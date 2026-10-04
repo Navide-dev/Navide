@@ -1597,7 +1597,8 @@ def _android_network_env() -> dict[str, str]:
 
     Empty everywhere else. On Android there is no /etc/resolv.conf, so Codex
     is pointed at the backend's loopback CONNECT proxy (which resolves through
-    the system), given a CA bundle, and a writable TMPDIR in place of /tmp.
+    the system, and only serves callers holding its per-process token), given a
+    CA bundle, and a writable TMPDIR in place of /tmp.
     """
     from .. import osplat
 
@@ -1607,9 +1608,8 @@ def _android_network_env() -> dict[str, str]:
 
     from .. import loopback_connect_proxy
 
-    port = loopback_connect_proxy.ensure_started()
     return {
-        "HTTPS_PROXY": f"http://127.0.0.1:{port}",
+        "HTTPS_PROXY": loopback_connect_proxy.proxy_url(),
         "SSL_CERT_FILE": certifi.where(),
         "TMPDIR": tempfile.gettempdir(),
     }

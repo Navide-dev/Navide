@@ -8,11 +8,22 @@ linked against the system resolver, opens the connection and relays bytes.
 It listens on loopback only, never inspects the tunnelled (TLS) bytes, and
 records which hosts were asked for so the UI can disclose where a CLI went.
 Started on first use in its own thread; idle otherwise.
+
+Loopback is not private on Android: every app on the device can connect to
+127.0.0.1. Without a credential this would be an open relay any app could use
+to reach the network on Navide's behalf. So each start mints a random token
+and a CONNECT without `Proxy-Authorization: Basic navide:<token>` gets 407.
+The token travels to the CLI inside HTTPS_PROXY's userinfo; other apps cannot
+read another process's environment on Android. Where a CLI may connect is not
+restricted, only disclosed (hosts_seen()).
 """
 from __future__ import annotations
 
 import asyncio
+import base64
+import hmac
 import logging
+import secrets
 import threading
 
 log = logging.getLogger(__name__)
@@ -20,6 +31,8 @@ log = logging.getLogger(__name__)
 _lock = threading.Lock()
 _address: tuple[str, int] | None = None
 _hosts: set[str] = set()
+_USER = "navide"
+_token = secrets.token_urlsafe(24)
 
 
 async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -33,10 +46,30 @@ async def _pipe(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> N
         writer.close()
 
 
+def _credential_ok(value: str) -> bool:
+    scheme, _, encoded = value.partition(" ")
+    if scheme.lower() != "basic":
+        return False
+    try:
+        supplied = base64.b64decode(encoded.strip(), validate=True)
+    except ValueError:
+        return False
+    return hmac.compare_digest(supplied, f"{_USER}:{_token}".encode())
+
+
 async def _handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     request = await reader.readline()
+    authorized = False
     while (line := await reader.readline()) not in (b"\r\n", b"\n", b""):
-        pass
+        name, _, value = line.decode("latin-1").partition(":")
+        if name.strip().lower() == "proxy-authorization":
+            authorized = _credential_ok(value.strip())
+    if not authorized:
+        writer.write(b'HTTP/1.1 407 Proxy Authentication Required\r\n'
+                     b'Proxy-Authenticate: Basic realm="navide"\r\n\r\n')
+        await writer.drain()
+        writer.close()
+        return
     parts = request.decode("latin-1").split()
     if len(parts) < 2 or parts[0].upper() != "CONNECT":
         writer.write(b"HTTP/1.1 405 Method Not Allowed\r\n\r\n")
@@ -89,6 +122,16 @@ def ensure_started() -> int:
         _address = box["address"]  # type: ignore[assignment]
         log.info("loopback CONNECT proxy listening on %s:%d", *_address)
         return _address[1]
+
+
+def token() -> str:
+    """The credential a client must present; minted once per process."""
+    return _token
+
+
+def proxy_url() -> str:
+    """HTTPS_PROXY value for a CLI spawn, credential included."""
+    return f"http://{_USER}:{_token}@127.0.0.1:{ensure_started()}"
 
 
 def bound_address() -> tuple[str, int] | None:
