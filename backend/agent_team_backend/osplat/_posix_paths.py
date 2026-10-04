@@ -228,6 +228,16 @@ def shell_command(command: str) -> list[str]:
     return [_system_sh(), "-c", command]
 
 
+def static_binaries_lack_resolver() -> bool:
+    """Whether a statically linked (musl) binary cannot resolve host names here.
+
+    musl reads `/etc/resolv.conf` and nothing else; Android has no such file,
+    so a static CLI such as Codex fails every lookup unless it is pointed at a
+    loopback proxy that resolves through the system. Never true on a desktop.
+    """
+    return sys.platform == "android" and not os.path.exists("/etc/resolv.conf")
+
+
 def quote_arg(arg: str) -> str:
     return shlex.quote(arg)
 

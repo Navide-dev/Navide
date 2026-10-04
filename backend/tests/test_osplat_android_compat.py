@@ -14,6 +14,7 @@ import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX seams")
 
+from agent_team_backend import osplat  # noqa: E402
 from agent_team_backend.osplat import _posix, _posix_paths  # noqa: E402
 
 
@@ -86,3 +87,19 @@ def test_openpty_ptmx_round_trip_on_linux(monkeypatch: pytest.MonkeyPatch) -> No
         assert os.read(slave, 16).strip() == b"ping"
     finally:
         os.close(master); os.close(slave)
+
+
+# ── static binaries and DNS ──────────────────────────────────────────────────
+
+def test_desktop_never_needs_the_loopback_dns_proxy() -> None:
+    assert osplat.paths.needs_loopback_dns_proxy() is False
+
+
+def test_android_without_resolv_conf_needs_the_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_exists = os.path.exists
+    monkeypatch.setattr(_posix_paths.os.path, "exists",
+                        lambda p: False if p == "/etc/resolv.conf" else real_exists(p))
+    monkeypatch.setattr(_posix_paths.sys, "platform", "android")
+    assert _posix_paths.static_binaries_lack_resolver() is True
+    monkeypatch.setattr(_posix_paths.sys, "platform", "linux")
+    assert _posix_paths.static_binaries_lack_resolver() is False

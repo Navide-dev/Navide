@@ -1584,8 +1584,40 @@ def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:
     return (root,)
 
 
+#: Hosts Codex 0.160.0 was seen reaching through the Android loopback proxy
+#: (2026-10-04, emulator, fake key). Disclosed in the UI, never enforced: the
+#: proxy relays whatever Codex asks for and records it (hosts_seen()).
+ANDROID_DISCLOSED_HOSTS = (
+    "api.openai.com", "chatgpt.com", "api.github.com", "codeload.github.com", "files.openai.com",
+)
+
+
+def _android_network_env() -> dict[str, str]:
+    """Env that lets the static musl Codex reach the network on Android.
+
+    Empty everywhere else. On Android there is no /etc/resolv.conf, so Codex
+    is pointed at the backend's loopback CONNECT proxy (which resolves through
+    the system), given a CA bundle, and a writable TMPDIR in place of /tmp.
+    """
+    from .. import osplat
+
+    if not osplat.paths.needs_loopback_dns_proxy():
+        return {}
+    import certifi
+
+    from .. import loopback_connect_proxy
+
+    port = loopback_connect_proxy.ensure_started()
+    return {
+        "HTTPS_PROXY": f"http://127.0.0.1:{port}",
+        "SSL_CERT_FILE": certifi.where(),
+        "TMPDIR": tempfile.gettempdir(),
+    }
+
+
 SPEC = VendorSpec(
     key="codex",
+    spawn_env_extra=_android_network_env,
     # Built-in OpenAI API and ChatGPT service defaults (verified 2026-09-21):
     # https://learn.chatgpt.com/docs/config-file/config-sample
     # https://github.com/openai/codex/blob/main/codex-rs/model-provider-info/src/lib.rs
