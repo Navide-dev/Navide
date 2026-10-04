@@ -14,7 +14,40 @@ import pytest
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX seams")
 
-from agent_team_backend.osplat import _posix  # noqa: E402
+from agent_team_backend.osplat import _posix, _posix_paths  # noqa: E402
+
+
+# ── /bin/sh and /bin/bash ────────────────────────────────────────────────────
+
+def test_shell_command_desktop_keeps_bin_sh() -> None:
+    assert os.path.exists("/bin/sh")
+    assert _posix_paths.shell_command("echo hi") == ["/bin/sh", "-c", "echo hi"]
+
+
+def test_shell_command_falls_back_when_bin_sh_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_exists = os.path.exists
+    monkeypatch.setattr(_posix_paths.os.path, "exists", lambda p: False if p == "/bin/sh" else real_exists(p))
+    monkeypatch.setattr(_posix_paths.shutil, "which", lambda name: None)
+    assert _posix_paths.shell_command("echo hi") == ["/system/bin/sh", "-c", "echo hi"]
+    monkeypatch.setattr(_posix_paths.shutil, "which", lambda name: "/data/prefix/bin/sh" if name == "sh" else None)
+    assert _posix_paths.shell_command("echo hi") == ["/data/prefix/bin/sh", "-c", "echo hi"]
+
+
+def test_login_probe_desktop_defaults_to_bin_bash(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SHELL", raising=False)
+    assert os.path.exists("/bin/bash")
+    assert _posix_paths.login_path_probe()[0] == "/bin/bash"
+    monkeypatch.setenv("SHELL", "/bin/zsh")
+    assert _posix_paths.login_path_probe()[0] == "/bin/zsh"
+
+
+def test_login_probe_falls_back_when_bin_bash_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SHELL", raising=False)
+    real_exists = os.path.exists
+    monkeypatch.setattr(_posix_paths.os.path, "exists",
+                        lambda p: False if p in ("/bin/bash", "/bin/sh") else real_exists(p))
+    monkeypatch.setattr(_posix_paths.shutil, "which", lambda name: None)
+    assert _posix_paths.login_path_probe()[0] == "/system/bin/sh"
 
 
 # ── PTY without os.openpty ───────────────────────────────────────────────────
