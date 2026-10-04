@@ -25,6 +25,7 @@ import tempfile
 import re
 import shutil
 import sqlite3
+import stat
 import threading
 import time
 
@@ -888,7 +889,15 @@ class CodexHomeManager:
             newest = max(stranded, key=lambda p: p.stat().st_mtime)
             self.real_home.mkdir(parents=True, exist_ok=True)
             try:
-                os.link(newest, real_auth)
+                if hasattr(os, "link"):
+                    os.link(newest, real_auth)
+                else:
+                    # Android's CPython has no os.link: an exclusive copy
+                    # keeps "a concurrent writer beating us simply wins".
+                    fd = os.open(real_auth, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(fd, "wb") as out:
+                        os.fchmod(out.fileno(), stat.S_IMODE(newest.stat().st_mode))
+                        out.write(newest.read_bytes())
             except FileExistsError:
                 return False
         except OSError as err:
