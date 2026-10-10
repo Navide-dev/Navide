@@ -37,7 +37,7 @@ which runs, in order:
    feature off and on again restores it. Copilot's hook file is Navide's
    alone, so deleting it is the whole removal.
    Only a **folder** reset is not a removal: the CLI's config folder
-   (`~/.claude`, `~/.qwen`, `~/.copilot`) or the workspace's `.cursor`
+   (`~/.claude`, `~/.qwen`, `~/.copilot`, `~/.codex`) or the workspace's `.cursor`
    gone, or deleted and created again (a different device, inode or birth
    time than the last write saw), took Navide's entry along with everything
    else. The feature stays allowed and the write that puts the entry back is
@@ -52,6 +52,10 @@ which runs, in order:
    allowed everywhere else. The workspace's whole `.cursor` folder gone
    (`git clean -fdx`, a fresh clone, a re-created worktree) is a reset of
    that workspace, not a removal.
+   A target or config folder behind a link that leads nowhere (a volume not
+   mounted yet, a dotfiles checkout mid-switch) is **unknown**: neither a
+   removal nor a reset. Nothing is written, turned off or forgotten, and
+   `apply` returns `"unknown"` until the link leads somewhere again.
    A workspace whose `.cursor` (or the config or skills folder in it) leads
    outside the workspace through a link is never written, cleaned or gated.
    Its panes go without the feature, so the user is told: logged and
@@ -174,8 +178,10 @@ startup features at once (per-spawn features apply on the next spawn).
 Moving a switch is announced (`off` / `allowed`, notify true) and logged
 with its `source`.
 
-`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row (not announced)
-for each feature the notice named: it stays allowed with the user's say-so.
+`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row for each feature
+the notice named: it stays allowed with the user's say-so. Each row is
+announced and carries its `source`, like a switch moved, so a client other
+than a Navide window dismissing the notice is seen.
 
 ### Account prompts (`credentials.auto-repair`)
 

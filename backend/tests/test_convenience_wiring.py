@@ -188,6 +188,69 @@ def test_a_config_folder_gone_altogether_is_a_reset(gate, homes, agent) -> None:
     assert gate.state(convenience_wiring.HOOK_FEATURES[agent]) == ("allowed", "default")
 
 
+def test_a_config_folder_behind_a_dangling_link_is_unknown_not_a_reset(gate, tmp_path, monkeypatch) -> None:
+    """R3-L1: ~/.claude is a link into a volume that is briefly unmounted.
+    That is not a reset: the hook the user deleted by hand stays deleted
+    when the volume comes back, and nothing is written meanwhile."""
+    volume = tmp_path / "vol"
+    (volume / "claude").mkdir(parents=True)
+    folder = tmp_path / "claude-link"
+    folder.symlink_to(volume / "claude")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    settings = folder / "settings.json"
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "first"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    del data["hooks"]["PreToolUse"]
+    settings.write_text(json.dumps(data), encoding="utf-8")
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    volume.rename(tmp_path / "vol-unmounted")
+
+    out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+
+    assert out["convenience"] == "unknown"
+    assert not (tmp_path / "vol").exists()
+    (tmp_path / "vol-unmounted").rename(volume)
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
+        "unchanged"
+    )
+    assert not any(part.startswith("PreToolUse:") for part in claude_hooks.hook_parts(settings))
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
+
+
+def test_a_settings_link_that_leads_nowhere_is_unknown_not_a_removal(gate, tmp_path, monkeypatch) -> None:
+    """R3-L2: settings.json is a dotfiles link whose target is briefly gone.
+    That is not the user removing Navide's hooks: the feature stays on,
+    nothing is written, and turning it off meanwhile cannot claim the
+    hooks were taken back."""
+    dotfiles = tmp_path / "dotfiles"
+    dotfiles.mkdir()
+    (dotfiles / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
+    folder = tmp_path / "claude"
+    folder.mkdir()
+    (folder / "settings.json").symlink_to(dotfiles / "settings.json")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "first"
+    content = (dotfiles / "settings.json").read_text(encoding="utf-8")
+    (dotfiles / "settings.json").unlink()
+
+    out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+
+    assert out["convenience"] == "unknown"
+    assert not (dotfiles / "settings.json").exists()
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    with pytest.raises(convenience.CleanupIncomplete):
+        convenience_wiring.set_feature("claude.hooks", False, port_file=port)
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    (dotfiles / "settings.json").write_text(content, encoding="utf-8")
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
+        "unchanged"
+    )
+    assert claude_hooks.hooks_present(folder / "settings.json")
+
+
 @pytest.mark.parametrize("agent", ["claude", "qwen"])
 def test_a_settings_file_navide_created_and_the_user_deleted_is_a_removal(gate, homes, agent) -> None:
     """Item 7: with the config folder still there, deleting the settings
@@ -943,6 +1006,28 @@ def test_codex_hook_trust_a_row_seeding_never_copies_is_not_a_removal(gate, tmp_
     assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
 
     assert gate.state("codex.hook-trust") == ("allowed", "default")
+
+
+def test_codex_hook_trust_a_reset_codex_folder_is_a_fresh_start_not_a_removal(gate, tmp_path) -> None:
+    """R3-M1 (decision 4): ``rm -rf ~/.codex`` and reinstalling took Navide's
+    trust rows with everything else. The feature stays allowed and the next
+    pane is seeded again, announced as a re-add after a reset."""
+    import shutil
+
+    manager, real = _codex(tmp_path)
+    hooks = (real / "hooks.json").read_text(encoding="utf-8")
+    config = (real / "config.toml").read_text(encoding="utf-8")
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    shutil.rmtree(real)
+    real.mkdir()
+    (real / "hooks.json").write_text(hooks, encoding="utf-8")
+    (real / "config.toml").write_text(config, encoding="utf-8")
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
+
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+    assert gate.history("codex.hook-trust")[0]["action"] == "reset"
+    assert gate.history("codex.hook-trust")[0]["notify"] is True
 
 
 def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_path, monkeypatch) -> None:

@@ -279,8 +279,8 @@ class ConvenienceGate:
     ) -> str:
         """Run one write through the gate.
 
-        Returns "off", "removed", "refused", "unchanged", "first", "repair"
-        or "reset". ``file`` is
+        Returns "off", "removed", "refused", "unknown", "unchanged", "first",
+        "repair" or "reset". ``file`` is
         the file whose bytes the write changes, when there is one: it is what
         gets backed up and compared. Without it every completed write counts
         as a change. ``quiet_repairs`` logs later changes without announcing
@@ -312,12 +312,20 @@ class ConvenienceGate:
         choice, never the feature's. The target is refused (logged and
         announced once as ``removed-entry``, then "refused" without a write)
         and the feature stays allowed everywhere else.
+
+        A link on the way to ``file`` or ``reset_folder`` that leads nowhere
+        (a volume not mounted yet, a dotfiles checkout mid-switch) is
+        "unknown": not a removal, not a reset, and nothing is written or
+        forgotten until the link leads somewhere again.
         """
         feature(feature_id)
         key = str(target)
         with self._lock:
             if not self.allowed(feature_id):
                 return "off"
+            if _unreachable(file) or _unreachable(reset_folder):
+                log.warning("%s: %s is behind a link that leads nowhere; treating as unknown", feature_id, key)
+                return "unknown"
             folder = self._folder(feature_id, key)
             known = folder is not None
             was_present = _probe(present)
@@ -649,7 +657,9 @@ class ConvenienceGate:
 
     def acknowledge_upgrade(self, *, source: str = "") -> None:
         """The user read the upgrade notice: each feature it named stays
-        allowed, now with the user's say-so on the log."""
+        allowed, now with the user's say-so on the log. Announced, with
+        ``source``, like a switch moved: a client other than the user
+        dismissing the notice must not go unseen."""
         value = self.db.kv_get(UPGRADE_KEY)
         if isinstance(value, dict):
             self.db.kv_set(UPGRADE_KEY, {**value, "acked": True}, now=int(self._clock()))
@@ -658,7 +668,7 @@ class ConvenienceGate:
                     if feature_id in _BY_ID:
                         self.record(
                             feature_id, "allowed", "", detail="kept allowed: upgrade notice acknowledged",
-                            notify=False, source=source,
+                            source=source,
                         )
 
     # ── reads ───────────────────────────────────────────────────────────
@@ -729,6 +739,19 @@ def _folder_identity(folder: Path | None) -> str | None:
         return None
     birth = getattr(st, "st_birthtime", None)
     return f"{st.st_dev}:{st.st_ino}:{birth if birth is not None else ''}"
+
+
+def _unreachable(path: Path | None) -> bool:
+    """Whether ``path`` or a folder above it is a link that leads nowhere."""
+    if path is None:
+        return False
+    for step in (path, *path.parents):
+        try:
+            if step.is_symlink() and not step.exists():
+                return True
+        except OSError:
+            return True
+    return False
 
 
 def _was_reset(seen: str, folder: Path) -> bool:

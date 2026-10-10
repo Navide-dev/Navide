@@ -293,15 +293,18 @@ def test_switch_flips_and_the_upgrade_ack_are_announced_and_say_who_did_it(gate,
 
     gate.set_allowed("cursor.project-mcp", False, source="settings")
     gate.set_allowed("cursor.project-mcp", True, source="ws-client")
-    gate.acknowledge_upgrade(source="settings")
+    gate.acknowledge_upgrade(source="ws-client")
 
     off, allowed = gate.history("cursor.project-mcp")[::-1]
     assert (off["action"], off["notify"], off["source"]) == ("off", True, "settings")
     assert (allowed["action"], allowed["notify"], allowed["source"]) == ("allowed", True, "ws-client")
-    assert [n["entry"]["action"] for n in gate.sent[-2:]] == ["off", "allowed"]
+    assert [n["entry"]["action"] for n in gate.sent[-3:-1]] == ["off", "allowed"]
+    # R3-L4: dismissing the one-time upgrade notice is the user's say-so on
+    # every feature it named, so an agent doing it must not go unseen.
     [ack] = [e for e in gate.history("claude.hooks") if e["action"] == "allowed"]
-    assert (ack["source"], ack["notify"]) == ("settings", False)
+    assert (ack["source"], ack["notify"]) == ("ws-client", True)
     assert "upgrade notice" in ack["detail"]
+    assert gate.sent[-1]["entry"]["id"] == ack["id"]
 
 
 def test_a_log_written_before_the_source_column_still_reads(tmp_path) -> None:

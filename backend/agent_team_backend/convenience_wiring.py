@@ -342,7 +342,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     )
     for name in refused:
         g.record("cursor.project-skills", "removed-entry", str(target / name), detail="link deleted outside Navide")
-    if outcome in ("off", "removed", "refused"):
+    if outcome in ("off", "removed", "refused", "unknown"):
         return False
     if not manifest.is_file():
         g.forget("cursor.project-skills", target)
@@ -408,7 +408,7 @@ def seed_hook_trust_gated(manager: Any, pane_home: Path) -> int:
     outcome = g.apply(
         "codex.hook-trust", config, write=write,
         present=lambda: manager.hook_trust_intact(exclude=pane_home), file=config,
-        quiet_repairs=True,
+        quiet_repairs=True, reset_folder=manager.real_home,
     )
     return 0 if outcome in ("off", "removed") else seeded[0]
 
