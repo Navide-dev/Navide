@@ -9,7 +9,9 @@
 // useConvenience(backend) once, which subscribes to the broadcast and feeds
 // the announcements; the overview reads the same state.
 import { getCurrentScope, onScopeDispose, readonly, ref, watch } from 'vue'
+import { i18n } from '@navide/plugin-ui/foundation'
 import type { useBackend } from './useBackend'
+import type { SetDefaultResult } from './useCliProfiles'
 import { useAnnouncements } from './useAnnouncements'
 
 type Backend = ReturnType<typeof useBackend>
@@ -148,6 +150,18 @@ export async function ackConvenienceUpgrade(backend: Sender): Promise<boolean> {
   upgrade.value = null
   publish()
   return true
+}
+
+/** What to tell the user after the account prompt's "switch back", or null.
+ *  A verified LIVE_DRIFT refusal only lasts until Navide realigns its active
+ *  account with the outside sign-in (seconds), so it reads as "wait and
+ *  retry" rather than the backend's raw words. */
+export function convenienceSwitchBackError(res: SetDefaultResult): string | null {
+  if (res.ok) return null
+  if (res.code === 'LIVE_DRIFT' && res.liveDrift?.verified === true) {
+    return i18n.global.t('convenience.notice.switch-back-syncing')
+  }
+  return res.message || null
 }
 
 /** Ask the CLI Extensions pane to show the overview tab. The caller opens

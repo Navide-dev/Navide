@@ -333,7 +333,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
 import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
-import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
+import { convenienceSwitchBackError, openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -14135,7 +14135,8 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
       // switch flow as Settings → Accounts.
       const res = await cliAccountSwitch(action.agentKey, action.slotId)
       if (res.ok) announcements.markRead(action.rowId)
-      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      const error = convenienceSwitchBackError(res)
+      if (error) notifyRestore.toast(error, { type: 'error' })
       break
     }
   }
