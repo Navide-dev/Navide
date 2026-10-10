@@ -65,9 +65,11 @@ _BY_ID = {feature.id: feature for feature in REGISTRY}
 #: ``cleanup``: Navide took back its own entry; ``cleanup-failed``: it could
 #: not, so the feature stayed on; ``removed-entry``: the user deleted one of
 #: several entries in a target, which stays out while the rest keep working;
-#: ``prompt``: a decision is waiting on the user.
+#: ``prompt``: a decision is waiting on the user; ``refused-unsafe``: a
+#: workspace target leads outside the workspace, so Navide set nothing up there.
 ACTIONS = (
     "first", "repair", "reset", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
+    "refused-unsafe",
 )
 
 UPGRADE_KEY = "convenience.upgrade_notice"
@@ -487,6 +489,21 @@ class ConvenienceGate:
             except Exception as err:  # noqa: BLE001 — the log row is the record
                 log.warning("announcing %s %s failed: %s", feature_id, action, err)
         return entry
+
+    def record_once(self, feature_id: str, action: str, target: str | Path, *, detail: str = "") -> bool:
+        """Log and announce ``action`` for ``target`` unless the log already
+        has it: True the first time."""
+        key = str(target)
+        with self._lock:
+            with self.db.transaction() as cur:
+                seen = cur.execute(
+                    "SELECT 1 FROM convenience_log WHERE feature = ? AND action = ? AND target = ? LIMIT 1",
+                    (feature_id, action, key),
+                ).fetchone()
+            if seen is not None:
+                return False
+            self.record(feature_id, action, key, detail=detail)
+            return True
 
     def note(self, feature_id: str, target: str | Path, *, detail: str = "") -> bool:
         """Disclose a target a required feature created, once: True the first

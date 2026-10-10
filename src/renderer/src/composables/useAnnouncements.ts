@@ -577,6 +577,7 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         }
         break
       }
+      // 'refused-unsafe' among them: a workspace left alone for safety.
       default:
         title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })
     }

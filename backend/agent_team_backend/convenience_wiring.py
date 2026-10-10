@@ -229,8 +229,12 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
 
     path = wiring.project_config_path(agent_key, cwd)
     g = _gate
-    if g is None or path is None or not wiring.project_config_inside(path, Path(cwd)):
-        # Not the workspace's file: nothing is written, so nothing is gated.
+    if g is None or path is None:
+        return wiring.ensure_project_config(agent_key, cwd)
+    if not wiring.project_config_inside(path, Path(cwd)):
+        # Not the workspace's file: nothing is written, so nothing is gated,
+        # but the pane goes without Navide's tools and the user is told.
+        _refused_unsafe("cursor.project-mcp", path)
         return wiring.ensure_project_config(agent_key, cwd)
     wired = [False]
 
@@ -256,6 +260,21 @@ def _project_config_present(agent_key: str, path: Path) -> bool:
     if path.is_file() and not path.read_text(encoding="utf-8").strip():
         raise ValueError(f"{path} is empty")
     return wiring.project_config_has_entry(agent_key, path)
+
+
+def _refused_unsafe(feature_id: str, target: Path) -> None:
+    """A workspace whose .cursor leads outside it is left alone for safety;
+    say so once for that workspace, while the feature is allowed."""
+    g = _gate
+    if g is None or not g.allowed(feature_id):
+        return
+    try:
+        g.record_once(
+            feature_id, "refused-unsafe", target,
+            detail="leads outside the workspace through a link; not set up here",
+        )
+    except Exception as err:  # noqa: BLE001 — disclosure never blocks a spawn
+        log.warning("recording %s %s failed: %s", feature_id, target, err)
 
 
 def _remove_project_configs() -> None:
@@ -304,6 +323,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     target = Path(cwd).joinpath(*wiring.project_rel)
     if not skills_wiring.project_target_safe(target, Path(cwd)):
         # Not the workspace's folder: nothing is written, so nothing is gated.
+        _refused_unsafe("cursor.project-skills", target)
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]

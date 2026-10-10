@@ -18,7 +18,8 @@
         "allowed": "The convenience feature \"{feature}\" was allowed",
         "cleanup": "Removed {target} for the convenience feature \"{feature}\"",
         "removed-entry": "You removed {target}. Navide will not add that entry back; the rest of the convenience feature \"{feature}\" keeps working. Turn the feature off and on again to restore it",
-        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again"
+        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again",
+        "refused-unsafe": "The .cursor folder holding {target} leads outside the project folder, so for safety Navide did not set up the convenience feature \"{feature}\" here. To use it, make .cursor a plain folder inside the project"
       },
       "button": {
         "overview": "Open overview",
@@ -39,7 +40,8 @@
       "cleanup": "Cleaned up",
       "removed-entry": "Entry removed by you",
       "cleanup-failed": "Could not clean up",
-      "prompt": "Sign-in changed outside Navide"
+      "prompt": "Sign-in changed outside Navide",
+      "refused-unsafe": "Not set up, for safety"
     },
     "overview": {
       "title": "Convenience features and what Navide changes on your computer",

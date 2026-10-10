@@ -219,6 +219,19 @@ describe('convenience announcement rows', () => {
     expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
+  it('tells a workspace left alone for safety in its own words', () => {
+    useAnnouncements().noteConvenience({
+      features: [feature()],
+      notices: [entry({ action: 'refused-unsafe', target: '/repo/.cursor/mcp.json' })],
+      upgrade: null,
+    })
+    const [row] = rows()
+    expect(row.title).toBe(
+      '/repo/.cursor/mcp.json 所在的 .cursor 指向專案資料夾外，為了安全，Navide 沒有在這裡設定便利功能「Claude hook：回合偵測、Navide Guard 與喚醒」。要使用，請把 .cursor 改成專案內的一般資料夾'
+    )
+    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
   it('offers re-allow on a removal only while the removal keeps the feature off', () => {
     const removed = entry({ id: 9, action: 'removed' })
     useAnnouncements().noteConvenience({ features: [feature({ state: 'off', reason: 'removed' })], notices: [removed], upgrade: null })

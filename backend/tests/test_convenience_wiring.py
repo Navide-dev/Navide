@@ -538,6 +538,52 @@ def test_a_cursor_folder_relinked_outside_the_workspace_is_neither_written_nor_a
     assert not wiring.project_config_inside(wiring.project_config_path("cursor", repo), repo)
 
 
+def _cursor_linked_outside(tmp_path: Path) -> tuple[Path, Path]:
+    repo = _cursor_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "skills").mkdir(parents=True)
+    (repo / ".cursor").symlink_to(elsewhere)
+    return repo, elsewhere
+
+
+def _unsafe_rows(gate, feature_id: str) -> list[tuple[str, bool]]:
+    return [(e["target"], e["notify"]) for e in gate.history(feature_id) if e["action"] == "refused-unsafe"]
+
+
+def test_a_cursor_mcp_refused_for_safety_is_announced_once_per_workspace(gate, tmp_path) -> None:
+    """Not wiring a workspace whose .cursor leads outside it costs the pane
+    Navide's tools: the user is told, once for that workspace."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+
+    assert _unsafe_rows(gate, "cursor.project-mcp") == [(str(wiring.project_config_path("cursor", repo)), True)]
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+
+
+def test_cursor_skills_refused_for_safety_are_announced_once_per_workspace(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert _unsafe_rows(gate, "cursor.project-skills") == [(str(repo / ".cursor" / "skills"), True)]
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
+def test_a_cursor_feature_that_is_off_says_nothing_about_an_unsafe_workspace(gate, homes, tmp_path) -> None:
+    repo, _ = _cursor_linked_outside(tmp_path)
+    convenience_wiring.set_feature("cursor.project-mcp", False, port_file=str(homes["port"]))
+
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+
+    assert _unsafe_rows(gate, "cursor.project-mcp") == []
+
+
 def test_turning_cursor_mcp_off_takes_back_only_navides_entry(gate, homes, tmp_path) -> None:
     from agent_team_backend.mcp_server import wiring
 
