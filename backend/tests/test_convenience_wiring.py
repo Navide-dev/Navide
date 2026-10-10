@@ -144,6 +144,29 @@ def test_one_hook_the_user_deleted_stays_out_while_the_others_keep_working(gate,
     assert "PreToolUse" in json.loads(settings.read_text(encoding="utf-8"))["hooks"]
 
 
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent) -> None:
+    """R6/C3: deleting the whole config folder (resetting the CLI) took the
+    settings file with it, not just Navide's entry. That is not the user
+    removing Navide's hooks: the feature stays allowed and the next write is
+    announced as a first one, like a fresh install."""
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    folder = _target(agent).parent
+    shutil.rmtree(folder)
+    folder.mkdir()
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    assert out["convenience"] == "first"
+    assert gate.state(feature_id) == ("allowed", "default")
+    assert claude_hooks.hooks_present(_target(agent))
+    assert [e["action"] for e in gate.history(feature_id)] == ["first", "first"]
+
+
 def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     settings = _target("claude")
     settings.write_text(json.dumps({

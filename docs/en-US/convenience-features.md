@@ -36,6 +36,11 @@ which runs, in order:
    feature stays allowed so the other hooks keep working. Turning the
    feature off and on again restores it. Copilot's hook file is Navide's
    alone, so deleting it is the whole removal.
+   A deleted **file** is not a removal when it is the user's own file Navide
+   merges into (Claude's and Qwen's settings.json): resetting the CLI's
+   config folder took Navide's entry along with everything else, so the
+   target is forgotten, the feature stays allowed and the next write is
+   announced as `first`, like a fresh install.
 3. **Backup.** A file target is copied into
    `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
    (deduplicated by content). A backup is the whole file, **including any

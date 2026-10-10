@@ -257,6 +257,7 @@ class ConvenienceGate:
         detail: str = "",
         quiet_repairs: bool = False,
         parts: Callable[[], set[str]] | None = None,
+        shared_file: bool = False,
     ) -> str:
         """Run one write through the gate.
 
@@ -276,6 +277,12 @@ class ConvenienceGate:
         user's removal of that entry alone: it is logged as
         ``removed-entry``, ``excluded`` names it from then on so ``write``
         leaves it out, and the feature stays allowed for the rest.
+
+        ``shared_file`` marks ``file`` as the user's own file Navide merges
+        into (a CLI's settings.json), not one Navide owns. When that file is
+        gone altogether — the user reset the CLI's config folder — Navide's
+        entry went with everything else: that is a fresh start, not the
+        user's removal, so the target is forgotten and written as ``first``.
         """
         feature(feature_id)
         key = str(target)
@@ -284,6 +291,9 @@ class ConvenienceGate:
                 return "off"
             known = self._known(feature_id, key)
             was_present = _probe(present)
+            if known and was_present is False and shared_file and file is not None and not file.exists():
+                self.forget(feature_id, key)
+                known = False
             if known and was_present is False:
                 self._set_state(feature_id, "off", "removed")
                 self._mark(feature_id, key, present=False)

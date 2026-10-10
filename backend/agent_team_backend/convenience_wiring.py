@@ -135,7 +135,12 @@ def install_hooks_gated(
         skip = g.excluded(feature_id, path) if parts is not None else frozenset()
         result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    outcome = g.apply(feature_id, path, write=write, present=present, file=path, parts=parts)
+    # Claude's and Qwen's settings.json are the user's; Copilot's hook file
+    # is Navide's own, so deleting it stays the user's removal.
+    outcome = g.apply(
+        feature_id, path, write=write, present=present, file=path, parts=parts,
+        shared_file=agent_key in _PER_HOOK,
+    )
     return {**result, "convenience": outcome}
 
 
