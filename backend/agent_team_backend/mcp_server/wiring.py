@@ -244,6 +244,33 @@ def project_config_path(agent_key: str, cwd: str | Path) -> Path | None:
     return Path(cwd).joinpath(*wiring.project_config)
 
 
+def project_config_inside(path: Path, root: Path) -> bool:
+    """Whether ``path``, a project MCP config of the workspace ``root``, is
+    really the workspace's own.
+
+    The repository decides what its ``.cursor`` holds, so a folder level that
+    is a link, or a config that is a link resolving outside the workspace (to
+    ``~/.claude.json``, or to a path that does not exist yet), is never
+    written, created or cleaned through. A link that stays inside is fine.
+    """
+    from agent_team_backend.plugins.builtin.navide_skills.skills_wiring import project_target_safe
+
+    if not project_target_safe(path.parent, root):
+        return False
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _project_root(agent_key: str, path: Path) -> Path:
+    """The workspace a project MCP config path belongs to."""
+    wiring = mcp_wiring(agent_key)
+    depth = len(wiring.project_config) if wiring is not None and wiring.project_config else 1
+    return path.parents[depth - 1]
+
+
 def _write_atomic(path: Path, content: str) -> None:
     """Replace ``path`` in one step, with a temp name no other pane can share.
 
@@ -354,6 +381,9 @@ def ensure_project_config(agent_key: str, cwd: str | Path) -> bool:
         # that cannot connect.
         log.warning("workspace is the home directory — not wiring %s globally", agent_key)
         return False
+    if not project_config_inside(path, root):
+        log.warning("%s reaches outside %s through a link — leaving %s unwired", path, root, agent_key)
+        return False
     existed = path.exists()
     document: dict[str, Any] = {}
     if existed:
@@ -412,6 +442,8 @@ def project_config_has_entry(agent_key: str, path: Path) -> bool:
     wiring = mcp_wiring(agent_key)
     if wiring is None or wiring.config is None or not path.is_file():
         return False
+    if not project_config_inside(path, _project_root(agent_key, path)):
+        return False  # not the workspace's file: nothing of Navide's is there
     raw = path.read_text(encoding="utf-8").strip()
     document = json.loads(raw) if raw else {}
     if not isinstance(document, dict):
@@ -430,6 +462,9 @@ def remove_project_config(agent_key: str, path: Path) -> bool:
     """
     wiring = mcp_wiring(agent_key)
     if wiring is None or wiring.config is None or not path.is_file():
+        return False
+    if not project_config_inside(path, _project_root(agent_key, path)):
+        log.warning("%s reaches outside its workspace through a link — leaving it alone", path)
         return False
     try:
         raw = path.read_text(encoding="utf-8").strip()

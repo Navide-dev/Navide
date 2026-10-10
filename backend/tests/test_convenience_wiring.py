@@ -404,6 +404,31 @@ def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -
     assert gate.state("cursor.project-mcp") == ("off", "removed")
 
 
+def test_a_cursor_folder_relinked_outside_the_workspace_is_neither_written_nor_a_removal(
+    gate, tmp_path
+) -> None:
+    """OF-N1: after Navide wrote it, .cursor became a link out of the
+    workspace. Nothing is written there, and that is not the user removing
+    Navide's entry either: the feature stays allowed."""
+    import shutil
+
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+    shutil.rmtree(repo / ".cursor")
+    (repo / ".cursor").symlink_to(elsewhere)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+
+    assert (elsewhere / "mcp.json").read_text(encoding="utf-8") == '{"mcpServers": {}}'
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert not wiring.project_config_inside(wiring.project_config_path("cursor", repo), repo)
+
+
 def test_turning_cursor_mcp_off_takes_back_only_navides_entry(gate, homes, tmp_path) -> None:
     from agent_team_backend.mcp_server import wiring
 

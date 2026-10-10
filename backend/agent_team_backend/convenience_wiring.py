@@ -230,7 +230,8 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
 
     path = wiring.project_config_path(agent_key, cwd)
     g = _gate
-    if g is None or path is None:
+    if g is None or path is None or not wiring.project_config_inside(path, Path(cwd)):
+        # Not the workspace's file: nothing is written, so nothing is gated.
         return wiring.ensure_project_config(agent_key, cwd)
     wired = [False]
 
