@@ -14,7 +14,7 @@ import {
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
-import { answerWindowChallenge, backendInfoFor } from './backendIpc'
+import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
@@ -860,7 +860,8 @@ function broadcastBackendChanged(): void {
   )
   // A terminal error bypasses the focus gate — see BackendBroadcastTracker.
   const urgent = payload.status === 'error'
-  for (const win of BrowserWindow.getAllWindows()) {
+  // Navide windows only, like backend:info: the payload carries the ws token.
+  for (const win of backendChangedTargets(BrowserWindow.getAllWindows(), [mainWindows, navideAuxWindows])) {
     if (win.isDestroyed()) continue
     const { immediate } = backendBroadcastTracker.dispatch(win.id, win.isFocused(), payload, urgent)
     if (immediate) win.webContents.send('backend:changed', payload)
@@ -868,8 +869,8 @@ function broadcastBackendChanged(): void {
 }
 
 // Flush a queued backend info snapshot to a window as soon as it regains
-// focus, and stop tracking it once closed. Registered on every BrowserWindow
-// (not just main windows) so Roles/Stages/Editor windows behave the same way.
+// focus, and stop tracking it once closed. Registered on every BrowserWindow,
+// but only a window broadcastBackendChanged pushed to has anything queued.
 app.on('browser-window-created', (_event, win) => {
   win.on('focus', () => {
     const payload = backendBroadcastTracker.takePending(win.id)

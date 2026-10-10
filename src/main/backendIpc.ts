@@ -38,3 +38,16 @@ export function backendInfoFor<T extends { status: string }>(
   if (navideWindows.some((windows) => isTrustedPluginManagementSender(event, windows))) return payload
   return { status: payload.status }
 }
+
+/**
+ * Who gets a backend:changed push (the same payload as backend:info, wsUrl
+ * included): the Navide windows main created, nothing else. Any other window
+ * is not sent anything at all — it has no preload to receive it — and so
+ * never enters the focus-gated queue either.
+ */
+export function backendChangedTargets(
+  windows: readonly BrowserWindow[],
+  navideWindows: ReadonlyArray<ReadonlySet<BrowserWindow>>,
+): BrowserWindow[] {
+  return windows.filter((win) => navideWindows.some((set) => set.has(win)))
+}

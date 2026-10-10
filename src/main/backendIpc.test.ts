@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 }))
 
 import { proveWindow } from './backend'
-import { answerWindowChallenge, backendInfoFor } from './backendIpc'
+import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 
 type FakeWindow = { id: number; webContents: object; isDestroyed: () => boolean }
 
@@ -109,5 +109,25 @@ describe('backend:info scope (R3-M2)', () => {
     expect(backendInfoFor({ sender: stranger, senderFrame: { parent: null } } as never, groups, FULL)).toEqual({ status: 'ready' })
     fromWebContents.mockReturnValue(null)
     expect(backendInfoFor({ sender: {}, senderFrame: { parent: null } } as never, groups, FULL)).toEqual({ status: 'ready' })
+  })
+})
+
+describe('backend:changed recipients', () => {
+  it('pushes only to Navide windows main created; other windows get nothing', () => {
+    const main = windowWith({}, 1)
+    const detached = windowWith({}, 2)
+    const plans = windowWith({}, 3)
+    const pluginHost = windowWith({}, 4)
+    const pdf = windowWith({}, 5)
+    const groups = [new Set([main, detached]), new Set([plans])] as never
+    expect(backendChangedTargets([main, pluginHost, detached, plans, pdf] as never, groups)).toEqual([main, detached, plans])
+  })
+
+  it('is what broadcastBackendChanged iterates', () => {
+    const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8')
+    const body = source.slice(source.indexOf('function broadcastBackendChanged'))
+    const loop = body.slice(0, body.indexOf('\n}\n'))
+    expect(loop).toContain('backendChangedTargets(BrowserWindow.getAllWindows(), [mainWindows, navideAuxWindows])')
+    expect(loop).not.toMatch(/for \(const win of BrowserWindow\.getAllWindows\(\)\)/)
   })
 })
