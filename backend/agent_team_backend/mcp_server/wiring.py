@@ -286,7 +286,9 @@ def _git_repo_root(start: Path) -> Path | None:
     too — that is a worktree or submodule, whose exclude file is the
     superproject's and not ours to append to.
     """
-    home = Path.home().resolve()
+    # The real home, not $HOME: a backend launched from a shimmed pane
+    # inherits the shim's, and Windows ignores HOME altogether.
+    home = pane_home.real_home().resolve()
     for candidate in (start, *start.parents):
         if candidate.resolve() == home:
             return None
@@ -343,7 +345,7 @@ def ensure_project_config(agent_key: str, cwd: str | Path) -> bool:
     root = Path(cwd)
     if not root.is_dir():
         return False
-    if root.resolve() == Path.home().resolve():
+    if root.resolve() == pane_home.real_home().resolve():
         # A project config under the home directory is the CLI's *global* one,
         # not a project one: our entry would apply in every project the user
         # opens, and outside Navide the variable is unset, leaving a server

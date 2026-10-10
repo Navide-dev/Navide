@@ -608,10 +608,11 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
     """Keep our links out of the user's git status, best effort.
 
     The walk stops at the home directory: a home that is itself a dotfiles
-    repo does not own the workspaces under it.
+    repo does not own the workspaces under it. The real home, not ``$HOME``:
+    a backend launched from a shimmed pane inherits the shim's.
     """
     root = target
-    home = Path.home().resolve()
+    home = real_home().resolve()
     for candidate in [target, *target.parents]:
         if candidate.resolve() == home:
             return

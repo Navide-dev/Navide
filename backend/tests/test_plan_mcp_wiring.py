@@ -12,7 +12,7 @@ import pytest
 from agent_team_backend import app, osplat
 from agent_team_backend.cli_vendors.registry import vendor as cli_vendor
 from agent_team_backend.plugins import wiring as plugin_wiring
-from agent_team_backend.mcp_server import auth as plan_mcp_auth, wiring as plan_mcp_wiring
+from agent_team_backend.mcp_server import auth as plan_mcp_auth, pane_home, wiring as plan_mcp_wiring
 
 
 # ---- write_claude_config ----
@@ -403,8 +403,12 @@ def test_wire_cursor_refuses_to_write_the_global_config(
 ) -> None:
     """~/.cursor/mcp.json is cursor's *global* config. Opening the home
     directory as a workspace must not put our server into every project the
-    user has — outside Navide the variable is unset and it cannot connect."""
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+    user has — outside Navide the variable is unset and it cannot connect.
+
+    The home is the real one: a backend launched from a shimmed pane inherits
+    that shim's HOME, which ``Path.home()`` would answer with."""
+    monkeypatch.setattr(pane_home, "real_home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "inherited-shim-home"))
     env: dict[str, str] = {}
     plan_mcp_wiring.wire_command("cursor", "cursor-agent", 4567, "p1", env, str(tmp_path))
     assert not plan_mcp_wiring.project_config_path("cursor", tmp_path).exists()
@@ -461,8 +465,10 @@ def test_wire_cursor_does_not_claim_a_repo_above_the_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A home that is itself a dotfiles repo must not swallow every workspace
-    under it that is not a repo of its own."""
-    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
+    under it that is not a repo of its own. The real home, not an inherited
+    shim's HOME."""
+    monkeypatch.setattr(pane_home, "real_home", lambda: tmp_path)
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "inherited-shim-home"))
     (tmp_path / ".git" / "info").mkdir(parents=True)
     ws = tmp_path / "projects" / "not-a-repo"
     ws.mkdir(parents=True)
