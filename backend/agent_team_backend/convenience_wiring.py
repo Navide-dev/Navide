@@ -70,13 +70,17 @@ def note(feature_id: str, target: str | Path, *, detail: str = "") -> None:
         log.warning("noting %s %s failed: %s", feature_id, target, err)
 
 
-def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
-    """Announce a change a required feature made to the user's own files."""
+def changed(feature_id: str, target: str | Path, *, detail: str, once: bool = False) -> None:
+    """Announce a change a required feature made to the user's own files;
+    with ``once``, later changes to the same path are only logged."""
     g = _gate
     if g is None:
         return
     try:
-        g.record(feature_id, "repair", str(target), detail=detail)
+        if once:
+            g.changed_once(feature_id, target, detail=detail)
+        else:
+            g.record(feature_id, "repair", str(target), detail=detail)
     except Exception as err:  # noqa: BLE001
         log.warning("recording %s %s failed: %s", feature_id, target, err)
 

@@ -594,6 +594,21 @@ def test_an_entry_a_pane_shim_moves_into_the_vendors_folder_is_announced(gate, t
     assert _shim_changes(gate) == [("repair", str(target), True)]
 
 
+def test_a_pane_shim_change_to_the_same_path_is_announced_only_the_first_time(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    target = tmp_path / "home" / ".kimi-code" / "sessions"
+    for adopt in (pane_home._adopt, skills_wiring._adopt):
+        entry = tmp_path / "shim" / "sessions"
+        entry.mkdir(parents=True)
+        if target.exists():
+            target.rmdir()
+        adopt(entry, target)
+
+    assert _shim_changes(gate) == [("repair", str(target), True), ("repair", str(target), False)]
+
+
 def test_empty_entries_a_pane_shim_seeds_in_the_vendors_folder_are_announced(gate, tmp_path) -> None:
     from agent_team_backend.mcp_server import pane_home
 

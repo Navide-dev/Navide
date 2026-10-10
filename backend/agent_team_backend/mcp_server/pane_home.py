@@ -229,7 +229,7 @@ def _adopt(entry: Path, target: Path) -> bool:
         return False
     from ..convenience_wiring import changed
 
-    changed("pane-shims", target, detail=f"moved from the pane home {entry}")
+    changed("pane-shims", target, detail=f"moved from the pane home {entry}", once=True)
     return True
 
 
@@ -358,7 +358,7 @@ def _seed_link_targets(spec: ShimSpec, real_vendor: Path, shim_vendor: Path) -> 
         except OSError as err:
             log.warning("could not seed %s: %s", target, err)
             continue
-        changed("pane-shims", target, detail="created empty so panes can share it")
+        changed("pane-shims", target, detail="created empty so panes can share it", once=True)
     for name in spec.seeded_files:
         target = real_vendor / name
         if target.exists() or target.is_symlink():
@@ -369,7 +369,7 @@ def _seed_link_targets(spec: ShimSpec, real_vendor: Path, shim_vendor: Path) -> 
         except OSError as err:
             log.warning("could not seed %s: %s", target, err)
             continue
-        changed("pane-shims", target, detail="created empty so panes can share it")
+        changed("pane-shims", target, detail="created empty so panes can share it", once=True)
 
 
 def _base_config(real: Path, shim: Path) -> dict[str, Any]:

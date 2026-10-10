@@ -714,7 +714,7 @@ def _adopt(entry: Path, target: Path) -> None:
         return
     from agent_team_backend.convenience_wiring import changed
 
-    changed("pane-shims", target, detail=f"moved from the pane home {entry}")
+    changed("pane-shims", target, detail=f"moved from the pane home {entry}", once=True)
 
 
 def _resolve(path: Path) -> Path:
