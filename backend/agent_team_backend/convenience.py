@@ -14,8 +14,9 @@ write through the gate:
 5. a change is announced (``notify``) and appended to the audit log.
 
 A target that already carries Navide's entry when first seen was written
-before this ledger existed (an upgraded install): it is adopted silently and
-named in the one-time upgrade notice.
+before this ledger existed (an upgraded install): it is adopted and named in
+the one-time upgrade notice, or — first seen after that notice was decided,
+as a per-spawn feature's target is — announced on its own as ``first``.
 """
 
 from __future__ import annotations
@@ -283,13 +284,23 @@ class ConvenienceGate:
                 self._mark(feature_id, key, present=False)
             if not changed:
                 if not known and was_present is True:
-                    self._adopted.add(feature_id)
+                    self._adopt(feature_id, key)
                 return "unchanged"
             action = "repair" if known else "first"
             backup = self._backup(feature_id, key, before)
             notify = not (quiet_repairs and action == "repair")
             self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
             return action
+
+    def _adopt(self, feature_id: str, key: str) -> None:
+        """An entry an earlier Navide wrote, first seen now. During the
+        startup pass it joins the one-time upgrade notice; after that notice
+        was decided (a per-spawn feature, first seen when its pane opens) it
+        is announced on its own, once, since the ledger now knows it."""
+        if self.db.kv_get(UPGRADE_KEY) is None:
+            self._adopted.add(feature_id)
+            return
+        self.record(feature_id, "first", key, detail="found Navide's entry from an earlier version; kept")
 
     def record(
         self,

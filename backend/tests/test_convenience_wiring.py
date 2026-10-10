@@ -284,6 +284,26 @@ def test_cursor_mcp_allowed_writes_what_it_wrote_before(gate, tmp_path) -> None:
     assert gate.history()[0]["target"] == str(path)
 
 
+def test_an_entry_adopted_after_the_upgrade_notice_was_decided_is_announced(gate, tmp_path) -> None:
+    """C2: the upgrade notice is fixed at startup, but Cursor's project config
+    is first seen when a Cursor pane opens. An entry an earlier Navide wrote
+    there must still be disclosed once, not adopted in silence."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.install(None)
+    wiring.ensure_project_config("cursor", repo)
+    convenience_wiring.install(gate)
+    gate.finish_startup_scan()
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+
+    [notice] = [n for n in gate.notices() if n["feature"] == "cursor.project-mcp"]
+    assert (notice["action"], notice["target"]) == ("first", str(wiring.project_config_path("cursor", repo)))
+    assert "earlier" in notice["detail"]
+
+
 def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -> None:
     from agent_team_backend.mcp_server import wiring
 

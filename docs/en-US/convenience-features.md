@@ -44,8 +44,11 @@ which runs, in order:
    A row a caller triggered names its `source`.
 
 A target that already carries Navide's entry when first seen (an upgraded
-install) is added to the ledger silently: nothing was written, so there is
-nothing to announce.
+install) is added to the ledger without a write. During the startup pass it
+is named in the one-time upgrade notice. A target first seen after that
+notice was decided — the per-spawn features (Cursor project MCP and skills,
+Codex hook trust) are only seen when their pane opens — is announced on its
+own, once, as `first` ("found Navide's entry from an earlier version").
 
 ## Feature registry
 
