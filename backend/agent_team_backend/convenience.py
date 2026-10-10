@@ -800,8 +800,17 @@ def _folder_identity(folder: Path | None) -> str | None:
     return f"{st.st_dev}:{st.st_ino}:{birth if birth is not None else ''}"
 
 
+#: Folders whose children are mount roots of removable or network volumes:
+#: /Volumes/<name> (macOS), /mnt/<name>. A config folder whose missing part
+#: starts at one of them is on a volume that is not mounted right now.
+_MOUNT_PARENTS: tuple[Path, ...] = (Path("/Volumes"), Path("/mnt"))
+#: Same, one user level deeper: /media/<user>/<name>, /run/media/<user>/<name>.
+_MOUNT_GRANDPARENTS: tuple[Path, ...] = (Path("/media"), Path("/run/media"))
+
+
 def _unreachable(path: Path | None) -> bool:
-    """Whether ``path`` or a folder above it is a link that leads nowhere."""
+    """Whether ``path`` or a folder above it is a link that leads nowhere, or
+    sits on a volume that is not mounted (``_on_unmounted_volume``)."""
     if path is None:
         return False
     for step in (path, *path.parents):
@@ -810,7 +819,30 @@ def _unreachable(path: Path | None) -> bool:
                 return True
         except OSError:
             return True
-    return False
+    return _on_unmounted_volume(path)
+
+
+def _on_unmounted_volume(path: Path) -> bool:
+    """Whether the first missing folder on the way down to ``path`` is a
+    volume's mount root (``_MOUNT_PARENTS``/``_MOUNT_GRANDPARENTS``), or its
+    drive root is missing (Windows ``E:\\``). Anything else that is missing
+    is an ordinary deletion."""
+    missing = None
+    for step in (path, *path.parents):
+        try:
+            if step.exists():
+                break
+        except OSError:
+            return True
+        missing = step
+    else:
+        return bool(path.drive)
+    if missing is None:
+        return False
+    parent = missing.parent
+    return parent in _MOUNT_PARENTS or (
+        parent.parent in _MOUNT_GRANDPARENTS and parent != parent.parent
+    )
 
 
 def _was_reset(seen: str, folder: Path) -> bool:

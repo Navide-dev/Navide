@@ -55,7 +55,11 @@ which runs, in order:
    A target or config folder behind a link that leads nowhere (a volume not
    mounted yet, a dotfiles checkout mid-switch) is **unknown**: neither a
    removal nor a reset. Nothing is written, turned off or forgotten, and
-   `apply` returns `"unknown"` until the link leads somewhere again.
+   `apply` returns `"unknown"` until the link leads somewhere again. The same
+   holds for a folder on a volume that is not mounted: when the first missing
+   folder on the way down is a mount root (`/Volumes/<name>`, `/mnt/<name>`,
+   `/media/<user>/<name>`, `/run/media/<user>/<name>`) or a missing drive root
+   (`E:\`). Any other missing folder is judged as before.
    A workspace is keyed by its canonical path (links resolved, `..`
    collapsed, each folder spelled as stored), so a refusal holds however the
    pane spells it.

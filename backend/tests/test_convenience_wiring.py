@@ -219,6 +219,66 @@ def test_a_config_folder_behind_a_dangling_link_is_unknown_not_a_reset(gate, tmp
     assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
 
 
+@pytest.mark.parametrize("layout", ["volumes", "media"])
+def test_a_config_folder_on_an_unmounted_volume_is_unknown_not_a_reset(
+    gate, tmp_path, monkeypatch, layout
+) -> None:
+    """CLAUDE_CONFIG_DIR sits on an external volume with no link in between;
+    the volume is unmounted, so the missing folder is its mount root. That is
+    not a reset: nothing is written or announced, and the hook the user
+    deleted stays deleted once the volume is back."""
+    from agent_team_backend import convenience
+
+    root = tmp_path / ("Volumes" if layout == "volumes" else "media")
+    if layout == "volumes":
+        monkeypatch.setattr(convenience, "_MOUNT_PARENTS", (root,))
+        volume = root / "X"
+    else:
+        monkeypatch.setattr(convenience, "_MOUNT_GRANDPARENTS", (root,))
+        volume = root / "me" / "X"
+    folder = volume / "claude"
+    folder.mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    settings = folder / "settings.json"
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "first"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    del data["hooks"]["PreToolUse"]
+    settings.write_text(json.dumps(data), encoding="utf-8")
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    volume.rename(tmp_path / "unmounted")
+
+    out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+
+    assert out["convenience"] == "unknown"
+    assert not volume.exists()
+    (tmp_path / "unmounted").rename(volume)
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
+        "unchanged"
+    )
+    assert not any(part.startswith("PreToolUse:") for part in claude_hooks.hook_parts(settings))
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
+
+
+def test_a_config_folder_gone_inside_a_mounted_volume_is_still_a_reset(gate, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import convenience
+
+    root = tmp_path / "Volumes"
+    monkeypatch.setattr(convenience, "_MOUNT_PARENTS", (root,))
+    folder = root / "X" / "claude"
+    folder.mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    import shutil
+
+    shutil.rmtree(folder)
+    folder.mkdir()
+
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "reset"
+
+
 def test_a_settings_link_that_leads_nowhere_is_unknown_not_a_removal(gate, tmp_path, monkeypatch) -> None:
     """R3-L2: settings.json is a dotfiles link whose target is briefly gone.
     That is not the user removing Navide's hooks: the feature stays on,
