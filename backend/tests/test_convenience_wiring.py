@@ -671,6 +671,7 @@ async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, mon
     assert {(r["cli"], r["name"]) for r in rows} == {
         ("codex", "codex.pane-homes"), ("cursor", "cursor.project-mcp"),
         ("kimi", "pane-shims"), ("grok", "pane-shims"), ("antigravity", "pane-shims"), ("muse", "pane-shims"),
+        ("copilot", "pane-shims"), ("qwen", "pane-shims"),
     }
     assert all(r["owner"] == "navide" and r["valid"] for r in rows)
     assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}
