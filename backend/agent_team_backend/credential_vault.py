@@ -271,6 +271,20 @@ def _claude_home_secret_is_fresher(home_secret: str | None, slot_secret: str) ->
     return home_exp is not None and slot_exp is not None and home_exp >= slot_exp
 
 
+def _is_older_login_of_same_account(live: "LiveCredentials", stored: "LiveCredentials") -> bool:
+    """True when ``live`` is the same claude account as ``stored`` (both
+    emails known and equal) with a strictly older token expiry."""
+    live_exp = _claude_oauth_expires_at(live.secret)
+    stored_exp = _claude_oauth_expires_at(stored.secret)
+    if live_exp is None or stored_exp is None or live_exp >= stored_exp:
+        return False
+    emails = [
+        creds.account.get("emailAddress") if isinstance(creds.account, dict) else None
+        for creds in (live, stored)
+    ]
+    return all(isinstance(e, str) and e for e in emails) and emails[0].casefold() == emails[1].casefold()
+
+
 def _claude_credential_is_wiped(secret: str | None) -> bool:
     """True when a claude credentials JSON keeps its ``claudeAiOauth`` wrapper
     but holds neither token. Claude Code empties ``accessToken`` and
@@ -1069,6 +1083,12 @@ class CredentialVault:
         state so callers can roll it back."""
         self.require_store_mutation(agent_key)
         creds = self.read_live(agent_key, strict=True, scope=scope)
+        if agent_key == "claude" and _is_older_login_of_same_account(
+            creds, self.read_slot(agent_key, slot_id, scope=scope)
+        ):
+            # The slot holds a newer sign-in of this account than live does
+            # (a re-login while auto-repair was off): keep the newer one.
+            return creds
         self.write_slot(agent_key, slot_id, creds, scope=scope)
         return creds
 

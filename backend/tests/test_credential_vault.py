@@ -319,6 +319,33 @@ def test_capture_keeps_slot_when_live_claude_tokens_are_wiped(tmp_path: Path) ->
     assert captured.secret == _WIPED
 
 
+def test_capture_never_replaces_a_newer_login_of_the_same_account_with_an_older_one(tmp_path: Path) -> None:
+    """P4: the slot holds a fresh sign-in of the account while live still
+    runs on the account's older token; mirroring live back would lose it."""
+    vault = _file_vault(tmp_path)
+    older = json.dumps({"claudeAiOauth": {"accessToken": "a1", "refreshToken": "r1", "expiresAt": 1000}})
+    newer = json.dumps({"claudeAiOauth": {"accessToken": "a2", "refreshToken": "r2", "expiresAt": 2000}})
+    vault.write_live("claude", LiveCredentials(secret=older, account={"emailAddress": "a@x.com"}))
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=newer, account={"emailAddress": "a@x.com"}))
+
+    captured = vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == newer
+    assert captured.secret == older  # switch() can still roll live back
+
+
+def test_capture_still_mirrors_an_older_token_of_a_different_account(tmp_path: Path) -> None:
+    vault = _file_vault(tmp_path)
+    older = json.dumps({"claudeAiOauth": {"accessToken": "b1", "refreshToken": "r1", "expiresAt": 1000}})
+    newer = json.dumps({"claudeAiOauth": {"accessToken": "a2", "refreshToken": "r2", "expiresAt": 2000}})
+    vault.write_live("claude", LiveCredentials(secret=older, account={"emailAddress": "b@x.com"}))
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=newer, account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == older
+
+
 def test_capture_stores_claude_credential_that_still_has_a_token(tmp_path: Path) -> None:
     """Only a fully wiped blob is refused: an expired-but-refreshable
     credential still carries the refresh token and must be backed up."""
