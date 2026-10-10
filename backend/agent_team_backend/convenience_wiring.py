@@ -320,7 +320,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
         reset_folder=Path(cwd) / wiring.project_rel[0], per_target=True,
     )
     for name in refused:
-        g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")
+        g.record("cursor.project-skills", "removed-entry", str(target / name), detail="link deleted outside Navide")
     if outcome in ("off", "removed", "refused"):
         return False
     if not manifest.is_file():

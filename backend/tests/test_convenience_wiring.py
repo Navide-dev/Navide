@@ -695,8 +695,10 @@ def test_a_planted_skill_link_the_user_deleted_is_refused_in_that_workspace_only
     assert not (skills / "alpha").is_symlink()
     assert (skills / "beta").is_symlink()
     assert gate.state("cursor.project-skills") == ("allowed", "default")
-    removed = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "removed"]
-    assert removed == [(str(skills / "alpha"), True)]
+    # One link of several, refused in one workspace: the feature is not off,
+    # so the row must not read "turned off".
+    removed = [(e["action"], e["target"], e["notify"]) for e in gate.history() if e["action"].startswith("removed")]
+    assert removed == [("removed-entry", str(skills / "alpha"), True)]
     assert not [e for e in gate.history() if e["action"] == "repair"]
 
 
