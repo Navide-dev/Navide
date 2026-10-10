@@ -11793,6 +11793,10 @@ async def cli_extensions_list(session: "Session", msg_id: str, msg_type: str, pa
     from . import cli_extensions
 
     inventory = await asyncio.to_thread(cli_extensions.scan)
+    from . import app
+
+    listing = await asyncio.to_thread(app.convenience_gate.listing)
+    inventory.items.extend(cli_extensions.navide_changes(listing["features"]))
     await session.send_json(make_response(msg_id, msg_type, inventory.as_dict()))
 
 

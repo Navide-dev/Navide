@@ -424,3 +424,31 @@ def test_a_file_moved_into_the_real_claude_home_is_announced(gate, tmp_path) -> 
 
     [entry] = [e for e in gate.history() if e["feature"] == "claude.account-homes"]
     assert (entry["action"], entry["target"], entry["notify"]) == ("repair", str(target), True)
+
+
+@pytest.mark.asyncio
+async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, cli_extensions, ws_handlers
+
+    monkeypatch.setattr(app, "convenience_gate", gate)
+    monkeypatch.setattr(cli_extensions, "scan", lambda home=None, runner=None: cli_extensions.Inventory(vendors=[], items=[]))
+    gate.note("codex.pane-homes", tmp_path / ".codex-panes")
+    gate.note("pane-shims", tmp_path / ".navide-panes")
+    gate.apply("cursor.project-mcp", tmp_path / "mcp.json", write=lambda: None, present=lambda: True)
+    gate.apply("claude.hooks", tmp_path / "settings.json", write=lambda: None, present=lambda: True)
+    sent: list[dict] = []
+
+    async def send_json(msg: dict) -> None:
+        sent.append(msg)
+
+    await ws_handlers.cli_extensions_list(SimpleNamespace(send_json=send_json), "1", "cli_extensions.list", {})
+
+    rows = [i for i in sent[-1]["payload"]["items"] if i["kind"] == "navide-change"]
+    assert {(r["cli"], r["name"]) for r in rows} == {
+        ("codex", "codex.pane-homes"), ("cursor", "cursor.project-mcp"),
+        ("kimi", "pane-shims"), ("grok", "pane-shims"), ("antigravity", "pane-shims"), ("muse", "pane-shims"),
+    }
+    assert all(r["owner"] == "navide" and r["valid"] for r in rows)
+    assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}

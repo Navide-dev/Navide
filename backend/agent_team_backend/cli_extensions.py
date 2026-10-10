@@ -117,7 +117,8 @@ class CliExtension:
     cli: str
     id: str
     name: str
-    #: ``plugin`` | ``mod`` | ``extension`` | ``hook`` | ``package``.
+    #: ``plugin`` | ``mod`` | ``extension`` | ``hook`` | ``package``, or
+    #: ``navide-change`` for a convenience-feature target (see navide_changes).
     kind: str
     #: The vendor's own name for it, untranslated ("Claude plugin").
     type_label: str
@@ -212,6 +213,37 @@ def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
 
 
 # ── readers ──────────────────────────────────────────────────────────────────
+
+
+#: Convenience features listed beside each CLI's own extensions. Hooks are
+#: left out — the scan already reads them from the CLI's files — and so is the
+#: account repair, which writes logins, not anything a CLI loads.
+_CHANGE_CLIS: dict[str, tuple[str, ...]] = {
+    "codex.hook-trust": ("codex",),
+    "codex.login-promote": ("codex",),
+    "codex.pane-homes": ("codex",),
+    "cursor.project-mcp": ("cursor",),
+    "cursor.project-skills": ("cursor",),
+    "claude.account-homes": ("claude",),
+    "pane-shims": ("kimi", "grok", "antigravity", "muse"),
+}
+
+
+def navide_changes(features: list[dict[str, Any]]) -> list[CliExtension]:
+    """What Navide wrote into a CLI's world for a convenience feature, one row
+    per recorded target, so the CLI Extensions page shows them with owner
+    navide. ``features`` is ``ConvenienceGate.listing()["features"]``."""
+    out: list[CliExtension] = []
+    for feature in features:
+        for cli in _CHANGE_CLIS.get(feature["id"], ()):
+            for target in feature["targets"]:
+                out.append(CliExtension(
+                    cli=cli, id=f"navide-change:{feature['id']}:{target['path']}",
+                    name=feature["id"], kind="navide-change", type_label="Navide change",
+                    enabled=feature["state"] == "allowed", owner="navide", evidence="recorded",
+                    path=target["path"],
+                ))
+    return out
 
 
 def _read_source(cli: str, source: Any, home: Path, run: Runner) -> list[CliExtension]:
