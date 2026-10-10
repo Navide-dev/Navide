@@ -329,17 +329,27 @@ MANIFEST_FILE = ".navide-links"
 
 
 def _read_manifest(target: Path) -> set[str]:
+    """Names of the links Navide planted, as plain entry names only.
+
+    The manifest sits in the user's repository where anyone can edit it, and
+    its names are unlinked: one with a separator or ``..`` would reach outside
+    the skills directory, so it is ignored.
+    """
     manifest = target / MANIFEST_FILE
     try:
         if not manifest.is_file():
             return set()
-        return {
+        names = {
             line.strip()
             for line in manifest.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.startswith("#")
         }
     except OSError:
         return set()
+    return {
+        name for name in names
+        if name not in (".", "..") and "/" not in name and "\\" not in name
+    }
 
 
 def _write_manifest(target: Path, planted: set[str]) -> None:

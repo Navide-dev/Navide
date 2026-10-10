@@ -980,3 +980,25 @@ def test_project_dir_never_writes_the_exclude_of_a_home_directory_repo(
 
     assert (cwd / ".cursor" / "skills" / "alpha").is_symlink()
     assert not (home / ".git" / "info" / "exclude").exists()
+
+
+def test_a_manifest_name_can_never_reach_outside_the_skills_directory(tmp_path: Path) -> None:
+    """The manifest lives in the user's repo, so anyone can write it.
+
+    A name with a path separator or ``..`` must never be followed: removing
+    "our" links would then unlink a symlink anywhere on disk.
+    """
+    repo = tmp_path / "repo"
+    target = repo / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside-link"
+    outside.symlink_to(tmp_path)
+    (target / skills_wiring.MANIFEST_FILE).write_text(
+        "../../../outside-link\nsub/name\n..\nok\n", encoding="utf-8"
+    )
+    (target / "ok").symlink_to(tmp_path)
+
+    skills_wiring.remove_project_dir(target)
+
+    assert outside.is_symlink()
+    assert not (target / "ok").exists()
