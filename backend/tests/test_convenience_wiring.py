@@ -167,6 +167,30 @@ def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent
     assert [e["action"] for e in gate.history(feature_id)] == ["first", "first"]
 
 
+def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_removal(gate, homes) -> None:
+    """R6 for Copilot: its hook file is Navide's alone, so deleting it is the
+    user's removal. Deleting the whole Copilot folder (resetting the CLI) is
+    not: the feature stays allowed and, once Copilot is set up again, the
+    hook is written as a first one."""
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+    shutil.rmtree(homes["copilot"])
+
+    gone = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+    homes["copilot"].mkdir()
+    back = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+
+    assert (gone["convenience"], back["convenience"]) == ("unchanged", "first")
+    assert gate.state("copilot.hooks") == ("allowed", "default")
+    assert _target("copilot").is_file()
+
+    _target("copilot").unlink()
+    assert convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)["convenience"] == "removed"
+    assert gate.state("copilot.hooks") == ("off", "removed")
+
+
 def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     settings = _target("claude")
     settings.write_text(json.dumps({

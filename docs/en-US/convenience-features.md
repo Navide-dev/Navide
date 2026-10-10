@@ -40,7 +40,9 @@ which runs, in order:
    merges into (Claude's and Qwen's settings.json): resetting the CLI's
    config folder took Navide's entry along with everything else, so the
    target is forgotten, the feature stays allowed and the next write is
-   announced as `first`, like a fresh install.
+   announced as `first`, like a fresh install. For Copilot, whose hook file
+   is Navide's alone, only the whole `~/.copilot` folder gone counts as a
+   reset; the folder still there without the hook file is a removal.
 3. **Backup.** A file target is copied into
    `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
    (deduplicated by content). A backup is the whole file, **including any

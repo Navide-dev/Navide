@@ -257,7 +257,7 @@ class ConvenienceGate:
         detail: str = "",
         quiet_repairs: bool = False,
         parts: Callable[[], set[str]] | None = None,
-        shared_file: bool = False,
+        reset_when_missing: Path | None = None,
     ) -> str:
         """Run one write through the gate.
 
@@ -278,11 +278,13 @@ class ConvenienceGate:
         ``removed-entry``, ``excluded`` names it from then on so ``write``
         leaves it out, and the feature stays allowed for the rest.
 
-        ``shared_file`` marks ``file`` as the user's own file Navide merges
-        into (a CLI's settings.json), not one Navide owns. When that file is
-        gone altogether — the user reset the CLI's config folder — Navide's
-        entry went with everything else: that is a fresh start, not the
-        user's removal, so the target is forgotten and written as ``first``.
+        ``reset_when_missing`` is the path whose absence means the user
+        reset the CLI rather than removed Navide's entry: the user's own file
+        Navide merges into (a CLI's settings.json), or the CLI's whole config
+        folder when the target file is Navide's alone. When it is gone,
+        Navide's entry went with everything else: that is a fresh start, not
+        the user's removal, so the target is forgotten and the next write is
+        a ``first``.
         """
         feature(feature_id)
         key = str(target)
@@ -291,7 +293,7 @@ class ConvenienceGate:
                 return "off"
             known = self._known(feature_id, key)
             was_present = _probe(present)
-            if known and was_present is False and shared_file and file is not None and not file.exists():
+            if known and was_present is False and reset_when_missing is not None and not reset_when_missing.exists():
                 self.forget(feature_id, key)
                 known = False
             if known and was_present is False:
