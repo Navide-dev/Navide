@@ -24,7 +24,7 @@ import os
 import re
 import shutil
 import tempfile
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from agent_team_backend import osplat
@@ -333,7 +333,10 @@ def _read_manifest(target: Path) -> set[str]:
 
     The manifest sits in the user's repository where anyone can edit it, and
     its names are unlinked: one with a separator or ``..`` would reach outside
-    the skills directory, so it is ignored.
+    the skills directory, and so would a Windows drive-relative name
+    (``C:x``) or stream (``a:b``). Only a name that is its own final path
+    component under both POSIX and Windows rules is kept. Lines split on
+    ``\\n`` alone, the one separator ``_write_manifest`` writes.
     """
     manifest = target / MANIFEST_FILE
     try:
@@ -341,15 +344,22 @@ def _read_manifest(target: Path) -> set[str]:
             return set()
         names = {
             line.strip()
-            for line in manifest.read_text(encoding="utf-8").splitlines()
+            for line in manifest.read_text(encoding="utf-8").split("\n")
             if line.strip() and not line.startswith("#")
         }
     except OSError:
         return set()
-    return {
-        name for name in names
-        if name not in (".", "..") and "/" not in name and "\\" not in name
-    }
+    return {name for name in names if _plain_entry_name(name)}
+
+
+def _plain_entry_name(name: str) -> bool:
+    return (
+        name not in (".", "..")
+        and name.isprintable()
+        and ":" not in name
+        and PurePosixPath(name).name == name
+        and PureWindowsPath(name).name == name
+    )
 
 
 def _write_manifest(target: Path, planted: set[str]) -> None:

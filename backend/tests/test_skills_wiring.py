@@ -1002,3 +1002,15 @@ def test_a_manifest_name_can_never_reach_outside_the_skills_directory(tmp_path: 
 
     assert outside.is_symlink()
     assert not (target / "ok").exists()
+
+
+@pytest.mark.parametrize("name", ["C:evil", "C:\\evil", "a:b", "..", ".", "a/b", "a\\b", "x\u2028y"])
+def test_only_plain_entry_names_are_read_from_the_manifest(tmp_path: Path, name: str) -> None:
+    """Windows drive-relative names (``C:evil``) and alternate data streams
+    (``a:b``) escape the directory on Windows even without a separator."""
+    target = tmp_path / "skills"
+    target.mkdir()
+    (target / skills_wiring.MANIFEST_FILE).write_text(f"{name}\nok\n", encoding="utf-8")
+
+    assert skills_wiring._read_manifest(target) == {"ok"}
+
