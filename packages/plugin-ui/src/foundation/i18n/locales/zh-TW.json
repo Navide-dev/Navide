@@ -126,7 +126,7 @@
         "name": "pane 啟動目錄",
         "benefit": "Kimi、Grok、Antigravity 與 Muse 的 pane 從各自的目錄啟動，讓每個 pane 保有自己的帳號與設定。",
         "purpose": "讓每個 pane 保有自己的帳號與設定",
-        "writes": "~/.navide-panes/，以及 Navide 在各家自己目錄裡接管的項目",
+        "writes": "~/.navide-panes/；另外會把 pane 建立的項目搬進各家自己的目錄（~/.kimi-code、~/.grok、~/.gemini、~/.agents、~/.copilot、~/.qwen），並在那裡建立空的項目；每次搬移或建立都會記錄",
         "cost": "必要：它服務的 pane 少了它就無法執行。"
       },
       "claude_account-homes": {

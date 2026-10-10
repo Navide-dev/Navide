@@ -70,13 +70,17 @@ def note(feature_id: str, target: str | Path, *, detail: str = "") -> None:
         log.warning("noting %s %s failed: %s", feature_id, target, err)
 
 
-def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
-    """Announce a change a required feature made to the user's own files."""
+def changed(feature_id: str, target: str | Path, *, detail: str, once: bool = False) -> None:
+    """Announce a change a required feature made to the user's own files;
+    with ``once``, later changes to the same path are only logged."""
     g = _gate
     if g is None:
         return
     try:
-        g.record(feature_id, "repair", str(target), detail=detail)
+        if once:
+            g.changed_once(feature_id, target, detail=detail)
+        else:
+            g.record(feature_id, "repair", str(target), detail=detail)
     except Exception as err:  # noqa: BLE001
         log.warning("recording %s %s failed: %s", feature_id, target, err)
 
@@ -168,7 +172,10 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
     remove = REMOVERS.get(feature_id)
     if agent_key is not None:
         remove = lambda: remove_hooks(agent_key)  # noqa: E731
+    refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
     g.set_allowed(feature_id, allowed, remove=remove)
+    if refusing:
+        _clear_refused_skills(refusing)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:
@@ -230,7 +237,9 @@ def _remove_project_configs() -> None:
 def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     """``skills_wiring.sync_project_dir`` as the feature cursor.project-skills.
 
-    The manifest of planted links is the marker. When a sync leaves nothing
+    The manifest of planted links is the marker. A planted link the user
+    deleted by hand is refused in that workspace only — logged and announced
+    as a removal of that one name — and the feature stays allowed. When a sync leaves nothing
     planted, Navide removed the manifest itself, so the target is forgotten
     rather than later read as a removal by the user.
     """
@@ -240,13 +249,24 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     if g is None or not cwd:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     target = Path(cwd).joinpath(*wiring.project_rel)
+    if not skills_wiring.project_target_safe(target, Path(cwd)):
+        # Not the workspace's folder: nothing is written, so nothing is gated.
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
+    # Before the gate reads the manifest, so recording the refusal is not
+    # mistaken for a change Navide made.
+    refused = skills_wiring.refuse_missing_links(target) if g.allowed("cursor.project-skills") else []
 
     def write() -> None:
         delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
 
-    outcome = g.apply("cursor.project-skills", target, write=write, present=manifest.is_file, file=manifest)
+    outcome = g.apply(
+        "cursor.project-skills", target, write=write,
+        present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
+    )
+    for name in refused:
+        g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")
     if outcome in ("off", "removed"):
         return False
     if not manifest.is_file():
@@ -257,11 +277,25 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
 def _remove_project_dirs() -> None:
     from .plugins.builtin.navide_skills import skills_wiring
 
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
     for target in _targets("cursor.project-skills"):
         try:
-            skills_wiring.remove_project_dir(Path(target))
+            skills_wiring.remove_project_dir(Path(target), root=Path(target).parents[depth - 1])
         except OSError as err:
             log.warning("removing Navide's links from %s failed: %s", target, err)
+
+
+def _clear_refused_skills(targets: list[str]) -> None:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
+    for target in targets:
+        try:
+            skills_wiring.clear_refused(Path(target), root=Path(target).parents[depth - 1])
+        except OSError as err:
+            log.warning("clearing refused skills in %s failed: %s", target, err)
 
 
 # ── Codex: hook trust (S4) ─────────────────────────────────────────────────

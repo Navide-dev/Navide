@@ -263,6 +263,158 @@ def test_turning_cursor_skills_off_removes_only_planted_links(gate, homes, tmp_p
     assert not (repo / ".cursor" / "skills" / "alpha").exists()
 
 
+def test_turning_cursor_skills_off_takes_back_the_folder_and_exclude_navide_created(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.write_text("# user\n", encoding="utf-8")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    assert "/.cursor/skills/" in exclude.read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+
+    assert exclude.read_text(encoding="utf-8") == "# user\n"
+    assert not (repo / ".cursor" / "skills").exists()
+
+
+def test_turning_cursor_skills_off_drops_only_its_own_exclude_lines_in_the_users_folder(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    (repo / ".cursor" / "skills" / "mine").mkdir(parents=True)
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.write_text("# user\n/.cursor/skills/mine-too\n", encoding="utf-8")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    assert "/.cursor/skills/alpha" in exclude.read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+
+    assert exclude.read_text(encoding="utf-8") == "# user\n/.cursor/skills/mine-too\n"
+    assert sorted(p.name for p in (repo / ".cursor" / "skills").iterdir()) == ["mine"]
+
+
+def _users_skills_behind_a_repo_link(tmp_path: Path, link_level: str) -> tuple[Path, Path, Path]:
+    """A cloned repo whose .cursor or .cursor/skills is a link to the user's
+    own skills folder, with a manifest naming one of the user's links."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    user_cursor = tmp_path / "home" / ".cursor"
+    user_skills = user_cursor / "skills"
+    user_skills.mkdir(parents=True)
+    real_skill = tmp_path / "elsewhere" / "alpha"
+    real_skill.mkdir(parents=True)
+    (user_skills / "alpha").symlink_to(real_skill)
+    (user_skills / skills_wiring.MANIFEST_FILE).write_text("alpha\n", encoding="utf-8")
+    repo = _cursor_repo(tmp_path)
+    if link_level == "skills":
+        (repo / ".cursor").mkdir()
+        (repo / ".cursor" / "skills").symlink_to(user_skills)
+    else:
+        (repo / ".cursor").symlink_to(user_cursor)
+    return repo, user_skills, real_skill
+
+
+@pytest.mark.parametrize("link_level", ["skills", "cursor"])
+def test_a_skills_folder_linked_outside_the_repo_is_never_synced(gate, tmp_path, monkeypatch, link_level) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [])
+    repo, user_skills, real_skill = _users_skills_behind_a_repo_link(tmp_path, link_level)
+    wiring = skills_wiring.SkillsWiring(project_rel=(".cursor", "skills"))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert (user_skills / "alpha").is_symlink()
+    assert gate.listing_feature("cursor.project-skills")["targets"] == []
+
+
+@pytest.mark.parametrize("link_level", ["skills", "cursor"])
+def test_a_skills_folder_linked_outside_the_repo_is_never_removed_from(tmp_path, link_level) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    repo, user_skills, _ = _users_skills_behind_a_repo_link(tmp_path, link_level)
+
+    assert skills_wiring.remove_project_dir(repo / ".cursor" / "skills", root=repo) == 0
+
+    assert (user_skills / "alpha").is_symlink()
+    assert (user_skills / skills_wiring.MANIFEST_FILE).is_file()
+
+
+def _two_cursor_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agent_team_backend.cli_vendors.base import SkillsWiring
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    sources = [tmp_path / "managed" / name for name in ("alpha", "beta")]
+    for source in sources:
+        source.mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: list(sources))
+    return SkillsWiring(project_rel=(".cursor", "skills"))
+
+
+def test_a_planted_skill_link_the_user_deleted_is_refused_in_that_workspace_only(
+    gate, tmp_path, monkeypatch
+) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()  # the manifest still names it
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert not (skills / "alpha").is_symlink()
+    assert (skills / "beta").is_symlink()
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    removed = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "removed"]
+    assert removed == [(str(skills / "alpha"), True)]
+    assert not [e for e in gate.history() if e["action"] == "repair"]
+
+
+def test_re_allowing_cursor_skills_clears_the_refused_names(gate, homes, tmp_path, monkeypatch) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    convenience_wiring.set_feature("cursor.project-skills", True, port_file=str(homes["port"]))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert (skills / "alpha").is_symlink()
+
+
+def test_a_cleared_off_then_on_skills_feature_links_a_refused_name_again(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+    convenience_wiring.set_feature("cursor.project-skills", True, port_file=str(homes["port"]))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert (skills / "alpha").is_symlink() and (skills / "beta").is_symlink()
+
+
+def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"
@@ -514,6 +666,76 @@ def test_a_file_moved_into_the_real_claude_home_is_announced(gate, tmp_path) -> 
     assert (entry["action"], entry["target"], entry["notify"]) == ("repair", str(target), True)
 
 
+def _shim_changes(gate) -> list[tuple[str, str, bool]]:
+    return [(e["action"], e["target"], e["notify"]) for e in reversed(gate.history()) if e["feature"] == "pane-shims"]
+
+
+def test_an_entry_a_pane_shim_moves_into_the_vendors_folder_is_announced(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+
+    entry = tmp_path / "shim" / "sessions"
+    entry.mkdir(parents=True)
+    target = tmp_path / "home" / ".kimi-code" / "sessions"
+
+    assert pane_home._adopt(entry, target) is True
+
+    assert _shim_changes(gate) == [("repair", str(target), True)]
+
+
+def test_a_pane_shim_change_to_the_same_path_is_announced_only_the_first_time(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    target = tmp_path / "home" / ".kimi-code" / "sessions"
+    for adopt in (pane_home._adopt, skills_wiring._adopt):
+        entry = tmp_path / "shim" / "sessions"
+        entry.mkdir(parents=True)
+        if target.exists():
+            target.rmdir()
+        adopt(entry, target)
+
+    assert _shim_changes(gate) == [("repair", str(target), True), ("repair", str(target), False)]
+
+
+def test_empty_entries_a_pane_shim_seeds_in_the_vendors_folder_are_announced(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+
+    real = tmp_path / "home" / ".grok"
+    real.mkdir(parents=True)
+    spec = pane_home.SHIM_SPECS["grok"]
+
+    pane_home._seed_link_targets(spec, real, tmp_path / "shim" / ".grok")
+    pane_home._seed_link_targets(spec, real, tmp_path / "shim" / ".grok")
+
+    seeded = [real / name for name in (*spec.seeded_dirs, *spec.seeded_files)]
+    assert _shim_changes(gate) == [("repair", str(path), True) for path in seeded]
+
+
+def test_an_entry_a_skills_shim_moves_into_the_vendors_folder_is_announced(gate, tmp_path) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    entry = tmp_path / "shim" / "config.json"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("{}", encoding="utf-8")
+    target = tmp_path / "home" / ".copilot" / "config.json"
+
+    skills_wiring._adopt(entry, target)
+
+    assert target.is_file()
+    assert _shim_changes(gate) == [("repair", str(target), True)]
+
+
+def test_pane_shim_changes_are_listed_for_every_cli_that_uses_a_shim(gate, tmp_path) -> None:
+    from agent_team_backend import cli_extensions
+
+    gate.note("pane-shims", tmp_path / ".navide-panes")
+
+    rows = cli_extensions.navide_changes(gate.listing()["features"])
+
+    clis = sorted(row.cli for row in rows if row.name == "pane-shims")
+    assert clis == ["antigravity", "copilot", "grok", "kimi", "muse", "qwen"]
+
+
 @pytest.mark.asyncio
 async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, monkeypatch) -> None:
     from types import SimpleNamespace
@@ -537,6 +759,7 @@ async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, mon
     assert {(r["cli"], r["name"]) for r in rows} == {
         ("codex", "codex.pane-homes"), ("cursor", "cursor.project-mcp"),
         ("kimi", "pane-shims"), ("grok", "pane-shims"), ("antigravity", "pane-shims"), ("muse", "pane-shims"),
+        ("copilot", "pane-shims"), ("qwen", "pane-shims"),
     }
     assert all(r["owner"] == "navide" and r["valid"] for r in rows)
     assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}

@@ -246,6 +246,18 @@ class ConvenienceGate:
             self.record(feature_id, "first", key, detail=detail)
             return True
 
+    def changed_once(self, feature_id: str, target: str | Path, *, detail: str = "") -> bool:
+        """Log a change a required feature made to ``target``, announcing it
+        only the first time that path is changed: True when announced."""
+        feature(feature_id)
+        key = str(target)
+        with self._lock:
+            first = not self._known(feature_id, key)
+            if first:
+                self._mark(feature_id, key, present=True)
+            self.record(feature_id, "repair", key, detail=detail, notify=first)
+            return first
+
     def forget(self, feature_id: str, target: str | Path) -> None:
         """Drop a target Navide took back itself (a reclaimed pane home)."""
         with self.db.transaction() as cur:

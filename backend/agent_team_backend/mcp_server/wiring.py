@@ -250,8 +250,10 @@ def _write_atomic(path: Path, content: str) -> None:
     A fixed ``.tmp`` neighbour would collide when two panes on the same
     workspace spawn at once: one os.replace wins, the other raises on a temp
     file that is already gone, and worse, a CLI starting in between could read
-    a half-written config.
+    a half-written config. A link (a dotfiles-managed config) is written
+    through: replacing it would turn it into a plain file.
     """
+    path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         mode: int | None = path.stat().st_mode & 0o777

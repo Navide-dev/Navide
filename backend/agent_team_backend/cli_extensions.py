@@ -225,7 +225,7 @@ _CHANGE_CLIS: dict[str, tuple[str, ...]] = {
     "cursor.project-mcp": ("cursor",),
     "cursor.project-skills": ("cursor",),
     "claude.account-homes": ("claude",),
-    "pane-shims": ("kimi", "grok", "antigravity", "muse"),
+    "pane-shims": ("kimi", "grok", "antigravity", "muse", "copilot", "qwen"),
 }
 
 
