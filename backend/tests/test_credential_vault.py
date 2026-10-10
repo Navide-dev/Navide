@@ -2018,3 +2018,84 @@ def test_an_app_secret_with_a_backslash_or_quote_is_read_back_exactly(tmp_path, 
     for token in ('{"a":"b\\"}', 'x"y', "tab\there"):
         vault.write_app_secret("navide-server-token", token)
         assert vault.read_app_secret("navide-server-token") == token
+
+
+# ── Startup repair of the live login (security review D2/D2b) ────────────────
+
+_REPAIR_SEC_A = '{"claudeAiOauth":{"accessToken":"tokA","refreshToken":"rA","expiresAt":9999999999999}}'
+_REPAIR_SEC_B = '{"claudeAiOauth":{"accessToken":"tokB","refreshToken":"rB","expiresAt":9999999999999}}'
+
+
+def _promoted(root: Path) -> None:
+    for marker in (".live-unified", ".homes-promoted"):
+        path = root / "claude" / marker
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+
+def test_a_failed_keychain_read_at_startup_never_overwrites_the_live_login(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """D2: rc 36 from security is not an empty live login."""
+    from agent_team_backend.credential_vault import CLAUDE_LIVE_KEYCHAIN_SERVICE
+
+    items: dict[str, str] = {}
+
+    def security(args, input_text=None):
+        tokens = shlex.split((input_text or "").rstrip("\n")) if args == ["-i"] else list(args)
+        service = tokens[tokens.index("-s") + 1]
+        if tokens[0] == "find-generic-password":
+            if service == CLAUDE_LIVE_KEYCHAIN_SERVICE:
+                return 36, "User interaction is not allowed."
+            return (0, security_g_output(items[service])) if service in items else (44, "")
+        if tokens[0] == "add-generic-password":
+            items[service] = tokens[tokens.index("-w") + 1]
+            return 0, ""
+        if tokens[0] == "delete-generic-password":
+            return (0, "") if items.pop(service, None) is not None else (44, "")
+        return 1, ""
+
+    (tmp_path / "home").mkdir()
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=security, platform="darwin")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    items[CLAUDE_LIVE_KEYCHAIN_SERVICE] = _REPAIR_SEC_B
+    _promoted(tmp_path / "root")
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert items[CLAUDE_LIVE_KEYCHAIN_SERVICE] == _REPAIR_SEC_B
+    assert _isolated_convenience_gate.history() == []
+
+
+def test_a_sign_out_outside_navide_is_a_prompt_not_a_sign_back_in(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """D2b: once the live login was published, an empty one at startup is the
+    user's `claude /logout` — told, never undone."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert vault.read_live("claude").secret is None
+    [entry] = _isolated_convenience_gate.history()
+    assert entry["action"] == "prompt"
+    assert json.loads(entry["detail"]) == {"agentKey": "claude", "reason": "logout"}
+
+
+def test_the_first_promotion_still_publishes_the_active_account(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """The migration case the repair exists for keeps working."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    (tmp_path / "root" / "claude" / ".live-unified").touch()
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert vault.read_live("claude").secret == _REPAIR_SEC_A
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]

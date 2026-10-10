@@ -1861,7 +1861,10 @@ class CredentialVault:
         # The marker is written only after every profile promoted cleanly —
         # a failed profile leaves it unwritten so the next startup retries.
         promoted_marker = self._homes_promoted_marker(agent_key)
-        if not promoted_marker.exists():
+        # Set on an earlier startup: the live login was published then, so an
+        # empty one now is the user signing out outside Navide.
+        promoted_before = promoted_marker.exists()
+        if not promoted_before:
             all_promoted = True
             for profile_id in profile_ids:
                 try:
@@ -1892,14 +1895,19 @@ class CredentialVault:
         # publish the freshly promoted slot so panes are signed in.
         try:
             active_scope = scopes.get(active_id)
+            # Strict: a transient Keychain failure is no empty live login.
             if (
-                self.read_live(agent_key, scope=active_scope).secret is None
+                self.read_live(agent_key, strict=True, scope=active_scope).secret is None
                 and self.read_slot(agent_key, active_id, scope=active_scope).secret is not None
             ):
                 # The convenience feature credentials.auto-repair: announced,
-                # skipped when off. An empty live login is no other account.
-                from .convenience_wiring import repair_live_login
+                # skipped when off. A sign-out made outside Navide is never
+                # undone; the user is told instead.
+                from .convenience_wiring import prompt_live_logout, repair_live_login
 
+                if promoted_before:
+                    prompt_live_logout(agent_key)
+                    return
                 repair_live_login(
                     agent_key, active_id,
                     lambda: self.restore(agent_key, active_id, scope=active_scope),
