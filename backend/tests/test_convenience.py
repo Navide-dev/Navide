@@ -207,3 +207,14 @@ def test_the_listing_carries_every_feature(gate, tmp_path) -> None:
     assert by_id["claude.hooks"]["targets"][0]["present"] is True
     assert by_id["codex.pane-homes"]["toggleable"] is False
     assert listing["upgrade"] is None
+
+
+def test_noting_a_required_target_announces_only_its_first_creation(gate, tmp_path) -> None:
+    root = tmp_path / ".codex-panes"
+
+    assert gate.note("codex.pane-homes", root, detail="per-pane CODEX_HOME") is True
+    assert gate.note("codex.pane-homes", root) is False
+
+    [entry] = gate.history()
+    assert (entry["feature"], entry["action"], entry["notify"]) == ("codex.pane-homes", "first", True)
+    assert gate.listing_feature("codex.pane-homes")["targets"][0]["path"] == str(root)

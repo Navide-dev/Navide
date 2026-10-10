@@ -228,6 +228,18 @@ class ConvenienceGate:
                 log.warning("announcing %s %s failed: %s", feature_id, action, err)
         return entry
 
+    def note(self, feature_id: str, target: str | Path, *, detail: str = "") -> bool:
+        """Disclose a target a required feature created, once: True the first
+        time (logged and announced), False after that."""
+        feature(feature_id)
+        key = str(target)
+        with self._lock:
+            if self._known(feature_id, key):
+                return False
+            self._mark(feature_id, key, present=True)
+            self.record(feature_id, "first", key, detail=detail)
+            return True
+
     def forget(self, feature_id: str, target: str | Path) -> None:
         """Drop a target Navide took back itself (a reclaimed pane home)."""
         with self.db.transaction() as cur:

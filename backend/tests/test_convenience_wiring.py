@@ -291,7 +291,9 @@ def test_codex_hook_trust_allowed_seeds_as_before_and_announces_once(gate, tmp_p
 
     text = (real / "config.toml").read_text(encoding="utf-8")
     assert text.count("trusted_hash") == 3
-    assert [(e["action"], e["notify"]) for e in gate.history()] == [("repair", False), ("first", True)]
+    assert [(e["action"], e["notify"]) for e in gate.history("codex.hook-trust")] == [
+        ("repair", False), ("first", True),
+    ]
 
 
 def test_codex_hook_trust_rows_the_user_deleted_turn_the_feature_off(gate, tmp_path) -> None:
@@ -393,3 +395,32 @@ def test_the_same_account_in_another_case_is_a_repair_not_a_prompt(gate) -> None
         live_email="ME@example.com", slot_email="me@example.com",
     ) is True
     assert restored == ["x"]
+
+
+# ── Required features: disclosed, never switched ─────────────────────────────
+
+
+def test_the_codex_pane_homes_root_is_disclosed_on_first_creation(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    manager = CodexHomeManager(real_home=tmp_path / "real-codex", panes_root=tmp_path / ".codex-panes")
+    manager.prepare(PANE_A)
+    manager.prepare(PANE_B)
+
+    entries = [e for e in gate.history() if e["feature"] == "codex.pane-homes"]
+    assert [(e["action"], e["target"]) for e in entries] == [("first", str(tmp_path / ".codex-panes"))]
+
+
+def test_a_file_moved_into_the_real_claude_home_is_announced(gate, tmp_path) -> None:
+    from agent_team_backend.credential_vault import CredentialVault
+
+    vault = CredentialVault(root=tmp_path / "profiles", real_home=tmp_path / "home", platform="darwin")
+    src = tmp_path / "profiles" / "claude" / "a" / "config-dir" / "CLAUDE.md"
+    src.parent.mkdir(parents=True)
+    src.write_text("notes", encoding="utf-8")
+    target = tmp_path / "home" / ".claude" / "CLAUDE.md"
+
+    assert vault._migrate_file(src, target) is True
+
+    [entry] = [e for e in gate.history() if e["feature"] == "claude.account-homes"]
+    assert (entry["action"], entry["target"], entry["notify"]) == ("repair", str(target), True)

@@ -766,6 +766,9 @@ class CodexHomeManager:
         safe_id = self._safe_home_id(home_id)
         pane_home = self.panes_root / safe_id
         pane_home.mkdir(parents=True, exist_ok=True)
+        from ..convenience_wiring import note
+
+        note("codex.pane-homes", self.panes_root, detail="per-pane CODEX_HOME directories")
         self._share_config_entries(pane_home, source)
         self._prepare_skills_view(pane_home, source / "skills")
         return pane_home

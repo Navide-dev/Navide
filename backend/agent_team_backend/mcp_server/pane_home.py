@@ -437,6 +437,9 @@ def prepare(
     if reason is not None:
         log.warning("%s pane %s spawns unwired: %s", agent_key, pane_id, reason)
         return None
+    from ..convenience_wiring import note
+
+    note("pane-shims", panes_root(), detail="per-pane homes for MCP and skills")
     home = real_home()
     if PANES_DIR_NAME in home.parts:
         # The backend was launched from inside a shimmed pane and inherited its

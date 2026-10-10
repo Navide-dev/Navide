@@ -221,6 +221,9 @@ def prepare_root(
         else:
             root = panes_root() / agent_key / pane_id
             ours = True
+            from agent_team_backend.convenience_wiring import note
+
+            note("pane-shims", panes_root(), detail="per-pane homes for skills")
         real_root = home.joinpath(*wiring.root_home)
         sources = _managed_sources(agent_key, store, native_root)
         suppressed = [home.joinpath(*rel) for rel in wiring.discovery_home]

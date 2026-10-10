@@ -1644,10 +1644,17 @@ class CredentialVault:
         """Make sure a shared symlink can be written through: the target dir
         itself for a directory link, or the target's parent for a file link
         (the file is created by the CLI on first write, through the symlink)."""
+        base = target if is_dir else target.parent
+        existed = base.is_dir()
         try:
-            (target if is_dir else target.parent).mkdir(parents=True, exist_ok=True)
+            base.mkdir(parents=True, exist_ok=True)
         except OSError as err:
             log.warning("cannot ensure shared target base %s: %s", target, err)
+            return
+        if not existed:
+            from .convenience_wiring import note
+
+            note("claude.account-homes", base, detail="created for signed-in accounts")
 
     def _migrate_file(self, src: Path, target: Path) -> bool:
         """Move a real file that shadows a shared link into the real home.
@@ -1667,6 +1674,9 @@ class CredentialVault:
                 return True
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(os.fspath(src), os.fspath(target))
+            from .convenience_wiring import changed
+
+            changed("claude.account-homes", target, detail=f"moved from {src}")
             return True
         except OSError as err:
             log.warning("migrating %s -> %s failed: %s", src, target, err)
@@ -1708,6 +1718,9 @@ class CredentialVault:
                 log.warning("kept %s unshared: could not fully merge into %s", src, target)
                 return False
             shutil.rmtree(src, ignore_errors=True)
+            from .convenience_wiring import changed
+
+            changed("claude.account-homes", target, detail=f"merged from {src}")
             return True
         except OSError as err:
             log.warning("migrating dir %s -> %s failed: %s", src, target, err)

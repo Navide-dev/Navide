@@ -59,6 +59,28 @@ def broadcast_change(change: dict[str, Any]) -> None:
         loop.call_soon_threadsafe(send)
 
 
+def note(feature_id: str, target: str | Path, *, detail: str = "") -> None:
+    """Disclose a target a required feature created (first time only)."""
+    g = _gate
+    if g is None:
+        return
+    try:
+        g.note(feature_id, target, detail=detail)
+    except Exception as err:  # noqa: BLE001 — disclosure never blocks a spawn
+        log.warning("noting %s %s failed: %s", feature_id, target, err)
+
+
+def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
+    """Announce a change a required feature made to the user's own files."""
+    g = _gate
+    if g is None:
+        return
+    try:
+        g.record(feature_id, "repair", str(target), detail=detail)
+    except Exception as err:  # noqa: BLE001
+        log.warning("recording %s %s failed: %s", feature_id, target, err)
+
+
 # ── CLI hooks (S1–S3) ──────────────────────────────────────────────────────
 
 HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "copilot.hooks"}
