@@ -21,7 +21,7 @@ import {
   pathEnvKey,
   stopBackendProcess,
   waitForHealth,
-  windowProof,
+  proveWindow,
 } from './backend'
 
 // The platform to restore after a test that switched it: whatever this file
@@ -349,8 +349,12 @@ describe('backend spawn options', () => {
   })
 })
 
-describe('windowProof', () => {
-  it('matches the vector the backend checks (test_ws_auth window proof)', () => {
-    expect(windowProof('host-secret')).toBe('e99d8de99a8a1c5a64c637332e281c570490d9abe72f30b8520aa5271a302874')
+describe('proveWindow', () => {
+  it('matches the vector the backend checks (test_ws_auth WINDOW_PROOF_VECTOR)', () => {
+    expect(proveWindow('host-secret', 'nonce-1')).toBe('a4c453f892421e367a36312ee518ccbca38a442e010fc441ed351d433ec3d0f6')
+  })
+
+  it('binds the per-connection nonce, so one proof cannot answer another challenge', () => {
+    expect(proveWindow('host-secret', 'nonce-1')).not.toBe(proveWindow('host-secret', 'nonce-2'))
   })
 })

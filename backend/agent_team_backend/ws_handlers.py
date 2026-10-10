@@ -191,6 +191,26 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
 
 
+@handler("window.prove")
+async def window_prove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Answer this connection's `ws.welcome` challenge. Accepted once per
+    connection: a right proof spends the challenge. A wrong one does not -- a
+    proof meant for the previous socket can arrive on a fresh one during a
+    reconnect, and must not lock that window out."""
+    from . import app
+
+    challenge = getattr(session, "window_challenge", "")
+    proof = payload.get("proof") if isinstance(payload, dict) else None
+    if not app.navide_window_proof_matches(challenge, proof):
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "window proof refused")
+        )
+        return
+    session.window_challenge = ""
+    session.navide_window = True
+    await session.send_json(make_response(msg_id, msg_type, {"proved": True}))
+
+
 @handler("agent.capability.result")
 async def agent_capability_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict

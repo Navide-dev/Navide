@@ -222,6 +222,8 @@ def test_websocket_monitor_round_trip_without_startup_side_effects(tmp_path, mon
     # hooks and shutdown shared application resources. Only /ws is exercised.
     client = TestClient(app.app, base_url="http://127.0.0.1")
     with client.websocket_connect("/ws?t=monitor-test-token") as ws:
+        # Every connection opens with the window challenge.
+        assert ws.receive_json()["type"] == "ws.welcome"
         for days in (14, 30, 90):
             ws.send_json({"id": str(days), "type": "tokens.monitor", "payload": {"days": days}})
             frame = ws.receive_json()

@@ -469,6 +469,19 @@ export function wsTokenPath(dataDir: string): string {
 }
 
 /**
+ * The answer to one connection's window challenge: HMAC-SHA256 of the host
+ * token, which only main and the backend hold, over the nonce the backend sent
+ * that connection in `ws.welcome`. Main gives it to its own main windows
+ * (backend:proveWindow) and never to its plugin broker socket; the backend
+ * checks it to tell a Navide window from any other client that read the token
+ * file (a pane agent, a script). Per connection, so a proof seen once cannot
+ * be replayed. Mirrors backend app.navide_window_proof_matches.
+ */
+export function proveWindow(hostSessionToken: string, nonce: string): string {
+  return createHmac('sha256', hostSessionToken).update(`navide-window/v2\u0000${nonce}`).digest('hex')
+}
+
+/**
  * The credential the backend requires on /ws, or '' if it is not there yet.
  *
  * Read from disk on every call rather than cached: the backend mints a new one
@@ -476,17 +489,6 @@ export function wsTokenPath(dataDir: string): string {
  * never stopped. A cached token would survive that and every window would be
  * refused with no obvious cause.
  */
-/**
- * What main appends (as `&w=`) to the /ws URL it hands its own windows, and
- * never to its plugin broker socket: HMAC-SHA256 of the host token, which only
- * main and the backend hold. The backend checks it at connect to tell a Navide
- * window from any other client that read the token file (a pane agent, a
- * script). Mirrors backend app.navide_window_proof_matches.
- */
-export function windowProof(hostSessionToken: string): string {
-  return createHmac('sha256', hostSessionToken).update('navide-window').digest('hex')
-}
-
 export function readWsToken(handle: BackendHandle): string {
   try {
     return readFileSync(wsTokenPath(handle.dataDir), 'utf8').trim()

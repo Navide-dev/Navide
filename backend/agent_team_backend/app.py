@@ -452,15 +452,19 @@ def host_supports_plans_backend() -> bool:
     )
 
 
-def navide_window_proof_matches(proof: Any) -> bool:
-    """Whether a /ws client was handed its URL by Electron main for one of its
-    windows: main appends HMAC-SHA256(host token, "navide-window") there and
-    nowhere else. The token file is readable by every pane process, so it
-    cannot say this; the host token never leaves main and this process."""
+def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
+    """Whether `proof` answers this connection's window challenge: main
+    returns HMAC-SHA256(host token, "navide-window/v2\\0" + challenge) to its
+    main windows (backend:proveWindow) and to nothing else. The token file is
+    readable by every pane process, so it cannot say this; the host token
+    never leaves main and this process. The challenge is per connection, so a
+    proof seen once is worth nothing on any other."""
     expected = _HOST_SESSION_TOKEN
-    if not isinstance(proof, str) or not expected:
+    if not isinstance(proof, str) or not expected or not challenge:
         return False
-    digest = hmac.new(expected.encode(), b"navide-window", hashlib.sha256).hexdigest()
+    digest = hmac.new(
+        expected.encode(), b"navide-window/v2\0" + challenge.encode(), hashlib.sha256
+    ).hexdigest()
     return secrets.compare_digest(proof, digest)
 
 
@@ -539,10 +543,13 @@ class Session:
         # most recently focused first.
         self.ui_bus_ready = False
         self.ui_focused_at = 0.0
-        # Set at connect from the window proof in the URL (see
+        # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.
         self.navide_window = False
+        # The nonce sent in `ws.welcome`; cleared by the first right
+        # `window.prove`, so a connection is proved at most once.
+        self.window_challenge = secrets.token_hex(32)
         # Throttle state for the slow-send probe (see _note_send_timing).
         # None rather than 0.0: the first slow send must always report, which a
         # zero baseline would swallow whenever the clock starts near zero.
@@ -3041,8 +3048,14 @@ async def ws(websocket: WebSocket) -> None:
     await websocket.accept()
     log.info("ws client connected")
     session = Session(websocket)
-    session.navide_window = navide_window_proof_matches(websocket.query_params.get("w") or "")
     _SESSIONS.add(session)
+    # First thing on every connection: the challenge a Navide main window
+    # answers through main (window.prove) to be told apart from any other
+    # client holding the token. Fresh per connection, so a reconnect proves
+    # again and a proof seen once cannot be replayed.
+    await session.send_json(
+        make_event("ws.welcome", {"windowChallenge": session.window_challenge})
+    )
     # An MCP client reads this backend's tool list once, when it connects, so a
     # CLI that was already talking to the previous backend keeps the tools it
     # saw then. Told to the window rather than logged: only the window can put

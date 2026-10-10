@@ -11,10 +11,10 @@ import {
   startBackend,
   getResolvedUserPath,
   readWsToken,
-  windowProof,
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
+import { answerWindowChallenge } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
@@ -825,9 +825,10 @@ function backendInfoPayload() {
     // one change here reaches every /ws client at once. A page in a browser
     // can guess the port but cannot read the file this came from, which is
     // the whole of the defence; see backend/agent_team_backend/ws_auth.py.
-    // The window proof marks these as Navide windows; the plugin broker gets
-    // the URL without it (brokerWsUrl).
-    wsUrl: `${brokerWsUrl(backend)}&w=${windowProof(backend.hostSessionToken)}`
+    // Nothing here marks a Navide window: a main window answers the
+    // connection's challenge through backend:proveWindow instead, so the URL
+    // carries no replayable proof and the plugin broker uses the same one.
+    wsUrl: brokerWsUrl(backend)
   }
 }
 
@@ -2002,6 +2003,10 @@ ipcMain.handle('plans:retryV2', (event) => {
 })
 
 ipcMain.handle('backend:info', () => backendInfoPayload())
+// Signs one ws connection's window challenge, for a main window only.
+ipcMain.handle('backend:proveWindow', (event, nonce: unknown) =>
+  answerWindowChallenge(event, nonce, mainWindows, backend?.hostSessionToken ?? null)
+)
 
 // A backend that dies after a successful start must not keep reporting
 // 'ready' with a dead port: watch its exit and, if it is still the active
