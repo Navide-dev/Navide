@@ -910,6 +910,75 @@ def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link
     assert not target.exists() or not [p.name for p in target.iterdir() if p.is_symlink()]
 
 
+def _alias(tmp_path: Path, real: Path, how: str) -> Path | str:
+    if how == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(real)
+        return link
+    if how == "case":
+        other = real.with_name(real.name.swapcase())
+        if not other.exists():
+            pytest.skip("case-sensitive file system")
+        return other
+    if how == "dotdot":
+        return real / ".git" / ".."
+    return str(real) + "/"
+
+
+@pytest.mark.parametrize("how", ["symlink", "case", "dotdot", "trailing"])
+def test_a_cursor_mcp_refusal_holds_for_every_spelling_of_the_workspace(gate, tmp_path, how) -> None:
+    """R3-L3: the refusal is keyed by the workspace itself, not by how its
+    path was spelled (a link to it, another case on APFS, ``..``)."""
+    real = tmp_path / "Repo"
+    (real / ".git" / "info").mkdir(parents=True)
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is True
+    (real / ".cursor" / "mcp.json").unlink()
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is False
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", _alias(tmp_path, real, how)) is False
+
+    assert not (real / ".cursor" / "mcp.json").exists()
+
+
+def test_a_cursor_skills_refusal_holds_through_a_link_to_the_workspace(gate, tmp_path, monkeypatch) -> None:
+    import shutil
+
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    real = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(real))
+    shutil.rmtree(real / ".cursor" / "skills")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(real))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(_alias(tmp_path, real, "symlink"))) is False
+
+    assert not (real / ".cursor" / "skills").exists()
+
+
+def test_a_refusal_recorded_under_another_spelling_still_holds(gate, tmp_path) -> None:
+    """A ledger row written before refusals were keyed by the resolved path
+    names the workspace as the pane spelled it; it still counts."""
+    from agent_team_backend.mcp_server import wiring
+
+    real = tmp_path / "Repo"
+    (real / ".git" / "info").mkdir(parents=True)
+    (real / ".cursor").mkdir()  # the user deleted mcp.json, the folder stays
+    link = _alias(tmp_path, real, "symlink")
+    gate._refuse_target("cursor.project-mcp", str(wiring.project_config_path("cursor", link)))
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is False
+
+    assert not (real / ".cursor" / "mcp.json").exists()
+
+
+def test_a_workspace_refused_for_safety_is_announced_once_for_every_spelling(gate, tmp_path) -> None:
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    convenience_wiring.ensure_project_config_gated("cursor", _alias(tmp_path, repo, "symlink"))
+
+    assert len(_unsafe_rows(gate, "cursor.project-mcp")) == 1
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"

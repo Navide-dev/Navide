@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from .convenience import ConvenienceGate, Takeback
+from .convenience import ConvenienceGate, Takeback, canonical_path
 
 log = logging.getLogger("agent_team_backend.convenience_wiring")
 
@@ -228,8 +228,10 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     without Navide's tools, which is what turning it off costs."""
     from .mcp_server import wiring
 
-    path = wiring.project_config_path(agent_key, cwd)
     g = _gate
+    if g is not None and cwd:
+        cwd = canonical_path(cwd)  # one key per workspace, however it is spelled
+    path = wiring.project_config_path(agent_key, cwd)
     if g is None or path is None:
         return wiring.ensure_project_config(agent_key, cwd)
     if not wiring.project_config_inside(path, Path(cwd)):
@@ -321,6 +323,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     g = _gate
     if g is None or not cwd:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+    cwd = str(canonical_path(cwd))  # one key per workspace, however it is spelled
     target = Path(cwd).joinpath(*wiring.project_rel)
     if not skills_wiring.project_target_safe(target, Path(cwd)):
         # Not the workspace's folder: nothing is written, so nothing is gated.

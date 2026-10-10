@@ -318,6 +318,8 @@ class ConvenienceGate:
         with self._lock:
             if not self.allowed(feature_id):
                 return "off"
+            if per_target:
+                self._adopt_spelling(feature_id, key)
             folder = self._folder(feature_id, key)
             known = folder is not None
             was_present = _probe(present)
@@ -500,10 +502,41 @@ class ConvenienceGate:
                     "SELECT 1 FROM convenience_log WHERE feature = ? AND action = ? AND target = ? LIMIT 1",
                     (feature_id, action, key),
                 ).fetchone()
+                if seen is None:
+                    seen = next((
+                        row for row in cur.execute(
+                            "SELECT target FROM convenience_log WHERE feature = ? AND action = ?",
+                            (feature_id, action),
+                        ).fetchall()
+                        if row["target"] != key and respelled(row["target"]) == key
+                    ), None)
             if seen is not None:
                 return False
             self.record(feature_id, action, key, detail=detail)
             return True
+
+    def _adopt_spelling(self, feature_id: str, key: str) -> None:
+        """Move a per-workspace target recorded under another spelling of
+        ``key`` (a link to the workspace, another case, ``..``: rows written
+        before such keys were canonical) onto ``key``, refusals included."""
+        if self._known(feature_id, key):
+            return
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT target FROM convenience_targets WHERE feature = ?", (feature_id,)
+            ).fetchall()
+            old = next((row["target"] for row in rows if respelled(row["target"]) == key), None)
+            if old is None:
+                return
+            cur.execute(
+                "UPDATE convenience_targets SET target = ? WHERE feature = ? AND target = ?",
+                (key, feature_id, old),
+            )
+            cur.execute(
+                "UPDATE OR IGNORE convenience_parts SET target = ? WHERE feature = ? AND target = ?",
+                (key, feature_id, old),
+            )
+            cur.execute("DELETE FROM convenience_parts WHERE feature = ? AND target = ?", (feature_id, old))
 
     def note(self, feature_id: str, target: str | Path, *, detail: str = "") -> bool:
         """Disclose a target a required feature created, once: True the first
@@ -715,6 +748,32 @@ def _probe(present: Callable[[], bool]) -> bool | None:
     except Exception as err:  # noqa: BLE001 — unreadable is neither present nor removed
         log.warning("presence check failed (%s); treating as unknown", err)
         return None
+
+
+def canonical_path(path: str | Path) -> Path:
+    """The one spelling of ``path``: links resolved, ``..`` collapsed, and
+    every existing component spelled as the file system stores it, so a
+    case-insensitive volume (APFS, NTFS) cannot give one folder two keys."""
+    resolved = Path(os.path.realpath(path))
+    out = Path(resolved.anchor)
+    for index, name in enumerate(resolved.parts[1:], 1):
+        try:
+            names = os.listdir(out)
+        except OSError:
+            return out.joinpath(*resolved.parts[index:])
+        if name not in names:
+            if not (out / name).exists():
+                return out.joinpath(*resolved.parts[index:])
+            name = next((n for n in names if n.casefold() == name.casefold()), name)
+        out = out / name
+    return out
+
+
+def respelled(target: str) -> str:
+    """``target`` with its folder in its canonical spelling and its last
+    component as given (it may be a link Navide never follows)."""
+    path = Path(target)
+    return str(canonical_path(path.parent) / path.name)
 
 
 def _folder_identity(folder: Path | None) -> str | None:
