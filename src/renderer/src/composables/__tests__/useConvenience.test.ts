@@ -232,6 +232,19 @@ describe('convenience announcement rows', () => {
     expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
+  it('tells a skill left out for its name in its own words', () => {
+    useAnnouncements().noteConvenience({
+      features: [feature()],
+      notices: [entry({ action: 'refused-name', target: '/repo/.cursor/skills/.navide-links' })],
+      upgrade: null,
+    })
+    const [row] = rows()
+    expect(row.title).toBe(
+      'Skill「.navide-links」和 Navide 的清單檔 .navide-links 同名，Navide 沒有在 /repo/.cursor/skills 為它建立連結；改名後就會出現'
+    )
+    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
   it('offers re-allow on a removal only while the removal keeps the feature off', () => {
     const removed = entry({ id: 9, action: 'removed' })
     useAnnouncements().noteConvenience({ features: [feature({ state: 'off', reason: 'removed' })], notices: [removed], upgrade: null })

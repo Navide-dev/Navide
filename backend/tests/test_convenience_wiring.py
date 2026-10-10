@@ -919,6 +919,152 @@ def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, 
     assert gate.state("cursor.project-skills") == ("allowed", "default")
 
 
+@pytest.mark.parametrize("kind", ["existing", "dangling"])
+def test_a_skills_manifest_linked_outside_is_refused_for_safety_and_never_logged(
+    gate, tmp_path, monkeypatch, kind
+) -> None:
+    """R3-H1: a repo ships a real .cursor/skills whose .navide-links leads
+    outside it. Nothing is written through the link, no line of the file it
+    leads to reaches the log, and the user is told once."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    if kind == "existing":
+        victim.write_text("export SECRET_PATH=1\nalias ll='ls -l'\n", encoding="utf-8")
+    before = victim.read_text(encoding="utf-8") if victim.exists() else None
+    repo = _cursor_repo(tmp_path)
+    target = repo / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    (target / skills_wiring.MANIFEST_FILE).symlink_to(victim)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert (victim.read_text(encoding="utf-8") if victim.exists() else None) == before
+    assert _unsafe_rows(gate, "cursor.project-skills") == [(str(target), True)]
+    assert not [e for e in gate.history() if e["action"] == "removed-entry"]
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
+def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    """R3-L5: a managed skill called .navide-links took the manifest's place
+    (the manifest write then failed on a directory) and its link outlived
+    turning the feature off."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    named = tmp_path / "managed" / skills_wiring.MANIFEST_FILE
+    other = tmp_path / "managed" / "review"
+    named.mkdir(parents=True)
+    other.mkdir()
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [named, other])
+    wiring = skills_wiring.skills_wiring("cursor")
+    repo = _cursor_repo(tmp_path)
+    target = repo / ".cursor" / "skills"
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert skills_wiring.has_manifest(target)
+    assert skills_wiring._read_manifest(target) == {"review"}
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+    assert not target.exists() or not [p.name for p in target.iterdir() if p.is_symlink()]
+
+
+def test_a_skill_named_like_the_manifest_is_announced_once_per_workspace(gate, tmp_path, monkeypatch) -> None:
+    """R3-L5: the skill left out is the user's to know about, once for each
+    workspace, naming the link Navide did not create."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    named = tmp_path / "managed" / skills_wiring.MANIFEST_FILE
+    named.mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [named])
+    wiring = skills_wiring.skills_wiring("cursor")
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+
+    for _ in range(2):
+        convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other))
+
+    rows = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "refused-name"]
+    assert sorted(rows) == sorted(
+        (str(r / ".cursor" / "skills" / skills_wiring.MANIFEST_FILE), True) for r in (repo, other)
+    )
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
+def _alias(tmp_path: Path, real: Path, how: str) -> Path | str:
+    if how == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(real)
+        return link
+    if how == "case":
+        other = real.with_name(real.name.swapcase())
+        if not other.exists():
+            pytest.skip("case-sensitive file system")
+        return other
+    if how == "dotdot":
+        return real / ".git" / ".."
+    return str(real) + "/"
+
+
+@pytest.mark.parametrize("how", ["symlink", "case", "dotdot", "trailing"])
+def test_a_cursor_mcp_refusal_holds_for_every_spelling_of_the_workspace(gate, tmp_path, how) -> None:
+    """R3-L3: the refusal is keyed by the workspace itself, not by how its
+    path was spelled (a link to it, another case on APFS, ``..``)."""
+    real = tmp_path / "Repo"
+    (real / ".git" / "info").mkdir(parents=True)
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is True
+    (real / ".cursor" / "mcp.json").unlink()
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is False
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", _alias(tmp_path, real, how)) is False
+
+    assert not (real / ".cursor" / "mcp.json").exists()
+
+
+def test_a_cursor_skills_refusal_holds_through_a_link_to_the_workspace(gate, tmp_path, monkeypatch) -> None:
+    import shutil
+
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    real = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(real))
+    shutil.rmtree(real / ".cursor" / "skills")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(real))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(_alias(tmp_path, real, "symlink"))) is False
+
+    assert not (real / ".cursor" / "skills").exists()
+
+
+def test_a_refusal_recorded_under_another_spelling_still_holds(gate, tmp_path) -> None:
+    """A ledger row written before refusals were keyed by the resolved path
+    names the workspace as the pane spelled it; it still counts."""
+    from agent_team_backend.mcp_server import wiring
+
+    real = tmp_path / "Repo"
+    (real / ".git" / "info").mkdir(parents=True)
+    (real / ".cursor").mkdir()  # the user deleted mcp.json, the folder stays
+    link = _alias(tmp_path, real, "symlink")
+    gate._refuse_target("cursor.project-mcp", str(wiring.project_config_path("cursor", link)))
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", real) is False
+
+    assert not (real / ".cursor" / "mcp.json").exists()
+
+
+def test_a_workspace_refused_for_safety_is_announced_once_for_every_spelling(gate, tmp_path) -> None:
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    convenience_wiring.ensure_project_config_gated("cursor", _alias(tmp_path, repo, "symlink"))
+
+    assert len(_unsafe_rows(gate, "cursor.project-mcp")) == 1
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"

@@ -56,8 +56,15 @@ which runs, in order:
    mounted yet, a dotfiles checkout mid-switch) is **unknown**: neither a
    removal nor a reset. Nothing is written, turned off or forgotten, and
    `apply` returns `"unknown"` until the link leads somewhere again.
-   A workspace whose `.cursor` (or the config or skills folder in it) leads
-   outside the workspace through a link is never written, cleaned or gated.
+   A workspace is keyed by its canonical path (links resolved, `..`
+   collapsed, each folder spelled as stored), so a refusal holds however the
+   pane spells it.
+   A workspace whose `.cursor` (or the config or skills folder in it, or the
+   skills manifest `.navide-links`) leads outside the workspace through a
+   link is never written, cleaned or gated; a `.git/info/exclude` that is a
+   link is never written either. A skill named like the manifest is never
+   linked there; that is logged and announced once per workspace as
+   `refused-name`.
    Its panes go without the feature, so the user is told: logged and
    announced as `refused-unsafe`, once per workspace and feature, while the
    feature is allowed.
@@ -114,7 +121,7 @@ the panes they serve cannot run without them.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `reset`, `removed`, `off`,
   `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`,
-  `refused-unsafe`.
+  `refused-unsafe`, `refused-name`.
 - `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
   — the entries of a target with several: `state` is `written` (Navide's
   last write left it there) or `removed` (the user deleted it; never written
@@ -138,7 +145,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe'
+  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object,

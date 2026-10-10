@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from .convenience import ConvenienceGate, Takeback
+from .convenience import ConvenienceGate, Takeback, canonical_path
 
 log = logging.getLogger("agent_team_backend.convenience_wiring")
 
@@ -228,8 +228,10 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     without Navide's tools, which is what turning it off costs."""
     from .mcp_server import wiring
 
-    path = wiring.project_config_path(agent_key, cwd)
     g = _gate
+    if g is not None and cwd:
+        cwd = canonical_path(cwd)  # one key per workspace, however it is spelled
+    path = wiring.project_config_path(agent_key, cwd)
     if g is None or path is None:
         return wiring.ensure_project_config(agent_key, cwd)
     if not wiring.project_config_inside(path, Path(cwd)):
@@ -321,19 +323,26 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     g = _gate
     if g is None or not cwd:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+    cwd = str(canonical_path(cwd))  # one key per workspace, however it is spelled
     target = Path(cwd).joinpath(*wiring.project_rel)
     if not skills_wiring.project_target_safe(target, Path(cwd)):
         # Not the workspace's folder: nothing is written, so nothing is gated.
         _refused_unsafe("cursor.project-skills", target)
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+    if not skills_wiring.manifest_safe(target):
+        # The repository put a link (or a pipe) where the manifest goes: it
+        # is never read, written or gated, so the folder is left alone too.
+        _refused_unsafe("cursor.project-skills", target)
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
+    skipped: list[Path] = []
     # Before the gate reads the manifest, so recording the refusal is not
     # mistaken for a change Navide made.
     refused = skills_wiring.refuse_missing_links(target) if g.allowed("cursor.project-skills") else []
 
     def write() -> None:
-        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd, skipped=skipped)
 
     outcome = g.apply(
         "cursor.project-skills", target, write=write,
@@ -344,7 +353,12 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
         g.record("cursor.project-skills", "removed-entry", str(target / name), detail="link deleted outside Navide")
     if outcome in ("off", "removed", "refused", "unknown"):
         return False
-    if not manifest.is_file():
+    for link in skipped:
+        g.record_once(
+            "cursor.project-skills", "refused-name", link,
+            detail="a skill with the manifest's name; not linked here",
+        )
+    if not skills_wiring.has_manifest(target):
         g.forget("cursor.project-skills", target)
     return delivered[0]
 
@@ -380,9 +394,13 @@ def _project_dir_takeback() -> list[Takeback]:
     depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
     items = []
     for target in _targets("cursor.project-skills"):
-        manifest = Path(target) / skills_wiring.MANIFEST_FILE
+        path = Path(target)
+        # A manifest that is a link is not Navide's: never backed up (that
+        # would copy where it leads) and never counted as left behind.
         items.append(Takeback(
-            target, lambda path=Path(target): skills_wiring.remove_project_dir(path, root=path.parents[depth - 1]), manifest.is_file, manifest,
+            target, lambda path=path: skills_wiring.remove_project_dir(path, root=path.parents[depth - 1]),
+            lambda path=path: skills_wiring.has_manifest(path),
+            path / skills_wiring.MANIFEST_FILE if skills_wiring.has_manifest(path) else None,
         ))
     return items
 

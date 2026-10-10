@@ -1056,3 +1056,62 @@ def test_only_plain_entry_names_are_read_from_the_manifest(tmp_path: Path, name:
 
     assert skills_wiring._read_manifest(target) == {"ok"}
 
+
+
+def _manifest_linked_to(tmp_path: Path, kind: str) -> tuple[Path, Path, str | None]:
+    """A cloned repo ships a real ``.cursor/skills`` whose manifest is a link
+    to a file outside the workspace (``kind`` "existing") or to a path there
+    that does not exist yet ("dangling")."""
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "existing":
+        victim.write_text("export SECRET_PATH=1\nalias ll='ls -l'\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    target = cwd / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    (target / skills_wiring.MANIFEST_FILE).symlink_to(victim)
+    return cwd, victim, victim.read_text(encoding="utf-8") if victim.exists() else None
+
+
+@pytest.mark.parametrize("kind", ["existing", "dangling"])
+def test_a_manifest_linked_outside_the_workspace_is_never_written_through(tmp_path: Path, kind: str) -> None:
+    """R3-H1: the manifest is read and written only as a regular file."""
+    _skill(tmp_path / "managed", "alpha")
+    cwd, victim, before = _manifest_linked_to(tmp_path, kind)
+
+    assert _sync(tmp_path, cwd) is False
+
+    assert (victim.read_text(encoding="utf-8") if victim.exists() else None) == before
+    assert (cwd / ".cursor" / "skills" / skills_wiring.MANIFEST_FILE).is_symlink()
+    assert not (cwd / ".cursor" / "skills" / "alpha").exists()
+
+
+def test_a_manifest_linked_outside_is_never_read_cleaned_or_removed(tmp_path: Path) -> None:
+    cwd, victim, before = _manifest_linked_to(tmp_path, "existing")
+    target = cwd / ".cursor" / "skills"
+
+    assert skills_wiring.refuse_missing_links(target) == []
+    skills_wiring.clear_refused(target, root=cwd)
+    assert skills_wiring.remove_project_dir(target, root=cwd) == 0
+
+    assert victim.read_text(encoding="utf-8") == before
+    assert (target / skills_wiring.MANIFEST_FILE).is_symlink()
+
+
+def test_a_git_exclude_linked_outside_the_workspace_is_never_written(tmp_path: Path) -> None:
+    """R3-H1: the ``.git/info/exclude`` append never follows a link either."""
+    _skill(tmp_path / "managed", "alpha")
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export A=1\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    (cwd / ".git" / "info").mkdir(parents=True)
+    (cwd / ".git" / "info" / "exclude").symlink_to(victim)
+
+    assert _sync(tmp_path, cwd) is True
+    assert (cwd / ".cursor" / "skills" / "alpha").is_symlink()
+    assert victim.read_text(encoding="utf-8") == "export A=1\n"
+    victim.write_text("export A=1\n/.cursor/skills/\n", encoding="utf-8")
+    skills_wiring.remove_project_dir(cwd / ".cursor" / "skills", root=cwd)
+
+    assert victim.read_text(encoding="utf-8") == "export A=1\n/.cursor/skills/\n"

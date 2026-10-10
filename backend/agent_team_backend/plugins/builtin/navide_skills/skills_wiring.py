@@ -23,6 +23,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import tempfile
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
@@ -255,6 +256,7 @@ def sync_project_dir(
     *,
     store: SkillsStore | None = None,
     native_root: Path | None = None,
+    skipped: list[Path] | None = None,
 ) -> bool:
     """Keep our links in the workspace's skill directory up to date.
 
@@ -265,6 +267,9 @@ def sync_project_dir(
     CLI's directory, exactly like a link the user might make themselves — so
     the set is recorded in a manifest beside the links. Anything not in the
     manifest is the user's and is left untouched.
+
+    ``skipped`` collects the links a skill's name kept from being created
+    (one named like the manifest), for the caller to tell the user.
     """
     if not cwd:
         return False
@@ -272,6 +277,9 @@ def sync_project_dir(
         target = Path(cwd).joinpath(*wiring.project_rel)
         if not project_target_safe(target, Path(cwd)):
             log.warning("%s reaches outside %s through a link — not syncing skills there", target, cwd)
+            return False
+        if not manifest_safe(target):
+            log.warning("%s is not a regular file — not syncing skills there", target / MANIFEST_FILE)
             return False
         sources = _managed_sources(agent_key, store, native_root)
         planted = _read_manifest(target)
@@ -281,8 +289,17 @@ def sync_project_dir(
         ours = not target.is_dir() or _manifest_created(target)
         target.mkdir(parents=True, exist_ok=True)
         # Only a name the manifest carries back unchanged: any other link
-        # would be an orphan that taking the links back never finds.
-        wanted = {source.name: source for source in sources if _manifest_name(source.name)}
+        # would be an orphan that taking the links back never finds. A skill
+        # named like the manifest would take the manifest's place.
+        wanted = {
+            source.name: source for source in sources
+            if _manifest_name(source.name) and source.name != MANIFEST_FILE
+        }
+        for source in sources:
+            if source.name == MANIFEST_FILE:
+                log.warning("skill %s is named like Navide's manifest — not linked in %s", source, target)
+                if skipped is not None:
+                    skipped.append(target / source.name)
         # Remove what we planted before and no longer want; never anything else.
         for name in sorted(planted):
             if name in wanted:
@@ -354,7 +371,7 @@ def project_dir_intact(target: Path) -> bool:
     name behind. A name in the manifest that is no longer a link is the
     user's removal.
     """
-    if not (target / MANIFEST_FILE).is_file():
+    if not has_manifest(target):
         return False
     return all((target / name).is_symlink() for name in _read_manifest(target))
 
@@ -397,6 +414,9 @@ def remove_project_dir(target: Path, *, root: Path | None = None) -> int:
     if not project_target_safe(target, root or target.parent):
         log.warning("%s reaches outside its workspace through a link — leaving it alone", target)
         return 0
+    if not manifest_safe(target):
+        log.warning("%s is not a regular file — leaving it alone", target / MANIFEST_FILE)
+        return 0
     removed = 0
     names = _read_manifest(target)
     created = _manifest_created(target) or _excluded_from_git(target)
@@ -425,6 +445,74 @@ _CREATED_LINE = "# Navide created this directory"
 #: Manifest lines naming a link the user deleted by hand: never linked again
 #: in this workspace until the feature is re-allowed.
 _REFUSED_PREFIX = "# refused: "
+#: Open flags that never follow a link a repository ships in a file's place
+#: and never block on a pipe; Windows has neither, and the lstat check that
+#: precedes every open stands alone there.
+_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+
+
+def manifest_safe(target: Path) -> bool:
+    """Whether the manifest in ``target`` is a regular file or absent.
+
+    The skills folder may be the repository's own, and a repository can ship
+    a link (to ``~/.zshrc``, or dangling) or a pipe under the manifest's
+    name. Such a manifest is never read, written or deleted.
+    """
+    return _regular_or_absent(target / MANIFEST_FILE)
+
+
+def has_manifest(target: Path) -> bool:
+    """Whether ``target`` holds a manifest Navide could have written: a
+    regular file, never a link."""
+    try:
+        return stat.S_ISREG((target / MANIFEST_FILE).lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _regular_or_absent(path: Path) -> bool:
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+
+
+def _read_regular(path: Path) -> str | None:
+    """``path``'s text, None when it is absent. Anything but a regular file
+    (a link, a directory, a pipe) raises OSError and is never followed."""
+    if not _regular_or_absent(path):
+        raise OSError(f"{path} is not a regular file")
+    try:
+        fd = os.open(path, os.O_RDONLY | _NOFOLLOW)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise OSError(f"{path} is not a regular file")
+        return handle.read().decode("utf-8")
+
+
+def _replace_regular(path: Path, text: str) -> None:
+    """Write ``path`` through a temporary file in its folder and an atomic
+    rename, which replaces a link rather than writing where it leads. Only a
+    regular file (or nothing) is ever replaced."""
+    if not _regular_or_absent(path):
+        raise OSError(f"{path} is not a regular file")
+    try:
+        mode = stat.S_IMODE(path.lstat().st_mode)
+    except FileNotFoundError:
+        mode = 0o644
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+            handle.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 def _read_manifest(target: Path) -> set[str]:
@@ -437,17 +525,13 @@ def _read_manifest(target: Path) -> set[str]:
     component under both POSIX and Windows rules is kept. Lines split on
     ``\\n`` alone, the one separator ``_write_manifest`` writes.
     """
-    manifest = target / MANIFEST_FILE
     try:
-        if not manifest.is_file():
-            return set()
-        names = {
-            line.strip()
-            for line in manifest.read_text(encoding="utf-8").split("\n")
-            if line.strip() and not line.startswith("#")
-        }
+        text = _read_regular(target / MANIFEST_FILE)
     except OSError:
         return set()
+    if text is None:
+        return set()
+    names = {line.strip() for line in text.split("\n") if line.strip() and not line.startswith("#")}
     return {name for name in names if _plain_entry_name(name)}
 
 
@@ -470,7 +554,7 @@ def _manifest_name(name: str) -> bool:
 
 def _manifest_created(target: Path) -> bool:
     try:
-        lines = (target / MANIFEST_FILE).read_text(encoding="utf-8").split("\n")
+        lines = (_read_regular(target / MANIFEST_FILE) or "").split("\n")
     except OSError:
         return False
     return _CREATED_LINE in lines
@@ -478,7 +562,7 @@ def _manifest_created(target: Path) -> bool:
 
 def _read_refused(target: Path) -> set[str]:
     try:
-        lines = (target / MANIFEST_FILE).read_text(encoding="utf-8").split("\n")
+        lines = (_read_regular(target / MANIFEST_FILE) or "").split("\n")
     except OSError:
         return set()
     names = {line[len(_REFUSED_PREFIX):].strip() for line in lines if line.startswith(_REFUSED_PREFIX)}
@@ -489,6 +573,8 @@ def _write_manifest(
     target: Path, planted: set[str], *, created: bool = False, refused: set[str] = frozenset()
 ) -> None:
     manifest = target / MANIFEST_FILE
+    if not _regular_or_absent(manifest):
+        raise OSError(f"{manifest} is not a regular file")
     if not planted and not refused:
         manifest.unlink(missing_ok=True)
         return
@@ -497,7 +583,7 @@ def _write_manifest(
         body += f"{_CREATED_LINE}\n"
     body += "".join(f"{_REFUSED_PREFIX}{name}\n" for name in sorted(refused))
     body += "".join(f"{name}\n" for name in sorted(planted))
-    manifest.write_text(body, encoding="utf-8")
+    _replace_regular(manifest, body)
 
 
 def wire_command(
@@ -746,13 +832,20 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
     exclude, rel = found
     line = f"/{rel}/" if directory else f"/{rel}"
     try:
-        existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+        # Never through a link: the exclude file or its folder may lead
+        # outside the repository.
+        if exclude.parent.is_symlink():
+            raise OSError(f"{exclude.parent} is a link")
+        existing = _read_regular(exclude) or ""
         lines = existing.splitlines()
         if line in lines or (not directory and f"/{PurePosixPath(rel).parent}/" in lines):
             return
         exclude.parent.mkdir(parents=True, exist_ok=True)
         prefix = "" if not existing or existing.endswith("\n") else "\n"
-        with exclude.open("a", encoding="utf-8") as handle:
+        fd = os.open(exclude, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _NOFOLLOW, 0o644)
+        with os.fdopen(fd, "a", encoding="utf-8") as handle:
+            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+                raise OSError(f"{exclude} is not a regular file")
             handle.write(f"{prefix}{line}\n")
     except OSError as err:
         log.warning("could not add %s to git exclude: %s", target, err)
@@ -785,7 +878,7 @@ def _excluded_from_git(target: Path) -> bool:
         return False
     exclude, rel = found
     try:
-        return f"/{rel}/" in exclude.read_text(encoding="utf-8").splitlines()
+        return f"/{rel}/" in (_read_regular(exclude) or "").splitlines()
     except OSError:
         return False
 
@@ -800,13 +893,18 @@ def _unexclude_from_git(target: Path, names: set[str], *, directory: bool) -> No
     if directory:
         ours.add(f"/{rel}/")
     try:
-        lines = exclude.read_text(encoding="utf-8").splitlines(keepends=True)
+        if exclude.parent.is_symlink():
+            return
+        text = _read_regular(exclude)
     except OSError:
         return
+    if text is None:
+        return
+    lines = text.splitlines(keepends=True)
     kept = [line for line in lines if line.strip() not in ours]
     if kept != lines:
         try:
-            exclude.write_text("".join(kept), encoding="utf-8")
+            _replace_regular(exclude, "".join(kept))
         except OSError as err:
             log.warning("could not update %s: %s", exclude, err)
 
