@@ -884,7 +884,12 @@ class CodexHomeManager:
         concurrent writer beating us simply wins) and swap the pane's copy
         for the standard symlink so codex token refreshes write through to
         the shared file. Returns True when the real home gained the
-        credential."""
+        credential.
+
+        Through the convenience gate this happens once. A shared login that
+        existed and is gone was signed out outside Navide: the user gets a
+        prompt, and no pane login — least of all an older or different
+        account — takes its place."""
         real_auth = self.real_home / "auth.json"
         from ..convenience_wiring import gate
 
@@ -895,6 +900,14 @@ class CodexHomeManager:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
             if not self.panes_root.is_dir():
+                return False
+            if convenience is not None and self._shared_login_existed(convenience, real_auth):
+                latest = convenience.history("codex.login-promote", limit=1)
+                if not latest or latest[0]["action"] != "prompt":
+                    convenience.record(
+                        "codex.login-promote", "prompt", str(real_auth),
+                        detail=json.dumps({"agentKey": "codex"}),
+                    )
                 return False
             stranded = [
                 p for p in self.panes_root.glob("*/auth.json")
@@ -922,10 +935,21 @@ class CodexHomeManager:
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
         if convenience is not None:
-            convenience.record(
-                "codex.login-promote", "first", str(real_auth), detail=f"from {newest.parent.name}"
-            )
+            convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
         return True
+
+    def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the real auth.json was there before: Navide promoted it (the
+        ledger), or a pane home still links to it."""
+        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+            return True
+        for link in self.panes_root.glob("*/auth.json"):
+            try:
+                if link.is_symlink() and Path(os.readlink(link)) == real_auth:
+                    return True
+            except OSError:
+                continue
+        return False
 
     @staticmethod
     def _remove_generated_path(path: Path) -> None:

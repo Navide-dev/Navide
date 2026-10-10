@@ -387,6 +387,50 @@ def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -
     assert not (real / "auth.json").exists()
 
 
+def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tmp_path) -> None:
+    import os
+    import time
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare(PANE_A), manager.prepare(PANE_B)
+    (home_a / "auth.json").write_text('{"who": "old-account"}', encoding="utf-8")
+    (home_b / "auth.json").write_text('{"who": "new-account"}', encoding="utf-8")
+    os.utime(home_a / "auth.json", (time.time() - 100, time.time() - 100))
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert (home_a / "auth.json").read_text(encoding="utf-8") == '{"who": "old-account"}'
+    actions = [e["action"] for e in gate.history("codex.login-promote")]
+    assert actions == ["prompt", "first"]
+    assert gate.history("codex.login-promote")[0]["notify"] is True
+
+
+def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
+
+
 # ── Account auto-repair (D7) ─────────────────────────────────────────────────
 
 
