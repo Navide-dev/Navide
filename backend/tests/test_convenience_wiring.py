@@ -296,6 +296,53 @@ def test_turning_cursor_skills_off_drops_only_its_own_exclude_lines_in_the_users
     assert sorted(p.name for p in (repo / ".cursor" / "skills").iterdir()) == ["mine"]
 
 
+def _users_skills_behind_a_repo_link(tmp_path: Path, link_level: str) -> tuple[Path, Path, Path]:
+    """A cloned repo whose .cursor or .cursor/skills is a link to the user's
+    own skills folder, with a manifest naming one of the user's links."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    user_cursor = tmp_path / "home" / ".cursor"
+    user_skills = user_cursor / "skills"
+    user_skills.mkdir(parents=True)
+    real_skill = tmp_path / "elsewhere" / "alpha"
+    real_skill.mkdir(parents=True)
+    (user_skills / "alpha").symlink_to(real_skill)
+    (user_skills / skills_wiring.MANIFEST_FILE).write_text("alpha\n", encoding="utf-8")
+    repo = _cursor_repo(tmp_path)
+    if link_level == "skills":
+        (repo / ".cursor").mkdir()
+        (repo / ".cursor" / "skills").symlink_to(user_skills)
+    else:
+        (repo / ".cursor").symlink_to(user_cursor)
+    return repo, user_skills, real_skill
+
+
+@pytest.mark.parametrize("link_level", ["skills", "cursor"])
+def test_a_skills_folder_linked_outside_the_repo_is_never_synced(gate, tmp_path, monkeypatch, link_level) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [])
+    repo, user_skills, real_skill = _users_skills_behind_a_repo_link(tmp_path, link_level)
+    wiring = skills_wiring.SkillsWiring(project_rel=(".cursor", "skills"))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert (user_skills / "alpha").is_symlink()
+    assert gate.listing_feature("cursor.project-skills")["targets"] == []
+
+
+@pytest.mark.parametrize("link_level", ["skills", "cursor"])
+def test_a_skills_folder_linked_outside_the_repo_is_never_removed_from(tmp_path, link_level) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    repo, user_skills, _ = _users_skills_behind_a_repo_link(tmp_path, link_level)
+
+    assert skills_wiring.remove_project_dir(repo / ".cursor" / "skills", root=repo) == 0
+
+    assert (user_skills / "alpha").is_symlink()
+    assert (user_skills / skills_wiring.MANIFEST_FILE).is_file()
+
+
 def test_a_planted_skill_link_the_user_deleted_is_not_relinked(gate, tmp_path, monkeypatch) -> None:
     wiring = _cursor_skills(tmp_path, monkeypatch)
     repo = _cursor_repo(tmp_path)

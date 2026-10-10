@@ -241,6 +241,9 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     if g is None or not cwd:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     target = Path(cwd).joinpath(*wiring.project_rel)
+    if not skills_wiring.project_target_safe(target, Path(cwd)):
+        # Not the workspace's folder: nothing is written, so nothing is gated.
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
 
@@ -261,9 +264,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
 def _remove_project_dirs() -> None:
     from .plugins.builtin.navide_skills import skills_wiring
 
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
     for target in _targets("cursor.project-skills"):
         try:
-            skills_wiring.remove_project_dir(Path(target))
+            skills_wiring.remove_project_dir(Path(target), root=Path(target).parents[depth - 1])
         except OSError as err:
             log.warning("removing Navide's links from %s failed: %s", target, err)
 

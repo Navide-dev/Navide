@@ -266,6 +266,9 @@ def sync_project_dir(
         return False
     try:
         target = Path(cwd).joinpath(*wiring.project_rel)
+        if not project_target_safe(target, Path(cwd)):
+            log.warning("%s reaches outside %s through a link — not syncing skills there", target, cwd)
+            return False
         sources = _managed_sources(agent_key, store, native_root)
         planted = _read_manifest(target)
         if not sources and not planted and not target.is_dir():
@@ -308,6 +311,32 @@ def sync_project_dir(
         return False
 
 
+def project_target_safe(target: Path, root: Path) -> bool:
+    """Whether ``target`` really lives inside ``root``, the workspace.
+
+    A cloned repository can make ``.cursor`` or ``.cursor/skills`` a link to
+    a folder outside it — the user's own skills — with a manifest naming the
+    user's links there. Every level below ``root`` must be a real directory
+    (or absent) and the resolved target must stay inside the resolved root;
+    otherwise the folder is not the workspace's and is never written or
+    cleaned.
+    """
+    try:
+        rel = target.relative_to(root)
+    except ValueError:
+        return False
+    level = root
+    for part in rel.parts:
+        level = level / part
+        if level.is_symlink():
+            return False
+    try:
+        target.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 def project_dir_intact(target: Path) -> bool:
     """Whether every link Navide planted in a workspace skills directory is
     still there.
@@ -321,14 +350,19 @@ def project_dir_intact(target: Path) -> bool:
     return all((target / name).is_symlink() for name in _read_manifest(target))
 
 
-def remove_project_dir(target: Path) -> int:
+def remove_project_dir(target: Path, *, root: Path | None = None) -> int:
     """Take back the links Navide planted in a workspace skills directory.
 
     Only names in the manifest that are still symlinks are removed, then the
     manifest itself and the git exclude lines ``sync_project_dir`` added; the
     user's own skills there are never touched. A directory Navide created is
-    deleted once it is empty. Returns how many links were removed.
+    deleted once it is empty. ``root`` is the workspace ``target`` belongs
+    to (its parent when not given); a target reaching outside it through a
+    link is left alone. Returns how many links were removed.
     """
+    if not project_target_safe(target, root or target.parent):
+        log.warning("%s reaches outside its workspace through a link — leaving it alone", target)
+        return 0
     removed = 0
     names = _read_manifest(target)
     created = _manifest_created(target) or _excluded_from_git(target)
