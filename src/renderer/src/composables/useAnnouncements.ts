@@ -5,6 +5,8 @@ import { WHATS_NEW, cmpSemver, pickText } from '../lib/whatsNew'
 import type { CandidateTier, ExclusionReason, FailureCause } from '../lib/quotaFailover'
 import type { UpdateState } from '../../../shared/updater'
 import type { EvolveRun } from './useEvolve'
+import type { ConvenienceSnapshot } from './useConvenience'
+import { convenienceText } from '../lib/convenienceText'
 
 /**
  * Announcements centre — the status-bar feed of version news.
@@ -22,7 +24,7 @@ import type { EvolveRun } from './useEvolve'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve'
+export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'convenience'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -50,11 +52,23 @@ export type EvolveAnnouncementAction = {
   paneId?: string
 }
 
+/** A convenience-feature row's button (docs/en-US/convenience-features.md).
+ *  App.vue maps them onto the overview, `convenience.*` RPCs and, for the
+ *  account prompt, the existing cli_profiles default-account switch. */
+export type ConvenienceAnnouncementAction =
+  | { kind: 'convenience-overview' }
+  | { kind: 'convenience-reallow'; featureId: string }
+  | { kind: 'convenience-keep-login'; rowId: string }
+  /** Back to the account Navide would restore (`slotId` null = Default). */
+  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string | null; label: string }
+  | { kind: 'convenience-upgrade-ack' }
+
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
   | QuotaAnnouncementAction
   | ReleaseTourAction
   | EvolveAnnouncementAction
+  | ConvenienceAnnouncementAction
 
 export interface Announcement {
   /** Stable across renders: `release:<version>`, `update:<version>`,
@@ -455,6 +469,113 @@ function noteEvolveNotice(notice: EvolveNotice, at: number = Date.now()): void {
   evolveNotices.value = [{ notice, at }, ...evolveNotices.value].slice(0, MAX_EVOLVE_NOTICES)
 }
 
+// ── Convenience features ────────────────────────────────────────────────────
+
+/** The last `convenience.list` useConvenience read. Not persisted: the
+ *  backend's log is the record, and it is re-read on every connect. */
+const convenienceState = shallowRef<ConvenienceSnapshot | null>(null)
+const convenienceAgentLabel = shallowRef<(agentKey: string) => string>((key) => key)
+
+export const CONVENIENCE_UPGRADE_ID = 'convenience:upgrade'
+
+/** `detail` of a credentials.auto-repair prompt entry (a JSON string). */
+interface ConveniencePromptDetail {
+  agentKey?: string
+  slotId?: string | null
+  slotLabel?: string
+  liveEmail?: string
+  slotEmail?: string
+}
+
+function parsePromptDetail(detail: string): ConveniencePromptDetail {
+  try {
+    const parsed = JSON.parse(detail) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as ConveniencePromptDetail) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function convenienceAnnouncementId(entryId: number): string {
+  return `convenience:${entryId}`
+}
+
+function convenienceItems(seen: Set<string>): Announcement[] {
+  const state = convenienceState.value
+  if (!state) return []
+  const t = i18n.global.t
+  const overview: ConvenienceAnnouncementAction = { kind: 'convenience-overview' }
+  const items: Announcement[] = []
+  if (state.upgrade && state.upgrade.features.length > 0) {
+    items.push({
+      id: CONVENIENCE_UPGRADE_ID,
+      kind: 'convenience',
+      title: t('convenience.notice.upgrade'),
+      highlights: state.upgrade.features.map((id) => convenienceText(id, 'name')),
+      note: t('convenience.notice.upgrade-note'),
+      read: false,
+      actions: [{ kind: 'convenience-upgrade-ack' }, overview],
+    })
+  }
+  const entries = state.notices.filter((entry) => entry.notify).slice().sort((a, b) => b.at - a.at || b.id - a.id)
+  for (const entry of entries) {
+    const id = convenienceAnnouncementId(entry.id)
+    const feature = convenienceText(entry.feature, 'name')
+    const actions: ConvenienceAnnouncementAction[] = []
+    let title: string
+    let note: string | undefined
+    const highlights: string[] = []
+    switch (entry.action) {
+      case 'first':
+      case 'repair':
+        title = t('convenience.notice.wrote', { feature, target: entry.target, purpose: convenienceText(entry.feature, 'purpose') })
+        if (entry.action === 'repair') note = t('convenience.notice.repair-note')
+        break
+      case 'removed': {
+        title = t('convenience.notice.removed', { feature, target: entry.target })
+        const current = state.features.find((f) => f.id === entry.feature)
+        // Offered only while the removal is still what keeps it off.
+        if (current?.state === 'off' && current.reason === 'removed') {
+          actions.push({ kind: 'convenience-reallow', featureId: entry.feature })
+        }
+        break
+      }
+      case 'prompt': {
+        const detail = parsePromptDetail(entry.detail)
+        const agentKey = detail.agentKey || entry.target
+        const label = detail.slotLabel || detail.slotEmail || ''
+        title = t('convenience.notice.prompt', { agent: convenienceAgentLabel.value(agentKey) })
+        if (detail.liveEmail || label) {
+          highlights.push(t('convenience.notice.prompt-accounts', { live: detail.liveEmail || '?', slot: label || '?' }))
+        }
+        note = t('convenience.notice.prompt-note')
+        // A prompt is answered once: reading the row is the answer "keep"
+        // (Navide already follows the live account).
+        if (!seen.has(id)) {
+          actions.push({ kind: 'convenience-keep-login', rowId: id })
+          actions.push({ kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId ?? null, label })
+        }
+        break
+      }
+      default:
+        title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })
+    }
+    actions.push(overview)
+    items.push({ id, kind: 'convenience', title, highlights, note, createdAt: entry.at * 1000, read: false, actions })
+  }
+  return items
+}
+
+/** Hand in the latest `convenience.list` (useConvenience does, on every read). */
+function noteConvenience(snapshot: ConvenienceSnapshot): void {
+  convenienceState.value = snapshot
+}
+
+/** How the account prompt names a CLI (App.vue passes the agent specs' labels). */
+function setConvenienceAgentLabel(label: (agentKey: string) => string): void {
+  convenienceAgentLabel.value = label
+}
+
 /** Live quota incidents by id, newest update first when listed. Not
  *  persisted: the backend owns the incidents and re-publishes them on
  *  connect, and a stale copy in ui_settings would offer buttons for an epoch
@@ -774,6 +895,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const locale = i18n.global.locale.value
   const seen = new Set(readIds.value)
   const merged = [
+    ...convenienceItems(seen),
     ...evolveItems(),
     ...schedulerItems(),
     ...backendItems(),
@@ -844,6 +966,12 @@ export function __resetQuotaAnnouncementsForTest(): void {
   quotaReadMarks.value = new Map()
 }
 
+/** Test-only: forget the convenience snapshot (the module is a singleton). */
+export function __resetConvenienceAnnouncementsForTest(): void {
+  convenienceState.value = null
+  convenienceAgentLabel.value = (key) => key
+}
+
 /** Test-only: forget every evolve notice (the module is a singleton). */
 export function __resetEvolveAnnouncementsForTest(): void {
   evolveNotices.value = []
@@ -860,6 +988,8 @@ export function useAnnouncements() {
     noteBackendUpgrade,
     noteSchedulerDisabled,
     noteEvolveNotice,
+    noteConvenience,
+    setConvenienceAgentLabel,
     noteQuotaIncident,
     invalidateQuotaActions,
     dismissQuotaIncident,

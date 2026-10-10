@@ -1,4 +1,142 @@
 {
+  "convenience": {
+    "notice": {
+      "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
+      "repair-note": "This put back or repaired what Navide wrote earlier.",
+      "removed": "You removed {target}, so the convenience feature \"{feature}\" is now off; Navide will not add it back",
+      "prompt": "{agent}'s sign-in was changed outside Navide",
+      "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
+      "prompt-note": "Navide did not overwrite it. Keep the current sign-in, or switch back to the account Navide would restore.",
+      "upgrade": "These convenience features stay on, as before",
+      "upgrade-note": "They stay allowed. You can turn any of them off on the overview.",
+      "action": {
+        "off": "The convenience feature \"{feature}\" was turned off",
+        "allowed": "The convenience feature \"{feature}\" was allowed",
+        "cleanup": "Removed {target} for the convenience feature \"{feature}\""
+      },
+      "button": {
+        "overview": "Open overview",
+        "reallow": "Allow again",
+        "keep-login": "Keep the current sign-in",
+        "switch-back": "Switch back to {label}",
+        "upgrade-ack": "Got it"
+      }
+    },
+    "action": {
+      "first": "First write",
+      "repair": "Put back or repaired",
+      "removed": "Removed by you",
+      "off": "Turned off",
+      "allowed": "Allowed",
+      "cleanup": "Cleaned up",
+      "prompt": "Sign-in changed outside Navide"
+    },
+    "overview": {
+      "title": "Convenience features and what Navide changes on your computer",
+      "intro": "Navide writes outside its own folder only when a convenience feature you allowed needs it. Every write is announced and logged; once you turn a feature off or delete its entry, Navide does not add it back.",
+      "allClis": "All CLIs",
+      "required": "Required",
+      "requiredHint": "The panes it serves cannot run without it, so it has no switch. It is listed so you know about it.",
+      "allowed": "Allowed",
+      "off": "Off",
+      "reasonRemoved": "You removed what Navide wrote, so this is off. Use the switch to allow it again.",
+      "writes": "Writes",
+      "present": "Present",
+      "absent": "Not present",
+      "noTargets": "Navide has not written anywhere yet.",
+      "cost": "If turned off",
+      "confirmTitle": "Turn off \"{feature}\"?",
+      "confirmBody": "Navide will remove what it wrote here (only entries Navide marked as its own):",
+      "confirmBodyNone": "Nothing Navide wrote is present, so nothing will be removed.",
+      "confirmOff": "Turn off and remove",
+      "cancel": "Cancel",
+      "setFailed": "Could not change it: {error}",
+      "loadFailed": "Could not read convenience features: {error}",
+      "loading": "Loading…",
+      "history": "History",
+      "historyEmpty": "No entries yet.",
+      "backup": "Backup: {path}"
+    },
+    "feature": {
+      "claude_hooks": {
+        "name": "Claude hooks: turn detection, Navide Guard and wake-up",
+        "benefit": "Claude reports when each turn ends, Navide Guard checks Claude's tool calls, and the push channel can wake an idle Claude.",
+        "purpose": "Navide knows when Claude finishes a turn and Navide Guard can check its tool calls",
+        "writes": "Hooks in ~/.claude/settings.json (turn detection, Navide Guard, wake-up)",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Claude's tool calls; the push channel cannot wake an idle Claude."
+      },
+      "qwen_hooks": {
+        "name": "Qwen hooks: turn detection and Navide Guard",
+        "benefit": "Qwen reports when each turn ends and Navide Guard checks Qwen's tool calls.",
+        "purpose": "Navide knows when Qwen finishes a turn and Navide Guard can check its tool calls",
+        "writes": "Hooks in ~/.qwen/settings.json",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Qwen's tool calls."
+      },
+      "copilot_hooks": {
+        "name": "Copilot hooks: turn detection and Navide Guard",
+        "benefit": "Copilot reports when each turn ends and Navide Guard checks Copilot's tool calls.",
+        "purpose": "Navide knows when Copilot finishes a turn and Navide Guard can check its tool calls",
+        "writes": "~/.copilot/hooks/agent-team.json",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Copilot's tool calls."
+      },
+      "codex_hook-trust": {
+        "name": "Codex hook trust carried over",
+        "benefit": "Codex panes keep the trust you already gave your own hooks instead of asking again.",
+        "purpose": "Codex panes do not ask you to trust your own hooks again",
+        "writes": "[hooks.state] rows in ~/.codex/config.toml",
+        "cost": "Every Codex pane asks you to trust your own hooks again."
+      },
+      "codex_login-promote": {
+        "name": "Share a Codex sign-in made in a pane",
+        "benefit": "A Codex sign-in you make inside a pane becomes Codex's sign-in everywhere.",
+        "purpose": "a sign-in made inside a pane works for Codex everywhere",
+        "writes": "~/.codex/auth.json (a hard link to the pane's sign-in)",
+        "cost": "A sign-in made inside a pane stays in that pane."
+      },
+      "cursor_project-mcp": {
+        "name": "Navide MCP tools for Cursor",
+        "benefit": "Cursor panes get Navide's MCP tools, such as messaging, plans and scheduling.",
+        "purpose": "Cursor panes can use Navide's tools",
+        "writes": "The workspace's .cursor/mcp.json and a line in .git/info/exclude",
+        "cost": "Cursor panes have no Navide tools."
+      },
+      "cursor_project-skills": {
+        "name": "Skills delivered to Cursor",
+        "benefit": "Skills you route to Cursor are linked into the workspace so Cursor panes can use them.",
+        "purpose": "Cursor panes can use the skills you routed to them",
+        "writes": "Links in the workspace's .cursor/skills/ and a line in .git/info/exclude",
+        "cost": "Cursor panes get no delivered skills."
+      },
+      "credentials_auto-repair": {
+        "name": "Account sign-in auto-repair",
+        "benefit": "When a CLI's live sign-in goes missing after an account switch, Navide restores the account you chose so panes do not start signed out.",
+        "purpose": "panes do not start signed out after an account switch",
+        "writes": "The CLI's live sign-in: Keychain, ~/.claude.json and the vendor's credential files",
+        "cost": "A pane can start signed out after an account switch went wrong."
+      },
+      "codex_pane-homes": {
+        "name": "Codex pane folders",
+        "benefit": "Each Codex pane gets a folder of its own so panes can use different accounts side by side.",
+        "purpose": "Codex panes can use different accounts side by side",
+        "writes": "~/.codex-panes/",
+        "cost": "Required: the panes it serves cannot run without it."
+      },
+      "pane-shims": {
+        "name": "Pane launch folders",
+        "benefit": "Kimi, Grok, Antigravity and Muse panes start from a folder of their own so each pane keeps its own account and settings.",
+        "purpose": "each pane keeps its own account and settings",
+        "writes": "~/.navide-panes/ and entries Navide adopts in the vendor's own folder",
+        "cost": "Required: the panes it serves cannot run without it."
+      },
+      "claude_account-homes": {
+        "name": "Claude account folders",
+        "benefit": "Each signed-in Claude account keeps a folder of its own, so sessions and settings follow the account.",
+        "purpose": "sessions and settings follow each Claude account",
+        "writes": "Links and moved files in ~/.claude for signed-in accounts",
+        "cost": "Required: the panes it serves cannot run without it."
+      }
+    }
+  },
   "windowControls": {
     "group": "Window controls",
     "minimize": "Minimize",
@@ -987,6 +1125,7 @@
   },
   "settings": {
     "cliExtensions": {
+      "tabInstalled": "Installed CLI extensions",
       "intro": "Each AI CLI's own CLI extensions — Claude plugins and mods, Codex hooks, Pi extensions and the rest — and what they can reach. Navide only reads them: nothing here installs, enables or changes anything. Navide plugins have their own page.",
       "summary": "{total} CLI extensions · {l3} with code inside the CLI's own process",
       "machineWide": "One set per CLI for the whole machine: every Navide pane and account of that CLI loads the same ones.",

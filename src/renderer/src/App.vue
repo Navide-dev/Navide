@@ -331,8 +331,9 @@ import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, his
 import { executeCommand, initKeybindingsPort, useKeybindings, registerCommand, setContext } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
-import type { EvolveAnnouncementAction } from './composables/useAnnouncements'
+import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
+import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -8115,29 +8116,27 @@ provide(cliAccountDirActionsKey, {
   },
 })
 
-provide(
-  cliAccountSwitchKey,
-  createCliAccountSwitchHandler(cliProfilesApi, {
-    confirm: (message, opts) => notifyRestore.confirm(message, opts),
-    agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
-    accountLabel: (agentKey, profileId) => accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
-    // The account we just switched to cannot authenticate. It is the active
-    // account now, so this is a live login — the poller harvests it back into
-    // the slot. The toast says why a login pane appeared on its own, and an
-    // aged-out token is told apart from a lost login: the first is what
-    // parking an account normally does to it, and calling that "signed out"
-    // reads as the switch having broken something.
-    startLogin: (agentKey, reason) => {
-      notifyRestore.toast(
-        i18n.global.t(
-          reason === 'expired' ? 'cli-account.needs-login-expired' : 'cli-account.needs-login'
-        ),
-        { type: 'info' }
-      )
-      void onCliLoginSpawn(agentKey)
-    }
-  })
-)
+const cliAccountSwitch = createCliAccountSwitchHandler(cliProfilesApi, {
+  confirm: (message, opts) => notifyRestore.confirm(message, opts),
+  agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
+  accountLabel: (agentKey, profileId) => accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
+  // The account we just switched to cannot authenticate. It is the active
+  // account now, so this is a live login — the poller harvests it back into
+  // the slot. The toast says why a login pane appeared on its own, and an
+  // aged-out token is told apart from a lost login: the first is what
+  // parking an account normally does to it, and calling that "signed out"
+  // reads as the switch having broken something.
+  startLogin: (agentKey, reason) => {
+    notifyRestore.toast(
+      i18n.global.t(
+        reason === 'expired' ? 'cli-account.needs-login-expired' : 'cli-account.needs-login'
+      ),
+      { type: 'info' }
+    )
+    void onCliLoginSpawn(agentKey)
+  }
+})
+provide(cliAccountSwitchKey, cliAccountSwitch)
 
 /** Restart this window's live panes of one agent after a forced account
  *  switch, so they pick up the new credentials. Login panes and dead
@@ -8691,7 +8690,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -14107,6 +14106,38 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
       break
     default:
       evolve.openPanel(action.workspace)
+  }
+}
+
+// Convenience features: notices for every write Navide made outside its own
+// data directory, and the overview in Settings → CLI Extensions.
+const convenience = useConvenience(backend, {
+  agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
+})
+async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promise<void> {
+  switch (action.kind) {
+    case 'convenience-overview':
+      closePopover()
+      openConvenienceOverview()
+      openSettingsAt('cliExtensions')
+      break
+    case 'convenience-reallow':
+      await convenience.setAllowed(action.featureId, true)
+      break
+    case 'convenience-upgrade-ack':
+      await convenience.ackUpgrade()
+      break
+    case 'convenience-keep-login':
+      announcements.markRead(action.rowId)
+      break
+    case 'convenience-switch-back': {
+      // Back to the account Navide would have restored, through the same
+      // switch flow as Settings → Accounts.
+      const res = await cliAccountSwitch(action.agentKey, action.slotId)
+      if (res.ok) announcements.markRead(action.rowId)
+      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      break
+    }
   }
 }
 
@@ -21689,6 +21720,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @quota-action="(action) => void quotaFailover.actOn(action)"
       @tour="startAnnouncementTour"
       @evolve-action="onEvolveAction"
+      @convenience-action="(action) => void onConvenienceAction(action)"
     />
 
     <!-- Workspace self-evolution panel (opened from the sidebar heading and

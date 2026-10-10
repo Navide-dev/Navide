@@ -1,4 +1,142 @@
 {
+  "convenience": {
+    "notice": {
+      "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
+      "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
+      "removed": "{target} が削除されたため、便利機能「{feature}」をオフにしました。自動で戻すことはありません",
+      "prompt": "{agent} のログインが Navide の外で変更されました",
+      "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
+      "prompt-note": "Navide は上書きしていません。現在のログインを維持するか、Navide が復元するアカウントに戻せます。",
+      "upgrade": "以下の便利機能はこれまでどおりオンのままです",
+      "upgrade-note": "許可されたままです。概要ページでいつでもオフにできます。",
+      "action": {
+        "off": "便利機能「{feature}」をオフにしました",
+        "allowed": "便利機能「{feature}」を許可しました",
+        "cleanup": "便利機能「{feature}」の {target} を削除しました"
+      },
+      "button": {
+        "overview": "概要を開く",
+        "reallow": "再度許可",
+        "keep-login": "現在のログインを維持",
+        "switch-back": "{label} に戻す",
+        "upgrade-ack": "了解"
+      }
+    },
+    "action": {
+      "first": "初回書き込み",
+      "repair": "復元・修復",
+      "removed": "ユーザーが削除",
+      "off": "オフ",
+      "allowed": "許可",
+      "cleanup": "クリーンアップ",
+      "prompt": "Navide の外でログインが変更"
+    },
+    "overview": {
+      "title": "便利機能と Navide があなたのコンピューターに加えた変更",
+      "intro": "Navide は、許可された便利機能が必要とするときにだけ、Navide のフォルダー外に書き込みます。書き込みは毎回通知・記録され、オフにするか手動で削除すると再び追加されません。",
+      "allClis": "すべての CLI",
+      "required": "必須",
+      "requiredHint": "対応する pane はこれなしでは動作しないため、スイッチはありません。把握できるよう一覧に表示しています。",
+      "allowed": "許可",
+      "off": "オフ",
+      "reasonRemoved": "Navide が書き込んだ内容が削除されたため、オフになっています。スイッチで再度許可できます。",
+      "writes": "書き込み先",
+      "present": "あり",
+      "absent": "なし",
+      "noTargets": "Navide はまだどこにも書き込んでいません。",
+      "cost": "オフにすると",
+      "confirmTitle": "「{feature}」をオフにしますか？",
+      "confirmBody": "Navide が書き込んだ以下の内容を削除します（Navide の印が付いた項目のみ）：",
+      "confirmBodyNone": "削除する Navide の書き込みはありません。",
+      "confirmOff": "オフにして削除",
+      "cancel": "キャンセル",
+      "setFailed": "変更できませんでした：{error}",
+      "loadFailed": "便利機能を読み込めませんでした：{error}",
+      "loading": "読み込み中…",
+      "history": "履歴",
+      "historyEmpty": "履歴はありません。",
+      "backup": "バックアップ：{path}"
+    },
+    "feature": {
+      "claude_hooks": {
+        "name": "Claude hook：ターン検出、Navide Guard、起動",
+        "benefit": "Claude がターンの終了を報告し、Navide Guard が Claude のツール呼び出しを確認し、プッシュチャネルがアイドル中の Claude を起こせます。",
+        "purpose": "Navide が Claude のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "~/.claude/settings.json の hooks（ターン検出、Navide Guard、起動）",
+        "cost": "ターン終了は報告ではなく出力から推測されます。Navide Guard は Claude のツール呼び出しを確認せず、プッシュチャネルはアイドル中の Claude を起こせません。"
+      },
+      "qwen_hooks": {
+        "name": "Qwen hook：ターン検出と Navide Guard",
+        "benefit": "Qwen がターンの終了を報告し、Navide Guard が Qwen のツール呼び出しを確認します。",
+        "purpose": "Navide が Qwen のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "~/.qwen/settings.json の hooks",
+        "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Qwen のツール呼び出しを確認しません。"
+      },
+      "copilot_hooks": {
+        "name": "Copilot hook：ターン検出と Navide Guard",
+        "benefit": "Copilot がターンの終了を報告し、Navide Guard が Copilot のツール呼び出しを確認します。",
+        "purpose": "Navide が Copilot のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "~/.copilot/hooks/agent-team.json",
+        "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Copilot のツール呼び出しを確認しません。"
+      },
+      "codex_hook-trust": {
+        "name": "Codex hook の信頼を引き継ぐ",
+        "benefit": "Codex pane は、自分の hooks にすでに与えた信頼を引き継ぎ、再確認しません。",
+        "purpose": "Codex pane で自分の hooks を再度信頼する必要がなくなる",
+        "writes": "~/.codex/config.toml の [hooks.state] 行",
+        "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
+      },
+      "codex_login-promote": {
+        "name": "pane 内の Codex ログインを共有",
+        "benefit": "pane 内で行った Codex のログインが、このコンピューター全体の Codex のログインになります。",
+        "purpose": "pane 内のログインを他の場所でも使える",
+        "writes": "~/.codex/auth.json（pane のログインへのハードリンク）",
+        "cost": "pane 内のログインはその pane の中だけに残ります。"
+      },
+      "cursor_project-mcp": {
+        "name": "Cursor 用 Navide MCP ツール",
+        "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",
+        "purpose": "Cursor pane が Navide のツールを使える",
+        "writes": "ワークスペースの .cursor/mcp.json と .git/info/exclude の 1 行",
+        "cost": "Cursor pane で Navide のツールを使えません。"
+      },
+      "cursor_project-skills": {
+        "name": "Cursor への skills 配信",
+        "benefit": "Cursor に割り当てた skills をワークスペースにリンクし、Cursor pane で使えるようにします。",
+        "purpose": "Cursor pane が割り当てた skills を使える",
+        "writes": "ワークスペースの .cursor/skills/ 内のリンクと .git/info/exclude の 1 行",
+        "cost": "Cursor pane に skills が配信されません。"
+      },
+      "credentials_auto-repair": {
+        "name": "アカウントのログイン自動修復",
+        "benefit": "アカウント切り替え後に CLI の現在のログインが失われた場合、選んだアカウントを Navide が復元し、pane が未ログインで起動しないようにします。",
+        "purpose": "アカウント切り替え後に pane が未ログインで起動しない",
+        "writes": "CLI の現在のログイン：キーチェーン、~/.claude.json、各ベンダーの認証情報ファイル",
+        "cost": "アカウント切り替えに失敗した後、pane が未ログインで起動することがあります。"
+      },
+      "codex_pane-homes": {
+        "name": "Codex pane 専用フォルダー",
+        "benefit": "Codex pane ごとに専用のフォルダーを用意し、pane ごとに別のアカウントを同時に使えるようにします。",
+        "purpose": "Codex pane で別々のアカウントを同時に使える",
+        "writes": "~/.codex-panes/",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      },
+      "pane-shims": {
+        "name": "pane 起動フォルダー",
+        "benefit": "Kimi、Grok、Antigravity、Muse の pane を専用フォルダーから起動し、pane ごとにアカウントと設定を保ちます。",
+        "purpose": "pane ごとにアカウントと設定を保てる",
+        "writes": "~/.navide-panes/ と、各ベンダーのフォルダー内で Navide が引き継いだ項目",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      },
+      "claude_account-homes": {
+        "name": "Claude アカウントフォルダー",
+        "benefit": "ログイン済みの Claude アカウントごとに専用フォルダーを持ち、セッションと設定がアカウントに付いていきます。",
+        "purpose": "セッションと設定が各 Claude アカウントに付いていく",
+        "writes": "ログイン済みアカウント用に ~/.claude 内に作成したリンクと移動したファイル",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      }
+    }
+  },
   "windowControls": {
     "group": "ウィンドウ操作",
     "minimize": "最小化",
@@ -987,6 +1125,7 @@
   },
   "settings": {
     "cliExtensions": {
+      "tabInstalled": "インストール済みの CLI 拡張",
       "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin、Claude mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲を一覧にします。Navide は読み取るだけで、ここでインストール・有効化・変更を行うことはありません。Navide プラグインは専用のページにあります。",
       "summary": "CLI 拡張 {total} 件 · うち CLI のプロセス内で動くコード {l3} 件",
       "machineWide": "CLI ごとにマシン全体で 1 セットです。その CLI の Navide ペインとアカウントはすべて同じものを読み込みます。",

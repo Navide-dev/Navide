@@ -1,4 +1,142 @@
 {
+  "convenience": {
+    "notice": {
+      "wrote": "已依你允許的便利功能「{feature}」，寫入 {target}（為了{purpose}）",
+      "repair-note": "這次是補回或修復 Navide 先前寫入的內容。",
+      "removed": "你移除了 {target}，已關閉便利功能「{feature}」；不會再自動加回",
+      "prompt": "{agent} 的登入在 Navide 外被換過",
+      "prompt-accounts": "目前登入：{live} · Navide 原本會還原成：{slot}",
+      "prompt-note": "Navide 沒有覆蓋它。你可以保留目前的登入，或切回 Navide 原本會還原的帳號。",
+      "upgrade": "以下便利功能沿用你目前的設定，維持開啟",
+      "upgrade-note": "它們維持允許；可隨時在總覽頁關閉。",
+      "action": {
+        "off": "已關閉便利功能「{feature}」",
+        "allowed": "已允許便利功能「{feature}」",
+        "cleanup": "已依便利功能「{feature}」移除 {target}"
+      },
+      "button": {
+        "overview": "查看總覽",
+        "reallow": "重新允許",
+        "keep-login": "保留目前的登入",
+        "switch-back": "切回 {label}",
+        "upgrade-ack": "知道了"
+      }
+    },
+    "action": {
+      "first": "首次寫入",
+      "repair": "補回或修復",
+      "removed": "你移除了",
+      "off": "已關閉",
+      "allowed": "已允許",
+      "cleanup": "已清理",
+      "prompt": "登入在 Navide 外被換過"
+    },
+    "overview": {
+      "title": "便利功能與 Navide 對你電腦的修改",
+      "intro": "Navide 只在你允許的便利功能需要時，才會寫入 Navide 資料夾以外的地方。每次寫入都會通知你並留下紀錄；關閉或手動刪除後就不會再加回。",
+      "allClis": "所有 CLI",
+      "required": "必要",
+      "requiredHint": "它服務的 pane 少了它就無法執行，所以沒有開關；列在這裡是為了讓你知道。",
+      "allowed": "已允許",
+      "off": "已關閉",
+      "reasonRemoved": "你手動移除了 Navide 寫入的內容，所以已關閉；按開關可重新允許。",
+      "writes": "寫入",
+      "present": "存在",
+      "absent": "已不存在",
+      "noTargets": "Navide 還沒有寫入任何位置。",
+      "cost": "關閉的代價",
+      "confirmTitle": "關閉「{feature}」？",
+      "confirmBody": "Navide 會移除它寫入的這些內容（只移除帶有 Navide 標記的項目）：",
+      "confirmBodyNone": "目前沒有 Navide 寫入的內容需要移除。",
+      "confirmOff": "關閉並移除",
+      "cancel": "取消",
+      "setFailed": "無法變更：{error}",
+      "loadFailed": "無法讀取便利功能：{error}",
+      "loading": "讀取中…",
+      "history": "紀錄",
+      "historyEmpty": "沒有紀錄。",
+      "backup": "備份：{path}"
+    },
+    "feature": {
+      "claude_hooks": {
+        "name": "Claude hook：回合偵測、Navide Guard 與喚醒",
+        "benefit": "Claude 會回報每一回合何時結束、Navide Guard 會檢查 Claude 的工具呼叫，推播頻道也能喚醒閒置的 Claude。",
+        "purpose": "讓 Navide 知道 Claude 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
+        "writes": "~/.claude/settings.json 裡的 hooks（回合偵測、Navide Guard、喚醒）",
+        "cost": "回合結束改由輸出推測，不再由 Claude 回報；Navide Guard 不會檢查 Claude 的工具呼叫；推播頻道無法喚醒閒置的 Claude。"
+      },
+      "qwen_hooks": {
+        "name": "Qwen hook：回合偵測與 Navide Guard",
+        "benefit": "Qwen 會回報每一回合何時結束，Navide Guard 會檢查 Qwen 的工具呼叫。",
+        "purpose": "讓 Navide 知道 Qwen 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
+        "writes": "~/.qwen/settings.json 裡的 hooks",
+        "cost": "回合結束改由輸出推測，不再由 Qwen 回報；Navide Guard 不會檢查 Qwen 的工具呼叫。"
+      },
+      "copilot_hooks": {
+        "name": "Copilot hook：回合偵測與 Navide Guard",
+        "benefit": "Copilot 會回報每一回合何時結束，Navide Guard 會檢查 Copilot 的工具呼叫。",
+        "purpose": "讓 Navide 知道 Copilot 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
+        "writes": "~/.copilot/hooks/agent-team.json",
+        "cost": "回合結束改由輸出推測，不再由 Copilot 回報；Navide Guard 不會檢查 Copilot 的工具呼叫。"
+      },
+      "codex_hook-trust": {
+        "name": "Codex hook 信任沿用",
+        "benefit": "Codex pane 會沿用你已經給過自己 hooks 的信任，不必每個 pane 再問一次。",
+        "purpose": "讓 Codex pane 不必再要你重新信任自己的 hooks",
+        "writes": "~/.codex/config.toml 裡的 [hooks.state] 列",
+        "cost": "每個 Codex pane 都會再要你信任一次自己的 hooks。"
+      },
+      "codex_login-promote": {
+        "name": "Codex pane 內登入全機沿用",
+        "benefit": "你在 pane 內完成的 Codex 登入，會成為整台機器 Codex 的登入。",
+        "purpose": "讓在 pane 內完成的登入在其他地方也能用",
+        "writes": "~/.codex/auth.json（指向 pane 登入的硬連結）",
+        "cost": "在 pane 內完成的登入只留在那個 pane。"
+      },
+      "cursor_project-mcp": {
+        "name": "Cursor 的 Navide MCP 工具",
+        "benefit": "Cursor pane 可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",
+        "purpose": "讓 Cursor pane 能使用 Navide 的工具",
+        "writes": "工作區的 .cursor/mcp.json，以及 .git/info/exclude 裡的一行",
+        "cost": "Cursor pane 沒有 Navide 的工具可用。"
+      },
+      "cursor_project-skills": {
+        "name": "Cursor 的 skills 遞送",
+        "benefit": "你分配給 Cursor 的 skills 會連結進工作區，讓 Cursor pane 可以使用。",
+        "purpose": "讓 Cursor pane 能使用你分配給它的 skills",
+        "writes": "工作區 .cursor/skills/ 裡的連結，以及 .git/info/exclude 裡的一行",
+        "cost": "Cursor pane 拿不到遞送的 skills。"
+      },
+      "credentials_auto-repair": {
+        "name": "帳號登入自動修復",
+        "benefit": "切換帳號後若 CLI 目前的登入不見了，Navide 會還原你選的帳號，避免 pane 啟動時變成未登入。",
+        "purpose": "避免切換帳號後 pane 啟動時變成未登入",
+        "writes": "CLI 目前的登入：Keychain、~/.claude.json 與各家的憑證檔",
+        "cost": "帳號切換出錯後，pane 可能會以未登入狀態啟動。"
+      },
+      "codex_pane-homes": {
+        "name": "Codex pane 專屬目錄",
+        "benefit": "每個 Codex pane 都有自己的目錄，讓不同 pane 可以同時使用不同帳號。",
+        "purpose": "讓 Codex pane 可以同時使用不同帳號",
+        "writes": "~/.codex-panes/",
+        "cost": "必要：它服務的 pane 少了它就無法執行。"
+      },
+      "pane-shims": {
+        "name": "pane 啟動目錄",
+        "benefit": "Kimi、Grok、Antigravity 與 Muse 的 pane 從各自的目錄啟動，讓每個 pane 保有自己的帳號與設定。",
+        "purpose": "讓每個 pane 保有自己的帳號與設定",
+        "writes": "~/.navide-panes/，以及 Navide 在各家自己目錄裡接管的項目",
+        "cost": "必要：它服務的 pane 少了它就無法執行。"
+      },
+      "claude_account-homes": {
+        "name": "Claude 帳號目錄",
+        "benefit": "每個已登入的 Claude 帳號都有自己的目錄，session 與設定跟著帳號走。",
+        "purpose": "讓 session 與設定跟著各個 Claude 帳號",
+        "writes": "~/.claude 裡為已登入帳號建立的連結與搬移的檔案",
+        "cost": "必要：它服務的 pane 少了它就無法執行。"
+      }
+    }
+  },
   "windowControls": {
     "group": "視窗控制",
     "minimize": "最小化",
@@ -987,6 +1125,7 @@
   },
   "settings": {
     "cliExtensions": {
+      "tabInstalled": "已安裝的 CLI 擴充",
       "intro": "列出每個 AI CLI 自己安裝的 CLI 擴充（Claude plugin、Claude mod、Codex hook、Pi extension……），以及它們能碰到什麼。Navide 只讀取，這裡不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
       "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個是在 CLI 程序內執行的程式碼",
       "machineWide": "每家 CLI 整台機器只有一份：Navide 裡這家 CLI 的每個 pane、每個帳號，都會載入同一套。",
