@@ -82,6 +82,29 @@ def test_hooks_the_user_deleted_are_not_re_added_at_the_next_start(gate, homes) 
     assert gate.state("claude.hooks") == ("off", "removed")
 
 
+def test_a_settings_file_unreadable_at_first_sight_is_neither_adopted_nor_later_read_as_removed(
+    gate, homes
+) -> None:
+    """A1: the presence check cannot read a file with a typo. That says
+    nothing about Navide's hooks, so nothing is recorded; once the user fixes
+    the typo the next start is a first write, not a removal."""
+    settings = _target("claude")
+    settings.write_text('{"model": "x",}', encoding="utf-8")
+
+    first = convenience_wiring.install_cli_hooks(str(homes["port"]))
+
+    assert first["claude"]["convenience"] == "unchanged"
+    assert gate.listing_feature("claude.hooks")["targets"] == []
+    assert gate.upgrade_notice() is None or "claude.hooks" not in gate.upgrade_notice()["features"]
+
+    settings.write_text('{"model": "x"}', encoding="utf-8")
+    second = convenience_wiring.install_cli_hooks(str(homes["port"]))
+
+    assert second["claude"]["convenience"] == "first"
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    assert claude_hooks.hooks_present(settings)
+
+
 def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     settings = _target("claude")
     settings.write_text(json.dumps({

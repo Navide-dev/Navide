@@ -164,8 +164,11 @@ class ConvenienceGate:
         gets backed up and compared. Without it every completed write counts
         as a change. ``quiet_repairs`` logs later changes without announcing
         them, for a target that grows routinely (one trust row per pane).
-        An exception from ``write`` propagates after nothing was recorded; one from ``present`` reads as "present", so a file the gate
-        cannot read is never mistaken for a removal.
+        An exception from ``write`` propagates after nothing was recorded. One
+        from ``present`` reads as "unknown": a file the gate cannot read is
+        never mistaken for a removal, and never recorded or adopted as one
+        that carries Navide's entry either — fixing it later would otherwise
+        read as the user's removal.
         """
         feature(feature_id)
         key = str(target)
@@ -173,8 +176,8 @@ class ConvenienceGate:
             if not self.allowed(feature_id):
                 return "off"
             known = self._known(feature_id, key)
-            was_present = _safe(present)
-            if known and not was_present:
+            was_present = _probe(present)
+            if known and was_present is False:
                 self._set_state(feature_id, "off", "removed")
                 self._mark(feature_id, key, present=False)
                 self.record(feature_id, "removed", key, detail="deleted outside Navide")
@@ -186,12 +189,13 @@ class ConvenienceGate:
             # Only a target that now carries Navide's entry joins the ledger:
             # an installer that skipped wrote nothing, and remembering the
             # target would read its absence next time as the user's removal.
-            if _safe(present):
+            now_present = _probe(present)
+            if now_present is True:
                 self._mark(feature_id, key, present=True)
-            elif known:
+            elif known and now_present is False:
                 self._mark(feature_id, key, present=False)
             if not changed:
-                if not known and was_present:
+                if not known and was_present is True:
                     self._adopted.add(feature_id)
                 return "unchanged"
             action = "repair" if known else "first"
@@ -361,12 +365,13 @@ class ConvenienceGate:
         }
 
 
-def _safe(present: Callable[[], bool]) -> bool:
+def _probe(present: Callable[[], bool]) -> bool | None:
+    """True or False as ``present`` says; None when it cannot tell."""
     try:
         return bool(present())
-    except Exception as err:  # noqa: BLE001 — unreadable is not removed
-        log.warning("presence check failed (%s); treating as present", err)
-        return True
+    except Exception as err:  # noqa: BLE001 — unreadable is neither present nor removed
+        log.warning("presence check failed (%s); treating as unknown", err)
+        return None
 
 
 def _read(file: Path | None) -> bytes | None:
