@@ -230,7 +230,8 @@ def _remove_project_configs() -> None:
 def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     """``skills_wiring.sync_project_dir`` as the feature cursor.project-skills.
 
-    The manifest of planted links is the marker. When a sync leaves nothing
+    The manifest of planted links is the marker, checked against the links
+    themselves: one the user deleted by hand is a removal. When a sync leaves nothing
     planted, Navide removed the manifest itself, so the target is forgotten
     rather than later read as a removal by the user.
     """
@@ -246,7 +247,10 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     def write() -> None:
         delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
 
-    outcome = g.apply("cursor.project-skills", target, write=write, present=manifest.is_file, file=manifest)
+    outcome = g.apply(
+        "cursor.project-skills", target, write=write,
+        present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
+    )
     if outcome in ("off", "removed"):
         return False
     if not manifest.is_file():

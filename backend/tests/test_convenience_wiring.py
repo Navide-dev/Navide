@@ -263,6 +263,31 @@ def test_turning_cursor_skills_off_removes_only_planted_links(gate, homes, tmp_p
     assert not (repo / ".cursor" / "skills" / "alpha").exists()
 
 
+def test_a_planted_skill_link_the_user_deleted_is_not_relinked(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    link = repo / ".cursor" / "skills" / "alpha"
+    link.unlink()  # the manifest still names it
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert not link.is_symlink()
+    assert gate.state("cursor.project-skills") == ("off", "removed")
+    latest = gate.history()[0]
+    assert (latest["action"], latest["notify"]) == ("removed", True)
+
+
+def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"

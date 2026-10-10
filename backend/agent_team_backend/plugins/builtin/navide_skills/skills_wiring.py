@@ -308,6 +308,19 @@ def sync_project_dir(
         return False
 
 
+def project_dir_intact(target: Path) -> bool:
+    """Whether every link Navide planted in a workspace skills directory is
+    still there.
+
+    The manifest alone cannot say: a link the user deleted by hand leaves its
+    name behind. A name in the manifest that is no longer a link is the
+    user's removal.
+    """
+    if not (target / MANIFEST_FILE).is_file():
+        return False
+    return all((target / name).is_symlink() for name in _read_manifest(target))
+
+
 def remove_project_dir(target: Path) -> int:
     """Take back the links Navide planted in a workspace skills directory.
 
