@@ -3607,3 +3607,36 @@ async def test_a_parked_account_with_its_own_config_dir_is_measured_live(
     assert row["windows"][0]["usedPercent"] == 70
     assert payload["accounts"]["claude"][without["id"]]["status"] == "not-measured"
     assert payload["accounts"]["claude"][active["id"]]["windows"][0]["usedPercent"] == 10
+
+
+class _IdentityVault(_RecordingVault):
+    def __init__(self, root: Path, live: str, slot: str) -> None:
+        super().__init__(root=root)
+        self._emails = {None: live, "slot": slot}
+
+    def identity(self, agent_key: str, slot_id: str | None = None) -> dict:
+        email = self._emails[None if slot_id is None else "slot"]
+        return {"signedIn": True, "email": email}
+
+    def restore(self, agent_key: str, slot_id: str) -> bool:
+        self.restored.append((agent_key, slot_id))
+        return True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("live", "restored"), [("me@example.com", True), ("other@example.com", False)])
+async def test_a_harvested_active_login_never_overrides_an_account_changed_outside_navide(
+    tmp_path, monkeypatch, _isolated_convenience_gate, live, restored
+) -> None:
+    """D7: restoring live is the auto-repair; a different signed-in account
+    is the user's own change, answered with a prompt instead."""
+    vault = _IdentityVault(tmp_path / "slots", live=live, slot="me@example.com")
+    monkeypatch.setattr(us, "_login_pane_running", lambda agent_key, profile_id: False)
+    monkeypatch.setattr(us, "_active_profile_id", lambda agent_key: "p1")
+    monkeypatch.setattr(us, "_dedupe_harvested_login", lambda vault, agent_key, profile_id: profile_id)
+
+    assert await us._harvest_login_home_locked(vault, "claude", "p1") is True
+
+    assert vault.restored == ([("claude", "p1")] if restored else [])
+    actions = [e["action"] for e in _isolated_convenience_gate.history()]
+    assert actions == (["repair"] if restored else ["prompt"])

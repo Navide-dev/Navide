@@ -90,7 +90,9 @@ interface LogEntry {
   feature: string
   action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
   target: string
-  detail: string             // plain English for the log; UI text comes from i18n by feature/action
+  detail: string             // plain English for the log; UI text comes from i18n by feature/action.
+                             // For action 'prompt' (credentials.auto-repair) it is a JSON object:
+                             // { agentKey, slotId, slotLabel, liveEmail, slotEmail }
   backup: string             // '' when none
   notify: boolean
 }

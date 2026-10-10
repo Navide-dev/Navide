@@ -341,3 +341,55 @@ def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -
 
     assert manager.promote_stranded_auth() is False
     assert not (real / "auth.json").exists()
+
+
+# ── Account auto-repair (D7) ─────────────────────────────────────────────────
+
+
+def test_an_allowed_repair_restores_and_is_announced(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("slot-a"), reason="live login was empty"
+    ) is True
+
+    assert restored == ["slot-a"]
+    [entry] = gate.history()
+    assert (entry["feature"], entry["action"], entry["notify"]) == ("credentials.auto-repair", "repair", True)
+
+
+def test_a_repair_that_is_off_writes_nothing(gate) -> None:
+    gate.set_allowed("credentials.auto-repair", False)
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login("claude", "slot-a", lambda: restored.append("x"), reason="r") is False
+
+    assert restored == []
+
+
+def test_an_account_changed_outside_navide_is_never_overridden(gate) -> None:
+    """D7: a different signed-in account becomes a prompt, not a restore."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="Other@Example.com", slot_email="me@example.com", slot_label="Work",
+    ) is False
+
+    assert restored == []
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("prompt", True)
+    assert json.loads(entry["detail"]) == {
+        "agentKey": "claude", "slotId": "slot-a", "slotLabel": "Work",
+        "liveEmail": "Other@Example.com", "slotEmail": "me@example.com",
+    }
+
+
+def test_the_same_account_in_another_case_is_a_repair_not_a_prompt(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="ME@example.com", slot_email="me@example.com",
+    ) is True
+    assert restored == ["x"]

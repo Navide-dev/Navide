@@ -490,11 +490,40 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
             except Exception as err:  # noqa: BLE001 — both profiles stay usable
                 log.warning("de-duplicating the %s login failed: %s", agent_key, err)
         if _active_profile_id(agent_key) == slot_id:
+            # The convenience feature credentials.auto-repair (D7): announced,
+            # skipped when off, and never over an account the user signed
+            # into outside Navide — that becomes a prompt.
+            from .convenience_wiring import repair_live_login
+
+            live_email, slot_email = await vault_to_thread(
+                _live_and_slot_emails, vault, agent_key, slot_id
+            )
             await vault_to_thread(functools.partial(
-                vault.restore, agent_key, slot_id,
-                **_scope_kwargs(vault.restore, agent_key, slot_id),
+                repair_live_login, agent_key, slot_id,
+                functools.partial(
+                    vault.restore, agent_key, slot_id,
+                    **_scope_kwargs(vault.restore, agent_key, slot_id),
+                ),
+                reason="signed in through Navide",
+                live_email=live_email, slot_email=slot_email,
             ))
         return True
+
+
+def _live_and_slot_emails(vault, agent_key: str, slot_id: str) -> tuple[str | None, str | None]:
+    """Signed-in emails of the live login and of a slot, None when unknown.
+    Blocking (Keychain for claude)."""
+    identity = getattr(vault, "identity", None)
+    if not callable(identity):
+        return None, None
+    try:
+        live = identity(agent_key)
+        slot = identity(agent_key, slot_id)
+    except Exception as err:  # noqa: BLE001 — unknown identity: no comparison
+        log.warning("reading %s identities failed: %s", agent_key, err)
+        return None, None
+    live_email = live.get("email") if live.get("signedIn") else None
+    return live_email or None, slot.get("email") or None
 
 
 async def _harvest_pending_login_homes(store, vault) -> list[str]:

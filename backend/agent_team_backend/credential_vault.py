@@ -1883,7 +1883,15 @@ class CredentialVault:
                 self.read_live(agent_key, scope=active_scope).secret is None
                 and self.read_slot(agent_key, active_id, scope=active_scope).secret is not None
             ):
-                self.restore(agent_key, active_id, scope=active_scope)
+                # The convenience feature credentials.auto-repair: announced,
+                # skipped when off. An empty live login is no other account.
+                from .convenience_wiring import repair_live_login
+
+                repair_live_login(
+                    agent_key, active_id,
+                    lambda: self.restore(agent_key, active_id, scope=active_scope),
+                    reason="the live login was empty",
+                )
         except Exception as err:  # noqa: BLE001
             log.warning(
                 "restoring active %s account after promotion failed: %s",

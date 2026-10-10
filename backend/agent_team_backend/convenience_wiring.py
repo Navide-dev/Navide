@@ -9,6 +9,7 @@ no app, tooling) every writer runs exactly as it did before the gate existed.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
@@ -273,6 +274,47 @@ def _drop_codex_hook_trust() -> None:
     manager = getattr(app, "codex_home_manager", None)
     if manager is not None:
         manager.drop_all_hook_trust()
+
+
+# ── Account auto-repair (D7) ───────────────────────────────────────────────
+
+
+def repair_live_login(
+    agent_key: str,
+    slot_id: str,
+    restore: Callable[[], Any],
+    *,
+    reason: str,
+    live_email: str | None = None,
+    slot_email: str | None = None,
+    slot_label: str = "",
+) -> bool:
+    """Write the active account back into the CLI's live login, as the
+    feature credentials.auto-repair. Returns whether it was written.
+
+    D7: when the live login is a *different* signed-in account than the one
+    Navide would restore, the user changed it outside Navide. That is never
+    overridden: the user gets a prompt (keep it, or switch back) instead.
+    """
+    g = _gate
+    if g is None:
+        restore()
+        return True
+    if not g.allowed("credentials.auto-repair"):
+        return False
+    target = f"{agent_key} live login"
+    if live_email and slot_email and live_email.casefold() != slot_email.casefold():
+        g.record(
+            "credentials.auto-repair", "prompt", target,
+            detail=json.dumps({
+                "agentKey": agent_key, "slotId": slot_id, "slotLabel": slot_label,
+                "liveEmail": live_email, "slotEmail": slot_email,
+            }),
+        )
+        return False
+    restore()
+    g.record("credentials.auto-repair", "repair", target, detail=reason)
+    return True
 
 
 #: Removal for the features that are not CLI hooks.
