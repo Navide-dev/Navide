@@ -409,7 +409,9 @@ def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tm
     assert (home_a / "auth.json").read_text(encoding="utf-8") == '{"who": "old-account"}'
     actions = [e["action"] for e in gate.history("codex.login-promote")]
     assert actions == ["prompt", "first"]
-    assert gate.history("codex.login-promote")[0]["notify"] is True
+    prompt = gate.history("codex.login-promote")[0]
+    assert prompt["notify"] is True
+    assert json.loads(prompt["detail"]) == {"agentKey": "codex", "reason": "logout"}
 
 
 def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, tmp_path) -> None:

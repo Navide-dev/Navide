@@ -906,7 +906,7 @@ class CodexHomeManager:
                 if not latest or latest[0]["action"] != "prompt":
                     convenience.record(
                         "codex.login-promote", "prompt", str(real_auth),
-                        detail=json.dumps({"agentKey": "codex"}),
+                        detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
                     )
                 return False
             stranded = [
