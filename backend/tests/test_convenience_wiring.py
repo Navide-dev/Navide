@@ -188,6 +188,37 @@ def test_a_config_folder_gone_altogether_is_a_reset(gate, homes, agent) -> None:
     assert gate.state(convenience_wiring.HOOK_FEATURES[agent]) == ("allowed", "default")
 
 
+def test_a_config_folder_behind_a_dangling_link_is_unknown_not_a_reset(gate, tmp_path, monkeypatch) -> None:
+    """R3-L1: ~/.claude is a link into a volume that is briefly unmounted.
+    That is not a reset: the hook the user deleted by hand stays deleted
+    when the volume comes back, and nothing is written meanwhile."""
+    volume = tmp_path / "vol"
+    (volume / "claude").mkdir(parents=True)
+    folder = tmp_path / "claude-link"
+    folder.symlink_to(volume / "claude")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    settings = folder / "settings.json"
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "first"
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    del data["hooks"]["PreToolUse"]
+    settings.write_text(json.dumps(data), encoding="utf-8")
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    volume.rename(tmp_path / "vol-unmounted")
+
+    out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+
+    assert out["convenience"] == "unknown"
+    assert not (tmp_path / "vol").exists()
+    (tmp_path / "vol-unmounted").rename(volume)
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
+        "unchanged"
+    )
+    assert not any(part.startswith("PreToolUse:") for part in claude_hooks.hook_parts(settings))
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
+
+
 @pytest.mark.parametrize("agent", ["claude", "qwen"])
 def test_a_settings_file_navide_created_and_the_user_deleted_is_a_removal(gate, homes, agent) -> None:
     """Item 7: with the config folder still there, deleting the settings

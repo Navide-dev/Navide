@@ -52,6 +52,10 @@ which runs, in order:
    allowed everywhere else. The workspace's whole `.cursor` folder gone
    (`git clean -fdx`, a fresh clone, a re-created worktree) is a reset of
    that workspace, not a removal.
+   A target or config folder behind a link that leads nowhere (a volume not
+   mounted yet, a dotfiles checkout mid-switch) is **unknown**: neither a
+   removal nor a reset. Nothing is written, turned off or forgotten, and
+   `apply` returns `"unknown"` until the link leads somewhere again.
    A workspace whose `.cursor` (or the config or skills folder in it) leads
    outside the workspace through a link is never written, cleaned or gated.
    Its panes go without the feature, so the user is told: logged and
