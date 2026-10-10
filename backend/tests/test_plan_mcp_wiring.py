@@ -461,6 +461,30 @@ def test_wire_cursor_keeps_the_permissions_the_users_file_had(tmp_path: Path) ->
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="POSIX mode bits")
+def test_cursor_config_behind_a_link_is_written_through_it(tmp_path: Path) -> None:
+    """A dotfiles-managed mcp.json is a link: wiring and removal write the
+    file it points at, keep the link, and keep the mode."""
+    real = tmp_path / "dotfiles" / "mcp.json"
+    real.parent.mkdir()
+    real.write_text(json.dumps({"mcpServers": {"mine": {"command": "x"}}}), encoding="utf-8")
+    real.chmod(0o600)
+    ws = tmp_path / "ws"
+    path = plan_mcp_wiring.project_config_path("cursor", ws)
+    path.parent.mkdir(parents=True)
+    path.symlink_to(real)
+
+    plan_mcp_wiring.wire_command("cursor", "cursor-agent", 4567, "p1", {}, str(ws))
+    assert path.is_symlink()
+    assert plan_mcp_wiring.SERVER_NAME in json.loads(real.read_text(encoding="utf-8"))["mcpServers"]
+
+    assert plan_mcp_wiring.remove_project_config("cursor", path) is True
+    assert path.is_symlink()
+    assert json.loads(real.read_text(encoding="utf-8")) == {"mcpServers": {"mine": {"command": "x"}}}
+    assert stat.S_IMODE(real.stat().st_mode) == 0o600
+    assert sorted(p.name for p in real.parent.iterdir()) == ["mcp.json"]
+
+
 def test_wire_cursor_does_not_claim_a_repo_above_the_workspace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

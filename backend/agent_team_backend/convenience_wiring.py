@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from .convenience import ConvenienceGate
+from .convenience import ConvenienceGate, Takeback
 
 log = logging.getLogger("agent_team_backend.convenience_wiring")
 
@@ -70,13 +70,17 @@ def note(feature_id: str, target: str | Path, *, detail: str = "") -> None:
         log.warning("noting %s %s failed: %s", feature_id, target, err)
 
 
-def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
-    """Announce a change a required feature made to the user's own files."""
+def changed(feature_id: str, target: str | Path, *, detail: str, once: bool = False) -> None:
+    """Announce a change a required feature made to the user's own files;
+    with ``once``, later changes to the same path are only logged."""
     g = _gate
     if g is None:
         return
     try:
-        g.record(feature_id, "repair", str(target), detail=detail)
+        if once:
+            g.changed_once(feature_id, target, detail=detail)
+        else:
+            g.record(feature_id, "repair", str(target), detail=detail)
     except Exception as err:  # noqa: BLE001
         log.warning("recording %s %s failed: %s", feature_id, target, err)
 
@@ -84,6 +88,11 @@ def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
 # ── CLI hooks (S1–S3) ──────────────────────────────────────────────────────
 
 HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "copilot.hooks"}
+
+#: Vendors whose settings file holds one Navide hook per event, so one the
+#: user deleted is told apart from the rest (their installers take ``skip``).
+#: Copilot's hook file is Navide's alone: deleting it is the whole removal.
+_PER_HOOK = frozenset({"claude", "qwen"})
 
 
 def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
@@ -120,11 +129,23 @@ def install_hooks_gated(
         return install(port_file)
     path, present, _ = _hook_target(agent_key)
     result: dict[str, Any] = {}
+    parts = None
+    if agent_key in _PER_HOOK:
+        from . import claude_hooks
+
+        parts = lambda: claude_hooks.hook_parts(path)  # noqa: E731
 
     def write() -> None:
-        result.update(install(port_file) or {})
+        skip = g.excluded(feature_id, path) if parts is not None else frozenset()
+        result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    outcome = g.apply(feature_id, path, write=write, present=present, file=path)
+    # Claude's and Qwen's settings.json are the user's: that file gone is a
+    # reset. Copilot's hook file is Navide's own, so deleting it stays the
+    # user's removal; only its whole config folder gone is a reset.
+    outcome = g.apply(
+        feature_id, path, write=write, present=present, file=path, parts=parts,
+        reset_when_missing=path if agent_key in _PER_HOOK else path.parent.parent,
+    )
     return {**result, "convenience": outcome}
 
 
@@ -155,20 +176,29 @@ def remove_hooks(agent_key: str) -> Any:
     return _hook_target(agent_key)[2]()
 
 
+def _hook_takeback(agent_key: str) -> list[Takeback]:
+    path, present, remove = _hook_target(agent_key)
+    return [Takeback(str(path), remove, present, path)]
+
+
 # ── switches ───────────────────────────────────────────────────────────────
 
 
-def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
+def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str = "") -> None:
     """The overview's switch: off takes Navide's entries back first; allowed
-    re-applies a startup feature at once (a per-spawn one on its next spawn)."""
+    re-applies a startup feature at once (a per-spawn one on its next spawn).
+    ``source`` is who moved it, for the log (``ConvenienceGate.record``)."""
     g = _gate
     if g is None:
         raise RuntimeError("convenience gate not installed")
     agent_key = next((k for k, f in HOOK_FEATURES.items() if f == feature_id), None)
-    remove = REMOVERS.get(feature_id)
+    takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
-        remove = lambda: remove_hooks(agent_key)  # noqa: E731
-    g.set_allowed(feature_id, allowed, remove=remove)
+        takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
+    refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
+    g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
+    if refusing:
+        _clear_refused_skills(refusing)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:
@@ -224,13 +254,29 @@ def _remove_project_configs() -> None:
             log.warning("removing Navide's entry from %s failed: %s", target, err)
 
 
+def _project_config_takeback() -> list[Takeback]:
+    from .mcp_server import wiring
+
+    return [
+        Takeback(
+            target,
+            lambda path=Path(target): wiring.remove_project_config("cursor", path),
+            lambda path=Path(target): wiring.project_config_has_entry("cursor", path),
+            Path(target),
+        )
+        for target in _targets("cursor.project-mcp")
+    ]
+
+
 # ── Cursor: project skills (H2) ────────────────────────────────────────────
 
 
 def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     """``skills_wiring.sync_project_dir`` as the feature cursor.project-skills.
 
-    The manifest of planted links is the marker. When a sync leaves nothing
+    The manifest of planted links is the marker. A planted link the user
+    deleted by hand is refused in that workspace only — logged and announced
+    as a removal of that one name — and the feature stays allowed. When a sync leaves nothing
     planted, Navide removed the manifest itself, so the target is forgotten
     rather than later read as a removal by the user.
     """
@@ -240,13 +286,24 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     if g is None or not cwd:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     target = Path(cwd).joinpath(*wiring.project_rel)
+    if not skills_wiring.project_target_safe(target, Path(cwd)):
+        # Not the workspace's folder: nothing is written, so nothing is gated.
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
+    # Before the gate reads the manifest, so recording the refusal is not
+    # mistaken for a change Navide made.
+    refused = skills_wiring.refuse_missing_links(target) if g.allowed("cursor.project-skills") else []
 
     def write() -> None:
         delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
 
-    outcome = g.apply("cursor.project-skills", target, write=write, present=manifest.is_file, file=manifest)
+    outcome = g.apply(
+        "cursor.project-skills", target, write=write,
+        present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
+    )
+    for name in refused:
+        g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")
     if outcome in ("off", "removed"):
         return False
     if not manifest.is_file():
@@ -257,11 +314,39 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
 def _remove_project_dirs() -> None:
     from .plugins.builtin.navide_skills import skills_wiring
 
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
     for target in _targets("cursor.project-skills"):
         try:
-            skills_wiring.remove_project_dir(Path(target))
+            skills_wiring.remove_project_dir(Path(target), root=Path(target).parents[depth - 1])
         except OSError as err:
             log.warning("removing Navide's links from %s failed: %s", target, err)
+
+
+def _clear_refused_skills(targets: list[str]) -> None:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
+    for target in targets:
+        try:
+            skills_wiring.clear_refused(Path(target), root=Path(target).parents[depth - 1])
+        except OSError as err:
+            log.warning("clearing refused skills in %s failed: %s", target, err)
+
+
+def _project_dir_takeback() -> list[Takeback]:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
+    items = []
+    for target in _targets("cursor.project-skills"):
+        manifest = Path(target) / skills_wiring.MANIFEST_FILE
+        items.append(Takeback(
+            target, lambda path=Path(target): skills_wiring.remove_project_dir(path, root=path.parents[depth - 1]), manifest.is_file, manifest,
+        ))
+    return items
 
 
 # ── Codex: hook trust (S4) ─────────────────────────────────────────────────
@@ -363,9 +448,27 @@ def prompt_live_logout(agent_key: str) -> None:
     )
 
 
+def _codex_hook_trust_takeback() -> list[Takeback]:
+    from . import app
+
+    manager = getattr(app, "codex_home_manager", None)
+    if manager is None:
+        return []
+    config = manager.real_home / "config.toml"
+    return [Takeback(str(config), manager.drop_all_hook_trust, None, config)]
+
+
 #: Removal for the features that are not CLI hooks.
 REMOVERS: dict[str, Callable[[], Any]] = {
     "cursor.project-mcp": _remove_project_configs,
     "cursor.project-skills": _remove_project_dirs,
     "codex.hook-trust": _drop_codex_hook_trust,
+}
+
+#: The same removals per target, as the off switch runs them: backed up,
+#: checked afterwards and logged one by one.
+TAKEBACKS: dict[str, Callable[[], list[Takeback]]] = {
+    "cursor.project-mcp": _project_config_takeback,
+    "cursor.project-skills": _project_dir_takeback,
+    "codex.hook-trust": _codex_hook_trust_takeback,
 }

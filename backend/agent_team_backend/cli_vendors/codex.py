@@ -739,6 +739,11 @@ _HOME_RUNTIME_DATABASE = re.compile(
 )
 
 
+#: Per pane home: the config.toml trust rows Navide seeded for it, so a
+#: removal check never counts a row Navide did not write.
+_SEEDED_TRUST_FILE = ".navide-hook-trust.json"
+
+
 class CodexHomeManager:
     """Create isolated CODEX_HOME dirs while sharing stable user config."""
 
@@ -879,7 +884,12 @@ class CodexHomeManager:
         concurrent writer beating us simply wins) and swap the pane's copy
         for the standard symlink so codex token refreshes write through to
         the shared file. Returns True when the real home gained the
-        credential."""
+        credential.
+
+        Through the convenience gate this happens once. A shared login that
+        existed and is gone was signed out outside Navide: the user gets a
+        prompt, and no pane login — least of all an older or different
+        account — takes its place."""
         real_auth = self.real_home / "auth.json"
         from ..convenience_wiring import gate
 
@@ -890,6 +900,14 @@ class CodexHomeManager:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
             if not self.panes_root.is_dir():
+                return False
+            if convenience is not None and self._shared_login_existed(convenience, real_auth):
+                latest = convenience.history("codex.login-promote", limit=1)
+                if not latest or latest[0]["action"] != "prompt":
+                    convenience.record(
+                        "codex.login-promote", "prompt", str(real_auth),
+                        detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
+                    )
                 return False
             stranded = [
                 p for p in self.panes_root.glob("*/auth.json")
@@ -917,10 +935,21 @@ class CodexHomeManager:
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
         if convenience is not None:
-            convenience.record(
-                "codex.login-promote", "first", str(real_auth), detail=f"from {newest.parent.name}"
-            )
+            convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
         return True
+
+    def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the real auth.json was there before: Navide promoted it (the
+        ledger), or a pane home still links to it."""
+        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+            return True
+        for link in self.panes_root.glob("*/auth.json"):
+            try:
+                if link.is_symlink() and Path(os.readlink(link)) == real_auth:
+                    return True
+            except OSError:
+                continue
+        return False
 
     @staticmethod
     def _remove_generated_path(path: Path) -> None:
@@ -956,22 +985,16 @@ class CodexHomeManager:
             return 0
         real_prefix = f"{real_hooks}:"
         pane_prefix = f"{pane_hooks}:"
-        keys = re.findall(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE)
-        # Header → the trusted_hash line that follows it.
-        blocks = re.findall(
-            r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")',
-            text, flags=re.MULTILINE,
-        )
-        existing = {_toml_unescape(k) for k in keys}
+        rows = _hook_state_rows(text)
         additions = []
-        for key, hashed in blocks:
-            key = _toml_unescape(key)
-            if not key.startswith(real_prefix):
+        seeded = []
+        for key, hashed in rows.items():
+            if hashed is None or not key.startswith(real_prefix):
                 continue
             new_key = pane_prefix + key[len(real_prefix):]
-            if new_key in existing:
+            if new_key in rows:
                 continue
-            existing.add(new_key)
+            seeded.append(new_key)
             additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = {hashed}\n')
         if not additions:
             return 0
@@ -982,7 +1005,25 @@ class CodexHomeManager:
         except OSError as err:
             log.warning("seeding codex hook trust for %s failed: %s", pane_home, err)
             return 0
+        self._remember_seeded_trust(pane_home, seeded)
         return len(additions)
+
+    @staticmethod
+    def _seeded_trust(pane_home: Path) -> list[str]:
+        """The trust rows `seed_hook_trust` wrote for this home; [] if unknown."""
+        try:
+            keys = json.loads((pane_home / _SEEDED_TRUST_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+    def _remember_seeded_trust(self, pane_home: Path, keys: list[str]) -> None:
+        known = self._seeded_trust(pane_home)
+        merged = known + [k for k in keys if k not in known]
+        try:
+            (pane_home / _SEEDED_TRUST_FILE).write_text(json.dumps(merged), encoding="utf-8")
+        except OSError as err:
+            log.warning("recording seeded codex hook trust for %s failed: %s", pane_home, err)
 
     def find_session_home(self, resume_id: str) -> Path | None:
         """Locate the CODEX_HOME that physically holds this session, if any.
@@ -1226,38 +1267,28 @@ class CodexHomeManager:
     def drop_all_hook_trust(self) -> None:
         """Remove every ``hooks.state`` row seeded for any pane home."""
         self._drop_trust_rows(f"{self.panes_root}{os.sep}")
+        for record in self.panes_root.glob(f"*/{_SEEDED_TRUST_FILE}"):
+            record.unlink(missing_ok=True)
 
     def hook_trust_intact(self, exclude: Path | None = None) -> bool:
         """Whether every live pane home still has the trust rows it was seeded.
 
-        A home is checked only when seeding would have given it rows: its
-        hooks.json is byte-identical to the real one and the real home has
-        trusted rows. False means rows were deleted outside Navide.
-        ``exclude`` is the home about to be seeded, which has none yet.
+        Only the rows `seed_hook_trust` recorded writing are checked: a hook
+        the user trusted later, in plain Codex or behind a pane's symlinked
+        hooks.json, was never seeded and is not missing. False means a seeded
+        row was deleted outside Navide. ``exclude`` is the home about to be
+        seeded.
         """
-        real_hooks = self.real_home / "hooks.json"
         try:
             text = (self.real_home / "config.toml").read_text(encoding="utf-8")
-            real_bytes = real_hooks.read_bytes()
             homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
         except OSError:
             return True
-        keys = {_toml_unescape(k) for k in re.findall(
-            r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE)}
-        real_prefix = f"{real_hooks}:"
-        suffixes = [k[len(real_prefix):] for k in keys if k.startswith(real_prefix)]
-        if not suffixes:
-            return True
+        rows = _hook_state_rows(text)
         for home in homes:
             if exclude is not None and home == exclude:
                 continue
-            try:
-                if (home / "hooks.json").read_bytes() != real_bytes:
-                    continue
-            except OSError:
-                continue
-            pane_prefix = f"{home / 'hooks.json'}:"
-            if any(pane_prefix + suffix not in keys for suffix in suffixes):
+            if any(key not in rows for key in self._seeded_trust(home)):
                 return False
         return True
 
@@ -1371,6 +1402,18 @@ class CodexHomeManager:
 # ---- attribution/watch hooks ----------------------------------------------
 
 _CODEX_PANES_ROOT_NAME = ".codex-panes"
+
+
+def _hook_state_rows(text: str) -> dict[str, str | None]:
+    """Every ``[hooks.state."<key>"]`` table in config.toml, by unescaped key,
+    to its ``trusted_hash`` literal when that is the table's first line — the
+    only rows seeding copies — else None. Seeding and its presence check both
+    read the file through this one parser."""
+    rows: dict[str, str | None] = {}
+    for header in re.finditer(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE):
+        trusted = re.match(r'\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")', text[header.end():])
+        rows.setdefault(_toml_unescape(header.group(1)), trusted.group(1) if trusted else None)
+    return rows
 
 
 def _toml_escape(value: str) -> str:

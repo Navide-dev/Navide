@@ -227,6 +227,9 @@ def _adopt(entry: Path, target: Path) -> bool:
     except OSError as err:
         log.warning("could not adopt %s into %s: %s", entry, target, err)
         return False
+    from ..convenience_wiring import changed
+
+    changed("pane-shims", target, detail=f"moved from the pane home {entry}", once=True)
     return True
 
 
@@ -339,6 +342,8 @@ def _seed_link_targets(spec: ShimSpec, real_vendor: Path, shim_vendor: Path) -> 
         # and there is nothing to share on a first spawn anyway — _adopt()
         # picks the entries up once the directory genuinely exists.
         return
+    from ..convenience_wiring import changed
+
     for name in spec.seeded_dirs:
         target = real_vendor / name
         if target.exists() or target.is_symlink():
@@ -352,6 +357,8 @@ def _seed_link_targets(spec: ShimSpec, real_vendor: Path, shim_vendor: Path) -> 
             target.mkdir(parents=True, exist_ok=True)
         except OSError as err:
             log.warning("could not seed %s: %s", target, err)
+            continue
+        changed("pane-shims", target, detail="created empty so panes can share it", once=True)
     for name in spec.seeded_files:
         target = real_vendor / name
         if target.exists() or target.is_symlink():
@@ -361,6 +368,8 @@ def _seed_link_targets(spec: ShimSpec, real_vendor: Path, shim_vendor: Path) -> 
             target.touch()
         except OSError as err:
             log.warning("could not seed %s: %s", target, err)
+            continue
+        changed("pane-shims", target, detail="created empty so panes can share it", once=True)
 
 
 def _base_config(real: Path, shim: Path) -> dict[str, Any]:
@@ -439,7 +448,11 @@ def prepare(
         return None
     from ..convenience_wiring import note
 
-    note("pane-shims", panes_root(), detail="per-pane homes for MCP and skills")
+    note(
+        "pane-shims", panes_root(),
+        detail="per-pane homes for MCP and skills; entries a pane creates are moved"
+        " into the vendor's own folder, which may also get empty seed entries",
+    )
     home = real_home()
     if PANES_DIR_NAME in home.parts:
         # The backend was launched from inside a shimmed pane and inherited its

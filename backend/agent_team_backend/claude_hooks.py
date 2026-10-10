@@ -32,6 +32,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -407,16 +408,32 @@ def _write_settings(path: Path, data: dict[str, Any]) -> None:
             log.info("backed up CLI settings → %s", backup)
         except OSError as err:
             log.warning("backup failed (%s); proceeding without backup", err)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # The file a symlink points at is the one rewritten (a dotfiles-managed
+    # settings.json stays a link), and its mode is kept: the temp file starts
+    # 0600 and takes the original's mode before it replaces it, so a file
+    # that may hold an API key is never left wider than the user made it.
+    target = path.resolve()
     try:
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, path)
+        mode: int | None = stat.S_IMODE(target.stat().st_mode)
+    except OSError:
+        mode = None
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    try:
+        tmp.unlink(missing_ok=True)  # a leftover keeps its own mode
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False))
+        if mode is not None:
+            os.chmod(tmp, mode)
+        os.replace(tmp, target)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
 
 
-def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str, Any]:
+def install_hooks(
+    port_file: str, settings_file: Path | None = None, *, skip: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     """Idempotent merge: ensure our hooks are present for each event.
 
     `port_file` is the absolute path to a small text file containing the
@@ -430,6 +447,9 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
     serve claude's push channel, so a user who switched that channel off gets
     it stripped here and not written back. The signal hooks are unaffected —
     they feed activity detection, which has nothing to do with push delivery.
+
+    ``skip`` names hooks (``hook_parts`` keys) the user deleted by hand: they
+    are not written back, and the others are installed as usual.
     """
     path = settings_file or settings_path()
     # Refuse to write over a file that is not a JSON object. _read_settings
@@ -500,11 +520,11 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
         # is backgrounded and only its exit code matters, and a single event
         # (Stop) wants both.
         ours: list[dict[str, Any]] = []
-        if event_kind:
+        if event_kind and f"{event_name}:{event_kind}" not in skip:
             ours.append(osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind)))
-        if event_name == GUARD_EVENT:
+        if event_name == GUARD_EVENT and f"{event_name}:guard" not in skip:
             ours.append(guard_hook_entry(port_file))
-        if event_name in _REWAKE_EVENTS and rewake_wanted:
+        if event_name in _REWAKE_EVENTS and rewake_wanted and f"{event_name}:rewake" not in skip:
             ours.append({
                 **osplat.scripts.hook_entry(_build_rewake_command(port_file)),
                 "asyncRewake": True,
@@ -562,6 +582,36 @@ def hooks_present(settings_file: Path | None = None) -> bool:
         for entry in entries if isinstance(entry, dict)
         for hook in (entry.get("hooks") if isinstance(entry.get("hooks"), list) else [])
     )
+
+
+_KIND_RE = re.compile(re.escape(_AGENT_TEAM_MARKER) + r" kind=(\w+)")
+
+
+def hook_parts(settings_file: Path | None = None) -> set[str]:
+    """Each Navide hook in the settings file, as "<event>:<kind>" (kind is
+    the marker's: stop, guard, rewake …). One the user deleted by hand is
+    missing here while the rest are not. Raises like ``hooks_present``."""
+    path = settings_file or settings_path()
+    if not path.is_file():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    hooks_section = data.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return set()
+    parts: set[str] = set()
+    for event_name, entries in hooks_section.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            inner = entry.get("hooks") if isinstance(entry, dict) else None
+            for hook in inner if isinstance(inner, list) else []:
+                if _hook_is_ours(hook):
+                    # The exec-form guard runs a script and carries no marker.
+                    match = _KIND_RE.search(str(hook.get("command", "")))
+                    parts.add(f"{event_name}:{match.group(1) if match else 'guard'}")
+    return parts
 
 
 def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:
