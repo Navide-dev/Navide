@@ -336,8 +336,8 @@ async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate,
         pass
 
     monkeypatch.setattr(app, "broadcast", broadcast)
-    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True)
-    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False)
+    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True, navide_window=True)
+    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False, navide_window=False)
 
     await ws_handlers.convenience_set(window, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
     await ws_handlers.convenience_set(other, "2", "convenience.set", {"id": "cursor.project-mcp", "allowed": True})
@@ -345,6 +345,31 @@ async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate,
     assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [
         ("allowed", "ws-client"), ("off", "settings"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_announcing_the_ui_bus_does_not_make_a_client_settings(gate, homes, monkeypatch) -> None:
+    """A10: any token holder can send ui.invoke.ready. Only the window proof
+    Electron main gives its windows at connect makes a switch "settings"."""
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, ws_handlers
+
+    monkeypatch.setattr(app, "convenience_gate", gate)
+
+    async def send_json(msg: dict) -> None:
+        pass
+
+    async def broadcast(event: dict, **_: object) -> None:
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    agent = SimpleNamespace(send_json=send_json, ui_bus_ready=False, ui_focused_at=0, navide_window=False)
+    await ws_handlers.ui_invoke_ready(agent, "0", "ui.invoke.ready", {"focused": True})
+
+    await ws_handlers.convenience_set(agent, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
+
+    assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [("off", "ws-client")]
 
 
 # ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────
@@ -708,6 +733,27 @@ def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_pa
 
     assert (real / "config.toml").read_text(encoding="utf-8").rstrip("\n") == before.rstrip("\n")
     assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 0
+
+
+def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import app
+    from agent_team_backend.convenience import CleanupIncomplete
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    real.chmod(0o555)  # the rewrite cannot land
+    try:
+        with pytest.raises(CleanupIncomplete):
+            convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    finally:
+        real.chmod(0o755)
+
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
+    assert gate.state("codex.hook-trust")[0] == "allowed"
+    # Once the file is writable again, off takes the rows back.
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 1
 
 
 def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -> None:

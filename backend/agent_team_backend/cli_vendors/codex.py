@@ -27,6 +27,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import tomllib
 
 import psutil
 
@@ -770,6 +771,8 @@ class CodexHomeManager:
             self.promote_stranded_auth()
         safe_id = self._safe_home_id(home_id)
         pane_home = self.panes_root / safe_id
+        if source_home is None:
+            self._retire_signed_out_login(pane_home)
         pane_home.mkdir(parents=True, exist_ok=True)
         from ..convenience_wiring import note
 
@@ -938,10 +941,38 @@ class CodexHomeManager:
             convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
         return True
 
+    def _retire_signed_out_login(self, pane_home: Path) -> None:
+        """Set aside a pane's own login copy once the shared login it sat
+        beside was signed out outside Navide.
+
+        `promote_stranded_auth` never adopts such a copy, but a spawn in that
+        same home (a resume, a restart) would read it and run as the account
+        the user signed out of. It is renamed, not deleted, so codex starts
+        signed out and asks; the user was already told by the logout prompt.
+        """
+        real_auth = self.real_home / "auth.json"
+        own = pane_home / "auth.json"
+        if real_auth.exists() or real_auth.is_symlink():
+            return
+        if not own.is_file() or own.is_symlink():
+            return
+        from ..convenience_wiring import gate
+
+        if not self._shared_login_existed(gate(), real_auth):
+            return
+        try:
+            os.replace(own, own.with_name("auth.json.signed-out"))
+        except OSError as err:
+            log.warning("setting aside the signed-out codex login in %s failed: %s", pane_home, err)
+            return
+        log.info("set aside the signed-out codex login in %s", pane_home)
+
     def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
         """Whether the real auth.json was there before: Navide promoted it (the
         ledger), or a pane home still links to it."""
-        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+        if convenience is not None and any(
+            t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]
+        ):
             return True
         for link in self.panes_root.glob("*/auth.json"):
             try:
@@ -980,12 +1011,11 @@ class CodexHomeManager:
                 return 0
             if pane_hooks.read_bytes() != real_hooks.read_bytes():
                 return 0
-            text = config.read_text(encoding="utf-8")
-        except OSError:
+            rows = _hook_state_rows(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return 0
         real_prefix = f"{real_hooks}:"
         pane_prefix = f"{pane_hooks}:"
-        rows = _hook_state_rows(text)
         additions = []
         seeded = []
         for key, hashed in rows.items():
@@ -995,11 +1025,11 @@ class CodexHomeManager:
             if new_key in rows:
                 continue
             seeded.append(new_key)
-            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = {hashed}\n')
+            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n')
         if not additions:
             return 0
-        lead = "" if text.endswith("\n") else "\n"
         try:
+            lead = "" if config.read_text(encoding="utf-8").endswith("\n") else "\n"
             with config.open("a", encoding="utf-8") as f:
                 f.write(lead + "\n" + "\n".join(additions))
         except OSError as err:
@@ -1079,6 +1109,10 @@ class CodexHomeManager:
             try:
                 for pane_home in sorted(self.panes_root.iterdir()):
                     if holds_session(pane_home):
+                        # The spawn reuses this home without `prepare`: the
+                        # same login check runs here.
+                        self.promote_stranded_auth()
+                        self._retire_signed_out_login(pane_home)
                         self._share_config_entries(pane_home, self.real_home)
                         self._prepare_skills_view(pane_home, self.real_home / "skills")
                         return pane_home
@@ -1266,9 +1300,20 @@ class CodexHomeManager:
 
     def drop_all_hook_trust(self) -> None:
         """Remove every ``hooks.state`` row seeded for any pane home."""
-        self._drop_trust_rows(f"{self.panes_root}{os.sep}")
+        if not self._drop_trust_rows(f"{self.panes_root}{os.sep}"):
+            return
         for record in self.panes_root.glob(f"*/{_SEEDED_TRUST_FILE}"):
             record.unlink(missing_ok=True)
+
+    def any_pane_hook_trust(self) -> bool:
+        """Whether config.toml still holds a ``hooks.state`` row keyed on any
+        pane home — what `drop_all_hook_trust` takes out."""
+        try:
+            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        prefix = f"{self.panes_root}{os.sep}"
+        return any(key.startswith(prefix) for key in _hook_state_rows(text))
 
     def hook_trust_intact(self, exclude: Path | None = None) -> bool:
         """Whether every live pane home still has the trust rows it was seeded.
@@ -1280,11 +1325,11 @@ class CodexHomeManager:
         seeded.
         """
         try:
-            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
             homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
-        except OSError:
+        except (OSError, ValueError):
+            # Unreadable or not TOML: nothing says a row was deleted.
             return True
-        rows = _hook_state_rows(text)
         for home in homes:
             if exclude is not None and home == exclude:
                 continue
@@ -1292,22 +1337,26 @@ class CodexHomeManager:
                 return False
         return True
 
-    def _drop_trust_rows(self, prefix: str) -> None:
+    def _drop_trust_rows(self, prefix: str) -> bool:
+        """Returns False when the rewrite failed and the rows are still there."""
         config = self.real_home / "config.toml"
         try:
             text = config.read_text(encoding="utf-8")
         except OSError:
-            return
+            return True
+        # Textual, to leave the rest of the file byte-identical, but any
+        # spelling TOML allows for the header and value matches.
         block = re.compile(
-            r'\n*^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*"[^"\n]*"[ \t]*\n?',
+            r'\n*^\[[ \t]*hooks[ \t]*\.[ \t]*state[ \t]*\.[ \t]*(' + _TOML_KEY + r')[ \t]*\][ \t]*(?:#[^\n]*)?\n'
+            r'\s*trusted_hash[ \t]*=[ \t]*(?:' + _TOML_KEY + r')[ \t]*(?:#[^\n]*)?(?:\n|\Z)',
             flags=re.MULTILINE,
         )
         kept = block.sub(
-            lambda m: "\n" if _toml_unescape(m.group(1)).startswith(prefix) else m.group(0),
+            lambda m: "\n" if (_toml_key(m.group(1)) or "").startswith(prefix) else m.group(0),
             text,
         )
         if kept == text:
-            return
+            return True
         # Through the resolved path: a dotfiles symlink stays a symlink.
         target = config.resolve()
         tmp = target.with_name(target.name + ".navide-tmp")
@@ -1322,6 +1371,8 @@ class CodexHomeManager:
         except OSError as err:
             tmp.unlink(missing_ok=True)
             log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
+            return False
+        return True
 
     def sweep_orphans(self) -> list[str]:
         """Reclaim every pane home no pane needs. Runs once at backend start.
@@ -1405,15 +1456,33 @@ _CODEX_PANES_ROOT_NAME = ".codex-panes"
 
 
 def _hook_state_rows(text: str) -> dict[str, str | None]:
-    """Every ``[hooks.state."<key>"]`` table in config.toml, by unescaped key,
-    to its ``trusted_hash`` literal when that is the table's first line — the
-    only rows seeding copies — else None. Seeding and its presence check both
-    read the file through this one parser."""
+    """Every ``hooks.state`` table in config.toml, by key, to its
+    ``trusted_hash`` — the only value seeding copies — else None. Read as
+    TOML, so any legal spelling of a header counts. Seeding and its presence
+    checks all read the file through this one parser; a file that is not
+    TOML raises ``ValueError``."""
+    state = tomllib.loads(text).get("hooks", {})
+    state = state.get("state", {}) if isinstance(state, dict) else {}
+    if not isinstance(state, dict):
+        return {}
     rows: dict[str, str | None] = {}
-    for header in re.finditer(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE):
-        trusted = re.match(r'\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")', text[header.end():])
-        rows.setdefault(_toml_unescape(header.group(1)), trusted.group(1) if trusted else None)
+    for key, table in state.items():
+        trusted = table.get("trusted_hash") if isinstance(table, dict) else None
+        rows[key] = trusted if isinstance(trusted, str) else None
     return rows
+
+
+#: A quoted TOML key or string: basic ("...", with escapes) or literal ('...').
+_TOML_KEY = r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\''
+
+
+def _toml_key(quoted: str) -> str | None:
+    """The value of one quoted TOML key, or None when it does not parse."""
+    try:
+        value = tomllib.loads(f"k = {quoted}")["k"]
+    except ValueError:
+        return None
+    return value if isinstance(value, str) else None
 
 
 def _toml_escape(value: str) -> str:

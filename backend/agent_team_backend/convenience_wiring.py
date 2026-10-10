@@ -455,7 +455,7 @@ def _codex_hook_trust_takeback() -> list[Takeback]:
     if manager is None:
         return []
     config = manager.real_home / "config.toml"
-    return [Takeback(str(config), manager.drop_all_hook_trust, None, config)]
+    return [Takeback(str(config), manager.drop_all_hook_trust, manager.any_pane_hook_trust, config)]
 
 
 #: Removal for the features that are not CLI hooks.

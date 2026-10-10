@@ -11,6 +11,7 @@ import {
   startBackend,
   getResolvedUserPath,
   readWsToken,
+  windowProof,
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
@@ -824,8 +825,14 @@ function backendInfoPayload() {
     // one change here reaches every /ws client at once. A page in a browser
     // can guess the port but cannot read the file this came from, which is
     // the whole of the defence; see backend/agent_team_backend/ws_auth.py.
-    wsUrl: `ws://${backend.host}:${backend.port}/ws?t=${encodeURIComponent(readWsToken(backend))}`
+    // The window proof marks these as Navide windows; the plugin broker gets
+    // the URL without it (brokerWsUrl).
+    wsUrl: `${brokerWsUrl(backend)}&w=${windowProof(backend.hostSessionToken)}`
   }
+}
+
+function brokerWsUrl(handle: BackendHandle): string {
+  return `ws://${handle.host}:${handle.port}/ws?t=${encodeURIComponent(readWsToken(handle))}`
 }
 
 // Push the current backend info to every window so each renderer's useBackend
@@ -841,7 +848,7 @@ function broadcastBackendChanged(): void {
   // Point the main-process transport at the new backend before changing its
   // bearer. This prevents a reconnect from registering the new token on the
   // old socket while that socket's registration task is still in flight.
-  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' ? payload.wsUrl : null)
+  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' && backend ? brokerWsUrl(backend) : null)
   frontendPluginManager.setBackendHostToken(
     payload.status === 'ready' && backend ? backend.hostSessionToken : null
   )
