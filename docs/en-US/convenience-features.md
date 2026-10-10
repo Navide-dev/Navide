@@ -180,8 +180,8 @@ answers main windows only) for HMAC-SHA256(host token,
 `"navide-window/v2\0" + nonce`) and sends it back as `window.prove { proof }`.
 A right proof is accepted once per connection; a wrong one is refused. A
 reconnect gets a fresh nonce and proves again, and the plugin broker socket
-never proves. The host token is handed to the backend on stdin (second line,
-after the confirm key) and lives only in main's and the backend's memory —
+never proves. The host token is handed to the backend on stdin (the first line,
+after the confirm key and a space) and lives only in main's and the backend's memory —
 never in a file, the spawn environment or a URL. Known limit: a same-user
 process that can read main's or the backend's memory can still get it.
 

@@ -39,14 +39,16 @@ const CONFIRM_TTL_MS = 30_000
 
 export function handConfirmKey(proc: ChildProcess, hostSessionToken: string): void {
   confirmKey = randomBytes(32).toString('hex')
-  // Two lines, then the pipe closes: the confirm key, then the host token. The
-  // host token used to travel in the spawn env, which on macOS any same-uid
-  // process reads with `ps -E` even after the backend pops it. The backend
-  // reads exactly this much, and a stdin left open would be a channel neither
+  // One line, then the pipe closes: the confirm key and the host token,
+  // separated by a space (neither contains one). The host token used to travel
+  // in the spawn env, which on macOS any same-uid process reads with `ps -E`
+  // even after the backend pops it. One line, not two: the backend reads
+  // exactly one, so a launcher that writes only the key and keeps the pipe
+  // open never leaves it waiting. A stdin left open would be a channel neither
   // side has a use for -- except on Windows, where it is the only way to ask
   // for a graceful stop (see stopBackendProcess): no SIGTERM exists there, so
   // the pipe stays open and carries a `shutdown` line later.
-  proc.stdin?.write(`${confirmKey}\n${hostSessionToken}\n`)
+  proc.stdin?.write(`${confirmKey} ${hostSessionToken}\n`)
   if (!isWindows()) proc.stdin?.end()
 }
 

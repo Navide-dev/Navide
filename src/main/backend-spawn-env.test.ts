@@ -70,11 +70,13 @@ describe('backend spawn environment (R3-M2)', () => {
       expect(spawned).toHaveLength(1)
       const { env, stdin } = spawned[0]
       expect(Object.keys(env).filter((k) => k.toUpperCase().includes('HOST_TOKEN'))).toEqual([])
-      // Both credentials went over stdin instead: confirm key, then host token.
-      const lines = stdin.join('').split('\n')
-      expect(lines[0]).toMatch(/^[0-9a-f]{64}$/)
-      expect(lines[1]).toMatch(/^[A-Za-z0-9_-]{43}$/)
-      for (const value of Object.values(env)) expect(value).not.toContain(lines[1])
+      // Both credentials went over stdin instead, on one line: confirm key,
+      // then host token.
+      const [handover] = stdin.join('').split('\n')
+      const [confirm, host] = handover.split(' ')
+      expect(confirm).toMatch(/^[0-9a-f]{64}$/)
+      expect(host).toMatch(/^[A-Za-z0-9_-]{43}$/)
+      for (const value of Object.values(env)) expect(value).not.toContain(host)
     })
   }
 })

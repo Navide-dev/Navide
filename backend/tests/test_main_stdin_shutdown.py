@@ -8,6 +8,7 @@ import io
 from agent_team_backend.__main__ import (
     SHUTDOWN_LINE,
     _read_confirm_key,
+    _read_handover,
     _read_host_token,
     _watch_stdin_for_shutdown,
 )
@@ -83,3 +84,49 @@ def test_windows_two_lines_and_eof_is_not_a_shutdown() -> None:
     server = _Server()
     _watch_stdin_for_shutdown(server, stream)
     assert server.should_exit is False
+
+
+# ---- one handover line: confirm key and host token -------------------------
+
+
+def test_the_handover_line_carries_both_credentials() -> None:
+    assert _read_handover(io.StringIO("confirm-key host-token\n")) == ("confirm-key", "host-token")
+
+
+def test_a_handover_line_with_only_the_confirm_key_has_no_host_token() -> None:
+    assert _read_handover(io.StringIO("confirm-key\n")) == ("confirm-key", "")
+    assert _read_handover(io.StringIO("\n")) == ("", "")
+
+
+def test_a_one_line_launcher_that_keeps_the_pipe_open_is_never_waited_on() -> None:
+    """A launcher that writes one line and keeps stdin open for `shutdown`
+    (Windows, the cli_regression harness) must not hang the backend: the
+    handover is exactly one line."""
+    import os
+    import threading
+
+    read_fd, write_fd = os.pipe()
+    os.write(write_fd, b"confirm-key\n")
+    stream = os.fdopen(read_fd, "r")
+    result: list[tuple[str, str]] = []
+    reader = threading.Thread(target=lambda: result.append(_read_handover(stream)), daemon=True)
+    try:
+        reader.start()
+        reader.join(5)
+        assert result == [("confirm-key", "")]
+    finally:
+        os.close(write_fd)
+        reader.join(5)
+        stream.close()
+
+
+def test_main_reads_one_handover_line_not_two() -> None:
+    from pathlib import Path
+
+    import agent_team_backend.__main__ as entry
+
+    source = Path(entry.__file__).read_text(encoding="utf-8")
+    body = source[source.index("def main("):]
+    assert "_read_handover()" in body
+    assert "_read_host_token()" not in body
+

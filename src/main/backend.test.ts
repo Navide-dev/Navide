@@ -128,7 +128,7 @@ describe('the trust-confirmation key', () => {
     handConfirmKey(proc as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
 
     expect(writes).toHaveLength(1)
-    expect(writes[0]).toMatch(/^[0-9a-f]{64}\nhost-token\n$/)
+    expect(writes[0]).toMatch(/^[0-9a-f]{64} host-token\n$/)
     expect(ended).toBe(true)
   })
 
@@ -176,7 +176,7 @@ describe('the trust-confirmation key', () => {
     handConfirmKey({
       stdin: { write: (s: string) => writes.push(s), end: () => {} },
     } as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
-    const key = writes[0].split('\n')[0]
+    const key = writes[0].split('\n')[0].split(' ')[0]
 
     const token = mintTrustConfirmation('p2p.trust.device.approve', 'dev-1', 'subject-1')
     expect(token).not.toBeNull()

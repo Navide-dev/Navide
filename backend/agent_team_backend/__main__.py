@@ -88,6 +88,18 @@ def _read_host_token(stream=None) -> str:
     return _read_confirm_key(stream)
 
 
+def _read_handover(stream=None) -> tuple[str, str]:
+    """``(confirm key, host token)`` from the first line of stdin.
+
+    Main writes both on that one line, separated by a space. One line, not
+    two: a launcher that writes a single line and keeps the pipe open for the
+    `shutdown` line (Windows, the cli_regression harness) must not leave the
+    backend waiting on a second one. No host token on the line means none.
+    """
+    confirm, _, host = _read_confirm_key(stream).partition(" ")
+    return confirm, host.strip()
+
+
 SHUTDOWN_LINE = "shutdown"
 
 
@@ -222,7 +234,8 @@ def main() -> int:
     # Absent is normal for a backend nobody spawned from the app (the tests, a
     # developer running this by hand); it means the six trust-changing actions
     # refuse rather than that they stop being checked.
-    if confirm_token.set_key(_read_confirm_key()):
+    confirm_key, host_token = _read_handover()
+    if confirm_token.set_key(confirm_key):
         log.info("adopted the trust-confirmation key from the parent process")
     else:
         log.info(
@@ -230,10 +243,10 @@ def main() -> int:
             "trust will be refused on this backend"
         )
 
-    # The host token follows on the next line, for the same reason: the
+    # The host token rides on the same line, for the same reason: the
     # environment it used to travel in is readable with `ps -E`. Absent means
     # host.register refuses and every connection is an ordinary ws client.
-    if _app_module.set_host_session_token(_read_host_token()):
+    if _app_module.set_host_session_token(host_token):
         log.info("adopted the host token from the parent process")
     else:
         log.info("no host token on stdin; host.register will be refused on this backend")

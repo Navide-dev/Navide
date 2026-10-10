@@ -104,7 +104,7 @@ from .tokens_store import TokensStore
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
-# registration. It arrives on stdin, second line, after the confirm key (see
+# registration. It arrives on stdin, on the confirm key's line after a space (see
 # __main__ and set_host_session_token) -- never in the environment: on macOS a
 # same-uid process reads the spawn env block with `ps -E` even after a pop.
 # The variable is still scrubbed, never adopted, so a stale launcher that sets
