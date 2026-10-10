@@ -155,14 +155,16 @@ class ConvenienceGate:
         present: Callable[[], bool],
         file: Path | None = None,
         detail: str = "",
+        quiet_repairs: bool = False,
     ) -> str:
         """Run one write through the gate.
 
         Returns "off", "removed", "unchanged", "first" or "repair". ``file`` is
         the file whose bytes the write changes, when there is one: it is what
         gets backed up and compared. Without it every completed write counts
-        as a change. An exception from ``write`` propagates after nothing was
-        recorded; one from ``present`` reads as "present", so a file the gate
+        as a change. ``quiet_repairs`` logs later changes without announcing
+        them, for a target that grows routinely (one trust row per pane).
+        An exception from ``write`` propagates after nothing was recorded; one from ``present`` reads as "present", so a file the gate
         cannot read is never mistaken for a removal.
         """
         feature(feature_id)
@@ -186,9 +188,10 @@ class ConvenienceGate:
                 if not known and was_present:
                     self._adopted.add(feature_id)
                 return "unchanged"
-            action = "repair" if known or was_present else "first"
+            action = "repair" if known else "first"
             backup = self._backup(feature_id, before)
-            self.record(feature_id, action, key, detail=detail, backup=backup)
+            notify = not (quiet_repairs and action == "repair")
+            self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
             return action
 
     def record(

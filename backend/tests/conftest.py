@@ -149,6 +149,30 @@ def _isolated_data_dir(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_convenience_gate(tmp_path, monkeypatch):
+    """A fresh convenience gate per test, every feature allowed.
+
+    ``app`` installs a process-wide gate on import; without this a test that
+    deleted hooks would turn ``claude.hooks`` off for every test after it.
+    A sibling of tmp_path, like the skills home below.
+    """
+    import sys
+
+    from agent_team_backend import convenience, convenience_wiring
+    from agent_team_backend.db import Database
+
+    root = tmp_path.with_name(tmp_path.name + "-convenience")
+    gate = convenience.ConvenienceGate(Database(root / "navide.db"), backup_root=root / "backups")
+    previous = convenience_wiring.gate()
+    convenience_wiring.install(gate)
+    app = sys.modules.get("agent_team_backend.app")
+    if app is not None:
+        monkeypatch.setattr(app, "convenience_gate", gate)
+    yield gate
+    convenience_wiring.install(previous)
+
+
+@pytest.fixture(autouse=True)
 def _isolated_skills_home(tmp_path, monkeypatch):
     """The skills library and native-skills scan read the user's real home
     (``~/.agents/skills``, ``~/.copilot/skills``, ...). A test that spawns a

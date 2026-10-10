@@ -878,6 +878,11 @@ class CodexHomeManager:
         the shared file. Returns True when the real home gained the
         credential."""
         real_auth = self.real_home / "auth.json"
+        from ..convenience_wiring import gate
+
+        convenience = gate()
+        if convenience is not None and not convenience.allowed("codex.login-promote"):
+            return False
         try:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
@@ -908,6 +913,10 @@ class CodexHomeManager:
             # will diverge on refresh until its next prepare() re-links it.
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
+        if convenience is not None:
+            convenience.record(
+                "codex.login-promote", "first", str(real_auth), detail=f"from {newest.parent.name}"
+            )
         return True
 
     @staticmethod
@@ -1209,8 +1218,48 @@ class CodexHomeManager:
         They are keyed on that home's path, so once it is gone they can never
         match again and would only pile up in the user's config.toml.
         """
+        self._drop_trust_rows(f"{pane_home / 'hooks.json'}:")
+
+    def drop_all_hook_trust(self) -> None:
+        """Remove every ``hooks.state`` row seeded for any pane home."""
+        self._drop_trust_rows(f"{self.panes_root}{os.sep}")
+
+    def hook_trust_intact(self, exclude: Path | None = None) -> bool:
+        """Whether every live pane home still has the trust rows it was seeded.
+
+        A home is checked only when seeding would have given it rows: its
+        hooks.json is byte-identical to the real one and the real home has
+        trusted rows. False means rows were deleted outside Navide.
+        ``exclude`` is the home about to be seeded, which has none yet.
+        """
+        real_hooks = self.real_home / "hooks.json"
+        try:
+            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+            real_bytes = real_hooks.read_bytes()
+            homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
+        except OSError:
+            return True
+        keys = {_toml_unescape(k) for k in re.findall(
+            r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE)}
+        real_prefix = f"{real_hooks}:"
+        suffixes = [k[len(real_prefix):] for k in keys if k.startswith(real_prefix)]
+        if not suffixes:
+            return True
+        for home in homes:
+            if exclude is not None and home == exclude:
+                continue
+            try:
+                if (home / "hooks.json").read_bytes() != real_bytes:
+                    continue
+            except OSError:
+                continue
+            pane_prefix = f"{home / 'hooks.json'}:"
+            if any(pane_prefix + suffix not in keys for suffix in suffixes):
+                return False
+        return True
+
+    def _drop_trust_rows(self, prefix: str) -> None:
         config = self.real_home / "config.toml"
-        prefix = f"{pane_home / 'hooks.json'}:"
         try:
             text = config.read_text(encoding="utf-8")
         except OSError:
@@ -1238,7 +1287,7 @@ class CodexHomeManager:
             os.replace(tmp, target)
         except OSError as err:
             tmp.unlink(missing_ok=True)
-            log.warning("dropping codex hook trust for %s failed: %s", pane_home, err)
+            log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
 
     def sweep_orphans(self) -> list[str]:
         """Reclaim every pane home no pane needs. Runs once at backend start.

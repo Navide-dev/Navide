@@ -90,6 +90,13 @@ def test_an_entry_already_there_on_first_sight_is_adopted_silently(gate, tmp_pat
     assert gate.upgrade_features() == ["claude.hooks"]
 
 
+def test_a_changed_target_first_seen_is_announced_as_first(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "")
+    target.present = lambda: True  # type: ignore[method-assign]
+
+    assert _apply(gate, target) == "first"
+
+
 def test_a_hand_removed_entry_turns_the_feature_off_and_is_never_re_added(gate, tmp_path) -> None:
     target = _File(tmp_path / "settings.json", "")
     _apply(gate, target)

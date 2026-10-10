@@ -241,8 +241,43 @@ def _remove_project_dirs() -> None:
             log.warning("removing Navide's links from %s failed: %s", target, err)
 
 
+# ── Codex: hook trust (S4) ─────────────────────────────────────────────────
+
+
+def seed_hook_trust_gated(manager: Any, pane_home: Path) -> int:
+    """``CodexHomeManager.seed_hook_trust`` as the feature codex.hook-trust.
+
+    Announced the first time it touches config.toml; the row each new pane
+    adds after that is logged quietly. Rows the user deleted for a live pane
+    home turn the feature off."""
+    g = _gate
+    if g is None:
+        return manager.seed_hook_trust(pane_home)
+    config = manager.real_home / "config.toml"
+    seeded = [0]
+
+    def write() -> None:
+        seeded[0] = manager.seed_hook_trust(pane_home)
+
+    outcome = g.apply(
+        "codex.hook-trust", config, write=write,
+        present=lambda: manager.hook_trust_intact(exclude=pane_home), file=config,
+        quiet_repairs=True,
+    )
+    return 0 if outcome in ("off", "removed") else seeded[0]
+
+
+def _drop_codex_hook_trust() -> None:
+    from . import app
+
+    manager = getattr(app, "codex_home_manager", None)
+    if manager is not None:
+        manager.drop_all_hook_trust()
+
+
 #: Removal for the features that are not CLI hooks.
 REMOVERS: dict[str, Callable[[], Any]] = {
     "cursor.project-mcp": _remove_project_configs,
     "cursor.project-skills": _remove_project_dirs,
+    "codex.hook-trust": _drop_codex_hook_trust,
 }

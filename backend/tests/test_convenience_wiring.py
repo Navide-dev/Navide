@@ -261,3 +261,83 @@ def test_turning_cursor_skills_off_removes_only_planted_links(gate, homes, tmp_p
     assert sorted(p.name for p in (repo / ".cursor" / "skills").iterdir()) == ["mine"]
     assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
     assert not (repo / ".cursor" / "skills" / "alpha").exists()
+
+
+# ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
+
+PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"
+PANE_B = "0a1b2c3d-7777-4888-8999-aaaabbbbcccc"
+
+
+def _codex(tmp_path: Path):
+    from agent_team_backend.cli_vendors.codex import _toml_escape
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "hooks.json").write_text('{"hooks": {}}', encoding="utf-8")
+    key = _toml_escape(str(real / "hooks.json"))
+    (real / "config.toml").write_text(
+        f'model = "x"\n\n[hooks.state."{key}:stop:0:0"]\ntrusted_hash = "sha256:aaaa"\n', encoding="utf-8"
+    )
+    return CodexHomeManager(real_home=real, panes_root=tmp_path / "panes"), real
+
+
+def test_codex_hook_trust_allowed_seeds_as_before_and_announces_once(gate, tmp_path) -> None:
+    manager, real = _codex(tmp_path)
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
+
+    text = (real / "config.toml").read_text(encoding="utf-8")
+    assert text.count("trusted_hash") == 3
+    assert [(e["action"], e["notify"]) for e in gate.history()] == [("repair", False), ("first", True)]
+
+
+def test_codex_hook_trust_rows_the_user_deleted_turn_the_feature_off(gate, tmp_path) -> None:
+    manager, real = _codex(tmp_path)
+    before = (real / "config.toml").read_text(encoding="utf-8")
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    # The user deletes the rows Navide added and keeps their own.
+    (real / "config.toml").write_text(before, encoding="utf-8")
+    original = before
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 0
+
+    assert (real / "config.toml").read_text(encoding="utf-8") == original
+    assert gate.state("codex.hook-trust") == ("off", "removed")
+
+
+def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import app
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    before = (real / "config.toml").read_text(encoding="utf-8")
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+
+    assert (real / "config.toml").read_text(encoding="utf-8").rstrip("\n") == before.rstrip("\n")
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 0
+
+
+def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home = manager.prepare(PANE_A)
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+
+    assert manager.promote_stranded_auth() is True
+    assert gate.history()[0]["feature"] == "codex.login-promote"
+    assert gate.history()[0]["notify"] is True
+
+    (real / "auth.json").unlink()
+    (home / "auth.json").unlink()
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+    gate.set_allowed("codex.login-promote", False)
+
+    assert manager.promote_stranded_auth() is False
+    assert not (real / "auth.json").exists()

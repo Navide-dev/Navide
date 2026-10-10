@@ -7765,7 +7765,11 @@ async def _terminal_create_impl(
     # at "Hooks need review". CODEX_HOME is final only after all wiring above.
     seeder = getattr(app.codex_home_manager, "seed_hook_trust", None)
     if agent_key == "codex" and not login_profile_id and env.get("CODEX_HOME") and callable(seeder):
-        seeded = await asyncio.to_thread(seeder, Path(env["CODEX_HOME"]))
+        from . import convenience_wiring
+
+        seeded = await asyncio.to_thread(
+            convenience_wiring.seed_hook_trust_gated, app.codex_home_manager, Path(env["CODEX_HOME"])
+        )
         if seeded:
             app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
     if transaction["cancelled"]:
