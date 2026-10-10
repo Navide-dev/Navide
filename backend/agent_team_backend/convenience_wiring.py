@@ -238,11 +238,14 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     def write() -> None:
         wired[0] = wiring.ensure_project_config(agent_key, cwd)
 
+    # A removal is that workspace's alone; the .cursor folder gone (git
+    # clean, a fresh clone, a re-created worktree) is its reset.
     outcome = g.apply(
         "cursor.project-mcp", path, write=write,
         present=lambda: wiring.project_config_has_entry(agent_key, path), file=path,
+        reset_when_missing=path.parent, per_target=True,
     )
-    return wired[0] and outcome not in ("off", "removed")
+    return wired[0] and outcome not in ("off", "removed", "refused")
 
 
 def _remove_project_configs() -> None:
@@ -277,9 +280,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
 
     The manifest of planted links is the marker. A planted link the user
     deleted by hand is refused in that workspace only — logged and announced
-    as a removal of that one name — and the feature stays allowed. When a sync leaves nothing
-    planted, Navide removed the manifest itself, so the target is forgotten
-    rather than later read as a removal by the user.
+    as a removal of that one name — and the feature stays allowed. The
+    whole folder or its manifest deleted is refused for that workspace only
+    as well; the .cursor folder gone is the workspace's reset. When a sync
+    leaves nothing planted, Navide removed the manifest itself, so the target
+    is forgotten rather than later read as a removal by the user.
     """
     from .plugins.builtin.navide_skills import skills_wiring
 
@@ -302,10 +307,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     outcome = g.apply(
         "cursor.project-skills", target, write=write,
         present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
+        reset_when_missing=Path(cwd) / wiring.project_rel[0], per_target=True,
     )
     for name in refused:
         g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")
-    if outcome in ("off", "removed"):
+    if outcome in ("off", "removed", "refused"):
         return False
     if not manifest.is_file():
         g.forget("cursor.project-skills", target)

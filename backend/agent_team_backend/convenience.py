@@ -71,6 +71,10 @@ ACTIONS = (
 
 UPGRADE_KEY = "convenience.upgrade_notice"
 
+#: The ``convenience_parts`` name of a whole target the user removed Navide's
+#: entry from, for a feature refused per target (``apply(per_target=True)``).
+_WHOLE_TARGET = ""
+
 #: Backups kept per target. Each is the whole file, secrets included, so a
 #: target that changes on every pane start must not pile them up for ever; a
 #: feature turned off or an entry removed keeps only its latest.
@@ -258,10 +262,11 @@ class ConvenienceGate:
         quiet_repairs: bool = False,
         parts: Callable[[], set[str]] | None = None,
         reset_when_missing: Path | None = None,
+        per_target: bool = False,
     ) -> str:
         """Run one write through the gate.
 
-        Returns "off", "removed", "unchanged", "first" or "repair". ``file`` is
+        Returns "off", "removed", "refused", "unchanged", "first" or "repair". ``file`` is
         the file whose bytes the write changes, when there is one: it is what
         gets backed up and compared. Without it every completed write counts
         as a change. ``quiet_repairs`` logs later changes without announcing
@@ -285,6 +290,12 @@ class ConvenienceGate:
         Navide's entry went with everything else: that is a fresh start, not
         the user's removal, so the target is forgotten and the next write is
         a ``first``.
+
+        ``per_target`` is for a feature with a target in every workspace: the
+        user removing Navide's entry from one workspace is that workspace's
+        choice, never the feature's. The target is refused (logged and
+        announced once as ``removed-entry``, then "refused" without a write)
+        and the feature stays allowed everywhere else.
         """
         feature(feature_id)
         key = str(target)
@@ -296,6 +307,10 @@ class ConvenienceGate:
             if known and was_present is False and reset_when_missing is not None and not reset_when_missing.exists():
                 self.forget(feature_id, key)
                 known = False
+            if known and was_present is False and per_target:
+                return self._refuse_target(feature_id, key)
+            if per_target and was_present is True:
+                self._clear_part(feature_id, key, _WHOLE_TARGET)  # the user put it back
             if known and was_present is False:
                 self._set_state(feature_id, "off", "removed")
                 self._mark(feature_id, key, present=False)
@@ -327,6 +342,29 @@ class ConvenienceGate:
             notify = not (quiet_repairs and action == "repair")
             self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
             return action
+
+    def _refuse_target(self, feature_id: str, key: str) -> str:
+        """The user removed Navide's entry from this one target: never write
+        it there again, announced the first time only."""
+        if _WHOLE_TARGET in self.excluded(feature_id, key):
+            return "refused"
+        with self.db.transaction() as cur:
+            cur.execute(
+                "INSERT INTO convenience_parts (feature, target, part, state) VALUES (?, ?, ?, 'removed')"
+                " ON CONFLICT(feature, target, part) DO UPDATE SET state = 'removed'",
+                (feature_id, key, _WHOLE_TARGET),
+            )
+        self._mark(feature_id, key, present=False)
+        self.record(feature_id, "removed-entry", key, detail="deleted outside Navide; not written here again")
+        self._prune(feature_id, key, keep=1)
+        return "refused"
+
+    def _clear_part(self, feature_id: str, key: str, part: str) -> None:
+        with self.db.transaction() as cur:
+            cur.execute(
+                "DELETE FROM convenience_parts WHERE feature = ? AND target = ? AND part = ?",
+                (feature_id, key, part),
+            )
 
     def excluded(self, feature_id: str, target: str | Path) -> frozenset[str]:
         """The entries of ``target`` the user deleted by hand."""

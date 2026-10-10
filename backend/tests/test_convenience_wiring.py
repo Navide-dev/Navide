@@ -391,17 +391,67 @@ def test_an_entry_adopted_after_the_upgrade_notice_was_decided_is_announced(gate
 
 
 def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -> None:
+    """RM-N1: the removal is that workspace's. It is never written back
+    there, and every other workspace keeps Navide's tools."""
     from agent_team_backend.mcp_server import wiring
 
     repo = _cursor_repo(tmp_path)
+    other = _cursor_repo(tmp_path / "other")
     convenience_wiring.ensure_project_config_gated("cursor", repo)
     path = wiring.project_config_path("cursor", repo)
     path.write_text('{"mcpServers": {"mine": {"url": "x"}}}\n', encoding="utf-8")
 
     assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
 
     assert path.read_text(encoding="utf-8") == '{"mcpServers": {"mine": {"url": "x"}}}\n'
-    assert gate.state("cursor.project-mcp") == ("off", "removed")
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert [(e["action"], e["target"]) for e in gate.history() if e["action"].startswith("removed")] == [
+        ("removed-entry", str(path)),
+    ]
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+
+@pytest.mark.parametrize("how", ["git-clean", "reclone", "worktree-recreate"])
+def test_a_reset_workspace_gets_cursor_mcp_back_and_turns_nothing_off(gate, tmp_path, how) -> None:
+    """RM-N1: `git clean -fdx`, a fresh clone or a re-created worktree takes
+    the git-excluded .cursor folder away with Navide's config. That is the
+    workspace reset, not the user's removal: the config is written again and
+    the feature stays allowed in every workspace."""
+    import shutil
+
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    if how == "git-clean":
+        shutil.rmtree(repo / ".cursor")
+    else:
+        shutil.rmtree(repo)
+        (repo / ".git" / "info").mkdir(parents=True)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert wiring.project_config_has_entry("cursor", wiring.project_config_path("cursor", repo))
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+
+
+def test_a_deleted_cursor_mcp_file_is_refused_in_that_workspace_only(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    wiring.project_config_path("cursor", repo).unlink()  # .cursor stays
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+    assert not wiring.project_config_path("cursor", repo).exists()
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
 
 
 def test_a_cursor_folder_relinked_outside_the_workspace_is_neither_written_nor_a_removal(
@@ -620,6 +670,48 @@ def test_a_cleared_off_then_on_skills_feature_links_a_refused_name_again(
     convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
 
     assert (skills / "alpha").is_symlink() and (skills / "beta").is_symlink()
+
+
+@pytest.mark.parametrize("how", ["git-clean", "reclone"])
+def test_a_reset_workspace_gets_cursor_skills_back_and_turns_nothing_off(gate, tmp_path, monkeypatch, how) -> None:
+    """RM-N1 for skills: the git-excluded .cursor folder gone with the
+    workspace reset is a fresh start there, never a removal for everyone."""
+    import shutil
+
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    if how == "git-clean":
+        shutil.rmtree(repo / ".cursor")
+    else:
+        shutil.rmtree(repo)
+        (repo / ".git" / "info").mkdir(parents=True)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other)) is True
+
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    assert (repo / ".cursor" / "skills" / "alpha").is_symlink()
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+
+
+def test_a_deleted_skills_folder_is_refused_in_that_workspace_only(gate, tmp_path, monkeypatch) -> None:
+    import shutil
+
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    shutil.rmtree(repo / ".cursor" / "skills")  # .cursor stays
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other)) is True
+
+    assert not (repo / ".cursor" / "skills").exists()
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    assert [e["action"] for e in gate.history() if e["action"].startswith("removed")] == ["removed-entry"]
 
 
 def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, monkeypatch) -> None:

@@ -43,6 +43,12 @@ which runs, in order:
    announced as `first`, like a fresh install. For Copilot, whose hook file
    is Navide's alone, only the whole `~/.copilot` folder gone counts as a
    reset; the folder still there without the hook file is a removal.
+   The Cursor features have a target in every workspace, so a removal there
+   is that workspace's alone: the target is refused (logged and announced
+   once as `removed-entry`, never written there again) and the feature stays
+   allowed everywhere else. The workspace's whole `.cursor` folder gone
+   (`git clean -fdx`, a fresh clone, a re-created worktree) is a reset of
+   that workspace, not a removal.
 3. **Backup.** A file target is copied into
    `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
    (deduplicated by content). A backup is the whole file, **including any
