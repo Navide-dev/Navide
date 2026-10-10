@@ -2137,6 +2137,25 @@ def test_one_sign_out_outside_navide_is_one_prompt_however_many_startups(
     assert vault.read_live("claude").secret is None
 
 
+def test_a_sign_out_seen_while_auto_repair_is_off_is_told_once_it_is_on(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """R3-L6: with auto-repair off nothing is told, so nothing may be marked
+    as told either — turning the feature back on tells the sign-out."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", True)
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert [e["action"] for e in _isolated_convenience_gate.history() if e["action"] == "prompt"] == ["prompt"]
+    assert vault.read_live("claude").secret is None
+
+
 def test_the_first_promotion_still_publishes_the_active_account(
     tmp_path, _isolated_convenience_gate
 ) -> None:

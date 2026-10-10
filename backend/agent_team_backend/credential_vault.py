@@ -1936,8 +1936,7 @@ class CredentialVault:
 
                 if promoted_before:
                     # One sign-out, one prompt: not again on every startup.
-                    if not announced.exists():
-                        prompt_live_logout(agent_key)
+                    if not announced.exists() and prompt_live_logout(agent_key):
                         announced.parent.mkdir(parents=True, exist_ok=True)
                         announced.touch()
                     return

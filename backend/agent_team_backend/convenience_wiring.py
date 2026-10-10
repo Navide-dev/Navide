@@ -490,16 +490,18 @@ def repair_live_login(
     return True
 
 
-def prompt_live_logout(agent_key: str) -> None:
+def prompt_live_logout(agent_key: str) -> bool:
     """The live login went empty after Navide had it signed in: the user
-    signed out outside Navide. Never signed back in; the user is told."""
+    signed out outside Navide. Never signed back in; the user is told.
+    Returns whether the user was told (False while the feature is off)."""
     g = _gate
     if g is None or not g.allowed("credentials.auto-repair"):
-        return
+        return False
     g.record(
         "credentials.auto-repair", "prompt", f"{agent_key} live login",
         detail=json.dumps({"agentKey": agent_key, "reason": "logout"}),
     )
+    return True
 
 
 def _codex_hook_trust_takeback() -> list[Takeback]:
