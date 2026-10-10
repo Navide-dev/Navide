@@ -771,6 +771,8 @@ class CodexHomeManager:
             self.promote_stranded_auth()
         safe_id = self._safe_home_id(home_id)
         pane_home = self.panes_root / safe_id
+        if source_home is None:
+            self._retire_signed_out_login(pane_home)
         pane_home.mkdir(parents=True, exist_ok=True)
         from ..convenience_wiring import note
 
@@ -939,10 +941,38 @@ class CodexHomeManager:
             convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
         return True
 
+    def _retire_signed_out_login(self, pane_home: Path) -> None:
+        """Set aside a pane's own login copy once the shared login it sat
+        beside was signed out outside Navide.
+
+        `promote_stranded_auth` never adopts such a copy, but a spawn in that
+        same home (a resume, a restart) would read it and run as the account
+        the user signed out of. It is renamed, not deleted, so codex starts
+        signed out and asks; the user was already told by the logout prompt.
+        """
+        real_auth = self.real_home / "auth.json"
+        own = pane_home / "auth.json"
+        if real_auth.exists() or real_auth.is_symlink():
+            return
+        if not own.is_file() or own.is_symlink():
+            return
+        from ..convenience_wiring import gate
+
+        if not self._shared_login_existed(gate(), real_auth):
+            return
+        try:
+            os.replace(own, own.with_name("auth.json.signed-out"))
+        except OSError as err:
+            log.warning("setting aside the signed-out codex login in %s failed: %s", pane_home, err)
+            return
+        log.info("set aside the signed-out codex login in %s", pane_home)
+
     def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
         """Whether the real auth.json was there before: Navide promoted it (the
         ledger), or a pane home still links to it."""
-        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+        if convenience is not None and any(
+            t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]
+        ):
             return True
         for link in self.panes_root.glob("*/auth.json"):
             try:
@@ -1079,6 +1109,10 @@ class CodexHomeManager:
             try:
                 for pane_home in sorted(self.panes_root.iterdir()):
                     if holds_session(pane_home):
+                        # The spawn reuses this home without `prepare`: the
+                        # same login check runs here.
+                        self.promote_stranded_auth()
+                        self._retire_signed_out_login(pane_home)
                         self._share_config_entries(pane_home, self.real_home)
                         self._prepare_skills_view(pane_home, self.real_home / "skills")
                         return pane_home

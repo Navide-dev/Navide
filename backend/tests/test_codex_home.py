@@ -334,6 +334,49 @@ def test_prepare_adopts_stranded_login_for_new_pane(tmp_path: Path) -> None:
     assert stranded.is_symlink()
 
 
+def _signed_out_outside_navide(tmp_path: Path) -> tuple[CodexHomeManager, Path, Path]:
+    """Two in-pane logins, the newer one promoted, then `codex logout`
+    outside Navide removes the shared credential. Pane A still holds its own
+    older login as a real file."""
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare("pane-a"), manager.prepare("pane-b")
+    _write_pane_auth(home_a / "auth.json", "old-account")
+    os.utime(home_a / "auth.json", (1, 1))
+    _write_pane_auth(home_b / "auth.json", "new-account")
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()
+    return manager, real, home_a
+
+
+def test_resuming_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
+    from agent_team_backend import convenience_wiring
+
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+    sid = "0199aaaa-bbbb-7ccc-8ddd-eeeeeeeeeeee"
+    day = home_a / "sessions" / "2026" / "10" / "10"
+    day.mkdir(parents=True)
+    (day / f"rollout-2026-10-10T00-00-00-{sid}.jsonl").write_text("{}\n", encoding="utf-8")
+
+    home = manager.find_session_home(sid)
+
+    assert home == home_a
+    assert not (home / "auth.json").exists()
+    assert not (real / "auth.json").exists()
+    # The user is told, as for any spawn after an outside logout.
+    latest = convenience_wiring.gate().history("codex.login-promote", limit=1)
+    assert latest[0]["action"] == "prompt"
+
+
+def test_respawning_the_same_home_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+
+    home = manager.prepare("pane-a")
+
+    assert not (home / "auth.json").exists()
+    assert not (real / "auth.json").exists()
+
+
 # ── sub-agent pin repair ────────────────────────────────────────────────────
 
 def _meta(sid: str, *, parent: str = "", ancestors: tuple[str, ...] = ()) -> str:
