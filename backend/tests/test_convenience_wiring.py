@@ -173,3 +173,91 @@ async def test_the_ws_api_lists_switches_and_refuses_a_required_feature(gate, ho
 
     await ws_handlers.convenience_history(session, "4", "convenience.history", {"feature": "claude.hooks"})
     assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "first"]
+
+
+# ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────
+
+
+def _cursor_repo(tmp_path: Path) -> Path:
+    repo = tmp_path / "repo"
+    (repo / ".git" / "info").mkdir(parents=True)
+    return repo
+
+
+def test_cursor_mcp_allowed_writes_what_it_wrote_before(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    plain, gated = _cursor_repo(tmp_path / "a"), _cursor_repo(tmp_path / "b")
+    assert wiring.ensure_project_config("cursor", plain) is True
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", gated) is True
+
+    path = wiring.project_config_path("cursor", gated)
+    assert path.read_text(encoding="utf-8") == wiring.project_config_path("cursor", plain).read_text(encoding="utf-8")
+    assert gate.history()[0]["action"] == "first"
+    assert gate.history()[0]["target"] == str(path)
+
+
+def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    path = wiring.project_config_path("cursor", repo)
+    path.write_text('{"mcpServers": {"mine": {"url": "x"}}}\n', encoding="utf-8")
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+
+    assert path.read_text(encoding="utf-8") == '{"mcpServers": {"mine": {"url": "x"}}}\n'
+    assert gate.state("cursor.project-mcp") == ("off", "removed")
+
+
+def test_turning_cursor_mcp_off_takes_back_only_navides_entry(gate, homes, tmp_path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    created = _cursor_repo(tmp_path / "created")
+    theirs = _cursor_repo(tmp_path / "theirs")
+    own = wiring.project_config_path("cursor", theirs)
+    own.parent.mkdir(parents=True)
+    own.write_text('{"mcpServers": {"mine": {"url": "x"}}}', encoding="utf-8")
+    convenience_wiring.ensure_project_config_gated("cursor", created)
+    convenience_wiring.ensure_project_config_gated("cursor", theirs)
+
+    convenience_wiring.set_feature("cursor.project-mcp", False, port_file=str(homes["port"]))
+
+    assert not wiring.project_config_path("cursor", created).exists()
+    assert ".cursor/mcp.json" not in (created / ".git" / "info" / "exclude").read_text(encoding="utf-8")
+    assert json.loads(own.read_text(encoding="utf-8")) == {"mcpServers": {"mine": {"url": "x"}}}
+
+
+def _cursor_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agent_team_backend.cli_vendors.base import SkillsWiring
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    source = tmp_path / "managed" / "alpha"
+    source.mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [source])
+    return SkillsWiring(project_rel=(".cursor", "skills"))
+
+
+def test_cursor_skills_allowed_plants_links_as_before(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert (repo / ".cursor" / "skills" / "alpha").is_symlink()
+    assert gate.history()[0]["action"] == "first"
+
+
+def test_turning_cursor_skills_off_removes_only_planted_links(gate, homes, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    (repo / ".cursor" / "skills" / "mine").mkdir(parents=True)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+
+    assert sorted(p.name for p in (repo / ".cursor" / "skills").iterdir()) == ["mine"]
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert not (repo / ".cursor" / "skills" / "alpha").exists()

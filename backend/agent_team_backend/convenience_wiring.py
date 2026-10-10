@@ -159,6 +159,90 @@ def _installer(agent_key: str) -> Callable[[str], dict[str, Any]] | None:
     return spec.install_hooks if spec is not None else None
 
 
-#: Removal for the features that are not CLI hooks; filled in below as each
-#: write site is wired.
-REMOVERS: dict[str, Callable[[], Any]] = {}
+def _targets(feature_id: str) -> list[str]:
+    g = _gate
+    if g is None:
+        return []
+    return [target["path"] for target in g.listing_feature(feature_id)["targets"]]
+
+
+# ── Cursor: project MCP config (H1) ────────────────────────────────────────
+
+
+def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
+    """``mcp_server.wiring.ensure_project_config`` as the feature
+    cursor.project-mcp. False when the feature is off: the pane then runs
+    without Navide's tools, which is what turning it off costs."""
+    from .mcp_server import wiring
+
+    path = wiring.project_config_path(agent_key, cwd)
+    g = _gate
+    if g is None or path is None:
+        return wiring.ensure_project_config(agent_key, cwd)
+    wired = [False]
+
+    def write() -> None:
+        wired[0] = wiring.ensure_project_config(agent_key, cwd)
+
+    outcome = g.apply(
+        "cursor.project-mcp", path, write=write,
+        present=lambda: wiring.project_config_has_entry(agent_key, path), file=path,
+    )
+    return wired[0] and outcome not in ("off", "removed")
+
+
+def _remove_project_configs() -> None:
+    from .mcp_server import wiring
+
+    for target in _targets("cursor.project-mcp"):
+        try:
+            wiring.remove_project_config("cursor", Path(target))
+        except OSError as err:
+            log.warning("removing Navide's entry from %s failed: %s", target, err)
+
+
+# ── Cursor: project skills (H2) ────────────────────────────────────────────
+
+
+def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
+    """``skills_wiring.sync_project_dir`` as the feature cursor.project-skills.
+
+    The manifest of planted links is the marker. When a sync leaves nothing
+    planted, Navide removed the manifest itself, so the target is forgotten
+    rather than later read as a removal by the user.
+    """
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    g = _gate
+    if g is None or not cwd:
+        return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+    target = Path(cwd).joinpath(*wiring.project_rel)
+    manifest = target / skills_wiring.MANIFEST_FILE
+    delivered = [False]
+
+    def write() -> None:
+        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+
+    outcome = g.apply("cursor.project-skills", target, write=write, present=manifest.is_file, file=manifest)
+    if outcome in ("off", "removed"):
+        return False
+    if not manifest.is_file():
+        g.forget("cursor.project-skills", target)
+    return delivered[0]
+
+
+def _remove_project_dirs() -> None:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    for target in _targets("cursor.project-skills"):
+        try:
+            skills_wiring.remove_project_dir(Path(target))
+        except OSError as err:
+            log.warning("removing Navide's links from %s failed: %s", target, err)
+
+
+#: Removal for the features that are not CLI hooks.
+REMOVERS: dict[str, Callable[[], Any]] = {
+    "cursor.project-mcp": _remove_project_configs,
+    "cursor.project-skills": _remove_project_dirs,
+}

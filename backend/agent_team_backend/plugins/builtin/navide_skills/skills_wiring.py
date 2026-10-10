@@ -305,6 +305,23 @@ def sync_project_dir(
         return False
 
 
+def remove_project_dir(target: Path) -> int:
+    """Take back the links Navide planted in a workspace skills directory.
+
+    Only names in the manifest that are still symlinks are removed, then the
+    manifest itself; the user's own skills there are never touched. Returns
+    how many links were removed.
+    """
+    removed = 0
+    for name in sorted(_read_manifest(target)):
+        link = target / name
+        if link.is_symlink():
+            link.unlink(missing_ok=True)
+            removed += 1
+    (target / MANIFEST_FILE).unlink(missing_ok=True)
+    return removed
+
+
 #: Names of the links Navide planted in a workspace skills directory. Lives
 #: beside them so it travels with the checkout and is covered by the same
 #: git exclude.
@@ -361,7 +378,9 @@ def wire_command(
                 env[wiring.root_env] = root
         return command
     if wiring.project_rel:
-        sync_project_dir(agent_key, wiring, cwd)
+        from agent_team_backend.convenience_wiring import sync_project_dir_gated
+
+        sync_project_dir_gated(agent_key, wiring, cwd)
         return command
     try:
         view = prepare_view(agent_key, wiring)

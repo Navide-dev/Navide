@@ -399,6 +399,79 @@ def ensure_project_config(agent_key: str, cwd: str | Path) -> bool:
     return True
 
 
+def project_config_has_entry(agent_key: str, path: Path) -> bool:
+    """Whether a project MCP config still carries our server.
+
+    Raises when the file exists but is not a JSON object: an unreadable file
+    says nothing about whether the user removed our entry.
+    """
+    wiring = mcp_wiring(agent_key)
+    if wiring is None or wiring.config is None or not path.is_file():
+        return False
+    raw = path.read_text(encoding="utf-8").strip()
+    document = json.loads(raw) if raw else {}
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    servers = document.get(wiring.config.section[-1])
+    return isinstance(servers, dict) and SERVER_NAME in servers
+
+
+def remove_project_config(agent_key: str, path: Path) -> bool:
+    """Take our server back out of a project MCP config; True when it was there.
+
+    The user's servers stay. A file left holding nothing but an empty server
+    map was Navide's alone: it is deleted, along with the git exclude line
+    ``ensure_project_config`` added for it. A file that does not parse is left
+    exactly as it is.
+    """
+    wiring = mcp_wiring(agent_key)
+    if wiring is None or wiring.config is None or not path.is_file():
+        return False
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+        document = json.loads(raw) if raw else {}
+    except (OSError, json.JSONDecodeError) as err:
+        log.warning("%s unreadable (%s) — leaving it alone", path, err)
+        return False
+    section = wiring.config.section[-1]
+    servers = document.get(section) if isinstance(document, dict) else None
+    if not isinstance(servers, dict):
+        return False
+    ours = [name for name in (SERVER_NAME, *LEGACY_SERVER_NAMES) if name in servers]
+    if not ours:
+        return False
+    kept = {key: value for key, value in servers.items() if key not in ours}
+    if not kept and set(document) == {section}:
+        path.unlink(missing_ok=True)
+        _unexclude_from_git(path, path.parent)
+        return True
+    document[section] = kept
+    _write_atomic(path, json.dumps(document, indent=2) + "\n")
+    return True
+
+
+def _unexclude_from_git(config_path: Path, start: Path) -> None:
+    """Drop the exclude line ``_exclude_from_git`` added for a file we removed."""
+    repo = _git_repo_root(start)
+    if repo is None:
+        return
+    try:
+        relpath = config_path.relative_to(repo).as_posix()
+    except ValueError:
+        return
+    exclude = repo / ".git" / "info" / "exclude"
+    try:
+        lines = exclude.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return
+    kept = [line for line in lines if line.strip() != relpath]
+    if kept != lines:
+        try:
+            exclude.write_text("".join(kept), encoding="utf-8")
+        except OSError as err:
+            log.warning("could not update %s: %s", exclude, err)
+
+
 def wire_command(
     agent_key: str,
     command: Any,
@@ -463,7 +536,9 @@ def wire_command(
     if wiring.project_config:
         # env first: with nowhere to put the URL there is no point writing a
         # config file into the user's repo.
-        if cwd and env is not None and ensure_project_config(agent_key, cwd):
+        from ..convenience_wiring import ensure_project_config_gated
+
+        if cwd and env is not None and ensure_project_config_gated(agent_key, cwd):
             env.setdefault(PROJECT_URL_ENV, plan_mcp_url(port, pane_id))
         return command
     if wiring.config_file:
