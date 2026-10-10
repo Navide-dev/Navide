@@ -1119,6 +1119,17 @@ class CredentialVault:
         same account until then."""
         return self.slot_dir(agent_key, slot_id) / ".sign-in-pending-live"
 
+    def move_sign_in_pending_live(self, agent_key: str, from_slot_id: str, to_slot_id: str) -> None:
+        """Carry a pending-live sign-in marker along with the sign-in when it
+        is folded into another slot; the source keeps none."""
+        source = self._sign_in_pending_live_marker(agent_key, from_slot_id)
+        if not source.exists():
+            return
+        target = self._sign_in_pending_live_marker(agent_key, to_slot_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+        source.unlink(missing_ok=True)
+
     def switch(
         self,
         agent_key: str,

@@ -396,6 +396,7 @@ def _dedupe_harvested_login(vault, agent_key: str, profile_id: str) -> str | Non
     if keep_id is None:
         return None
     vault.write_slot(agent_key, keep_id, vault.read_slot(agent_key, profile_id))
+    vault.move_sign_in_pending_live(agent_key, profile_id, keep_id)
     if store.list()["defaults"].get(agent_key) == profile_id:
         store.set_default(agent_key, keep_id)
     vault.delete_slot_secrets(agent_key, profile_id)

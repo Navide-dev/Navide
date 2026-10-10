@@ -223,3 +223,49 @@ async def test_dedupe_failure_leaves_the_login_usable(
 
     assert fresh["id"] in _profile_ids(store)
     assert app.credential_vault.read_slot("codex", fresh["id"]).secret == new_secret
+
+
+def _claude_oauth(token: str, expires_at: int) -> str:
+    return json.dumps({"claudeAiOauth": {"accessToken": token, "refreshToken": "r" + token, "expiresAt": expires_at}})
+
+
+async def test_a_folded_sign_in_that_never_reached_live_survives_a_switch(
+    tmp_path: Path,
+    store: CliProfilesStore,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolated_convenience_gate,
+) -> None:
+    """The pending-live shield follows the sign-in into the profile it was
+    folded into: a switch away captures live's older token of the same
+    account, and the survivor must keep the new sign-in (the deleted
+    duplicate keeps no marker)."""
+    vault = app.credential_vault
+    (tmp_path / "vault-home").mkdir(exist_ok=True)  # the conftest vault's real home
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    account = {"emailAddress": "a@x.com"}
+    kept = store.create(agent_key="claude", name="Account 1")["id"]
+    other = store.create(agent_key="claude", name="Account C")["id"]
+    vault.write_slot("claude", kept, LiveCredentials(secret=_claude_oauth("old", 1000), account=account))
+    vault.write_slot("claude", other, LiveCredentials(
+        secret=_claude_oauth("c", 5000), account={"emailAddress": "c@x.com"}))
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("old", 1000), account=account))
+    fresh = store.create(agent_key="claude", name="Account 2")["id"]
+    store.set_default("claude", fresh)
+    home = _write_login_home("claude", fresh, ".credentials.json", _claude_oauth("new", 2000))
+    (home / ".claude.json").write_text(json.dumps({"oauthAccount": account}), encoding="utf-8")
+    real_restore = vault.restore
+
+    def failing_restore(*args: Any, **kwargs: Any) -> None:
+        raise RuntimeError("keychain write failed")
+
+    monkeypatch.setattr(vault, "restore", failing_restore)
+    with pytest.raises(RuntimeError):
+        await _harvest_login_home_locked(vault, "claude", fresh)
+    monkeypatch.setattr(vault, "restore", real_restore)
+    assert _profile_ids(store) == [kept, other]
+    assert store.list()["defaults"]["claude"] == kept
+
+    vault.switch("claude", kept, other)
+
+    assert vault.read_slot("claude", kept).secret == _claude_oauth("new", 2000)
+    assert not vault._sign_in_pending_live_marker("claude", fresh).exists()
