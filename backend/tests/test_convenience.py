@@ -218,3 +218,21 @@ def test_noting_a_required_target_announces_only_its_first_creation(gate, tmp_pa
     [entry] = gate.history()
     assert (entry["feature"], entry["action"], entry["notify"]) == ("codex.pane-homes", "first", True)
     assert gate.listing_feature("codex.pane-homes")["targets"][0]["path"] == str(root)
+
+
+def test_a_write_that_left_no_entry_is_not_recorded_and_never_reads_as_a_removal(gate, tmp_path) -> None:
+    """An installer that skipped (a dev backend, a CLI that is not set up)
+    wrote nothing; holding the target in the ledger would make the next start
+    read its absence as the user's removal."""
+    path = tmp_path / "settings.json"
+    calls: list[int] = []
+
+    def skipped() -> None:
+        calls.append(1)
+
+    assert gate.apply("claude.hooks", path, write=skipped, present=lambda: False, file=path) == "unchanged"
+    assert gate.apply("claude.hooks", path, write=skipped, present=lambda: False, file=path) == "unchanged"
+
+    assert calls == [1, 1]
+    assert gate.allowed("claude.hooks")
+    assert gate.listing_feature("claude.hooks")["targets"] == []

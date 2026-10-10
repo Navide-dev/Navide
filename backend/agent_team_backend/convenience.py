@@ -183,7 +183,13 @@ class ConvenienceGate:
             write()
             after = _read(file)
             changed = file is None or before != after
-            self._mark(feature_id, key, present=True)
+            # Only a target that now carries Navide's entry joins the ledger:
+            # an installer that skipped wrote nothing, and remembering the
+            # target would read its absence next time as the user's removal.
+            if _safe(present):
+                self._mark(feature_id, key, present=True)
+            elif known:
+                self._mark(feature_id, key, present=False)
             if not changed:
                 if not known and was_present:
                     self._adopted.add(feature_id)
