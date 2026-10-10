@@ -318,6 +318,9 @@ async def test_cli_extensions_list_tool_also_names_what_navide_changed(
 
     [row] = [item for item in result["items"] if item["kind"] == "navide-change"]
     assert (row["cli"], row["name"], row["owner"]) == ("cursor", "cursor.project-mcp", "navide")
+    # OF-N2: every pane reads this; another workspace's path must not leak
+    # through the id.
+    assert str(tmp_path) not in json.dumps(result)
     agent_messaging._reset_for_test()
 
 
