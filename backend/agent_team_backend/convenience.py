@@ -66,6 +66,11 @@ ACTIONS = ("first", "repair", "removed", "off", "allowed", "cleanup", "prompt")
 
 UPGRADE_KEY = "convenience.upgrade_notice"
 
+#: Backups kept per target. Each is the whole file, secrets included, so a
+#: target that changes on every pane start must not pile them up for ever; a
+#: feature turned off or an entry removed keeps only its latest.
+BACKUPS_PER_TARGET = 5
+
 
 def feature(feature_id: str) -> Feature:
     return _BY_ID[feature_id]
@@ -128,6 +133,8 @@ class ConvenienceGate:
         with self._lock:
             if not allowed and remove is not None:
                 remove()
+            if not allowed:
+                self._prune(feature_id, keep=1)
             self._set_state(feature_id, "allowed" if allowed else "off", "user")
             if allowed:
                 # A fresh start: what the user deleted before re-allowing is
@@ -182,6 +189,7 @@ class ConvenienceGate:
                 self._set_state(feature_id, "off", "removed")
                 self._mark(feature_id, key, present=False)
                 self.record(feature_id, "removed", key, detail="deleted outside Navide")
+                self._prune(feature_id, key, keep=1)
                 return "removed"
             before = _read(file)
             write()
@@ -200,7 +208,7 @@ class ConvenienceGate:
                     self._adopted.add(feature_id)
                 return "unchanged"
             action = "repair" if known else "first"
-            backup = self._backup(feature_id, before)
+            backup = self._backup(feature_id, key, before)
             notify = not (quiet_repairs and action == "repair")
             self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
             return action
@@ -276,13 +284,20 @@ class ConvenienceGate:
                 (feature_id, key, int(self._clock()), int(present)),
             )
 
-    def _backup(self, feature_id: str, content: bytes | None) -> str:
+    def _backup_dir(self, feature_id: str, key: str) -> Path:
+        return self.backup_root / feature_id / hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+
+    def _backup(self, feature_id: str, key: str, content: bytes | None) -> str:
+        """Copy ``content`` into the target's own backup folder (deduplicated
+        by content), then keep only its latest ``BACKUPS_PER_TARGET``."""
         if content is None:
             return ""
         digest = hashlib.sha256(content).hexdigest()
-        path = self.backup_root / feature_id / f"{digest}.bak"
+        path = self._backup_dir(feature_id, key) / f"{digest}.bak"
         try:
-            if not path.exists():
+            if path.exists():
+                os.utime(path)  # the same content again is the latest backup
+            else:
                 _private_dirs(self.backup_root, path.parent)
                 # 0600 from creation: a backup holds the whole file, secrets
                 # included, and must never be readable by others in between.
@@ -294,7 +309,23 @@ class ConvenienceGate:
         except OSError as err:
             log.warning("backing up %s failed: %s", feature_id, err)
             return ""
+        self._prune(feature_id, key, keep=BACKUPS_PER_TARGET)
         return str(path)
+
+    def _prune(self, feature_id: str, key: str | None = None, *, keep: int) -> None:
+        """Keep the latest ``keep`` backups of one target, or of every target
+        of the feature."""
+        root = self.backup_root / feature_id
+        folders = [self._backup_dir(feature_id, key)] if key is not None else (
+            [p for p in root.iterdir() if p.is_dir()] if root.is_dir() else []
+        )
+        for folder in folders:
+            try:
+                backups = sorted(folder.glob("*.bak"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+                for stale in backups[keep:]:
+                    stale.unlink()
+            except OSError as err:
+                log.warning("pruning backups of %s failed: %s", feature_id, err)
 
     # ── upgrade notice ──────────────────────────────────────────────────
 

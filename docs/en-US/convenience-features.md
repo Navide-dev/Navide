@@ -30,7 +30,13 @@ which runs, in order:
    `present()` is now false, the user removed it: the feature goes off
    (reason `removed`), the event is logged and announced, nothing is written.
 3. **Backup.** A file target is copied into
-   `<app data>/convenience-backups/<feature>/<sha256>.bak` (deduplicated).
+   `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
+   (deduplicated by content). A backup is the whole file, **including any
+   secrets it holds** (an API key in `env`, an MCP server token), so backups
+   are private to the user (folders 0700, files created 0600), each target
+   keeps only its latest 5, and a feature turned off or an entry removed
+   keeps only its latest one. A log row may name a backup that has since
+   been rotated away.
 4. **Write.** `write()` performs the existing write unchanged.
 5. **Notify.** Only when the target's bytes changed: the first write to a
    target is announced as `first`, a later change as `repair`.

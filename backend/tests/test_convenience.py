@@ -250,3 +250,36 @@ def test_backups_are_private_from_the_moment_they_exist(gate, tmp_path) -> None:
     folders = [tmp_path / "backups", *[p for p in (tmp_path / "backups").rglob("*") if p.is_dir()]]
     assert {oct(stat.S_IMODE(p.stat().st_mode)) for p in folders} == {"0o700"}
     assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+
+
+def test_backups_are_kept_per_target_and_rotated(gate, tmp_path) -> None:
+    """A7: a target that changes on every pane start (one Codex trust row per
+    pane) must not leave one full copy of the file, secrets and all, per
+    change for ever. Each target keeps its last few; a removal keeps one."""
+    config = tmp_path / "config.toml"
+    config.write_text('[mcp_servers.gh.env]\nGITHUB_TOKEN = "ghp_secret"\n', encoding="utf-8")
+    rows = [0]
+
+    def add_row() -> None:
+        rows[0] += 1
+        config.write_text(config.read_text(encoding="utf-8") + f"# row {rows[0]}\n", encoding="utf-8")
+
+    for _ in range(25):
+        gate.apply("codex.hook-trust", config, write=add_row, present=lambda: True, file=config, quiet_repairs=True)
+    other = _File(tmp_path / "other.toml", "x\n")
+    gate.apply("codex.hook-trust", other.path, write=other.write, present=other.present, file=other.path)
+
+    backups = list((tmp_path / "backups" / "codex.hook-trust").rglob("*.bak"))
+    assert len(backups) == convenience.BACKUPS_PER_TARGET + 1
+    newest = gate.history("codex.hook-trust")[1]["backup"]
+    assert Path(newest).is_file()
+
+    config.write_text("", encoding="utf-8")
+    assert gate.apply(
+        "codex.hook-trust", config, write=add_row, present=lambda: False, file=config
+    ) == "removed"
+
+    [kept_other] = [e["backup"] for e in gate.history("codex.hook-trust") if e["target"] == str(other.path)]
+    assert sorted(map(str, (tmp_path / "backups" / "codex.hook-trust").rglob("*.bak"))) == sorted(
+        [newest, kept_other]
+    )
