@@ -3771,3 +3771,138 @@ async def test_an_unreadable_live_login_is_left_alone(
 
     assert restored == []
     assert _isolated_convenience_gate.history() == []
+
+
+# ── Account prompt: per-provider vendors and identity-less logins (round 2: D3/D3b, AC-N1) ──
+
+
+def _plain_vault_setup(tmp_path, monkeypatch):
+    """A real vault and store behind ``app``, with no profiles yet."""
+    from agent_team_backend import app
+    from agent_team_backend.credential_vault import CredentialVault
+
+    store = CliProfilesStore(path=tmp_path / "p.json", profiles_root=tmp_path / "pr")
+    monkeypatch.setattr(app, "cli_profiles_store", store)
+    (tmp_path / "home").mkdir()
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    monkeypatch.setattr(app, "credential_vault", vault)
+
+    async def broadcast(event, *, exclude=None):
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    monkeypatch.setattr(us, "_login_pane_running", lambda *a: False)
+    return app, store, vault
+
+
+@pytest.mark.asyncio
+async def test_re_signing_the_active_per_provider_account_applies_the_new_login(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1/D3: opencode signs in against the live store. After the CLI
+    refreshed its token, a Navide sign-in of the active profile ends with
+    the new login live (as on main): the live login equal to the pre-login
+    copy is that account's own, never an outside account."""
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    po = store.create(agent_key="opencode", name="OC", scope="anthropic")["id"]
+    mk = lambda a: json.dumps({"type": "oauth", "access": a, "refresh": "r-" + a, "expires": 1})  # noqa: E731
+    vault.write_slot("opencode", po, LiveCredentials(secret=mk("old")), scope="anthropic")
+    store.set_default("opencode", po)
+    vault.write_live("opencode", LiveCredentials(secret=mk("refreshed")), scope="anthropic")
+    vault.login_spawn_env("opencode", po, scope="anthropic")
+    vault.write_live("opencode", LiveCredentials(secret=mk("NEW")), scope="anthropic")
+
+    assert await us._harvest_login_home_locked(vault, "opencode", po) is True
+
+    assert json.loads(vault.read_live("opencode", scope="anthropic").secret)["access"] == "NEW"
+    assert [p["name"] for p in store.list()["profiles"]] == ["OC"]
+    assert store.list()["defaults"]["opencode"] == po
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]
+
+
+@pytest.mark.asyncio
+async def test_re_signing_an_identity_less_active_account_keeps_mains_restore(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1: kimi stores no identity. Re-signing the active account through
+    Navide after the CLI refreshed its token restores the new login every
+    time, as main does, and never registers a stray profile per sign-in."""
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    tok = lambda n: json.dumps({"access_token": n, "refresh_token": "r-" + n})  # noqa: E731
+    pk = store.create(agent_key="kimi", name="Work")["id"]
+    vault.write_slot("kimi", pk, LiveCredentials(secret=tok("t1")))
+    store.set_default("kimi", pk)
+    vault.restore("kimi", pk)
+    n = {"i": 0}
+
+    def fake_harvest(agent_key, slot_id, **k):
+        n["i"] += 1
+        vault.write_slot("kimi", slot_id, LiveCredentials(secret=tok(f"new{n['i']}")))
+        return True
+
+    monkeypatch.setattr(vault, "harvest_login_home", fake_harvest)
+    for round_ in range(3):
+        vault.write_live("kimi", LiveCredentials(secret=tok(f"refreshed{round_}")))
+        await us._harvest_login_home_locked(vault, "kimi", store.list()["defaults"]["kimi"])
+        assert json.loads(vault.read_live("kimi").secret)["access_token"] == f"new{round_ + 1}"
+
+    assert [p["name"] for p in store.list()["profiles"]] == ["Work"]
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"] * 3
+
+
+def test_an_outside_per_provider_login_is_registered_in_a_profile_of_its_scope(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D3b: registering an outside opencode login (the account prompt's
+    follow, and its switch-back's capture) creates the profile in the
+    provider scope it was read from; without one the store refused it and
+    the active pointer never moved."""
+    from agent_team_backend import credential_watcher
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    po = store.create(agent_key="opencode", name="OC", scope="anthropic")["id"]
+    mk = lambda a: json.dumps({"type": "oauth", "access": a, "refresh": "r-" + a, "expires": 1})  # noqa: E731
+    vault.write_slot("opencode", po, LiveCredentials(secret=mk("A")), scope="anthropic")
+    store.set_default("opencode", po)
+    vault.write_live("opencode", LiveCredentials(secret=mk("B")), scope="anthropic")
+
+    followed = credential_watcher._adopt_unregistered_live_account(
+        "opencode", "Signed in outside Navide", scope="anthropic"
+    )
+
+    assert followed is not None and followed != po
+    assert store.list()["defaults"]["opencode"] == followed
+    assert store.get(followed)["scope"] == "anthropic"
+    assert json.loads(vault.read_slot("opencode", followed, scope="anthropic").secret)["access"] == "B"
+    assert json.loads(vault.read_slot("opencode", po, scope="anthropic").secret)["access"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_the_same_unidentified_outside_login_never_multiplies_profiles(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1: an outside login with no email that a profile already holds
+    is followed to that profile; a prompt never registers a second one."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    s = _session()
+    for round_ in range(2):
+        vault.write_live("claude", LiveCredentials(secret=_SEC_B, account=None))
+        await us._harvest_login_home_locked(vault, "claude", pa)
+        assert store.list()["defaults"]["claude"] != pa
+        if round_ == 0:
+            us_switch = {"agent_key": "claude", "profile_id": pa, "force": True}
+            await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": us_switch})
+            assert not s.websocket.sent[-1].get("error")
+            assert vault.read_live("claude").secret == _SEC_A
+
+    names = [p["name"] for p in store.list()["profiles"]]
+    assert len(names) == 3, names

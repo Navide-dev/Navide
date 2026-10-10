@@ -2627,13 +2627,20 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
             from .convenience_wiring import gate as convenience_gate
 
             slot = profile_id or DEFAULT_SLOT_ID
+            # A per-provider vendor's provider entry, as in a normal switch.
+            scope = quota_failover.profile_scope(
+                agent_key, app.cli_profiles_store.get(profile_id) if profile_id else None
+            )
+            kw = {"scope": scope} if scope else {}
             try:
                 live, own = await vault_to_thread(lambda: (
-                    app.credential_vault.read_live(agent_key, strict=True).secret,
-                    app.credential_vault.read_slot(agent_key, slot).secret,
+                    app.credential_vault.read_live(agent_key, strict=True, **kw).secret,
+                    app.credential_vault.read_slot(agent_key, slot, **kw).secret,
                 ))
                 if live != own:
-                    await vault_to_thread(app.credential_vault.restore, agent_key, slot)
+                    await vault_to_thread(
+                        functools.partial(app.credential_vault.restore, agent_key, slot, **kw)
+                    )
                     g = convenience_gate()
                     if g is not None:
                         g.record("credentials.auto-repair", "repair", f"{agent_key} live login",

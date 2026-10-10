@@ -479,6 +479,9 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
         slot_before = None if slot_was_empty else await vault_to_thread(
             _slot_secret, vault, agent_key, profile_id
         )
+        # A sign-in against the live store (no login isolation) puts the
+        # login it replaced back live: that copy is this account's own.
+        pre_login = await vault_to_thread(_pre_login_secret, vault, agent_key, profile_id)
         harvested = await vault_to_thread(
             functools.partial(
                 vault.harvest_login_home, agent_key, profile_id,
@@ -503,7 +506,7 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
 
             try:
                 live_email, slot_email, other = await vault_to_thread(
-                    _compare_live_to_slot, vault, agent_key, slot_id, slot_before
+                    _compare_live_to_slot, vault, agent_key, slot_id, slot_before, pre_login
                 )
             except Exception as err:  # noqa: BLE001 — unread is not signed out
                 log.warning(
@@ -524,7 +527,8 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
                 # Navide's active account must follow the login that stays
                 # live, or the next switch captures it into this slot.
                 followed = await vault_to_thread(
-                    _follow_live_account, agent_key, slot_id, live_email
+                    _follow_live_account, agent_key, slot_id, live_email,
+                    _scope_kwargs(vault.identity, agent_key, slot_id).get("scope"),
                 )
     if followed is not None:
         from .ws_handlers import _broadcast_profiles_changed
@@ -546,24 +550,45 @@ def _slot_secret(vault, agent_key: str, slot_id: str) -> str | None:
         return None
 
 
+def _pre_login_secret(vault, agent_key: str, slot_id: str) -> str | None:
+    """The live secret a sign-in against the live store replaced (its
+    pre-login snapshot), None when there is none. Blocking."""
+    snapshot = getattr(vault, "_pre_login_snapshot", None)
+    if not callable(snapshot):
+        return None
+    try:
+        present, before, _scope = snapshot(agent_key, slot_id)
+    except Exception:  # noqa: BLE001 — no proof the live login is this account's
+        return None
+    return before if present else None
+
+
 def _compare_live_to_slot(
-    vault, agent_key: str, slot_id: str, slot_before: str | None
+    vault, agent_key: str, slot_id: str, slot_before: str | None,
+    pre_login: str | None = None,
 ) -> tuple[str | None, str | None, bool]:
     """``(live email, slot email, other account)``: is the live login an
-    account other than ``slot_id``'s? Emails decide when both are known;
-    otherwise only the slot's own secret (now, or before the harvest) proves
-    it is the same account. An empty live login is no other account. Raises
-    when the live login cannot be read. Blocking (Keychain for claude)."""
-    live = vault.identity(agent_key, strict=True)
+    account other than ``slot_id``'s? Emails decide when both are known.
+    With neither one (kimi, the per-provider stores) nothing can tell an
+    account apart, so it is the same account and the login is restored, as
+    before the prompt existed. With one, only the slot's own secret (now,
+    before the harvest, or the pre-login copy a live-store sign-in put back)
+    proves it is the same account. An empty live login is no other account.
+    Raises when the live login cannot be read. Blocking (Keychain for
+    claude)."""
+    kw = _scope_kwargs(vault.identity, agent_key, slot_id)
+    live = vault.identity(agent_key, strict=True, **kw)
     if not live.get("signedIn"):
         return None, None, False
-    slot_email = vault.identity(agent_key, slot_id).get("email") or None
+    slot_email = vault.identity(agent_key, slot_id, **kw).get("email") or None
     live_email = live.get("email") or None
     if live_email and slot_email:
         return live_email, slot_email, live_email.casefold() != slot_email.casefold()
+    if not live_email and not slot_email:
+        return None, None, False
     kw = _scope_kwargs(vault.read_live, agent_key, slot_id)
     live_secret = vault.read_live(agent_key, strict=True, **kw).secret
-    own = {_slot_secret(vault, agent_key, slot_id), slot_before} - {None}
+    own = {_slot_secret(vault, agent_key, slot_id), slot_before, pre_login} - {None}
     return live_email, slot_email, live_secret not in own
 
 
@@ -576,18 +601,27 @@ def _profile_name(profile_id: str) -> str:
     return str((profile or {}).get("name") or "")
 
 
-def _follow_live_account(agent_key: str, slot_id: str, live_email: str | None) -> str | None:
+def _follow_live_account(
+    agent_key: str, slot_id: str, live_email: str | None, scope: str | None = None
+) -> str | None:
     """Point Navide's active account at the live login after a prompt left
-    it live: the profile holding it, else a new one registered for it (see
+    it live: the profile holding it (by email, else by its exact secret),
+    else a new one registered for it in ``scope`` (see
     ``credential_watcher``). Never writes the live login. Call inside
     ``switch_lock``. Blocking."""
-    from .credential_watcher import _adopt_unregistered_live_account, align_default_to_live
+    from .credential_watcher import (
+        _adopt_unregistered_live_account,
+        align_default_to_live,
+        point_at_profile_holding_live,
+    )
 
     try:
-        moved = align_default_to_live(agent_key)
+        moved = align_default_to_live(agent_key, scope=scope)
+        if moved is None and _active_profile_id(agent_key) == slot_id and not live_email:
+            moved = point_at_profile_holding_live(agent_key, scope=scope)
         if moved is None and _active_profile_id(agent_key) == slot_id:
             moved = _adopt_unregistered_live_account(
-                agent_key, live_email or "Signed in outside Navide"
+                agent_key, live_email or "Signed in outside Navide", scope=scope
             )
     except Exception as err:  # noqa: BLE001
         log.warning("following the live %s account failed: %s", agent_key, err)
