@@ -37,7 +37,7 @@ which runs, in order:
    feature off and on again restores it. Copilot's hook file is Navide's
    alone, so deleting it is the whole removal.
    Only a **folder** reset is not a removal: the CLI's config folder
-   (`~/.claude`, `~/.qwen`, `~/.copilot`) or the workspace's `.cursor`
+   (`~/.claude`, `~/.qwen`, `~/.copilot`, `~/.codex`) or the workspace's `.cursor`
    gone, or deleted and created again (a different device, inode or birth
    time than the last write saw), took Navide's entry along with everything
    else. The feature stays allowed and the write that puts the entry back is

@@ -945,6 +945,28 @@ def test_codex_hook_trust_a_row_seeding_never_copies_is_not_a_removal(gate, tmp_
     assert gate.state("codex.hook-trust") == ("allowed", "default")
 
 
+def test_codex_hook_trust_a_reset_codex_folder_is_a_fresh_start_not_a_removal(gate, tmp_path) -> None:
+    """R3-M1 (decision 4): ``rm -rf ~/.codex`` and reinstalling took Navide's
+    trust rows with everything else. The feature stays allowed and the next
+    pane is seeded again, announced as a re-add after a reset."""
+    import shutil
+
+    manager, real = _codex(tmp_path)
+    hooks = (real / "hooks.json").read_text(encoding="utf-8")
+    config = (real / "config.toml").read_text(encoding="utf-8")
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    shutil.rmtree(real)
+    real.mkdir()
+    (real / "hooks.json").write_text(hooks, encoding="utf-8")
+    (real / "config.toml").write_text(config, encoding="utf-8")
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
+
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+    assert gate.history("codex.hook-trust")[0]["action"] == "reset"
+    assert gate.history("codex.hook-trust")[0]["notify"] is True
+
+
 def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_path, monkeypatch) -> None:
     from agent_team_backend import app
 

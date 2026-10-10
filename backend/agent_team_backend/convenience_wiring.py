@@ -408,7 +408,7 @@ def seed_hook_trust_gated(manager: Any, pane_home: Path) -> int:
     outcome = g.apply(
         "codex.hook-trust", config, write=write,
         present=lambda: manager.hook_trust_intact(exclude=pane_home), file=config,
-        quiet_repairs=True,
+        quiet_repairs=True, reset_folder=manager.real_home,
     )
     return 0 if outcome in ("off", "removed") else seeded[0]
 
