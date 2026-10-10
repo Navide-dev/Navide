@@ -637,6 +637,17 @@ def test_an_entry_a_skills_shim_moves_into_the_vendors_folder_is_announced(gate,
     assert _shim_changes(gate) == [("repair", str(target), True)]
 
 
+def test_pane_shim_changes_are_listed_for_every_cli_that_uses_a_shim(gate, tmp_path) -> None:
+    from agent_team_backend import cli_extensions
+
+    gate.note("pane-shims", tmp_path / ".navide-panes")
+
+    rows = cli_extensions.navide_changes(gate.listing()["features"])
+
+    clis = sorted(row.cli for row in rows if row.name == "pane-shims")
+    assert clis == ["antigravity", "copilot", "grok", "kimi", "muse", "qwen"]
+
+
 @pytest.mark.asyncio
 async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, monkeypatch) -> None:
     from types import SimpleNamespace
