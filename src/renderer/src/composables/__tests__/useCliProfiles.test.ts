@@ -540,7 +540,7 @@ describe('createCliAccountSwitchHandler', () => {
   type SetDefaultFn = (
     agentKey: string,
     profileId: string | null,
-    opts?: { force?: boolean },
+    opts?: { force?: boolean; restoreLive?: boolean },
   ) => Promise<SetDefaultResult>
 
   function makeCaps(confirmResult = true) {
@@ -561,6 +561,19 @@ describe('createCliAccountSwitchHandler', () => {
     expect(setDefault).toHaveBeenCalledTimes(1)
     expect(setDefault).toHaveBeenCalledWith('claude', 'p1')
     expect(caps.confirm).not.toHaveBeenCalled()
+  })
+
+  it('carries the account prompt\'s restoreLive through the first send and the forced resend', async () => {
+    const setDefault = vi.fn<SetDefaultFn>()
+      .mockResolvedValueOnce({ ok: false, code: 'PANES_RUNNING', count: 1, message: 'busy' })
+      .mockResolvedValueOnce({ ok: true })
+    const handler = createCliAccountSwitchHandler({ setDefault }, makeCaps())
+
+    expect(await handler('claude', 'p1', { restoreLive: true })).toEqual({ ok: true })
+    expect(setDefault.mock.calls).toEqual([
+      ['claude', 'p1', { restoreLive: true }],
+      ['claude', 'p1', { force: true, restoreLive: true }],
+    ])
   })
 
   it('starts a sign-in when the switched-to account has no usable credentials', async () => {

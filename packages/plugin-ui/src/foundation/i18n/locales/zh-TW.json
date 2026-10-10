@@ -7,7 +7,8 @@
       "prompt": "{agent} 的登入在 Navide 外被換過",
       "prompt-accounts": "目前登入：{live} · Navide 原本會還原成：{slot}",
       "prompt-note": "Navide 沒有覆蓋它。你可以保留目前的登入，或切回 Navide 原本會還原的帳號。",
-      "switch-back-syncing": "Navide 還在同步你在外部登入的帳號，請稍候幾秒再試",
+      "prompt-logout": "你在 Navide 外登出了 {agent}，Navide 沒有自動幫你登回。",
+      "prompt-logout-note": "要再使用 {agent}，請重新登入，或到設定的帳號頁切換帳號。",
       "upgrade": "以下便利功能沿用你目前的設定，維持開啟",
       "upgrade-note": "它們維持允許；可隨時在總覽頁關閉。",
       "action": {
@@ -19,6 +20,7 @@
         "overview": "查看總覽",
         "reallow": "重新允許",
         "keep-login": "保留目前的登入",
+        "dismiss": "知道了",
         "switch-back": "切回 {label}",
         "upgrade-ack": "知道了"
       }

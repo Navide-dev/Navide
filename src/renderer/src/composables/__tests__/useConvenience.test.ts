@@ -9,7 +9,6 @@ import {
   __resetConvenienceForTest,
   consumeConvenienceOverviewRequest,
   convenienceHistory,
-  convenienceSwitchBackError,
   openConvenienceOverview,
   setConvenienceAllowed,
   useConvenience,
@@ -263,6 +262,25 @@ describe('convenience announcement rows', () => {
     ])
   })
 
+  it('tells an outside sign-out as such, with only an acknowledgement', () => {
+    const announcements = useAnnouncements()
+    announcements.setConvenienceAgentLabel((key) => (key === 'codex' ? 'Codex' : key))
+    announcements.noteConvenience({
+      features: [],
+      notices: [entry({
+        id: 13, feature: 'credentials.auto-repair', action: 'prompt', target: 'codex live login',
+        detail: JSON.stringify({ agentKey: 'codex', reason: 'logout' }),
+      })],
+      upgrade: null,
+    })
+    const [row] = rows()
+    expect(row.title).toBe('你在 Navide 外登出了 Codex，Navide 沒有自動幫你登回。')
+    expect(row.highlights).toEqual([])
+    expect(row.actions).toEqual([{ kind: 'convenience-dismiss', rowId: 'convenience:13' }, { kind: 'convenience-overview' }])
+    announcements.markRead('convenience:13')
+    expect(rows()[0].actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
   it('lists the features in use on the one-time upgrade row', () => {
     useAnnouncements().noteConvenience({ features: [], notices: [], upgrade: { features: ['claude.hooks', 'cursor.project-mcp'] } })
     const [row] = rows()
@@ -275,40 +293,5 @@ describe('convenience announcement rows', () => {
   it('shows an unknown feature by its id instead of a key path', () => {
     useAnnouncements().noteConvenience({ features: [], notices: [entry({ feature: 'future.thing' })], upgrade: null })
     expect(rows()[0].title).toContain('「future.thing」')
-  })
-})
-
-describe('convenienceSwitchBackError', () => {
-  const drift = (verified: boolean) => ({
-    ok: false as const,
-    code: 'LIVE_DRIFT',
-    message: 'live credential belongs to another account',
-    liveDrift: { verified, currentSlotId: 'slot-a', epoch: 3, liveFingerprint: 'f' },
-  })
-
-  beforeEach(() => {
-    i18n.global.locale.value = 'zh-TW'
-  })
-
-  it('says nothing for a switch that went through or a silent refusal', () => {
-    expect(convenienceSwitchBackError({ ok: true })).toBeNull()
-    expect(convenienceSwitchBackError({ ok: false })).toBeNull()
-  })
-
-  it('explains a verified live drift as Navide still syncing the outside sign-in', () => {
-    expect(convenienceSwitchBackError(drift(true))).toBe('Navide 還在同步你在外部登入的帳號，請稍候幾秒再試')
-    i18n.global.locale.value = 'en-US'
-    expect(convenienceSwitchBackError(drift(true))).toBe(
-      'Navide is still syncing the account you signed in to outside Navide. Try again in a few seconds.'
-    )
-    i18n.global.locale.value = 'ja-JP'
-    expect(convenienceSwitchBackError(drift(true))).toBe(
-      'Navide の外でログインしたアカウントを同期しています。数秒後にもう一度お試しください'
-    )
-  })
-
-  it('passes any other refusal through as the backend worded it', () => {
-    expect(convenienceSwitchBackError(drift(false))).toBe('live credential belongs to another account')
-    expect(convenienceSwitchBackError({ ok: false, code: 'SWITCH_RATE_LIMITED', message: 'wait 30 s' })).toBe('wait 30 s')
   })
 })

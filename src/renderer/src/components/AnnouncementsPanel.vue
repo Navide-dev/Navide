@@ -88,6 +88,7 @@ function actionLabel(action: AnnouncementActionSpec): string {
     case 'convenience-overview':
     case 'convenience-reallow':
     case 'convenience-keep-login':
+    case 'convenience-dismiss':
     case 'convenience-upgrade-ack':
       return i18n.global.t(`convenience.notice.button.${action.kind.slice('convenience-'.length)}`)
   }

@@ -7,7 +7,8 @@
       "prompt": "{agent} のログインが Navide の外で変更されました",
       "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
       "prompt-note": "Navide は上書きしていません。現在のログインを維持するか、Navide が復元するアカウントに戻せます。",
-      "switch-back-syncing": "Navide の外でログインしたアカウントを同期しています。数秒後にもう一度お試しください",
+      "prompt-logout": "Navide の外で {agent} からログアウトしました。Navide は自動で再ログインしていません。",
+      "prompt-logout-note": "{agent} を再び使うには、もう一度ログインするか、設定のアカウントでアカウントを切り替えてください。",
       "upgrade": "以下の便利機能はこれまでどおりオンのままです",
       "upgrade-note": "許可されたままです。概要ページでいつでもオフにできます。",
       "action": {
@@ -19,6 +20,7 @@
         "overview": "概要を開く",
         "reallow": "再度許可",
         "keep-login": "現在のログインを維持",
+        "dismiss": "了解",
         "switch-back": "{label} に戻す",
         "upgrade-ack": "了解"
       }

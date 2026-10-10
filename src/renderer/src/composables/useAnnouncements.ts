@@ -59,6 +59,8 @@ export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-overview' }
   | { kind: 'convenience-reallow'; featureId: string }
   | { kind: 'convenience-keep-login'; rowId: string }
+  /** Acknowledges a notice that offers nothing else (an outside sign-out). */
+  | { kind: 'convenience-dismiss'; rowId: string }
   /** Back to the account Navide would restore, named by the prompt's slotId. */
   | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string }
   | { kind: 'convenience-upgrade-ack' }
@@ -485,6 +487,8 @@ interface ConveniencePromptDetail {
   slotLabel?: string
   liveEmail?: string
   slotEmail?: string
+  /** "logout": the user signed out outside Navide; no slot to switch back to. */
+  reason?: string
 }
 
 function parsePromptDetail(detail: string): ConveniencePromptDetail {
@@ -543,6 +547,14 @@ function convenienceItems(seen: Set<string>): Announcement[] {
       case 'prompt': {
         const detail = parsePromptDetail(entry.detail)
         const agentKey = detail.agentKey || entry.target
+        if (detail.reason === 'logout') {
+          // Navide did not sign the user back in; there is nothing to choose.
+          const agent = convenienceAgentLabel.value(agentKey)
+          title = t('convenience.notice.prompt-logout', { agent })
+          note = t('convenience.notice.prompt-logout-note', { agent })
+          if (!seen.has(id)) actions.push({ kind: 'convenience-dismiss', rowId: id })
+          break
+        }
         const label = detail.slotLabel || detail.slotEmail || ''
         title = t('convenience.notice.prompt', { agent: convenienceAgentLabel.value(agentKey) })
         if (detail.liveEmail || label) {

@@ -7,7 +7,8 @@
       "prompt": "{agent}'s sign-in was changed outside Navide",
       "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
       "prompt-note": "Navide did not overwrite it. Keep the current sign-in, or switch back to the account Navide would restore.",
-      "switch-back-syncing": "Navide is still syncing the account you signed in to outside Navide. Try again in a few seconds.",
+      "prompt-logout": "You signed out of {agent} outside Navide. Navide did not sign you back in.",
+      "prompt-logout-note": "To use {agent} again, sign in again or switch accounts in Settings → Accounts.",
       "upgrade": "These convenience features stay on, as before",
       "upgrade-note": "They stay allowed. You can turn any of them off on the overview.",
       "action": {
@@ -19,6 +20,7 @@
         "overview": "Open overview",
         "reallow": "Allow again",
         "keep-login": "Keep the current sign-in",
+        "dismiss": "Got it",
         "switch-back": "Switch back to {label}",
         "upgrade-ack": "Got it"
       }

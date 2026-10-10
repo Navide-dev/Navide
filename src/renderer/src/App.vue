@@ -333,7 +333,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
 import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
-import { convenienceSwitchBackError, openConvenienceOverview, useConvenience } from './composables/useConvenience'
+import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
   type HotSwitchedPane,
@@ -14128,15 +14128,15 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
       await convenience.ackUpgrade()
       break
     case 'convenience-keep-login':
+    case 'convenience-dismiss':
       announcements.markRead(action.rowId)
       break
     case 'convenience-switch-back': {
       // Back to the account Navide would have restored, through the same
       // switch flow as Settings → Accounts.
-      const res = await cliAccountSwitch(action.agentKey, action.slotId)
+      const res = await cliAccountSwitch(action.agentKey, action.slotId, { restoreLive: true })
       if (res.ok) announcements.markRead(action.rowId)
-      const error = convenienceSwitchBackError(res)
-      if (error) notifyRestore.toast(error, { type: 'error' })
+      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
       break
     }
   }

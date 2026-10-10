@@ -458,6 +458,9 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
        *  the state the first refusal reported, which the backend checks
        *  under its lock before honouring the assumption. */
       assumeLiveIsCurrent?: { expectedCurrentSlotId: string; expectedEpoch: number; liveFingerprint: string }
+      /** The account prompt's "switch back": when the account is already the
+       *  active one, write its slot back to live instead of a no-op. */
+      restoreLive?: boolean
     },
   ): Promise<SetDefaultResult> {
     try {
@@ -466,6 +469,7 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
         profile_id: profileId,
       }
       if (opts?.force) payload.force = true
+      if (opts?.restoreLive) payload.restore_live = true
       if (opts?.assumeLiveIsCurrent) {
         payload.assume_live_is_current = true
         payload.expected_current_slot_id = opts.assumeLiveIsCurrent.expectedCurrentSlotId
@@ -1001,6 +1005,7 @@ function groupCloudItems(items: unknown[]): CliCloudCredentials {
 export type CliAccountSwitchHandler = (
   agentKey: string,
   profileId: string | null,
+  opts?: { restoreLive?: boolean },
 ) => Promise<SetDefaultResult>
 
 export const cliAccountSwitchKey: InjectionKey<CliAccountSwitchHandler> =
@@ -1058,8 +1063,11 @@ export function createCliAccountSwitchHandler(
     return res
   }
 
-  return async (agentKey, profileId) => {
-    const first = await api.setDefault(agentKey, profileId)
+  return async (agentKey, profileId, opts) => {
+    const restoreLive = opts?.restoreLive === true
+    const first = restoreLive
+      ? await api.setDefault(agentKey, profileId, { restoreLive })
+      : await api.setDefault(agentKey, profileId)
     if (!first.ok && first.code === 'LIVE_DRIFT' && first.liveDrift?.verified === false) {
       // The live credential changed and the vendor stores no identity to
       // check it against: only the user can say whether it is still the
@@ -1113,7 +1121,7 @@ export function createCliAccountSwitchHandler(
       },
     )
     if (!confirmed) return { ok: false, code: 'PANES_RUNNING' }
-    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, { force: true }))
+    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, { force: true, ...(restoreLive ? { restoreLive } : {}) }))
   }
 }
 
