@@ -178,8 +178,10 @@ startup features at once (per-spawn features apply on the next spawn).
 Moving a switch is announced (`off` / `allowed`, notify true) and logged
 with its `source`.
 
-`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row (not announced)
-for each feature the notice named: it stays allowed with the user's say-so.
+`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row for each feature
+the notice named: it stays allowed with the user's say-so. Each row is
+announced and carries its `source`, like a switch moved, so a client other
+than a Navide window dismissing the notice is seen.
 
 ### Account prompts (`credentials.auto-repair`)
 

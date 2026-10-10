@@ -657,7 +657,9 @@ class ConvenienceGate:
 
     def acknowledge_upgrade(self, *, source: str = "") -> None:
         """The user read the upgrade notice: each feature it named stays
-        allowed, now with the user's say-so on the log."""
+        allowed, now with the user's say-so on the log. Announced, with
+        ``source``, like a switch moved: a client other than the user
+        dismissing the notice must not go unseen."""
         value = self.db.kv_get(UPGRADE_KEY)
         if isinstance(value, dict):
             self.db.kv_set(UPGRADE_KEY, {**value, "acked": True}, now=int(self._clock()))
@@ -666,7 +668,7 @@ class ConvenienceGate:
                     if feature_id in _BY_ID:
                         self.record(
                             feature_id, "allowed", "", detail="kept allowed: upgrade notice acknowledged",
-                            notify=False, source=source,
+                            source=source,
                         )
 
     # ── reads ───────────────────────────────────────────────────────────
