@@ -3,6 +3,8 @@
     "notice": {
       "wrote": "已依你允許的便利功能「{feature}」，寫入 {target}（為了{purpose}）",
       "repair-note": "這次是補回或修復 Navide 先前寫入的內容。",
+      "reset": "重置後重新加回：已依你允許的便利功能「{feature}」，再次寫入 {target}（為了{purpose}）",
+      "reset-note": "它所在的資料夾被刪除或重新建立，這算是重置，不是你移除它。要停用，請在總覽頁關閉這個功能。",
       "removed": "你移除了 {target}，已關閉便利功能「{feature}」；不會再自動加回",
       "prompt": "{agent} 的登入在 Navide 外被換過",
       "prompt-accounts": "目前登入：{live} · Navide 原本會還原成：{slot}",
@@ -30,6 +32,7 @@
     "action": {
       "first": "首次寫入",
       "repair": "補回或修復",
+      "reset": "重置後重新加回",
       "removed": "你移除了",
       "off": "已關閉",
       "allowed": "已允許",

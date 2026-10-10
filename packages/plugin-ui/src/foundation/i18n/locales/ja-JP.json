@@ -3,6 +3,8 @@
     "notice": {
       "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
       "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
+      "reset": "リセット後に再追加：許可済みの便利機能「{feature}」により {target} に再び書き込みました（{purpose}ため）",
+      "reset-note": "保存先のフォルダーが削除または作り直されたため、削除ではなくリセットとして扱いました。止めるには、概要ページでこの機能をオフにしてください。",
       "removed": "{target} が削除されたため、便利機能「{feature}」をオフにしました。自動で戻すことはありません",
       "prompt": "{agent} のログインが Navide の外で変更されました",
       "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
@@ -30,6 +32,7 @@
     "action": {
       "first": "初回書き込み",
       "repair": "復元・修復",
+      "reset": "リセット後に再追加",
       "removed": "ユーザーが削除",
       "off": "オフ",
       "allowed": "許可",

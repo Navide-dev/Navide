@@ -139,12 +139,11 @@ def install_hooks_gated(
         skip = g.excluded(feature_id, path) if parts is not None else frozenset()
         result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    # Claude's and Qwen's settings.json are the user's: that file gone is a
-    # reset. Copilot's hook file is Navide's own, so deleting it stays the
-    # user's removal; only its whole config folder gone is a reset.
+    # Only the CLI's whole config folder gone or created anew is a reset;
+    # the settings or hook file deleted from it is the user's removal.
     outcome = g.apply(
         feature_id, path, write=write, present=present, file=path, parts=parts,
-        reset_when_missing=path if agent_key in _PER_HOOK else path.parent.parent,
+        reset_folder=path.parent if agent_key in _PER_HOOK else path.parent.parent,
     )
     return {**result, "convenience": outcome}
 
@@ -243,7 +242,7 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     outcome = g.apply(
         "cursor.project-mcp", path, write=write,
         present=lambda: wiring.project_config_has_entry(agent_key, path), file=path,
-        reset_when_missing=path.parent, per_target=True,
+        reset_folder=path.parent, per_target=True,
     )
     return wired[0] and outcome not in ("off", "removed", "refused")
 
@@ -307,7 +306,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     outcome = g.apply(
         "cursor.project-skills", target, write=write,
         present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
-        reset_when_missing=Path(cwd) / wiring.project_rel[0], per_target=True,
+        reset_folder=Path(cwd) / wiring.project_rel[0], per_target=True,
     )
     for name in refused:
         g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")

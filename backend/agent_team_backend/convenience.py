@@ -59,14 +59,15 @@ REGISTRY: tuple[Feature, ...] = (
 )
 _BY_ID = {feature.id: feature for feature in REGISTRY}
 
-#: Log actions. ``first``/``repair``: a write changed a target; ``removed``:
+#: Log actions. ``first``/``repair``: a write changed a target; ``reset``: a
+#: write put Navide's entry back after its folder was reset; ``removed``:
 #: the user deleted an entry; ``off``/``allowed``: the switch moved;
 #: ``cleanup``: Navide took back its own entry; ``cleanup-failed``: it could
 #: not, so the feature stayed on; ``removed-entry``: the user deleted one of
 #: several entries in a target, which stays out while the rest keep working;
 #: ``prompt``: a decision is waiting on the user.
 ACTIONS = (
-    "first", "repair", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
+    "first", "repair", "reset", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
 )
 
 UPGRADE_KEY = "convenience.upgrade_notice"
@@ -74,6 +75,11 @@ UPGRADE_KEY = "convenience.upgrade_notice"
 #: The ``convenience_parts`` name of a whole target the user removed Navide's
 #: entry from, for a feature refused per target (``apply(per_target=True)``).
 _WHOLE_TARGET = ""
+
+#: ``convenience_targets.folder`` of a target whose reset folder was reset:
+#: its next write is announced as ``reset``, and its absence until then is
+#: never read as the user's removal.
+_RESET = "reset"
 
 #: Backups kept per target. Each is the whole file, secrets included, so a
 #: target that changes on every pane start must not pile them up for ever; a
@@ -137,7 +143,8 @@ class ConvenienceGate:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS convenience_targets ("
                 " feature TEXT NOT NULL, target TEXT NOT NULL, written_at INTEGER NOT NULL,"
-                " present INTEGER NOT NULL DEFAULT 1, PRIMARY KEY(feature, target))"
+                " present INTEGER NOT NULL DEFAULT 1, folder TEXT NOT NULL DEFAULT '',"
+                " PRIMARY KEY(feature, target))"
             )
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS convenience_log ("
@@ -157,6 +164,10 @@ class ConvenienceGate:
             columns = {row[1] for row in cur.execute("PRAGMA table_info(convenience_log)").fetchall()}
             if "source" not in columns:
                 cur.execute("ALTER TABLE convenience_log ADD COLUMN source TEXT NOT NULL DEFAULT ''")
+            # Which reset folder the last write saw (``_folder_identity``).
+            columns = {row[1] for row in cur.execute("PRAGMA table_info(convenience_targets)").fetchall()}
+            if "folder" not in columns:
+                cur.execute("ALTER TABLE convenience_targets ADD COLUMN folder TEXT NOT NULL DEFAULT ''")
 
     # ── switches ────────────────────────────────────────────────────────
 
@@ -261,12 +272,13 @@ class ConvenienceGate:
         detail: str = "",
         quiet_repairs: bool = False,
         parts: Callable[[], set[str]] | None = None,
-        reset_when_missing: Path | None = None,
+        reset_folder: Path | None = None,
         per_target: bool = False,
     ) -> str:
         """Run one write through the gate.
 
-        Returns "off", "removed", "refused", "unchanged", "first" or "repair". ``file`` is
+        Returns "off", "removed", "refused", "unchanged", "first", "repair"
+        or "reset". ``file`` is
         the file whose bytes the write changes, when there is one: it is what
         gets backed up and compared. Without it every completed write counts
         as a change. ``quiet_repairs`` logs later changes without announcing
@@ -283,13 +295,15 @@ class ConvenienceGate:
         ``removed-entry``, ``excluded`` names it from then on so ``write``
         leaves it out, and the feature stays allowed for the rest.
 
-        ``reset_when_missing`` is the path whose absence means the user
-        reset the CLI rather than removed Navide's entry: the user's own file
-        Navide merges into (a CLI's settings.json), or the CLI's whole config
-        folder when the target file is Navide's alone. When it is gone,
-        Navide's entry went with everything else: that is a fresh start, not
-        the user's removal, so the target is forgotten and the next write is
-        a ``first``.
+        ``reset_folder`` is the folder whose reset means the user reset the
+        CLI or the workspace rather than removed Navide's entry: the CLI's
+        config folder, or the workspace's ``.cursor``. Only the folder counts,
+        never a file in it: the folder gone, or a different folder than the
+        one the last write saw (deleted and created again), took Navide's
+        entry with everything else. That is a fresh start, not the user's
+        removal: the feature stays allowed and the next write that puts the
+        entry back is announced as ``reset``. A file Navide wrote deleted
+        from a folder that is still the same one is the user's removal.
 
         ``per_target`` is for a feature with a target in every workspace: the
         user removing Navide's entry from one workspace is that workspace's
@@ -302,11 +316,18 @@ class ConvenienceGate:
         with self._lock:
             if not self.allowed(feature_id):
                 return "off"
-            known = self._known(feature_id, key)
+            folder = self._folder(feature_id, key)
+            known = folder is not None
             was_present = _probe(present)
-            if known and was_present is False and reset_when_missing is not None and not reset_when_missing.exists():
-                self.forget(feature_id, key)
-                known = False
+            reset = folder == _RESET
+            if (
+                known and not reset and was_present is False and reset_folder is not None
+                and _was_reset(folder or "", reset_folder)
+            ):
+                self._mark_reset(feature_id, key)
+                reset = True
+            if reset and was_present is False:
+                known = False  # nothing of the user's to read as a removal
             if known and was_present is False and per_target:
                 return self._refuse_target(feature_id, key)
             if per_target and was_present is True:
@@ -328,16 +349,16 @@ class ConvenienceGate:
             # target would read its absence next time as the user's removal.
             now_present = _probe(present)
             if now_present is True:
-                self._mark(feature_id, key, present=True)
+                self._mark(feature_id, key, present=True, folder=_folder_identity(reset_folder))
                 if parts is not None:
                     self._note_written_parts(feature_id, key, parts)
             elif known and now_present is False:
                 self._mark(feature_id, key, present=False)
             if not changed:
-                if not known and was_present is True:
+                if not known and not reset and was_present is True:
                     self._adopt(feature_id, key)
                 return "unchanged"
-            action = "repair" if known else "first"
+            action = "reset" if reset else "repair" if known else "first"
             backup = self._backup(feature_id, key, before)
             notify = not (quiet_repairs and action == "repair")
             self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
@@ -503,6 +524,28 @@ class ConvenienceGate:
                 (feature_id, str(target)),
             )
 
+    def _folder(self, feature_id: str, key: str) -> str | None:
+        """The ledger's ``folder`` for ``key``; None when it is not known."""
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT folder FROM convenience_targets WHERE feature = ? AND target = ?",
+                (feature_id, key),
+            ).fetchone()
+        return None if row is None else row["folder"]
+
+    def _mark_reset(self, feature_id: str, key: str) -> None:
+        """The target's folder was reset: a fresh start for its entries and
+        for the user's refusals there, remembered until the next write."""
+        with self.db.transaction() as cur:
+            cur.execute(
+                "UPDATE convenience_targets SET present = 0, folder = ? WHERE feature = ? AND target = ?",
+                (_RESET, feature_id, key),
+            )
+            cur.execute(
+                "DELETE FROM convenience_parts WHERE feature = ? AND target = ?",
+                (feature_id, key),
+            )
+
     def _known(self, feature_id: str, key: str) -> bool:
         with self.db.transaction() as cur:
             return cur.execute(
@@ -510,14 +553,15 @@ class ConvenienceGate:
                 (feature_id, key),
             ).fetchone() is not None
 
-    def _mark(self, feature_id: str, key: str, *, present: bool) -> None:
+    def _mark(self, feature_id: str, key: str, *, present: bool, folder: str | None = None) -> None:
         with self.db.transaction() as cur:
             cur.execute(
-                "INSERT INTO convenience_targets (feature, target, written_at, present)"
-                " VALUES (?, ?, ?, ?) ON CONFLICT(feature, target) DO UPDATE SET"
+                "INSERT INTO convenience_targets (feature, target, written_at, present, folder)"
+                " VALUES (?, ?, ?, ?, ?) ON CONFLICT(feature, target) DO UPDATE SET"
                 " present = excluded.present"
-                + (", written_at = excluded.written_at" if present else ""),
-                (feature_id, key, int(self._clock()), int(present)),
+                + (", written_at = excluded.written_at" if present else "")
+                + (", folder = excluded.folder" if folder is not None else ""),
+                (feature_id, key, int(self._clock()), int(present), folder or ""),
             )
 
     def _backup_dir(self, feature_id: str, key: str) -> Path:
@@ -654,6 +698,30 @@ def _probe(present: Callable[[], bool]) -> bool | None:
     except Exception as err:  # noqa: BLE001 — unreadable is neither present nor removed
         log.warning("presence check failed (%s); treating as unknown", err)
         return None
+
+
+def _folder_identity(folder: Path | None) -> str | None:
+    """Which folder ``folder`` is now: device, inode and (where the OS keeps
+    one) birth time, so a folder deleted and created again reads as another.
+    None without a folder to name."""
+    if folder is None:
+        return None
+    try:
+        st = folder.stat()
+    except OSError:
+        return None
+    birth = getattr(st, "st_birthtime", None)
+    return f"{st.st_dev}:{st.st_ino}:{birth if birth is not None else ''}"
+
+
+def _was_reset(seen: str, folder: Path) -> bool:
+    """Whether ``folder`` was reset since a write saw it as ``seen``: gone,
+    or another folder now. A row written before identities were kept
+    (``seen`` empty) only counts the folder gone."""
+    if not folder.exists():
+        return True
+    now = _folder_identity(folder)
+    return bool(seen) and now is not None and now != seen
 
 
 def _private_dirs(root: Path, leaf: Path) -> None:

@@ -148,8 +148,8 @@ def test_one_hook_the_user_deleted_stays_out_while_the_others_keep_working(gate,
 def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent) -> None:
     """R6/C3: deleting the whole config folder (resetting the CLI) took the
     settings file with it, not just Navide's entry. That is not the user
-    removing Navide's hooks: the feature stays allowed and the next write is
-    announced as a first one, like a fresh install."""
+    removing Navide's hooks: the feature stays allowed and the hooks are
+    written again, announced as a re-add after a reset."""
     import shutil
 
     port = str(homes["port"])
@@ -161,10 +161,47 @@ def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent
     out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
 
     feature_id = convenience_wiring.HOOK_FEATURES[agent]
-    assert out["convenience"] == "first"
+    assert out["convenience"] == "reset"
     assert gate.state(feature_id) == ("allowed", "default")
     assert claude_hooks.hooks_present(_target(agent))
-    assert [e["action"] for e in gate.history(feature_id)] == ["first", "first"]
+    assert [(e["action"], e["notify"]) for e in gate.history(feature_id)] == [("reset", True), ("first", True)]
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_config_folder_gone_altogether_is_a_reset(gate, homes, agent) -> None:
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    folder = _target(agent).parent
+    shutil.rmtree(folder)
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    if not folder.exists():
+        # This installer waits for the CLI to set its folder up again; the
+        # reset is still what the next write announces.
+        assert out["convenience"] == "unchanged"
+        folder.mkdir()
+        out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    assert out["convenience"] == "reset"
+    assert gate.state(convenience_wiring.HOOK_FEATURES[agent]) == ("allowed", "default")
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_settings_file_navide_created_and_the_user_deleted_is_a_removal(gate, homes, agent) -> None:
+    """Item 7: with the config folder still there, deleting the settings
+    file Navide created is how the user removes Navide's hooks."""
+    port = str(homes["port"])
+    assert convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)["convenience"] == "first"
+    _target(agent).unlink()
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    assert out["convenience"] == "removed"
+    assert gate.state(feature_id) == ("off", "removed")
+    assert not _target(agent).exists()
 
 
 def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_removal(gate, homes) -> None:
@@ -182,7 +219,7 @@ def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_
     homes["copilot"].mkdir()
     back = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
 
-    assert (gone["convenience"], back["convenience"]) == ("unchanged", "first")
+    assert (gone["convenience"], back["convenience"]) == ("unchanged", "reset")
     assert gate.state("copilot.hooks") == ("allowed", "default")
     assert _target("copilot").is_file()
 
@@ -435,8 +472,12 @@ def test_a_reset_workspace_gets_cursor_mcp_back_and_turns_nothing_off(gate, tmp_
     assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
 
     assert gate.state("cursor.project-mcp") == ("allowed", "default")
-    assert wiring.project_config_has_entry("cursor", wiring.project_config_path("cursor", repo))
+    path = wiring.project_config_path("cursor", repo)
+    assert wiring.project_config_has_entry("cursor", path)
     assert not [e for e in gate.history() if e["action"].startswith("removed")]
+    assert [(e["action"], e["notify"]) for e in gate.history() if e["target"] == str(path)] == [
+        ("reset", True), ("first", True),
+    ]
 
 
 def test_a_deleted_cursor_mcp_file_is_refused_in_that_workspace_only(gate, tmp_path) -> None:

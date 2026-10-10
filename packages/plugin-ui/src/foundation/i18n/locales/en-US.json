@@ -3,6 +3,8 @@
     "notice": {
       "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
       "repair-note": "This put back or repaired what Navide wrote earlier.",
+      "reset": "Re-added after a reset: wrote {target} again under the convenience feature \"{feature}\" you allowed, so that {purpose}",
+      "reset-note": "Its folder was deleted or created again, which is a reset, not you removing it. To stop this, turn the feature off on the overview.",
       "removed": "You removed {target}, so the convenience feature \"{feature}\" is now off; Navide will not add it back",
       "prompt": "{agent}'s sign-in was changed outside Navide",
       "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
@@ -30,6 +32,7 @@
     "action": {
       "first": "First write",
       "repair": "Put back or repaired",
+      "reset": "Re-added after a reset",
       "removed": "Removed by you",
       "off": "Turned off",
       "allowed": "Allowed",
