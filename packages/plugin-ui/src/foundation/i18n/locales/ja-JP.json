@@ -3,6 +3,8 @@
     "notice": {
       "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
       "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
+      "reset": "リセット後に再追加：許可済みの便利機能「{feature}」により {target} に再び書き込みました（{purpose}ため）",
+      "reset-note": "保存先のフォルダーが削除または作り直されたため、削除ではなくリセットとして扱いました。止めるには、概要ページでこの機能をオフにしてください。",
       "removed": "{target} が削除されたため、便利機能「{feature}」をオフにしました。自動で戻すことはありません",
       "prompt": "{agent} のログインが Navide の外で変更されました",
       "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
@@ -16,7 +18,8 @@
         "allowed": "便利機能「{feature}」を許可しました",
         "cleanup": "便利機能「{feature}」の {target} を削除しました",
         "removed-entry": "{target} が削除されました。Navide はこの項目を戻しません。便利機能「{feature}」のほかの部分はそのまま動作します。元に戻すには、概要ページでこの機能をオフにしてから再度許可してください",
-        "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください"
+        "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください",
+        "refused-unsafe": "{target} がある .cursor はプロジェクトフォルダーの外を指しているため、安全のため Navide はここで便利機能「{feature}」を設定していません。使うには、.cursor をプロジェクト内の通常のフォルダーにしてください"
       },
       "button": {
         "overview": "概要を開く",
@@ -30,13 +33,15 @@
     "action": {
       "first": "初回書き込み",
       "repair": "復元・修復",
+      "reset": "リセット後に再追加",
       "removed": "ユーザーが削除",
       "off": "オフ",
       "allowed": "許可",
       "cleanup": "クリーンアップ",
       "removed-entry": "ユーザーが項目を削除",
       "cleanup-failed": "クリーンアップ失敗",
-      "prompt": "Navide の外でログインが変更"
+      "prompt": "Navide の外でログインが変更",
+      "refused-unsafe": "安全のため未設定"
     },
     "overview": {
       "title": "便利機能と Navide があなたのコンピューターに加えた変更",

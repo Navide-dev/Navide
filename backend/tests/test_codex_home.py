@@ -334,6 +334,49 @@ def test_prepare_adopts_stranded_login_for_new_pane(tmp_path: Path) -> None:
     assert stranded.is_symlink()
 
 
+def _signed_out_outside_navide(tmp_path: Path) -> tuple[CodexHomeManager, Path, Path]:
+    """Two in-pane logins, the newer one promoted, then `codex logout`
+    outside Navide removes the shared credential. Pane A still holds its own
+    older login as a real file."""
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare("pane-a"), manager.prepare("pane-b")
+    _write_pane_auth(home_a / "auth.json", "old-account")
+    os.utime(home_a / "auth.json", (1, 1))
+    _write_pane_auth(home_b / "auth.json", "new-account")
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()
+    return manager, real, home_a
+
+
+def test_resuming_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
+    from agent_team_backend import convenience_wiring
+
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+    sid = "0199aaaa-bbbb-7ccc-8ddd-eeeeeeeeeeee"
+    day = home_a / "sessions" / "2026" / "10" / "10"
+    day.mkdir(parents=True)
+    (day / f"rollout-2026-10-10T00-00-00-{sid}.jsonl").write_text("{}\n", encoding="utf-8")
+
+    home = manager.find_session_home(sid)
+
+    assert home == home_a
+    assert not (home / "auth.json").exists()
+    assert not (real / "auth.json").exists()
+    # The user is told, as for any spawn after an outside logout.
+    latest = convenience_wiring.gate().history("codex.login-promote", limit=1)
+    assert latest[0]["action"] == "prompt"
+
+
+def test_respawning_the_same_home_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+
+    home = manager.prepare("pane-a")
+
+    assert not (home / "auth.json").exists()
+    assert not (real / "auth.json").exists()
+
+
 # ── sub-agent pin repair ────────────────────────────────────────────────────
 
 def _meta(sid: str, *, parent: str = "", ancestors: tuple[str, ...] = ()) -> str:
@@ -523,6 +566,57 @@ def test_seed_hook_trust_escapes_backslashes_in_toml_keys(tmp_path: Path) -> Non
     assert manager.seed_hook_trust(pane) == 1
     state = tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))["hooks"]["state"]
     assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
+
+
+def _trust_headers(path: Path) -> list[str]:
+    """The same table header in the shapes TOML allows: a trailing comment,
+    spacing inside the brackets, a literal (single-quoted) key."""
+    key = str(path)
+    return [
+        f'[hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0"]  # trusted in codex',
+        f'[ hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0" ]',
+        f"[hooks.state.'{key}:stop:0:0']",
+    ]
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_seed_hook_trust_reads_any_toml_shape_of_the_real_row(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    (real / "config.toml").write_text(
+        f'{_trust_headers(real / "hooks.json")[shape]}\ntrusted_hash = "sha256:aaaa"\n', encoding="utf-8"
+    )
+
+    assert manager.seed_hook_trust(pane) == 1
+
+    state = tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))["hooks"]["state"]
+    assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_a_reformatted_seeded_row_is_neither_missing_nor_seeded_twice(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    assert manager.seed_hook_trust(pane) == 2
+    # The seeded stop row is rewritten into another legal TOML shape.
+    text = (real / "config.toml").read_text(encoding="utf-8")
+    seeded = f'[hooks.state."{_toml_escape_for_test(pane / "hooks.json")}:stop:0:0"]'
+    assert seeded in text
+    (real / "config.toml").write_text(text.replace(seeded, _trust_headers(pane / "hooks.json")[shape]), encoding="utf-8")
+
+    assert manager.hook_trust_intact() is True
+    assert manager.seed_hook_trust(pane) == 0
+    tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))
+    manager.drop_all_hook_trust()
+    assert manager.any_pane_hook_trust() is False
+
+
+def _toml_escape_for_test(path: Path) -> str:
+    from agent_team_backend.cli_vendors.codex import _toml_escape
+
+    return _toml_escape(str(path))
 
 
 def test_prepare_keeps_a_correct_skills_link_when_readlink_reports_an_extended_path(

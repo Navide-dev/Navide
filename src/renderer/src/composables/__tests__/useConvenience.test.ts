@@ -209,6 +209,29 @@ describe('convenience announcement rows', () => {
     expect(rows()[0].note).toBe('這次是補回或修復 Navide 先前寫入的內容。')
   })
 
+  it('announces a re-add after a reset in its own words', () => {
+    useAnnouncements().noteConvenience({ features: [feature()], notices: [entry({ action: 'reset' })], upgrade: null })
+    const [row] = rows()
+    expect(row.title).toBe(
+      '重置後重新加回：已依你允許的便利功能「Claude hook：回合偵測、Navide Guard 與喚醒」，再次寫入 /Users/me/.claude/settings.json（為了讓 Navide 知道 Claude 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫）'
+    )
+    expect(row.note).toBe('它所在的資料夾被刪除或重新建立，這算是重置，不是你移除它。要停用，請在總覽頁關閉這個功能。')
+    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
+  it('tells a workspace left alone for safety in its own words', () => {
+    useAnnouncements().noteConvenience({
+      features: [feature()],
+      notices: [entry({ action: 'refused-unsafe', target: '/repo/.cursor/mcp.json' })],
+      upgrade: null,
+    })
+    const [row] = rows()
+    expect(row.title).toBe(
+      '/repo/.cursor/mcp.json 所在的 .cursor 指向專案資料夾外，為了安全，Navide 沒有在這裡設定便利功能「Claude hook：回合偵測、Navide Guard 與喚醒」。要使用，請把 .cursor 改成專案內的一般資料夾'
+    )
+    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
   it('offers re-allow on a removal only while the removal keeps the feature off', () => {
     const removed = entry({ id: 9, action: 'removed' })
     useAnnouncements().noteConvenience({ features: [feature({ state: 'off', reason: 'removed' })], notices: [removed], upgrade: null })

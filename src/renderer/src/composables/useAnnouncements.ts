@@ -538,6 +538,10 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         title = t('convenience.notice.wrote', { feature, target: entry.target, purpose: convenienceText(entry.feature, 'purpose') })
         if (entry.action === 'repair') note = t('convenience.notice.repair-note')
         break
+      case 'reset':
+        title = t('convenience.notice.reset', { feature, target: entry.target, purpose: convenienceText(entry.feature, 'purpose') })
+        note = t('convenience.notice.reset-note')
+        break
       case 'removed': {
         title = t('convenience.notice.removed', { feature, target: entry.target })
         const current = state.features.find((f) => f.id === entry.feature)
@@ -580,6 +584,7 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         }
         break
       }
+      // 'refused-unsafe' among them: a workspace left alone for safety.
       default:
         title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })
     }

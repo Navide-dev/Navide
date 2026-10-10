@@ -11919,8 +11919,11 @@ def _convenience_source(session: "Session") -> str:
     """Who moved a switch, for the audit log: a main window (it runs the UI
     action bus, where the overview lives) or some other client holding the
     backend token — a script, or an agent that read the token file. Pane
-    agents have no MCP tool for convenience.*, so this is how one would show."""
-    return "settings" if getattr(session, "ui_bus_ready", False) else "ws-client"
+    agents have no MCP tool for convenience.*, so this is how one would show.
+    ui.invoke.ready is the client's own word, so the window proof checked at
+    connect is what makes it "settings"."""
+    window = getattr(session, "navide_window", False) and getattr(session, "ui_bus_ready", False)
+    return "settings" if window else "ws-client"
 
 
 @handler("convenience.list")

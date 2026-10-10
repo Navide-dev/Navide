@@ -148,8 +148,8 @@ def test_one_hook_the_user_deleted_stays_out_while_the_others_keep_working(gate,
 def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent) -> None:
     """R6/C3: deleting the whole config folder (resetting the CLI) took the
     settings file with it, not just Navide's entry. That is not the user
-    removing Navide's hooks: the feature stays allowed and the next write is
-    announced as a first one, like a fresh install."""
+    removing Navide's hooks: the feature stays allowed and the hooks are
+    written again, announced as a re-add after a reset."""
     import shutil
 
     port = str(homes["port"])
@@ -161,10 +161,47 @@ def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent
     out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
 
     feature_id = convenience_wiring.HOOK_FEATURES[agent]
-    assert out["convenience"] == "first"
+    assert out["convenience"] == "reset"
     assert gate.state(feature_id) == ("allowed", "default")
     assert claude_hooks.hooks_present(_target(agent))
-    assert [e["action"] for e in gate.history(feature_id)] == ["first", "first"]
+    assert [(e["action"], e["notify"]) for e in gate.history(feature_id)] == [("reset", True), ("first", True)]
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_config_folder_gone_altogether_is_a_reset(gate, homes, agent) -> None:
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    folder = _target(agent).parent
+    shutil.rmtree(folder)
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    if not folder.exists():
+        # This installer waits for the CLI to set its folder up again; the
+        # reset is still what the next write announces.
+        assert out["convenience"] == "unchanged"
+        folder.mkdir()
+        out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    assert out["convenience"] == "reset"
+    assert gate.state(convenience_wiring.HOOK_FEATURES[agent]) == ("allowed", "default")
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_settings_file_navide_created_and_the_user_deleted_is_a_removal(gate, homes, agent) -> None:
+    """Item 7: with the config folder still there, deleting the settings
+    file Navide created is how the user removes Navide's hooks."""
+    port = str(homes["port"])
+    assert convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)["convenience"] == "first"
+    _target(agent).unlink()
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    assert out["convenience"] == "removed"
+    assert gate.state(feature_id) == ("off", "removed")
+    assert not _target(agent).exists()
 
 
 def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_removal(gate, homes) -> None:
@@ -182,7 +219,7 @@ def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_
     homes["copilot"].mkdir()
     back = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
 
-    assert (gone["convenience"], back["convenience"]) == ("unchanged", "first")
+    assert (gone["convenience"], back["convenience"]) == ("unchanged", "reset")
     assert gate.state("copilot.hooks") == ("allowed", "default")
     assert _target("copilot").is_file()
 
@@ -336,8 +373,8 @@ async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate,
         pass
 
     monkeypatch.setattr(app, "broadcast", broadcast)
-    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True)
-    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False)
+    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True, navide_window=True)
+    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False, navide_window=False)
 
     await ws_handlers.convenience_set(window, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
     await ws_handlers.convenience_set(other, "2", "convenience.set", {"id": "cursor.project-mcp", "allowed": True})
@@ -345,6 +382,31 @@ async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate,
     assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [
         ("allowed", "ws-client"), ("off", "settings"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_announcing_the_ui_bus_does_not_make_a_client_settings(gate, homes, monkeypatch) -> None:
+    """A10: any token holder can send ui.invoke.ready. Only the window proof
+    Electron main gives its windows at connect makes a switch "settings"."""
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, ws_handlers
+
+    monkeypatch.setattr(app, "convenience_gate", gate)
+
+    async def send_json(msg: dict) -> None:
+        pass
+
+    async def broadcast(event: dict, **_: object) -> None:
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    agent = SimpleNamespace(send_json=send_json, ui_bus_ready=False, ui_focused_at=0, navide_window=False)
+    await ws_handlers.ui_invoke_ready(agent, "0", "ui.invoke.ready", {"focused": True})
+
+    await ws_handlers.convenience_set(agent, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
+
+    assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [("off", "ws-client")]
 
 
 # ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────
@@ -391,17 +453,160 @@ def test_an_entry_adopted_after_the_upgrade_notice_was_decided_is_announced(gate
 
 
 def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -> None:
+    """RM-N1: the removal is that workspace's. It is never written back
+    there, and every other workspace keeps Navide's tools."""
     from agent_team_backend.mcp_server import wiring
 
     repo = _cursor_repo(tmp_path)
+    other = _cursor_repo(tmp_path / "other")
     convenience_wiring.ensure_project_config_gated("cursor", repo)
     path = wiring.project_config_path("cursor", repo)
     path.write_text('{"mcpServers": {"mine": {"url": "x"}}}\n', encoding="utf-8")
 
     assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
 
     assert path.read_text(encoding="utf-8") == '{"mcpServers": {"mine": {"url": "x"}}}\n'
-    assert gate.state("cursor.project-mcp") == ("off", "removed")
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert [(e["action"], e["target"]) for e in gate.history() if e["action"].startswith("removed")] == [
+        ("removed-entry", str(path)),
+    ]
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+
+@pytest.mark.parametrize("content", ["", "  \n"])
+def test_an_emptied_cursor_mcp_file_is_not_a_removal(gate, tmp_path, content) -> None:
+    """An editor or Cursor itself truncated mid-write: an empty file says
+    nothing about the user removing Navide's entry, so it is repaired."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    path = wiring.project_config_path("cursor", repo)
+    path.write_text(content, encoding="utf-8")
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+
+    assert wiring.project_config_has_entry("cursor", path)
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+
+
+@pytest.mark.parametrize("how", ["git-clean", "reclone", "worktree-recreate"])
+def test_a_reset_workspace_gets_cursor_mcp_back_and_turns_nothing_off(gate, tmp_path, how) -> None:
+    """RM-N1: `git clean -fdx`, a fresh clone or a re-created worktree takes
+    the git-excluded .cursor folder away with Navide's config. That is the
+    workspace reset, not the user's removal: the config is written again and
+    the feature stays allowed in every workspace."""
+    import shutil
+
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    if how == "git-clean":
+        shutil.rmtree(repo / ".cursor")
+    else:
+        shutil.rmtree(repo)
+        (repo / ".git" / "info").mkdir(parents=True)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    path = wiring.project_config_path("cursor", repo)
+    assert wiring.project_config_has_entry("cursor", path)
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+    assert [(e["action"], e["notify"]) for e in gate.history() if e["target"] == str(path)] == [
+        ("reset", True), ("first", True),
+    ]
+
+
+def test_a_deleted_cursor_mcp_file_is_refused_in_that_workspace_only(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    wiring.project_config_path("cursor", repo).unlink()  # .cursor stays
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
+
+    assert not wiring.project_config_path("cursor", repo).exists()
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+
+
+def test_a_cursor_folder_relinked_outside_the_workspace_is_neither_written_nor_a_removal(
+    gate, tmp_path
+) -> None:
+    """OF-N1: after Navide wrote it, .cursor became a link out of the
+    workspace. Nothing is written there, and that is not the user removing
+    Navide's entry either: the feature stays allowed."""
+    import shutil
+
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "mcp.json").write_text('{"mcpServers": {}}', encoding="utf-8")
+    shutil.rmtree(repo / ".cursor")
+    (repo / ".cursor").symlink_to(elsewhere)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+
+    assert (elsewhere / "mcp.json").read_text(encoding="utf-8") == '{"mcpServers": {}}'
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert not wiring.project_config_inside(wiring.project_config_path("cursor", repo), repo)
+
+
+def _cursor_linked_outside(tmp_path: Path) -> tuple[Path, Path]:
+    repo = _cursor_repo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "skills").mkdir(parents=True)
+    (repo / ".cursor").symlink_to(elsewhere)
+    return repo, elsewhere
+
+
+def _unsafe_rows(gate, feature_id: str) -> list[tuple[str, bool]]:
+    return [(e["target"], e["notify"]) for e in gate.history(feature_id) if e["action"] == "refused-unsafe"]
+
+
+def test_a_cursor_mcp_refused_for_safety_is_announced_once_per_workspace(gate, tmp_path) -> None:
+    """Not wiring a workspace whose .cursor leads outside it costs the pane
+    Navide's tools: the user is told, once for that workspace."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is False
+
+    assert _unsafe_rows(gate, "cursor.project-mcp") == [(str(wiring.project_config_path("cursor", repo)), True)]
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+
+
+def test_cursor_skills_refused_for_safety_are_announced_once_per_workspace(gate, tmp_path, monkeypatch) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo, _ = _cursor_linked_outside(tmp_path)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert _unsafe_rows(gate, "cursor.project-skills") == [(str(repo / ".cursor" / "skills"), True)]
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
+def test_a_cursor_feature_that_is_off_says_nothing_about_an_unsafe_workspace(gate, homes, tmp_path) -> None:
+    repo, _ = _cursor_linked_outside(tmp_path)
+    convenience_wiring.set_feature("cursor.project-mcp", False, port_file=str(homes["port"]))
+
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+
+    assert _unsafe_rows(gate, "cursor.project-mcp") == []
 
 
 def test_turning_cursor_mcp_off_takes_back_only_navides_entry(gate, homes, tmp_path) -> None:
@@ -561,8 +766,10 @@ def test_a_planted_skill_link_the_user_deleted_is_refused_in_that_workspace_only
     assert not (skills / "alpha").is_symlink()
     assert (skills / "beta").is_symlink()
     assert gate.state("cursor.project-skills") == ("allowed", "default")
-    removed = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "removed"]
-    assert removed == [(str(skills / "alpha"), True)]
+    # One link of several, refused in one workspace: the feature is not off,
+    # so the row must not read "turned off".
+    removed = [(e["action"], e["target"], e["notify"]) for e in gate.history() if e["action"].startswith("removed")]
+    assert removed == [("removed-entry", str(skills / "alpha"), True)]
     assert not [e for e in gate.history() if e["action"] == "repair"]
 
 
@@ -595,6 +802,48 @@ def test_a_cleared_off_then_on_skills_feature_links_a_refused_name_again(
     convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
 
     assert (skills / "alpha").is_symlink() and (skills / "beta").is_symlink()
+
+
+@pytest.mark.parametrize("how", ["git-clean", "reclone"])
+def test_a_reset_workspace_gets_cursor_skills_back_and_turns_nothing_off(gate, tmp_path, monkeypatch, how) -> None:
+    """RM-N1 for skills: the git-excluded .cursor folder gone with the
+    workspace reset is a fresh start there, never a removal for everyone."""
+    import shutil
+
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    if how == "git-clean":
+        shutil.rmtree(repo / ".cursor")
+    else:
+        shutil.rmtree(repo)
+        (repo / ".git" / "info").mkdir(parents=True)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other)) is True
+
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    assert (repo / ".cursor" / "skills" / "alpha").is_symlink()
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+
+
+def test_a_deleted_skills_folder_is_refused_in_that_workspace_only(gate, tmp_path, monkeypatch) -> None:
+    import shutil
+
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    shutil.rmtree(repo / ".cursor" / "skills")  # .cursor stays
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other)) is True
+
+    assert not (repo / ".cursor" / "skills").exists()
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    assert [e["action"] for e in gate.history() if e["action"].startswith("removed")] == ["removed-entry"]
 
 
 def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, monkeypatch) -> None:
@@ -708,6 +957,27 @@ def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_pa
 
     assert (real / "config.toml").read_text(encoding="utf-8").rstrip("\n") == before.rstrip("\n")
     assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 0
+
+
+def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import app
+    from agent_team_backend.convenience import CleanupIncomplete
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    real.chmod(0o555)  # the rewrite cannot land
+    try:
+        with pytest.raises(CleanupIncomplete):
+            convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    finally:
+        real.chmod(0o755)
+
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
+    assert gate.state("codex.hook-trust")[0] == "allowed"
+    # Once the file is writable again, off takes the rows back.
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 1
 
 
 def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -> None:

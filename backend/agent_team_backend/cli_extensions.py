@@ -27,6 +27,7 @@ these same directories, so one machine has one set per CLI.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -232,13 +233,17 @@ _CHANGE_CLIS: dict[str, tuple[str, ...]] = {
 def navide_changes(features: list[dict[str, Any]]) -> list[CliExtension]:
     """What Navide wrote into a CLI's world for a convenience feature, one row
     per recorded target, so the CLI Extensions page shows them with owner
-    navide. ``features`` is ``ConvenienceGate.listing()["features"]``."""
+    navide. ``features`` is ``ConvenienceGate.listing()["features"]``.
+
+    The id names the target by a hash of its path: the agent's copy of this
+    inventory (``public_dict``) carries no paths, and a Cursor target is a
+    path in some other workspace."""
     out: list[CliExtension] = []
     for feature in features:
         for cli in _CHANGE_CLIS.get(feature["id"], ()):
             for target in feature["targets"]:
                 out.append(CliExtension(
-                    cli=cli, id=f"navide-change:{feature['id']}:{target['path']}",
+                    cli=cli, id=f"navide-change:{feature['id']}:{hashlib.sha256(target['path'].encode('utf-8')).hexdigest()[:16]}",
                     name=feature["id"], kind="navide-change", type_label="Navide change",
                     enabled=feature["state"] == "allowed", owner="navide", evidence="recorded",
                     path=target["path"],

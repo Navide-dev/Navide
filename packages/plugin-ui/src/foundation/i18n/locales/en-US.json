@@ -3,6 +3,8 @@
     "notice": {
       "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
       "repair-note": "This put back or repaired what Navide wrote earlier.",
+      "reset": "Re-added after a reset: wrote {target} again under the convenience feature \"{feature}\" you allowed, so that {purpose}",
+      "reset-note": "Its folder was deleted or created again, which is a reset, not you removing it. To stop this, turn the feature off on the overview.",
       "removed": "You removed {target}, so the convenience feature \"{feature}\" is now off; Navide will not add it back",
       "prompt": "{agent}'s sign-in was changed outside Navide",
       "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
@@ -16,7 +18,8 @@
         "allowed": "The convenience feature \"{feature}\" was allowed",
         "cleanup": "Removed {target} for the convenience feature \"{feature}\"",
         "removed-entry": "You removed {target}. Navide will not add that entry back; the rest of the convenience feature \"{feature}\" keeps working. Turn the feature off and on again to restore it",
-        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again"
+        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again",
+        "refused-unsafe": "The .cursor folder holding {target} leads outside the project folder, so for safety Navide did not set up the convenience feature \"{feature}\" here. To use it, make .cursor a plain folder inside the project"
       },
       "button": {
         "overview": "Open overview",
@@ -30,13 +33,15 @@
     "action": {
       "first": "First write",
       "repair": "Put back or repaired",
+      "reset": "Re-added after a reset",
       "removed": "Removed by you",
       "off": "Turned off",
       "allowed": "Allowed",
       "cleanup": "Cleaned up",
       "removed-entry": "Entry removed by you",
       "cleanup-failed": "Could not clean up",
-      "prompt": "Sign-in changed outside Navide"
+      "prompt": "Sign-in changed outside Navide",
+      "refused-unsafe": "Not set up, for safety"
     },
     "overview": {
       "title": "Convenience features and what Navide changes on your computer",

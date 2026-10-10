@@ -221,3 +221,42 @@ def test_a_client_holding_the_token_is_let_through(client) -> None:
         while reply.get("id") != "p1":
             reply = ws.receive_json()
         assert reply.get("ok") is True
+
+
+# ---- which client is a Navide window -------------------------------------------
+
+
+def _window_proof(host_token: str) -> str:
+    """What Electron main appends to the URL it hands its windows (and never
+    to its own broker socket): src/main/backend.ts windowProof."""
+    import hashlib
+    import hmac
+
+    return hmac.new(host_token.encode(), b"navide-window", hashlib.sha256).hexdigest()
+
+
+@pytest.mark.parametrize(("proof", "expected"), [("good", True), ("bad", False), ("", False)])
+def test_only_a_client_given_the_window_proof_counts_as_a_navide_window(client, monkeypatch, proof, expected) -> None:
+    """A10: the token file is readable by any pane process, so holding it says
+    nothing about being a window. The proof is derived from the host token,
+    which only Electron main and this process hold."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    value = {"good": _window_proof("host-secret"), "bad": _window_proof("other"), "": ""}[proof]
+    token = ws_auth.issue_token()
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}&w={value}") as ws:
+        ws.send_json({"id": "p1", "type": "ping", "payload": {}})
+        while ws.receive_json().get("id") != "p1":
+            pass
+        (session,) = set(app_module._SESSIONS) - before
+        assert session.navide_window is expected
+
+
+def test_the_window_proof_matches_the_vector_main_computes() -> None:
+    """src/main/backend.test.ts pins the same value for windowProof."""
+    assert _window_proof("host-secret") == "e99d8de99a8a1c5a64c637332e281c570490d9abe72f30b8520aa5271a302874"
+
+
+def test_without_a_host_token_no_client_counts_as_a_navide_window(monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "")
+    assert app_module.navide_window_proof_matches(_window_proof("")) is False

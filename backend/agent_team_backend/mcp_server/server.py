@@ -6702,8 +6702,9 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
 
     Items of kind `navide-change` are what Navide itself wrote into a CLI's
     world for a convenience feature (name = the feature id, enabled = the
-    feature is allowed); their id ends with the file Navide changed, so the
-    user can be told exactly what was touched.
+    feature is allowed); their id ends with a hash of the file Navide changed
+    — the file itself is named on Settings → CLI Extensions, where the user
+    can see exactly what was touched.
 
     Names and metadata only: no paths and no hook command lines, which can
     name scripts, hosts and tokens. A global inventory: it does not vary by

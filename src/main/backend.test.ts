@@ -21,6 +21,7 @@ import {
   pathEnvKey,
   stopBackendProcess,
   waitForHealth,
+  windowProof,
 } from './backend'
 
 // The platform to restore after a test that switched it: whatever this file
@@ -345,5 +346,11 @@ describe('backend spawn options', () => {
   it('never splits or joins PATH on a literal colon', () => {
     const source = readFileSync(resolve(__dirname, 'backend.ts'), 'utf8')
     expect(source).not.toMatch(/split\(':'\)|join\(':'\)/)
+  })
+})
+
+describe('windowProof', () => {
+  it('matches the vector the backend checks (test_ws_auth window proof)', () => {
+    expect(windowProof('host-secret')).toBe('e99d8de99a8a1c5a64c637332e281c570490d9abe72f30b8520aa5271a302874')
   })
 })

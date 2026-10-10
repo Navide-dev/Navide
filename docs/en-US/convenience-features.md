@@ -36,13 +36,27 @@ which runs, in order:
    feature stays allowed so the other hooks keep working. Turning the
    feature off and on again restores it. Copilot's hook file is Navide's
    alone, so deleting it is the whole removal.
-   A deleted **file** is not a removal when it is the user's own file Navide
-   merges into (Claude's and Qwen's settings.json): resetting the CLI's
-   config folder took Navide's entry along with everything else, so the
-   target is forgotten, the feature stays allowed and the next write is
-   announced as `first`, like a fresh install. For Copilot, whose hook file
-   is Navide's alone, only the whole `~/.copilot` folder gone counts as a
-   reset; the folder still there without the hook file is a removal.
+   Only a **folder** reset is not a removal: the CLI's config folder
+   (`~/.claude`, `~/.qwen`, `~/.copilot`) or the workspace's `.cursor`
+   gone, or deleted and created again (a different device, inode or birth
+   time than the last write saw), took Navide's entry along with everything
+   else. The feature stays allowed and the write that puts the entry back is
+   announced as `reset` ("re-added after a reset"). A file Navide wrote
+   deleted from a folder that is still the same one — the settings.json
+   Navide created, Copilot's hook file — is the user's removal. On a file
+   system without birth times (Linux) a folder created again at once can get
+   the old inode back; that reads as a removal, never as a silent re-add.
+   The Cursor features have a target in every workspace, so a removal there
+   is that workspace's alone: the target is refused (logged and announced
+   once as `removed-entry`, never written there again) and the feature stays
+   allowed everywhere else. The workspace's whole `.cursor` folder gone
+   (`git clean -fdx`, a fresh clone, a re-created worktree) is a reset of
+   that workspace, not a removal.
+   A workspace whose `.cursor` (or the config or skills folder in it) leads
+   outside the workspace through a link is never written, cleaned or gated.
+   Its panes go without the feature, so the user is told: logged and
+   announced as `refused-unsafe`, once per workspace and feature, while the
+   feature is allowed.
 3. **Backup.** A file target is copied into
    `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
    (deduplicated by content). A backup is the whole file, **including any
@@ -53,7 +67,8 @@ which runs, in order:
    been rotated away.
 4. **Write.** `write()` performs the existing write unchanged.
 5. **Notify.** Only when the target's bytes changed: the first write to a
-   target is announced as `first`, a later change as `repair`.
+   target is announced as `first`, a later change as `repair`, and the one
+   that puts the entry back after a folder reset as `reset`.
 6. **Audit log.** Every write, removal detection, off and re-allow is appended.
    A row a caller triggered names its `source`.
 
@@ -88,11 +103,14 @@ the panes they serve cannot run without them.
 - `convenience_features(id PRIMARY KEY, state TEXT, reason TEXT, updated_at INTEGER)`
   — `state` is `allowed` or `off`; `reason` is `default`, `user` or `removed`.
   A missing row means `allowed`/`default`.
-- `convenience_targets(feature TEXT, target TEXT, written_at INTEGER, PRIMARY KEY(feature, target))`
-  — the ledger: every target Navide wrote for a feature.
+- `convenience_targets(feature TEXT, target TEXT, written_at INTEGER, present INTEGER, folder TEXT, PRIMARY KEY(feature, target))`
+  — the ledger: every target Navide wrote for a feature. `folder` names the
+  reset folder the last write saw (`<device>:<inode>:<birth time>`), or is
+  `reset` while a reset target waits for its next write.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
-  — append-only. `action` is one of `first`, `repair`, `removed`, `off`,
-  `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`.
+  — append-only. `action` is one of `first`, `repair`, `reset`, `removed`, `off`,
+  `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`,
+  `refused-unsafe`.
 - `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
   — the entries of a target with several: `state` is `written` (Navide's
   last write left it there) or `removed` (the user deleted it; never written
@@ -116,7 +134,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
+  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object,
@@ -131,7 +149,9 @@ interface LogEntry {
                              //     no slotId, nothing to switch back to
   backup: string             // '' when none
   notify: boolean
-  source: string             // who triggered it: 'settings' (a Navide main window),
+  source: string             // who triggered it: 'settings' (a Navide main window,
+                             //     proven by the window proof Electron main puts in
+                             //     its windows' /ws URL — never the client's own word),
                              // 'ws-client' (any other client with the backend token),
                              // '' for Navide's own writes
 }
@@ -200,5 +220,7 @@ history.
 
 Notices read 「已依你允許的便利功能「X」，寫入 Y（為了 Z）」 and link to the
 overview. A removal reads 「你移除了 Y，已關閉便利功能「X」；不會再自動加回」 with a
-re-allow button. Terms follow `glossary.md`: never a bare 擴充/外掛; a CLI's own
+re-allow button. A re-add after a folder reset reads 「重置後重新加回：已依你允許的便利功能「X」，再次寫入 Y（為了 Z）」
+and says the folder was deleted or created again. A workspace left alone
+for safety reads 「Y 所在的 .cursor 指向專案資料夾外，為了安全，Navide 沒有在這裡設定便利功能「X」」. Terms follow `glossary.md`: never a bare 擴充/外掛; a CLI's own
 hooks keep the vendor's name ("Claude hook").
