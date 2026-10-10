@@ -185,6 +185,17 @@ async def reject_foreign_host(request: Request, call_next: Any) -> Response:
     return await call_next(request)
 
 database = Database(app_data_dir() / DB_FILENAME)
+# Every write outside Navide's own data goes through this gate
+# (docs/en-US/convenience-features.md).
+from . import convenience_wiring  # noqa: E402
+from .convenience import ConvenienceGate  # noqa: E402
+
+convenience_gate = ConvenienceGate(
+    database,
+    backup_root=app_data_dir() / "convenience-backups",
+    notify=convenience_wiring.broadcast_change,
+)
+convenience_wiring.install(convenience_gate)
 workspace_databases = WorkspaceDatabases()
 project_store = ProjectStore(databases=workspace_databases)
 spawn_history_store = SpawnHistoryStore(databases=workspace_databases)
@@ -2269,15 +2280,11 @@ async def _start_log_watcher() -> None:
     # backend for reliable "agent active / turn complete / parked on a prompt"
     # signals that buffer scanning cannot give. Each installer no-ops when its
     # CLI's config root is absent, and failure is non-fatal — the orchestrator
-    # falls back to log-tail + sentinel detection.
-    for _key, _spec in _CLI_VENDORS.items():
-        if _spec.install_hooks is None:
-            continue
-        try:
-            result = _spec.install_hooks(str(backend_port_file()))
-            log.info("%s hooks install: %s", _key, result)
-        except Exception as err:  # noqa: BLE001
-            log.warning("%s hooks install failed: %s", _key, err)
+    # falls back to log-tail + sentinel detection. Each is the convenience
+    # feature "<cli>.hooks": announced when it changes a file, skipped when the
+    # user turned it off or deleted the hooks by hand.
+    convenience_wiring.remember_loop(asyncio.get_running_loop())
+    convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.
     # The Host-bound Manifest v2 activation catalog is validated by the wiring

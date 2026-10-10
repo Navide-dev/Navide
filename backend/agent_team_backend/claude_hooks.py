@@ -312,7 +312,9 @@ def _refresh_claude_version(port_file: str) -> None:
         log.warning("could not record the Claude Code version: %s", err)
         return
     log.info("Claude Code version %s: reinstalling hooks", version)
-    install_hooks(port_file)
+    from .convenience_wiring import install_hooks_gated
+
+    install_hooks_gated("claude", install_hooks, port_file)
 
 
 def _build_rewake_command(port_file: str) -> str:
@@ -537,6 +539,29 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
             target=_refresh_claude_version, args=(port_file,), name="claude-version-probe", daemon=True
         ).start()
     return {"installed": True, "path": str(path), "events": added, "port_file": port_file}
+
+
+def hooks_present(settings_file: Path | None = None) -> bool:
+    """Whether the settings file still carries any hook Navide wrote.
+
+    Raises when the file exists but cannot be read as a JSON object: an
+    unreadable file says nothing about whether the user removed our hooks.
+    """
+    path = settings_file or settings_path()
+    if not path.is_file():
+        return False
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    hooks_section = data.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return False
+    return any(
+        _hook_is_ours(hook)
+        for entries in hooks_section.values() if isinstance(entries, list)
+        for entry in entries if isinstance(entry, dict)
+        for hook in (entry.get("hooks") if isinstance(entry.get("hooks"), list) else [])
+    )
 
 
 def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:

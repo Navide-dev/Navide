@@ -4073,8 +4073,12 @@ async def _reinstall_claude_hooks() -> None:
     spec = CLI_VENDORS.get("claude")
     if spec is None or spec.install_hooks is None:
         return
+    from . import convenience_wiring
+
     try:
-        result = await asyncio.to_thread(spec.install_hooks, str(backend_port_file()))
+        result = await asyncio.to_thread(
+            convenience_wiring.install_hooks_gated, "claude", spec.install_hooks, str(backend_port_file())
+        )
         app.log.info("claude hooks reinstalled after a push-channel switch: %s", result)
     except Exception as err:  # noqa: BLE001
         app.log.warning("claude hooks reinstall failed: %s", err)
@@ -11786,6 +11790,66 @@ async def cli_extensions_list(session: "Session", msg_id: str, msg_type: str, pa
 
     inventory = await asyncio.to_thread(cli_extensions.scan)
     await session.send_json(make_response(msg_id, msg_type, inventory.as_dict()))
+
+
+# ── Convenience features (convenience.*) ───────────────────────────────────
+# What Navide changes outside its own data; docs/en-US/convenience-features.md.
+
+
+@handler("convenience.list")
+async def convenience_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    listing = await asyncio.to_thread(app.convenience_gate.listing)
+    await session.send_json(make_response(msg_id, msg_type, listing))
+
+
+@handler("convenience.history")
+async def convenience_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    feature_id = str(payload.get("feature") or "") or None
+    try:
+        limit = int(payload.get("limit") or 200)
+        entries = await asyncio.to_thread(app.convenience_gate.history, feature_id, limit)
+    except (KeyError, ValueError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, {"entries": entries}))
+
+
+@handler("convenience.set")
+async def convenience_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app, convenience_wiring
+    from .applog import backend_port_file
+
+    feature_id = str(payload.get("id") or "")
+    allowed = payload.get("allowed")
+    if not isinstance(allowed, bool):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "allowed must be a boolean"))
+        return
+    try:
+        await asyncio.to_thread(
+            convenience_wiring.set_feature, feature_id, allowed, port_file=str(backend_port_file())
+        )
+    except KeyError:
+        await session.send_json(make_error(msg_id, msg_type, "UNKNOWN_FEATURE", feature_id))
+        return
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "REQUIRED_FEATURE", str(err)))
+        return
+    feature = await asyncio.to_thread(app.convenience_gate.listing_feature, feature_id)
+    await session.send_json(make_response(msg_id, msg_type, {"feature": feature}))
+    await app.broadcast(make_event("convenience.changed", {"feature": feature_id}))
+
+
+@handler("convenience.upgrade_ack")
+async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    await asyncio.to_thread(app.convenience_gate.acknowledge_upgrade)
+    await session.send_json(make_response(msg_id, msg_type, {}))
+    await app.broadcast(make_event("convenience.changed", {}))
 
 
 # ── Voice input (voice.*) ───────────────────────────────────────────────────
