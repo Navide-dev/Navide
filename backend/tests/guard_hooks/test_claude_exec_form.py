@@ -135,7 +135,7 @@ def test_a_changed_probe_reinstalls_and_an_unchanged_one_does_not(monkeypatch) -
 
     monkeypatch.setattr(onboarding_deps, "_get_db", lambda: FakeDb())
     installs: list[str] = []
-    monkeypatch.setattr(claude_hooks, "install_hooks", lambda port_file: installs.append(port_file))
+    monkeypatch.setattr(claude_hooks, "install_hooks", lambda port_file, **_kw: installs.append(port_file))
     monkeypatch.setattr(claude_hooks, "_probe_claude_version", lambda: (2, 1, 287))
     claude_hooks._refresh_claude_version("p")
     assert claude_hooks._known_claude_version() == (2, 1, 287) and installs == ["p"]
