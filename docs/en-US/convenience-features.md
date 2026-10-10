@@ -160,14 +160,26 @@ interface LogEntry {
                              //     no slotId, nothing to switch back to
   backup: string             // '' when none
   notify: boolean
-  source: string             // who triggered it: 'settings' (a Navide main window,
-                             //     proven by the window proof Electron main puts in
-                             //     its windows' /ws URL — never the client's own word),
+  source: string             // who triggered it: 'settings' (a Navide main window
+                             //     that also runs the UI action bus, proven per
+                             //     connection — never the client's own word),
                              // 'ws-client' (any other client with the backend token),
                              // '' for Navide's own writes
 }
 interface UpgradeNotice { features: string[] } // ids in use when the upgrade ran
 ```
+
+How a connection proves it is a Navide main window: the backend opens every
+/ws connection with `ws.welcome` `{ windowChallenge }`, a random nonce for that
+connection alone. The window asks Electron main (`backend:proveWindow`, which
+answers main windows only) for HMAC-SHA256(host token,
+`"navide-window/v2\0" + nonce`) and sends it back as `window.prove { proof }`.
+A right proof is accepted once per connection; a wrong one is refused. A
+reconnect gets a fresh nonce and proves again, and the plugin broker socket
+never proves. The host token is handed to the backend on stdin (second line,
+after the confirm key) and lives only in main's and the backend's memory —
+never in a file, the spawn environment or a URL. Known limit: a same-user
+process that can read main's or the backend's memory can still get it.
 
 `convenience.history` `{ feature?: string, limit?: number }` → `{ entries: LogEntry[] }`
 
