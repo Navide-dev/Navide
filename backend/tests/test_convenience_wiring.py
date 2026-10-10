@@ -219,6 +219,38 @@ def test_a_config_folder_behind_a_dangling_link_is_unknown_not_a_reset(gate, tmp
     assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
 
 
+def test_a_settings_link_that_leads_nowhere_is_unknown_not_a_removal(gate, tmp_path, monkeypatch) -> None:
+    """R3-L2: settings.json is a dotfiles link whose target is briefly gone.
+    That is not the user removing Navide's hooks: the feature stays on,
+    nothing is written, and turning it off meanwhile cannot claim the
+    hooks were taken back."""
+    dotfiles = tmp_path / "dotfiles"
+    dotfiles.mkdir()
+    (dotfiles / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
+    folder = tmp_path / "claude"
+    folder.mkdir()
+    (folder / "settings.json").symlink_to(dotfiles / "settings.json")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == "first"
+    content = (dotfiles / "settings.json").read_text(encoding="utf-8")
+    (dotfiles / "settings.json").unlink()
+
+    out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+
+    assert out["convenience"] == "unknown"
+    assert not (dotfiles / "settings.json").exists()
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    with pytest.raises(convenience.CleanupIncomplete):
+        convenience_wiring.set_feature("claude.hooks", False, port_file=port)
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    (dotfiles / "settings.json").write_text(content, encoding="utf-8")
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
+        "unchanged"
+    )
+    assert claude_hooks.hooks_present(folder / "settings.json")
+
+
 @pytest.mark.parametrize("agent", ["claude", "qwen"])
 def test_a_settings_file_navide_created_and_the_user_deleted_is_a_removal(gate, homes, agent) -> None:
     """Item 7: with the config folder still there, deleting the settings

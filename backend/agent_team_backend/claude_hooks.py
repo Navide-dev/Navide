@@ -566,9 +566,12 @@ def hooks_present(settings_file: Path | None = None) -> bool:
 
     Raises when the file exists but cannot be read as a JSON object: an
     unreadable file says nothing about whether the user removed our hooks.
+    So does a link that leads nowhere (a dotfiles checkout mid-switch).
     """
     path = settings_file or settings_path()
     if not path.is_file():
+        if path.is_symlink():
+            raise FileNotFoundError(f"{path} is a link that leads nowhere")
         return False
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
