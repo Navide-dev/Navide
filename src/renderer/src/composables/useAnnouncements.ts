@@ -59,8 +59,8 @@ export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-overview' }
   | { kind: 'convenience-reallow'; featureId: string }
   | { kind: 'convenience-keep-login'; rowId: string }
-  /** Back to the account Navide would restore (`slotId` null = Default). */
-  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string | null; label: string }
+  /** Back to the account Navide would restore, named by the prompt's slotId. */
+  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string }
   | { kind: 'convenience-upgrade-ack' }
 
 export type AnnouncementActionSpec =
@@ -550,10 +550,14 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         }
         note = t('convenience.notice.prompt-note')
         // A prompt is answered once: reading the row is the answer "keep"
-        // (Navide already follows the live account).
+        // (Navide already follows the live account). Switching back needs the
+        // slot the prompt names; a missing one must never become a switch to
+        // Default, so then only "keep" is offered.
         if (!seen.has(id)) {
           actions.push({ kind: 'convenience-keep-login', rowId: id })
-          actions.push({ kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId ?? null, label })
+          if (typeof detail.slotId === 'string' && detail.slotId) {
+            actions.push({ kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId, label })
+          }
         }
         break
       }

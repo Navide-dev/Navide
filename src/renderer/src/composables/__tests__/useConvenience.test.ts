@@ -245,15 +245,21 @@ describe('convenience announcement rows', () => {
     expect(rows()[0].actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
-  it('still offers the prompt when its detail is not JSON', () => {
+  it.each([
+    ['not JSON', 'live account differs'],
+    ['JSON without a slotId', JSON.stringify({ agentKey: 'codex', liveEmail: 'me@home.dev' })],
+    ['a null slotId', JSON.stringify({ agentKey: 'codex', slotId: null, slotLabel: 'Default' })],
+  ])('never offers a switch back when the detail is %s', (_, detail) => {
     useAnnouncements().noteConvenience({
       features: [],
-      notices: [entry({ id: 12, feature: 'credentials.auto-repair', action: 'prompt', target: 'codex', detail: 'live account differs' })],
+      notices: [entry({ id: 12, feature: 'credentials.auto-repair', action: 'prompt', target: 'codex', detail })],
       upgrade: null,
     })
-    const [row] = rows()
-    expect(row.highlights).toEqual([])
-    expect(row.actions?.[1]).toEqual({ kind: 'convenience-switch-back', rowId: 'convenience:12', agentKey: 'codex', slotId: null, label: '' })
+    // A missing slot must never turn into a switch to Default.
+    expect(rows()[0].actions).toEqual([
+      { kind: 'convenience-keep-login', rowId: 'convenience:12' },
+      { kind: 'convenience-overview' },
+    ])
   })
 
   it('lists the features in use on the one-time upgrade row', () => {
