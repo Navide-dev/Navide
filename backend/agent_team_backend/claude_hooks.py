@@ -32,6 +32,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -407,10 +408,24 @@ def _write_settings(path: Path, data: dict[str, Any]) -> None:
             log.info("backed up CLI settings → %s", backup)
         except OSError as err:
             log.warning("backup failed (%s); proceeding without backup", err)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # The file a symlink points at is the one rewritten (a dotfiles-managed
+    # settings.json stays a link), and its mode is kept: the temp file starts
+    # 0600 and takes the original's mode before it replaces it, so a file
+    # that may hold an API key is never left wider than the user made it.
+    target = path.resolve()
     try:
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, path)
+        mode: int | None = stat.S_IMODE(target.stat().st_mode)
+    except OSError:
+        mode = None
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    try:
+        tmp.unlink(missing_ok=True)  # a leftover keeps its own mode
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False))
+        if mode is not None:
+            os.chmod(tmp, mode)
+        os.replace(tmp, target)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
