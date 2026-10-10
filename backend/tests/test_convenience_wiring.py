@@ -310,6 +310,48 @@ def test_codex_hook_trust_rows_the_user_deleted_turn_the_feature_off(gate, tmp_p
     assert gate.state("codex.hook-trust") == ("off", "removed")
 
 
+def test_codex_hook_trust_a_hook_the_user_trusts_outside_navide_is_not_a_removal(gate, tmp_path) -> None:
+    manager, real = _codex(tmp_path)
+    key = (real / "config.toml").read_text(encoding="utf-8").split('[hooks.state."')[1].rsplit(":stop:", 1)[0]
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    # The user trusts another hook in plain `codex`; pane A was never seeded it.
+    with (real / "config.toml").open("a", encoding="utf-8") as f:
+        f.write(f'\n[hooks.state."{key}:pre_tool_use:0:0"]\ntrusted_hash = "sha256:bbbb"\n')
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 2
+
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+
+
+def test_codex_hook_trust_an_edited_hooks_json_behind_the_pane_symlink_is_not_a_removal(gate, tmp_path) -> None:
+    manager, real = _codex(tmp_path)
+    key = (real / "config.toml").read_text(encoding="utf-8").split('[hooks.state."')[1].rsplit(":stop:", 1)[0]
+    home_a = manager.prepare(PANE_A)
+    assert convenience_wiring.seed_hook_trust_gated(manager, home_a) == 1
+    # The user adds a hook and trusts it; pane A's hooks.json is a symlink, so
+    # it follows the edit while its config rows do not.
+    (real / "hooks.json").write_text('{"hooks": {"Stop": [1, 2]}}', encoding="utf-8")
+    with (real / "config.toml").open("a", encoding="utf-8") as f:
+        f.write(f'\n[hooks.state."{key}:stop:0:1"]\ntrusted_hash = "sha256:bbbb"\n')
+    assert (home_a / "hooks.json").is_symlink()
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 2
+
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+
+
+def test_codex_hook_trust_a_row_seeding_never_copies_is_not_a_removal(gate, tmp_path) -> None:
+    manager, real = _codex(tmp_path)
+    key = (real / "config.toml").read_text(encoding="utf-8").split('[hooks.state."')[1].rsplit(":stop:", 1)[0]
+    with (real / "config.toml").open("a", encoding="utf-8") as f:
+        f.write(f'\n[hooks.state."{key}:notification:0:0"]\nenabled = false\n')
+
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
+
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+
+
 def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_path, monkeypatch) -> None:
     from agent_team_backend import app
 
@@ -343,6 +385,52 @@ def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -
 
     assert manager.promote_stranded_auth() is False
     assert not (real / "auth.json").exists()
+
+
+def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tmp_path) -> None:
+    import os
+    import time
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare(PANE_A), manager.prepare(PANE_B)
+    (home_a / "auth.json").write_text('{"who": "old-account"}', encoding="utf-8")
+    (home_b / "auth.json").write_text('{"who": "new-account"}', encoding="utf-8")
+    os.utime(home_a / "auth.json", (time.time() - 100, time.time() - 100))
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert (home_a / "auth.json").read_text(encoding="utf-8") == '{"who": "old-account"}'
+    actions = [e["action"] for e in gate.history("codex.login-promote")]
+    assert actions == ["prompt", "first"]
+    prompt = gate.history("codex.login-promote")[0]
+    assert prompt["notify"] is True
+    assert json.loads(prompt["detail"]) == {"agentKey": "codex", "reason": "logout"}
+
+
+def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
 
 
 # ── Account auto-repair (D7) ─────────────────────────────────────────────────
