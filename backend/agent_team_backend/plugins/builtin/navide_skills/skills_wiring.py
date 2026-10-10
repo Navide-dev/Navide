@@ -275,6 +275,7 @@ def sync_project_dir(
             return False
         sources = _managed_sources(agent_key, store, native_root)
         planted = _read_manifest(target)
+        refused = _read_refused(target)
         if not sources and not planted and not target.is_dir():
             return False
         ours = not target.is_dir() or _manifest_created(target)
@@ -289,6 +290,8 @@ def sync_project_dir(
                 link.unlink(missing_ok=True)
             planted.discard(name)
         for name, source in wanted.items():
+            if name in refused:
+                continue  # the user deleted our link here once
             link = target / name
             if link.is_symlink():
                 if _resolve(link) == _resolve(source):
@@ -301,7 +304,7 @@ def sync_project_dir(
                 continue  # a real directory here is the user's skill
             link.symlink_to(source, target_is_directory=True)
             planted.add(name)
-        _write_manifest(target, planted, created=ours)
+        _write_manifest(target, planted, created=ours, refused=refused)
         if ours:
             _exclude_from_git(target)
         elif planted:
@@ -354,6 +357,31 @@ def project_dir_intact(target: Path) -> bool:
     return all((target / name).is_symlink() for name in _read_manifest(target))
 
 
+def refuse_missing_links(target: Path) -> list[str]:
+    """Record the planted links the user deleted by hand as refused.
+
+    A name in the manifest that is no longer a link means the user does not
+    want that skill in this workspace: it moves from the planted names to the
+    refused ones and is never linked here again, while every other skill
+    keeps working. Returns the names refused now.
+    """
+    planted = _read_manifest(target)
+    missing = sorted(name for name in planted if not (target / name).is_symlink())
+    if missing:
+        _write_manifest(
+            target, planted - set(missing), created=_manifest_created(target),
+            refused=_read_refused(target) | set(missing),
+        )
+    return missing
+
+
+def clear_refused(target: Path, *, root: Path | None = None) -> None:
+    """Forget the names refused in a workspace: re-allowing starts fresh."""
+    if not project_target_safe(target, root or target.parent) or not _read_refused(target):
+        return
+    _write_manifest(target, _read_manifest(target), created=_manifest_created(target))
+
+
 def remove_project_dir(target: Path, *, root: Path | None = None) -> int:
     """Take back the links Navide planted in a workspace skills directory.
 
@@ -392,6 +420,9 @@ MANIFEST_FILE = ".navide-links"
 #: Manifest line recording that the directory itself was Navide's, so turning
 #: the feature off may delete it once empty.
 _CREATED_LINE = "# Navide created this directory"
+#: Manifest lines naming a link the user deleted by hand: never linked again
+#: in this workspace until the feature is re-allowed.
+_REFUSED_PREFIX = "# refused: "
 
 
 def _read_manifest(target: Path) -> set[str]:
@@ -436,14 +467,26 @@ def _manifest_created(target: Path) -> bool:
     return _CREATED_LINE in lines
 
 
-def _write_manifest(target: Path, planted: set[str], *, created: bool = False) -> None:
+def _read_refused(target: Path) -> set[str]:
+    try:
+        lines = (target / MANIFEST_FILE).read_text(encoding="utf-8").split("\n")
+    except OSError:
+        return set()
+    names = {line[len(_REFUSED_PREFIX):].strip() for line in lines if line.startswith(_REFUSED_PREFIX)}
+    return {name for name in names if _plain_entry_name(name)}
+
+
+def _write_manifest(
+    target: Path, planted: set[str], *, created: bool = False, refused: set[str] = frozenset()
+) -> None:
     manifest = target / MANIFEST_FILE
-    if not planted:
+    if not planted and not refused:
         manifest.unlink(missing_ok=True)
         return
     body = "# links planted by Navide; edit or delete freely, Navide only touches these\n"
     if created:
         body += f"{_CREATED_LINE}\n"
+    body += "".join(f"{_REFUSED_PREFIX}{name}\n" for name in sorted(refused))
     body += "".join(f"{name}\n" for name in sorted(planted))
     manifest.write_text(body, encoding="utf-8")
 

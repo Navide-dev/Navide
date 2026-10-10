@@ -343,19 +343,66 @@ def test_a_skills_folder_linked_outside_the_repo_is_never_removed_from(tmp_path,
     assert (user_skills / skills_wiring.MANIFEST_FILE).is_file()
 
 
-def test_a_planted_skill_link_the_user_deleted_is_not_relinked(gate, tmp_path, monkeypatch) -> None:
-    wiring = _cursor_skills(tmp_path, monkeypatch)
+def _two_cursor_skills(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agent_team_backend.cli_vendors.base import SkillsWiring
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    sources = [tmp_path / "managed" / name for name in ("alpha", "beta")]
+    for source in sources:
+        source.mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: list(sources))
+    return SkillsWiring(project_rel=(".cursor", "skills"))
+
+
+def test_a_planted_skill_link_the_user_deleted_is_refused_in_that_workspace_only(
+    gate, tmp_path, monkeypatch
+) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
     repo = _cursor_repo(tmp_path)
     convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
-    link = repo / ".cursor" / "skills" / "alpha"
-    link.unlink()  # the manifest still names it
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()  # the manifest still names it
 
-    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
 
-    assert not link.is_symlink()
-    assert gate.state("cursor.project-skills") == ("off", "removed")
-    latest = gate.history()[0]
-    assert (latest["action"], latest["notify"]) == ("removed", True)
+    assert not (skills / "alpha").is_symlink()
+    assert (skills / "beta").is_symlink()
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+    removed = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "removed"]
+    assert removed == [(str(skills / "alpha"), True)]
+    assert not [e for e in gate.history() if e["action"] == "repair"]
+
+
+def test_re_allowing_cursor_skills_clears_the_refused_names(gate, homes, tmp_path, monkeypatch) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    convenience_wiring.set_feature("cursor.project-skills", True, port_file=str(homes["port"]))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert (skills / "alpha").is_symlink()
+
+
+def test_a_cleared_off_then_on_skills_feature_links_a_refused_name_again(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _two_cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    skills = repo / ".cursor" / "skills"
+    (skills / "alpha").unlink()
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+    convenience_wiring.set_feature("cursor.project-skills", True, port_file=str(homes["port"]))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+
+    assert (skills / "alpha").is_symlink() and (skills / "beta").is_symlink()
 
 
 def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, monkeypatch) -> None:
