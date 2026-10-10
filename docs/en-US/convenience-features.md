@@ -52,8 +52,13 @@ which runs, in order:
    allowed everywhere else. The workspace's whole `.cursor` folder gone
    (`git clean -fdx`, a fresh clone, a re-created worktree) is a reset of
    that workspace, not a removal.
-   A workspace whose `.cursor` (or the config or skills folder in it) leads
-   outside the workspace through a link is never written, cleaned or gated.
+   A workspace is keyed by its canonical path (links resolved, `..`
+   collapsed, each folder spelled as stored), so a refusal holds however the
+   pane spells it.
+   A workspace whose `.cursor` (or the config or skills folder in it, or the
+   skills manifest `.navide-links`) leads outside the workspace through a
+   link is never written, cleaned or gated; a `.git/info/exclude` that is a
+   link is never written either.
    Its panes go without the feature, so the user is told: logged and
    announced as `refused-unsafe`, once per workspace and feature, while the
    feature is allowed.
