@@ -531,6 +531,50 @@ def test_a_file_moved_into_the_real_claude_home_is_announced(gate, tmp_path) -> 
     assert (entry["action"], entry["target"], entry["notify"]) == ("repair", str(target), True)
 
 
+def _shim_changes(gate) -> list[tuple[str, str, bool]]:
+    return [(e["action"], e["target"], e["notify"]) for e in reversed(gate.history()) if e["feature"] == "pane-shims"]
+
+
+def test_an_entry_a_pane_shim_moves_into_the_vendors_folder_is_announced(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+
+    entry = tmp_path / "shim" / "sessions"
+    entry.mkdir(parents=True)
+    target = tmp_path / "home" / ".kimi-code" / "sessions"
+
+    assert pane_home._adopt(entry, target) is True
+
+    assert _shim_changes(gate) == [("repair", str(target), True)]
+
+
+def test_empty_entries_a_pane_shim_seeds_in_the_vendors_folder_are_announced(gate, tmp_path) -> None:
+    from agent_team_backend.mcp_server import pane_home
+
+    real = tmp_path / "home" / ".grok"
+    real.mkdir(parents=True)
+    spec = pane_home.SHIM_SPECS["grok"]
+
+    pane_home._seed_link_targets(spec, real, tmp_path / "shim" / ".grok")
+    pane_home._seed_link_targets(spec, real, tmp_path / "shim" / ".grok")
+
+    seeded = [real / name for name in (*spec.seeded_dirs, *spec.seeded_files)]
+    assert _shim_changes(gate) == [("repair", str(path), True) for path in seeded]
+
+
+def test_an_entry_a_skills_shim_moves_into_the_vendors_folder_is_announced(gate, tmp_path) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    entry = tmp_path / "shim" / "config.json"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("{}", encoding="utf-8")
+    target = tmp_path / "home" / ".copilot" / "config.json"
+
+    skills_wiring._adopt(entry, target)
+
+    assert target.is_file()
+    assert _shim_changes(gate) == [("repair", str(target), True)]
+
+
 @pytest.mark.asyncio
 async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, monkeypatch) -> None:
     from types import SimpleNamespace

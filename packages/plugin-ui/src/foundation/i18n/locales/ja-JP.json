@@ -126,7 +126,7 @@
         "name": "pane 起動フォルダー",
         "benefit": "Kimi、Grok、Antigravity、Muse の pane を専用フォルダーから起動し、pane ごとにアカウントと設定を保ちます。",
         "purpose": "pane ごとにアカウントと設定を保てる",
-        "writes": "~/.navide-panes/ と、各ベンダーのフォルダー内で Navide が引き継いだ項目",
+        "writes": "~/.navide-panes/。加えて、pane が作った項目を各ベンダーのフォルダー（~/.kimi-code、~/.grok、~/.gemini、~/.agents、~/.copilot、~/.qwen）へ移動し、そこに空の項目を作成します。移動と作成はそれぞれ記録されます",
         "cost": "必須：対応する pane はこれなしでは動作しません。"
       },
       "claude_account-homes": {

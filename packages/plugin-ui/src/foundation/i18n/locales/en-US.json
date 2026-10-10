@@ -126,7 +126,7 @@
         "name": "Pane launch folders",
         "benefit": "Kimi, Grok, Antigravity and Muse panes start from a folder of their own so each pane keeps its own account and settings.",
         "purpose": "each pane keeps its own account and settings",
-        "writes": "~/.navide-panes/ and entries Navide adopts in the vendor's own folder",
+        "writes": "~/.navide-panes/, plus entries a pane creates moved into the vendor's own folder (~/.kimi-code, ~/.grok, ~/.gemini, ~/.agents, ~/.copilot, ~/.qwen) and empty seed entries created there; each move or creation is logged",
         "cost": "Required: the panes it serves cannot run without it."
       },
       "claude_account-homes": {

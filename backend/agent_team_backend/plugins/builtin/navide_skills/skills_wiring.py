@@ -223,7 +223,11 @@ def prepare_root(
             ours = True
             from agent_team_backend.convenience_wiring import note
 
-            note("pane-shims", panes_root(), detail="per-pane homes for skills")
+            note(
+                "pane-shims", panes_root(),
+                detail="per-pane homes for skills; entries a pane creates are moved"
+                " into the vendor's own folder",
+            )
         real_root = home.joinpath(*wiring.root_home)
         sources = _managed_sources(agent_key, store, native_root)
         suppressed = [home.joinpath(*rel) for rel in wiring.discovery_home]
@@ -664,6 +668,10 @@ def _adopt(entry: Path, target: Path) -> None:
         os.replace(entry, target)
     except OSError as err:
         log.warning("could not adopt %s into %s: %s", entry, target, err)
+        return
+    from agent_team_backend.convenience_wiring import changed
+
+    changed("pane-shims", target, detail=f"moved from the pane home {entry}")
 
 
 def _resolve(path: Path) -> Path:

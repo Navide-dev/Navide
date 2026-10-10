@@ -53,7 +53,7 @@ nothing to announce.
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
 | `credentials.auto-repair` | all | live CLI login (Keychain, `~/.claude.json`, vendor credential files) | yes | a pane can start signed out after an account switch went wrong |
 | `codex.pane-homes` | codex | `~/.codex-panes/` | no (required) | — |
-| `pane-shims` | kimi, grok, antigravity, muse | `~/.navide-panes/` and adopted entries in the vendor's own directory | no (required) | — |
+| `pane-shims` | kimi, grok, antigravity, muse | `~/.navide-panes/`; entries a pane creates are moved into the vendor's own directory (`~/.kimi-code`, `~/.grok`, `~/.gemini`, `~/.agents`, `~/.copilot`, `~/.qwen`) and empty seed entries are created there, each logged as `repair` with its real path | no (required) | — |
 | `claude.account-homes` | claude | links and moved files in `~/.claude` for signed-in accounts | no (required) | — |
 
 Required features are listed for disclosure only. They have no switch because
