@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from .convenience import ConvenienceGate
+from .convenience import ConvenienceGate, Takeback
 
 log = logging.getLogger("agent_team_backend.convenience_wiring")
 
@@ -89,6 +89,11 @@ def changed(feature_id: str, target: str | Path, *, detail: str, once: bool = Fa
 
 HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "copilot.hooks"}
 
+#: Vendors whose settings file holds one Navide hook per event, so one the
+#: user deleted is told apart from the rest (their installers take ``skip``).
+#: Copilot's hook file is Navide's alone: deleting it is the whole removal.
+_PER_HOOK = frozenset({"claude", "qwen"})
+
 
 def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
     """(file, present, remove) for one vendor's hook installation."""
@@ -124,11 +129,23 @@ def install_hooks_gated(
         return install(port_file)
     path, present, _ = _hook_target(agent_key)
     result: dict[str, Any] = {}
+    parts = None
+    if agent_key in _PER_HOOK:
+        from . import claude_hooks
+
+        parts = lambda: claude_hooks.hook_parts(path)  # noqa: E731
 
     def write() -> None:
-        result.update(install(port_file) or {})
+        skip = g.excluded(feature_id, path) if parts is not None else frozenset()
+        result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    outcome = g.apply(feature_id, path, write=write, present=present, file=path)
+    # Claude's and Qwen's settings.json are the user's: that file gone is a
+    # reset. Copilot's hook file is Navide's own, so deleting it stays the
+    # user's removal; only its whole config folder gone is a reset.
+    outcome = g.apply(
+        feature_id, path, write=write, present=present, file=path, parts=parts,
+        reset_when_missing=path if agent_key in _PER_HOOK else path.parent.parent,
+    )
     return {**result, "convenience": outcome}
 
 
@@ -159,21 +176,27 @@ def remove_hooks(agent_key: str) -> Any:
     return _hook_target(agent_key)[2]()
 
 
+def _hook_takeback(agent_key: str) -> list[Takeback]:
+    path, present, remove = _hook_target(agent_key)
+    return [Takeback(str(path), remove, present, path)]
+
+
 # ── switches ───────────────────────────────────────────────────────────────
 
 
-def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
+def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str = "") -> None:
     """The overview's switch: off takes Navide's entries back first; allowed
-    re-applies a startup feature at once (a per-spawn one on its next spawn)."""
+    re-applies a startup feature at once (a per-spawn one on its next spawn).
+    ``source`` is who moved it, for the log (``ConvenienceGate.record``)."""
     g = _gate
     if g is None:
         raise RuntimeError("convenience gate not installed")
     agent_key = next((k for k, f in HOOK_FEATURES.items() if f == feature_id), None)
-    remove = REMOVERS.get(feature_id)
+    takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
-        remove = lambda: remove_hooks(agent_key)  # noqa: E731
+        takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
     refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
-    g.set_allowed(feature_id, allowed, remove=remove)
+    g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
     if refusing:
         _clear_refused_skills(refusing)
     if allowed and agent_key is not None:
@@ -229,6 +252,20 @@ def _remove_project_configs() -> None:
             wiring.remove_project_config("cursor", Path(target))
         except OSError as err:
             log.warning("removing Navide's entry from %s failed: %s", target, err)
+
+
+def _project_config_takeback() -> list[Takeback]:
+    from .mcp_server import wiring
+
+    return [
+        Takeback(
+            target,
+            lambda path=Path(target): wiring.remove_project_config("cursor", path),
+            lambda path=Path(target): wiring.project_config_has_entry("cursor", path),
+            Path(target),
+        )
+        for target in _targets("cursor.project-mcp")
+    ]
 
 
 # ── Cursor: project skills (H2) ────────────────────────────────────────────
@@ -296,6 +333,20 @@ def _clear_refused_skills(targets: list[str]) -> None:
             skills_wiring.clear_refused(Path(target), root=Path(target).parents[depth - 1])
         except OSError as err:
             log.warning("clearing refused skills in %s failed: %s", target, err)
+
+
+def _project_dir_takeback() -> list[Takeback]:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    wiring = skills_wiring.skills_wiring("cursor")
+    depth = len(wiring.project_rel) if wiring is not None and wiring.project_rel else 1
+    items = []
+    for target in _targets("cursor.project-skills"):
+        manifest = Path(target) / skills_wiring.MANIFEST_FILE
+        items.append(Takeback(
+            target, lambda path=Path(target): skills_wiring.remove_project_dir(path, root=path.parents[depth - 1]), manifest.is_file, manifest,
+        ))
+    return items
 
 
 # ── Codex: hook trust (S4) ─────────────────────────────────────────────────
@@ -373,9 +424,27 @@ def repair_live_login(
     return True
 
 
+def _codex_hook_trust_takeback() -> list[Takeback]:
+    from . import app
+
+    manager = getattr(app, "codex_home_manager", None)
+    if manager is None:
+        return []
+    config = manager.real_home / "config.toml"
+    return [Takeback(str(config), manager.drop_all_hook_trust, None, config)]
+
+
 #: Removal for the features that are not CLI hooks.
 REMOVERS: dict[str, Callable[[], Any]] = {
     "cursor.project-mcp": _remove_project_configs,
     "cursor.project-skills": _remove_project_dirs,
     "codex.hook-trust": _drop_codex_hook_trust,
+}
+
+#: The same removals per target, as the off switch runs them: backed up,
+#: checked afterwards and logged one by one.
+TAKEBACKS: dict[str, Callable[[], list[Takeback]]] = {
+    "cursor.project-mcp": _project_config_takeback,
+    "cursor.project-skills": _project_dir_takeback,
+    "codex.hook-trust": _codex_hook_trust_takeback,
 }

@@ -13,7 +13,9 @@
       "action": {
         "off": "已關閉便利功能「{feature}」",
         "allowed": "已允許便利功能「{feature}」",
-        "cleanup": "已依便利功能「{feature}」移除 {target}"
+        "cleanup": "已依便利功能「{feature}」移除 {target}",
+        "removed-entry": "你移除了 {target}；Navide 不會再加回這一項，便利功能「{feature}」的其他部分照常運作。要恢復，請在總覽頁把這個功能關閉再重新允許",
+        "cleanup-failed": "無法移除 {target}，便利功能「{feature}」仍維持開啟。請先手動修好這個檔案（它可能不是有效的 JSON），再關閉一次"
       },
       "button": {
         "overview": "查看總覽",
@@ -30,6 +32,8 @@
       "off": "已關閉",
       "allowed": "已允許",
       "cleanup": "已清理",
+      "removed-entry": "你移除了其中一項",
+      "cleanup-failed": "無法清理",
       "prompt": "登入在 Navide 外被換過"
     },
     "overview": {

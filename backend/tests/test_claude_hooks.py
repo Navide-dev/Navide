@@ -392,3 +392,33 @@ def test_an_unreadable_settings_file_is_left_untouched(tmp_path, content) -> Non
     assert result["reason"] == "settings.json unparseable"
     assert settings_file.read_text(encoding="utf-8") == content
     assert not (tmp_path / "settings.json.pre-agent-team.bak").exists()
+
+
+@pytest.mark.skipif(osplat.platform_id == "win32", reason="POSIX symlinks and modes")
+def test_install_and_removal_keep_a_symlinked_settings_file_and_its_mode(tmp_path) -> None:
+    """A dotfiles-managed settings.json is a symlink, and may hold an API key
+    behind 0600. Writing it must change the file it points at, not replace
+    the link with a plain file, and must not widen its mode."""
+    import os
+    import stat
+
+    from agent_team_backend.claude_hooks import hooks_present, install_hooks, uninstall_hooks
+
+    real = tmp_path / "dotfiles" / "claude-settings.json"
+    real.parent.mkdir()
+    real.write_text(json.dumps({"env": {"ANTHROPIC_API_KEY": "sk-secret"}}), encoding="utf-8")
+    real.chmod(0o600)
+    link = tmp_path / "claude" / "settings.json"
+    link.parent.mkdir()
+    link.symlink_to(real)
+    port_file = tmp_path / "port"
+    port_file.write_text("1234")
+
+    assert install_hooks(str(port_file), settings_file=link)["installed"] is True
+    assert link.is_symlink() and hooks_present(real)
+    assert stat.S_IMODE(os.stat(real).st_mode) == 0o600
+
+    assert uninstall_hooks(settings_file=link)["removed"] is True
+    assert link.is_symlink() and not hooks_present(real)
+    assert stat.S_IMODE(os.stat(real).st_mode) == 0o600
+    assert json.loads(real.read_text(encoding="utf-8"))["env"] == {"ANTHROPIC_API_KEY": "sk-secret"}

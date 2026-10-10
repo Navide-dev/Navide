@@ -19,7 +19,8 @@ type Sender = Pick<Backend, 'send'>
 
 export type ConvenienceState = 'allowed' | 'off'
 export type ConvenienceReason = 'default' | 'user' | 'removed'
-export type ConvenienceAction = 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
+export type ConvenienceAction =
+  | 'first' | 'repair' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
 
 export interface ConvenienceTarget {
   path: string
@@ -48,6 +49,10 @@ export interface ConvenienceLogEntry {
   detail: string
   backup: string
   notify: boolean
+  /** Who triggered the row: "settings" (a Navide window), "ws-client" (any
+   *  other client holding the backend token), "" for Navide's own writes.
+   *  Absent from a backend older than the field. */
+  source?: string
 }
 
 export interface ConvenienceUpgradeNotice {

@@ -29,16 +29,40 @@ which runs, in order:
 2. **Removed by hand?** If the ledger says Navide wrote `target` before and
    `present()` is now false, the user removed it: the feature goes off
    (reason `removed`), the event is logged and announced, nothing is written.
+   A target holding several Navide entries (Claude's and Qwen's settings.json
+   hold one hook per event, named `<event>:<kind>`, e.g. `PreToolUse:guard`)
+   is also checked entry by entry: one the user deleted while others remain
+   is logged and announced as `removed-entry` and never written back, and the
+   feature stays allowed so the other hooks keep working. Turning the
+   feature off and on again restores it. Copilot's hook file is Navide's
+   alone, so deleting it is the whole removal.
+   A deleted **file** is not a removal when it is the user's own file Navide
+   merges into (Claude's and Qwen's settings.json): resetting the CLI's
+   config folder took Navide's entry along with everything else, so the
+   target is forgotten, the feature stays allowed and the next write is
+   announced as `first`, like a fresh install. For Copilot, whose hook file
+   is Navide's alone, only the whole `~/.copilot` folder gone counts as a
+   reset; the folder still there without the hook file is a removal.
 3. **Backup.** A file target is copied into
-   `<app data>/convenience-backups/<feature>/<sha256>.bak` (deduplicated).
+   `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
+   (deduplicated by content). A backup is the whole file, **including any
+   secrets it holds** (an API key in `env`, an MCP server token), so backups
+   are private to the user (folders 0700, files created 0600), each target
+   keeps only its latest 5, and a feature turned off or an entry removed
+   keeps only its latest one. A log row may name a backup that has since
+   been rotated away.
 4. **Write.** `write()` performs the existing write unchanged.
 5. **Notify.** Only when the target's bytes changed: the first write to a
    target is announced as `first`, a later change as `repair`.
 6. **Audit log.** Every write, removal detection, off and re-allow is appended.
+   A row a caller triggered names its `source`.
 
 A target that already carries Navide's entry when first seen (an upgraded
-install) is added to the ledger silently: nothing was written, so there is
-nothing to announce.
+install) is added to the ledger without a write. During the startup pass it
+is named in the one-time upgrade notice. A target first seen after that
+notice was decided — the per-spawn features (Cursor project MCP and skills,
+Codex hook trust) are only seen when their pane opens — is announced on its
+own, once, as `first` ("found Navide's entry from an earlier version").
 
 ## Feature registry
 
@@ -66,9 +90,13 @@ the panes they serve cannot run without them.
   A missing row means `allowed`/`default`.
 - `convenience_targets(feature TEXT, target TEXT, written_at INTEGER, PRIMARY KEY(feature, target))`
   — the ledger: every target Navide wrote for a feature.
-- `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER)`
+- `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `removed`, `off`,
-  `allowed`, `cleanup`, `prompt`.
+  `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`.
+- `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
+  — the entries of a target with several: `state` is `written` (Navide's
+  last write left it there) or `removed` (the user deleted it; never written
+  back). Cleared with the target and on re-allow.
 - kv `convenience.upgrade_notice` — set once the upgrade notice was published.
 
 ## WebSocket API
@@ -88,13 +116,16 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
+  action: 'first' | 'repair' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object:
                              // { agentKey, slotId, slotLabel, liveEmail, slotEmail }
   backup: string             // '' when none
   notify: boolean
+  source: string             // who triggered it: 'settings' (a Navide main window),
+                             // 'ws-client' (any other client with the backend token),
+                             // '' for Navide's own writes
 }
 interface UpgradeNotice { features: string[] } // ids in use when the upgrade ran
 ```
@@ -102,11 +133,21 @@ interface UpgradeNotice { features: string[] } // ids in use when the upgrade ra
 `convenience.history` `{ feature?: string, limit?: number }` → `{ entries: LogEntry[] }`
 
 `convenience.set` `{ id, allowed: boolean }` → `{ feature: Feature }`. Off runs the
-feature's removal (only Navide-marked entries) before switching off; allowed
-clears a `removed` reason and re-applies startup features at once (per-spawn
-features apply on the next spawn).
+feature's removal (only Navide-marked entries) before switching off: each
+target is backed up, its entry taken out, checked afterwards and logged as
+`cleanup`. When an entry cannot be taken out (the file does not parse, the
+write fails) it would keep working, so the switch does **not** move: the
+target is logged and announced as `cleanup-failed`, the feature stays
+`allowed`, and the call fails with `CLEANUP_INCOMPLETE`. Targets that were
+taken back are dropped from the ledger, so writing them again later is a
+`first`, never a removal. Allowed clears a `removed` reason and re-applies
+startup features at once (per-spawn features apply on the next spawn).
 
-`convenience.upgrade_ack` `{}` → `{}`.
+Moving a switch is announced (`off` / `allowed`, notify true) and logged
+with its `source`.
+
+`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row (not announced)
+for each feature the notice named: it stays allowed with the user's say-so.
 
 Event `convenience.changed` `{ feature?: string, entry?: LogEntry }` — a write was
 gated, a notice was added, or a state changed. The renderer re-reads

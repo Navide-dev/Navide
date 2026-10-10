@@ -82,6 +82,115 @@ def test_hooks_the_user_deleted_are_not_re_added_at_the_next_start(gate, homes) 
     assert gate.state("claude.hooks") == ("off", "removed")
 
 
+def test_a_settings_file_unreadable_at_first_sight_is_neither_adopted_nor_later_read_as_removed(
+    gate, homes
+) -> None:
+    """A1: the presence check cannot read a file with a typo. That says
+    nothing about Navide's hooks, so nothing is recorded; once the user fixes
+    the typo the next start is a first write, not a removal."""
+    settings = _target("claude")
+    settings.write_text('{"model": "x",}', encoding="utf-8")
+
+    first = convenience_wiring.install_cli_hooks(str(homes["port"]))
+
+    assert first["claude"]["convenience"] == "unchanged"
+    assert gate.listing_feature("claude.hooks")["targets"] == []
+    assert gate.upgrade_notice() is None or "claude.hooks" not in gate.upgrade_notice()["features"]
+
+    settings.write_text('{"model": "x"}', encoding="utf-8")
+    second = convenience_wiring.install_cli_hooks(str(homes["port"]))
+
+    assert second["claude"]["convenience"] == "first"
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    assert claude_hooks.hooks_present(settings)
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_one_hook_the_user_deleted_stays_out_while_the_others_keep_working(gate, homes, agent) -> None:
+    """R1: deleting one Navide hook by hand (here: everything on PreToolUse,
+    the Guard included) is the user's "not allowed" for that hook. It is
+    never added back; the feature stays allowed and the other hooks are kept
+    up to date. Re-allowing (off, then on) brings it back."""
+    from agent_team_backend.cli_vendors.registry import VENDORS
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    port = str(homes["port"])
+    install = VENDORS[agent].install_hooks  # what the startup pass runs
+    assert convenience_wiring.install_hooks_gated(agent, install, port)["convenience"] == "first"
+    settings = _target(agent)
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    del data["hooks"]["PreToolUse"]
+    settings.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    out = convenience_wiring.install_hooks_gated(agent, install, port)
+    again = convenience_wiring.install_hooks_gated(agent, install, port)
+
+    hooks = json.loads(settings.read_text(encoding="utf-8"))["hooks"]
+    assert "PreToolUse" not in hooks
+    assert claude_hooks.hooks_present(settings)
+    assert (out["convenience"], again["convenience"]) == ("unchanged", "unchanged")
+    assert gate.state(feature_id) == ("allowed", "default")
+    removed = [e for e in gate.history(feature_id) if e["action"] == "removed-entry"]
+    assert sorted(e["detail"] for e in removed) == sorted(
+        part for part in ("PreToolUse:pre_tool_use", "PreToolUse:guard")
+        if agent == "claude" or part == "PreToolUse:guard"
+    )
+    assert all(e["notify"] for e in removed)
+
+    convenience_wiring.install(gate)
+    gate.set_allowed(feature_id, False)
+    gate.set_allowed(feature_id, True)
+    convenience_wiring.install_hooks_gated(agent, install, port)
+    assert "PreToolUse" in json.loads(settings.read_text(encoding="utf-8"))["hooks"]
+
+
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_a_reset_config_folder_is_a_fresh_start_not_a_removal(gate, homes, agent) -> None:
+    """R6/C3: deleting the whole config folder (resetting the CLI) took the
+    settings file with it, not just Navide's entry. That is not the user
+    removing Navide's hooks: the feature stays allowed and the next write is
+    announced as a first one, like a fresh install."""
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+    folder = _target(agent).parent
+    shutil.rmtree(folder)
+    folder.mkdir()
+
+    out = convenience_wiring.install_hooks_gated(agent, INSTALLERS[agent], port)
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    assert out["convenience"] == "first"
+    assert gate.state(feature_id) == ("allowed", "default")
+    assert claude_hooks.hooks_present(_target(agent))
+    assert [e["action"] for e in gate.history(feature_id)] == ["first", "first"]
+
+
+def test_a_deleted_copilot_folder_is_a_fresh_start_but_a_deleted_hook_file_is_a_removal(gate, homes) -> None:
+    """R6 for Copilot: its hook file is Navide's alone, so deleting it is the
+    user's removal. Deleting the whole Copilot folder (resetting the CLI) is
+    not: the feature stays allowed and, once Copilot is set up again, the
+    hook is written as a first one."""
+    import shutil
+
+    port = str(homes["port"])
+    convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+    shutil.rmtree(homes["copilot"])
+
+    gone = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+    homes["copilot"].mkdir()
+    back = convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)
+
+    assert (gone["convenience"], back["convenience"]) == ("unchanged", "first")
+    assert gate.state("copilot.hooks") == ("allowed", "default")
+    assert _target("copilot").is_file()
+
+    _target("copilot").unlink()
+    assert convenience_wiring.install_hooks_gated("copilot", INSTALLERS["copilot"], port)["convenience"] == "removed"
+    assert gate.state("copilot.hooks") == ("off", "removed")
+
+
 def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     settings = _target("claude")
     settings.write_text(json.dumps({
@@ -98,6 +207,41 @@ def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     assert convenience_wiring.install_hooks_gated(
         "claude", claude_hooks.install_hooks, str(homes["port"])
     )["convenience"] == "off"
+
+
+def test_turning_hooks_off_backs_up_and_logs_what_it_took_back(gate, homes) -> None:
+    """A6: off is a write to the user's file like any other: backed up first
+    and logged per target as ``cleanup``."""
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, str(homes["port"]))
+    before = _target("claude").read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    [cleanup] = [e for e in gate.history("claude.hooks") if e["action"] == "cleanup"]
+    assert cleanup["target"] == str(_target("claude"))
+    assert Path(cleanup["backup"]).read_text(encoding="utf-8") == before
+    assert gate.state("claude.hooks") == ("off", "user")
+
+
+def test_off_never_claims_off_while_navides_hooks_are_still_in_an_unreadable_file(gate, homes) -> None:
+    """A6: a settings.json the user broke by hand (a trailing comma) cannot be
+    cleaned, so Navide's hooks keep firing. The switch must not read "off"
+    then: the feature stays allowed and the user is told why."""
+    settings = _target("claude")
+    settings.write_text("{}", encoding="utf-8")
+    convenience_wiring.install_cli_hooks(str(homes["port"]))
+    settings.write_text(settings.read_text(encoding="utf-8").rstrip().rstrip("}") + ",}", encoding="utf-8")
+    broken = settings.read_text(encoding="utf-8")
+
+    with pytest.raises(convenience.CleanupIncomplete) as raised:
+        convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    assert raised.value.targets == [str(settings)]
+    assert settings.read_text(encoding="utf-8") == broken
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    [cleanup] = [e for e in gate.history("claude.hooks") if e["action"].startswith("cleanup")]
+    assert (cleanup["action"], cleanup["notify"]) == ("cleanup-failed", True)
+    assert Path(cleanup["backup"]).read_text(encoding="utf-8") == broken
 
 
 @pytest.mark.parametrize("agent", ["claude", "qwen", "copilot"])
@@ -172,7 +316,35 @@ async def test_the_ws_api_lists_switches_and_refuses_a_required_feature(gate, ho
     assert sent[-1]["error"]["code"] == "REQUIRED_FEATURE"
 
     await ws_handlers.convenience_history(session, "4", "convenience.history", {"feature": "claude.hooks"})
-    assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "first"]
+    assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "cleanup", "first"]
+
+
+@pytest.mark.asyncio
+async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate, homes, monkeypatch) -> None:
+    """A10: a main window (it runs the UI action bus) is "settings"; any other
+    client holding the backend token is "ws-client", visible in the log."""
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, ws_handlers
+
+    monkeypatch.setattr(app, "convenience_gate", gate)
+
+    async def send_json(msg: dict) -> None:
+        pass
+
+    async def broadcast(event: dict, **_: object) -> None:
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True)
+    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False)
+
+    await ws_handlers.convenience_set(window, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
+    await ws_handlers.convenience_set(other, "2", "convenience.set", {"id": "cursor.project-mcp", "allowed": True})
+
+    assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [
+        ("allowed", "ws-client"), ("off", "settings"),
+    ]
 
 
 # ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────
@@ -196,6 +368,26 @@ def test_cursor_mcp_allowed_writes_what_it_wrote_before(gate, tmp_path) -> None:
     assert path.read_text(encoding="utf-8") == wiring.project_config_path("cursor", plain).read_text(encoding="utf-8")
     assert gate.history()[0]["action"] == "first"
     assert gate.history()[0]["target"] == str(path)
+
+
+def test_an_entry_adopted_after_the_upgrade_notice_was_decided_is_announced(gate, tmp_path) -> None:
+    """C2: the upgrade notice is fixed at startup, but Cursor's project config
+    is first seen when a Cursor pane opens. An entry an earlier Navide wrote
+    there must still be disclosed once, not adopted in silence."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.install(None)
+    wiring.ensure_project_config("cursor", repo)
+    convenience_wiring.install(gate)
+    gate.finish_startup_scan()
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+
+    [notice] = [n for n in gate.notices() if n["feature"] == "cursor.project-mcp"]
+    assert (notice["action"], notice["target"]) == ("first", str(wiring.project_config_path("cursor", repo)))
+    assert "earlier" in notice["detail"]
 
 
 def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -> None:

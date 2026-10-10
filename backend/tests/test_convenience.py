@@ -7,6 +7,8 @@ allowed by default, so today's behaviour is kept.
 
 from __future__ import annotations
 
+import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -236,3 +238,85 @@ def test_a_write_that_left_no_entry_is_not_recorded_and_never_reads_as_a_removal
     assert calls == [1, 1]
     assert gate.allowed("claude.hooks")
     assert gate.listing_feature("claude.hooks")["targets"] == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_backups_are_private_from_the_moment_they_exist(gate, tmp_path) -> None:
+    """A8: a backup holds the whole file, secrets included. Its folders are
+    0700 and the file is created 0600, never readable by others in between."""
+    _apply(gate, _File(tmp_path / "settings.json", "token: secret\n"))
+
+    [backup] = (tmp_path / "backups").rglob("*.bak")
+    folders = [tmp_path / "backups", *[p for p in (tmp_path / "backups").rglob("*") if p.is_dir()]]
+    assert {oct(stat.S_IMODE(p.stat().st_mode)) for p in folders} == {"0o700"}
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
+
+
+def test_backups_are_kept_per_target_and_rotated(gate, tmp_path) -> None:
+    """A7: a target that changes on every pane start (one Codex trust row per
+    pane) must not leave one full copy of the file, secrets and all, per
+    change for ever. Each target keeps its last few; a removal keeps one."""
+    config = tmp_path / "config.toml"
+    config.write_text('[mcp_servers.gh.env]\nGITHUB_TOKEN = "ghp_secret"\n', encoding="utf-8")
+    rows = [0]
+
+    def add_row() -> None:
+        rows[0] += 1
+        config.write_text(config.read_text(encoding="utf-8") + f"# row {rows[0]}\n", encoding="utf-8")
+
+    for _ in range(25):
+        gate.apply("codex.hook-trust", config, write=add_row, present=lambda: True, file=config, quiet_repairs=True)
+    other = _File(tmp_path / "other.toml", "x\n")
+    gate.apply("codex.hook-trust", other.path, write=other.write, present=other.present, file=other.path)
+
+    backups = list((tmp_path / "backups" / "codex.hook-trust").rglob("*.bak"))
+    assert len(backups) == convenience.BACKUPS_PER_TARGET + 1
+    newest = gate.history("codex.hook-trust")[1]["backup"]
+    assert Path(newest).is_file()
+
+    config.write_text("", encoding="utf-8")
+    assert gate.apply(
+        "codex.hook-trust", config, write=add_row, present=lambda: False, file=config
+    ) == "removed"
+
+    [kept_other] = [e["backup"] for e in gate.history("codex.hook-trust") if e["target"] == str(other.path)]
+    assert sorted(map(str, (tmp_path / "backups" / "codex.hook-trust").rglob("*.bak"))) == sorted(
+        [newest, kept_other]
+    )
+
+
+def test_switch_flips_and_the_upgrade_ack_are_announced_and_say_who_did_it(gate, tmp_path) -> None:
+    """A10: moving a switch changes what Navide may do to the user's files,
+    so it is announced like any write, and the log says where it came from."""
+    _apply(gate, _File(tmp_path / "settings.json", "# navide\n"))
+    gate.finish_startup_scan()
+
+    gate.set_allowed("cursor.project-mcp", False, source="settings")
+    gate.set_allowed("cursor.project-mcp", True, source="ws-client")
+    gate.acknowledge_upgrade(source="settings")
+
+    off, allowed = gate.history("cursor.project-mcp")[::-1]
+    assert (off["action"], off["notify"], off["source"]) == ("off", True, "settings")
+    assert (allowed["action"], allowed["notify"], allowed["source"]) == ("allowed", True, "ws-client")
+    assert [n["entry"]["action"] for n in gate.sent[-2:]] == ["off", "allowed"]
+    [ack] = [e for e in gate.history("claude.hooks") if e["action"] == "allowed"]
+    assert (ack["source"], ack["notify"]) == ("settings", False)
+    assert "upgrade notice" in ack["detail"]
+
+
+def test_a_log_written_before_the_source_column_still_reads(tmp_path) -> None:
+    db = Database(tmp_path / "navide.db")
+    with db.transaction() as cur:
+        cur.execute(
+            "CREATE TABLE convenience_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,"
+            " feature TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,"
+            " detail TEXT NOT NULL, backup TEXT NOT NULL, notify INTEGER NOT NULL)"
+        )
+        cur.execute(
+            "INSERT INTO convenience_log (at, feature, action, target, detail, backup, notify)"
+            " VALUES (1, 'claude.hooks', 'first', 't', '', '', 1)"
+        )
+
+    gate = convenience.ConvenienceGate(db, backup_root=tmp_path / "b")
+
+    assert gate.history()[0]["source"] == ""
