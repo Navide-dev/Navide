@@ -241,10 +241,21 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     # clean, a fresh clone, a re-created worktree) is its reset.
     outcome = g.apply(
         "cursor.project-mcp", path, write=write,
-        present=lambda: wiring.project_config_has_entry(agent_key, path), file=path,
+        present=lambda: _project_config_present(agent_key, path), file=path,
         reset_folder=path.parent, per_target=True,
     )
     return wired[0] and outcome not in ("off", "removed", "refused")
+
+
+def _project_config_present(agent_key: str, path: Path) -> bool:
+    """Whether the workspace's config still carries Navide's entry. An empty
+    file (an editor or Cursor truncated it mid-write) cannot tell, so it is
+    unknown — repaired, never read as the user's removal."""
+    from .mcp_server import wiring
+
+    if path.is_file() and not path.read_text(encoding="utf-8").strip():
+        raise ValueError(f"{path} is empty")
+    return wiring.project_config_has_entry(agent_key, path)
 
 
 def _remove_project_configs() -> None:

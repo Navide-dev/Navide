@@ -449,6 +449,24 @@ def test_cursor_mcp_entry_the_user_deleted_is_not_written_back(gate, tmp_path) -
     assert convenience_wiring.ensure_project_config_gated("cursor", other) is True
 
 
+@pytest.mark.parametrize("content", ["", "  \n"])
+def test_an_emptied_cursor_mcp_file_is_not_a_removal(gate, tmp_path, content) -> None:
+    """An editor or Cursor itself truncated mid-write: an empty file says
+    nothing about the user removing Navide's entry, so it is repaired."""
+    from agent_team_backend.mcp_server import wiring
+
+    repo = _cursor_repo(tmp_path)
+    convenience_wiring.ensure_project_config_gated("cursor", repo)
+    path = wiring.project_config_path("cursor", repo)
+    path.write_text(content, encoding="utf-8")
+
+    assert convenience_wiring.ensure_project_config_gated("cursor", repo) is True
+
+    assert wiring.project_config_has_entry("cursor", path)
+    assert gate.state("cursor.project-mcp") == ("allowed", "default")
+    assert not [e for e in gate.history() if e["action"].startswith("removed")]
+
+
 @pytest.mark.parametrize("how", ["git-clean", "reclone", "worktree-recreate"])
 def test_a_reset_workspace_gets_cursor_mcp_back_and_turns_nothing_off(gate, tmp_path, how) -> None:
     """RM-N1: `git clean -fdx`, a fresh clone or a re-created worktree takes
