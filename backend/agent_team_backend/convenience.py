@@ -62,8 +62,12 @@ _BY_ID = {feature.id: feature for feature in REGISTRY}
 #: Log actions. ``first``/``repair``: a write changed a target; ``removed``:
 #: the user deleted an entry; ``off``/``allowed``: the switch moved;
 #: ``cleanup``: Navide took back its own entry; ``cleanup-failed``: it could
-#: not, so the feature stayed on; ``prompt``: a decision is waiting on the user.
-ACTIONS = ("first", "repair", "removed", "off", "allowed", "cleanup", "cleanup-failed", "prompt")
+#: not, so the feature stayed on; ``removed-entry``: the user deleted one of
+#: several entries in a target, which stays out while the rest keep working;
+#: ``prompt``: a decision is waiting on the user.
+ACTIONS = (
+    "first", "repair", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
+)
 
 UPGRADE_KEY = "convenience.upgrade_notice"
 
@@ -138,6 +142,14 @@ class ConvenienceGate:
                 " detail TEXT NOT NULL, backup TEXT NOT NULL, notify INTEGER NOT NULL,"
                 " source TEXT NOT NULL DEFAULT '')"
             )
+            # The entries one target holds, for a target with several (one
+            # hook per CLI event): what Navide wrote, and what the user
+            # deleted by hand and so must never be written back.
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS convenience_parts ("
+                " feature TEXT NOT NULL, target TEXT NOT NULL, part TEXT NOT NULL,"
+                " state TEXT NOT NULL, PRIMARY KEY(feature, target, part))"
+            )
             columns = {row[1] for row in cur.execute("PRAGMA table_info(convenience_log)").fetchall()}
             if "source" not in columns:
                 cur.execute("ALTER TABLE convenience_log ADD COLUMN source TEXT NOT NULL DEFAULT ''")
@@ -187,6 +199,7 @@ class ConvenienceGate:
                 # not a removal to hold against the next write.
                 with self.db.transaction() as cur:
                     cur.execute("DELETE FROM convenience_targets WHERE feature = ?", (feature_id,))
+                    cur.execute("DELETE FROM convenience_parts WHERE feature = ?", (feature_id,))
             self.record(feature_id, "allowed" if allowed else "off", "", source=source)
 
     def _take_back(self, feature_id: str, items: list[Takeback]) -> None:
@@ -243,6 +256,7 @@ class ConvenienceGate:
         file: Path | None = None,
         detail: str = "",
         quiet_repairs: bool = False,
+        parts: Callable[[], set[str]] | None = None,
     ) -> str:
         """Run one write through the gate.
 
@@ -256,6 +270,12 @@ class ConvenienceGate:
         never mistaken for a removal, and never recorded or adopted as one
         that carries Navide's entry either — fixing it later would otherwise
         read as the user's removal.
+
+        ``parts`` lists the separate entries a target holds (one hook per
+        event). One Navide wrote that is gone while others remain is the
+        user's removal of that entry alone: it is logged as
+        ``removed-entry``, ``excluded`` names it from then on so ``write``
+        leaves it out, and the feature stays allowed for the rest.
         """
         feature(feature_id)
         key = str(target)
@@ -270,6 +290,8 @@ class ConvenienceGate:
                 self.record(feature_id, "removed", key, detail="deleted outside Navide")
                 self._prune(feature_id, key, keep=1)
                 return "removed"
+            if parts is not None and known and was_present is True:
+                self._note_removed_parts(feature_id, key, parts)
             before = _read(file)
             write()
             after = _read(file)
@@ -280,6 +302,8 @@ class ConvenienceGate:
             now_present = _probe(present)
             if now_present is True:
                 self._mark(feature_id, key, present=True)
+                if parts is not None:
+                    self._note_written_parts(feature_id, key, parts)
             elif known and now_present is False:
                 self._mark(feature_id, key, present=False)
             if not changed:
@@ -291,6 +315,53 @@ class ConvenienceGate:
             notify = not (quiet_repairs and action == "repair")
             self.record(feature_id, action, key, detail=detail, backup=backup, notify=notify)
             return action
+
+    def excluded(self, feature_id: str, target: str | Path) -> frozenset[str]:
+        """The entries of ``target`` the user deleted by hand."""
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT part FROM convenience_parts WHERE feature = ? AND target = ? AND state = 'removed'",
+                (feature_id, str(target)),
+            ).fetchall()
+        return frozenset(row["part"] for row in rows)
+
+    def _note_removed_parts(self, feature_id: str, key: str, parts: Callable[[], set[str]]) -> None:
+        try:
+            now = set(parts())
+        except Exception as err:  # noqa: BLE001 — unknown is not removed
+            log.warning("listing the entries of %s failed (%s); treating as unknown", key, err)
+            return
+        with self.db.transaction() as cur:
+            written = {row["part"] for row in cur.execute(
+                "SELECT part FROM convenience_parts WHERE feature = ? AND target = ? AND state = 'written'",
+                (feature_id, key),
+            ).fetchall()}
+        for part in sorted(written - now):
+            with self.db.transaction() as cur:
+                cur.execute(
+                    "UPDATE convenience_parts SET state = 'removed' WHERE feature = ? AND target = ? AND part = ?",
+                    (feature_id, key, part),
+                )
+            self.record(feature_id, "removed-entry", f"{key} [{part}]", detail=part)
+
+    def _note_written_parts(self, feature_id: str, key: str, parts: Callable[[], set[str]]) -> None:
+        """Navide's own write decides what it wrote: an entry it no longer
+        writes (a switched-off push channel) is not one the user removed."""
+        try:
+            now = set(parts())
+        except Exception as err:  # noqa: BLE001
+            log.warning("listing the entries of %s failed (%s)", key, err)
+            return
+        with self.db.transaction() as cur:
+            cur.execute(
+                "DELETE FROM convenience_parts WHERE feature = ? AND target = ? AND state = 'written'",
+                (feature_id, key),
+            )
+            cur.executemany(
+                "INSERT INTO convenience_parts (feature, target, part, state) VALUES (?, ?, ?, 'written')"
+                " ON CONFLICT(feature, target, part) DO NOTHING",
+                [(feature_id, key, part) for part in sorted(now)],
+            )
 
     def _adopt(self, feature_id: str, key: str) -> None:
         """An entry an earlier Navide wrote, first seen now. During the
@@ -360,6 +431,10 @@ class ConvenienceGate:
         with self.db.transaction() as cur:
             cur.execute(
                 "DELETE FROM convenience_targets WHERE feature = ? AND target = ?",
+                (feature_id, str(target)),
+            )
+            cur.execute(
+                "DELETE FROM convenience_parts WHERE feature = ? AND target = ?",
                 (feature_id, str(target)),
             )
 

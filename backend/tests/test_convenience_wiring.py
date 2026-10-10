@@ -105,6 +105,45 @@ def test_a_settings_file_unreadable_at_first_sight_is_neither_adopted_nor_later_
     assert claude_hooks.hooks_present(settings)
 
 
+@pytest.mark.parametrize("agent", ["claude", "qwen"])
+def test_one_hook_the_user_deleted_stays_out_while_the_others_keep_working(gate, homes, agent) -> None:
+    """R1: deleting one Navide hook by hand (here: everything on PreToolUse,
+    the Guard included) is the user's "not allowed" for that hook. It is
+    never added back; the feature stays allowed and the other hooks are kept
+    up to date. Re-allowing (off, then on) brings it back."""
+    from agent_team_backend.cli_vendors.registry import VENDORS
+
+    feature_id = convenience_wiring.HOOK_FEATURES[agent]
+    port = str(homes["port"])
+    install = VENDORS[agent].install_hooks  # what the startup pass runs
+    assert convenience_wiring.install_hooks_gated(agent, install, port)["convenience"] == "first"
+    settings = _target(agent)
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    del data["hooks"]["PreToolUse"]
+    settings.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    out = convenience_wiring.install_hooks_gated(agent, install, port)
+    again = convenience_wiring.install_hooks_gated(agent, install, port)
+
+    hooks = json.loads(settings.read_text(encoding="utf-8"))["hooks"]
+    assert "PreToolUse" not in hooks
+    assert claude_hooks.hooks_present(settings)
+    assert (out["convenience"], again["convenience"]) == ("unchanged", "unchanged")
+    assert gate.state(feature_id) == ("allowed", "default")
+    removed = [e for e in gate.history(feature_id) if e["action"] == "removed-entry"]
+    assert sorted(e["detail"] for e in removed) == sorted(
+        part for part in ("PreToolUse:pre_tool_use", "PreToolUse:guard")
+        if agent == "claude" or part == "PreToolUse:guard"
+    )
+    assert all(e["notify"] for e in removed)
+
+    convenience_wiring.install(gate)
+    gate.set_allowed(feature_id, False)
+    gate.set_allowed(feature_id, True)
+    convenience_wiring.install_hooks_gated(agent, install, port)
+    assert "PreToolUse" in json.loads(settings.read_text(encoding="utf-8"))["hooks"]
+
+
 def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     settings = _target("claude")
     settings.write_text(json.dumps({

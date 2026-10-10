@@ -85,6 +85,11 @@ def changed(feature_id: str, target: str | Path, *, detail: str) -> None:
 
 HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "copilot.hooks"}
 
+#: Vendors whose settings file holds one Navide hook per event, so one the
+#: user deleted is told apart from the rest (their installers take ``skip``).
+#: Copilot's hook file is Navide's alone: deleting it is the whole removal.
+_PER_HOOK = frozenset({"claude", "qwen"})
+
 
 def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
     """(file, present, remove) for one vendor's hook installation."""
@@ -120,11 +125,17 @@ def install_hooks_gated(
         return install(port_file)
     path, present, _ = _hook_target(agent_key)
     result: dict[str, Any] = {}
+    parts = None
+    if agent_key in _PER_HOOK:
+        from . import claude_hooks
+
+        parts = lambda: claude_hooks.hook_parts(path)  # noqa: E731
 
     def write() -> None:
-        result.update(install(port_file) or {})
+        skip = g.excluded(feature_id, path) if parts is not None else frozenset()
+        result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    outcome = g.apply(feature_id, path, write=write, present=present, file=path)
+    outcome = g.apply(feature_id, path, write=write, present=present, file=path, parts=parts)
     return {**result, "convenience": outcome}
 
 

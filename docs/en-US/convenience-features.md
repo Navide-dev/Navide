@@ -29,6 +29,13 @@ which runs, in order:
 2. **Removed by hand?** If the ledger says Navide wrote `target` before and
    `present()` is now false, the user removed it: the feature goes off
    (reason `removed`), the event is logged and announced, nothing is written.
+   A target holding several Navide entries (Claude's and Qwen's settings.json
+   hold one hook per event, named `<event>:<kind>`, e.g. `PreToolUse:guard`)
+   is also checked entry by entry: one the user deleted while others remain
+   is logged and announced as `removed-entry` and never written back, and the
+   feature stays allowed so the other hooks keep working. Turning the
+   feature off and on again restores it. Copilot's hook file is Navide's
+   alone, so deleting it is the whole removal.
 3. **Backup.** A file target is copied into
    `<app data>/convenience-backups/<feature>/<target hash>/<sha256>.bak`
    (deduplicated by content). A backup is the whole file, **including any
@@ -78,7 +85,11 @@ the panes they serve cannot run without them.
   — the ledger: every target Navide wrote for a feature.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `removed`, `off`,
-  `allowed`, `cleanup`, `cleanup-failed`, `prompt`.
+  `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`.
+- `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
+  — the entries of a target with several: `state` is `written` (Navide's
+  last write left it there) or `removed` (the user deleted it; never written
+  back). Cleared with the target and on re-allow.
 - kv `convenience.upgrade_notice` — set once the upgrade notice was published.
 
 ## WebSocket API
@@ -98,7 +109,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
+  action: 'first' | 'repair' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object:

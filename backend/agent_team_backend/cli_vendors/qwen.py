@@ -862,12 +862,12 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
-def _install_hooks(port_file: str) -> Any:
+def _install_hooks(port_file: str, *, skip: frozenset[str] = frozenset()) -> Any:
     # Qwen Code ships Claude's hook design, so the same mechanism gives its
     # panes the one signal the PTY cannot provide. Lazy import — see claude.py.
     from ..qwen_hooks import install_hooks
 
-    return install_hooks(port_file)
+    return install_hooks(port_file, skip=skip)
 
 
 def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:

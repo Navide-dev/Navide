@@ -14,6 +14,7 @@
         "off": "便利機能「{feature}」をオフにしました",
         "allowed": "便利機能「{feature}」を許可しました",
         "cleanup": "便利機能「{feature}」の {target} を削除しました",
+        "removed-entry": "{target} が削除されました。Navide はこの項目を戻しません。便利機能「{feature}」のほかの部分はそのまま動作します。元に戻すには、概要ページでこの機能をオフにしてから再度許可してください",
         "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください"
       },
       "button": {
@@ -31,6 +32,7 @@
       "off": "オフ",
       "allowed": "許可",
       "cleanup": "クリーンアップ",
+      "removed-entry": "ユーザーが項目を削除",
       "cleanup-failed": "クリーンアップ失敗",
       "prompt": "Navide の外でログインが変更"
     },

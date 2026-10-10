@@ -66,7 +66,9 @@ def settings_path() -> Path:
     return Path.home() / ".qwen" / "settings.json"
 
 
-def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str, Any]:
+def install_hooks(
+    port_file: str, settings_file: Path | None = None, *, skip: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     """Idempotent merge: ensure our Notification hook is present.
 
     Mirrors claude_hooks.install_hooks — prior agent-team entries are stripped
@@ -75,6 +77,9 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
 
     Skipped entirely when no ~/.qwen exists: writing settings.json would create
     the config directory for a CLI the user has not installed.
+
+    ``skip`` names hooks the user deleted by hand (``claude_hooks.hook_parts``
+    keys): they are not written back.
     """
     path = settings_file or settings_path()
     if settings_file is None and not path.parent.is_dir():
@@ -137,6 +142,13 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
                 # else: drop the wrapper we emptied
             else:
                 cleaned.append(entry)
+        part = f"{event_name}:{event_kind or 'guard'}"
+        if part in skip:
+            if cleaned:
+                hooks_section[event_name] = cleaned
+            else:
+                hooks_section.pop(event_name, None)
+            continue
         if event_name == GUARD_EVENT:
             # Same entry shape as the Notification hook below, plus a timeout.
             ours = {
