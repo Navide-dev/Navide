@@ -270,7 +270,7 @@ def sync_project_dir(
         planted = _read_manifest(target)
         if not sources and not planted and not target.is_dir():
             return False
-        ours = not target.is_dir()
+        ours = not target.is_dir() or _manifest_created(target)
         target.mkdir(parents=True, exist_ok=True)
         wanted = {source.name: source for source in sources}
         # Remove what we planted before and no longer want; never anything else.
@@ -294,7 +294,7 @@ def sync_project_dir(
                 continue  # a real directory here is the user's skill
             link.symlink_to(source, target_is_directory=True)
             planted.add(name)
-        _write_manifest(target, planted)
+        _write_manifest(target, planted, created=ours)
         if ours:
             _exclude_from_git(target)
         elif planted:
@@ -325,16 +325,25 @@ def remove_project_dir(target: Path) -> int:
     """Take back the links Navide planted in a workspace skills directory.
 
     Only names in the manifest that are still symlinks are removed, then the
-    manifest itself; the user's own skills there are never touched. Returns
-    how many links were removed.
+    manifest itself and the git exclude lines ``sync_project_dir`` added; the
+    user's own skills there are never touched. A directory Navide created is
+    deleted once it is empty. Returns how many links were removed.
     """
     removed = 0
-    for name in sorted(_read_manifest(target)):
+    names = _read_manifest(target)
+    created = _manifest_created(target) or _excluded_from_git(target)
+    for name in sorted(names):
         link = target / name
         if link.is_symlink():
             link.unlink(missing_ok=True)
             removed += 1
     (target / MANIFEST_FILE).unlink(missing_ok=True)
+    _unexclude_from_git(target, {*names, MANIFEST_FILE}, directory=created)
+    if created:
+        try:
+            target.rmdir()
+        except OSError:
+            pass  # not empty: what is left is the user's
     return removed
 
 
@@ -342,6 +351,9 @@ def remove_project_dir(target: Path) -> int:
 #: beside them so it travels with the checkout and is covered by the same
 #: git exclude.
 MANIFEST_FILE = ".navide-links"
+#: Manifest line recording that the directory itself was Navide's, so turning
+#: the feature off may delete it once empty.
+_CREATED_LINE = "# Navide created this directory"
 
 
 def _read_manifest(target: Path) -> set[str]:
@@ -378,12 +390,22 @@ def _plain_entry_name(name: str) -> bool:
     )
 
 
-def _write_manifest(target: Path, planted: set[str]) -> None:
+def _manifest_created(target: Path) -> bool:
+    try:
+        lines = (target / MANIFEST_FILE).read_text(encoding="utf-8").split("\n")
+    except OSError:
+        return False
+    return _CREATED_LINE in lines
+
+
+def _write_manifest(target: Path, planted: set[str], *, created: bool = False) -> None:
     manifest = target / MANIFEST_FILE
     if not planted:
         manifest.unlink(missing_ok=True)
         return
     body = "# links planted by Navide; edit or delete freely, Navide only touches these\n"
+    if created:
+        body += f"{_CREATED_LINE}\n"
     body += "".join(f"{name}\n" for name in sorted(planted))
     manifest.write_text(body, encoding="utf-8")
 
@@ -624,21 +646,10 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
     repo does not own the workspaces under it. The real home, not ``$HOME``:
     a backend launched from a shimmed pane inherits the shim's.
     """
-    root = target
-    home = real_home().resolve()
-    for candidate in [target, *target.parents]:
-        if candidate.resolve() == home:
-            return
-        if (candidate / ".git").is_dir():
-            root = candidate
-            break
-    else:
+    found = _exclude_file(target)
+    if found is None:
         return
-    exclude = root / ".git" / "info" / "exclude"
-    try:
-        rel = target.relative_to(root).as_posix()
-    except ValueError:
-        return
+    exclude, rel = found
     line = f"/{rel}/" if directory else f"/{rel}"
     try:
         existing = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
@@ -651,6 +662,59 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
             handle.write(f"{prefix}{line}\n")
     except OSError as err:
         log.warning("could not add %s to git exclude: %s", target, err)
+
+
+def _exclude_file(target: Path) -> tuple[Path, str] | None:
+    """(the repo's ``.git/info/exclude``, ``target`` relative to the repo)."""
+    root = target
+    home = real_home().resolve()
+    for candidate in [target, *target.parents]:
+        if candidate.resolve() == home:
+            return None
+        if (candidate / ".git").is_dir():
+            root = candidate
+            break
+    else:
+        return None
+    try:
+        rel = target.relative_to(root).as_posix()
+    except ValueError:
+        return None
+    return root / ".git" / "info" / "exclude", rel
+
+
+def _excluded_from_git(target: Path) -> bool:
+    """Whether the whole directory carries the exclude line Navide adds only
+    for a directory it created — the marker before manifests recorded it."""
+    found = _exclude_file(target)
+    if found is None:
+        return False
+    exclude, rel = found
+    try:
+        return f"/{rel}/" in exclude.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+
+
+def _unexclude_from_git(target: Path, names: set[str], *, directory: bool) -> None:
+    """Drop the exclude lines ``_exclude_from_git`` added for ``target``."""
+    found = _exclude_file(target)
+    if found is None:
+        return
+    exclude, rel = found
+    ours = {f"/{rel}/{name}" for name in names}
+    if directory:
+        ours.add(f"/{rel}/")
+    try:
+        lines = exclude.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return
+    kept = [line for line in lines if line.strip() not in ours]
+    if kept != lines:
+        try:
+            exclude.write_text("".join(kept), encoding="utf-8")
+        except OSError as err:
+            log.warning("could not update %s: %s", exclude, err)
 
 
 def _replace_view(view_root: Path, sources: list[Path], layout: tuple[str, ...]) -> None:

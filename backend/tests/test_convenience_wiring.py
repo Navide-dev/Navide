@@ -263,6 +263,39 @@ def test_turning_cursor_skills_off_removes_only_planted_links(gate, homes, tmp_p
     assert not (repo / ".cursor" / "skills" / "alpha").exists()
 
 
+def test_turning_cursor_skills_off_takes_back_the_folder_and_exclude_navide_created(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.write_text("# user\n", encoding="utf-8")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    assert "/.cursor/skills/" in exclude.read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+
+    assert exclude.read_text(encoding="utf-8") == "# user\n"
+    assert not (repo / ".cursor" / "skills").exists()
+
+
+def test_turning_cursor_skills_off_drops_only_its_own_exclude_lines_in_the_users_folder(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    repo = _cursor_repo(tmp_path)
+    (repo / ".cursor" / "skills" / "mine").mkdir(parents=True)
+    exclude = repo / ".git" / "info" / "exclude"
+    exclude.write_text("# user\n/.cursor/skills/mine-too\n", encoding="utf-8")
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    assert "/.cursor/skills/alpha" in exclude.read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+
+    assert exclude.read_text(encoding="utf-8") == "# user\n/.cursor/skills/mine-too\n"
+    assert sorted(p.name for p in (repo / ".cursor" / "skills").iterdir()) == ["mine"]
+
+
 def test_a_planted_skill_link_the_user_deleted_is_not_relinked(gate, tmp_path, monkeypatch) -> None:
     wiring = _cursor_skills(tmp_path, monkeypatch)
     repo = _cursor_repo(tmp_path)
