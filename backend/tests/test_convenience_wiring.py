@@ -910,6 +910,29 @@ def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link
     assert not target.exists() or not [p.name for p in target.iterdir() if p.is_symlink()]
 
 
+def test_a_skill_named_like_the_manifest_is_announced_once_per_workspace(gate, tmp_path, monkeypatch) -> None:
+    """R3-L5: the skill left out is the user's to know about, once for each
+    workspace, naming the link Navide did not create."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    named = tmp_path / "managed" / skills_wiring.MANIFEST_FILE
+    named.mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [named])
+    wiring = skills_wiring.skills_wiring("cursor")
+    repo = _cursor_repo(tmp_path / "a")
+    other = _cursor_repo(tmp_path / "b")
+
+    for _ in range(2):
+        convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo))
+    convenience_wiring.sync_project_dir_gated("cursor", wiring, str(other))
+
+    rows = [(e["target"], e["notify"]) for e in gate.history() if e["action"] == "refused-name"]
+    assert sorted(rows) == sorted(
+        (str(r / ".cursor" / "skills" / skills_wiring.MANIFEST_FILE), True) for r in (repo, other)
+    )
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
 def _alias(tmp_path: Path, real: Path, how: str) -> Path | str:
     if how == "symlink":
         link = tmp_path / "link"

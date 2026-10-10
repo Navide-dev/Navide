@@ -69,7 +69,7 @@ _BY_ID = {feature.id: feature for feature in REGISTRY}
 #: workspace target leads outside the workspace, so Navide set nothing up there.
 ACTIONS = (
     "first", "repair", "reset", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
-    "refused-unsafe",
+    "refused-unsafe", "refused-name",
 )
 
 UPGRADE_KEY = "convenience.upgrade_notice"

@@ -584,6 +584,14 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         }
         break
       }
+      case 'refused-name': {
+        // The target is the link Navide did not create: its folder, then its name.
+        const cut = Math.max(entry.target.lastIndexOf('/'), entry.target.lastIndexOf('\\'))
+        title = t('convenience.notice.action.refused-name', {
+          feature, name: entry.target.slice(cut + 1), target: entry.target.slice(0, Math.max(cut, 0)),
+        })
+        break
+      }
       // 'refused-unsafe' among them: a workspace left alone for safety.
       default:
         title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })

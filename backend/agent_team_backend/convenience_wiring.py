@@ -336,12 +336,13 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
+    skipped: list[Path] = []
     # Before the gate reads the manifest, so recording the refusal is not
     # mistaken for a change Navide made.
     refused = skills_wiring.refuse_missing_links(target) if g.allowed("cursor.project-skills") else []
 
     def write() -> None:
-        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd)
+        delivered[0] = skills_wiring.sync_project_dir(agent_key, wiring, cwd, skipped=skipped)
 
     outcome = g.apply(
         "cursor.project-skills", target, write=write,
@@ -352,6 +353,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
         g.record("cursor.project-skills", "removed-entry", str(target / name), detail="link deleted outside Navide")
     if outcome in ("off", "removed", "refused"):
         return False
+    for link in skipped:
+        g.record_once(
+            "cursor.project-skills", "refused-name", link,
+            detail="a skill with the manifest's name; not linked here",
+        )
     if not skills_wiring.has_manifest(target):
         g.forget("cursor.project-skills", target)
     return delivered[0]

@@ -256,6 +256,7 @@ def sync_project_dir(
     *,
     store: SkillsStore | None = None,
     native_root: Path | None = None,
+    skipped: list[Path] | None = None,
 ) -> bool:
     """Keep our links in the workspace's skill directory up to date.
 
@@ -266,6 +267,9 @@ def sync_project_dir(
     CLI's directory, exactly like a link the user might make themselves — so
     the set is recorded in a manifest beside the links. Anything not in the
     manifest is the user's and is left untouched.
+
+    ``skipped`` collects the links a skill's name kept from being created
+    (one named like the manifest), for the caller to tell the user.
     """
     if not cwd:
         return False
@@ -294,6 +298,8 @@ def sync_project_dir(
         for source in sources:
             if source.name == MANIFEST_FILE:
                 log.warning("skill %s is named like Navide's manifest — not linked in %s", source, target)
+                if skipped is not None:
+                    skipped.append(target / source.name)
         # Remove what we planted before and no longer want; never anything else.
         for name in sorted(planted):
             if name in wanted:
