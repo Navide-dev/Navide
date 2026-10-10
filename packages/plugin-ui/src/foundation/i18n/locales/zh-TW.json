@@ -8725,6 +8725,7 @@
     "switch-title": "切換帳號",
     "swap-failed": "帳號切換失敗，仍使用原本的帳號。",
     "panes-running": "有 {count} 個運行中的 CLI pane 正在使用此帳號，請先關閉再切換。",
+    "live-changed": "這則通知之後，登入中的 {agent} 帳號已經變了，所以沒有切換任何帳號。請到「設定 → 帳號」確認。",
     "switch-rate-limited": "帳號切換過於頻繁，請於 {seconds} 秒後再試。",
     "switch-restart-confirm-title": "重啟運行中的 pane",
     "switch-restart-confirm-body": "切換帳號將重啟 {count} 個運行中的 {agent} pane，繼續？",

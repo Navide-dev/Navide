@@ -8725,6 +8725,7 @@
     "switch-title": "アカウントを切り替え",
     "swap-failed": "アカウントの切り替えに失敗しました。以前のアカウントが引き続き有効です。",
     "panes-running": "実行中の CLI ペイン {count} 個がこのアカウントを使用しています。切り替える前に閉じてください。",
+    "live-changed": "この通知のあとでサインイン中の {agent} アカウントが変わったため、何も切り替えていません。設定 → アカウントで確認してください。",
     "switch-rate-limited": "アカウントの切り替え回数が多すぎます。{seconds} 秒後に再試行してください。",
     "switch-restart-confirm-title": "実行中のペインを再起動",
     "switch-restart-confirm-body": "アカウントを切り替えると、実行中の {agent} ペイン {count} 個が再起動されます。続行しますか？",

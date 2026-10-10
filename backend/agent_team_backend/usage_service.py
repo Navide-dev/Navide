@@ -513,6 +513,9 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
                     "reading the live %s login failed; left it as is: %s", agent_key, err
                 )
                 return True
+            fingerprint = await vault_to_thread(
+                _live_fingerprint, vault, agent_key, slot_id
+            ) if other else ""
             written = await vault_to_thread(functools.partial(
                 repair_live_login, agent_key, slot_id,
                 functools.partial(
@@ -522,6 +525,7 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
                 reason="signed in through Navide",
                 live_email=live_email, slot_email=slot_email,
                 slot_label=_profile_name(slot_id), other_account=other,
+                live_fingerprint=fingerprint,
             ))
             if other and not written:
                 # Navide's active account must follow the login that stays
@@ -548,6 +552,20 @@ def _slot_secret(vault, agent_key: str, slot_id: str) -> str | None:
         ).secret
     except Exception:  # noqa: BLE001 — no proof the live login is this account's
         return None
+
+
+def _live_fingerprint(vault, agent_key: str, slot_id: str) -> str:
+    """``login_fingerprint`` of the live login in ``slot_id``'s scope; ''
+    when it cannot be read. Blocking."""
+    from .convenience_wiring import login_fingerprint
+
+    try:
+        live = vault.read_live(
+            agent_key, strict=True, **_scope_kwargs(vault.read_live, agent_key, slot_id)
+        )
+    except Exception:  # noqa: BLE001 — the switch-back then refuses, never guesses
+        return ""
+    return login_fingerprint(live.secret)
 
 
 def _pre_login_secret(vault, agent_key: str, slot_id: str) -> str | None:

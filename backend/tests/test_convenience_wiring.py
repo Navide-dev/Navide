@@ -808,6 +808,7 @@ def test_an_account_changed_outside_navide_is_never_overridden(gate) -> None:
     assert convenience_wiring.repair_live_login(
         "claude", "slot-a", lambda: restored.append("x"), reason="r",
         live_email="Other@Example.com", slot_email="me@example.com", slot_label="Work",
+        live_fingerprint="f00d",
     ) is False
 
     assert restored == []
@@ -816,6 +817,7 @@ def test_an_account_changed_outside_navide_is_never_overridden(gate) -> None:
     assert json.loads(entry["detail"]) == {
         "agentKey": "claude", "slotId": "slot-a", "slotLabel": "Work",
         "liveEmail": "Other@Example.com", "slotEmail": "me@example.com",
+        "liveFingerprint": "f00d",
     }
 
 

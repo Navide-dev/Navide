@@ -3702,7 +3702,8 @@ async def test_switching_back_from_the_account_prompt_restores_and_never_corrupt
 
     s = _session()
     await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
-        "agent_key": "claude", "profile_id": detail["slotId"], "restore_live": True}})
+        "agent_key": "claude", "profile_id": detail["slotId"], "restore_live": True,
+        "restore_live_fingerprint": detail["liveFingerprint"]}})
     assert not s.websocket.sent[-1].get("error")
     assert vault.read_live("claude").secret == _SEC_A
 
@@ -3724,7 +3725,8 @@ async def test_switching_back_restores_the_slot_when_it_is_still_the_active_acco
     app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
     s = _session()
     await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
-        "agent_key": "claude", "profile_id": pa, "restore_live": True}})
+        "agent_key": "claude", "profile_id": pa, "restore_live": True,
+        "restore_live_fingerprint": ""}})
 
     assert not s.websocket.sent[-1].get("error")
     assert vault.read_live("claude").secret == _SEC_A
@@ -3906,3 +3908,137 @@ async def test_the_same_unidentified_outside_login_never_multiplies_profiles(
 
     names = [p["name"] for p in store.list()["profiles"]]
     assert len(names) == 3, names
+
+
+# ── Account prompt: switch-back is a real, guarded switch (round 2: AC-N2) ──
+
+
+def _switch_back(app, s, pid, fingerprint=None):
+    payload = {"agent_key": "claude", "profile_id": pid, "restore_live": True}
+    if fingerprint is not None:
+        payload["restore_live_fingerprint"] = fingerprint
+    return app.handle_message(s, {"id": "sb", "type": "cli_profiles.set_default", "payload": payload})
+
+
+@pytest.mark.asyncio
+async def test_the_account_prompt_carries_a_fingerprint_never_the_secret(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account={"emailAddress": "b@x.com"}))
+
+    await us._harvest_login_home_locked(vault, "claude", pa)
+
+    [prompt] = [e for e in _isolated_convenience_gate.history() if e["action"] == "prompt"]
+    assert json.loads(prompt["detail"])["liveFingerprint"] == login_fingerprint(_SEC_B)
+    assert "tokB" not in prompt["detail"] and "rB" not in prompt["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_stale_switch_back_never_overwrites_a_newer_outside_login(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N2: the prompt was about B; the user then signed in D outside.
+    Its switch-back is refused and nothing moves: D stays live, B's
+    profile keeps B."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account={"emailAddress": "b@x.com"}))
+    await us._harvest_login_home_locked(vault, "claude", pa)
+    [prompt] = [e for e in _isolated_convenience_gate.history() if e["action"] == "prompt"]
+    pb = store.list()["defaults"]["claude"]
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account={"emailAddress": "d@x.com"}))
+
+    s = _session()
+    await _switch_back(app, s, pa, json.loads(prompt["detail"])["liveFingerprint"])
+
+    assert s.websocket.sent[-1]["error"]["code"] == "LIVE_CHANGED"
+    assert vault.read_live("claude").secret == _SEC_D
+    assert vault.read_slot("claude", pb).secret == _SEC_B
+    assert store.list()["defaults"]["claude"] == pb
+
+
+@pytest.mark.asyncio
+async def test_a_switch_back_without_the_prompts_fingerprint_is_refused(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account=None))
+    s = _session()
+    await _switch_back(app, s, pa)
+
+    assert s.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+    assert vault.read_live("claude").secret == _SEC_B
+
+
+@pytest.mark.asyncio
+async def test_switching_back_keeps_the_unknown_live_login_in_its_own_profile(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N2: with the prompt's account still the active one, switching back
+    first captures the live login nobody holds into a profile of its own,
+    then switches like Settings does: counted, announced, broadcast."""
+    from agent_team_backend import ws_handlers
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account=None))
+    changed: list[str] = []
+
+    async def profiles_changed(reason, **kw):
+        changed.append(reason)
+
+    monkeypatch.setattr(ws_handlers, "_broadcast_profiles_changed", profiles_changed)
+    s = _session()
+    await _switch_back(app, s, pa, login_fingerprint(_SEC_D))
+
+    assert not s.websocket.sent[-1].get("error")
+    assert vault.read_live("claude").secret == _SEC_A
+    assert store.list()["defaults"]["claude"] == pa
+    held = [p["id"] for p in store.list()["profiles"]
+            if vault.read_slot("claude", p["id"]).secret == _SEC_D]
+    assert len(held) == 1 and held[0] not in (pa, pc)
+    assert changed == ["set_default"]
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guard", ["login", "rate"])
+async def test_switching_back_obeys_the_normal_switch_guards(
+    tmp_path, monkeypatch, _isolated_convenience_gate, guard
+) -> None:
+    """AC-N2: a running sign-in and the switch rate limit refuse the
+    switch-back too; nothing is captured, registered or written."""
+    from agent_team_backend import ws_handlers
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _register_running_terminal, _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account=None))
+    s = _session()
+    if guard == "login":
+        _register_running_terminal(s, "login", "claude", login_profile_id=pa)
+    else:
+        monkeypatch.setattr(ws_handlers, "_switch_rate_retry_after", lambda agent_key: 30.0)
+
+    await _switch_back(app, s, pa, login_fingerprint(_SEC_D))
+
+    code = s.websocket.sent[-1]["error"]["code"]
+    assert code == ("LOGIN_IN_PROGRESS" if guard == "login" else "SWITCH_RATE_LIMITED")
+    assert vault.read_live("claude").secret == _SEC_D
+    assert [p["name"] for p in store.list()["profiles"]] == ["A", "C"]
+    assert _isolated_convenience_gate.history() == []

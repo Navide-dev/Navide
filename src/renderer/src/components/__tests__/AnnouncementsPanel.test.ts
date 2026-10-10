@@ -300,7 +300,7 @@ describe('AnnouncementsPanel convenience rows', () => {
     try {
       const actions = [
         { kind: 'convenience-keep-login', rowId: 'convenience:11' },
-        { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work' },
+        { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work', liveFingerprint: 'fp-b' },
         { kind: 'convenience-overview' },
       ] as const
       const wrapper = mountPanel([

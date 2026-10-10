@@ -9,6 +9,7 @@ no app, tooling) every writer runs exactly as it did before the gate existed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -386,6 +387,16 @@ def _drop_codex_hook_trust() -> None:
 # ── Account auto-repair (D7) ───────────────────────────────────────────────
 
 
+def login_fingerprint(secret: str | None) -> str:
+    """The account prompt's handle on one live login: a hash, never the
+    secret ('' when nobody is signed in). Its "switch back" sends it back,
+    so the switch applies to the login the user was told about."""
+    if secret is None:
+        return ""
+    digest = hashlib.sha256(b"navide-account-prompt\0" + secret.encode("utf-8"))
+    return digest.hexdigest()[:24]
+
+
 def repair_live_login(
     agent_key: str,
     slot_id: str,
@@ -396,6 +407,7 @@ def repair_live_login(
     slot_email: str | None = None,
     slot_label: str = "",
     other_account: bool = False,
+    live_fingerprint: str = "",
 ) -> bool:
     """Write the active account back into the CLI's live login, as the
     feature credentials.auto-repair. Returns whether it was written.
@@ -404,7 +416,8 @@ def repair_live_login(
     Navide would restore, the user changed it outside Navide. That is never
     overridden: the user gets a prompt (keep it, or switch back) instead.
     ``other_account`` says so when no pair of emails can (an unidentified
-    login whose secret is not the slot's own).
+    login whose secret is not the slot's own). ``live_fingerprint``
+    (``login_fingerprint``) names that login in the prompt.
     """
     g = _gate
     if g is None:
@@ -421,6 +434,7 @@ def repair_live_login(
             detail=json.dumps({
                 "agentKey": agent_key, "slotId": slot_id, "slotLabel": slot_label,
                 "liveEmail": live_email, "slotEmail": slot_email,
+                "liveFingerprint": live_fingerprint,
             }),
         )
         return False

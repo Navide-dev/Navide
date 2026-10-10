@@ -229,7 +229,7 @@ describe('convenience announcement rows', () => {
       features: [],
       notices: [entry({
         id: 11, feature: 'credentials.auto-repair', action: 'prompt', target: 'claude',
-        detail: JSON.stringify({ agentKey: 'claude', slotId: 'slot-a', slotLabel: 'Work', liveEmail: 'me@home.dev', slotEmail: 'me@work.dev' }),
+        detail: JSON.stringify({ agentKey: 'claude', slotId: 'slot-a', slotLabel: 'Work', liveEmail: 'me@home.dev', slotEmail: 'me@work.dev', liveFingerprint: 'fp-b' }),
       })],
       upgrade: null,
     })
@@ -238,7 +238,7 @@ describe('convenience announcement rows', () => {
     expect(row.highlights).toEqual(['目前登入：me@home.dev · Navide 原本會還原成：Work'])
     expect(row.actions).toEqual([
       { kind: 'convenience-keep-login', rowId: 'convenience:11' },
-      { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work' },
+      { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work', liveFingerprint: 'fp-b' },
       { kind: 'convenience-overview' },
     ])
     announcements.markRead('convenience:11')
@@ -249,6 +249,7 @@ describe('convenience announcement rows', () => {
     ['not JSON', 'live account differs'],
     ['JSON without a slotId', JSON.stringify({ agentKey: 'codex', liveEmail: 'me@home.dev' })],
     ['a null slotId', JSON.stringify({ agentKey: 'codex', slotId: null, slotLabel: 'Default' })],
+    ['JSON without the live login fingerprint', JSON.stringify({ agentKey: 'codex', slotId: 'slot-a', slotLabel: 'Work' })],
   ])('never offers a switch back when the detail is %s', (_, detail) => {
     useAnnouncements().noteConvenience({
       features: [],

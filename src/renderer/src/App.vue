@@ -14134,7 +14134,9 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
     case 'convenience-switch-back': {
       // Back to the account Navide would have restored, through the same
       // switch flow as Settings → Accounts.
-      const res = await cliAccountSwitch(action.agentKey, action.slotId, { restoreLive: true })
+      const res = await cliAccountSwitch(action.agentKey, action.slotId, {
+        restoreLive: { liveFingerprint: action.liveFingerprint },
+      })
       if (res.ok) announcements.markRead(action.rowId)
       else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
       break

@@ -89,6 +89,37 @@ describe('useCliProfiles', () => {
     scope.stop()
   })
 
+  it('set_default sends the account prompt\'s switch-back with its live-login fingerprint', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.set_default', { defaults: { claude: 'p1' } })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    await result.setDefault('claude', 'p1', { restoreLive: { liveFingerprint: 'fp-b' } })
+    const call = mock.sent.find((s) => s.type === 'cli_profiles.set_default')
+    expect(call?.payload).toEqual({
+      agent_key: 'claude', profile_id: 'p1', restore_live: true, restore_live_fingerprint: 'fp-b',
+    })
+    scope.stop()
+  })
+
+  it('set_default tells a stale switch-back (LIVE_CHANGED) that nothing was switched', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.set_default', null as unknown as object, {
+      ok: false,
+      error: { code: 'LIVE_CHANGED', message: 'another claude login is live since this prompt; nothing was switched' },
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    const res = await result.setDefault('claude', 'p1', { restoreLive: { liveFingerprint: 'fp-b' } })
+    expect(res).toMatchObject({ ok: false, code: 'LIVE_CHANGED' })
+    expect(res.ok ? '' : res.message).toContain('nothing was switched')
+    scope.stop()
+  })
+
   it('set_default maps PANES_RUNNING to code + count without setting the banner error', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
@@ -540,7 +571,7 @@ describe('createCliAccountSwitchHandler', () => {
   type SetDefaultFn = (
     agentKey: string,
     profileId: string | null,
-    opts?: { force?: boolean; restoreLive?: boolean },
+    opts?: { force?: boolean; restoreLive?: { liveFingerprint: string } },
   ) => Promise<SetDefaultResult>
 
   function makeCaps(confirmResult = true) {
@@ -569,10 +600,11 @@ describe('createCliAccountSwitchHandler', () => {
       .mockResolvedValueOnce({ ok: true })
     const handler = createCliAccountSwitchHandler({ setDefault }, makeCaps())
 
-    expect(await handler('claude', 'p1', { restoreLive: true })).toEqual({ ok: true })
+    const restoreLive = { liveFingerprint: 'fp-b' }
+    expect(await handler('claude', 'p1', { restoreLive })).toEqual({ ok: true })
     expect(setDefault.mock.calls).toEqual([
-      ['claude', 'p1', { restoreLive: true }],
-      ['claude', 'p1', { force: true, restoreLive: true }],
+      ['claude', 'p1', { restoreLive }],
+      ['claude', 'p1', { force: true, restoreLive }],
     ])
   })
 

@@ -62,7 +62,7 @@ export type ConvenienceAnnouncementAction =
   /** Acknowledges a notice that offers nothing else (an outside sign-out). */
   | { kind: 'convenience-dismiss'; rowId: string }
   /** Back to the account Navide would restore, named by the prompt's slotId. */
-  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string }
+  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string; liveFingerprint: string }
   | { kind: 'convenience-upgrade-ack' }
 
 export type AnnouncementActionSpec =
@@ -487,6 +487,9 @@ interface ConveniencePromptDetail {
   slotLabel?: string
   liveEmail?: string
   slotEmail?: string
+  /** Hash of the live login the prompt is about; the switch-back sends it
+   *  back and the backend refuses it once another login is live. */
+  liveFingerprint?: string
   /** "logout": the user signed out outside Navide; no slot to switch back to. */
   reason?: string
 }
@@ -564,11 +567,15 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         // A prompt is answered once: reading the row is the answer "keep"
         // (Navide already follows the live account). Switching back needs the
         // slot the prompt names; a missing one must never become a switch to
-        // Default, so then only "keep" is offered.
+        // Default, so then only "keep" is offered. The same goes for the live
+        // login's fingerprint, without which the backend refuses the switch.
         if (!seen.has(id)) {
           actions.push({ kind: 'convenience-keep-login', rowId: id })
-          if (typeof detail.slotId === 'string' && detail.slotId) {
-            actions.push({ kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId, label })
+          if (typeof detail.slotId === 'string' && detail.slotId && typeof detail.liveFingerprint === 'string') {
+            actions.push({
+              kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId, label,
+              liveFingerprint: detail.liveFingerprint,
+            })
           }
         }
         break

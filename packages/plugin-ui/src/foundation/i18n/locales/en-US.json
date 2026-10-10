@@ -8725,6 +8725,7 @@
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
     "panes-running": "{count} running CLI pane(s) are using this account — close them before switching.",
+    "live-changed": "The signed-in {agent} account changed after this notice, so nothing was switched. Check Settings → Accounts.",
     "switch-rate-limited": "Too many account switches — try again in {seconds}s.",
     "switch-restart-confirm-title": "Restart running panes",
     "switch-restart-confirm-body": "Switching accounts will restart {count} running {agent} pane(s). Continue?",
