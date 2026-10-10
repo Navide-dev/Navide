@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import functools
+import hashlib
+import hmac
 import json
 import logging
 import mimetypes
@@ -446,6 +448,18 @@ def host_supports_plans_backend() -> bool:
     )
 
 
+def navide_window_proof_matches(proof: Any) -> bool:
+    """Whether a /ws client was handed its URL by Electron main for one of its
+    windows: main appends HMAC-SHA256(host token, "navide-window") there and
+    nowhere else. The token file is readable by every pane process, so it
+    cannot say this; the host token never leaves main and this process."""
+    expected = _HOST_SESSION_TOKEN
+    if not isinstance(proof, str) or not expected:
+        return False
+    digest = hmac.new(expected.encode(), b"navide-window", hashlib.sha256).hexdigest()
+    return secrets.compare_digest(proof, digest)
+
+
 def host_session_token_matches(token: Any) -> bool:
     """Validate the per-backend token used by Electron's Host session."""
     expected = _HOST_SESSION_TOKEN
@@ -513,6 +527,10 @@ class Session:
         # most recently focused first.
         self.ui_bus_ready = False
         self.ui_focused_at = 0.0
+        # Set at connect from the window proof in the URL (see
+        # navide_window_proof_matches): a Navide window, as opposed to any
+        # other client holding the token. ui_bus_ready is self-declared.
+        self.navide_window = False
         # Throttle state for the slow-send probe (see _note_send_timing).
         # None rather than 0.0: the first slow send must always report, which a
         # zero baseline would swallow whenever the clock starts near zero.
@@ -3011,6 +3029,7 @@ async def ws(websocket: WebSocket) -> None:
     await websocket.accept()
     log.info("ws client connected")
     session = Session(websocket)
+    session.navide_window = navide_window_proof_matches(websocket.query_params.get("w") or "")
     _SESSIONS.add(session)
     # An MCP client reads this backend's tool list once, when it connects, so a
     # CLI that was already talking to the previous backend keeps the tools it

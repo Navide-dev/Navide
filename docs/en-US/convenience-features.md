@@ -129,7 +129,9 @@ interface LogEntry {
                              //     no slotId, nothing to switch back to
   backup: string             // '' when none
   notify: boolean
-  source: string             // who triggered it: 'settings' (a Navide main window),
+  source: string             // who triggered it: 'settings' (a Navide main window,
+                             //     proven by the window proof Electron main puts in
+                             //     its windows' /ws URL — never the client's own word),
                              // 'ws-client' (any other client with the backend token),
                              // '' for Navide's own writes
 }
