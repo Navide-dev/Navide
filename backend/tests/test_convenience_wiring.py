@@ -452,3 +452,42 @@ async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, mon
     }
     assert all(r["owner"] == "navide" and r["valid"] for r in rows)
     assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}
+
+
+def test_a_repair_that_fails_after_writing_still_leaves_a_log_row(gate) -> None:
+    """D2: a restore that raises (possibly after the Keychain write) is logged."""
+    def restore() -> None:
+        raise RuntimeError("~/.claude.json write failed")
+
+    with pytest.raises(RuntimeError):
+        convenience_wiring.repair_live_login("claude", "slot-a", restore, reason="r")
+
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("repair", True)
+    assert "failed" in entry["detail"]
+
+
+def test_an_unidentified_other_account_is_a_prompt(gate) -> None:
+    """D1: no emails to compare, but the caller knows it is not the slot's own."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "kimi", "slot-a", lambda: restored.append("x"), reason="r", other_account=True,
+    ) is False
+
+    assert restored == []
+    assert [e["action"] for e in gate.history()] == ["prompt"]
+
+
+def test_the_account_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
+    """A11: the audit row carries the emails the prompt shows; the log does not."""
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="agent_team_backend.convenience"):
+        convenience_wiring.repair_live_login(
+            "claude", "slot-a", lambda: None, reason="r",
+            live_email="other@example.com", slot_email="me@example.com",
+        )
+
+    assert "other@example.com" in gate.history()[0]["detail"]
+    assert "@example.com" not in caplog.text

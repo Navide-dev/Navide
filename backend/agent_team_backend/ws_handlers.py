@@ -2619,6 +2619,36 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
                     )
                 )
                 return
+        if current_id == profile_id and payload.get("restore_live"):
+            # The account prompt's "switch back" while its account is still
+            # the active one: the live login is someone else's (or nobody's),
+            # so "already active" would be a false ok. Write the slot back
+            # to live — the user asked for exactly this.
+            from .convenience_wiring import gate as convenience_gate
+
+            slot = profile_id or DEFAULT_SLOT_ID
+            try:
+                live, own = await vault_to_thread(lambda: (
+                    app.credential_vault.read_live(agent_key, strict=True).secret,
+                    app.credential_vault.read_slot(agent_key, slot).secret,
+                ))
+                if live != own:
+                    await vault_to_thread(app.credential_vault.restore, agent_key, slot)
+                    g = convenience_gate()
+                    if g is not None:
+                        g.record("credentials.auto-repair", "repair", f"{agent_key} live login",
+                                 detail="switched back from the account prompt")
+            except Exception as err:  # noqa: BLE001
+                await session.send_json(
+                    make_error(msg_id, msg_type, "PROFILE_SWAP_FAILED", _profile_error(err))
+                )
+                return
+            await session.send_json(
+                make_response(
+                    msg_id, msg_type, {"defaults": app.cli_profiles_store.list()["defaults"]}
+                )
+            )
+            return
         if current_id == profile_id:
             # Already active — nothing to swap, nothing changed.
             await session.send_json(

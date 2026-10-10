@@ -310,6 +310,7 @@ def repair_live_login(
     live_email: str | None = None,
     slot_email: str | None = None,
     slot_label: str = "",
+    other_account: bool = False,
 ) -> bool:
     """Write the active account back into the CLI's live login, as the
     feature credentials.auto-repair. Returns whether it was written.
@@ -317,6 +318,8 @@ def repair_live_login(
     D7: when the live login is a *different* signed-in account than the one
     Navide would restore, the user changed it outside Navide. That is never
     overridden: the user gets a prompt (keep it, or switch back) instead.
+    ``other_account`` says so when no pair of emails can (an unidentified
+    login whose secret is not the slot's own).
     """
     g = _gate
     if g is None:
@@ -325,7 +328,9 @@ def repair_live_login(
     if not g.allowed("credentials.auto-repair"):
         return False
     target = f"{agent_key} live login"
-    if live_email and slot_email and live_email.casefold() != slot_email.casefold():
+    if other_account or (
+        live_email and slot_email and live_email.casefold() != slot_email.casefold()
+    ):
         g.record(
             "credentials.auto-repair", "prompt", target,
             detail=json.dumps({
@@ -334,9 +339,28 @@ def repair_live_login(
             }),
         )
         return False
-    restore()
+    log.info("restoring the %s live login from slot %s (%s)", agent_key, slot_id, reason)
+    try:
+        restore()
+    except Exception as err:
+        # The write may have landed before it failed (Keychain first, then
+        # ~/.claude.json): a failure still leaves its row.
+        g.record("credentials.auto-repair", "repair", target, detail=f"{reason}; failed: {err}")
+        raise
     g.record("credentials.auto-repair", "repair", target, detail=reason)
     return True
+
+
+def prompt_live_logout(agent_key: str) -> None:
+    """The live login went empty after Navide had it signed in: the user
+    signed out outside Navide. Never signed back in; the user is told."""
+    g = _gate
+    if g is None or not g.allowed("credentials.auto-repair"):
+        return
+    g.record(
+        "credentials.auto-repair", "prompt", f"{agent_key} live login",
+        detail=json.dumps({"agentKey": agent_key, "reason": "logout"}),
+    )
 
 
 #: Removal for the features that are not CLI hooks.

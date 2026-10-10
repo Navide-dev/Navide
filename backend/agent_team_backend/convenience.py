@@ -226,7 +226,10 @@ class ConvenienceGate:
             "id": entry_id, "at": at, "feature": feature_id, "action": action,
             "target": target, "detail": detail, "backup": backup, "notify": notify,
         }
-        log.info("convenience %s %s %s %s", feature_id, action, target, detail)
+        # A prompt's detail names the signed-in accounts (emails): the audit
+        # row and the announcement need them, the backend log does not.
+        log.info("convenience %s %s %s %s", feature_id, action, target,
+                 "" if action == "prompt" else detail)
         if notify and self.notify is not None:
             try:
                 self.notify({"feature": feature_id, "entry": entry})
