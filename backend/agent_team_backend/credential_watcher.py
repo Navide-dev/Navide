@@ -208,9 +208,10 @@ def _adopt_unregistered_live_account(
         except Exception as err:  # noqa: BLE001
             log.error("undoing profile %s for %s failed: %s", profile_id, agent_key, err)
         return None
+    # The profile is named by the account's email; the log names only the id.
     log.info(
-        "live %s account %s was unregistered; registered it as profile %s",
-        agent_key, email, profile_id,
+        "live %s account was unregistered; registered it as profile %s",
+        agent_key, profile_id,
     )
     return profile_id
 
