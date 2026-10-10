@@ -23,3 +23,18 @@ export function answerWindowChallenge(
   if (!hostSessionToken || typeof nonce !== 'string' || !WINDOW_CHALLENGE.test(nonce)) return null
   return proveWindow(hostSessionToken, nonce)
 }
+
+/**
+ * backend:info — the full payload (including wsUrl, which carries the ws
+ * token) for a Navide window main created: a top-level frame of a window in
+ * one of `navideWindows` (main, detached, Plans, Token Monitor). A plugin
+ * frame or view, a webview, or any other window gets only the status.
+ */
+export function backendInfoFor<T extends { status: string }>(
+  event: Sender,
+  navideWindows: ReadonlyArray<ReadonlySet<BrowserWindow>>,
+  payload: T,
+): T | { status: T['status'] } {
+  if (navideWindows.some((windows) => isTrustedPluginManagementSender(event, windows))) return payload
+  return { status: payload.status }
+}

@@ -14,7 +14,7 @@ import {
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
-import { answerWindowChallenge } from './backendIpc'
+import { answerWindowChallenge, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
@@ -354,6 +354,9 @@ const mainWindowWorkspaces = new Map<BrowserWindow, string>()
 const detachedGroups = new Map<string, BrowserWindow>()          // groupId → child window
 const detachedGroupWorkspace = new Map<string, string>()         // groupId → workspace_path
 const detachedWindowIds = new Set<number>()                      // child window ids
+// Navide windows main created that are not main windows (Plans, Token
+// Monitor): they get the full backend:info, but never a window proof.
+const navideAuxWindows = new Set<BrowserWindow>()
 // Workspaces a window has taken on from its sidebar, beyond the one it was
 // opened with. Kept apart from mainWindowWorkspaces so everything that means
 // "this window's own workspace" — the registry, run-group hand-offs, the
@@ -789,6 +792,8 @@ const requestTokenMonitor = createTokenMonitorWindowOpener({
   // Machine-wide: no workspace_path, so the restore filter reopens it without
   // asking which workspace came back.
   onWindowCreated: (win) => {
+    navideAuxWindows.add(win)
+    win.once('closed', () => navideAuxWindows.delete(win))
     watchRendererCrashes(win, { kind: 'token-monitor', log: warnMain })
     trackAuxWindow(win, { kind: 'token-monitor' })
   },
@@ -2002,7 +2007,11 @@ ipcMain.handle('plans:retryV2', (event) => {
   return retryPlansV2AfterRecovery()
 })
 
-ipcMain.handle('backend:info', () => backendInfoPayload())
+// Full info (wsUrl carries the ws token) for Navide windows only; a plugin
+// frame or view, a webview or any other window learns just the status.
+ipcMain.handle('backend:info', (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], backendInfoPayload())
+)
 // Signs one ws connection's window challenge, for a main window only.
 ipcMain.handle('backend:proveWindow', (event, nonce: unknown) =>
   answerWindowChallenge(event, nonce, mainWindows, backend?.hostSessionToken ?? null)
@@ -4061,6 +4070,8 @@ async function openLegacyPlanWindow(workspacePath: string, relPath?: string): Pr
     }
   })
   planWindows.set(workspacePath, win)
+  navideAuxWindows.add(win)
+  win.once('closed', () => navideAuxWindows.delete(win))
   watchRendererCrashes(win, { kind: 'plans', log: warnMain })
   // Restored as a plain Plans window: which of the two implementations serves
   // it next launch is decided then, by the router, exactly as it is here.

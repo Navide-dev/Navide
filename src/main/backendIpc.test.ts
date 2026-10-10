@@ -11,7 +11,7 @@ vi.mock('electron', () => ({
 }))
 
 import { proveWindow } from './backend'
-import { answerWindowChallenge } from './backendIpc'
+import { answerWindowChallenge, backendInfoFor } from './backendIpc'
 
 type FakeWindow = { id: number; webContents: object; isDestroyed: () => boolean }
 
@@ -66,5 +66,48 @@ describe('backend:proveWindow (R3-M2)', () => {
     // The broker connects with the same URL; only useBackend answers ws.welcome.
     const source = readFileSync(resolve(__dirname, 'plugins/frontendPluginManager.ts'), 'utf8')
     expect(source).not.toMatch(/ws\.welcome|window\.prove|proveWindow/)
+  })
+})
+
+describe('backend:info scope (R3-M2)', () => {
+  beforeEach(() => fromWebContents.mockReset())
+
+  const FULL = {
+    status: 'ready' as const,
+    host: '127.0.0.1',
+    port: 1,
+    pid: 2,
+    shell: '/bin/zsh',
+    httpUrl: 'http://127.0.0.1:1',
+    wsUrl: 'ws://127.0.0.1:1/ws?t=secret',
+  }
+
+  it('gives every Navide window main created the full payload', () => {
+    const mainSender = {}
+    const auxSender = {}
+    const main = windowWith(mainSender, 1)
+    const aux = windowWith(auxSender, 2)
+    const groups = [new Set([main]), new Set([aux])] as never
+    fromWebContents.mockReturnValue(main)
+    expect(backendInfoFor({ sender: mainSender, senderFrame: { parent: null } } as never, groups, FULL)).toEqual(FULL)
+    fromWebContents.mockReturnValue(aux)
+    expect(backendInfoFor({ sender: auxSender, senderFrame: { parent: null } } as never, groups, FULL)).toEqual(FULL)
+  })
+
+  it('gives anything else only the status', () => {
+    const sender = {}
+    const main = windowWith(sender)
+    const groups = [new Set([main])] as never
+    fromWebContents.mockReturnValue(main)
+    // Plugin iframe in a Navide window.
+    expect(backendInfoFor({ sender, senderFrame: { parent: {} } } as never, groups, FULL)).toEqual({ status: 'ready' })
+    // Webview / plugin view owned by it.
+    expect(backendInfoFor({ sender: {}, senderFrame: { parent: null } } as never, groups, FULL)).toEqual({ status: 'ready' })
+    // A window main did not register as a Navide window (a plugin host window).
+    const stranger = {}
+    fromWebContents.mockReturnValue(windowWith(stranger, 9))
+    expect(backendInfoFor({ sender: stranger, senderFrame: { parent: null } } as never, groups, FULL)).toEqual({ status: 'ready' })
+    fromWebContents.mockReturnValue(null)
+    expect(backendInfoFor({ sender: {}, senderFrame: { parent: null } } as never, groups, FULL)).toEqual({ status: 'ready' })
   })
 })
