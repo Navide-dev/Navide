@@ -74,7 +74,7 @@ the panes they serve cannot run without them.
   — the ledger: every target Navide wrote for a feature.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER)`
   — append-only. `action` is one of `first`, `repair`, `removed`, `off`,
-  `allowed`, `cleanup`, `prompt`.
+  `allowed`, `cleanup`, `cleanup-failed`, `prompt`.
 - kv `convenience.upgrade_notice` — set once the upgrade notice was published.
 
 ## WebSocket API
@@ -94,7 +94,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
+  action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object:
@@ -108,9 +108,15 @@ interface UpgradeNotice { features: string[] } // ids in use when the upgrade ra
 `convenience.history` `{ feature?: string, limit?: number }` → `{ entries: LogEntry[] }`
 
 `convenience.set` `{ id, allowed: boolean }` → `{ feature: Feature }`. Off runs the
-feature's removal (only Navide-marked entries) before switching off; allowed
-clears a `removed` reason and re-applies startup features at once (per-spawn
-features apply on the next spawn).
+feature's removal (only Navide-marked entries) before switching off: each
+target is backed up, its entry taken out, checked afterwards and logged as
+`cleanup`. When an entry cannot be taken out (the file does not parse, the
+write fails) it would keep working, so the switch does **not** move: the
+target is logged and announced as `cleanup-failed`, the feature stays
+`allowed`, and the call fails with `CLEANUP_INCOMPLETE`. Targets that were
+taken back are dropped from the ledger, so writing them again later is a
+`first`, never a removal. Allowed clears a `removed` reason and re-applies
+startup features at once (per-spawn features apply on the next spawn).
 
 `convenience.upgrade_ack` `{}` → `{}`.
 

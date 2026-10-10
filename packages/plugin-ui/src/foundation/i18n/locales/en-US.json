@@ -13,7 +13,8 @@
       "action": {
         "off": "The convenience feature \"{feature}\" was turned off",
         "allowed": "The convenience feature \"{feature}\" was allowed",
-        "cleanup": "Removed {target} for the convenience feature \"{feature}\""
+        "cleanup": "Removed {target} for the convenience feature \"{feature}\"",
+        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again"
       },
       "button": {
         "overview": "Open overview",
@@ -30,6 +31,7 @@
       "off": "Turned off",
       "allowed": "Allowed",
       "cleanup": "Cleaned up",
+      "cleanup-failed": "Could not clean up",
       "prompt": "Sign-in changed outside Navide"
     },
     "overview": {

@@ -11830,6 +11830,7 @@ async def convenience_history(session: "Session", msg_id: str, msg_type: str, pa
 async def convenience_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app, convenience_wiring
     from .applog import backend_port_file
+    from .convenience import CleanupIncomplete
 
     feature_id = str(payload.get("id") or "")
     allowed = payload.get("allowed")
@@ -11842,6 +11843,12 @@ async def convenience_set(session: "Session", msg_id: str, msg_type: str, payloa
         )
     except KeyError:
         await session.send_json(make_error(msg_id, msg_type, "UNKNOWN_FEATURE", feature_id))
+        return
+    except CleanupIncomplete as err:
+        # The switch did not move: Navide's entry is still in those files and
+        # still works. The cleanup rows already announced which and why.
+        await session.send_json(make_error(msg_id, msg_type, "CLEANUP_INCOMPLETE", str(err)))
+        await app.broadcast(make_event("convenience.changed", {"feature": feature_id}))
         return
     except ValueError as err:
         await session.send_json(make_error(msg_id, msg_type, "REQUIRED_FEATURE", str(err)))

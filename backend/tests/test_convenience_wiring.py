@@ -123,6 +123,41 @@ def test_turning_hooks_off_removes_only_navides_entries(gate, homes) -> None:
     )["convenience"] == "off"
 
 
+def test_turning_hooks_off_backs_up_and_logs_what_it_took_back(gate, homes) -> None:
+    """A6: off is a write to the user's file like any other: backed up first
+    and logged per target as ``cleanup``."""
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, str(homes["port"]))
+    before = _target("claude").read_text(encoding="utf-8")
+
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    [cleanup] = [e for e in gate.history("claude.hooks") if e["action"] == "cleanup"]
+    assert cleanup["target"] == str(_target("claude"))
+    assert Path(cleanup["backup"]).read_text(encoding="utf-8") == before
+    assert gate.state("claude.hooks") == ("off", "user")
+
+
+def test_off_never_claims_off_while_navides_hooks_are_still_in_an_unreadable_file(gate, homes) -> None:
+    """A6: a settings.json the user broke by hand (a trailing comma) cannot be
+    cleaned, so Navide's hooks keep firing. The switch must not read "off"
+    then: the feature stays allowed and the user is told why."""
+    settings = _target("claude")
+    settings.write_text("{}", encoding="utf-8")
+    convenience_wiring.install_cli_hooks(str(homes["port"]))
+    settings.write_text(settings.read_text(encoding="utf-8").rstrip().rstrip("}") + ",}", encoding="utf-8")
+    broken = settings.read_text(encoding="utf-8")
+
+    with pytest.raises(convenience.CleanupIncomplete) as raised:
+        convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    assert raised.value.targets == [str(settings)]
+    assert settings.read_text(encoding="utf-8") == broken
+    assert gate.state("claude.hooks") == ("allowed", "default")
+    [cleanup] = [e for e in gate.history("claude.hooks") if e["action"].startswith("cleanup")]
+    assert (cleanup["action"], cleanup["notify"]) == ("cleanup-failed", True)
+    assert Path(cleanup["backup"]).read_text(encoding="utf-8") == broken
+
+
 @pytest.mark.parametrize("agent", ["claude", "qwen", "copilot"])
 def test_re_allowing_installs_the_hooks_again_at_once(gate, homes, monkeypatch, agent) -> None:
     monkeypatch.setitem(
@@ -195,7 +230,7 @@ async def test_the_ws_api_lists_switches_and_refuses_a_required_feature(gate, ho
     assert sent[-1]["error"]["code"] == "REQUIRED_FEATURE"
 
     await ws_handlers.convenience_history(session, "4", "convenience.history", {"feature": "claude.hooks"})
-    assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "first"]
+    assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "cleanup", "first"]
 
 
 # ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────

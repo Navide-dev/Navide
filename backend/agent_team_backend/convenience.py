@@ -60,9 +60,9 @@ _BY_ID = {feature.id: feature for feature in REGISTRY}
 
 #: Log actions. ``first``/``repair``: a write changed a target; ``removed``:
 #: the user deleted an entry; ``off``/``allowed``: the switch moved;
-#: ``cleanup``: Navide took back its own entry; ``prompt``: a decision is
-#: waiting on the user.
-ACTIONS = ("first", "repair", "removed", "off", "allowed", "cleanup", "prompt")
+#: ``cleanup``: Navide took back its own entry; ``cleanup-failed``: it could
+#: not, so the feature stayed on; ``prompt``: a decision is waiting on the user.
+ACTIONS = ("first", "repair", "removed", "off", "allowed", "cleanup", "cleanup-failed", "prompt")
 
 UPGRADE_KEY = "convenience.upgrade_notice"
 
@@ -74,6 +74,32 @@ BACKUPS_PER_TARGET = 5
 
 def feature(feature_id: str) -> Feature:
     return _BY_ID[feature_id]
+
+
+@dataclass(frozen=True)
+class Takeback:
+    """One target the off switch takes Navide's entry back out of.
+
+    ``present`` tells afterwards whether the entry is still there; without
+    it the removal counts as done when ``remove`` did not raise. ``file`` is
+    backed up before ``remove`` runs.
+    """
+
+    target: str
+    remove: Callable[[], Any]
+    present: Callable[[], bool] | None = None
+    file: Path | None = None
+
+
+class CleanupIncomplete(RuntimeError):
+    """Off could not take Navide's entry back out of ``targets`` (a file
+    that does not parse, a failed write). The feature stays allowed, because
+    those entries still work; the user is told which targets and why."""
+
+    def __init__(self, feature_id: str, targets: list[str]) -> None:
+        super().__init__(f"{feature_id}: could not take Navide's entry back from {', '.join(targets)}")
+        self.feature_id = feature_id
+        self.targets = targets
 
 
 class ConvenienceGate:
@@ -125,14 +151,27 @@ class ConvenienceGate:
         return self.state(feature_id)[0] == "allowed"
 
     def set_allowed(
-        self, feature_id: str, allowed: bool, *, remove: Callable[[], Any] | None = None
+        self,
+        feature_id: str,
+        allowed: bool,
+        *,
+        remove: Callable[[], Any] | None = None,
+        takeback: Callable[[], list[Takeback]] | None = None,
     ) -> None:
-        """Move the switch. Off first takes back Navide's own entries."""
+        """Move the switch. Off first takes back Navide's own entries.
+
+        ``takeback`` lists them per target: each is backed up, removed and
+        logged as ``cleanup``. When one cannot be taken back the switch does
+        not move — the entry still works, so "off" would be untrue — and
+        ``CleanupIncomplete`` names the targets.
+        """
         if not feature(feature_id).toggleable:
             raise ValueError(f"{feature_id} is required and has no switch")
         with self._lock:
             if not allowed and remove is not None:
                 remove()
+            if not allowed and takeback is not None:
+                self._take_back(feature_id, takeback())
             if not allowed:
                 self._prune(feature_id, keep=1)
             self._set_state(feature_id, "allowed" if allowed else "off", "user")
@@ -142,6 +181,39 @@ class ConvenienceGate:
                 with self.db.transaction() as cur:
                     cur.execute("DELETE FROM convenience_targets WHERE feature = ?", (feature_id,))
             self.record(feature_id, "allowed" if allowed else "off", "", notify=False)
+
+    def _take_back(self, feature_id: str, items: list[Takeback]) -> None:
+        stuck: list[str] = []
+        done: list[str] = []
+        for item in items:
+            before = _read(item.file)
+            backup = self._backup(feature_id, item.target, before)
+            error = ""
+            try:
+                item.remove()
+            except Exception as err:  # noqa: BLE001 — reported below, never swallowed
+                error = str(err) or type(err).__name__
+            still = _probe(item.present) if item.present is not None else False
+            if error or still is not False:
+                stuck.append(item.target)
+                reason = error or ("the file cannot be read" if still is None else "the entry is still there")
+                self.record(
+                    feature_id, "cleanup-failed", item.target,
+                    detail=f"could not take Navide's entry back: {reason}", backup=backup,
+                )
+                continue
+            done.append(item.target)
+            if item.file is None or before != _read(item.file):
+                self.record(
+                    feature_id, "cleanup", item.target,
+                    detail="took Navide's entry back", backup=backup, notify=False,
+                )
+        if stuck:
+            # What was taken back is gone by Navide's own hand: the next write
+            # is a first one again, never the user's removal.
+            for target in done:
+                self.forget(feature_id, target)
+            raise CleanupIncomplete(feature_id, stuck)
 
     def _set_state(self, feature_id: str, state: str, reason: str) -> None:
         with self.db.transaction() as cur:

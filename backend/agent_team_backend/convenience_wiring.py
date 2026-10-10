@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
-from .convenience import ConvenienceGate
+from .convenience import ConvenienceGate, Takeback
 
 log = logging.getLogger("agent_team_backend.convenience_wiring")
 
@@ -155,6 +155,11 @@ def remove_hooks(agent_key: str) -> Any:
     return _hook_target(agent_key)[2]()
 
 
+def _hook_takeback(agent_key: str) -> list[Takeback]:
+    path, present, remove = _hook_target(agent_key)
+    return [Takeback(str(path), remove, present, path)]
+
+
 # ── switches ───────────────────────────────────────────────────────────────
 
 
@@ -165,10 +170,10 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
     if g is None:
         raise RuntimeError("convenience gate not installed")
     agent_key = next((k for k, f in HOOK_FEATURES.items() if f == feature_id), None)
-    remove = REMOVERS.get(feature_id)
+    takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
-        remove = lambda: remove_hooks(agent_key)  # noqa: E731
-    g.set_allowed(feature_id, allowed, remove=remove)
+        takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
+    g.set_allowed(feature_id, allowed, takeback=takeback)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:
@@ -224,6 +229,20 @@ def _remove_project_configs() -> None:
             log.warning("removing Navide's entry from %s failed: %s", target, err)
 
 
+def _project_config_takeback() -> list[Takeback]:
+    from .mcp_server import wiring
+
+    return [
+        Takeback(
+            target,
+            lambda path=Path(target): wiring.remove_project_config("cursor", path),
+            lambda path=Path(target): wiring.project_config_has_entry("cursor", path),
+            Path(target),
+        )
+        for target in _targets("cursor.project-mcp")
+    ]
+
+
 # ── Cursor: project skills (H2) ────────────────────────────────────────────
 
 
@@ -262,6 +281,18 @@ def _remove_project_dirs() -> None:
             skills_wiring.remove_project_dir(Path(target))
         except OSError as err:
             log.warning("removing Navide's links from %s failed: %s", target, err)
+
+
+def _project_dir_takeback() -> list[Takeback]:
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    items = []
+    for target in _targets("cursor.project-skills"):
+        manifest = Path(target) / skills_wiring.MANIFEST_FILE
+        items.append(Takeback(
+            target, lambda path=Path(target): skills_wiring.remove_project_dir(path), manifest.is_file, manifest,
+        ))
+    return items
 
 
 # ── Codex: hook trust (S4) ─────────────────────────────────────────────────
@@ -339,9 +370,27 @@ def repair_live_login(
     return True
 
 
+def _codex_hook_trust_takeback() -> list[Takeback]:
+    from . import app
+
+    manager = getattr(app, "codex_home_manager", None)
+    if manager is None:
+        return []
+    config = manager.real_home / "config.toml"
+    return [Takeback(str(config), manager.drop_all_hook_trust, None, config)]
+
+
 #: Removal for the features that are not CLI hooks.
 REMOVERS: dict[str, Callable[[], Any]] = {
     "cursor.project-mcp": _remove_project_configs,
     "cursor.project-skills": _remove_project_dirs,
     "codex.hook-trust": _drop_codex_hook_trust,
+}
+
+#: The same removals per target, as the off switch runs them: backed up,
+#: checked afterwards and logged one by one.
+TAKEBACKS: dict[str, Callable[[], list[Takeback]]] = {
+    "cursor.project-mcp": _project_config_takeback,
+    "cursor.project-skills": _project_dir_takeback,
+    "codex.hook-trust": _codex_hook_trust_takeback,
 }

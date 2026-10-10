@@ -13,7 +13,8 @@
       "action": {
         "off": "便利機能「{feature}」をオフにしました",
         "allowed": "便利機能「{feature}」を許可しました",
-        "cleanup": "便利機能「{feature}」の {target} を削除しました"
+        "cleanup": "便利機能「{feature}」の {target} を削除しました",
+        "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください"
       },
       "button": {
         "overview": "概要を開く",
@@ -30,6 +31,7 @@
       "off": "オフ",
       "allowed": "許可",
       "cleanup": "クリーンアップ",
+      "cleanup-failed": "クリーンアップ失敗",
       "prompt": "Navide の外でログインが変更"
     },
     "overview": {

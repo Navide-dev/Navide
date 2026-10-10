@@ -19,7 +19,7 @@ type Sender = Pick<Backend, 'send'>
 
 export type ConvenienceState = 'allowed' | 'off'
 export type ConvenienceReason = 'default' | 'user' | 'removed'
-export type ConvenienceAction = 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
+export type ConvenienceAction = 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt'
 
 export interface ConvenienceTarget {
   path: string
