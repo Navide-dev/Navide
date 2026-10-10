@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -282,9 +283,14 @@ class ConvenienceGate:
         path = self.backup_root / feature_id / f"{digest}.bak"
         try:
             if not path.exists():
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(content)
-                path.chmod(0o600)
+                _private_dirs(self.backup_root, path.parent)
+                # 0600 from creation: a backup holds the whole file, secrets
+                # included, and must never be readable by others in between.
+                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(content)
+        except FileExistsError:
+            pass
         except OSError as err:
             log.warning("backing up %s failed: %s", feature_id, err)
             return ""
@@ -372,6 +378,14 @@ def _probe(present: Callable[[], bool]) -> bool | None:
     except Exception as err:  # noqa: BLE001 — unreadable is neither present nor removed
         log.warning("presence check failed (%s); treating as unknown", err)
         return None
+
+
+def _private_dirs(root: Path, leaf: Path) -> None:
+    """Create ``leaf`` and every folder up to ``root`` as 0700."""
+    relative = leaf.relative_to(root)
+    for directory in [root / part for part in (*reversed(relative.parents), relative)]:
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        directory.chmod(0o700)
 
 
 def _read(file: Path | None) -> bytes | None:

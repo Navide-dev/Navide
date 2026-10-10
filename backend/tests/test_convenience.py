@@ -7,6 +7,8 @@ allowed by default, so today's behaviour is kept.
 
 from __future__ import annotations
 
+import stat
+import sys
 from pathlib import Path
 
 import pytest
@@ -236,3 +238,15 @@ def test_a_write_that_left_no_entry_is_not_recorded_and_never_reads_as_a_removal
     assert calls == [1, 1]
     assert gate.allowed("claude.hooks")
     assert gate.listing_feature("claude.hooks")["targets"] == []
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_backups_are_private_from_the_moment_they_exist(gate, tmp_path) -> None:
+    """A8: a backup holds the whole file, secrets included. Its folders are
+    0700 and the file is created 0600, never readable by others in between."""
+    _apply(gate, _File(tmp_path / "settings.json", "token: secret\n"))
+
+    [backup] = (tmp_path / "backups").rglob("*.bak")
+    folders = [tmp_path / "backups", *[p for p in (tmp_path / "backups").rglob("*") if p.is_dir()]]
+    assert {oct(stat.S_IMODE(p.stat().st_mode)) for p in folders} == {"0o700"}
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o600
