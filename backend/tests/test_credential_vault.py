@@ -2086,6 +2086,30 @@ def test_a_sign_out_outside_navide_is_a_prompt_not_a_sign_back_in(
     assert json.loads(entry["detail"]) == {"agentKey": "claude", "reason": "logout"}
 
 
+def test_one_sign_out_outside_navide_is_one_prompt_however_many_startups(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """AC-N3: the user stays signed out across startups: told once. Signing
+    in and out again is a new sign-out, told again."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    for _ in range(3):
+        vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["prompt"]
+
+    vault.write_live("claude", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    vault.write_live("claude", LiveCredentials(secret=None))
+    for _ in range(2):
+        vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["prompt", "prompt"]
+    assert vault.read_live("claude").secret is None
+
+
 def test_the_first_promotion_still_publishes_the_active_account(
     tmp_path, _isolated_convenience_gate
 ) -> None:

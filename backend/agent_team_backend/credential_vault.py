@@ -1804,6 +1804,11 @@ class CredentialVault:
     def _homes_promoted_marker(self, agent_key: str) -> Path:
         return self._root / agent_key / ".homes-promoted"
 
+    def _logout_announced_marker(self, agent_key: str) -> Path:
+        """Set while the user's sign-out outside Navide has been told; a
+        startup that finds a login again clears it."""
+        return self._root / agent_key / ".logout-announced"
+
     def _unify_claude_live(self, active_id: str | None) -> None:
         """One-shot (marker-guarded) alignment of claude's live location with
         the active account. Under the pre-unification model a managed claude
@@ -1896,8 +1901,12 @@ class CredentialVault:
         try:
             active_scope = scopes.get(active_id)
             # Strict: a transient Keychain failure is no empty live login.
+            live_empty = self.read_live(agent_key, strict=True, scope=active_scope).secret is None
+            announced = self._logout_announced_marker(agent_key)
+            if not live_empty:
+                announced.unlink(missing_ok=True)
             if (
-                self.read_live(agent_key, strict=True, scope=active_scope).secret is None
+                live_empty
                 and self.read_slot(agent_key, active_id, scope=active_scope).secret is not None
             ):
                 # The convenience feature credentials.auto-repair: announced,
@@ -1906,7 +1915,11 @@ class CredentialVault:
                 from .convenience_wiring import prompt_live_logout, repair_live_login
 
                 if promoted_before:
-                    prompt_live_logout(agent_key)
+                    # One sign-out, one prompt: not again on every startup.
+                    if not announced.exists():
+                        prompt_live_logout(agent_key)
+                        announced.parent.mkdir(parents=True, exist_ok=True)
+                        announced.touch()
                     return
                 repair_live_login(
                     agent_key, active_id,
