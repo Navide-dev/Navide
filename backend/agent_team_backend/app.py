@@ -104,9 +104,13 @@ from .tokens_store import TokensStore
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
-# registration. Keep it in this process, not in os.environ: backend-launched
-# shells, PTYs, Git hooks, and CLI helpers must not inherit a Host credential.
-_HOST_SESSION_TOKEN = os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", "")
+# registration. It arrives on stdin, second line, after the confirm key (see
+# __main__ and set_host_session_token) -- never in the environment: on macOS a
+# same-uid process reads the spawn env block with `ps -E` even after a pop.
+# The variable is still scrubbed, never adopted, so a stale launcher that sets
+# it cannot leak it into backend-launched shells, PTYs, Git hooks or helpers.
+os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", None)
+_HOST_SESSION_TOKEN = ""
 from .ui_settings import UiSettingsStore
 from .cli_risk import CliRiskService
 from .cli_risk_store import CliRiskStore
@@ -458,6 +462,14 @@ def navide_window_proof_matches(proof: Any) -> bool:
         return False
     digest = hmac.new(expected.encode(), b"navide-window", hashlib.sha256).hexdigest()
     return secrets.compare_digest(proof, digest)
+
+
+def set_host_session_token(token: str) -> bool:
+    """Adopt the host token main handed over on stdin. Returns whether there
+    was one; without it host.register refuses and no session is a window."""
+    global _HOST_SESSION_TOKEN
+    _HOST_SESSION_TOKEN = token if isinstance(token, str) else ""
+    return bool(_HOST_SESSION_TOKEN)
 
 
 def host_session_token_matches(token: Any) -> bool:

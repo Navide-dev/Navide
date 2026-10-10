@@ -37,14 +37,16 @@ let confirmKey = ''
 /** How long a minted confirmation stays usable. Must match TOKEN_TTL_S. */
 const CONFIRM_TTL_MS = 30_000
 
-export function handConfirmKey(proc: ChildProcess): void {
+export function handConfirmKey(proc: ChildProcess, hostSessionToken: string): void {
   confirmKey = randomBytes(32).toString('hex')
-  // One line, then the pipe closes: the backend reads exactly this much, and a
-  // stdin left open would be a channel neither side has a use for -- except on
-  // Windows, where it is the only way to ask for a graceful stop (see
-  // stopBackendProcess): no SIGTERM exists there, so the pipe stays open and
-  // carries a `shutdown` line later.
-  proc.stdin?.write(`${confirmKey}\n`)
+  // Two lines, then the pipe closes: the confirm key, then the host token. The
+  // host token used to travel in the spawn env, which on macOS any same-uid
+  // process reads with `ps -E` even after the backend pops it. The backend
+  // reads exactly this much, and a stdin left open would be a channel neither
+  // side has a use for -- except on Windows, where it is the only way to ask
+  // for a graceful stop (see stopBackendProcess): no SIGTERM exists there, so
+  // the pipe stays open and carries a `shutdown` line later.
+  proc.stdin?.write(`${confirmKey}\n${hostSessionToken}\n`)
   if (!isWindows()) proc.stdin?.end()
 }
 
@@ -303,7 +305,9 @@ export async function startBackend(
       { schemaVersion: 1, packages: [] }
     )
   const env = bindBackendPluginActivationCatalog(process.env, catalog)
-  env.NAVIDE_BACKEND_HOST_TOKEN = hostSessionToken
+  // The host token goes over stdin (handConfirmKey), never here: `ps -E` reads
+  // a spawn env. Dropped too in case a launcher left one in ours.
+  delete env.NAVIDE_BACKEND_HOST_TOKEN
   // The login-shell dance below runs on every platform that launches the app
   // with a session PATH rather than the shell's — macOS from Finder, Linux
   // from the .desktop entry. It used to be macOS-only, which left a Linux
@@ -353,8 +357,9 @@ export async function startBackend(
     )
     proc = spawn(binaryPath, ['--port', String(port), '--log-level', 'info'], {
       env,
-      // stdin hands over the trust-confirmation key and is closed right after
-      // on POSIX; on Windows it stays open to carry the `shutdown` line. See
+      // stdin hands over the trust-confirmation key and the host token and is
+      // closed right after on POSIX; on Windows it stays open to carry the
+      // `shutdown` line. See
       // handConfirmKey and stopBackendProcess.
       stdio: ['pipe', 'pipe', 'pipe'],
       // The frozen backend is a console-subsystem exe; without this Windows
@@ -396,7 +401,7 @@ export async function startBackend(
   proc.stdin?.on('error', (err: NodeJS.ErrnoException) => {
     console.warn(`[backend] stdin ${err.code ?? err.message}`)
   })
-  handConfirmKey(proc)
+  handConfirmKey(proc, hostSessionToken)
 
   proc.stdout?.on('data', (chunk: Buffer) => forwardBackendLog(process.stdout, chunk))
   proc.stderr?.on('data', (chunk: Buffer) => forwardBackendLog(process.stderr, chunk))

@@ -57,23 +57,35 @@ import uvicorn  # noqa: E402
 
 from . import __version__, osplat  # noqa: E402
 from .app import app as _fastapi_app, cli_risk_service  # noqa: E402
+from . import app as _app_module  # noqa: E402
 from . import confirm_token, ws_auth  # noqa: E402
 from .applog import backend_port_file, setup_file_logging  # noqa: E402
 
 
-def _read_confirm_key() -> str:
+def _read_confirm_key(stream=None) -> str:
     """The first line of stdin, or "" when there is nothing there.
 
     Never blocks a backend started by hand: the app closes the pipe straight
     after writing, so EOF is the ordinary answer for every other caller, and a
     terminal that is a tty is not read from at all.
     """
+    stream = sys.stdin if stream is None else stream
     try:
-        if sys.stdin is None or sys.stdin.closed or sys.stdin.isatty():
+        if stream is None or stream.closed or stream.isatty():
             return ""
-        return sys.stdin.readline().strip()
+        return stream.readline().strip()
     except Exception:  # noqa: BLE001 - startup must not die over a missing pipe
         return ""
+
+
+def _read_host_token(stream=None) -> str:
+    """The second line of stdin: the host token, or "" when there is none.
+
+    Same rules as the confirm key, read right after it. Main writes both lines
+    in one go, so on Windows -- where the pipe then stays open for the
+    `shutdown` line -- this does not wait on anything.
+    """
+    return _read_confirm_key(stream)
 
 
 SHUTDOWN_LINE = "shutdown"
@@ -217,6 +229,14 @@ def main() -> int:
             "no trust-confirmation key on stdin; actions that change device "
             "trust will be refused on this backend"
         )
+
+    # The host token follows on the next line, for the same reason: the
+    # environment it used to travel in is readable with `ps -E`. Absent means
+    # host.register refuses and every connection is an ordinary ws client.
+    if _app_module.set_host_session_token(_read_host_token()):
+        log.info("adopted the host token from the parent process")
+    else:
+        log.info("no host token on stdin; host.register will be refused on this backend")
 
     # Use the already-imported app object so PyInstaller can detect this
     # dependency statically (string-based import is invisible to the bundler).
