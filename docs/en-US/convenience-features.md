@@ -91,8 +91,14 @@ interface LogEntry {
   action: 'first' | 'repair' | 'removed' | 'off' | 'allowed' | 'cleanup' | 'prompt'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
-                             // For action 'prompt' (credentials.auto-repair) it is a JSON object:
-                             // { agentKey, slotId, slotLabel, liveEmail, slotEmail }
+                             // For action 'prompt' (credentials.auto-repair) it is a JSON object,
+                             // one of:
+                             //   { agentKey, slotId, slotLabel, liveEmail, slotEmail }
+                             //     the live login is another account than the slot
+                             //     (emails may be null when the CLI stores none)
+                             //   { agentKey, reason: 'logout' }
+                             //     the user signed out outside Navide (Claude, Codex);
+                             //     no slotId, nothing to switch back to
   backup: string             // '' when none
   notify: boolean
 }
@@ -107,6 +113,27 @@ clears a `removed` reason and re-applies startup features at once (per-spawn
 features apply on the next spawn).
 
 `convenience.upgrade_ack` `{}` → `{}`.
+
+### Account prompts (`credentials.auto-repair`)
+
+- The live login is read strictly: a failed read (a transient Keychain error)
+  is not an empty login, so nothing is written and only the backend log says so.
+- It is another account when both emails are known and differ, or, with no
+  pair of emails, when its secret is not the slot's own. That is a prompt, never
+  a write. Navide's active account then follows the login that stays live (the
+  profile holding it, else a new one registered for it), so a later switch can
+  never capture that login into the prompt's slot.
+- "Switch back" is `cli_profiles.set_default { …, restore_live: true }`: a real
+  switch, or, when the slot is still the active account, its slot written back
+  to live (logged as a `repair`).
+- An empty live login after Navide had published it on an earlier startup is
+  the user signing out outside Navide: a `logout` prompt with only an
+  acknowledgement. The one-time promotion of legacy profile homes still
+  publishes the active account.
+- Every restore leaves an audit row, including one that failed part-way.
+- The prompt detail keeps the two emails because the prompt shows them; they go
+  to the audit log and the `convenience.changed` broadcast only, never the
+  backend log.
 
 Event `convenience.changed` `{ feature?: string, entry?: LogEntry }` — a write was
 gated, a notice was added, or a state changed. The renderer re-reads
