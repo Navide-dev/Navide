@@ -326,12 +326,80 @@ def test_capture_never_replaces_a_newer_login_of_the_same_account_with_an_older_
     older = json.dumps({"claudeAiOauth": {"accessToken": "a1", "refreshToken": "r1", "expiresAt": 1000}})
     newer = json.dumps({"claudeAiOauth": {"accessToken": "a2", "refreshToken": "r2", "expiresAt": 2000}})
     vault.write_live("claude", LiveCredentials(secret=older, account={"emailAddress": "a@x.com"}))
-    vault.write_slot("claude", "slot1", LiveCredentials(secret=newer, account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", newer, "a@x.com")
 
     captured = vault.capture("claude", "slot1")
 
     assert vault.read_slot("claude", "slot1").secret == newer
     assert captured.secret == older  # switch() can still roll live back
+
+
+def _harvest_claude_sign_in(vault: CredentialVault, slot_id: str, secret: str, email: str) -> None:
+    """A sign-in through Navide: the login pane's home is harvested into the
+    slot; live is left as it was (the restore did not happen)."""
+    home = vault.login_home_path("claude", slot_id)
+    _write(home / ".credentials.json", secret)
+    _write(home / ".claude.json", json.dumps({"oauthAccount": {"emailAddress": email}}))
+    assert vault.harvest_login_home("claude", slot_id)
+
+
+def _claude_oauth(token: str, expires_at: object) -> str:
+    return json.dumps({"claudeAiOauth": {"accessToken": token, "refreshToken": "r" + token, "expiresAt": expires_at}})
+
+
+def test_capture_mirrors_a_refreshed_live_token_that_expires_before_the_slot_copy(tmp_path: Path) -> None:
+    """R3-L7: outside a pending sign-in, live is the account's current token
+    even when it expires earlier (the server shortened the lifetime): the
+    slot's older copy holds a refresh token that was already used."""
+    vault = _file_vault(tmp_path)
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=_claude_oauth("parent", 2000), account={"emailAddress": "a@x.com"}))
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("child", 1999), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("child", 1999)
+
+
+@pytest.mark.parametrize("slot_expiry", [float("inf"), float("nan"), 9e18])
+def test_capture_mirrors_live_over_a_slot_with_an_unusable_or_far_future_expiry(
+    tmp_path: Path, slot_expiry: float
+) -> None:
+    """R3-L7: a far-future, infinite or NaN slot expiry must not keep the
+    slot forever."""
+    vault = _file_vault(tmp_path)
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=_claude_oauth("old", slot_expiry), account={"emailAddress": "a@x.com"}))
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("live", 1000), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("live", 1000)
+
+
+@pytest.mark.parametrize("slot_expiry", [float("inf"), float("nan")])
+def test_a_pending_sign_in_with_a_non_finite_expiry_is_no_proof_it_is_newer(
+    tmp_path: Path, slot_expiry: float
+) -> None:
+    vault = _file_vault(tmp_path)
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("live", 1000), account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", _claude_oauth("new", slot_expiry), "a@x.com")
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("live", 1000)
+
+
+def test_a_sign_in_once_live_no_longer_shields_the_slot(tmp_path: Path) -> None:
+    """R3-L7: the shield lasts only until live carries the sign-in; a later
+    refresh with an earlier expiry is captured as usual."""
+    vault = _file_vault(tmp_path)
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("old", 1000), account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", _claude_oauth("new", 2000), "a@x.com")
+    vault.restore("claude", "slot1")
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("child", 1500), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("child", 1500)
 
 
 def test_capture_still_mirrors_an_older_token_of_a_different_account(tmp_path: Path) -> None:

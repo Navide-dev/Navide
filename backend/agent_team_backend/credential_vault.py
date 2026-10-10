@@ -40,6 +40,7 @@ import getpass
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -273,10 +274,15 @@ def _claude_home_secret_is_fresher(home_secret: str | None, slot_secret: str) ->
 
 def _is_older_login_of_same_account(live: "LiveCredentials", stored: "LiveCredentials") -> bool:
     """True when ``live`` is the same claude account as ``stored`` (both
-    emails known and equal) with a strictly older token expiry."""
+    emails known and equal) with a strictly older token expiry. A non-finite
+    expiry (Infinity/NaN) proves nothing."""
     live_exp = _claude_oauth_expires_at(live.secret)
     stored_exp = _claude_oauth_expires_at(stored.secret)
-    if live_exp is None or stored_exp is None or live_exp >= stored_exp:
+    if (
+        live_exp is None or stored_exp is None
+        or not (math.isfinite(live_exp) and math.isfinite(stored_exp))
+        or live_exp >= stored_exp
+    ):
         return False
     emails = [
         creds.account.get("emailAddress") if isinstance(creds.account, dict) else None
@@ -1083,13 +1089,21 @@ class CredentialVault:
         state so callers can roll it back."""
         self.require_store_mutation(agent_key)
         creds = self.read_live(agent_key, strict=True, scope=scope)
-        if agent_key == "claude" and _is_older_login_of_same_account(
-            creds, self.read_slot(agent_key, slot_id, scope=scope)
+        pending = self._sign_in_pending_live_marker(agent_key, slot_id)
+        if (
+            agent_key == "claude"
+            and pending.exists()
+            and _is_older_login_of_same_account(
+                creds, self.read_slot(agent_key, slot_id, scope=scope)
+            )
         ):
-            # The slot holds a newer sign-in of this account than live does
-            # (a re-login while auto-repair was off): keep the newer one.
+            # The slot holds a sign-in through Navide that never reached live
+            # (e.g. its restore failed), and live still runs on this account's
+            # older token: keep the newer one. Only in that window — outside
+            # it live is the account's current token, whatever its expiry.
             return creds
         self.write_slot(agent_key, slot_id, creds, scope=scope)
+        pending.unlink(missing_ok=True)
         return creds
 
     def restore(self, agent_key: str, slot_id: str, *, scope: str | None = None) -> None:
@@ -1097,6 +1111,13 @@ class CredentialVault:
         live credentials, and an empty slot clears them (the CLI then prompts
         a fresh login)."""
         self.write_live(agent_key, self.read_slot(agent_key, slot_id, scope=scope), scope=scope)
+        self._sign_in_pending_live_marker(agent_key, slot_id).unlink(missing_ok=True)
+
+    def _sign_in_pending_live_marker(self, agent_key: str, slot_id: str) -> Path:
+        """Set while a claude sign-in harvested into the slot has not been
+        restored to live; ``capture`` keeps it over an older live token of the
+        same account until then."""
+        return self.slot_dir(agent_key, slot_id) / ".sign-in-pending-live"
 
     def switch(
         self,
@@ -1467,6 +1488,7 @@ class CredentialVault:
             # the home's own .claude.json for the display-only oauthAccount.
             if not self.harvest_legacy_claude_home(slot_id, home):
                 return False
+            self._sign_in_pending_live_marker("claude", slot_id).touch()
             # The user just re-logged this account, so the login must win. The
             # legacy profile-home promotion (promote_profile_home_secrets)
             # keeps a home copy whose expiry is not older than the slot's — an
