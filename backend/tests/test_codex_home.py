@@ -525,6 +525,57 @@ def test_seed_hook_trust_escapes_backslashes_in_toml_keys(tmp_path: Path) -> Non
     assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
 
 
+def _trust_headers(path: Path) -> list[str]:
+    """The same table header in the shapes TOML allows: a trailing comment,
+    spacing inside the brackets, a literal (single-quoted) key."""
+    key = str(path)
+    return [
+        f'[hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0"]  # trusted in codex',
+        f'[ hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0" ]',
+        f"[hooks.state.'{key}:stop:0:0']",
+    ]
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_seed_hook_trust_reads_any_toml_shape_of_the_real_row(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    (real / "config.toml").write_text(
+        f'{_trust_headers(real / "hooks.json")[shape]}\ntrusted_hash = "sha256:aaaa"\n', encoding="utf-8"
+    )
+
+    assert manager.seed_hook_trust(pane) == 1
+
+    state = tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))["hooks"]["state"]
+    assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_a_reformatted_seeded_row_is_neither_missing_nor_seeded_twice(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    assert manager.seed_hook_trust(pane) == 2
+    # The seeded stop row is rewritten into another legal TOML shape.
+    text = (real / "config.toml").read_text(encoding="utf-8")
+    seeded = f'[hooks.state."{_toml_escape_for_test(pane / "hooks.json")}:stop:0:0"]'
+    assert seeded in text
+    (real / "config.toml").write_text(text.replace(seeded, _trust_headers(pane / "hooks.json")[shape]), encoding="utf-8")
+
+    assert manager.hook_trust_intact() is True
+    assert manager.seed_hook_trust(pane) == 0
+    tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))
+    manager.drop_all_hook_trust()
+    assert manager.any_pane_hook_trust() is False
+
+
+def _toml_escape_for_test(path: Path) -> str:
+    from agent_team_backend.cli_vendors.codex import _toml_escape
+
+    return _toml_escape(str(path))
+
+
 def test_prepare_keeps_a_correct_skills_link_when_readlink_reports_an_extended_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

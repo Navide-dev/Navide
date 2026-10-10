@@ -27,6 +27,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import tomllib
 
 import psutil
 
@@ -980,12 +981,11 @@ class CodexHomeManager:
                 return 0
             if pane_hooks.read_bytes() != real_hooks.read_bytes():
                 return 0
-            text = config.read_text(encoding="utf-8")
-        except OSError:
+            rows = _hook_state_rows(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return 0
         real_prefix = f"{real_hooks}:"
         pane_prefix = f"{pane_hooks}:"
-        rows = _hook_state_rows(text)
         additions = []
         seeded = []
         for key, hashed in rows.items():
@@ -995,11 +995,11 @@ class CodexHomeManager:
             if new_key in rows:
                 continue
             seeded.append(new_key)
-            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = {hashed}\n')
+            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n')
         if not additions:
             return 0
-        lead = "" if text.endswith("\n") else "\n"
         try:
+            lead = "" if config.read_text(encoding="utf-8").endswith("\n") else "\n"
             with config.open("a", encoding="utf-8") as f:
                 f.write(lead + "\n" + "\n".join(additions))
         except OSError as err:
@@ -1291,11 +1291,11 @@ class CodexHomeManager:
         seeded.
         """
         try:
-            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
             homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
-        except OSError:
+        except (OSError, ValueError):
+            # Unreadable or not TOML: nothing says a row was deleted.
             return True
-        rows = _hook_state_rows(text)
         for home in homes:
             if exclude is not None and home == exclude:
                 continue
@@ -1310,12 +1310,15 @@ class CodexHomeManager:
             text = config.read_text(encoding="utf-8")
         except OSError:
             return True
+        # Textual, to leave the rest of the file byte-identical, but any
+        # spelling TOML allows for the header and value matches.
         block = re.compile(
-            r'\n*^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*"[^"\n]*"[ \t]*\n?',
+            r'\n*^\[[ \t]*hooks[ \t]*\.[ \t]*state[ \t]*\.[ \t]*(' + _TOML_KEY + r')[ \t]*\][ \t]*(?:#[^\n]*)?\n'
+            r'\s*trusted_hash[ \t]*=[ \t]*(?:' + _TOML_KEY + r')[ \t]*(?:#[^\n]*)?(?:\n|\Z)',
             flags=re.MULTILINE,
         )
         kept = block.sub(
-            lambda m: "\n" if _toml_unescape(m.group(1)).startswith(prefix) else m.group(0),
+            lambda m: "\n" if (_toml_key(m.group(1)) or "").startswith(prefix) else m.group(0),
             text,
         )
         if kept == text:
@@ -1419,15 +1422,33 @@ _CODEX_PANES_ROOT_NAME = ".codex-panes"
 
 
 def _hook_state_rows(text: str) -> dict[str, str | None]:
-    """Every ``[hooks.state."<key>"]`` table in config.toml, by unescaped key,
-    to its ``trusted_hash`` literal when that is the table's first line — the
-    only rows seeding copies — else None. Seeding and its presence check both
-    read the file through this one parser."""
+    """Every ``hooks.state`` table in config.toml, by key, to its
+    ``trusted_hash`` — the only value seeding copies — else None. Read as
+    TOML, so any legal spelling of a header counts. Seeding and its presence
+    checks all read the file through this one parser; a file that is not
+    TOML raises ``ValueError``."""
+    state = tomllib.loads(text).get("hooks", {})
+    state = state.get("state", {}) if isinstance(state, dict) else {}
+    if not isinstance(state, dict):
+        return {}
     rows: dict[str, str | None] = {}
-    for header in re.finditer(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE):
-        trusted = re.match(r'\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")', text[header.end():])
-        rows.setdefault(_toml_unescape(header.group(1)), trusted.group(1) if trusted else None)
+    for key, table in state.items():
+        trusted = table.get("trusted_hash") if isinstance(table, dict) else None
+        rows[key] = trusted if isinstance(trusted, str) else None
     return rows
+
+
+#: A quoted TOML key or string: basic ("...", with escapes) or literal ('...').
+_TOML_KEY = r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\''
+
+
+def _toml_key(quoted: str) -> str | None:
+    """The value of one quoted TOML key, or None when it does not parse."""
+    try:
+        value = tomllib.loads(f"k = {quoted}")["k"]
+    except ValueError:
+        return None
+    return value if isinstance(value, str) else None
 
 
 def _toml_escape(value: str) -> str:
