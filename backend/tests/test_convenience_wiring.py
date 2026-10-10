@@ -856,6 +856,35 @@ def test_an_unchanged_skills_directory_is_not_read_as_a_removal(gate, tmp_path, 
     assert gate.state("cursor.project-skills") == ("allowed", "default")
 
 
+@pytest.mark.parametrize("kind", ["existing", "dangling"])
+def test_a_skills_manifest_linked_outside_is_refused_for_safety_and_never_logged(
+    gate, tmp_path, monkeypatch, kind
+) -> None:
+    """R3-H1: a repo ships a real .cursor/skills whose .navide-links leads
+    outside it. Nothing is written through the link, no line of the file it
+    leads to reaches the log, and the user is told once."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    if kind == "existing":
+        victim.write_text("export SECRET_PATH=1\nalias ll='ls -l'\n", encoding="utf-8")
+    before = victim.read_text(encoding="utf-8") if victim.exists() else None
+    repo = _cursor_repo(tmp_path)
+    target = repo / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    (target / skills_wiring.MANIFEST_FILE).symlink_to(victim)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert (victim.read_text(encoding="utf-8") if victim.exists() else None) == before
+    assert _unsafe_rows(gate, "cursor.project-skills") == [(str(target), True)]
+    assert not [e for e in gate.history() if e["action"] == "removed-entry"]
+    assert gate.state("cursor.project-skills") == ("allowed", "default")
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"
