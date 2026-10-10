@@ -134,8 +134,12 @@ class ConvenienceGate:
                 "CREATE TABLE IF NOT EXISTS convenience_log ("
                 " id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,"
                 " feature TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,"
-                " detail TEXT NOT NULL, backup TEXT NOT NULL, notify INTEGER NOT NULL)"
+                " detail TEXT NOT NULL, backup TEXT NOT NULL, notify INTEGER NOT NULL,"
+                " source TEXT NOT NULL DEFAULT '')"
             )
+            columns = {row[1] for row in cur.execute("PRAGMA table_info(convenience_log)").fetchall()}
+            if "source" not in columns:
+                cur.execute("ALTER TABLE convenience_log ADD COLUMN source TEXT NOT NULL DEFAULT ''")
 
     # ── switches ────────────────────────────────────────────────────────
 
@@ -157,13 +161,15 @@ class ConvenienceGate:
         *,
         remove: Callable[[], Any] | None = None,
         takeback: Callable[[], list[Takeback]] | None = None,
+        source: str = "",
     ) -> None:
         """Move the switch. Off first takes back Navide's own entries.
 
         ``takeback`` lists them per target: each is backed up, removed and
         logged as ``cleanup``. When one cannot be taken back the switch does
         not move — the entry still works, so "off" would be untrue — and
-        ``CleanupIncomplete`` names the targets.
+        ``CleanupIncomplete`` names the targets. The flip is announced like
+        any write, and ``source`` records who moved it (see ``record``).
         """
         if not feature(feature_id).toggleable:
             raise ValueError(f"{feature_id} is required and has no switch")
@@ -180,7 +186,7 @@ class ConvenienceGate:
                 # not a removal to hold against the next write.
                 with self.db.transaction() as cur:
                     cur.execute("DELETE FROM convenience_targets WHERE feature = ?", (feature_id,))
-            self.record(feature_id, "allowed" if allowed else "off", "", notify=False)
+            self.record(feature_id, "allowed" if allowed else "off", "", source=source)
 
     def _take_back(self, feature_id: str, items: list[Takeback]) -> None:
         stuck: list[str] = []
@@ -294,22 +300,29 @@ class ConvenienceGate:
         detail: str = "",
         backup: str = "",
         notify: bool = True,
+        source: str = "",
     ) -> dict[str, Any]:
-        """Append to the audit log; announce it when ``notify``."""
+        """Append to the audit log; announce it when ``notify``.
+
+        ``source`` says who asked, for a row a caller triggered: "settings"
+        (a Navide window), "ws-client" (any other client holding the backend
+        token). Empty for what Navide did on its own.
+        """
         feature(feature_id)
         if action not in ACTIONS:
             raise ValueError(action)
         at = int(self._clock())
         with self.db.transaction() as cur:
             cur.execute(
-                "INSERT INTO convenience_log (at, feature, action, target, detail, backup, notify)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (at, feature_id, action, target, detail, backup, int(notify)),
+                "INSERT INTO convenience_log (at, feature, action, target, detail, backup, notify, source)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (at, feature_id, action, target, detail, backup, int(notify), source),
             )
             entry_id = cur.lastrowid
         entry = {
             "id": entry_id, "at": at, "feature": feature_id, "action": action,
             "target": target, "detail": detail, "backup": backup, "notify": notify,
+            "source": source,
         }
         log.info("convenience %s %s %s %s", feature_id, action, target, detail)
         if notify and self.notify is not None:
@@ -422,10 +435,19 @@ class ConvenienceGate:
             return None
         return {"features": list(value.get("features") or [])}
 
-    def acknowledge_upgrade(self) -> None:
+    def acknowledge_upgrade(self, *, source: str = "") -> None:
+        """The user read the upgrade notice: each feature it named stays
+        allowed, now with the user's say-so on the log."""
         value = self.db.kv_get(UPGRADE_KEY)
         if isinstance(value, dict):
             self.db.kv_set(UPGRADE_KEY, {**value, "acked": True}, now=int(self._clock()))
+            if not value.get("acked"):
+                for feature_id in value.get("features") or []:
+                    if feature_id in _BY_ID:
+                        self.record(
+                            feature_id, "allowed", "", detail="kept allowed: upgrade notice acknowledged",
+                            notify=False, source=source,
+                        )
 
     # ── reads ───────────────────────────────────────────────────────────
 
@@ -504,5 +526,5 @@ def _entry(row: Any) -> dict[str, Any]:
     return {
         "id": row["id"], "at": row["at"], "feature": row["feature"], "action": row["action"],
         "target": row["target"], "detail": row["detail"], "backup": row["backup"],
-        "notify": bool(row["notify"]),
+        "notify": bool(row["notify"]), "source": row["source"],
     }

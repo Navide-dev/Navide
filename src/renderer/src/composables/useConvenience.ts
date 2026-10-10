@@ -48,6 +48,10 @@ export interface ConvenienceLogEntry {
   detail: string
   backup: string
   notify: boolean
+  /** Who triggered the row: "settings" (a Navide window), "ws-client" (any
+   *  other client holding the backend token), "" for Navide's own writes.
+   *  Absent from a backend older than the field. */
+  source?: string
 }
 
 export interface ConvenienceUpgradeNotice {

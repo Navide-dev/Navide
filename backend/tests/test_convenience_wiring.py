@@ -233,6 +233,34 @@ async def test_the_ws_api_lists_switches_and_refuses_a_required_feature(gate, ho
     assert [e["action"] for e in sent[-1]["payload"]["entries"]] == ["off", "cleanup", "first"]
 
 
+@pytest.mark.asyncio
+async def test_the_ws_api_records_whether_a_navide_window_moved_the_switch(gate, homes, monkeypatch) -> None:
+    """A10: a main window (it runs the UI action bus) is "settings"; any other
+    client holding the backend token is "ws-client", visible in the log."""
+    from types import SimpleNamespace
+
+    from agent_team_backend import app, ws_handlers
+
+    monkeypatch.setattr(app, "convenience_gate", gate)
+
+    async def send_json(msg: dict) -> None:
+        pass
+
+    async def broadcast(event: dict, **_: object) -> None:
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    window = SimpleNamespace(send_json=send_json, ui_bus_ready=True)
+    other = SimpleNamespace(send_json=send_json, ui_bus_ready=False)
+
+    await ws_handlers.convenience_set(window, "1", "convenience.set", {"id": "cursor.project-mcp", "allowed": False})
+    await ws_handlers.convenience_set(other, "2", "convenience.set", {"id": "cursor.project-mcp", "allowed": True})
+
+    assert [(e["action"], e["source"]) for e in gate.history("cursor.project-mcp")] == [
+        ("allowed", "ws-client"), ("off", "settings"),
+    ]
+
+
 # ── Cursor: project MCP config (H1) and project skills (H2) ─────────────────
 
 

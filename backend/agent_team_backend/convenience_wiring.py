@@ -163,9 +163,10 @@ def _hook_takeback(agent_key: str) -> list[Takeback]:
 # ── switches ───────────────────────────────────────────────────────────────
 
 
-def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
+def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str = "") -> None:
     """The overview's switch: off takes Navide's entries back first; allowed
-    re-applies a startup feature at once (a per-spawn one on its next spawn)."""
+    re-applies a startup feature at once (a per-spawn one on its next spawn).
+    ``source`` is who moved it, for the log (``ConvenienceGate.record``)."""
     g = _gate
     if g is None:
         raise RuntimeError("convenience gate not installed")
@@ -173,7 +174,7 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str) -> None:
     takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
         takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
-    g.set_allowed(feature_id, allowed, takeback=takeback)
+    g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:

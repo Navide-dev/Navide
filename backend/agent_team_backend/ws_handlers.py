@@ -11804,6 +11804,14 @@ async def cli_extensions_list(session: "Session", msg_id: str, msg_type: str, pa
 # What Navide changes outside its own data; docs/en-US/convenience-features.md.
 
 
+def _convenience_source(session: "Session") -> str:
+    """Who moved a switch, for the audit log: a main window (it runs the UI
+    action bus, where the overview lives) or some other client holding the
+    backend token — a script, or an agent that read the token file. Pane
+    agents have no MCP tool for convenience.*, so this is how one would show."""
+    return "settings" if getattr(session, "ui_bus_ready", False) else "ws-client"
+
+
 @handler("convenience.list")
 async def convenience_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -11839,7 +11847,8 @@ async def convenience_set(session: "Session", msg_id: str, msg_type: str, payloa
         return
     try:
         await asyncio.to_thread(
-            convenience_wiring.set_feature, feature_id, allowed, port_file=str(backend_port_file())
+            convenience_wiring.set_feature, feature_id, allowed,
+            port_file=str(backend_port_file()), source=_convenience_source(session),
         )
     except KeyError:
         await session.send_json(make_error(msg_id, msg_type, "UNKNOWN_FEATURE", feature_id))
@@ -11862,7 +11871,7 @@ async def convenience_set(session: "Session", msg_id: str, msg_type: str, payloa
 async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
-    await asyncio.to_thread(app.convenience_gate.acknowledge_upgrade)
+    await asyncio.to_thread(app.convenience_gate.acknowledge_upgrade, source=_convenience_source(session))
     await session.send_json(make_response(msg_id, msg_type, {}))
     await app.broadcast(make_event("convenience.changed", {}))
 

@@ -283,3 +283,40 @@ def test_backups_are_kept_per_target_and_rotated(gate, tmp_path) -> None:
     assert sorted(map(str, (tmp_path / "backups" / "codex.hook-trust").rglob("*.bak"))) == sorted(
         [newest, kept_other]
     )
+
+
+def test_switch_flips_and_the_upgrade_ack_are_announced_and_say_who_did_it(gate, tmp_path) -> None:
+    """A10: moving a switch changes what Navide may do to the user's files,
+    so it is announced like any write, and the log says where it came from."""
+    _apply(gate, _File(tmp_path / "settings.json", "# navide\n"))
+    gate.finish_startup_scan()
+
+    gate.set_allowed("cursor.project-mcp", False, source="settings")
+    gate.set_allowed("cursor.project-mcp", True, source="ws-client")
+    gate.acknowledge_upgrade(source="settings")
+
+    off, allowed = gate.history("cursor.project-mcp")[::-1]
+    assert (off["action"], off["notify"], off["source"]) == ("off", True, "settings")
+    assert (allowed["action"], allowed["notify"], allowed["source"]) == ("allowed", True, "ws-client")
+    assert [n["entry"]["action"] for n in gate.sent[-2:]] == ["off", "allowed"]
+    [ack] = [e for e in gate.history("claude.hooks") if e["action"] == "allowed"]
+    assert (ack["source"], ack["notify"]) == ("settings", False)
+    assert "upgrade notice" in ack["detail"]
+
+
+def test_a_log_written_before_the_source_column_still_reads(tmp_path) -> None:
+    db = Database(tmp_path / "navide.db")
+    with db.transaction() as cur:
+        cur.execute(
+            "CREATE TABLE convenience_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL,"
+            " feature TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL,"
+            " detail TEXT NOT NULL, backup TEXT NOT NULL, notify INTEGER NOT NULL)"
+        )
+        cur.execute(
+            "INSERT INTO convenience_log (at, feature, action, target, detail, backup, notify)"
+            " VALUES (1, 'claude.hooks', 'first', 't', '', '', 1)"
+        )
+
+    gate = convenience.ConvenienceGate(db, backup_root=tmp_path / "b")
+
+    assert gate.history()[0]["source"] == ""

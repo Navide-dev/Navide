@@ -41,6 +41,7 @@ which runs, in order:
 5. **Notify.** Only when the target's bytes changed: the first write to a
    target is announced as `first`, a later change as `repair`.
 6. **Audit log.** Every write, removal detection, off and re-allow is appended.
+   A row a caller triggered names its `source`.
 
 A target that already carries Navide's entry when first seen (an upgraded
 install) is added to the ledger silently: nothing was written, so there is
@@ -72,7 +73,7 @@ the panes they serve cannot run without them.
   A missing row means `allowed`/`default`.
 - `convenience_targets(feature TEXT, target TEXT, written_at INTEGER, PRIMARY KEY(feature, target))`
   — the ledger: every target Navide wrote for a feature.
-- `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER)`
+- `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `removed`, `off`,
   `allowed`, `cleanup`, `cleanup-failed`, `prompt`.
 - kv `convenience.upgrade_notice` — set once the upgrade notice was published.
@@ -101,6 +102,9 @@ interface LogEntry {
                              // { agentKey, slotId, slotLabel, liveEmail, slotEmail }
   backup: string             // '' when none
   notify: boolean
+  source: string             // who triggered it: 'settings' (a Navide main window),
+                             // 'ws-client' (any other client with the backend token),
+                             // '' for Navide's own writes
 }
 interface UpgradeNotice { features: string[] } // ids in use when the upgrade ran
 ```
@@ -118,7 +122,11 @@ taken back are dropped from the ledger, so writing them again later is a
 `first`, never a removal. Allowed clears a `removed` reason and re-applies
 startup features at once (per-spawn features apply on the next spawn).
 
-`convenience.upgrade_ack` `{}` → `{}`.
+Moving a switch is announced (`off` / `allowed`, notify true) and logged
+with its `source`.
+
+`convenience.upgrade_ack` `{}` → `{}`. Logs an `allowed` row (not announced)
+for each feature the notice named: it stays allowed with the user's say-so.
 
 Event `convenience.changed` `{ feature?: string, entry?: LogEntry }` — a write was
 gated, a notice was added, or a state changed. The renderer re-reads
