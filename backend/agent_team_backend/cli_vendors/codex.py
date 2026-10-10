@@ -1266,9 +1266,20 @@ class CodexHomeManager:
 
     def drop_all_hook_trust(self) -> None:
         """Remove every ``hooks.state`` row seeded for any pane home."""
-        self._drop_trust_rows(f"{self.panes_root}{os.sep}")
+        if not self._drop_trust_rows(f"{self.panes_root}{os.sep}"):
+            return
         for record in self.panes_root.glob(f"*/{_SEEDED_TRUST_FILE}"):
             record.unlink(missing_ok=True)
+
+    def any_pane_hook_trust(self) -> bool:
+        """Whether config.toml still holds a ``hooks.state`` row keyed on any
+        pane home — what `drop_all_hook_trust` takes out."""
+        try:
+            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        prefix = f"{self.panes_root}{os.sep}"
+        return any(key.startswith(prefix) for key in _hook_state_rows(text))
 
     def hook_trust_intact(self, exclude: Path | None = None) -> bool:
         """Whether every live pane home still has the trust rows it was seeded.
@@ -1292,12 +1303,13 @@ class CodexHomeManager:
                 return False
         return True
 
-    def _drop_trust_rows(self, prefix: str) -> None:
+    def _drop_trust_rows(self, prefix: str) -> bool:
+        """Returns False when the rewrite failed and the rows are still there."""
         config = self.real_home / "config.toml"
         try:
             text = config.read_text(encoding="utf-8")
         except OSError:
-            return
+            return True
         block = re.compile(
             r'\n*^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*"[^"\n]*"[ \t]*\n?',
             flags=re.MULTILINE,
@@ -1307,7 +1319,7 @@ class CodexHomeManager:
             text,
         )
         if kept == text:
-            return
+            return True
         # Through the resolved path: a dotfiles symlink stays a symlink.
         target = config.resolve()
         tmp = target.with_name(target.name + ".navide-tmp")
@@ -1322,6 +1334,8 @@ class CodexHomeManager:
         except OSError as err:
             tmp.unlink(missing_ok=True)
             log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
+            return False
+        return True
 
     def sweep_orphans(self) -> list[str]:
         """Reclaim every pane home no pane needs. Runs once at backend start.

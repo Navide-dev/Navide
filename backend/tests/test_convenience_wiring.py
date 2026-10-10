@@ -710,6 +710,27 @@ def test_turning_codex_hook_trust_off_drops_every_seeded_row(gate, homes, tmp_pa
     assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 0
 
 
+def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes, tmp_path, monkeypatch) -> None:
+    from agent_team_backend import app
+    from agent_team_backend.convenience import CleanupIncomplete
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    real.chmod(0o555)  # the rewrite cannot land
+    try:
+        with pytest.raises(CleanupIncomplete):
+            convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    finally:
+        real.chmod(0o755)
+
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
+    assert gate.state("codex.hook-trust")[0] == "allowed"
+    # Once the file is writable again, off takes the rows back.
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 1
+
+
 def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -> None:
     from agent_team_backend.codex_home import CodexHomeManager
 
