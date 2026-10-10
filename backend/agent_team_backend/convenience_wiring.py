@@ -139,12 +139,11 @@ def install_hooks_gated(
         skip = g.excluded(feature_id, path) if parts is not None else frozenset()
         result.update((install(port_file, skip=skip) if parts is not None else install(port_file)) or {})
 
-    # Claude's and Qwen's settings.json are the user's: that file gone is a
-    # reset. Copilot's hook file is Navide's own, so deleting it stays the
-    # user's removal; only its whole config folder gone is a reset.
+    # Only the CLI's whole config folder gone or created anew is a reset;
+    # the settings or hook file deleted from it is the user's removal.
     outcome = g.apply(
         feature_id, path, write=write, present=present, file=path, parts=parts,
-        reset_when_missing=path if agent_key in _PER_HOOK else path.parent.parent,
+        reset_folder=path.parent if agent_key in _PER_HOOK else path.parent.parent,
     )
     return {**result, "convenience": outcome}
 
@@ -232,16 +231,50 @@ def ensure_project_config_gated(agent_key: str, cwd: str | Path) -> bool:
     g = _gate
     if g is None or path is None:
         return wiring.ensure_project_config(agent_key, cwd)
+    if not wiring.project_config_inside(path, Path(cwd)):
+        # Not the workspace's file: nothing is written, so nothing is gated,
+        # but the pane goes without Navide's tools and the user is told.
+        _refused_unsafe("cursor.project-mcp", path)
+        return wiring.ensure_project_config(agent_key, cwd)
     wired = [False]
 
     def write() -> None:
         wired[0] = wiring.ensure_project_config(agent_key, cwd)
 
+    # A removal is that workspace's alone; the .cursor folder gone (git
+    # clean, a fresh clone, a re-created worktree) is its reset.
     outcome = g.apply(
         "cursor.project-mcp", path, write=write,
-        present=lambda: wiring.project_config_has_entry(agent_key, path), file=path,
+        present=lambda: _project_config_present(agent_key, path), file=path,
+        reset_folder=path.parent, per_target=True,
     )
-    return wired[0] and outcome not in ("off", "removed")
+    return wired[0] and outcome not in ("off", "removed", "refused")
+
+
+def _project_config_present(agent_key: str, path: Path) -> bool:
+    """Whether the workspace's config still carries Navide's entry. An empty
+    file (an editor or Cursor truncated it mid-write) cannot tell, so it is
+    unknown — repaired, never read as the user's removal."""
+    from .mcp_server import wiring
+
+    if path.is_file() and not path.read_text(encoding="utf-8").strip():
+        raise ValueError(f"{path} is empty")
+    return wiring.project_config_has_entry(agent_key, path)
+
+
+def _refused_unsafe(feature_id: str, target: Path) -> None:
+    """A workspace whose .cursor leads outside it is left alone for safety;
+    say so once for that workspace, while the feature is allowed."""
+    g = _gate
+    if g is None or not g.allowed(feature_id):
+        return
+    try:
+        g.record_once(
+            feature_id, "refused-unsafe", target,
+            detail="leads outside the workspace through a link; not set up here",
+        )
+    except Exception as err:  # noqa: BLE001 — disclosure never blocks a spawn
+        log.warning("recording %s %s failed: %s", feature_id, target, err)
 
 
 def _remove_project_configs() -> None:
@@ -276,9 +309,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
 
     The manifest of planted links is the marker. A planted link the user
     deleted by hand is refused in that workspace only — logged and announced
-    as a removal of that one name — and the feature stays allowed. When a sync leaves nothing
-    planted, Navide removed the manifest itself, so the target is forgotten
-    rather than later read as a removal by the user.
+    as a removal of that one name — and the feature stays allowed. The
+    whole folder or its manifest deleted is refused for that workspace only
+    as well; the .cursor folder gone is the workspace's reset. When a sync
+    leaves nothing planted, Navide removed the manifest itself, so the target
+    is forgotten rather than later read as a removal by the user.
     """
     from .plugins.builtin.navide_skills import skills_wiring
 
@@ -288,6 +323,7 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     target = Path(cwd).joinpath(*wiring.project_rel)
     if not skills_wiring.project_target_safe(target, Path(cwd)):
         # Not the workspace's folder: nothing is written, so nothing is gated.
+        _refused_unsafe("cursor.project-skills", target)
         return skills_wiring.sync_project_dir(agent_key, wiring, cwd)
     manifest = target / skills_wiring.MANIFEST_FILE
     delivered = [False]
@@ -301,10 +337,11 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
     outcome = g.apply(
         "cursor.project-skills", target, write=write,
         present=lambda: skills_wiring.project_dir_intact(target), file=manifest,
+        reset_folder=Path(cwd) / wiring.project_rel[0], per_target=True,
     )
     for name in refused:
-        g.record("cursor.project-skills", "removed", str(target / name), detail="link deleted outside Navide")
-    if outcome in ("off", "removed"):
+        g.record("cursor.project-skills", "removed-entry", str(target / name), detail="link deleted outside Navide")
+    if outcome in ("off", "removed", "refused"):
         return False
     if not manifest.is_file():
         g.forget("cursor.project-skills", target)

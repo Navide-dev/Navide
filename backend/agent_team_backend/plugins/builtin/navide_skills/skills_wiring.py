@@ -280,7 +280,9 @@ def sync_project_dir(
             return False
         ours = not target.is_dir() or _manifest_created(target)
         target.mkdir(parents=True, exist_ok=True)
-        wanted = {source.name: source for source in sources}
+        # Only a name the manifest carries back unchanged: any other link
+        # would be an orphan that taking the links back never finds.
+        wanted = {source.name: source for source in sources if _manifest_name(source.name)}
         # Remove what we planted before and no longer want; never anything else.
         for name in sorted(planted):
             if name in wanted:
@@ -457,6 +459,13 @@ def _plain_entry_name(name: str) -> bool:
         and PurePosixPath(name).name == name
         and PureWindowsPath(name).name == name
     )
+
+
+def _manifest_name(name: str) -> bool:
+    """Whether ``name`` survives a round trip through the manifest: a plain
+    entry name that is neither stripped (surrounding spaces) nor read as a
+    comment (a leading ``#``)."""
+    return _plain_entry_name(name) and name == name.strip() and not name.startswith("#")
 
 
 def _manifest_created(target: Path) -> bool:

@@ -1028,6 +1028,24 @@ def test_taking_links_back_never_follows_a_manifest_name_outside_the_directory(t
     assert not (target / "ok").exists()
 
 
+@pytest.mark.parametrize("name", ["x:y", "#hash", " lead", "trail "])
+def test_a_name_the_manifest_cannot_carry_is_never_planted(tmp_path: Path, name: str) -> None:
+    """C5: the manifest drops a name with ``:``, reads a leading ``#`` as a
+    comment and strips spaces, so a link planted under such a name would be
+    an orphan nothing ever takes back. It is never planted."""
+    odd, ok = _native(tmp_path, name), _native(tmp_path, "ok")
+    store = _Store(tmp_path / "managed", native=[odd, ok],
+                   native_targets={odd.real_path: ["cursor"], ok.real_path: ["cursor"]})
+    cwd = tmp_path / "repo"
+
+    _sync(tmp_path, cwd, store)
+
+    target = cwd / ".cursor" / "skills"
+    assert (target / "ok").is_symlink()
+    assert sorted(p.name for p in target.iterdir()) == sorted([skills_wiring.MANIFEST_FILE, "ok"])
+    assert skills_wiring._read_manifest(target) == {"ok"}
+
+
 @pytest.mark.parametrize("name", ["C:evil", "C:\\evil", "a:b", "..", ".", "a/b", "a\\b", "x\u2028y"])
 def test_only_plain_entry_names_are_read_from_the_manifest(tmp_path: Path, name: str) -> None:
     """Windows drive-relative names (``C:evil``) and alternate data streams
