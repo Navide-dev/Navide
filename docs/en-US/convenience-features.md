@@ -121,9 +121,11 @@ interface LogEntry {
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object,
                              // one of:
-                             //   { agentKey, slotId, slotLabel, liveEmail, slotEmail }
+                             //   { agentKey, slotId, slotLabel, liveEmail, slotEmail, liveFingerprint }
                              //     the live login is another account than the slot
-                             //     (emails may be null when the CLI stores none)
+                             //     (emails may be null when the CLI stores none;
+                             //     liveFingerprint is a hash of that live login,
+                             //     never the secret)
                              //   { agentKey, reason: 'logout' }
                              //     the user signed out outside Navide (Claude, Codex);
                              //     no slotId, nothing to switch back to
@@ -159,17 +161,24 @@ for each feature the notice named: it stays allowed with the user's say-so.
 
 - The live login is read strictly: a failed read (a transient Keychain error)
   is not an empty login, so nothing is written and only the backend log says so.
-- It is another account when both emails are known and differ, or, with no
-  pair of emails, when its secret is not the slot's own. That is a prompt, never
-  a write. Navide's active account then follows the login that stays live (the
+- It is another account when both emails are known and differ, or, with only
+  one email known, when its secret is not the slot's own (the slot's secret now,
+  before the sign-in, or the pre-login copy a live-store sign-in put back). With
+  no email on either side (kimi, the per-provider stores) nothing tells accounts
+  apart: the login is restored, as before prompts existed. Identities, live and
+  slot reads use the profile's provider scope. A prompt is never a write. Navide's active account then follows the login that stays live (the
   profile holding it, else a new one registered for it), so a later switch can
   never capture that login into the prompt's slot.
-- "Switch back" is `cli_profiles.set_default { …, restore_live: true }`: a real
-  switch, or, when the slot is still the active account, its slot written back
-  to live (logged as a `repair`).
+- "Switch back" is `cli_profiles.set_default { …, restore_live: true,
+  restore_live_fingerprint }`, carrying the prompt's `liveFingerprint`. It is
+  refused (`LIVE_CHANGED`) once another login is live, and is a normal switch
+  with all its guards. When the slot is still the active account, the live
+  login is first kept in the profile holding it (or one registered for it,
+  never a second one for the same login), which is then switched away from;
+  with nobody signed in the slot is just written back. Logged as a `repair`.
 - An empty live login after Navide had published it on an earlier startup is
   the user signing out outside Navide: a `logout` prompt with only an
-  acknowledgement. The one-time promotion of legacy profile homes still
+  acknowledgement, once per sign-out (not on every startup). The one-time promotion of legacy profile homes still
   publishes the active account.
 - Every restore leaves an audit row, including one that failed part-way.
 - The prompt detail keeps the two emails because the prompt shows them; they go
