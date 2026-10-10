@@ -285,8 +285,15 @@ def sync_project_dir(
         ours = not target.is_dir() or _manifest_created(target)
         target.mkdir(parents=True, exist_ok=True)
         # Only a name the manifest carries back unchanged: any other link
-        # would be an orphan that taking the links back never finds.
-        wanted = {source.name: source for source in sources if _manifest_name(source.name)}
+        # would be an orphan that taking the links back never finds. A skill
+        # named like the manifest would take the manifest's place.
+        wanted = {
+            source.name: source for source in sources
+            if _manifest_name(source.name) and source.name != MANIFEST_FILE
+        }
+        for source in sources:
+            if source.name == MANIFEST_FILE:
+                log.warning("skill %s is named like Navide's manifest — not linked in %s", source, target)
         # Remove what we planted before and no longer want; never anything else.
         for name in sorted(planted):
             if name in wanted:

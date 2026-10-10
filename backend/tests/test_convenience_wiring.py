@@ -885,6 +885,31 @@ def test_a_skills_manifest_linked_outside_is_refused_for_safety_and_never_logged
     assert gate.state("cursor.project-skills") == ("allowed", "default")
 
 
+def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link(
+    gate, homes, tmp_path, monkeypatch
+) -> None:
+    """R3-L5: a managed skill called .navide-links took the manifest's place
+    (the manifest write then failed on a directory) and its link outlived
+    turning the feature off."""
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    named = tmp_path / "managed" / skills_wiring.MANIFEST_FILE
+    other = tmp_path / "managed" / "review"
+    named.mkdir(parents=True)
+    other.mkdir()
+    monkeypatch.setattr(skills_wiring, "_managed_sources", lambda *a, **k: [named, other])
+    wiring = skills_wiring.skills_wiring("cursor")
+    repo = _cursor_repo(tmp_path)
+    target = repo / ".cursor" / "skills"
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert skills_wiring.has_manifest(target)
+    assert skills_wiring._read_manifest(target) == {"review"}
+    convenience_wiring.set_feature("cursor.project-skills", False, port_file=str(homes["port"]))
+    assert not target.exists() or not [p.name for p in target.iterdir() if p.is_symlink()]
+
+
 # ── Codex: hook trust (S4) and login promotion (S5) ──────────────────────────
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"
