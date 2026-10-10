@@ -113,9 +113,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.19',
     title: {
-      'zh-TW': 'CLI 擴充一覽，以及更清楚的名稱',
-      'en-US': 'CLI Extensions at a Glance, and Clearer Names',
-      'ja-JP': 'CLI 拡張の一覧と、わかりやすくなった名称',
+      'zh-TW': 'CLI 擴充一覽、不再遺失的最近工作區、資源限制',
+      'en-US': 'CLI Extensions at a Glance, a Recent List That Keeps Everything, and Resource Limits',
+      'ja-JP': 'CLI 拡張の一覧、消えなくなった最近のワークスペース、リソース制限',
     },
     highlights: [
       {
@@ -127,6 +127,31 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'zh-TW': '名稱整理：Navide 自己的外掛一律叫「Navide 外掛」，上架的地方叫「Navide 市集」，跟各家 CLI 自己的 CLI 擴充分開。設定側欄的「整合」改名為「Agent 資產」（MCP、技能、Prompt 技能、記憶），「憑證與金鑰」移到「帳號與代理」，「Navide 外掛」與「Navide 市集」移到「系統」。用舊名稱搜尋設定也找得到。',
         'en-US': 'Clearer names: Navide’s own plugins are now always “Navide plugins”, published in the “Navide Marketplace”, and kept apart from each AI CLI’s own CLI extensions. In the Settings sidebar, Integrations is now Agent Assets (MCP, skills, prompts, memory), Credentials & keys moved to Accounts & Agents, and Navide Plugins and Navide Marketplace moved to System. Searching Settings by the old names still finds them.',
         'ja-JP': '名称を整理しました。Navide 自身のプラグインは「Navide プラグイン」、公開の場は「Navide マーケットプレイス」に統一し、各 AI CLI の CLI 拡張と区別します。設定のサイドバーでは「連携」が「エージェント資産」（MCP、スキル、プロンプト、メモリ）になり、「認証情報とキー」は「アカウントとエージェント」へ、「Navide プラグイン」と「Navide マーケットプレイス」は「システム」へ移りました。旧名称で設定を検索しても見つかります。',
+      },
+      {
+        'zh-TW': '「最近」的工作區會一直保留到你自己移除，不會再只留 20 筆、把天天在用的專案擠掉。已開啟與已釘選的排在最上面，其他每次顯示 10 筆、按「顯示更多」看下去，搜尋框會找遍全部紀錄；找不到的資料夾會標示出來但不會消失。保留上限在「設定 → 一般」調整，預設 1000 筆，也可以不設上限，已開啟與已釘選的永遠不會被移除。',
+        'en-US': 'Recent now keeps every workspace until you remove it, instead of keeping 20 and pushing out the projects you use every day. Open and pinned workspaces sit on top, the rest show ten at a time with "show more", and the search box looks through the whole history; folders that are missing are marked, not dropped. Set the limit in Settings → General: 1000 by default, or none, and open or pinned workspaces are never removed.',
+        'ja-JP': '「最近」のワークスペースは、自分で削除するまで残るようになりました。20 件までしか残らず、毎日使うプロジェクトが押し出されることはもうありません。開いているものとピン留めしたものが上にまとまり、残りは 10 件ずつ「さらに表示」で見られ、検索ボックスは全履歴を探します。見つからないフォルダーは印が付くだけで消えません。上限は「設定 → 一般」で変更でき、既定は 1000 件、上限なしも選べます。開いているものとピン留めしたものは削除されません。',
+      },
+      {
+        'zh-TW': '新增「設定 → 一般 → 資源限制」，每一項在你調整前都維持原本的行為：限制新 pane 跑測試時的 worker 數、列出已關閉的 pane 留下還在跑的伺服器並一鍵停止、讓聚焦中但好幾小時沒動的 pane 也被回收（點一下就能接續）、自我優化逾時後過一段時間收掉它的 pane；macOS 上還能直接打開 Spotlight 的隱私權設定，把建置輸出排除在索引外。',
+        'en-US': 'New Settings → General → Resource limits, each leaving things as they were until you change it: cap the test workers new panes use, list servers that closed panes left running and stop one with a click, let a focused pane untouched for hours be reclaimed too (one click resumes it), and reclaim a timed-out self-evolution run’s pane after a grace period. On macOS a button opens Spotlight’s privacy settings so you can keep build output out of the index.',
+        'ja-JP': '「設定 → 一般 → リソース制限」を追加しました。どの項目も変更するまでは従来どおりです。新しいペインのテスト worker 数の上限、閉じたペインが残したまま動いているサーバーの一覧とワンクリック停止、フォーカス中でも何時間も操作のないペインの回収（クリックで再開）、タイムアウトした自己改善のペインを猶予後に回収。macOS では Spotlight のプライバシー設定を開くボタンから、ビルド出力をインデックスの対象外にできます。',
+      },
+      {
+        'zh-TW': '關掉的 pane 不會再留下還在跑的 CLI 程序：結束失敗會被察覺並補清，重新接回的 pane 也找得到原本的程序，關閉 Navide 時讓 Claude 有時間正常結束，逾時的指令會連同子程序一起停止；App 關閉期間錯過的排程，補跑時不會再重複執行兩次。pane 上的聊天室標籤改顯示綁定的聊天室名稱；工作區標題上的 ✦ 徽章只顯示狀態，設定改從標題的「⋯」選單或右鍵選單打開。',
+        'en-US': 'Closed panes no longer leave CLI processes running: a failed kill is noticed and cleaned up, a reattached pane’s processes are still found, quitting Navide gives Claude time to shut down cleanly, and a timed-out command stops along with its children; a schedule that missed runs while the app was closed no longer fires twice when it catches up. The chat chip on a pane now shows the bound chat’s name, and the ✦ badge on a workspace heading only shows status; open its settings from the heading’s ⋯ menu or right-click menu.',
+        'ja-JP': '閉じたペインが CLI のプロセスを残さなくなりました。終了の失敗を検知して後片付けし、再接続したペインのプロセスも見つけ、Navide の終了時は Claude が正常に終了する時間を確保し、タイムアウトしたコマンドは子プロセスごと止めます。アプリを閉じている間に実行されなかったスケジュールが、後から追いつくときに 2 回実行されることもなくなりました。ペインのチャットのラベルには紐づいたチャットの名前が表示されます。ワークスペース見出しの ✦ バッジは状態の表示だけになり、設定は見出しの「⋯」メニューか右クリックメニューから開きます。',
+      },
+      {
+        'zh-TW': '更安全：Navide 不會再覆寫讀不懂的 Claude settings.json、不會再把檔案搬進你的家目錄、不會再讓 Codex 的 config.toml 越長越大、不會把你自己的 Cursor 技能藏起來不讓 git 看到、搬移舊資料時會保留真正的對話紀錄檔，也補上 Cursor 技能清單的路徑漏洞；從 pane 裡啟動 Navide 時，也不會再把你的家目錄誤當成專案（技能與 MCP 設定都已修正）。',
+        'en-US': 'Safer: Navide no longer overwrites a Claude settings.json it cannot read, no longer moves files into your home folder, stops growing Codex’s config.toml, no longer hides your own Cursor skills from git, keeps the real session file when migrating old data, and closes a path issue in the Cursor skills manifest. When Navide is started from inside a pane, it no longer mistakes your home folder for a project (fixed in skills and MCP wiring).',
+        'ja-JP': 'より安全に：Navide は読み取れない Claude の settings.json を上書きしなくなり、ホームフォルダーにファイルを移動しなくなり、Codex の config.toml が増え続けることもなくなりました。自分の Cursor スキルを git から隠すこともなく、古いデータの移行時は本来のセッションファイルを残し、Cursor スキルの一覧ファイルのパスの問題も修正しました。ペインの中から Navide を起動しても、ホームフォルダーをプロジェクトと取り違えなくなりました（スキルと MCP の設定の両方を修正）。',
+      },
+      {
+        'zh-TW': 'Navide 的程式碼庫搬到 GitHub 的 Navide-dev/Navide，更新的備援來源與「說明」選單的連結都已指向新位置，更新仍優先走下載鏡像。Plans 的圖表改用 mermaid 12，版面與配色維持原樣；Electron、fastapi、anthropic、websockets 等相依套件也一併更新。',
+        'en-US': 'Navide’s repository moved to Navide-dev/Navide on GitHub; the update fallback and the Help menu’s links point there, and updates still come from the download mirror first. Plans diagrams now use mermaid 12 with the same layout and colours, and Electron, fastapi, anthropic, websockets and other dependencies are updated.',
+        'ja-JP': 'Navide のリポジトリは GitHub の Navide-dev/Navide に移りました。アップデートの予備の取得先と「ヘルプ」メニューのリンクは新しい場所を指し、アップデートは引き続きダウンロードミラーを優先します。Plans の図は mermaid 12 になり、レイアウトと配色はそのままです。Electron、fastapi、anthropic、websockets などの依存関係も更新しました。',
       },
     ],
   },

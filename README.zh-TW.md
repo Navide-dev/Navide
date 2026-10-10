@@ -10,7 +10,7 @@ Navide 是一套開源、AI-native 的軟體工程環境，專為一個人調度
 
 [English](README.md) | 繁體中文 | [日本語](README.ja-JP.md)
 
-[下載 v0.2.18](https://github.com/Navide-dev/Navide/releases/tag/v0.2.18) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
+[下載 v0.2.19](https://github.com/Navide-dev/Navide/releases/tag/v0.2.19) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
@@ -115,13 +115,13 @@ Local-first 不代表所有情況都完全離線。使用外部 Agent CLI、雲�
 
 ## 試用 Navide
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.18 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.19 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
 
-- [下載 DMG](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.dmg))
-- [下載 ZIP](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.zip))
-- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-x64.exe))
-- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-arm64.exe))
-- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-amd64.deb))
+- [下載 DMG](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.dmg))
+- [下載 ZIP](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.zip))
+- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-x64.exe))
+- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-arm64.exe))
+- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-amd64.deb))
 
 連結指向 dl.navide.dev，與 App 自動更新用的是同一個載點；旁邊的「GitHub」連結是 GitHub Release 上同一個檔案、逐位元相同（發版流程同時發佈兩邊並比對 checksum）。
 

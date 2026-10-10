@@ -10,7 +10,7 @@ Navide は、一人の人間が複数の Coding Agent を指揮するための�
 
 [English](README.md) | [繁體中文](README.zh-TW.md) | 日本語
 
-[v0.2.18 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.18) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
+[v0.2.19 をダウンロード](https://github.com/Navide-dev/Navide/releases/tag/v0.2.19) | [はじめに](docs/ja-JP/getting-started.md) | [ドキュメント](docs/ja-JP/README.md) | [ロードマップ](docs/ja-JP/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
@@ -115,13 +115,13 @@ Local-first は常に完全オフラインという意味ではありません�
 
 ## Navide を試す
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.18 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。v0.2.19 では Developer ID で署名され Apple の Notarization を通過した macOS 版に加え、Windows x64 Installer と Linux x64 Package を提供しています。
 
-- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.dmg))
-- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.zip))
-- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-x64.exe))
-- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-arm64.exe))
-- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-amd64.deb))
+- [DMG をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.dmg))
+- [ZIP をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.zip))
+- [Windows x64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-x64.exe))
+- [Windows ARM64 Installer をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-arm64.exe))
+- [Linux AppImage をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-x86_64.AppImage))・[Linux .deb をダウンロード](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-amd64.deb))
 
 リンク先は dl.navide.dev で、アプリの自動更新と同じ配信元です。隣の「GitHub」リンクは GitHub Release 上の同じファイル（バイト単位で同一。リリースワークフローが両方に公開し、チェックサムの一致を確認しています）。
 

@@ -4,13 +4,31 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+## [0.2.19] — 2026-10-11 — signed release
+
 ### Added
 
 - **CLI extensions inventory**: Settings → CLI Extensions lists the CLI extensions each AI CLI installed for itself (Claude plugins and mods, Codex plugins and hooks, Copilot, Droid, Cursor, Grok, MiniMax Code, Muse, Qwen, opencode, Kilo and Pi plugins, extensions and hooks), with each one's execution tier (L1 text assets, L2 subprocess, L3 code inside the CLI's own process), the capabilities it can reach, whether the CLI asks before running it, and which hooks Navide installed. Read-only: it parses each CLI's files or runs a declared listing command with a timeout, and never installs, enables or changes anything. Agents get names and metadata through the new MCP tool `cli_extensions_list`.
+- **Recent workspaces that stay**: Recent keeps every workspace you opened until you remove it, instead of dropping the oldest past 20. Open and pinned workspaces sit in their own group on top, the rest show ten at a time with "show more", a search box matches the whole history, and missing folders stay listed and marked. Every row can be removed from the list. Settings → General sets a storage limit (1000 by default, or off) that never drops an open or pinned workspace and says when it trimmed anything; going back to an older build keeps the list.
+- **Settings → General → Resource limits**, every option off or unchanged until you set it: cap test-runner workers for new panes (`NAVIDE_TEST_MAX_WORKERS`); list servers that closed panes left running and stop one on a click (on by default; lists only when asked); also reclaim a focused pane untouched for N hours, as a click-to-resume card; reclaim a timed-out self-evolution run's pane after a grace period (30 minutes by default, 0 for never); and on macOS, a button that opens Spotlight's privacy settings so you can exclude build output.
 
 ### Changed
 
 - Naming follows the new glossary (docs/en-US/glossary.md): Navide's own packages are "Navide plugins" in the "Navide Marketplace", an AI CLI's own add-ons are "CLI extensions". Settings: Integrations is now Agent Assets (MCP, skills, prompts, memory), Credentials & keys moved to Accounts & Agents, and Navide Plugins and Navide Marketplace moved to System; the old names still find them in Settings search.
+- The repository moved to [Navide-dev/Navide](https://github.com/Navide-dev/Navide). Updates still come from the download mirror first; the GitHub fallback, the Help menu's repository and issue links, and the first-party Navide plugins' repository field point at the new address.
+- The ✦ self-evolution badge on a workspace heading is display-only; open the panel from the heading's ⋯ menu or right-click menu.
+- Plans diagrams render with mermaid 12 and keep their current layout and classic look. Also updated: Electron 44.6, electron-builder, ws, koffi, mammoth, and on the backend fastapi, anthropic, websockets and tzdata.
+- The backend's `/health` reports event-loop lag and the shared thread pool's backlog.
+
+### Fixed
+
+- Closed panes no longer leave CLI processes running: a refused terminal kill is treated as a failure and swept, a reattached pane's PTYs are found under its earlier ids, quitting finishes its sweep within main's kill timer so Claude can shut down cleanly, and a timed-out `shell.run` stops its whole process group.
+- A scheduled job that missed runs while the app was closed no longer fires twice when the catch-up and the regular tick reach it together.
+- The channel chip on a pane shows the bound chat's name instead of repeating the pane's.
+- Navide no longer overwrites a Claude `settings.json` it cannot parse, no longer moves files a tool wrote into the Muse pane home into your real home folder, stops adding a hook trust block to `~/.codex/config.toml` for every pane (and keeps that file's permissions), no longer hides your own Cursor skills from `git status`, keeps the real session file when a legacy copy replaces it during migration, and reads only plain names from the Cursor skills links manifest so a crafted entry cannot remove a link elsewhere on disk.
+- When Navide is started from inside a pane, it no longer mistakes your real home folder for a project: the skills git-exclude walk and the MCP project config both check the real home, not the pane's `$HOME`.
+- Settings → CLI Extensions masks credentials in hook command lines and recognises Navide's Windows Guard hook as Navide's.
+- Pipeline graph: undo and redo wait for a pending save, and an unknown pipeline is reported as not found.
 
 ## [0.2.18] — 2026-10-09 — signed release
 

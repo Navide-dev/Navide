@@ -300,6 +300,29 @@ async def test_catch_up_runs_one_slot_per_job_burst_then_spaced(env) -> None:
         await restarted.close()
 
 
+async def test_a_tick_acting_on_a_stale_listing_does_not_fire_a_caught_up_job_again(env) -> None:
+    """The tick reads every job, then fires the overdue ones. When catch-up ran
+    a job in between, the tick's row still shows the old next_run_at; starting
+    the run must re-check the fresh row or the job is delivered twice."""
+    service = env["make"]()
+    job = await create(service, minutes=1, name="j0")
+    env["clock"].advance_ms(60 * MINUTE)
+    stale = await service.store.list_jobs()
+    await service._catch_up([job["id"]])  # noqa: SLF001
+    await settle(service)
+    assert len(env["bridge"].delivered) == 1
+
+    async def stale_listing() -> list[dict]:
+        return stale
+
+    service.store.list_jobs = stale_listing  # type: ignore[method-assign]
+    await service.tick()
+    await settle(service)
+
+    assert len(env["bridge"].delivered) == 1
+    assert [r["status"] for r in await runs(service, job["id"])] == ["ok"]
+
+
 async def test_catch_up_is_sequential(env) -> None:
     service = env["make"]()
     for i in range(3):

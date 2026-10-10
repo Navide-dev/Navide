@@ -960,6 +960,11 @@ class SchedulerService:
             if job is None or job["state"].get("running_at") is not None:
                 return None
             started = self.now_ms()
+            # A scheduled start comes from a listing read before this lock; a
+            # run that finished meanwhile moved next_run_at past now.
+            due = job["state"].get("next_run_at")
+            if not manual and due is not None and due > started:
+                return None
             job["state"]["running_at"] = started
             # Written before anything is dispatched: this is the reentry lock.
             await self.store.set_state(job_id, job["state"])

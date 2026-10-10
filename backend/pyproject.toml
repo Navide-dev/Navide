@@ -1,6 +1,6 @@
 [project]
 name = "agent-team-backend"
-version = "0.2.18"
+version = "0.2.19"
 description = "Python backend for the Navide AI-native engineering environment"
 requires-python = ">=3.12"
 dependencies = [

@@ -10,7 +10,7 @@ It is not another chat panel inside the traditional IDE. Navide is being built a
 
 English | [繁體中文](README.zh-TW.md) | [日本語](README.ja-JP.md)
 
-[Download v0.2.18](https://github.com/Navide-dev/Navide/releases/tag/v0.2.18) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
+[Download v0.2.19](https://github.com/Navide-dev/Navide/releases/tag/v0.2.19) | [Getting started](docs/en-US/getting-started.md) | [Documentation](docs/en-US/README.md) | [Roadmap](docs/en-US/roadmap.md)
 
 [![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
@@ -115,13 +115,13 @@ Read [Privacy and Data Flows](docs/en-US/privacy.md) and the [Security Policy](S
 
 ## Try Navide
 
-Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.18 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
+Navide supports macOS 13+ on Apple silicon, Linux x64, and Windows on x64 or Arm. The v0.2.19 release ships macOS builds signed with a Developer ID certificate and notarized by Apple, plus Windows x64 and Arm64 installers and Linux x64 packages:
 
-- [Download DMG](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.dmg))
-- [Download ZIP](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-arm64.zip))
-- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-x64.exe))
-- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-win-arm64.exe))
-- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.18/Navide-0.2.18-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.18/Navide-0.2.18-amd64.deb))
+- [Download DMG](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.dmg))
+- [Download ZIP](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-arm64.zip))
+- [Download Windows x64 installer](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-x64.exe))
+- [Download Windows Arm64 installer](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-win-arm64.exe))
+- [Download Linux AppImage](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-x86_64.AppImage)) · [Download Linux .deb](https://dl.navide.dev/releases/v0.2.19/Navide-0.2.19-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.19/Navide-0.2.19-amd64.deb))
 
 Links go to dl.navide.dev, the same host the app updates itself from; the *GitHub* link beside each one is the same file, byte for byte, on the GitHub Release (the release workflow publishes both and checks their checksums match).
 

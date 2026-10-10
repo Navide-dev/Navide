@@ -1,6 +1,6 @@
 {
   "name": "agent-team",
-  "version": "0.2.18",
+  "version": "0.2.19",
   "private": true,
   "author": "Navide Team",
   "description": "Navide: the AI-native engineering environment for one engineer directing multiple coding agents",
