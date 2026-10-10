@@ -201,6 +201,11 @@ for each feature the notice named: it stays allowed with the user's say-so.
   acknowledgement, once per sign-out (not on every startup). The one-time promotion of legacy profile homes still
   publishes the active account.
 - Every restore leaves an audit row, including one that failed part-way.
+- Signing the active account in again through Navide is the user's own
+  request, so its login goes live even with the switch off (still logged as a
+  `repair`, and still a prompt when another account is live). A switch never
+  captures live's older claude token over a newer one of the same account in
+  the slot.
 - The prompt detail keeps the two emails because the prompt shows them; they go
   to the audit log and the `convenience.changed` broadcast only, never the
   backend log.

@@ -445,9 +445,12 @@ def repair_live_login(
     slot_label: str = "",
     other_account: bool = False,
     live_fingerprint: str = "",
+    requested: bool = False,
 ) -> bool:
     """Write the active account back into the CLI's live login, as the
     feature credentials.auto-repair. Returns whether it was written.
+    ``requested``: the user asked for it (a sign-in through Navide), so it
+    applies whatever the auto-repair switch says.
 
     D7: when the live login is a *different* signed-in account than the one
     Navide would restore, the user changed it outside Navide. That is never
@@ -460,7 +463,7 @@ def repair_live_login(
     if g is None:
         restore()
         return True
-    if not g.allowed("credentials.auto-repair"):
+    if not requested and not g.allowed("credentials.auto-repair"):
         return False
     target = f"{agent_key} live login"
     if other_account or (

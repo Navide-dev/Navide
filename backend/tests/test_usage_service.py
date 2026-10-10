@@ -4042,3 +4042,33 @@ async def test_switching_back_obeys_the_normal_switch_guards(
     assert vault.read_live("claude").secret == _SEC_D
     assert [p["name"] for p in store.list()["profiles"]] == ["A", "C"]
     assert _isolated_convenience_gate.history() == []
+
+
+@pytest.mark.asyncio
+async def test_a_sign_in_through_navide_applies_live_even_with_auto_repair_off(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """P4 (a): signing the active account in again inside Navide is the
+    user's own request, not an automatic repair; with the switch off the
+    new login still goes live, and a later switch keeps it in the slot."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_A, account={"emailAddress": "a@x.com"}))
+    fresh = _SEC_A.replace("tokA", "tokA2")
+
+    def harvest(agent_key, slot_id, **kwargs):
+        vault.write_slot("claude", slot_id, LiveCredentials(secret=fresh, account={"emailAddress": "a@x.com"}))
+        return True
+
+    monkeypatch.setattr(vault, "harvest_login_home", harvest)
+    await us._harvest_login_home_locked(vault, "claude", pa)
+
+    assert vault.read_live("claude").secret == fresh
+    s = _session()
+    await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
+        "agent_key": "claude", "profile_id": pc, "force": True}})
+    assert vault.read_slot("claude", pa).secret == fresh
+

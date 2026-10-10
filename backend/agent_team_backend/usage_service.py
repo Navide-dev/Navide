@@ -525,7 +525,7 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
                 reason="signed in through Navide",
                 live_email=live_email, slot_email=slot_email,
                 slot_label=_profile_name(slot_id), other_account=other,
-                live_fingerprint=fingerprint,
+                live_fingerprint=fingerprint, requested=True,
             ))
             if other and not written:
                 # Navide's active account must follow the login that stays
