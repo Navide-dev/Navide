@@ -102,15 +102,44 @@ async def test_restoring_an_mcp_version_waits_for_approval(tmp_path, account_key
     assert result["held"] is True
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}
     assert sync_approvals.entry("mcp", "runner")["status"] == "pending"
-    # sync_approvals.overlay shows a held item as its held payload, so the
-    # restored version goes up as an edit on the next round (as a pulled
-    # hold never does: its payload is what was agreed). This machine keeps
-    # running the current one until the user approves.
+    # Nothing goes up while the restored version waits: the cloud keeps
+    # what this machine still runs until the user says yes here.
     assert (await a.sync())["ok"] is True
-    assert server.pushes == pushes + 1
+    assert server.pushes == pushes
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}
     (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
     assert sync_approvals.decide(a.adapter, "runner", True, row["digest"])["status"] == "applied"
     assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/first"}
+    # Approved and landed: an ordinary local edit, pushed once.
+    await a.sync()
+    assert server.pushes == pushes + 1
+    await a.sync()
+    assert server.pushes == pushes + 1
+
+
+async def test_a_rejected_restore_changes_nothing_anywhere(tmp_path, account_key, s3, monkeypatch):
+    monkeypatch.setattr(app, "app_data_dir", lambda: tmp_path / "app-data")
+    server = V3Server(s3, adopt_ready=True)
+    store = MCPSettingsStore(tmp_path / "a.json")
+    a = Dev(tmp_path, server, "A", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=store)
+    a.engine._request = lambda t, p: server.handle("A", t, p)
+    a.use()
+    store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/first"}])
+    await a.sync()
+    store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}])
+    await a.sync()
+    (old,) = await a.engine.versions("mcp", "runner")
+    pushes = server.pushes
+    assert (await a.engine.restore("mcp", "runner", old["rev"]))["held"] is True
+    (row,) = [h for h in sync_approvals.listing() if h["itemId"] == "runner"]
+    assert sync_approvals.decide(a.adapter, "runner", False, row["digest"])["status"] == "rejected"
+    # A "no" to a restore leaves nothing behind: no hold, nothing withheld,
+    # nothing pushed, and the current version keeps running.
+    assert sync_approvals.entry("mcp", "runner") is None
+    assert (await a.sync())["ok"] is True
+    assert server.pushes == pushes
+    assert {s["name"]: s["command"] for s in store.list_servers()} == {"runner": "/usr/bin/second"}
+    # A later local edit goes up as usual.
+    store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/third"}])
     await a.sync()
     assert server.pushes == pushes + 1

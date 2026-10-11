@@ -2880,7 +2880,10 @@ class SyncEngine:
         from . import sync_approvals
 
         entry = sync_approvals.entry(scope, item_id)
-        return bool(entry and entry.get("status") == sync_approvals.PENDING and entry.get("digest") == digest(payload))
+        held = bool(entry and entry.get("status") == sync_approvals.PENDING and entry.get("digest") == digest(payload))
+        if held:
+            sync_approvals.mark_restored(scope, item_id)
+        return held
 
     def _require_adapter(self, scope: str) -> ScopeAdapter:
         adapter = self._adapters.get(scope)

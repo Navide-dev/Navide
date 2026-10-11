@@ -553,13 +553,28 @@ def overlay(scope: str, snapshot: dict[str, Any]) -> dict[str, Any]:
 
 
 def withheld(scope: str) -> list[str]:
-    """Holds whose payload no longer opens here (or is gone): the engine
-    sends nothing for them — no edit, no delete — and reports them as held,
-    until a newer record for the item replaces the hold."""
+    """Holds whose payload no longer opens here (or is gone), and restored
+    versions still waiting for a yes: the engine sends nothing for them — no
+    edit, no delete — and reports them as held, until a newer record for the
+    item replaces the hold or the user decides."""
     return sorted(
-        item_id for item_id in _index().get(scope, {})
-        if held_payload(scope, item_id) is None
+        item_id for item_id, record in _index().get(scope, {}).items()
+        if record.get("restored") or held_payload(scope, item_id) is None
     )
+
+
+def mark_restored(scope: str, item_id: str) -> None:
+    """The hold of *item_id* is an earlier version the user asked to bring
+    back, not a record the cloud agreed on. Unlike a pulled hold it differs
+    from what was agreed, so ``overlay`` showing it would push it before it
+    was approved here; ``withheld`` keeps it back instead, and a "no" drops it."""
+    with _lock:
+        index = _index()
+        record = index.get(scope, {}).get(item_id)
+        if record is None:
+            return
+        record["restored"] = True
+        _write_index(index)
 
 
 def set_status(scope: str, item_id: str, status: str, *, token: str = "") -> None:
@@ -653,6 +668,12 @@ def decide(adapter: Any, item_id: str, approve: bool, shown_digest: str) -> dict
             raise sync_engine.SyncError(
                 f"{scope}/{item_id} changed since it was shown; review it again"
             )
+        if not approve and record.get("restored"):
+            # A restore nobody wants: the agreed copy is the local one, so
+            # there is nothing to keep standing in for it.
+            drop(scope, item_id)
+            drop_held_files(scope, item_id, shown_digest)
+            return {"scope": scope, "itemId": item_id, "status": REJECTED}
         if not approve:
             set_status(scope, item_id, REJECTED)
             # Nothing reviewed is kept for a "no".
