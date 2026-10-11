@@ -204,11 +204,6 @@ describe('SettingsModal Navide Cloud page', () => {
     expect(body.slice(body.indexOf('<template #share>'), body.indexOf('<template #devices>'))).toContain('<ShareLinksPane')
     expect(body.slice(body.indexOf('<template #devices>'))).toContain('<CloudDevicesSection')
   })
-
-  it('returns to the Sync sub-tab when a link points into the page', () => {
-    expect(src).toMatch(/setSection: async[\s\S]{0,200}if \(tab === 'cross-device'\) cloudSubtab\.value = 'sync'/)
-    expect(src).toMatch(/if \(item\.tab === 'cross-device'\) cloudSubtab\.value = 'sync'/)
-  })
 })
 
 describe('Navide Cloud sub-tabs, review round 1', () => {

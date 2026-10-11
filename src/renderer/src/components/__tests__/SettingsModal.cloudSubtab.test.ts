@@ -167,4 +167,33 @@ describe('SettingsModal Navide Cloud page', () => {
     await wrapper!.setProps({ initialTab: 'cross-device' })
     expect(subtabs().props('modelValue')).toBe('sync')
   })
+
+  it('returns to Sync when another window points at a section of the page', async () => {
+    await mountModal('connected')
+    await chooseSubtab('devices')
+    await (wrapper!.vm as unknown as { setSection(tab: string, section: string): Promise<void> }).setSection(
+      'cross-device',
+      'general-p2p-policy',
+    )
+    await flushPromises()
+    expect(subtabs().props('modelValue')).toBe('sync')
+  })
+
+  it('returns to Sync when a search result points into the page', async () => {
+    await mountModal('connected', { initialTab: 'general' })
+    wrapper!.findComponent(CloudSubtabs).vm.$emit('update:modelValue', 'devices')
+    await flushPromises()
+    expect(subtabs().props('modelValue')).toBe('devices')
+
+    const input = document.querySelector<HTMLInputElement>('.s-search-input')!
+    input.value = i18n.global.t('settings.search.item.general-p2p-policy.title')
+    input.dispatchEvent(new Event('input'))
+    await flushPromises()
+    const results = Array.from(document.querySelectorAll<HTMLButtonElement>('.s-search-result'))
+    const target = results.find((b) => b.textContent?.includes(i18n.global.t('settings.search.item.general-p2p-policy.title')))
+    expect(target).toBeDefined()
+    target!.click()
+    await flushPromises()
+    expect(subtabs().props('modelValue')).toBe('sync')
+  })
 })
