@@ -125,18 +125,18 @@ onMounted(() => { void load() })
               <span v-if="item.version" class="cli-ext-version">{{ item.version }}</span>
             </div>
             <div class="cli-ext-badges">
-              <span class="cli-ext-type">{{ item.type_label }}</span>
-              <span class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
+              <span v-truncate class="cli-ext-type">{{ item.type_label }}</span>
+              <span v-truncate class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
                 {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
               </span>
-              <span v-if="item.owner === 'navide'" class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
-              <span v-if="!item.enabled" class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
+              <span v-if="item.owner === 'navide'" v-truncate class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
+              <span v-if="!item.enabled" v-truncate class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
             </div>
             <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
             <template v-else>
               <div v-if="item.capabilities.length" class="cli-ext-caps">
-                <span v-for="cap in item.capabilities" :key="cap" class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
-                <span v-if="item.evidence === 'inferred'" class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
+                <span v-for="cap in item.capabilities" :key="cap" v-truncate class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
+                <span v-if="item.evidence === 'inferred'" v-truncate class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
               </div>
               <p class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
               <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
