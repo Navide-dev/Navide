@@ -540,3 +540,24 @@ def test_files_the_user_dropped_in_may_be_sent_but_not_their_neighbours(tmp_path
     dropped = _file(user_data / "Agent-Team" / "dropped-files" / "123-shot.png")
     assert media.resolve_outbound(str(dropped)) == (dropped.resolve(), "")
     assert media.resolve_outbound(str(_file(user_data / "Agent-Team" / "Local State"))) == (None, "system")
+
+
+# Windows drops trailing dots and spaces from every path segment, so "id_rsa." opens
+# id_rsa: when resolve() cannot give the final path back, the name rules must still see
+# the name Windows will open. Simulated through osplat.platform_id, so it runs anywhere.
+@pytest.mark.parametrize("rel", ["id_rsa.", "key.pem.", "server.key. .", "keychains . /db.txt", "auth.json.."])
+def test_trailing_dots_and_spaces_cannot_hide_a_denied_name_on_windows(ws: Path, monkeypatch, rel: str) -> None:
+    from agent_team_backend import osplat
+
+    f = _file(ws / "out" / rel)
+    monkeypatch.setattr(osplat, "platform_id", "win32")
+    assert media.resolve_outbound(str(f)) == (None, "denied_name")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows cannot create a name ending in a dot")
+def test_trailing_dots_elsewhere_are_judged_as_written(ws: Path, monkeypatch) -> None:
+    from agent_team_backend import osplat
+
+    monkeypatch.setattr(osplat, "platform_id", "darwin")
+    f = _file(ws / "out" / "key.pem.")  # not *.pem as written: as on main
+    assert media.resolve_outbound(str(f)) == (f.resolve(), "")

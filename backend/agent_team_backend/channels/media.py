@@ -178,6 +178,14 @@ def _scope(real: Path) -> tuple[str, ...]:
     return real.parts[len(home.parts):] if _inside(real, home) else real.parts[1:]
 
 
+def _name_key(part: str) -> str:
+    """A path segment as the name rules compare it. Windows drops trailing dots and spaces
+    from every segment, so "id_rsa." and "key.pem ." open id_rsa and key.pem there."""
+    from .. import osplat
+
+    return part.lower().rstrip(". ") if osplat.platform_id == "win32" else part.lower()
+
+
 def _folded(path: PurePath) -> tuple[str, ...]:
     return tuple(part.casefold() for part in path.parts)
 
@@ -225,7 +233,7 @@ def _check(raw: str) -> tuple[Path | None, os.stat_result | None, str]:
     scope = _scope(real)
     # A colon can also arrive through a symlink, after the raw path passed.
     if any(":" in part for part in scope) or any(
-            fnmatch.fnmatch(part.lower(), pat) for part in scope for pat in DENIED_NAMES):
+            fnmatch.fnmatch(_name_key(part), pat) for part in scope for pat in DENIED_NAMES):
         return None, None, "denied_name"
     if any(_within(real, s) for s in _system_dirs()):
         return None, None, "system"
