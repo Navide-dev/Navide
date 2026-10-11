@@ -95,6 +95,8 @@ class FakeLinks:
         if verb == "revoke":
             row.update(active=False, revokedAt="now")
             return {"linkId": row["linkId"], "revokedAt": "now"}
+        if verb == "caps":
+            return {"kinds": {}}
         raise share_links.ShareRemoteError("UNKNOWN_TYPE", verb)
 
     def created(self) -> list[dict[str, Any]]:
@@ -254,7 +256,7 @@ async def test_create_share_without_a_ring_fails_before_anything_is_sent(home: P
     client = FakeLinks()
     with pytest.raises(sync_keyring.KeyringError):
         await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
-    assert client.calls == []
+    assert client.calls == [("caps", {})]  # only the once-per-connection probe
 
 
 # ---- review round 1 ---------------------------------------------------------------
@@ -483,7 +485,7 @@ async def test_a_lifetime_under_the_servers_upload_window_is_refused_here(ring, 
     client = FakeLinks()
     with pytest.raises(share_links.ShareRefused) as err:
         await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", ttl_seconds=seconds, put=client.put)
-    assert err.value.code == "ttl" and client.calls == []
+    assert err.value.code == "ttl" and client.calls == [("caps", {})]
     with pytest.raises(share_links.ShareRefused):
         await share_links.extend(client, "ab" * 16, seconds)
 
@@ -575,3 +577,16 @@ def test_built_link_keys_are_remembered_for_masking() -> None:
     key = bytes(range(32))
     url = share_links.link_url("ab" * 16, key)
     assert url.split("#k=")[1] in share_links.known_key_fragments()
+
+
+async def test_an_old_server_is_refused_before_the_file_or_ring_is_touched(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F7-2: share_create on a server without links read, masked and reached
+    for the ring before the server said no."""
+    touched: list[str] = []
+    monkeypatch.setattr(share_links, "prepare", lambda *a, **k: touched.append("prepare"))
+    monkeypatch.setattr(share_links, "_require_ring", lambda: touched.append("ring"))
+    client = _CapsClient("UNKNOWN_TYPE")
+    with pytest.raises(share_links.ShareRemoteError) as err:
+        await share_links.create_share(client, str(_plan(home, "<p/>")), "plan")
+    assert err.value.code == "UNSUPPORTED"
+    assert touched == [] and client.calls == 1

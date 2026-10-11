@@ -495,6 +495,9 @@ async def create_share(
     """Mask, encrypt and publish ``raw_path``; the URL carries the only copy of K
     outside the account ring. ``pane_id`` (the creating pane, when an agent
     shares) is kept in the metadata so a chat notice can find its binding."""
+    # A server without links hears nothing else, and nothing is read (F7-2).
+    if not await ensure_supported(client):
+        raise ShareRemoteError("UNSUPPORTED", "This Navide Cloud server does not offer share links.")
     prepared = await asyncio.to_thread(prepare, raw_path, kind)
     ttl = _ttl(kind, ttl_seconds)
     _require_ring()

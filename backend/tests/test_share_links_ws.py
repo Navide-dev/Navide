@@ -117,7 +117,7 @@ async def test_a_refused_path_says_why(ring, home, server, broadcasts) -> None:
     await ws_handlers.share_create(session, "1", "share.create", {"path": str(key_file)})
     error = session.reply["error"]
     assert error["code"] == "SHARE_REFUSED" and error["details"]["reason"] == "denied_name"
-    assert server.calls == [] and broadcasts == []
+    assert server.calls == [("caps", {})] and broadcasts == []
 
 
 @pytest.mark.parametrize(

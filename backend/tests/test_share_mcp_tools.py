@@ -168,7 +168,7 @@ async def test_a_key_file_is_refused_with_its_reason(ring, home, connected, pane
     key_file.write_text("x")
     result = await mcp.share_create(path=str(key_file), ctx=None)
     assert result["ok"] is False and result["reason"] == "denied_name"
-    assert connected.calls == [] and broadcasts == []
+    assert connected.calls == [("caps", {})] and broadcasts == []
 
 
 async def test_revoke_goes_through(ring, home, connected, pane_caller, broadcasts) -> None:
