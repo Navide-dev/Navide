@@ -1866,6 +1866,13 @@ class SyncEngine:
         is known to check against.
         """
         device = str(raw.get("deviceId") or "")
+        if device and device != self._device_id() and _blocked_here(device):
+            # A blocked device of this account still holds the account key, so
+            # its records open and, with no pin to check, read as unknown
+            # origin — which a live record or a tombstone for an item this
+            # machine lacks is taken on. A stolen machine is what a block is for.
+            log.warning("refusing a record from %s: that device is blocked on this machine", device)
+            return _ORIGIN_FORGED
         if device and device == self._device_id():
             try:
                 key = device_signing.public_key()
@@ -3230,6 +3237,14 @@ def _unique(item_ids: Any) -> list[str]:
         if item_id and item_id not in out:
             out.append(item_id)
     return out
+
+
+def _blocked_here(device_id: str) -> bool:
+    """Whether this machine's own block list names *device_id*. Never raises:
+    ``is_blocked_locally`` answers from the store and logs what it cannot read."""
+    from . import trust_store
+
+    return trust_store.is_blocked_locally(device_id=device_id, member_id="")
 
 
 def _pinned_signing_key(device_id: str, member_id: str | None = None) -> str:
