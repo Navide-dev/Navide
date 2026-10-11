@@ -199,3 +199,30 @@ export async function runFollowSwitchBatch(
   }
   return failures
 }
+
+type SwitchHandler<R extends { ok: boolean }> = (agentKey: string, profileId: string | null) => Promise<R>
+
+/**
+ * Wrap the main window's account-switch handler with the follow step. The
+ * switch itself is untouched: with the flag off — or for any CLI but claude —
+ * the call goes straight through and nothing else runs. With it on, a claude
+ * switch that succeeded hands the account it left and the one it landed on to
+ * `afterSwitch` (which asks the user which pinned panes come along); its
+ * result is returned as-is, without waiting for that step.
+ */
+export function withFollowSwitch<R extends { ok: boolean }>(
+  base: SwitchHandler<R>,
+  deps: {
+    enabled: () => boolean
+    outgoing: (agentKey: string) => string | null
+    afterSwitch: (agentKey: string, outgoingId: string | null, targetId: string | null) => Promise<void>
+  },
+): SwitchHandler<R> {
+  return async (agentKey, profileId) => {
+    if (agentKey !== FOLLOW_SWITCH_AGENT || !deps.enabled()) return base(agentKey, profileId)
+    const outgoingId = deps.outgoing(agentKey)
+    const res = await base(agentKey, profileId)
+    if (res.ok) void deps.afterSwitch(agentKey, outgoingId, profileId)
+    return res
+  }
+}
