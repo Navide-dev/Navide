@@ -687,3 +687,12 @@ def test_aux_data_without_a_key_is_a_clear_error() -> None:
     assert sync_keyring.has_account_key() is False
     with pytest.raises(sync_keyring.KeyringError, match="no sync key"):
         sync_keyring.wrap_aux("link:abc:v1", b"k")
+
+
+def test_aux_data_names_itself_when_its_key_is_missing(fresh_ring) -> None:
+    wire = sync_keyring.wrap_aux("link:abc:v1", b"k" * 32)
+    raw = base64.b64decode(wire)
+    forged = base64.b64encode(raw[:1] + b"\xff" * 8 + raw[9:]).decode()
+    with pytest.raises(sync_keyring.UnknownKeyId) as err:
+        sync_keyring.unwrap_aux("link:abc:v1", forged)
+    assert "blob" not in str(err.value)

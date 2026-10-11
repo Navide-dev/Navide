@@ -606,7 +606,7 @@ def unwrap_aux(label: str, wire: str) -> bytes:
     if len(raw) < 1 + _KID_LEN + _NONCE_LEN + 16 or raw[:1] != _ENVELOPE_AUX:
         raise KeyringError("the wrapped value is not an auxiliary envelope")
     kid = raw[1 : 1 + _KID_LEN].hex()
-    key = _held_key(kid)
+    key = _held_key(kid, "wrapped value")
     start = 1 + _KID_LEN
     try:
         return AESGCM(key).decrypt(raw[start : start + _NONCE_LEN], raw[start + _NONCE_LEN :], _aad_aux(kid, label))
@@ -635,12 +635,12 @@ _BLOB_ID_CONTEXT = b"navide/blob-id/v1"
 BLOB_SEGMENT_OVERHEAD = _NONCE_LEN + 16
 
 
-def _held_key(kid: str) -> bytes:
+def _held_key(kid: str, noun: str = "blob") -> bytes:
     held = _load_ring()
     if held is None:
         raise KeyringError("this machine has no sync key yet")
     if kid not in held["keys"]:
-        raise UnknownKeyId(f"the blob is sealed under key {kid}, which this machine does not hold")
+        raise UnknownKeyId(f"the {noun} is sealed under key {kid}, which this machine does not hold")
     return held["keys"][kid]
 
 
