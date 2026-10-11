@@ -987,7 +987,13 @@ def _was_reset(seen: str, folder: Path) -> bool:
     if not folder.exists():
         return True
     now = _folder_identity(folder)
-    return bool(seen) and now is not None and now != seen
+    if not seen or now is None:
+        return False
+    # A birth time on one side only (statx newly available, or no longer)
+    # says nothing: then device and inode alone decide.
+    if not seen.rsplit(":", 1)[1] or not now.rsplit(":", 1)[1]:
+        return seen.rsplit(":", 1)[0] != now.rsplit(":", 1)[0]
+    return now != seen
 
 
 def _private_dirs(root: Path, leaf: Path) -> None:

@@ -1,9 +1,11 @@
 import json
 import os
+import stat
 from pathlib import Path
 
 import pytest
 
+from agent_team_backend import osplat
 from agent_team_backend.codex_home import CodexHomeManager
 from agent_team_backend.skills_store import SkillsStore
 
@@ -650,3 +652,26 @@ def test_prepare_keeps_a_correct_skills_link_when_readlink_reports_an_extended_p
     manager.prepare("pane-1")
     assert recreated == []
     assert (home / "skills" / "native").exists()
+
+
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="POSIX symlinks and modes")
+def test_a_temp_file_that_cannot_be_removed_never_changes_the_file_it_links_to(tmp_path: Path) -> None:
+    """A config.toml.navide-tmp that is a link to some other file, in a folder
+    that refuses the removal: nothing is done to the file it points at."""
+    from agent_team_backend.cli_vendors.codex import _discard_temp
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.write_text("not Navide's", encoding="utf-8")
+    elsewhere.chmod(0o644)
+    folder = tmp_path / "dotcodex"
+    folder.mkdir()
+    tmp = folder / "config.toml.navide-tmp"
+    tmp.symlink_to(elsewhere)
+    folder.chmod(0o555)
+    try:
+        with pytest.raises(PermissionError):
+            _discard_temp(tmp)
+    finally:
+        folder.chmod(0o755)
+
+    assert stat.S_IMODE(elsewhere.stat().st_mode) == 0o644
