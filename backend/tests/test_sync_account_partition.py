@@ -268,3 +268,19 @@ def test_a_park_that_fails_leaves_nothing_parked(tmp_path, monkeypatch, account_
     assert store.states("skills") == {}
     assert sync_approvals.entry("skills", "s") is None
 
+
+async def test_signing_out_and_back_in_to_the_same_account_restores_it(tmp_path, monkeypatch, account_key) -> None:
+    """Review D-L1 (R7): after a sign-out the settled account is "", so the
+    next sign-in looked like a first one and only adopted the (empty) live rows."""
+    from agent_team_backend import server_link
+
+    A, _B, store, settings = _switch_fixture(tmp_path, monkeypatch)
+    settings.values[server_link.SYNC_ACCOUNT_SETTING] = A
+    monkeypatch.setattr(server_link, "_settings_store", lambda: settings)
+    monkeypatch.setattr(server_link, "_settled_account", server_link._UNREAD)
+    await server_link._note_account(A)
+    await server_link._note_account(None)
+    assert store.states("skills") == {}
+    await server_link._note_account(A)
+    assert store.state("skills", "s").rev == 2
+    assert sync_approvals.entry("skills", "s") is not None

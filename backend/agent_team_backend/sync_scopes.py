@@ -2675,11 +2675,25 @@ def _restore_parked(store: Any, namespace: str) -> None:
         forget_approvals()
 
 
+def _live_is_empty(store: Any) -> bool:
+    scopes = sync_engine.SCOPES + sync_engine.INTERNAL_SCOPES
+    return not store.conflicts(None) and not any(store.states(s) or store.cursor(s) for s in scopes)
+
+
 def adopt_account(namespace: str | None) -> None:
-    """The link settled on the account the live sync rows already belong to."""
+    """The link settled on *namespace* without a switch it could see.
+
+    Usually the live rows are already that account's and are only claimed.
+    After a sign-out, though, nothing was settled, and the next sign-in looks
+    like a first one: if nothing is live, whatever was parked for this
+    account when it signed out comes back."""
     from . import app
 
-    app.sync_store.adopt_account(namespace)
+    store = app.sync_store
+    if namespace and _live_is_empty(store):
+        _restore_parked(store, namespace)
+        return
+    store.adopt_account(namespace)
 
 
 def forget_detached(scope: str | None = None) -> None:
