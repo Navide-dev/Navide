@@ -385,6 +385,13 @@ def _hook_text(hook: dict) -> str:
     return " ".join([str(hook.get("command", "")), *map(str, hook.get("args") or [])])
 
 
+def _owned(hook: Any, dev_only: bool) -> bool:
+    """Ours, and for a dev backend (``dev_only``) aimed at a dev backend: the
+    installed app's entries are never a dev backend's to take out, or the
+    user's installed Navide would silently lose its hooks."""
+    return _hook_is_ours(hook) and (not dev_only or "-dev" in _hook_text(hook))
+
+
 def _read_settings(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
@@ -552,17 +559,75 @@ def install_hooks(
              path, added, port_file)
     # Only for the real settings file: the probe serves what Claude Code will
     # read, and runs once per backend.
+    if settings_file is None:
+        _start_version_probe(port_file)
+    return {"installed": True, "path": str(path), "events": added, "port_file": port_file}
+
+
+def _start_version_probe(port_file: str) -> None:
     global _version_refresh_started
-    if settings_file is None and osplat.platform_id == "win32" and not _version_refresh_started:
+    if osplat.platform_id == "win32" and not _version_refresh_started:
         _version_refresh_started = True
         threading.Thread(
             target=_refresh_claude_version, args=(port_file,), name="claude-version-probe", daemon=True
         ).start()
-    return {"installed": True, "path": str(path), "events": added, "port_file": port_file}
 
 
-def hooks_present(settings_file: Path | None = None) -> bool:
-    """Whether the settings file still carries any hook Navide wrote.
+# ── Phase 3: the hooks ride on the panes Navide starts ──────────────────────
+
+#: The flag a carried pane is started with; Claude Code merges the file's
+#: hooks with the user's own settings rather than replacing them.
+SETTINGS_FLAG = "--settings"
+
+
+def pane_settings_path() -> Path:
+    """The settings file a carried pane gets through ``--settings``: Navide's
+    hooks alone, inside Navide's own data."""
+    from .push_delivery import runtime_dir
+
+    return runtime_dir("claude") / "settings.json"
+
+
+def prepare_pane_settings(port_file: str, skip: frozenset[str]) -> Path:
+    """Write the pane-side copy of Navide's hooks: exactly what
+    ``install_hooks`` merges into the shared file (rewake per the push-channel
+    switch, minus ``skip``), alone in a 0600 file of Navide's. Built beside
+    it and moved into place, so a pane starting meanwhile reads the old copy
+    or the new one, never half of one. Raises when it cannot be written."""
+    from .osplat import secret_files
+
+    target = pane_settings_path()
+    secret_files.make_private_dir(target.parent)
+    staging = target.with_name(f".{target.name}.new")
+    # Starts from nothing: install_hooks would merge into (and back up) a
+    # leftover from an interrupted write.
+    staging.unlink(missing_ok=True)
+    result = install_hooks(port_file, settings_file=staging, skip=skip)
+    if not result.get("installed"):
+        staging.unlink(missing_ok=True)
+        raise OSError(f"could not write {staging}: {result}")
+    os.replace(staging, target)
+    # What the probe decides (the exec-form guard) is in this file now.
+    _start_version_probe(port_file)
+    return target
+
+
+def wire_spawn(command: Any) -> Any:
+    """``command`` with ``--settings <pane file>`` appended, once. A command
+    that already names a settings file is left alone: whoever wrote it chose
+    that file, and Claude Code reads only one."""
+    from .push_delivery import _append_to_command, _command_text, _has_flag
+
+    if _has_flag(_command_text(command), SETTINGS_FLAG):
+        if str(pane_settings_path()) not in _command_text(command):
+            log.warning("claude pane names its own %s; Navide's hooks are not added", SETTINGS_FLAG)
+        return command
+    return _append_to_command(command, f"{SETTINGS_FLAG} {osplat.paths.quote_arg(str(pane_settings_path()))}")
+
+
+def hooks_present(settings_file: Path | None = None, *, dev_only: bool = False) -> bool:
+    """Whether the settings file still carries any hook Navide wrote (a dev
+    backend's own only, with ``dev_only``).
 
     Raises when the file exists but cannot be read as a JSON object: an
     unreadable file says nothing about whether the user removed our hooks.
@@ -580,7 +645,7 @@ def hooks_present(settings_file: Path | None = None) -> bool:
     if not isinstance(hooks_section, dict):
         return False
     return any(
-        _hook_is_ours(hook)
+        _owned(hook, dev_only)
         for entries in hooks_section.values() if isinstance(entries, list)
         for entry in entries if isinstance(entry, dict)
         for hook in (entry.get("hooks") if isinstance(entry.get("hooks"), list) else [])
@@ -617,8 +682,9 @@ def hook_parts(settings_file: Path | None = None) -> set[str]:
     return parts
 
 
-def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:
-    """Remove all agent-team hook entries; leave everything else alone."""
+def uninstall_hooks(settings_file: Path | None = None, *, dev_only: bool = False) -> dict[str, Any]:
+    """Remove all agent-team hook entries (a dev backend's own only, with
+    ``dev_only``); leave everything else alone."""
     path = settings_file or settings_path()
     if not path.is_file():
         return {"removed": False, "reason": "settings.json absent"}
@@ -640,7 +706,7 @@ def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:
             if isinstance(inner_hooks, list):
                 filtered = [
                     h for h in inner_hooks
-                    if not _hook_is_ours(h)
+                    if not _owned(h, dev_only)
                 ]
                 if filtered:
                     cleaned.append({**entry, "hooks": filtered})

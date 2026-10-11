@@ -7891,6 +7891,15 @@ async def _terminal_create_impl(
         payload["command"], push_channel = app.push_delivery.wire_spawn(
             agent_key, payload["command"], str(payload.get("pane_id") or ""), env
         )
+    # Claude's hooks, when the panes carry them instead of ~/.claude/settings.json:
+    # a file of Navide's, merged by Claude Code with the user's own settings —
+    # for a resume and an account-dir pane alike. Not for a login subcommand.
+    from . import convenience_wiring
+
+    if agent_key == "claude" and not login_subcommand and convenience_wiring.pane_carries_hooks("claude"):
+        from . import claude_hooks
+
+        payload["command"] = claude_hooks.wire_spawn(payload["command"])
     # Skills wiring mirrors ~/.codex/hooks.json into the per-pane CODEX_HOME,
     # and codex keys hook trust by that path — without this every spawn stops
     # at "Hooks need review". CODEX_HOME is final only after all wiring above.
