@@ -124,13 +124,14 @@ _CRED_KEY = (
     rf"(?!(?:[_-]?{_SAFE_SUFFIX})++(?!\w))\w{{0,64}}(?!\w)"
 )
 _CRED_PREFIX = rf"(?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s{{0,64}}[:=]\s{{0,64}}"
-#: A pwd value that starts like a path is a directory.
-_PWD_PATH = r"(?(pwd)(?![/~]))"
+#: A pwd value that starts like a path (/, ~, ., or a Windows drive) is a directory.
+_PWD_PATH = r"(?(pwd)(?![/~.]|[A-Za-z]:\\))"
 #: A backslash pair inside an unquoted value (C:\\Users\\x, or the doubled
 #: backslashes of the same path inside JSON) — but never a backslashed quote,
-#: which is the end of a surrounding JSON string. The pair and the single
-#: character below never match the same text, so this cannot backtrack.
-_ESCAPE_PAIR = r"""\\(?![\"'&]|u0022)\S"""
+#: which is the end of a surrounding JSON string, and never backslash-n, -r
+#: or -t, which in JSON text are a line break or a tab. The pair and the
+#: single character below never match the same text, so this cannot backtrack.
+_ESCAPE_PAIR = r"""\\(?![\"'&nrt]|u0022)\S"""
 #: A credential key with a quoted value: the whole value goes, spaces
 #: included, and an escaped quote inside it does not end it. The two value
 #: branches never match the same character (a backslash starts an escape,

@@ -437,7 +437,7 @@ def test_scan_time_stays_near_linear(name: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "secret: C:\\Users\\neil\\" + Z,
+        "secret: C:\\Users\\dev\\" + Z,  # B5-2: a \\n, \\r or \\t segment would end the value
         'password: "C:\\d0\\d1\\d2' + Z,
     ],
 )
@@ -472,3 +472,18 @@ def test_a_doubly_escaped_quote_in_plan_meta_still_delimits_the_value(tmp_path, 
     assert Z not in out
     meta = parse_plan_meta(out)
     assert meta is not None and meta["todos"][1]["content"] == "keep me intact"
+
+
+def test_a_json_newline_escape_ends_a_bare_value() -> None:
+    """B5-2: `TOKEN=S\\nnext line` inside JSON keeps the next line."""
+    import json
+
+    out = _masked(json.dumps({"c": "TOKEN=" + Z + "\nnext line"}))
+    assert Z not in out and json.loads(out)["c"].endswith("\nnext line")
+
+
+@pytest.mark.parametrize("value", ["./build", "C:\\Users\\neil", "c:\\work"])
+def test_a_pwd_that_is_a_relative_or_windows_path_is_a_directory(value: str) -> None:
+    """B5-3."""
+    text = "pwd: " + value
+    assert _masked(text) == text
