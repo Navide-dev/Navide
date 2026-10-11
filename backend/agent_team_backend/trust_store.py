@@ -1571,6 +1571,32 @@ def note_plaintext_refused(device_id: str, *, msg_key: str) -> None:
 #: Keys recorded but not yet written out. See SEEN_FLUSH_AFTER.
 _seen_pending: dict[str, int] = {}
 _seen_last_flush: float = 0.0
+#: Writes out a batch that no later message arrives to complete. Without it the
+#: keys sat in memory until the next delivery — or a restart, which lost them.
+_seen_timer: threading.Timer | None = None
+
+
+def _arm_seen_timer_locked() -> None:
+    global _seen_timer
+    if _seen_timer is None:
+        _seen_timer = threading.Timer(SEEN_FLUSH_SECONDS, _timed_seen_flush)
+        _seen_timer.daemon = True
+        _seen_timer.start()
+
+
+def _disarm_seen_timer_locked() -> None:
+    global _seen_timer
+    if _seen_timer is not None:
+        _seen_timer.cancel()
+        _seen_timer = None
+
+
+def _timed_seen_flush() -> None:
+    global _seen_timer
+    with _lock:
+        _seen_timer = None
+        if _seen_pending:
+            _flush_seen_locked(time.time())
 
 
 def has_seen_message(msg_key: str) -> bool:
@@ -1610,6 +1636,8 @@ def note_seen_message(msg_key: str) -> None:
             or now - _seen_last_flush >= SEEN_FLUSH_SECONDS
         ):
             _flush_seen_locked(now)
+        else:
+            _arm_seen_timer_locked()
 
 
 def flush_seen_messages() -> None:
@@ -1622,6 +1650,7 @@ def flush_seen_messages() -> None:
 
 def _flush_seen_locked(now: float) -> None:
     global _seen_last_flush
+    _disarm_seen_timer_locked()
     state = _try_load()
     if state is None:
         # Keep the keys in memory rather than dropping them: this runs while a
@@ -1751,6 +1780,7 @@ def _reset_for_test() -> None:
         # when the next starts and lands in its state document instead.
         _seen_pending.clear()
         _seen_last_flush = 0.0
+        _disarm_seen_timer_locked()
         _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.

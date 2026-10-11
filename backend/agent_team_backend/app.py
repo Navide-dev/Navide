@@ -2361,6 +2361,14 @@ async def _stop_log_watcher() -> None:
         tokens_store.flush()
     except Exception as err:  # noqa: BLE001
         log.warning("token store shutdown flush failed: %s", err)
+    # Delivered message keys still in the batch: written now, or a message
+    # received just before a normal restart could be replayed after it.
+    try:
+        from . import trust_store
+
+        trust_store.flush_seen_messages()
+    except Exception as err:  # noqa: BLE001
+        log.warning("delivered-message ledger shutdown flush failed: %s", err)
     try:
         dev_time_store.shutdown()
     except Exception as err:  # noqa: BLE001
