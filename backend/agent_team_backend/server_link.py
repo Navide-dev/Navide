@@ -1480,10 +1480,18 @@ class ServerLink:
         except Exception as err:  # noqa: BLE001 - unpinned, the new token could name any member
             log.warning("not confirming the rotated navide-server token: it could not be pinned to this member (%s)", err)
             return
+        if self._tokens.generation() != generation:
+            # Signed in, out or over since the rotation began: .next is not ours
+            # to confirm any more, and neither is the pin just taken for it.
+            await self._forget_next_pin(config.url, config.token, token)
+            return
         try:
             confirmed = await self._request("auth.token.confirm", {"tokenId": token_id})
         except Exception as err:  # noqa: BLE001
             log.info("navide-server token confirm did not complete (%s); the next hello settles it", err)
+            # R4-1: .next stays for the next hello, its pin does not. If the
+            # confirm did land, settling carries the pin over again first.
+            await self._forget_next_pin(config.url, config.token, token)
             return
         if not confirmed.get("ok"):
             # N3: only NOT_FOUND says the server did not swap. Any other error
@@ -1491,7 +1499,7 @@ class ServerLink:
             # revoked), so .next stays and the next hello settles it.
             if self._conflict_code(confirmed) == "NOT_FOUND":
                 log.info("navide-server refused the rotation confirm; keeping the current token")
-                await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+                await self._drop_next_token(config.url, config.token, token, generation)
             else:
                 log.info("navide-server rotation confirm failed (%s); the next hello settles it", self._conflict_code(confirmed) or "no code")
             return
@@ -1653,7 +1661,7 @@ class ServerLink:
         if not config.next_token:
             return config, reply
         if reply.get("ok"):
-            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            await self._drop_next_token(config.url, config.token, config.next_token, generation)
             return config, reply
         if self._conflict_code(reply) != "AUTH_REJECTED":
             return config, reply
@@ -1685,6 +1693,23 @@ class ServerLink:
                 await asyncio.to_thread(trust_store.forget_own_member, url, old_token)
         except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not safety
             log.warning("could not forget the retired navide-server token's member pin: %s", err)
+
+    async def _drop_next_token(self, url: str, current: str, next_token: str, generation: int) -> None:
+        """Drop ``.next`` and the member pin a rotation gave its token (R4-1), so
+        a server that never lets a rotation finish cannot grow the record."""
+        await self._forget_next_pin(url, current, next_token)
+        await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+
+    @staticmethod
+    async def _forget_next_pin(url: str, current: str, next_token: str) -> None:
+        """Forget an abandoned rotated token's member pin — never the current
+        token's, should a server hand that back as the rotated one. Best effort."""
+        if not next_token or next_token == current:
+            return
+        try:
+            await asyncio.to_thread(trust_store.forget_own_member, url, next_token)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not safety
+            log.warning("could not forget the dropped rotated navide-server token's member pin: %s", err)
 
     @staticmethod
     def _carry_member_pin(url: str, old_token: str, new_token: str) -> None:
