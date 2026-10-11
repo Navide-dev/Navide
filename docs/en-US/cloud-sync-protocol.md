@@ -276,3 +276,60 @@ database; bytes live in S3 under `<prefix><memberId>/<blobId>/<upload suffix>`.
 24 hours after it lost the last one; an upload with no activity for 7 days is
 aborted. `account.delete` removes the metadata in its transaction and queues
 the account's prefix for deletion in the same commit.
+
+## Desktop behaviour since protocol v3
+
+The v3 wire contract (objects in S3, hashed item ids, version history) is
+kept with the server; this section records how the desktop behaves next to
+0.2.19, for a person checking that nothing changed for them.
+
+**With Navide Cloud off, or no scope switched on:** no difference. No round
+runs, so `sync.caps` is never sent, nothing touches object storage, and the
+version history card is not shown.
+
+**Visible with Cloud connected:**
+
+- Settings → Navide Cloud has a collapsed *Version history* card. A restored
+  MCP server or skill waits for approval like any synced record and is not
+  pushed until approved; a restore is refused while an incoming change for
+  the item is waiting for approval.
+- Switching the Cloud account A → B → A, or signing out and back in to the
+  same account, resumes from the parked state instead of reading the account
+  again. Every scope is still switched off on a switch.
+- Credentials never sync, on any protocol. The stored switch is reported and
+  kept as before (`sync.status` adds `neverSynced`), but no round runs for
+  it, the switch cannot be turned on, and item-level requests refuse it.
+- `sync.inventory` answers credentials `not-connected`, connected or not,
+  and never lists the cloud's copy (that would take credential traffic).
+  Main answered `disabled` for a switched-off credentials scope and listed
+  the cloud's items for one left on by an older build, which the CLI
+  accounts page showed; that page now shows "not connected" for such a user.
+  No window reads the `disabled` answer, so a switched-off scope looks the
+  same as before.
+
+**Protocol and data, only once a scope is switched on:**
+
+- Each new connection sends `sync.caps {protocol: 3}` once. An older server's
+  `UNKNOWN_TYPE`, `UNSUPPORTED`, or no answer means the v1 wire, byte for
+  byte. `NAVIDE_SYNC_PROTOCOL=1` forces v1.
+- On an object account, bodies go to object storage (single PUT with
+  `If-None-Match: *`; 412 counts as uploaded) and come back by batched
+  presigned GET over kept-alive connections, capped at the stated size, over
+  https (plain http only to loopback).
+- Hashed item ids are adopted only on a v3 object account whose caps does not
+  say `adoptHmac: false`; an account outside the server's list stays on
+  legacy ids and is asked at most once per connection.
+- Database: `sync` schema steps 4–6 only add columns (with defaults) and the
+  `sync_parked` table; held approvals of a parked account move to
+  `sync-approvals-parked/<namespace>/` in the app data directory.
+
+**Downgrade to 0.2.19:** it skips the newer schema steps and reads and writes
+the tables as before; parked rows and approvals are left alone. An account
+that adopted hashed ids refuses a v1 client (`SYNC_PROTOCOL_REQUIRED`), so
+such a device stops syncing that account until it is upgraded.
+
+Known issues, not fixed: after a declined restore, a conflict card's local
+half can describe the declined version (nothing is overwritten); when two
+devices migrate at once and one has an unpushed edit, the conflict may have
+to be answered twice; one damaged or missing object fails its whole page and
+holds the cursor until it is repaired.

@@ -949,6 +949,8 @@ class ServerLink:
                 # re-sent for it. One catch-up round per connection; deliberately
                 # spawned rather than awaited, because a large first sync must
                 # not hold the session open before its reader starts.
+                if self._sync_engine is not None:
+                    self._sync_engine.reset_connection()  # sync.caps is per connection
                 self._spawn(self._sync_all())
                 # Messages in both directions whose answer the dropped
                 # connection may have swallowed: acks this device could not send,
@@ -3798,6 +3800,12 @@ async def _note_account(namespace: str | None) -> None:
     if previous is None or previous == namespace:
         _settled_account = namespace
         await _record_account(namespace)
+        try:
+            from . import sync_scopes
+
+            await asyncio.to_thread(sync_scopes.adopt_account, namespace)
+        except Exception as err:  # noqa: BLE001 - rows stay unclaimed until the next settle
+            log.warning("could not mark the sync state as this account's: %s", err)
         # Back on the account a failed switch was leaving: whatever that
         # switch did let go of belonged to this account, so sync reopens
         # rather than staying shut for a switch that is no longer happening.
@@ -3810,7 +3818,7 @@ async def _note_account(namespace: str | None) -> None:
     try:
         from . import sync_scopes
 
-        await asyncio.to_thread(sync_scopes.on_account_changed)
+        await asyncio.to_thread(sync_scopes.switch_account, previous, namespace)
     except Exception as err:  # noqa: BLE001 - retried on the next call
         log.warning("could not let go of the previous account's sync state; will retry: %s", err)
         _settled_account = previous
@@ -4001,6 +4009,11 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
                 "status": engine_mod.INVENTORY_NOT_CONNECTED,
                 "items": [],
             }
+        elif name in sync_scopes.NEVER_SYNCED:
+            # Credentials never sync, so the cloud's copy is never listed (that
+            # takes credential traffic): answered as offline, which the CLI
+            # accounts page shows as "not connected", nothing to act on.
+            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_NOT_CONNECTED, "items": []}
         else:
             try:
                 scopes[name] = await link.sync_engine().inventory(name)
@@ -4083,9 +4096,9 @@ def _inventory_devices(
 
 async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Send the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4097,9 +4110,9 @@ async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
 
 async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Take the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4107,6 +4120,31 @@ async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     if not await link.ensure_sync_key():
         raise ConnectionError("this machine does not hold the account sync key")
     return await link.sync_engine().pull_items(scope, item_ids)
+
+
+async def _history_engine(scope: str) -> Any:
+    from . import sync_approvals, sync_scopes
+
+    if scope in sync_scopes.NEVER_SYNCED:
+        raise sync_approvals.RetiredScopeError(scope)
+    link = _link
+    if link is None or not link._authenticated:  # noqa: SLF001 - same module
+        raise ConnectionError("the navide-server link is not connected")
+    # Looking at history never mints a key (ensure_sync_key would, on a
+    # machine paired with nobody): no key here means nothing to read.
+    if not await asyncio.to_thread(sync_keyring.has_account_key):
+        raise ConnectionError("this machine does not hold the account sync key")
+    return link.sync_engine()
+
+
+async def sync_versions(scope: str, item_id: str) -> list[dict[str, Any]]:
+    """The earlier versions the server keeps of one item, newest first."""
+    return await (await _history_engine(scope)).versions(scope, item_id)
+
+
+async def sync_restore_version(scope: str, item_id: str, rev: int) -> dict[str, Any]:
+    """Bring version *rev* of one item back here; ``held`` says it waits for approval."""
+    return await (await _history_engine(scope)).restore(scope, item_id, rev)
 
 
 def sync_conflicts(scope: str = "") -> list[dict[str, Any]]:
