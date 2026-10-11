@@ -673,9 +673,15 @@ def _load_locked() -> dict[str, Any]:
     parsed = _parse(raw)
 
     if marker is not None:
+        salvaged: list[str] = []
+        if parsed is None and raw:
+            parsed = _salvage(raw)
+            salvaged = list((parsed or {}).get("pins") or {})
         if parsed is None:
             _refuse_unparsed_locked(raw, marker)
         _adopt_journal(parsed, raw)
+        for device_id in salvaged:
+            _record_locked(parsed, NOTICE_PAIRING, device_id=device_id, detail={"pairing": "salvaged"})
         _remember_committed(parsed)
         _state = parsed
         _store_mode = "keychain"
@@ -790,6 +796,58 @@ def _load_file_locked(marker: dict[str, Any]) -> dict[str, Any]:
     _remember_committed(parsed)
     _state = parsed
     return _state
+
+
+def _salvage(raw: str) -> dict[str, Any] | None:
+    """What can be trusted in a record cut off mid-write (plan 797ad7, Q2), or
+    None when nothing can.
+
+    ``security -i`` stored the first 4095 bytes of a write that was too long, so
+    a record from before the move may end in the middle of a pin. The pins
+    written whole before that point are kept, and only them: each keeps its
+    key, so nobody can swap it, and goes back to ``approved: False`` — the
+    default-deny rules — until a person approves it again. Owned members are
+    kept when that map was written whole. Everything after the cut (blocks,
+    policy sequences, encrypted peers) is gone; the server's policy is still
+    where blocks are enforced.
+    """
+    decoder = json.JSONDecoder()
+    if not raw.startswith('{"v":%d,' % STATE_VERSION):
+        return None
+
+    def value_after(name: str) -> tuple[Any, int] | None:
+        at = raw.find(f'"{name}":')
+        if at < 0:
+            return None
+        try:
+            return decoder.raw_decode(raw, at + len(name) + 3)
+        except ValueError:
+            return None
+
+    state = _blank()
+    owned = value_after("ownMembers")
+    if owned is not None and isinstance(owned[0], dict):
+        state["ownMembers"] = {str(k): str(v) for k, v in owned[0].items() if isinstance(v, str)}
+    at = raw.find('"pins":{')
+    if at < 0:
+        return None
+    pos = at + len('"pins":{')
+    while True:
+        while pos < len(raw) and raw[pos] in " ,":
+            pos += 1
+        try:
+            device_id, pos = decoder.raw_decode(raw, pos)
+            if raw[pos] != ":":
+                break
+            pin, pos = decoder.raw_decode(raw, pos + 1)
+        except (ValueError, IndexError):
+            break
+        if (
+            isinstance(device_id, str) and isinstance(pin, dict)
+            and isinstance(pin.get("signKey"), str) and pin.get("signKey")
+        ):
+            state["pins"][device_id] = {**pin, "approved": False}
+    return state if state["pins"] else None
 
 
 def _note_unreadable_locked(err: Exception) -> None:

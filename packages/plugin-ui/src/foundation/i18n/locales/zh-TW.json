@@ -6721,6 +6721,7 @@
         "paired": "已與 {device} 配對",
         "refused": "{device} 拒絕了配對",
         "revoked": "{device} 已解除與這台裝置的配對",
+        "salvaged": "{device} 從受損的配對紀錄中救回，金鑰保留不變，但需要你重新核准",
         "full": "配對數已達上限，無法與 {device} 配對。需要升級 Navide 後才能新增。",
         "sending": "確認中…",
         "start": "配對",

@@ -634,6 +634,20 @@ describe('account modal — your network', () => {
     return MODAL.slice(start, end)
   }
 
+  it('names a pairing salvaged from a cut-off record in every language', () => {
+    // Plan 797ad7 Q2: whole pins in a record security -i cut off are kept,
+    // unapproved, and each gets a device-pairing notice with pairing "salvaged".
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.salvaged, locale).toContain('{device}')
+    }
+  })
+
   it('names the pairing limit in every language when a pin does not fit', () => {
     // Review KC-2: the backend records a device-pairing notice with pairing
     // "full", and the row renders t('settings.p2p.pair.' + n.pairing).

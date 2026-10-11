@@ -217,3 +217,45 @@ def test_a_copy_that_stopped_because_it_no_longer_fit_is_not_taken_back():
         _pin(index)
     _restart()
     assert all(trust_store.pin_for(_device(index)) for index in range(30))
+
+
+def _cut_after_pins(complete: int) -> str:
+    """A Keychain record from before the move, cut off by security -i inside the
+    pin after *complete* whole ones — the way a write too long was stored."""
+    trust_store.load()
+    for index in range(complete + 1):
+        _pin(index)
+    whole = json.dumps(_keychain_doc(), separators=(",", ":"))
+    cut_at = whole.index(f'"{_device(complete)}"') + 20
+    app.credential_vault.write_app_secret(trust_store.SECRET_NAME, whole[:cut_at])
+    trust_store._record_path().unlink()
+    marker = dict(_marker())
+    marker.pop("store")
+    marker.pop("mirror", None)
+    app.database.kv_set(trust_store.INITIALISED_KEY, marker, now=0)
+    _restart()
+    return whole[:cut_at]
+
+
+def test_whole_pins_in_a_cut_off_record_are_salvaged_unapproved():
+    """Q2: a record cut off mid-write keeps the pins that were written whole.
+    They pin the key — nobody can swap it — but go back to the default-deny
+    rules until a person approves them again."""
+    _cut_after_pins(3)
+    assert trust_store.locked_reason() == ""
+    for index in range(3):
+        pin = trust_store.pin_for(_device(index))
+        assert pin is not None and pin["signKey"] == KEY and pin["approved"] is False
+    assert trust_store.pin_for(_device(3)) is None
+    salvaged = [n for n in trust_store.notices()
+                if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == "salvaged"]
+    assert sorted(n["deviceId"] for n in salvaged) == sorted(_device(i) for i in range(3))
+    assert trust_store._record_path().exists()
+    _restart()
+    assert trust_store.pin_for(_device(0))["approved"] is False
+
+
+def test_a_record_cut_off_before_any_whole_pin_still_locks():
+    _cut_after_pins(0)
+    assert trust_store.locked_reason()
+    assert trust_store.damaged()
