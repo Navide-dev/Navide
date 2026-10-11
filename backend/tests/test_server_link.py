@@ -910,6 +910,12 @@ async def test_outbound_send_goes_over_the_link():
         sent = server.opened[0].sends
         assert len(sent) == 1
         signature = sent[0].pop("sig")
+        # And a v2 signature beside it, covering the send time (plan 797ad7 B4;
+        # test_message_sig2 has the rest).
+        assert device_signing.verify_message_v2(
+            sent[0].pop("sig2"), public_key_b64=device_signing.public_key(), msg_key="pa:mcp:1",
+            from_device=link._device_id, to_device="dev-b", kind="text", body="ship it",
+        ) is not None
         assert sent == [
             {
                 "to": {"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},

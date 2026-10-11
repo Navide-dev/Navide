@@ -143,7 +143,9 @@ def mac_vault_without_cli_writes(tmp_path, monkeypatch):
     return sec
 
 
-def test_device_trust_never_writes_through_the_cli_path(mac_vault_without_cli_writes):
+def test_device_trust_never_writes_through_the_cli_path(mac_vault_without_cli_writes, monkeypatch):
+    # The record in its Keychain item, as before the sealed file.
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
     sec = mac_vault_without_cli_writes
     trust_store.load()
     trust_store.pin_device("dev-a", sign_key="k" * 64, member_id="m1")
@@ -160,6 +162,19 @@ def test_device_trust_never_writes_through_the_cli_path(mac_vault_without_cli_wr
         trust_store.load()
     trust_store.rebuild_locked_store()
     trust_store.load()
+
+
+def test_the_sealed_record_key_and_its_downgrade_copy_never_write_through_the_cli_path(
+    mac_vault_without_cli_writes,
+):
+    from agent_team_backend import trust_file
+
+    sec = mac_vault_without_cli_writes
+    trust_store.load()
+    trust_store.pin_device("dev-a", sign_key="k" * 64, member_id="m1")
+    assert app.credential_vault.app_secret_service(trust_file.KEY_SECRET) in sec.items
+    stored = sec.items[app.credential_vault.app_secret_service(trust_store.SECRET_NAME)]
+    assert json.loads(stored)["pins"]["dev-a"]
 
 
 def test_the_cloud_token_and_salt_never_write_through_the_cli_path(mac_vault_without_cli_writes, monkeypatch):

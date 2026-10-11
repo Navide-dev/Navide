@@ -14,6 +14,17 @@ from pathlib import Path
 from agent_team_backend import trust_store
 
 
+
+def _journal_text(path) -> str:
+    """The journal as text, through the store's reader — DPAPI-wrapped on
+    Windows, and sealed with the record key once the record is in its file."""
+    from agent_team_backend import trust_file
+
+    blob = trust_store._read_journal_bytes(path)
+    if blob.startswith(trust_file.MAGIC):
+        blob = trust_file.unseal(trust_store._record_key, blob, trust_file.AAD_JOURNAL)
+    return blob.decode("utf-8")
+
 def _restart() -> None:
     with trust_store._lock:
         trust_store._state = None
@@ -105,7 +116,7 @@ def test_a_timer_writes_where_it_was_armed(monkeypatch, tmp_path):
     assert later.calls == []
     assert not (tmp_path / "elsewhere").exists()
     # Through the store's reader: on Windows the journal is DPAPI-wrapped.
-    assert "m-bound" in trust_store._read_journal_bytes(armed_journal).decode("utf-8")
+    assert "m-bound" in _journal_text(armed_journal)
     monkeypatch.setattr(app, "credential_vault", armed_vault)
 
 

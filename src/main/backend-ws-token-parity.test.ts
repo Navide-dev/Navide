@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { posix, win32 } from 'node:path'
+import { existsSync } from 'node:fs'
+import { posix, resolve, win32 } from 'node:path'
 
 // The invariant under test: the file main reads the ws token FROM is the file
 // the backend writes it TO. Both sides derive the path independently — TS in
@@ -39,12 +40,20 @@ import { backendDataDir, wsTokenPath } from './backend'
 
 type Vars = Record<string, string | undefined>
 
+// The backend's own interpreter, run directly — never through `uv run`, which
+// syncs the environment first: in a worktree without one it built a fresh
+// .venv, and run against a shared one it rewrote the editable install's .pth
+// to point at whichever checkout ran last. CI syncs before the suite starts
+// (ci.yml "Install locked dependencies"); locally, sync once by hand.
+const python = resolve('backend', '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
+
 /**
  * Ask the backend where it writes the ws token, with HOME and the XDG /
  * Windows base variables pinned. `layout` selects an osplat implementation
  * explicitly ('host' is whatever this machine selects — the packaged case).
  */
 function pythonWsTokenPath(layout: 'host' | 'linux', vars: Vars): string {
+  expect(existsSync(python), 'run uv --project backend sync --locked first').toBe(true)
   const script = `
 import json, os, sys
 vars = json.loads(os.environ["NAVIDE_PARITY_VARS"])
@@ -63,7 +72,7 @@ else:
     from agent_team_backend.osplat import _linux
     print(_linux.LinuxLayout().state_dir("Agent-Team") / "backend-ws-token")
 `
-  return execFileSync('uv', ['--project', 'backend', 'run', '--locked', 'python', '-'], {
+  return execFileSync(python, ['-'], {
     input: script,
     encoding: 'utf8',
     env: { ...process.env, NAVIDE_PARITY_VARS: JSON.stringify(vars) },
@@ -83,7 +92,7 @@ function withPlatform<T>(platform: NodeJS.Platform, fn: () => T): T {
   }
 }
 
-// Every test here shells out to `uv run python`, and the helper already
+// Every test here shells out to the backend's python, and the helper already
 // budgets 60s for that. Vitest's own per-test default is 5s, and that is the
 // one that governs: on a Windows runner a cold `uv` (venv resolution, then an
 // interpreter start) took the file 5573ms and the first test was killed

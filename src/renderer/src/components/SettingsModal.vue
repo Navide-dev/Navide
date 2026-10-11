@@ -95,6 +95,7 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
+import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -1018,6 +1019,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'loop quota exhausted account switch failover auto resume continue 迴圈 額度 耗盡 切換 帳號 自動 繼續 接續',
   },
   {
+    id: 'general-account-follow-switch',
+    tab: 'general',
+    section: 'general-account-follow-switch',
+    title: t('settings.search.item.general-account-follow-switch.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-account-follow-switch.summary'),
+    keywords: 'pinned pane account switch claude quota resume folder 固定 帳號 切換 額度 接回 資料夾',
+  },
+  {
     id: 'accounts',
     tab: 'accounts',
     section: 'accounts',
@@ -1313,6 +1323,12 @@ async function onFailoverModeChange(raw: string): Promise<void> {
 const loopFailoverResumeModel = ref(settingsGet<boolean>(LOOP_FAILOVER_RESUME_SETTING_KEY, false) === true)
 function onLoopFailoverResumeChange(): void {
   settingsSet(LOOP_FAILOVER_RESUME_SETTING_KEY, loopFailoverResumeModel.value)
+}
+// Opt-in: a claude switch offers to move the panes pinned to another account's
+// own config dir, and an out-of-quota pane offers "switch account and resume".
+const accountFollowSwitchModel = ref(useAccountFollowSwitchFlag().value)
+function onAccountFollowSwitchChange(): void {
+  setAccountFollowSwitch(accountFollowSwitchModel.value)
 }
 interface FailoverCapabilityRow {
   agentKey: string
@@ -3693,6 +3709,20 @@ watch(activeTab, (tab) => {
                     :disabled="failoverMode !== 'auto'"
                     :aria-label="$t('usage.failover-loop-title')"
                     @update:modelValue="onLoopFailoverResumeChange"
+                  />
+                </template>
+              </SettingRow>
+              <SettingRow
+                data-settings-section="general-account-follow-switch"
+                :title="$t('usage.follow-switch-title')"
+                :description="$t('usage.follow-switch-hint')"
+              >
+                <template #control>
+                  <ToggleSwitch
+                    v-model="accountFollowSwitchModel"
+                    data-testid="account-follow-switch"
+                    :aria-label="$t('usage.follow-switch-title')"
+                    @update:modelValue="onAccountFollowSwitchChange"
                   />
                 </template>
               </SettingRow>

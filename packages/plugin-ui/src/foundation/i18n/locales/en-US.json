@@ -1180,6 +1180,10 @@
           "title": "Resume a loop right after switching when quota runs out",
           "summary": "Looping panes switch account and continue without waiting for the reset"
         },
+        "general-account-follow-switch": {
+          "title": "Move pinned panes along when switching Claude accounts",
+          "summary": "Offer to resume panes on another account's own folder after a switch or when quota runs out"
+        },
         "accounts": {
           "title": "Git Accounts",
           "summary": "Add, edit, and remove encrypted Git host credentials and tokens."
@@ -6721,6 +6725,9 @@
         "paired": "Paired with {device}",
         "refused": "{device} refused the pairing",
         "revoked": "{device} unpaired from this device",
+        "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
+        "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
+        "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
         "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
@@ -8890,6 +8897,8 @@
     "failover-hint": "What Navide does when a CLI account hits its quota: do nothing, list the accounts it could switch to (default), or switch automatically — at most 3 automatic switches per 5 hours per CLI, never back to the exhausted account on its own. The table shows what each CLI can do; the switch itself is decided by the backend.",
     "failover-loop-title": "Resume a loop right after switching when quota runs out",
     "failover-loop-hint": "When a pane running a loop runs out of quota, switch to an account that still has quota and send continue right away instead of waiting for the reset. Requires \"Switch automatically\" above.",
+    "follow-switch-title": "Move pinned panes along when switching Claude accounts",
+    "follow-switch-hint": "Claude panes running on an account's own sign-in folder do not follow an account switch. With this on, a switch lists them so you can move them along, and an out-of-quota pane gets a \"Switch account\" button. Each pane reopens on the new account and resumes its conversation. Off by default.",
     "failover-mode-off": "Off",
     "failover-mode-notify": "Notify me",
     "failover-mode-auto": "Switch automatically",
@@ -10472,5 +10481,25 @@
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
     "limit-off": "No limit",
     "limit-on": "Keep up to"
+  },
+  "account-follow": {
+    "switch-title": "Switched to {account} — move these panes too?",
+    "switch-body": "These Claude panes run on another account's own folder, so the switch did not reach them. Ticked panes reopen on the new account and resume their conversation.",
+    "switch-skip": "Leave them",
+    "switch-confirm": "Move {count} pane(s)",
+    "quota-title": "{pane} is out of quota — resume on another account",
+    "quota-pick": "Reopen this pane on:",
+    "quota-peers": "Also move these panes that ran out on the same account:",
+    "quota-confirm": "Switch and resume {count} pane(s)",
+    "cancel": "Cancel",
+    "needs-dir-sign-in": "Sign in inside its own folder first",
+    "exhausted": "Out of quota",
+    "state-idle": "Idle — reopens now",
+    "state-running": "Busy — reopens once it is free",
+    "state-quota": "Out of quota — reopens now",
+    "note-window": "Only panes in this window are listed.",
+    "quota-button": "Switch account ›",
+    "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
+    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details."
   }
 }

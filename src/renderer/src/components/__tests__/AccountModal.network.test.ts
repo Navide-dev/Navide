@@ -634,6 +634,26 @@ describe('account modal — your network', () => {
     return MODAL.slice(start, end)
   }
 
+  it('names a pairing salvaged from a cut-off record in every language', () => {
+    // Plan 797ad7 Q2: whole pins in a record security -i cut off are kept,
+    // unapproved, and each gets a device-pairing notice with pairing "salvaged".
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.salvaged, locale).toContain('{device}')
+      // Plan 797ad7 B4 / Q4: a message without its time signature from a device
+      // that signs v2 is taken in 0.2.20, and said once per device.
+      expect(strings.settings.p2p.pair['sig2-missing'], locale).toContain('{device}')
+      // Review B4-1: a time signature that does not verify or is outside the
+      // window (usually a clock that is off) is decided on v1, and said once.
+      expect(strings.settings.p2p.pair['sig2-unusable'], locale).toContain('{device}')
+    }
+  })
+
   it('names the pairing limit in every language when a pin does not fit', () => {
     // Review KC-2: the backend records a device-pairing notice with pairing
     // "full", and the row renders t('settings.p2p.pair.' + n.pairing).

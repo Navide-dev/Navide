@@ -1180,6 +1180,10 @@
           "title": "迴圈遇到額度耗盡時，切換後立即繼續",
           "summary": "跑迴圈的 pane 切換帳號後直接繼續，不等額度重置"
         },
+        "general-account-follow-switch": {
+          "title": "切換 Claude 帳號時，固定帳號的 pane 一起換",
+          "summary": "切換後或額度用完時，讓在其他帳號資料夾裡執行的 pane 換帳號並接回對話"
+        },
         "accounts": {
           "title": "Git 帳號",
           "summary": "新增、編輯與移除加密保存的 Git 主機憑證與權杖。"
@@ -6721,6 +6725,9 @@
         "paired": "已與 {device} 配對",
         "refused": "{device} 拒絕了配對",
         "revoked": "{device} 已解除與這台裝置的配對",
+        "salvaged": "{device} 從受損的配對紀錄中救回，金鑰保留不變，但需要你重新核准",
+        "sig2-missing": "{device} 送來的訊息少了時間簽章，可能是伺服器不轉送這個欄位，或在途中被移除。訊息已照常送達",
+        "sig2-unusable": "{device} 送來的訊息時間簽章無效，或時間與這台機器差太多。已改用舊版簽章照常送達；請檢查兩台機器的時間",
         "full": "配對數已達上限，無法與 {device} 配對。需要升級 Navide 後才能新增。",
         "sending": "確認中…",
         "start": "配對",
@@ -8890,6 +8897,8 @@
     "failover-hint": "CLI 帳號額度用完時 Navide 的做法：不處理、列出可切換的帳號（預設），或自動切換——每個 CLI 每 5 小時最多自動切換 3 次，且不會自動切回耗盡的帳號。表格列出各 CLI 的能力；是否切換由後端決定。",
     "failover-loop-title": "迴圈遇到額度耗盡時，切換後立即繼續",
     "failover-loop-hint": "正在跑迴圈的 pane 額度用完時，自動切換到還有額度的帳號並立刻送出繼續，不等額度重置。需要上方選「自動切換」。",
+    "follow-switch-title": "切換 Claude 帳號時，固定帳號的 pane 一起換",
+    "follow-switch-hint": "在帳號自己的登入資料夾裡執行的 Claude pane，不會跟著帳號切換。開啟後，切換時會列出這些 pane 讓你選擇一起換；額度用完的 pane 也會出現「換帳號」按鈕。換過去的 pane 會用新帳號重新開啟並接回原本的對話。預設關閉。",
     "failover-mode-off": "關閉",
     "failover-mode-notify": "通知我",
     "failover-mode-auto": "自動切換",
@@ -10472,5 +10481,25 @@
     "limit-hint": "「最近」會保留每個開過的工作區，直到你手動移除。這只是儲存安全上限：達到上限時先移除最舊的紀錄，已開啟與已釘選的工作區永遠不會被移除。",
     "limit-off": "不設上限",
     "limit-on": "最多保留"
+  },
+  "account-follow": {
+    "switch-title": "已切換到 {account}，這些 pane 也要一起換嗎？",
+    "switch-body": "這些 Claude pane 在其他帳號自己的資料夾裡執行，所以這次切換沒有換到它們。勾選的 pane 會用新帳號重新開啟，並接回原本的對話。",
+    "switch-skip": "不換",
+    "switch-confirm": "一起換 {count} 個 pane",
+    "quota-title": "{pane} 額度用完，換帳號接回",
+    "quota-pick": "用這個帳號重新開啟：",
+    "quota-peers": "同一帳號額度用完的這些 pane 也一起換：",
+    "quota-confirm": "換帳號並接回 {count} 個 pane",
+    "cancel": "取消",
+    "needs-dir-sign-in": "需先在帳號資料夾登入",
+    "exhausted": "額度用完",
+    "state-idle": "閒置，立即重開",
+    "state-running": "忙碌中（執行、等待回應或輸入中），空下來後重開",
+    "state-quota": "額度用完，立即重開",
+    "note-window": "只列出這個視窗裡的 pane。",
+    "quota-button": "換帳號 ›",
+    "quota-button-tooltip": "用其他帳號重新開啟這個 pane，並接回原本的對話",
+    "done-partial": "有 {failed}/{total} 個 pane 未能換到新帳號，詳情請見紀錄。"
   }
 }

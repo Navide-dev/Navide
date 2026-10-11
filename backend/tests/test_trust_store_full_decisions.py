@@ -16,6 +16,14 @@ from agent_team_backend.credential_vault import CredentialVault
 from tests.test_trust_store_capacity import KEY, _device, _Security
 
 
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    """These pin down the record kept in its Keychain item — the store before
+    the sealed file, and still the one used when the move cannot happen. The
+    sealed file's own cases are in test_trust_store_file_mode."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
+
 @pytest.fixture
 def keychain(tmp_path, monkeypatch):
     sec = _Security()

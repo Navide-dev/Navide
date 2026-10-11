@@ -18,6 +18,14 @@ import pytest
 
 from agent_team_backend import app, trust_store
 
+
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    """These pin down the record kept in its Keychain item — the store before
+    the sealed file, and still the one used when the move cannot happen. The
+    sealed file's own cases are in test_trust_store_file_mode."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
 DEVICE = "4a50baf4-5c26-4785-a792-6fa9fd7387b0"
 
 
