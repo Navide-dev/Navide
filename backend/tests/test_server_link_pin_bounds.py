@@ -356,3 +356,59 @@ async def test_an_unreadable_record_keeps_no_full_code(kc, monkeypatch):
         await link.stop()
     assert snapshot["trustLocked"]
     assert snapshot["trustLockedCode"] == ""
+
+
+# ------------------------------------ R4-4: sign-out unpins only once gone
+
+
+async def _sign_out(monkeypatch):
+    async def _noop(*_a, **_k):
+        return None
+
+    async def _status():
+        return {}
+
+    monkeypatch.setattr(app, "ui_settings_store", _Settings())
+    monkeypatch.setattr(app, "broadcast", _noop)
+    monkeypatch.setattr(server_link, "reconfigure", _noop)
+    monkeypatch.setattr(server_link, "status", _status)
+    return await _call("p2p.account.logout", {})
+
+
+async def test_sign_out_whose_delete_failed_quietly_keeps_the_pin(kc, monkeypatch):
+    """The vault's delete does not check security's exit code. When it fails,
+    the token is still stored, so it keeps its pin: the next hello is held to
+    the member it was pinned to, not to whatever member a server names."""
+    from tests.test_server_link import default_responder
+
+    trust_store.load()
+    server_link.set_access_token("tok-a")
+    trust_store.adopt_own_member(URL, "tok-a", "m1")
+    kc.silent_delete.add(CUR_S)
+    resp = await _sign_out(monkeypatch)
+    kc.silent_delete.clear()
+    assert resp["ok"] is True
+    assert server_link.access_token() == "tok-a"
+    assert trust_store.member_for_credential(URL, "tok-a") == "m1"
+
+    def evil(conn, message):
+        reply = default_responder(conn, message)
+        if message.get("type") == "auth.hello" and reply and reply.get("ok"):
+            reply["payload"]["memberId"] = "m-evil"
+        return reply
+
+    link = await _connect_once(FakeServer(responder=evil))
+    try:
+        assert link._own_member != "m-evil"
+    finally:
+        await link.stop()
+
+
+async def test_sign_out_forgets_the_pins_once_the_token_is_gone(kc, monkeypatch):
+    trust_store.load()
+    server_link.set_access_token("tok-a")
+    trust_store.adopt_own_member(URL, "tok-a", "m1")
+    resp = await _sign_out(monkeypatch)
+    assert resp["ok"] is True
+    assert server_link.access_token() == ""
+    assert owners() == {}

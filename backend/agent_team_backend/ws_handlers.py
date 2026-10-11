@@ -4498,14 +4498,10 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
     revoked = await server_link.logout_on_server()
     # N1b: this token is never used again here, so its member pin goes too;
     # otherwise every sign-out and sign-in adds an entry to the trust record.
+    # R4-4: only once the token reads back erased — a delete that failed
+    # quietly leaves it stored, and a stored token keeps its pin.
     try:
-        signed_out = await vault_to_thread(server_link.access_token)
-        if signed_out:
-            await asyncio.to_thread(trust_store.forget_own_member, server_link.server_url(), signed_out)
-    except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not the sign-out
-        log.warning("could not forget the signed-out token's member pin: %s", err)
-    try:
-        await vault_to_thread(server_link.set_access_token, None)
+        await vault_to_thread(server_link.replace_access_token, None)
     except Exception as err:  # noqa: BLE001
         await session.send_json(
             make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
