@@ -36,7 +36,24 @@ PINNED = {
     "CredentialVault.app_secret_service": "010a5bb31525a00691deb93dd60d4e33323a87278fb026528b2adaef0e20058e",
     "CredentialVault.read_app_secret": "2d5f0d88e0916f91c627a42d26dc396de35730bf03fe40661e54fdd141976c18",
     "CredentialVault.write_app_secret": "683cc37bd887ecd07b5129d4cfcd61fe43b89c6de2fa3e3d06688e11b974b8fa",
+    # Review KC-7: the names the items are stored under, and the live/slot
+    # read-write methods built on the functions above.
+    "CLAUDE_LIVE_KEYCHAIN_SERVICE": "33cbe407a0a3ca48a9a5419ddf09d4c9825fc0d38e48afcdd6fffb2fec04b4b1",
+    "_SLOT_SERVICE_PREFIX": "f17760e730ccb92d59cadc15b6467dc80b490aaf3b6f17cf6afd43b5fa8f7198",
+    "_APP_SECRET_SERVICE_PREFIX": "759ef56f3eaa9d04a93c62784656a5ba7249e8cd76a6e6bd56e16626b0e3b3c5",
+    "CredentialVault._slot_service": "844846b282ca8d61e43c414203ae45664d0c2adb289b293f96aed1db3e18ff85",
+    "CredentialVault._read_vendor_keychain": "845903f7aeab553e042a1e084d4c7858d5a5dc0c706c002f0d3f9b913b16de15",
+    "CredentialVault._write_vendor_keychain": "cd1794eca85a85ea59bf4be52956101868bea1dfeea544c29beca6ee1801ed3f",
+    "CredentialVault.read_live": "8796ab7fcdb80bb5c3a3df80c50c5e79da71b083f74e38d868a30ac4faf602b5",
+    "CredentialVault.write_live": "99c2d40e831a559a12df8fbdbaac8093250e1ad8388b496915bdd36e59e53a10",
+    "CredentialVault._app_secret_suffix": "d8c96ee22d696df809fc0a930702a9ff25ebf475623206ffcc0e44b3bf2be6c8",
+    "CredentialVault.read_slot": "6f77b5285aaa76bbaca78b88684aa28bba5eb3017c1f55a0792f41052780c658",
+    "CredentialVault.write_slot": "af404431b2e9cbb22a7e944947627b9b0a9eb502d4e43c6638f11aed4d2693d4",
 }
+
+#: The owner-only file writer slots use off macOS (and on macOS for files), as
+#: shipped at v0.2.19. The Cloud journal has its own writer for this reason.
+POSIX_SECRETS_SHA256 = "97dd4fbf3016b3394b5c5f48e323c90a4d17ca59718741f034f04b025f6eb798"
 
 
 def _fingerprints() -> dict[str, str]:
@@ -52,6 +69,10 @@ def _fingerprints() -> dict[str, str]:
     for node in ast.parse(source).body:
         if isinstance(node, ast.FunctionDef) and node.name in PINNED:
             add(node.name, node)
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id in PINNED:
+                    add(target.id, node)
         if isinstance(node, ast.ClassDef) and node.name == "CredentialVault":
             for member in node.body:
                 name = f"CredentialVault.{member.name}" if isinstance(member, ast.FunctionDef) else ""
@@ -62,6 +83,28 @@ def _fingerprints() -> dict[str, str]:
 
 def test_the_cli_credential_keychain_functions_are_unchanged():
     assert _fingerprints() == PINNED
+
+
+def test_the_owner_only_file_writer_is_unchanged():
+    from agent_team_backend.osplat import _posix_secrets
+
+    path = Path(inspect.getsourcefile(_posix_secrets))
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == POSIX_SECRETS_SHA256
+
+
+def test_the_item_names_are_the_shipped_ones(tmp_path):
+    """Written out, not imported: a test importing the constant follows it when
+    it changes, and every stored item would be orphaned with nothing failing."""
+    sec = _Security()
+    vault = CredentialVault(root=tmp_path / "r", real_home=tmp_path / "h",
+                            security_runner=sec, platform="darwin")
+    vault.write_slot("claude", "acct1", credential_vault.LiveCredentials(secret="S1"))
+    vault.write_app_secret("navide-server-token", "T")
+    vault.switch("claude", credential_vault.DEFAULT_SLOT_ID, "acct1")
+
+    assert sec.items["Claude Code-credentials"] == "S1"
+    assert "Navide CLI account claude-acct1" in sec.items or "Navide CLI account claude-__default__" in sec.items
+    assert any(name.startswith("Navide secret navide-server-token") for name in sec.items)
 
 
 class _Security:

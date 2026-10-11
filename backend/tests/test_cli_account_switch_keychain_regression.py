@@ -23,13 +23,16 @@ import pytest
 
 from agent_team_backend.cloud_secrets import SECURITY_LINE_MAX_BYTES
 from agent_team_backend.credential_vault import (
-    CLAUDE_LIVE_KEYCHAIN_SERVICE,
     DEFAULT_SLOT_ID,
     CredentialVault,
     LiveCredentials,
     _kc_quote,
 )
 from tests.test_credential_vault_keychain_vendors import FakeSecurity
+
+#: Written out rather than imported (review KC-7): an imported constant follows
+#: a change to it, and the test would never notice the item had been renamed.
+CLAUDE_LIVE_KEYCHAIN_SERVICE = "Claude Code-credentials"
 
 
 class RecordingSecurity(FakeSecurity):
@@ -170,3 +173,14 @@ def test_the_cli_path_has_no_new_length_bound(tmp_path):
 
     assert _pre_change_command(CLAUDE_LIVE_KEYCHAIN_SERVICE, huge) in sec.commands
     assert sec.items[(CLAUDE_LIVE_KEYCHAIN_SERVICE, getpass.getuser())] == huge
+
+
+def test_a_very_long_claude_credential_is_written_as_before(tmp_path):
+    """Review KC-7: 10-20 KB, far past any bound — the CLI path still hands it
+    to `security` verbatim, as v0.2.19 did, and does not refuse it itself."""
+    vault, sec = _vault(tmp_path)
+    huge = _claude_secret(40)
+    assert 10_000 <= len(huge.encode()) <= 20_000
+    vault.write_slot("claude", "huge", LiveCredentials(secret=huge))
+    assert _pre_change_command("Navide CLI account claude-huge", huge) in sec.commands
+    assert vault.read_slot("claude", "huge").secret == huge
