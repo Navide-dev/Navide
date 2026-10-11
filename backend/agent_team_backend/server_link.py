@@ -954,6 +954,9 @@ class ServerLink:
                 # connection may have swallowed: acks this device could not send,
                 # and acks for its own sends that were pushed while it was away.
                 self._spawn(self._resend_unsent_acks())
+                # Approvals and notes left on this device's share links while
+                # it was away (links.feedback.list); a no-op without links.
+                self._spawn(self._drain_link_feedback())
                 reconciler = asyncio.create_task(self._reconcile_loop())
                 reporter = asyncio.create_task(self._report_loop())
                 # Deliberately *not* in the wait below. That set means "the
@@ -1039,6 +1042,11 @@ class ServerLink:
             return
         if msg_type == "links.opened":
             self._spawn(self._on_link_opened(message.get("payload")))
+            return
+        if msg_type == "links.feedback":
+            from . import share_feedback
+
+            self._spawn(share_feedback.on_pushed(message.get("payload")))
             return
         log.debug("navide-server event %r is not wired yet; ignoring it", msg_type)
 
@@ -2002,6 +2010,14 @@ class ServerLink:
     async def links_request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
         """``links.<verb>`` with ``payload``, e.g. ``links_request("list", {})``."""
         return await self._carry(f"links.{verb}", payload)
+
+    async def _drain_link_feedback(self) -> None:
+        from . import share_feedback
+
+        try:
+            await share_feedback.drain_if_connected()
+        except Exception as err:  # noqa: BLE001 - a catch-up round must not break the link
+            log.warning("catching up on share-link feedback failed: %s", err)
 
     async def _on_link_opened(self, payload: Any) -> None:
         """Somebody opened one of this account's share links."""
