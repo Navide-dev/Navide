@@ -83,82 +83,135 @@ onMounted(() => { void load() })
 
 <template>
   <section class="cli-ext" data-settings-section="cli-extensions">
-    <p class="cli-ext-intro">{{ t('settings.cliExtensions.intro') }}</p>
-    <div class="cli-ext-summary">
-      <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess }) }}</span>
-      <button type="button" class="cli-ext-rescan" :disabled="loading" @click="load">
-        {{ loading ? t('settings.cliExtensions.loading') : t('settings.cliExtensions.rescan') }}
-      </button>
-    </div>
-    <p class="cli-ext-note">{{ t('settings.cliExtensions.machineWide') }}</p>
+    <header class="cli-ext-header">
+      <p class="cli-ext-intro">{{ t('settings.cliExtensions.intro') }}</p>
+      <div class="cli-ext-summary">
+        <span class="cli-ext-counts">{{ t('settings.cliExtensions.summary', { total: valid.length, l3: inProcess }) }}</span>
+        <button type="button" class="cli-ext-rescan" :disabled="loading" @click="load">
+          {{ loading ? t('settings.cliExtensions.loading') : t('settings.cliExtensions.rescan') }}
+        </button>
+      </div>
+      <p class="cli-ext-note">{{ t('settings.cliExtensions.machineWide') }}</p>
+    </header>
     <p v-if="error" role="alert" class="cli-ext-error">{{ t('settings.cliExtensions.loadFailed', { error }) }}</p>
 
-    <details v-for="group in groups" :key="group.vendor.cli" class="cli-ext-group" :data-cli="group.vendor.cli" open>
-      <summary>
-        <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
-        <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
-      </summary>
-      <p v-if="!group.vendor.supported" class="cli-ext-empty cli-ext-unsupported">{{ t('settings.cliExtensions.unsupported') }}</p>
-      <p v-else-if="!group.rows.length" class="cli-ext-empty">{{ t('settings.cliExtensions.empty') }}</p>
-      <ul v-else class="cli-ext-list">
-        <li
-          v-for="item in group.rows"
-          :key="item.id"
-          class="cli-ext-card"
-          :data-id="item.id"
-          :data-tier="item.exec_tier"
-          :class="{ off: !item.enabled, broken: !item.valid }"
-        >
-          <div class="cli-ext-head">
-            <span class="cli-ext-name">{{ item.name }}</span>
-            <span v-if="item.version" class="cli-ext-version">{{ item.version }}</span>
-            <span class="cli-ext-type">{{ item.type_label }}</span>
-            <span class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
-              {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
-            </span>
-            <span v-if="item.owner === 'navide'" class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
-            <span v-if="!item.enabled" class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
-          </div>
-          <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
-          <template v-else>
-            <div v-if="item.capabilities.length" class="cli-ext-caps">
-              <span v-for="cap in item.capabilities" :key="cap" class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
-              <span v-if="item.evidence === 'inferred'" class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
+    <template v-for="group in groups" :key="group.vendor.cli">
+      <!-- A CLI with nothing to list is one row: there is nothing to unfold. -->
+      <div v-if="!group.vendor.supported || !group.rows.length" class="cli-ext-group is-empty" :data-cli="group.vendor.cli">
+        <div class="cli-ext-group-head">
+          <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
+          <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
+          <span v-if="!group.vendor.supported" class="cli-ext-empty cli-ext-unsupported">{{ t('settings.cliExtensions.unsupported') }}</span>
+          <span v-else class="cli-ext-empty">{{ t('settings.cliExtensions.empty') }}</span>
+        </div>
+      </div>
+      <details v-else class="cli-ext-group" :data-cli="group.vendor.cli" open>
+        <summary class="cli-ext-group-head">
+          <span class="cli-ext-chevron" aria-hidden="true" />
+          <span class="cli-ext-vendor">{{ group.vendor.label }}</span>
+          <span class="cli-ext-vendor-count">{{ group.vendor.count }}</span>
+        </summary>
+        <ul class="cli-ext-list">
+          <li
+            v-for="item in group.rows"
+            :key="item.id"
+            class="cli-ext-card"
+            :data-id="item.id"
+            :data-tier="item.exec_tier"
+            :class="{ off: !item.enabled, broken: !item.valid }"
+          >
+            <div class="cli-ext-title">
+              <span class="cli-ext-name">{{ item.name }}</span>
+              <span v-if="item.version" class="cli-ext-version">{{ item.version }}</span>
             </div>
-            <p class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
-            <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
-            <code v-if="item.path" v-truncate class="cli-ext-path">{{ item.path }}</code>
-          </template>
-        </li>
-      </ul>
-    </details>
+            <div class="cli-ext-badges">
+              <span class="cli-ext-type">{{ item.type_label }}</span>
+              <span class="cli-ext-tier" :class="`tier-${item.exec_tier}`" :title="t(`settings.cliExtensions.tierHint.${item.exec_tier}`)">
+                {{ t(`settings.cliExtensions.tier.${item.exec_tier}`) }}
+              </span>
+              <span v-if="item.owner === 'navide'" class="cli-ext-owner">{{ t('settings.cliExtensions.ownerNavide') }}</span>
+              <span v-if="!item.enabled" class="cli-ext-disabled">{{ t('settings.cliExtensions.disabled') }}</span>
+            </div>
+            <p v-if="!item.valid" class="cli-ext-error">{{ t('settings.cliExtensions.invalid', { error: item.error }) }}</p>
+            <template v-else>
+              <div v-if="item.capabilities.length" class="cli-ext-caps">
+                <span v-for="cap in item.capabilities" :key="cap" class="cli-ext-cap" :data-cap="cap">{{ t(`settings.cliExtensions.capability.${cap}`) }}</span>
+                <span v-if="item.evidence === 'inferred'" class="cli-ext-inferred" :title="t('settings.cliExtensions.inferredHint')">{{ t('settings.cliExtensions.inferred') }}</span>
+              </div>
+              <p class="cli-ext-consent">{{ t(`settings.cliExtensions.consent.${item.native_consent}`) }}</p>
+              <code v-if="item.detail" v-truncate class="cli-ext-detail">{{ item.detail }}</code>
+              <code v-if="item.path" v-truncate class="cli-ext-path">{{ item.path }}</code>
+            </template>
+          </li>
+        </ul>
+      </details>
+    </template>
   </section>
 </template>
 
 <style scoped>
-.cli-ext { display: flex; flex-direction: column; gap: 10px; }
-.cli-ext-intro, .cli-ext-note { margin: 0; font-size: 11.5px; color: var(--text-secondary); }
-.cli-ext-summary { display: flex; align-items: center; gap: 10px; }
-.cli-ext-counts { font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.cli-ext-rescan { font: inherit; font-size: var(--font-2xs); color: var(--text-primary); background: var(--bg-subtle); border: 1px solid var(--border-default); border-radius: var(--radius-xs); padding: 3px 8px; cursor: pointer; }
+/* The Settings tab body is full-bleed and overflow:hidden (see .s-body--bleed
+   in SettingsModal), so like the other bleed panes this one carries the page
+   gutter and owns the scroll; without both the list sat flush against the
+   edges and everything past the first screen was clipped. */
+.cli-ext {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 22px 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: var(--text-primary);
+}
+/* A scrolling flex column must not squeeze its rows to fit. */
+.cli-ext > * { flex-shrink: 0; }
+.cli-ext-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.cli-ext-intro, .cli-ext-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); }
+.cli-ext-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
+.cli-ext-counts { flex: 1 1 240px; min-width: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
+.cli-ext-rescan { flex-shrink: 0; font: inherit; font-size: var(--font-2xs); color: var(--text-primary); background: var(--bg-muted); border: 1px solid var(--border-default); border-radius: var(--radius-control); padding: 4px 10px; cursor: pointer; }
+.cli-ext-rescan:hover:not(:disabled) { background: var(--bg-elevated); color: var(--text-bright); }
 .cli-ext-rescan:disabled { opacity: 0.5; cursor: default; }
-.cli-ext-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); }
-.cli-ext-group { border: 1px solid var(--border-muted); border-radius: var(--radius-xs); }
-.cli-ext-group > summary { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; font-size: var(--font-sm); color: var(--text-bright); }
-.cli-ext-vendor-count { font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-empty { margin: 0; padding: 4px 10px 10px; font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-list { list-style: none; margin: 0; padding: 0 10px 10px; display: flex; flex-direction: column; gap: 6px; }
-.cli-ext-card { border: 1px solid var(--border-muted); border-radius: var(--radius-xs); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cli-ext-error { margin: 0; font-size: var(--font-2xs); color: var(--danger-fg); overflow-wrap: anywhere; }
+
+.cli-ext-group { min-width: 0; border: 1px solid var(--border-muted); border-radius: var(--radius-md); background: var(--bg-inset); }
+.cli-ext-group-head { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 8px 12px; font-size: var(--font-sm); color: var(--text-bright); }
+summary.cli-ext-group-head { cursor: pointer; list-style: none; border-radius: var(--radius-md); }
+summary.cli-ext-group-head::-webkit-details-marker { display: none; }
+summary.cli-ext-group-head:hover { background: var(--bg-hover-faint); }
+.cli-ext-group[open] > summary.cli-ext-group-head { border-bottom: 1px solid var(--border-muted); border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.cli-ext-chevron { flex-shrink: 0; width: 0; height: 0; border-left: 5px solid var(--text-secondary); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform 0.12s ease; }
+.cli-ext-group[open] > summary .cli-ext-chevron { transform: rotate(90deg); }
+.cli-ext-vendor { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.cli-ext-vendor-count { flex-shrink: 0; min-width: 18px; padding: 0 6px; border-radius: var(--radius-pill); background: var(--bg-muted); font-size: var(--font-2xs); line-height: 16px; text-align: center; color: var(--text-secondary); }
+.cli-ext-group.is-empty > .cli-ext-group-head { flex-wrap: wrap; padding: 6px 12px; }
+.cli-ext-group.is-empty .cli-ext-vendor { font-weight: 500; color: var(--text-primary); }
+.cli-ext-empty { margin-left: auto; min-width: 0; font-size: var(--font-2xs); color: var(--text-muted); text-align: right; }
+
+.cli-ext-list { list-style: none; margin: 0; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.cli-ext-card { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 9px 12px; border: 1px solid var(--border-muted); border-radius: var(--radius-sm); background: var(--bg-elevated); }
 .cli-ext-card.off { opacity: 0.7; }
-.cli-ext-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
-.cli-ext-name { font-weight: 600; color: var(--text-bright); font-size: var(--font-xs); overflow-wrap: anywhere; }
-.cli-ext-version { font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-cap, .cli-ext-inferred { font-size: 10.5px; border-radius: 99px; padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
-.cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-fg); }
-.cli-ext-tier.tier-L2 { color: var(--warning-fg, var(--text-primary)); }
-.cli-ext-owner { color: var(--accent-fg, var(--text-primary)); }
-.cli-ext-caps { display: flex; flex-wrap: wrap; gap: 4px; }
+.cli-ext-card.broken { border-color: var(--danger-muted); }
+.cli-ext-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.cli-ext-name {
+  min-width: 0;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-bright);
+  overflow-wrap: anywhere;
+}
+.cli-ext-version { min-width: 0; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.cli-ext-badges, .cli-ext-caps { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.cli-ext-type, .cli-ext-tier, .cli-ext-owner, .cli-ext-disabled, .cli-ext-cap, .cli-ext-inferred { max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; font-size: 10.5px; line-height: 16px; border-radius: var(--radius-pill); padding: 0 7px; border: 1px solid var(--border-default); color: var(--text-secondary); white-space: nowrap; }
+.cli-ext-type { color: var(--text-primary); background: var(--bg-muted); }
+.cli-ext-tier.tier-L3 { color: var(--danger-fg); border-color: var(--danger-muted); background: var(--danger-subtle); }
+.cli-ext-tier.tier-L2 { color: var(--warning-fg, var(--text-primary)); border-color: var(--attention-muted); background: var(--attention-subtle); }
+.cli-ext-owner { color: var(--accent-fg, var(--text-primary)); border-color: var(--accent-muted); background: var(--accent-subtle); }
+.cli-ext-disabled { border-style: dashed; }
+.cli-ext-cap { border-color: var(--border-muted); }
 .cli-ext-inferred { border-style: dashed; }
 .cli-ext-consent { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
-.cli-ext-detail, .cli-ext-path { font-size: 10.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.cli-ext-detail, .cli-ext-path { display: block; min-width: 0; padding: 3px 6px; border-radius: var(--radius-xs); background: var(--bg-inset); font-size: 10.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>
