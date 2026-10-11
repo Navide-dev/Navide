@@ -641,3 +641,49 @@ def test_an_offer_dispatched_for_one_account_is_refused_once_another_is_bound(mo
             namespace="acct-a",
         )
     sync_keyring._reset_for_test()
+
+
+# ---- auxiliary data (share-link keys and metadata) --------------------------------
+
+
+def test_aux_data_round_trips_under_its_label(fresh_ring) -> None:
+    secret = os.urandom(32)
+    wire = sync_keyring.wrap_aux("link:abc:v1", secret)
+    assert secret not in base64.b64decode(wire)
+    assert sync_keyring.unwrap_aux("link:abc:v1", wire) == secret
+
+
+def test_aux_data_does_not_open_under_another_label(fresh_ring) -> None:
+    wire = sync_keyring.wrap_aux("link:abc:v1", b"k" * 32)
+    with pytest.raises(sync_keyring.KeyringError):
+        sync_keyring.unwrap_aux("link:abc:v2", wire)
+
+
+def test_aux_data_does_not_open_with_another_accounts_key(fresh_ring) -> None:
+    wire = sync_keyring.wrap_aux("link:abc:v1", b"k" * 32)
+    sync_keyring.forget_account_key()
+    sync_keyring.ensure_account_key()  # an unrelated key
+    with pytest.raises(sync_keyring.KeyringError):
+        sync_keyring.unwrap_aux("link:abc:v1", wire)
+
+
+def test_aux_data_is_not_a_sync_record(fresh_ring) -> None:
+    """Same key, different envelope: neither side opens as the other."""
+    wire = sync_keyring.wrap_aux("prompts", b"body")
+    with pytest.raises(sync_keyring.KeyringError):
+        sync_keyring.decrypt(wire, scope="prompts", item_id="")
+    record = sync_keyring.encrypt("body", scope="link:abc:v1", item_id="")
+    with pytest.raises(sync_keyring.KeyringError):
+        sync_keyring.unwrap_aux("link:abc:v1", record)
+
+
+def test_aux_data_still_opens_after_rotation(fresh_ring) -> None:
+    wire = sync_keyring.wrap_aux("link:abc:v1", b"k" * 32)
+    sync_keyring.rotate_account_key()
+    assert sync_keyring.unwrap_aux("link:abc:v1", wire) == b"k" * 32
+
+
+def test_aux_data_without_a_key_is_a_clear_error() -> None:
+    assert sync_keyring.has_account_key() is False
+    with pytest.raises(sync_keyring.KeyringError, match="no sync key"):
+        sync_keyring.wrap_aux("link:abc:v1", b"k")

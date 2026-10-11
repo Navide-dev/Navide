@@ -567,6 +567,53 @@ def resealed(wire: str, *, scope: str, item_id: str) -> str:
     return encrypt(decrypt(wire, scope=scope, item_id=item_id), scope=scope, item_id=item_id)
 
 
+# ---- auxiliary data --------------------------------------------------------------
+#
+# Small values that are not sync records but must open on every device of the
+# account and nowhere else — a share link's key and its encrypted metadata.
+# Same key ring, its own envelope byte and AEAD prefix, so an aux value never
+# opens as a record or a record as an aux value. The label is bound in as AEAD
+# data the way scope and item are for records.
+
+_ENVELOPE_AUX = b"\x03"
+_AAD_PREFIX_AUX = b"navide/aux/v1"
+
+
+def _aad_aux(kid: str, label: str) -> bytes:
+    return b"\x00".join((_AAD_PREFIX_AUX, kid.encode("ascii"), label.encode("utf-8")))
+
+
+def wrap_aux(label: str, data: bytes) -> str:
+    """Seal *data* under the active key for *label*. Wire form, base64:
+    ``0x03 ‖ key id (8) ‖ nonce (12) ‖ ciphertext``."""
+    held = _load_ring()
+    if held is None:
+        raise KeyringError("this machine has no sync key yet")
+    kid = held["active"]
+    nonce = os.urandom(_NONCE_LEN)
+    sealed = AESGCM(held["keys"][kid]).encrypt(nonce, data, _aad_aux(kid, label))
+    return _encode(_ENVELOPE_AUX + bytes.fromhex(kid) + nonce + sealed)
+
+
+def unwrap_aux(label: str, wire: str) -> bytes:
+    """Open a value sealed by ``wrap_aux`` for the same *label*. Raises
+    ``UnknownKeyId`` when it names a key this machine lacks, ``KeyringError``
+    for anything else that does not open."""
+    try:
+        raw = _decode(wire)
+    except (ValueError, TypeError) as err:
+        raise KeyringError("the wrapped value is not valid base64") from err
+    if len(raw) < 1 + _KID_LEN + _NONCE_LEN + 16 or raw[:1] != _ENVELOPE_AUX:
+        raise KeyringError("the wrapped value is not an auxiliary envelope")
+    kid = raw[1 : 1 + _KID_LEN].hex()
+    key = _held_key(kid)
+    start = 1 + _KID_LEN
+    try:
+        return AESGCM(key).decrypt(raw[start : start + _NONCE_LEN], raw[start + _NONCE_LEN :], _aad_aux(kid, label))
+    except Exception as err:  # noqa: BLE001 - cryptography raises a bare InvalidTag
+        raise KeyringError("the wrapped value did not open with this account key") from err
+
+
 # ---- handing the ring to another device ----------------------------------------
 
 
