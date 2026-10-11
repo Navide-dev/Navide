@@ -381,3 +381,14 @@ def test_an_offline_mount_in_the_ledger_never_holds_up_the_gate(gate, tmp_path, 
         stuck.set()
         worker.join(5)
 
+
+
+@pytest.mark.parametrize(("seen", "now"), [("7:42:", "7:42:1700000000.5"), ("7:42:1700000000.5", "7:42:")])
+def test_a_folder_whose_birth_time_came_or_went_is_the_same_folder(tmp_path, monkeypatch, seen, now) -> None:
+    """One identity with a birth time and one without (statx newly
+    available, or no longer) say nothing about a reset: only device and
+    inode are compared then, so the user's removal is never undone."""
+    monkeypatch.setattr(convenience, "_folder_identity", lambda _folder: now)
+
+    assert convenience._was_reset(seen, tmp_path) is False
+    assert convenience._was_reset("7:43:", tmp_path) is True
