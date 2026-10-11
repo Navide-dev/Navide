@@ -64,7 +64,9 @@ class FakeS3:
                 s3.connections += 1
 
             def do_PUT(self) -> None:  # noqa: N802 - http.server naming
-                blob_id = self.path.rsplit("/", 1)[1]
+                # c7: a presigned URL names a fresh upload key (the query
+                # here); the object is still the blob it names.
+                blob_id = self.path.split("?", 1)[0].rsplit("/", 1)[1]
                 data = self.rfile.read(int(self.headers["Content-Length"]))
                 s3.content_types.append(self.headers.get("Content-Type"))
                 # moto (and S3 behind some proxies) reads a form-encoded body
@@ -99,7 +101,7 @@ class FakeS3:
                 self.end_headers()
 
             def do_GET(self) -> None:  # noqa: N802
-                blob_id = self.path.rsplit("/", 1)[1]
+                blob_id = self.path.split("?", 1)[0].rsplit("/", 1)[1]
                 s3.gets.append(blob_id)
                 data = s3.objects.get(blob_id)
                 if data is None or blob_id in s3.fail_get:
@@ -138,11 +140,20 @@ def s3():
 
 # ── fake Navide-Server, v3 ──────────────────────────────────────────────────
 RETIRED = ("memory", "credentials")
+#: Every scope the contract names. c7: the server retires none of them unless
+#: deployed to (NAVIDE_SYNC_RETIRE_SCOPES), so the client must never lean on it.
+ALL_SCOPES = ("prompts", "mcp", "skills", "memory", "credentials", "skill-files")
 
 
 class V3Server(FakeServer):
-    """``FakeServer`` plus contract rev c4. ``caps`` False answers sync.caps
-    with ``caps_error`` (an old server: UNKNOWN_TYPE; MySQL: UNSUPPORTED)."""
+    """``FakeServer`` plus contract rev c7. ``caps`` False answers sync.caps
+    with ``caps_error`` (an old server: UNKNOWN_TYPE; MySQL: UNSUPPORTED).
+
+    c7: an account that is neither s3 nor hmac gets UNSUPPORTED for
+    sync.caps, sync.versions and sync.adoptHmacIds and OBJECTS_DISABLED for
+    blobs.*; an hmac account keeps v3 after it leaves s3. ``retired`` is the
+    deploy-time retiredScopes list, empty by default (pass ``RETIRED`` for
+    the old behaviour, which also refuses their pushes with SCOPE_RETIRED)."""
 
     def __init__(
         self,
@@ -153,8 +164,11 @@ class V3Server(FakeServer):
         caps_error: str = "UNKNOWN_TYPE",
         item_ids: str = "legacy",
         adopt_ready: bool = False,
+        retired: tuple[str, ...] = (),
     ) -> None:
         super().__init__()
+        self.retired = tuple(retired)
+        self.presigns = 0
         self.s3 = s3
         self.storage = storage
         self.caps = caps
@@ -183,7 +197,7 @@ class V3Server(FakeServer):
     def caps_payload(self) -> dict:
         return {
             "version": 3, "storage": self.storage, "itemIds": self.item_ids, "itemIdKid": self.item_id_kid,
-            "scopes": ["prompts", "mcp", "skills", "skill-files"], "retiredScopes": list(RETIRED),
+            "scopes": [s for s in ALL_SCOPES if s not in self.retired], "retiredScopes": list(self.retired),
             "maxItems": 64, "maxBodyBytes": 524288, "maxPushBytes": 786432, "maxObjectBytes": 5242880,
             "maxBatch": 100, "maxPullPage": 500, "quotaItems": 10000, "quotaBytes": 1 << 30,
             "usedItems": 0, "usedBytes": 0, "versions": {"keep": 10, "maxAgeS": 2592000}, "presignTtlS": 900,
@@ -201,13 +215,19 @@ class V3Server(FakeServer):
             return {"ok": False, "error": {"code": code, "message": code, "details": details}}
 
         v3 = device in self.negotiated
+        # c7: neither an object account nor one already on hashed ids.
+        plain = self.storage != "s3" and self.item_ids != "hmac"
         if msg_type == "sync.caps":
             if not self.caps:
                 return err(self.caps_error)
+            if plain:
+                return err("UNSUPPORTED")
             if payload.get("protocol") == 3:
                 self.negotiated.add(device)
             return ok(self.caps_payload())
         if msg_type == "sync.adoptHmacIds":
+            if plain:
+                return err("UNSUPPORTED")
             if not v3:
                 return err("SYNC_PROTOCOL_REQUIRED")
             root = payload.get("rootKid")
@@ -221,6 +241,8 @@ class V3Server(FakeServer):
             self.item_ids, self.item_id_kid = "hmac", root
             return ok({"itemIds": "hmac", "itemIdKid": root})
         if msg_type.startswith("blobs."):
+            if plain:
+                return err("OBJECTS_DISABLED")
             if not v3:
                 return err("BAD_REQUEST")
             return self._blobs(msg_type, payload, ok, err)
@@ -228,7 +250,7 @@ class V3Server(FakeServer):
             return err("SYNC_PROTOCOL_REQUIRED")
         if msg_type == "sync.versions":
             if self.storage != "s3":
-                return err("BAD_REQUEST")
+                return err("UNSUPPORTED")
             key = (payload["scope"], payload["itemId"])
             return ok({"scope": key[0], "itemId": key[1],
                        "versions": [self._shape(dict(v), v3) for v in reversed(self.history.get(key, []))]})
@@ -238,7 +260,7 @@ class V3Server(FakeServer):
                 reply["items"] = [self._shape(r, v3) for r in reply["items"]]
                 return ok(reply)
             if msg_type == "sync.push":
-                if payload["scope"] in RETIRED:
+                if payload["scope"] in self.retired:
                     return err("SCOPE_RETIRED")
                 for item in payload["items"]:
                     item["deviceId"] = device
@@ -269,8 +291,9 @@ class V3Server(FakeServer):
                 if self.committed.get(o["blobId"]) == o["sizeBytes"]:
                     out.append({"blobId": o["blobId"], "state": "complete", "sizeBytes": o["sizeBytes"]})
                 else:
+                    self.presigns += 1  # c7: a new upload key every time
                     out.append({"blobId": o["blobId"], "state": "upload", "sizeBytes": o["sizeBytes"],
-                                "url": self.s3.url(o["blobId"])})
+                                "url": f"{self.s3.url(o['blobId'])}?key={self.presigns}"})
             return ok({"objects": out, "expiresAt": "later"})
         if msg_type == "blobs.commit":
             out = []
@@ -423,12 +446,14 @@ async def test_the_kill_switch_never_asks(tmp_path, account_key, s3, monkeypatch
     assert server.pushed()[0]["body"]
 
 
-async def test_an_inline_v3_account_pushes_bodies(tmp_path, account_key, s3):
+async def test_an_inline_account_speaks_v1_and_pushes_bodies(tmp_path, account_key, s3):
+    # c7: sync.caps answers UNSUPPORTED for an account without objects.
     server = V3Server(s3, storage="inline")
     a = V3Device(tmp_path, server, "A", {"p1": {"v": 1}})
     b = V3Device(tmp_path, server, "B")
     await a.sync()
     await b.sync()
+    assert a.engine._caps["version"] == 1
     assert b.adapter.items == {"p1": {"v": 1}}
     assert not [t for t in server.types() if t.startswith("blobs.")]
     assert server.pushed()[0]["body"]
@@ -668,7 +693,10 @@ async def test_a_record_that_cannot_be_fetched_fails_the_round(tmp_path, account
 # ── retired scopes ──────────────────────────────────────────────────────────
 @pytest.mark.parametrize("scope", RETIRED)
 async def test_a_retired_scope_never_reaches_objects_or_push(tmp_path, account_key, s3, scope):
+    # c7: the server retires nothing by default (retiredScopes []), so this
+    # holds on the client's own rule, not on a refusal from the fake.
     server = V3Server(s3)
+    assert server.caps_payload()["retiredScopes"] == []
     d = V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
     result = await d.sync()
     assert result["skipped"] == "retired"

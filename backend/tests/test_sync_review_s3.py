@@ -480,12 +480,15 @@ def _adopt_calls(server, device="A") -> int:
     return server.types(device).count("sync.adoptHmacIds")
 
 
-async def test_an_inline_v3_account_never_asks_to_adopt_hashed_ids(tmp_path, account_key, s3):
+async def test_an_inline_account_never_asks_to_adopt_hashed_ids(tmp_path, account_key, s3):
+    """c7: sync.caps answers UNSUPPORTED for an inline account, so it speaks
+    v1 and never asks to adopt."""
     from tests.test_sync_hashed_ids import NAMES
 
     server = V3Server(s3, storage="inline", adopt_ready=True)
     a = V3Device(tmp_path, server, "A", dict(NAMES))
     assert (await a.sync())["ok"] is True
+    assert a.engine._caps["version"] == 1
     a.reconnect()
     assert (await a.sync())["ok"] is True
     assert _adopt_calls(server) == 0 and server.item_ids == "legacy"
@@ -643,3 +646,43 @@ async def test_on_a_legacy_account_a_delete_that_meets_a_delete_is_still_a_confl
     assert state["raced"]
     (clash,) = b.store.conflicts("prompts")
     assert clash["itemId"] == "p1" and clash["local"] is None and clash["remote"] is None
+
+
+# ── contract c7 ─────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("scope", ["memory", "credentials"])
+@pytest.mark.parametrize("server_kind", ["v1", "v3-retires-nothing"])
+async def test_memory_and_credentials_never_go_up_through_the_real_gate(
+    tmp_path, account_key, s3, scope, server_kind
+):
+    """c7: retiredScopes defaults to [], so nothing on the server keeps these
+    two out. The sync layer's own switch (sync_scopes.scope_enabled) does,
+    whatever the protocol."""
+    from tests.test_sync_engine import DictScope
+
+    server = V3Server(s3, caps=(server_kind != "v1"))
+    assert server.retired == ()
+    d = V3Device(tmp_path, server, "A", adapter=DictScope(scope, {"x": {"secret": 1}}))
+    d.engine._enabled = sync_scopes.scope_enabled
+    result = await d.sync()
+    assert result.get("skipped")
+    assert not [t for t in server.types() if t in ("sync.push", "sync.pull") or t.startswith("blobs.")]
+    assert s3.puts == [] and not server.rows
+
+
+async def test_an_hmac_account_taken_off_s3_keeps_v3_and_its_hashed_ids(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    b = V3Device(tmp_path, server, "B")
+    assert (await a.sync())["ok"] is True
+    assert server.item_ids == "hmac"
+    server.storage = "inline"
+    a.reconnect()
+    a.adapter.items["gamma"] = {"v": "g"}
+    for _ in range(2):
+        await a.sync()
+    assert a.engine._caps["version"] == 3 and a.engine._caps["itemIds"] == "hmac"
+    assert (await b.sync())["ok"] is True
+    assert b.adapter.items == {**NAMES, "gamma": {"v": "g"}}
+    assert all(HASHED.match(i) for i in _live_ids(server))
