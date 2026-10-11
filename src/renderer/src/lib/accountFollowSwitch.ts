@@ -42,11 +42,11 @@ export interface FollowPaneInput {
   name: string
   agentKey: string
   realized?: boolean
-  isLogin?: boolean
   profileId?: string
   /** The pane announced it is out of quota. */
   usageLimited: boolean
-  /** A turn is in progress (a rebuild now would stop it). */
+  /** Not free to stop: a turn in progress, a prompt waiting on the user, or
+   *  someone typing into it (a rebuild now would lose that). */
   busy: boolean
   /** It has a resumable session (the Rebuild button's preconditions). */
   canRebuild: boolean
@@ -74,12 +74,12 @@ export function effectiveAccount(
 }
 
 function paneState(p: FollowPaneInput): FollowPaneState {
-  if (p.usageLimited) return 'quota'
-  return p.busy ? 'running' : 'idle'
+  if (p.busy) return 'running'
+  return p.usageLimited ? 'quota' : 'idle'
 }
 
 function movable(p: FollowPaneInput): boolean {
-  return !!p.realized && !p.isLogin && p.agentKey === FOLLOW_SWITCH_AGENT && p.canRebuild
+  return !!p.realized && p.agentKey === FOLLOW_SWITCH_AGENT && p.canRebuild
 }
 
 /**
@@ -167,16 +167,22 @@ export function quotaPeerRows(
     .map((p) => ({ paneId: p.id, name: p.name, profileId: account, state: 'quota' as const, checked: true }))
 }
 
+/** Rebuild outcomes worth waiting out: the pane got busy again, or another
+ *  rebuild of it (a restart batch) holds its lock right now. */
+const RETRYABLE = new Set(['busy', 'locked'])
+
 /**
  * Rebuild the chosen panes onto the new account, one at a time. Idle ones go
- * first; a pane mid-turn is waited for until its turn ends (polled), so no
- * work is cut off. `rebuild` resolves undefined on success, "busy" when the
- * pane started a turn after all (it is then waited for again), or another
- * failure token. Returns the failed pane ids with their reasons.
+ * first; a busy pane is waited for (polled) until it is free, so no work and
+ * no half-typed input is cut off. `resolve` maps a chosen id to the pane's
+ * id now — a rebuild elsewhere replaces ids — or null when it is gone.
+ * `rebuild` resolves undefined on success, "busy"/"locked" to be retried, or
+ * another failure token. Returns the failed pane ids with their reasons.
  */
 export async function runFollowSwitchBatch(
   ids: string[],
   deps: {
+    resolve: (id: string) => string | null
     isBusy: (id: string) => boolean
     rebuild: (id: string) => Promise<string | undefined>
     sleep: (ms: number) => Promise<void>
@@ -188,12 +194,17 @@ export async function runFollowSwitchBatch(
   const timeoutMs = deps.timeoutMs ?? 30 * 60_000
   const failures: Array<{ id: string; reason: string }> = []
   const ordered = [...ids.filter((id) => !deps.isBusy(id)), ...ids.filter((id) => deps.isBusy(id))]
-  for (const id of ordered) {
+  for (const chosen of ordered) {
     let waited = 0
     for (;;) {
+      const id = deps.resolve(chosen)
+      if (id === null) {
+        failures.push({ id: chosen, reason: 'missing-pane' })
+        break
+      }
       if (deps.isBusy(id)) {
         if (waited >= timeoutMs) {
-          failures.push({ id, reason: 'busy' })
+          failures.push({ id: chosen, reason: 'busy' })
           break
         }
         await deps.sleep(pollMs)
@@ -206,19 +217,19 @@ export async function runFollowSwitchBatch(
       } catch (error) {
         outcome = error instanceof Error ? error.message : String(error)
       }
-      if (outcome === 'busy' && waited < timeoutMs) {
+      if (outcome !== undefined && RETRYABLE.has(outcome) && waited < timeoutMs) {
         await deps.sleep(pollMs)
         waited += pollMs
         continue
       }
-      if (outcome !== undefined) failures.push({ id, reason: outcome })
+      if (outcome !== undefined) failures.push({ id: chosen, reason: outcome })
       break
     }
   }
   return failures
 }
 
-type SwitchHandler<R extends { ok: boolean }> = (agentKey: string, profileId: string | null) => Promise<R>
+type SwitchHandler<R extends { ok: boolean; needsLogin?: boolean }> = (agentKey: string, profileId: string | null) => Promise<R>
 
 /**
  * Wrap the main window's account-switch handler with the follow step. The
@@ -226,9 +237,11 @@ type SwitchHandler<R extends { ok: boolean }> = (agentKey: string, profileId: st
  * the call goes straight through and nothing else runs. With it on, a claude
  * switch that succeeded hands the account it left and the one it landed on to
  * `afterSwitch` (which asks the user which pinned panes come along); its
- * result is returned as-is, without waiting for that step.
+ * result is returned as-is, without waiting for that step. A switch that
+ * landed on an account still to be signed in offers nothing: the panes would
+ * reopen at a login prompt.
  */
-export function withFollowSwitch<R extends { ok: boolean }>(
+export function withFollowSwitch<R extends { ok: boolean; needsLogin?: boolean }>(
   base: SwitchHandler<R>,
   deps: {
     enabled: () => boolean
@@ -240,7 +253,7 @@ export function withFollowSwitch<R extends { ok: boolean }>(
     if (agentKey !== FOLLOW_SWITCH_AGENT || !deps.enabled()) return base(agentKey, profileId)
     const outgoingId = deps.outgoing(agentKey)
     const res = await base(agentKey, profileId)
-    if (res.ok) void deps.afterSwitch(agentKey, outgoingId, profileId)
+    if (res.ok && !res.needsLogin) void deps.afterSwitch(agentKey, outgoingId, profileId)
     return res
   }
 }

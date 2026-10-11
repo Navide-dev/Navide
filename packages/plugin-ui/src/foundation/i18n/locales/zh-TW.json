@@ -10491,11 +10491,11 @@
     "needs-dir-sign-in": "需先在帳號資料夾登入",
     "exhausted": "額度用完",
     "state-idle": "閒置，立即重開",
-    "state-running": "執行中，這輪結束後重開",
+    "state-running": "忙碌中（執行、等待回應或輸入中），空下來後重開",
     "state-quota": "額度用完，立即重開",
     "note-window": "只列出這個視窗裡的 pane。",
     "quota-button": "換帳號 ›",
     "quota-button-tooltip": "用其他帳號重新開啟這個 pane，並接回原本的對話",
-    "done-partial": "{total} 個 pane 中有 {failed} 個沒有換成功，詳情見 pipeline 紀錄"
+    "done-partial": "有 {failed}/{total} 個 pane 未能換到新帳號，詳情請見紀錄。"
   }
 }

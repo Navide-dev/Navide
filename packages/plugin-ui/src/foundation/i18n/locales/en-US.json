@@ -10491,11 +10491,11 @@
     "needs-dir-sign-in": "Sign in inside its own folder first",
     "exhausted": "Out of quota",
     "state-idle": "Idle — reopens now",
-    "state-running": "Working — reopens after this turn",
+    "state-running": "Busy — reopens once it is free",
     "state-quota": "Out of quota — reopens now",
     "note-window": "Only panes in this window are listed.",
     "quota-button": "Switch account ›",
     "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
-    "done-partial": "{failed} of {total} pane(s) could not be moved — see the pipeline log"
+    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details."
   }
 }

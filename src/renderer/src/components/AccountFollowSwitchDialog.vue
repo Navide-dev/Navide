@@ -28,9 +28,11 @@ const checked = ref<Set<string>>(new Set())
 const target = ref<string | null>(null)
 const dialog = ref<HTMLDivElement | null>(null)
 
+// Reset on every new question, not only on open: the host replaces the
+// question in place, with the dialog still open.
 watch(
-  () => props.open,
-  async (open) => {
+  () => [props.open, props.rows, props.targets] as const,
+  async ([open]) => {
     if (!open) return
     checked.value = new Set(props.rows.filter((r) => r.checked).map((r) => r.paneId))
     target.value = props.targets?.find((t) => t.eligible && !t.exhausted)?.id ?? null

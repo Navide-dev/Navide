@@ -62,6 +62,23 @@ describe('follow switch wiring: flag on', () => {
     expect(body).toContain("i18n.global.t('account-follow.done-partial'")
   })
 
+  it('waits on a pane parked on the user or holding typed input, not only a running one', () => {
+    const body = functionBody('followPaneBusy')
+    expect(body).toContain("if (status === 'awaiting') return true")
+    expect(body).toContain('const hold = messagingHoldKey(paneId)')
+    expect(body).toContain("if (hold === null || hold === 'gone') return false")
+    expect(functionBody('moveFollowPanes')).toContain('isBusy: followPaneBusy,')
+  })
+
+  it('finds a chosen pane again by its session once another rebuild replaced its id', () => {
+    const body = functionBody('moveFollowPanes')
+    expect(body).toContain('paneResumeSessionId(p) === session')
+  })
+
+  it('ends an open question unanswered before asking a new one', () => {
+    expect(functionBody('askFollowDialog')).toContain('followDialog.value?.settle(null)')
+  })
+
   it('moves to the account switched to, the Default as its reserved id', () => {
     const body = functionBody('offerFollowSwitch')
     expect(body).toContain('if (rows.length === 0) return')

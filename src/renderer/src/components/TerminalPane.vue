@@ -1021,17 +1021,6 @@ onMounted(() => {
 }
 /* Quota exhausted. Deliberately louder than the login badge. Clicking it
    (after a confirm) dismisses the flag, e.g. when it is stale or moot. */
-.usage-limit-switch {
-  font-size: var(--font-3xs);
-  font-weight: 600;
-  color: var(--danger-fg);
-  border: 1px solid var(--danger-fg);
-  border-radius: var(--radius-xs);
-  padding: 1px 6px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  cursor: pointer;
-}
 .usage-limit-inline {
   font-size: var(--font-3xs);
   font-weight: 600;
@@ -1041,6 +1030,19 @@ onMounted(() => {
   border-radius: var(--radius-xs);
   padding: 1px 6px;
   letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+/* Beside the quota badge, with the follow-switch flag on: reopen the pane
+   on another account. Quieter than the badge it sits next to. */
+.usage-limit-switch {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;

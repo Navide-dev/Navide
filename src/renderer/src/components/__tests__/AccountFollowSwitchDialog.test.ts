@@ -53,6 +53,14 @@ describe('AccountFollowSwitchDialog', () => {
     expect(wrapper.emitted('confirm')).toEqual([[['peer'], 'Z']])
   })
 
+  it('resets the ticks when the question is replaced while open', async () => {
+    wrapper = mountDialog({ rows: [row('p1', true)] })
+    await wrapper.get('[data-testid="account-follow-row-p1"] input').setValue(false)
+    await wrapper.setProps({ rows: [row('p2', true)] })
+    await wrapper.get('[data-testid="account-follow-confirm"]').trigger('click')
+    expect(wrapper.emitted('confirm')).toEqual([[['p2'], null]])
+  })
+
   it('quota mode: no landable account means nothing to confirm', () => {
     wrapper = mountDialog({
       mode: 'quota',

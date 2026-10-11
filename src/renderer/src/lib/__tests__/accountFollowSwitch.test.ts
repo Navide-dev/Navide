@@ -33,7 +33,6 @@ function pane(over: Partial<FollowPaneInput> & { id: string }): FollowPaneInput 
     name: over.id,
     agentKey: 'claude',
     realized: true,
-    isLogin: false,
     usageLimited: false,
     busy: false,
     canRebuild: true,
@@ -93,6 +92,7 @@ describe('followSwitchRows', () => {
         pane({ id: 'p2', profileId: 'C' }),
         pane({ id: 'p3', profileId: 'C', usageLimited: true }),
         pane({ id: 'p4', profileId: 'A', busy: true }),
+        pane({ id: 'p5', profileId: 'C', usageLimited: true, busy: true }),
       ],
       opts,
     )
@@ -101,6 +101,9 @@ describe('followSwitchRows', () => {
       ['p2', 'idle', false],
       ['p3', 'quota', true],
       ['p4', 'running', true],
+      // busy wins the label: an out-of-quota pane someone is typing into is
+      // not reopened "now"
+      ['p5', 'running', true],
     ])
   })
 
@@ -112,7 +115,6 @@ describe('followSwitchRows', () => {
         pane({ id: 'default', profileId: DEFAULT_SLOT_ID }),
         pane({ id: 'on-target', profileId: 'T' }),
         pane({ id: 'codex', profileId: 'A', agentKey: 'codex' }),
-        pane({ id: 'login', profileId: 'A', isLogin: true }),
         pane({ id: 'placeholder', profileId: 'A', realized: false }),
         pane({ id: 'no-session', profileId: 'A', canRebuild: false }),
       ],
@@ -139,6 +141,7 @@ describe('quotaSwitchTargets', () => {
         { id: 'A', label: 'a', remaining: '0%', exhausted: true },
         { id: 'B', label: 'b' },
         { id: 'C', label: 'c', remaining: '80%' },
+        { id: 'D', label: 'd' }, // neither live nor signed in inside its own dir
       ],
       { current: 'A', liveId: 'B', dirSignedIn },
     )
@@ -146,6 +149,7 @@ describe('quotaSwitchTargets', () => {
       { id: DEFAULT_SLOT_ID, label: 'Default', remaining: '', eligible: false, exhausted: false },
       { id: 'B', label: 'b', remaining: '', eligible: true, exhausted: false },
       { id: 'C', label: 'c', remaining: '80%', eligible: true, exhausted: false },
+      { id: 'D', label: 'd', remaining: '', eligible: false, exhausted: false },
     ])
   })
 
@@ -178,6 +182,7 @@ describe('runFollowSwitchBatch', () => {
     const order: string[] = []
     let sleeps = 0
     const failures = await runFollowSwitchBatch(['run', 'idle'], {
+      resolve: (id) => id,
       isBusy: (id) => busy.has(id),
       rebuild: async (id) => {
         order.push(id)
@@ -196,6 +201,7 @@ describe('runFollowSwitchBatch', () => {
   it('reports a pane that never goes idle within the timeout without rebuilding it', async () => {
     const rebuild = vi.fn(async () => undefined)
     const failures = await runFollowSwitchBatch(['run'], {
+      resolve: (id) => id,
       isBusy: () => true,
       rebuild,
       sleep: async () => {},
@@ -209,6 +215,7 @@ describe('runFollowSwitchBatch', () => {
   it('waits again when a pane turned busy at the last moment, and collects failures', async () => {
     let calls = 0
     const failures = await runFollowSwitchBatch(['p', 'q'], {
+      resolve: (id) => id,
       isBusy: () => false,
       rebuild: async (id) => {
         if (id === 'q') throw new Error('boom')
@@ -220,10 +227,44 @@ describe('runFollowSwitchBatch', () => {
     expect(calls).toBe(2)
     expect(failures).toEqual([{ id: 'q', reason: 'boom' }])
   })
+
+  it('follows a pane replaced by another rebuild and waits out its lock', async () => {
+    // A restart batch rebuilt `old` into `new` and still holds the lock once.
+    const current = new Map([['old', 'new']])
+    const seen: string[] = []
+    let locked = true
+    const failures = await runFollowSwitchBatch(['old'], {
+      resolve: (id) => current.get(id) ?? null,
+      isBusy: () => false,
+      rebuild: async (id) => {
+        seen.push(id)
+        if (locked) {
+          locked = false
+          return 'locked'
+        }
+        return undefined
+      },
+      sleep: async () => {},
+    })
+    expect(seen).toEqual(['new', 'new'])
+    expect(failures).toEqual([])
+  })
+
+  it('reports a pane that is gone by the time its turn comes', async () => {
+    const rebuild = vi.fn(async () => undefined)
+    const failures = await runFollowSwitchBatch(['gone'], {
+      resolve: () => null,
+      isBusy: () => false,
+      rebuild,
+      sleep: async () => {},
+    })
+    expect(rebuild).not.toHaveBeenCalled()
+    expect(failures).toEqual([{ id: 'gone', reason: 'missing-pane' }])
+  })
 })
 
 describe('withFollowSwitch', () => {
-  function setup(enabled: boolean, result: { ok: boolean; code?: string }) {
+  function setup(enabled: boolean, result: { ok: boolean; code?: string; needsLogin?: boolean }) {
     const base = vi.fn(async () => result)
     const outgoing = vi.fn(() => 'A')
     const afterSwitch = vi.fn(async () => {})
@@ -249,6 +290,13 @@ describe('withFollowSwitch', () => {
     expect(res).toBe(result)
     expect(base).toHaveBeenCalledWith('claude', 'T')
     expect(afterSwitch).toHaveBeenCalledWith('claude', 'A', 'T')
+  })
+
+  it('flag on: a switch onto an account still to be signed in offers nothing', async () => {
+    const result = { ok: true, needsLogin: true }
+    const { afterSwitch, handler } = setup(true, result)
+    expect(await handler('claude', 'T')).toBe(result)
+    expect(afterSwitch).not.toHaveBeenCalled()
   })
 
   it('flag on: a refused or declined switch moves nothing', async () => {

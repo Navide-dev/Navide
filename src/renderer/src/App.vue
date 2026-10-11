@@ -8279,6 +8279,8 @@ const followDialog = shallowRef<FollowDialogState | null>(null)
 function askFollowDialog(
   state: Omit<FollowDialogState, 'settle'>,
 ): Promise<{ paneIds: string[]; targetId: string | null } | null> {
+  // A new question replaces an open one; the open one ends unanswered.
+  followDialog.value?.settle(null)
   return new Promise((resolve) => {
     followDialog.value = {
       ...state,
@@ -8290,8 +8292,26 @@ function askFollowDialog(
   })
 }
 
+/** Not free to be stopped and reopened: mid-turn or starting, parked on a
+ *  permission box or a question, or holding input someone is typing — the
+ *  same reading the quota-failover restart waits on (quotaPaneReadiness). A
+ *  pane that is gone, exited or errored is not "busy": its rebuild settles it. */
+function followPaneBusy(paneId: string): boolean {
+  const paneRef = paneRefs[paneId]
+  const status = paneRef?.displayStatus as string | undefined
+  if (paneBusyForRebuild(
+    status,
+    paneRef?.status as string | undefined,
+    paneRef?.startingAgeMs as number | null | undefined,
+  ) !== false) return true
+  if (status === 'awaiting') return true
+  const hold = messagingHoldKey(paneId)
+  if (hold === null || hold === 'gone') return false
+  if (hold === 'not-ready') return status === 'starting'
+  return true
+}
+
 function followPaneInput(p: ActivePane): FollowPaneInput {
-  const paneRef = paneRefs[p.id]
   return {
     id: p.id,
     name: p.messagingName || p.customName || p.autoName || p.agentLabel,
@@ -8299,11 +8319,7 @@ function followPaneInput(p: ActivePane): FollowPaneInput {
     realized: p.realized,
     profileId: p.profileId,
     usageLimited: p.usageLimitAt != null,
-    busy: paneBusyForRebuild(
-      paneRef?.displayStatus as string | undefined,
-      paneRef?.status as string | undefined,
-      paneRef?.startingAgeMs as number | null | undefined,
-    ) !== false,
+    busy: followPaneBusy(p.id),
     canRebuild: paneCanRebuild(p),
   }
 }
@@ -8324,11 +8340,22 @@ function followDialogRows(rows: ReturnType<typeof followSwitchRows>): FollowDial
  *  panes go first; a pane mid-turn is waited for, never interrupted. */
 async function moveFollowPanes(ids: string[], profileId: string): Promise<void> {
   pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
+  // A rebuild elsewhere (a restart batch, the user's Rebuild) replaces a pane
+  // id while this batch waits; the conversation is what stays, so a chosen
+  // pane is found again by its session.
+  const sessions = new Map<string, string>()
+  for (const id of ids) {
+    const pane = panes.value.find((p) => p.id === id)
+    const session = pane ? paneResumeSessionId(pane) : ''
+    if (session) sessions.set(id, session)
+  }
   const failures = await runFollowSwitchBatch(ids, {
-    isBusy: (id) => {
-      const pane = panes.value.find((p) => p.id === id)
-      return !!pane && followPaneInput(pane).busy
+    resolve: (id) => {
+      if (panes.value.some((p) => p.id === id)) return id
+      const session = sessions.get(id)
+      return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
     },
+    isBusy: followPaneBusy,
     rebuild: (id) => rebuildPaneViaResume(id, { profileId, suppressBusyToast: true }),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   })
