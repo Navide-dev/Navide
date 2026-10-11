@@ -98,6 +98,9 @@ def test_a_timer_writes_where_it_was_armed(monkeypatch, tmp_path):
     deadline = time.monotonic() + 3
     while trust_store._seen_pending and time.monotonic() < deadline:
         time.sleep(0.02)
+    # The flush empties the batch before it writes, under the lock: wait for it.
+    with trust_store._lock:
+        pass
 
     assert later.calls == []
     assert not (tmp_path / "elsewhere").exists()
