@@ -34,16 +34,18 @@ is only worth making if it carries real work.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import contextvars
 import hashlib
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Protocol
 
-from . import device_signing, sync_keyring
+from . import device_signing, sync_keyring, sync_objects
 from .db import Database
 
 log = logging.getLogger("agent_team_backend.sync_engine")
@@ -129,7 +131,15 @@ INVENTORY_DISABLED = "disabled"
 
 
 class SyncError(Exception):
-    """A sync round could not be completed. Always recoverable by retrying."""
+    """A sync round could not be completed. Always recoverable by retrying.
+
+    ``code`` is the server's error code for a refusal (or the engine's own,
+    such as ``ITEM_ID_KEY_MISSING``); "" when there is none.
+    """
+
+    def __init__(self, message: str = "", *, code: str = "") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class StaleRound(SyncError):
@@ -148,6 +158,50 @@ class FrameTooLarge(ConnectionError):
 _round_generation: contextvars.ContextVar[tuple[Any, int] | None] = contextvars.ContextVar(
     "sync_round_generation", default=None
 )
+
+
+#: Protocol v3 (``sync.caps``): what one connection negotiated. A server that
+#: does not answer it — an older one, a MySQL one — is spoken to as v1, the
+#: wire this module has always used.
+_V1_CAPS: dict[str, Any] = {"version": 1, "storage": "inline", "itemIds": "legacy"}
+#: Scopes that never go up on the v3 path, whatever the server lists.
+RETIRED_SCOPES: tuple[str, ...] = ("memory", "credentials")
+#: Top-level refusals that mean the negotiated capabilities no longer hold.
+_RENEGOTIATE = frozenset({"OBJECTS_DISABLED", "SYNC_PROTOCOL_REQUIRED"})
+#: Objects per ``blobs.*`` request, the contract's ceiling.
+OBJECT_BATCH = 100
+#: The capabilities the running transfer works under (None: v1).
+_round_caps: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "sync_round_caps", default=None
+)
+
+
+def _caps_now() -> dict[str, Any]:
+    return _round_caps.get() or _V1_CAPS
+
+
+@contextlib.contextmanager
+def _using(caps: dict[str, Any]) -> Any:
+    token = _round_caps.set(caps)
+    try:
+        yield
+    finally:
+        _round_caps.reset(token)
+
+
+def _is_v3(caps: dict[str, Any]) -> bool:
+    return caps.get("version") == 3
+
+
+def _retired(caps: dict[str, Any], scope: str) -> bool:
+    if not _is_v3(caps):
+        return False
+    listed = caps.get("retiredScopes")
+    return scope in RETIRED_SCOPES or (isinstance(listed, list) and scope in listed)
+
+
+def _batches(items: list[Any], size: int) -> list[list[Any]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
 
 
 def round_is_current() -> bool:
@@ -850,6 +904,60 @@ class SyncEngine:
         #: reason ("refused", "held", "tooLarge"). Filled from worker threads,
         #: read once the round ends; one round per scope runs at a time.
         self._notes: dict[str, dict[str, list[str]]] = {}
+        #: What this connection negotiated (``sync.caps``); None until asked.
+        self._caps: dict[str, Any] | None = None
+        #: Whether this connection already asked to adopt hashed item ids.
+        self._adopt_tried = False
+
+    def reset_connection(self) -> None:
+        """A new connection: what the last one negotiated no longer holds."""
+        self._caps = None
+        self._adopt_tried = False
+
+    async def _negotiate(self) -> dict[str, Any]:
+        """This connection's capabilities, asked for once per connection.
+
+        Any refusal of ``sync.caps`` — an older server's UNKNOWN_TYPE, a MySQL
+        server's UNSUPPORTED, anything — means v1, the wire as it always was;
+        so does ``NAVIDE_SYNC_PROTOCOL=1``. A request that got no answer at
+        all is v1 for this call only and asked again next time.
+        """
+        if self._caps is None:
+            caps = await self._ask_caps()
+            if caps is None:
+                return dict(_V1_CAPS)
+            self._caps = caps
+        return self._caps
+
+    async def _ask_caps(self) -> dict[str, Any] | None:
+        if os.environ.get("NAVIDE_SYNC_PROTOCOL") == "1":
+            return dict(_V1_CAPS)
+        try:
+            reply = await self._call("sync.caps", {"protocol": 3})
+        except StaleRound:
+            raise
+        except Exception as err:  # noqa: BLE001 - no answer: v1 for now
+            log.info("sync.caps got no answer (%s); speaking v1 for now", _why(err))
+            return None
+        payload = reply.get("payload") if isinstance(reply, dict) and reply.get("ok") else None
+        if not isinstance(payload, dict) or payload.get("version") != 3:
+            return dict(_V1_CAPS)
+        return dict(payload)
+
+    def _heed_refusal(self, msg_type: str, reply: Any) -> None:
+        """Forget the negotiated capabilities when a refusal says they no
+        longer hold, so the next transfer asks again."""
+        if msg_type == "sync.caps" or not isinstance(reply, dict) or reply.get("ok"):
+            return
+        error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+        code = str(error.get("code") or "")
+        if code in _RENEGOTIATE or (
+            # On a v3 connection a refused record can mean the account moved
+            # on (another device adopted hashed ids) since this one asked.
+            code == "BAD_REQUEST" and self._caps is not None and _is_v3(self._caps)
+            and msg_type in ("sync.push", "sync.pull")
+        ):
+            self._caps = None
 
     def register(self, adapter: ScopeAdapter) -> None:
         if adapter.scope not in SCOPES + INTERNAL_SCOPES:
@@ -923,6 +1031,13 @@ class SyncEngine:
     async def _locked_round(self, scope: str, adapter: ScopeAdapter) -> dict[str, Any]:
         self._drop_memory_of_other_accounts()
         self._notes[scope] = {}
+        caps = await self._negotiate()
+        if _retired(caps, scope):
+            return {"skipped": "retired"}
+        with _using(caps):
+            return await self._round_under_caps(scope, adapter)
+
+    async def _round_under_caps(self, scope: str, adapter: ScopeAdapter) -> dict[str, Any]:
         # An adapter that needs the server for more than records (blob
         # transfers) is handed the connection here, and may decline the
         # round when the server cannot serve it.
@@ -1002,6 +1117,7 @@ class SyncEngine:
         self._store._check_round()
         reply = await self._request(msg_type, payload)
         self._store._check_round()
+        self._heed_refusal(msg_type, reply)
         return reply
 
     def _kick(self, scope: str) -> None:
@@ -1096,6 +1212,7 @@ class SyncEngine:
             items = reply.get("items")
             items = items if isinstance(items, list) else []
             self._learn_rows(scope, items)
+            await self._hydrate(scope, items)
             count, held_rev = await asyncio.to_thread(self._apply_page, adapter, items)
             applied += count
             # The reply's ``cursor`` is the scope's current maximum rev, not the
@@ -1623,9 +1740,133 @@ class SyncEngine:
         self, scope: str, wire: list[dict[str, Any]], pending: list[tuple[str, Any, str]]
     ) -> int:
         by_id = {item_id: (payload, item_hash) for item_id, payload, item_hash in pending}
+        caps = _caps_now()
+        if _is_v3(caps) and caps.get("storage") == "s3":
+            wire = await self._objectify(scope, wire, caps)
         reply = _payload(await self._call("sync.push", {"scope": scope, "items": wire}))
         stamps = {str(item.get("itemId") or ""): str(item.get("updatedAt") or "") for item in wire}
-        return await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps)
+        failure: SyncError | None = None
+        conflicts = reply.get("conflicts")
+        if isinstance(conflicts, list) and conflicts:
+            try:
+                await self._hydrate(scope, conflicts)
+            except SyncError as err:
+                # What was accepted is still written down; the clashes are
+                # met again, readable or not, by the next round.
+                failure = err
+                reply = {**reply, "conflicts": []}
+        count = await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps)
+        if failure is not None:
+            raise failure
+        return count
+
+    # ── records as objects (v3, storage "s3") ───────────────────────────
+    async def _objectify(
+        self, scope: str, wire: list[dict[str, Any]], caps: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """The batch with every live body stored as an object and named by an
+        ``objectRef``. The signature stays: it signs the body, which is the
+        object's bytes."""
+        live = [i for i, item in enumerate(wire) if not item.get("deleted") and item.get("body")]
+        if not live:
+            return wire
+        if _retired(caps, scope) or scope in RETIRED_SCOPES:
+            raise SyncError(f"SCOPE_RETIRED: {scope} does not sync", code="SCOPE_RETIRED")
+        data = [str(wire[i]["body"]).encode("utf-8") for i in live]
+        ids = await self._upload_objects(data, caps)
+        out = list(wire)
+        for i, blob_id, raw in zip(live, ids, data):
+            item = {k: v for k, v in wire[i].items() if k != "body"}
+            item["objectRef"] = {"blobId": blob_id, "sizeBytes": len(raw)}
+            out[i] = item
+        return out
+
+    async def _upload_objects(self, data: list[bytes], caps: dict[str, Any]) -> list[str]:
+        """Store each sealed record as an object; the blob id of each, in
+        order. Only what the server does not hold yet is PUT, and only after
+        every object is committed does anything name it."""
+        ids = await asyncio.to_thread(lambda: [sync_objects.object_id(d) for d in data])
+        todo = dict(zip(ids, data))
+        size = max(1, min(OBJECT_BATCH, int(caps.get("maxBatch") or OBJECT_BATCH)))
+        for _attempt in range(2):
+            uploads: list[tuple[str, str]] = []
+            for chunk in _batches(sorted(todo), size):
+                reply = _payload(await self._call(
+                    "blobs.presignPut",
+                    {"objects": [{"blobId": b, "sizeBytes": len(todo[b])} for b in chunk]},
+                ))
+                answers = {
+                    str(o.get("blobId") or ""): o for o in reply.get("objects") or [] if isinstance(o, dict)
+                }
+                for blob_id in chunk:
+                    answer = answers.get(blob_id) or {}
+                    if answer.get("state") == "complete":
+                        continue
+                    if answer.get("state") != "upload" or not answer.get("url"):
+                        raise SyncError("OBJECT_UPLOAD: the server would not take a record object")
+                    uploads.append((blob_id, str(answer["url"])))
+            if not uploads:
+                return ids
+            try:
+                await asyncio.to_thread(sync_objects.put_all, [(url, todo[b]) for b, url in uploads])
+            except sync_objects.ObjectError as err:
+                raise SyncError(f"OBJECT_UPLOAD: {err}") from err
+            restart: dict[str, bytes] = {}
+            for chunk in _batches([b for b, _ in uploads], size):
+                reply = _payload(await self._call("blobs.commit", {"blobIds": chunk}))
+                states = {
+                    str(o.get("blobId") or ""): str(o.get("state") or "")
+                    for o in reply.get("blobs") or [] if isinstance(o, dict)
+                }
+                for blob_id in chunk:
+                    state = states.get(blob_id, "")
+                    if state == "incomplete":
+                        restart[blob_id] = todo[blob_id]
+                    elif state != "complete":
+                        raise SyncError(f"OBJECT_UPLOAD: a record object was not stored ({state or 'no answer'})")
+            if not restart:
+                return ids
+            todo = restart
+        raise SyncError("OBJECT_UPLOAD: a record object did not complete after starting over")
+
+    async def _hydrate(self, scope: str, rows: list[Any]) -> None:
+        """Give every row that names an object instead of carrying a body its
+        body, fetched and checked. Rows that carry one are left alone, so a
+        v1 reply passes through untouched. Raises ``SyncError`` when any
+        object cannot be had whole; nothing of the batch is used then.
+
+        A retired scope never asks for an object: its rows stay bodiless and
+        read as unopenable.
+        """
+        targets: list[tuple[dict[str, Any], str]] = []
+        sizes: dict[str, int] = {}
+        for row in rows:
+            if not isinstance(row, dict) or row.get("deleted") or row.get("body"):
+                continue
+            ref = row.get("objectRef")
+            if not isinstance(ref, dict) or not ref.get("blobId"):
+                continue
+            blob_id = str(ref["blobId"])
+            targets.append((row, blob_id))
+            sizes[blob_id] = int(ref.get("sizeBytes") or 0)
+        if not targets or scope in RETIRED_SCOPES or _retired(_caps_now(), scope):
+            return
+        urls: list[tuple[str, str]] = []
+        for chunk in _batches(sorted(sizes), OBJECT_BATCH):
+            reply = _payload(await self._call("blobs.presignGet", {"blobIds": chunk}))
+            answers = {
+                str(o.get("blobId") or ""): o for o in reply.get("objects") or [] if isinstance(o, dict)
+            }
+            for blob_id in chunk:
+                answer = answers.get(blob_id) or {}
+                if answer.get("error") or not answer.get("url"):
+                    raise SyncError(
+                        f"OBJECT_UNAVAILABLE: a record object could not be fetched ({answer.get('error') or 'no answer'})"
+                    )
+                urls.append((blob_id, str(answer["url"])))
+        texts = await asyncio.to_thread(_fetch_verified, urls, sizes)
+        for row, blob_id in targets:
+            row["body"] = texts[blob_id]
 
     def _record_reply(
         self,
@@ -1835,8 +2076,9 @@ class SyncEngine:
             return {"scope": scope, "status": INVENTORY_DISABLED, "items": []}
         if not await asyncio.to_thread(sync_keyring.has_account_key):
             return {"scope": scope, "status": INVENTORY_NO_KEY, "items": []}
-        rows = await self._list_remote(scope)
-        items = await asyncio.to_thread(self._compare, adapter, rows)
+        with _using(await self._negotiate()):
+            rows = await self._list_remote(scope)
+            items = await asyncio.to_thread(self._compare, adapter, rows)
         return {"scope": scope, "status": INVENTORY_OK, "items": items}
 
     async def _list_remote(self, scope: str) -> list[dict[str, Any]]:
@@ -1863,6 +2105,7 @@ class SyncEngine:
             page = reply.get("items")
             page = [r for r in page if isinstance(r, dict)] if isinstance(page, list) else []
             self._learn_rows(scope, page)
+            await self._hydrate(scope, page)
             rows.extend(page)
             if not reply.get("more"):
                 break
@@ -1972,25 +2215,34 @@ class SyncEngine:
             adapter = self._require_adapter(scope)
             self._require_enabled(scope)
             await self._require_key()
+            caps = await self._negotiate()
+            if _retired(caps, scope):
+                raise SyncError(f"SCOPE_RETIRED: {scope} does not sync any more", code="SCOPE_RETIRED")
             # One transfer per scope at a time, like a round, and under the
             # generation it began with (see ``_round``).
             async with self._locks.setdefault(scope, asyncio.Lock()):
                 self._store._check_round()
                 self._drop_memory_of_other_accounts()
-                wanted = _unique(item_ids)
-                blocked_before = self._store.conflict_ids(scope)
-                pending, built = await asyncio.to_thread(self._prepare_push, adapter)
-                chosen_pending = [entry for entry in pending if entry[0] in wanted]
-                chosen_built = [
-                    entry for entry in built if str(entry[0].get("itemId") or "") in wanted
-                ]
-                if chosen_built:
-                    await self._send_all(scope, chosen_pending, chosen_built)
-                return await asyncio.to_thread(
-                    self._push_outcomes, scope, wanted, chosen_pending, chosen_built, blocked_before
-                )
+                return await self._push_chosen(adapter, scope, item_ids, caps)
         finally:
             _round_generation.reset(token)
+
+    async def _push_chosen(
+        self, adapter: ScopeAdapter, scope: str, item_ids: Any, caps: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        with _using(caps):
+            wanted = _unique(item_ids)
+            blocked_before = self._store.conflict_ids(scope)
+            pending, built = await asyncio.to_thread(self._prepare_push, adapter)
+            chosen_pending = [entry for entry in pending if entry[0] in wanted]
+            chosen_built = [
+                entry for entry in built if str(entry[0].get("itemId") or "") in wanted
+            ]
+            if chosen_built:
+                await self._send_all(scope, chosen_pending, chosen_built)
+            return await asyncio.to_thread(
+                self._push_outcomes, scope, wanted, chosen_pending, chosen_built, blocked_before
+            )
 
     def _push_outcomes(
         self,
@@ -2059,9 +2311,10 @@ class SyncEngine:
                     # this machine" mark for some items lifts it here, before the
                     # rows are read, so the pull below can take them.
                     await asyncio.to_thread(requested, wanted)
-                rows = await self._list_remote(scope)
-                by_id = {str(row.get("itemId") or ""): row for row in rows if row.get("itemId")}
-                return await asyncio.to_thread(self._apply_chosen, adapter, wanted, by_id)
+                with _using(await self._negotiate()):
+                    rows = await self._list_remote(scope)
+                    by_id = {str(row.get("itemId") or ""): row for row in rows if row.get("itemId")}
+                    return await asyncio.to_thread(self._apply_chosen, adapter, wanted, by_id)
         finally:
             _round_generation.reset(token)
 
@@ -2268,6 +2521,20 @@ def _pinned_signing_key(device_id: str, member_id: str | None = None) -> str:
     return key if isinstance(key, str) else ""
 
 
+def _fetch_verified(urls: list[tuple[str, str]], sizes: dict[str, int]) -> dict[str, str]:
+    """Download each object and check it is the one its id names. Blocking."""
+    try:
+        fetched = sync_objects.get_all(urls)
+    except sync_objects.ObjectError as err:
+        raise SyncError(f"OBJECT_UNAVAILABLE: {err}") from err
+    out: dict[str, str] = {}
+    for blob_id, data in fetched.items():
+        if len(data) != sizes.get(blob_id) or not sync_objects.object_matches(blob_id, data):
+            raise SyncError("OBJECT_INTEGRITY: a record object is not the one its id names")
+        out[blob_id] = data.decode("utf-8")
+    return out
+
+
 def _payload(reply: Any) -> dict[str, Any]:
     """The payload of a server reply, or a SyncError naming its refusal."""
     if not isinstance(reply, dict):
@@ -2275,7 +2542,7 @@ def _payload(reply: Any) -> dict[str, Any]:
     if not reply.get("ok"):
         error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
         code = str(error.get("code") or "UNKNOWN")
-        raise SyncError(f"{code}: {error.get('message') or 'the server refused the request'}")
+        raise SyncError(f"{code}: {error.get('message') or 'the server refused the request'}", code=code)
     payload = reply.get("payload")
     return payload if isinstance(payload, dict) else {}
 

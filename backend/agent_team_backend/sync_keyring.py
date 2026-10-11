@@ -514,6 +514,15 @@ def _v2_key_id(raw: bytes) -> str | None:
     return raw[1 : 1 + _KID_LEN].hex()
 
 
+def envelope_kid(wire: str) -> str | None:
+    """The key id a sealed body names (a v2 envelope), or None — a v1 body,
+    or something that is not an envelope. No key is needed to read it."""
+    try:
+        return _v2_key_id(_decode(wire))
+    except (ValueError, TypeError):
+        return None
+
+
 def decrypt(wire: str, *, scope: str, item_id: str) -> str:
     """Open one record body sealed by ``encrypt`` — this build's or the last one's.
 

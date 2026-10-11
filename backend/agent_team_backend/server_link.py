@@ -949,6 +949,8 @@ class ServerLink:
                 # re-sent for it. One catch-up round per connection; deliberately
                 # spawned rather than awaited, because a large first sync must
                 # not hold the session open before its reader starts.
+                if self._sync_engine is not None:
+                    self._sync_engine.reset_connection()  # sync.caps is per connection
                 self._spawn(self._sync_all())
                 # Messages in both directions whose answer the dropped
                 # connection may have swallowed: acks this device could not send,

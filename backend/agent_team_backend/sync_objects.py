@@ -14,9 +14,13 @@ keeps connections open between requests.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import http.client
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable
 from urllib.parse import urlsplit
 
 log = logging.getLogger("agent_team_backend.sync_objects")
@@ -102,3 +106,99 @@ class HttpPool:
         for conns in idle.values():
             for conn in conns:
                 conn.close()
+
+
+# ── record objects ──────────────────────────────────────────────────────────
+
+#: Transfers of one batch that run at once.
+PARALLEL = 8
+
+_POOL = HttpPool()
+
+
+class ObjectError(Exception):
+    """An object could not be stored or fetched. The text is fixed, safe to
+    show: it never quotes a URL (which carries a signature) or a body."""
+
+
+def shared_pool() -> HttpPool:
+    """The one pool every record transfer goes through."""
+    return _POOL
+
+
+def object_id(data: bytes) -> str:
+    """The blob id of a sealed record's bytes: the keyed hash of
+    ``sync_keyring.blob_hasher`` under the key the envelope names (the
+    active one for an envelope that names none)."""
+    from . import sync_keyring
+
+    kid = sync_keyring.envelope_kid(data.decode("utf-8"))
+    _, hasher = sync_keyring.blob_hasher(kid)
+    hasher.update(data)
+    return hasher.hexdigest()
+
+
+def object_matches(blob_id: str, data: bytes) -> bool:
+    """Whether *data* is the object *blob_id* names.
+
+    Two namings are valid: this account's keyed hash, and a plain SHA-256,
+    which is what the server names an object by when it writes one itself
+    (for a client that still sends bodies). A body under a key this machine
+    does not hold cannot be checked here; it passes, and opening it is what
+    holds it back (``UnknownKeyId``).
+    """
+    from . import sync_keyring
+
+    if hashlib.sha256(data).hexdigest() == blob_id:
+        return True
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    kid = sync_keyring.envelope_kid(text)
+    held = sync_keyring.ring() or {}
+    if kid is not None and kid not in (held.get("keys") or {}):
+        return True
+    _, hasher = sync_keyring.blob_hasher(kid)
+    hasher.update(data)
+    return hmac.compare_digest(hasher.hexdigest(), blob_id)
+
+
+def _run_all(fn: Callable[[Any], Any], jobs: list[Any]) -> list[Any]:
+    if not jobs:
+        return []
+    with ThreadPoolExecutor(max_workers=min(PARALLEL, len(jobs))) as pool:
+        return list(pool.map(fn, jobs))
+
+
+def put_all(uploads: list[tuple[str, bytes]]) -> None:
+    """PUT each ``(url, bytes)``, PARALLEL at a time. Blocking; raises
+    ``ObjectError`` unless every one was answered 2xx."""
+
+    def one(job: tuple[str, bytes]) -> None:
+        url, data = job
+        try:
+            status, _ = _POOL.request("PUT", url, body=data)
+        except (OSError, http.client.HTTPException) as err:
+            raise ObjectError(f"an object upload failed ({type(err).__name__})") from err
+        if not 200 <= status < 300:
+            raise ObjectError(f"an object upload was answered {status}")
+
+    _run_all(one, uploads)
+
+
+def get_all(downloads: list[tuple[str, str]]) -> dict[str, bytes]:
+    """GET each ``(blob id, url)``, PARALLEL at a time. Blocking; raises
+    ``ObjectError`` unless every one was answered 200."""
+
+    def one(job: tuple[str, str]) -> tuple[str, bytes]:
+        blob_id, url = job
+        try:
+            status, data = _POOL.request("GET", url)
+        except (OSError, http.client.HTTPException) as err:
+            raise ObjectError(f"an object download failed ({type(err).__name__})") from err
+        if status != 200:
+            raise ObjectError(f"an object download was answered {status}")
+        return blob_id, data
+
+    return dict(_run_all(one, downloads))
