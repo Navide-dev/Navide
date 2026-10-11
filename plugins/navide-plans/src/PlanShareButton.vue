@@ -170,7 +170,7 @@ function expiryText(value: string): string {
               <input v-model="sendToChat" type="checkbox" data-test="plan-share-chat" :disabled="creating">
               <span>{{ t('plans.share.send-to-chat') }}</span>
             </label>
-            <p class="psb-muted psb-note" data-test="plan-share-chat-note">{{ t('plans.share.send-to-chat-note') }}</p>
+            <p class="psb-muted psb-note" data-test="plan-share-chat-note">{{ t('plans.share.send-to-chat-note') }} {{ t('plans.share.send-to-chat-direct-only') }}</p>
             <template v-if="sendToChat">
               <p v-if="chats === null" class="psb-muted">{{ t('plans.share.chat-loading') }}</p>
               <p v-else-if="!chats.length" class="psb-muted" data-test="plan-share-chat-empty">{{ t('plans.share.chat-none') }}</p>

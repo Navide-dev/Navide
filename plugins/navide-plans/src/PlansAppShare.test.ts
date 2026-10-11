@@ -229,6 +229,9 @@ describe('Plan view — share link', () => {
     await flushPromises()
     const chat = document.querySelector('[data-test="plan-share-chat"]') as HTMLInputElement
     expect(chat.checked).toBe(false)
+    const note = document.querySelector('[data-test="plan-share-chat-note"]')!.textContent ?? ''
+    expect(note).toContain('plans.share.send-to-chat-note')
+    expect(note).toContain('plans.share.send-to-chat-direct-only')
     expect(document.querySelector('[data-test="plan-share-chat-target"]')).toBeNull()
 
     chat.checked = true
