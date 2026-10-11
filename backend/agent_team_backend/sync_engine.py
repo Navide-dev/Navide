@@ -2854,6 +2854,19 @@ class SyncEngine:
         self._store._check_round()
         if item_id in self._store.conflict_ids(scope):
             raise SyncError(f"{scope}/{item_id} has an unresolved conflict; answer it first")
+        from . import sync_approvals
+
+        # The adapter's hold replaces any hold already filed for the item: a
+        # pulled change waiting for approval would be dropped with a rejected
+        # restore, and the older local copy pushed over it. A previous
+        # restore's own hold may be replaced.
+        waiting = sync_approvals.entry(scope, item_id)
+        if waiting and not waiting.get("restored"):
+            raise SyncError(
+                f"RESTORE_BLOCKED: an incoming change to {scope}/{item_id} is waiting for approval; "
+                "decide it first",
+                code="RESTORE_BLOCKED",
+            )
         wire_id = str(row["itemId"])
         if self._origin(row, scope=scope, item_id=wire_id) == _ORIGIN_FORGED:
             raise SyncError(f"version {row['rev']} of {scope}/{item_id} is not signed by the device it names")
@@ -2873,9 +2886,7 @@ class SyncEngine:
             raise SyncError(f"{scope}/{item_id} could not be restored here ({type(err).__name__})") from err
         if not taken:
             raise SyncError(f"{scope}/{item_id} could not be restored here")
-        from . import sync_approvals
-
-        entry = sync_approvals.entry(scope, item_id)
+        entry =sync_approvals.entry(scope, item_id)
         held = bool(entry and entry.get("status") == sync_approvals.PENDING and entry.get("digest") == digest(payload))
         if held:
             sync_approvals.mark_restored(scope, item_id)
