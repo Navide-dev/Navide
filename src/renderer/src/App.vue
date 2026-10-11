@@ -170,11 +170,12 @@ import {
 import { pickReusablePane, runReportedDispatch, validatePlanDispatch, type PlanDispatchOutcome, type PlanDispatchPayload } from './lib/planDispatch'
 import { planExecutionPrompt } from './lib/planExecutePrompt'
 import {
-  composerHoldsPayload, echoEvidence, echoTimeoutFor, framedComposerHolds, normalizeForMatch,
+  composerHoldsPayload, echoEvidence, echoTimeoutFor, framedComposerHolds, injectionVerified, normalizeForMatch,
   shellSubmitEvidence, submitBaseline, submitEvidence, type EchoEvidence, type SubmitEvidence,
   SUBMIT_CONFIRM_MS, SUBMIT_SCREEN_LINES, TAIL_MATCH_LEN
 } from './lib/injectEcho'
 import { failedInjectReleasesHold } from './lib/deliveryHold'
+import { RESUME_CONSUME_WAIT_MS, resumeBootHold, resumeUnconfirmed } from './lib/resumeBoot'
 import {
   awaitEcho, awaitInputUnblocked, createInputBlockTracker, needsInputWait, PROBE_SESSION_GONE
 } from './lib/ptyInputBlock'
@@ -2441,7 +2442,7 @@ async function deliverAgentMessage(
   paneId: string,
   text: string,
   shouldAbort?: () => boolean,
-): Promise<boolean | null | { failed: MessageReason }> {
+): Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }> {
   // Hold the badge on RUNNING until the recipient's log shows the message
   // consumed — released in the agent.activity handler, fused inside
   // useTerminal. Marked BEFORE the Enter, not after: an idle CLI writes the
@@ -2453,7 +2454,21 @@ async function deliverAgentMessage(
   if (panes.value.find((p) => p.id === paneId)?.agentKey !== TERMINAL_AGENT_KEY) {
     paneRefs[paneId]?.markDeliveredPending?.()
   }
-  const outcome: { leftInComposer?: boolean; foregroundBusy?: boolean; commandRefused?: string } = {}
+  const outcome: {
+    echo?: EchoEvidence | null
+    submit?: SubmitEvidence | null
+    leftInComposer?: boolean
+    foregroundBusy?: boolean
+    commandRefused?: string
+  } = {}
+  // Sampled before typing: our own message's user record is the signal that
+  // would confirm the resume, so asking afterwards could answer "confirmed" on
+  // the strength of the very delivery being judged.
+  const unconfirmed = resumeUnconfirmed({
+    resumeSpawnedAt: Number(paneRefs[paneId]?.resumeSpawnedAt ?? 0),
+    lastSignalAt: paneCliSignalAt(paneId),
+  })
+  const typedAt = Date.now()
   // A PTY that stops reading holds the message on `pty-blocked` for as long
   // as it takes; the hold is what cli_check_message shows the sender meanwhile.
   const ok = await injectPane(
@@ -2478,6 +2493,19 @@ async function deliverAgentMessage(
     }
     return false
   }
+  // A resumed CLI that has not spoken since its spawn may still be repainting,
+  // and that repaint is all a growth-only echo or submit observed — the
+  // 2026-10-10 open_target message was reported delivered that way while the
+  // repaint had wiped it. Only the CLI reading it back counts then. Without
+  // that it is reported unconfirmed, not failed: the text and its Enter did go
+  // out, and a sender told "failed" resends work that may already be running.
+  // Its user record arriving later still confirms it (messaging.confirmDelivery).
+  if (unconfirmed && !injectionVerified(outcome.echo ?? null, outcome.submit ?? null)) {
+    if (!(await cliSignalSince(paneId, typedAt, RESUME_CONSUME_WAIT_MS))) {
+      paneRefs[paneId]?.clearDeliveredPending?.()
+      return { unconfirmed: true }
+    }
+  }
   await sleep(1500)
   const sw = watchers.get(paneId)
   if (sw && !sw.cancelled) {
@@ -2486,6 +2514,23 @@ async function deliverAgentMessage(
     sw.lastAnalyzedBufferLen = len
   }
   return true
+}
+
+/** Newest CLI-side signal for a pane — activity or a turn end — or 0. */
+function paneCliSignalAt(paneId: string): number {
+  return Math.max(paneTurnCompleteAt.get(paneId) ?? 0, paneLastActiveAt.get(paneId) ?? 0)
+}
+
+/** Wait until the pane's CLI reports something newer than `since`; false on
+ *  timeout or once the pane is gone. */
+async function cliSignalSince(paneId: string, since: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (paneCliSignalAt(paneId) > since) return true
+    if (!paneAlive(paneId)) return false
+    await sleep(250)
+  }
+  return paneCliSignalAt(paneId) > since
 }
 
 /** How long after the last keystroke a pane still counts as being typed at.
@@ -2558,6 +2603,16 @@ function messagingHoldKey(
   const parkedOnQuestion = status === 'awaiting' && awaitingKind === 'question'
   if (status !== 'running' && status !== 'idle' && !parkedOnQuestion) return 'not-ready'
   if (pane.injectionStatus === 'scheduled' || pane.kickoffStatus === 'pending') return 'starting'
+  // A resumed CLI reloads its transcript in silence, which the badge reads as
+  // idle; a message typed then is wiped by the resume repaint and the repaint
+  // passes for its echo. Hold until the CLI itself says it is up.
+  if (resumeBootHold({
+    hasPty: !!paneRefs[paneId]?.sessionId,
+    resumeSpawnedAt: Number(paneRefs[paneId]?.resumeSpawnedAt ?? 0),
+    pushReady: pushReadyPanes.has(paneId),
+    lastSignalAt: paneCliSignalAt(paneId),
+    now: Date.now(),
+  })) return 'starting'
   // The composer may still be holding the text of a push whose submit failed
   // and whose clear was not confirmed. The typed path would paste the next
   // envelope after it and submit both as one. That text only leaves the box
@@ -13732,6 +13787,8 @@ backend.on('agent.activity', (raw) => {
       // delivered-pending — one record releases one delivery.
       if (isInjectedMessageText(ev.text)) {
         paneRefs[ev.pane_id]?.clearDeliveredPending?.()
+        // ...and the late confirmation of one reported unconfirmed.
+        messaging.confirmDelivery(ev.pane_id, ev.text)
       } else {
         setPaneAutoName(ev.pane_id, deriveAutoName(ev.text))
         requestLlmPaneName(ev.pane_id, ev.text)

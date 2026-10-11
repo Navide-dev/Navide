@@ -355,6 +355,7 @@
     "reason-pane-closed": "The target pane closed before delivery",
     "reason-dropped": "Dropped from the log before it could be delivered",
     "reason-inject-failed": "Injection failed — the target CLI never echoed the message",
+    "reason-delivery-unconfirmed": "Sent, but the target CLI has not shown it received it yet — check the pane before resending",
     "reason-inject-error": "Injection error: {error}",
     "reason-push-stuck": "The CLI's input box would not clear after two pushes",
     "reason-route-error": "Routing error: {error}",
@@ -2026,6 +2027,7 @@
         "general": "General",
         "accountsAgents": "Accounts & Agents",
         "integration": "Agent Assets",
+        "navidePlugins": "Navide Plugins",
         "system": "System"
       },
       "general": "General",
@@ -2117,14 +2119,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into four groups, <strong>23 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>24 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-three tabs",
+          "h2": "The twenty-four tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -2163,6 +2165,10 @@
             "cloud": {
               "what": "Cross-device link status, this machine's fingerprint, who may command this machine",
               "more": "section 5 of this page"
+            },
+            "credentials": {
+              "what": "A read-only scan of the credential and key risks on this machine: findings, inventory, scan roots and reminders",
+              "more": "the page itself; it only scans and never changes a file"
             },
             "accounts": {
               "what": "Git accounts and CLI accounts",
@@ -6474,7 +6480,7 @@
     },
     "skills": {
       "title": "Managed Skills",
-      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. Nothing here moves or edits the skills your CLIs keep in their own folders.",
+      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. A skill in a CLI's own folder moves only when you choose “Move into shared library”, which leaves a link in its old place; “Restore” moves it back.",
       "new": "New skill",
       "search": "Search skills",
       "empty-title": "No managed skills yet",

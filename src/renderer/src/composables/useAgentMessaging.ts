@@ -12,6 +12,7 @@ import {
   uniqueMessagingName,
   PUSH_UNCLEAR_LIMIT,
 } from '../lib/agentMessaging'
+import { normalizeForMatch, TAIL_MATCH_LEN } from '../lib/injectEcho'
 
 /**
  * Inter-CLI messaging: pane name registry + per-target delivery queue.
@@ -230,9 +231,11 @@ export interface MessagingDeps {
    *  honours it clears what it wrote and resolves false. */
   /** true: typed. false: did not arrive. null: put it back at the head of the
    *  queue, nothing spent. `{ failed }`: refused for good, with the reason the
-   *  sender is told (a terminal command the backend will not type). */
+   *  sender is told (a terminal command the backend will not type).
+   *  `{ unconfirmed }`: typed and submitted, but the CLI has not shown it
+   *  received it — see UNCONFIRMED_REASON. */
   deliver: (paneId: string, text: string, shouldAbort?: () => boolean) =>
-    Promise<boolean | null | { failed: MessageReason }>
+    Promise<boolean | null | { failed: MessageReason } | { unconfirmed: true }>
   /** True when the pane can accept an injection right now (idle + settled). */
   isPaneIdle: (paneId: string) => boolean
   /** Why isPaneIdle() said no, as an i18n key suffix under `msg.hold-*`. Must
@@ -373,6 +376,13 @@ const HYDRATE_LOST_REASON: MessageReason = { key: 'window-reloaded' }
  *  reportDelivery path as a failure, and the sending window reads the key to
  *  land its own row on `cancelled` rather than `failed`. */
 const CANCELLED_REASON: MessageReason = { key: 'cancelled' }
+/** Reason on a message that was typed and submitted into a CLI that never
+ *  showed it received it (a just-resumed one; see App's deliverAgentMessage).
+ *  The row reads `delivered` with this caveat rather than `failed`: it may well
+ *  be running, and a failure invites the resend that would run it twice. Sent
+ *  back with ok=false so the backend can tell it apart, and followed by an ok
+ *  report if the transcript shows the message later (confirmDelivery). */
+const UNCONFIRMED_REASON: MessageReason = { key: 'delivery-unconfirmed' }
 /** Verdict reported back for a message the RECIPIENT took itself, by reading it
  *  through `cli_read_incoming` instead of waiting for it to be typed in.
  *
@@ -481,6 +491,13 @@ const ACCEPTED_MSG_KEYS_CAP = 500
 const remoteOutbound = new Map<string, { id: number; sentAt: number }>()
 /** Inbound cross-workspace messages to report back on, message id → msgKey. */
 const remoteInbound = new Map<number, string>()
+/** Messages delivered here with UNCONFIRMED_REASON, by id: the pane they went
+ *  into, and the msgKey to report the confirmation back on (absent for one sent
+ *  from this window, whose row is the sender's own). */
+const unconfirmedDeliveries = new Map<number, { paneId: string; msgKey?: string }>()
+/** Outbound messages another window reported unconfirmed, by msgKey, so its
+ *  later confirmation can still find the row. */
+const unconfirmedOutbound = new Map<string, number>()
 /** Message ids by the correlation id their envelope handed out, so a reply that
  *  echoes one back can be linked to the message it answers. Populated wherever
  *  an envelope is rendered; pruned by expireCorrelations(). */
@@ -578,6 +595,9 @@ function unregisterPane(paneId: string): void {
   }
   queues.delete(paneId)
   delivering.delete(paneId)
+  for (const [id, entry] of unconfirmedDeliveries) {
+    if (entry.paneId === paneId) unconfirmedDeliveries.delete(id)
+  }
   const name = nameByPane.get(paneId)
   if (name) paneByName.delete(name)
   nameByPane.delete(paneId)
@@ -1223,11 +1243,24 @@ function noteOutboundMessage(args: {
 /** Apply a delivery report to this window's outbound log entry (no-op when the
  *  report belongs to another window). */
 function resolveRemoteDelivery(msgKey: string, ok: boolean, reason: string): void {
+  const lateId = unconfirmedOutbound.get(msgKey)
+  if (lateId !== undefined) {
+    // The receiving window said unconfirmed earlier; this is it confirming.
+    unconfirmedOutbound.delete(msgKey)
+    const late = findMessage(lateId)
+    if (ok && late?.reason?.key === UNCONFIRMED_REASON.key) clearUnconfirmed(late)
+    return
+  }
   const rec = remoteOutbound.get(msgKey)
   if (rec === undefined) return
   remoteOutbound.delete(msgKey)
   const msg = findMessage(rec.id)
   if (!msg) return
+  if (!ok && decodeReason(reason)?.key === UNCONFIRMED_REASON.key) {
+    markUnconfirmed(msg)
+    unconfirmedOutbound.set(msgKey, rec.id)
+    return
+  }
   if (ok) {
     msg.status = 'delivered'
     msg.deliveredAt = deps ? deps.now() : msg.createdAt
@@ -1402,7 +1435,12 @@ async function pumpPane(paneId: string): Promise<void> {
     const ok = await deliverOnce(paneId, msg, envelope, push, () => cancelRequested.has(id))
     const stuck = ok === 'unclear'
       && (pushUnclearCount.get(id) ?? 0) + 1 >= PUSH_UNCLEAR_LIMIT
-    if (typeof ok === 'object' && ok !== null) {
+    if (typeof ok === 'object' && ok !== null && 'unconfirmed' in ok) {
+      markUnconfirmed(msg)
+      envelopes.delete(id)
+      unconfirmedDeliveries.set(id, { paneId, msgKey: remoteInbound.get(id) })
+      ackReason = UNCONFIRMED_REASON
+    } else if (typeof ok === 'object' && ok !== null) {
       ackReason = ok.failed
       failMessage(id, ackReason)
     } else if (stuck) {
@@ -1478,7 +1516,7 @@ async function deliverOnce(
   envelope: string,
   push: { kind: string } | null,
   shouldAbort: () => boolean,
-): Promise<boolean | null | 'unclear' | { failed: MessageReason }> {
+): Promise<boolean | null | 'unclear' | { failed: MessageReason } | { unconfirmed: true }> {
   if (!deps) return false
   if (push && deps.pushDeliver) {
     msg.route = `push:${push.kind}`
@@ -1974,6 +2012,48 @@ function clearMessageLog(): void {
   deps?.persistClear?.(CLEAR_KEEP_STATUSES)
 }
 
+/** Land a row on `delivered` with the unconfirmed caveat. Not failMessage: no
+ *  Resend in the panel, and no failure notice to the sender. */
+function markUnconfirmed(m: AgentMessage): void {
+  m.status = 'delivered'
+  m.deliveredAt = deps ? deps.now() : m.createdAt
+  m.reason = UNCONFIRMED_REASON
+  delete m.hold
+  deps?.persistUpdate?.([{
+    uid: m.uid, status: 'delivered', delivered_at: m.deliveredAt, reason: encodeReason(UNCONFIRMED_REASON),
+  }])
+}
+
+function clearUnconfirmed(m: AgentMessage): void {
+  delete m.reason
+  deps?.persistUpdate?.([{ uid: m.uid, reason: '' }])
+}
+
+/**
+ * A user record from `paneId`'s CLI log — `text` is what the transcript reader
+ * read back — confirms a delivery that went out unconfirmed, when it is that
+ * message: its correlation id, or the start of its content, is in the record.
+ * The row loses its caveat and the confirmation is reported to whoever is
+ * waiting on the msgKey. Returns whether one was confirmed.
+ */
+function confirmDelivery(paneId: string, text: string): boolean {
+  const record = normalizeForMatch(text)
+  if (!record) return false
+  for (const [id, entry] of unconfirmedDeliveries) {
+    if (entry.paneId !== paneId) continue
+    const m = findMessage(id)
+    if (!m) { unconfirmedDeliveries.delete(id); continue }
+    const head = normalizeForMatch(m.content).slice(0, TAIL_MATCH_LEN)
+    const matches = (!!m.correlationId && text.includes(m.correlationId)) || (!!head && record.includes(head))
+    if (!matches) continue
+    unconfirmedDeliveries.delete(id)
+    if (m.reason?.key === UNCONFIRMED_REASON.key) clearUnconfirmed(m)
+    if (entry.msgKey !== undefined) deps?.reportDelivery?.(entry.msgKey, true, null)
+    return true
+  }
+  return false
+}
+
 /** Test-only: wipe all singleton state. */
 export function _resetMessagingForTest(): void {
   deps = null
@@ -1991,6 +2071,8 @@ export function _resetMessagingForTest(): void {
   acceptedMsgKeys.clear()
   remoteOutbound.clear()
   remoteInbound.clear()
+  unconfirmedDeliveries.clear()
+  unconfirmedOutbound.clear()
   correlations.clear()
   readReserved.clear()
   pushUnclearCount.clear()
@@ -2020,6 +2102,7 @@ export function useAgentMessaging() {
     acceptRemoteMessage,
     noteOutboundMessage,
     resolveRemoteDelivery,
+    confirmDelivery,
     drainForHook,
     settleHookDrain,
     findByUid,

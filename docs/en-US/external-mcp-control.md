@@ -150,6 +150,13 @@ pending-message queue is at its cap), `inject-failed` (typing it into the
 pane did not take), `pane-closed` (the target went away before delivery), or
 `no-report` (the attempt never reported an outcome).
 
+`unconfirmed` (reason `delivery-unconfirmed`) is neither of those: the text
+and its Enter went into a CLI that had just been resumed, and that CLI has
+not shown it received it. It was sent, and it may be running, so do not
+resend on it alone — look at the pane first with `cli_get_status` or
+`cli_read_log`. The status becomes `delivered` if the CLI's transcript shows
+the message later.
+
 A failure is also pushed at the sending pane without being asked for: Navide
 writes a `[Navide MSG] delivery failed` notice naming the target and the
 reason into that pane once it is idle, through the same queue and injection

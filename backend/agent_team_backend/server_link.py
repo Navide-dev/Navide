@@ -3558,11 +3558,16 @@ class ServerLink:
             return False
         # Claimed before the ack is awaited so a second report cannot double-ack.
         entry["acked"] = True
+        key = _reason_key(reason)
         self._spawn(
             self._ack(
                 msg_key,
-                "delivered" if ok else "failed",
-                reason=_reason_key(reason),
+                # Typed into a resumed CLI that has not shown it yet: the ack
+                # has no state for that, and "failed" would have the far sender
+                # resend work that may already be running. The reason carries
+                # the caveat.
+                "delivered" if ok or key == "delivery-unconfirmed" else "failed",
+                reason=key,
                 pane_id=entry["pane_id"],
             )
         )

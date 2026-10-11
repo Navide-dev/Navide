@@ -745,6 +745,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // memory predictable across long-running panes.
   const cleanBuffer = ref<string>('')
   const cleanBytesSeen = ref(0)
+  // When this terminal created a PTY for a resume spawn (0 otherwise, and for a
+  // reattach, whose CLI never stopped). The messaging gate reads it: a resumed
+  // CLI reloads its transcript in silence, so quiet alone does not mean ready —
+  // see lib/resumeBoot.ts.
+  const resumeSpawnedAt = ref(0)
   // `lastActivityAt` only updates when CLEANED text changes — i.e. real content.
   // Used for analyzer triggers and sentinel scans.
   const lastActivityAt = ref<number>(0)
@@ -2809,6 +2814,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       startingStartedAt.value = null
       sessionId.value = resp.payload.terminal_session_id
       rememberSessionId(sessionId.value)  // enable reattach after a reload
+      resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
       status.value = 'running'
       const probe = resp.payload.startup_probe
       if (probe?.binary_path) {
@@ -3418,6 +3424,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     lastCommand,
     cleanBuffer,
     cleanBytesSeen,
+    resumeSpawnedAt,
     lastActivityAt,
     lastRawActivityAt,
     hasDraft,
