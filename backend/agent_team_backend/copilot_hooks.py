@@ -224,6 +224,15 @@ def another_backends(path: Path) -> bool:
     return "/hooks/copilot" in text and str(app_data_dir() / hook_auth.FILENAME) not in text
 
 
+def _navides(path: Path) -> bool:
+    """Whether ``path`` is a Navide hook file, whichever backend wrote it."""
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return "/hooks/copilot" in "\n".join(_strings(document))
+
+
 def _resolved(folder: Path) -> Path:
     try:
         return folder.resolve()
@@ -248,8 +257,9 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
     plus a fresh link to each entry of ``user_hooks``, so a file the user
     adds later is seen. A user file with Navide's name is linked under
     ``agent-team.user.json`` rather than hidden, and anything the pane holds
-    in Navide's place is moved aside the same way; another backend's Navide
-    file is left out, as this pane reports to this backend only. Otherwise
+    in Navide's place is moved aside the same way; a Navide hook file there
+    is left out — another backend's, as this pane reports to this backend
+    only, or this one's own, which the pane already carries. Otherwise
     it is what it always was, a link to ``user_hooks``. Nothing is written
     under ``user_hooks``.
     """
@@ -289,8 +299,11 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
     for entry in theirs:
         name = entry.name
         if name == _HOOK_FILENAME:
-            if another_backends(entry):
-                log.info("leaving another backend's %s out of the pane", entry)
+            if _navides(entry):
+                # Another backend's (this pane reports to this one only), or
+                # this backend's own written back after it was taken back:
+                # linked beside the pane's copy, every hook would run twice.
+                log.info("leaving the Navide hook file %s out of the pane", entry)
                 continue
             name = _free_name(names)
         links[name] = entry

@@ -179,6 +179,19 @@ def test_another_backends_hook_file_is_neither_retracted_nor_linked(gate, sandbo
     assert (hooks / "agent-team.json").resolve() == copilot_hooks.pane_hooks_file().resolve()
 
 
+def test_this_backends_own_shared_file_back_while_carrying_is_never_linked_twice(gate, sandbox) -> None:
+    # Carrying: the shared file was taken back. Should this backend's own
+    # Navide file show up there again (an older build writing it back), a
+    # pane must not load it beside its own copy: every hook would run twice.
+    _carry(gate, sandbox)
+    copilot_hooks.install_hooks(str(sandbox["port"]), sandbox["copilot"] / "hooks")
+
+    hooks = _spawn(sandbox) / "hooks"
+
+    assert sorted(p.name for p in hooks.iterdir()) == ["agent-team.json", "mine.json"]
+    assert (hooks / "agent-team.json").resolve() == copilot_hooks.pane_hooks_file().resolve()
+
+
 def test_off_keeps_todays_link_and_the_switch_goes_both_ways(gate, sandbox) -> None:
     convenience_wiring.set_feature("copilot.hooks", False, port_file=str(sandbox["port"]))
     assert not convenience_wiring.pane_carries_hooks("copilot")
