@@ -1396,9 +1396,10 @@ async def test_terminal_create_codex_carries_hook_trust_inline_and_leaves_the_us
         monkeypatch.setattr(app, "attribution", FakeAttribution())
         monkeypatch.setattr(app, "codex_home_manager", manager)
         monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+        port_file = str(tmp_path / "Agent-Team" / "backend-port")
         if not allowed:
-            convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(tmp_path / "port"))
-        convenience_wiring.carry_codex_hook_trust()
+            convenience_wiring.set_feature("codex.hook-trust", False, port_file=port_file)
+        convenience_wiring.carry_codex_hook_trust(port_file)
         before = _tree(real)
         session = _session()
 
@@ -1438,5 +1439,41 @@ async def test_terminal_create_codex_carries_hook_trust_inline_and_leaves_the_us
                 f"{home / 'hooks.json'}:stop:0:0": {"trusted_hash": "sha256:aaaa"},
             }}}
         assert Path(created[1]["env"]["CODEX_HOME"]) == resumed_home
+    finally:
+        convenience_wiring.install(None)
+
+
+@pytest.mark.asyncio
+async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A dev backend never carries hook trust inline: it seeds config.toml as
+    in Phase 2, so the installed build's rows are never retracted by it."""
+    from agent_team_backend import convenience, convenience_wiring
+    from agent_team_backend.db import Database
+
+    gate = convenience.ConvenienceGate(Database(tmp_path / "navide.db"), backup_root=tmp_path / "backups")
+    convenience_wiring.install(gate)
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    try:
+        manager, real = _codex_sandbox(tmp_path)
+        monkeypatch.setattr(app, "attribution", FakeAttribution())
+        monkeypatch.setattr(app, "codex_home_manager", manager)
+        monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+        assert convenience_wiring.carry_codex_hook_trust(str(tmp_path / "Agent-Team-dev" / "backend-port")) is False
+        session = _session()
+
+        await app.handle_message(session, {
+            "id": "m-dev", "type": "terminal.create",
+            "payload": {
+                "pane_id": "pane-dev", "agent_key": "codex", "command": ["/bin/zsh", "-ilc", "codex"],
+                "cwd": "/ws", "metadata": {"workspace_path": "/ws", "session_home_id": "home-dev"},
+            },
+        })
+
+        spawn = session.terminals.created[0]  # type: ignore[attr-defined]
+        home = Path(spawn["env"]["CODEX_HOME"])
+        assert not any(o.startswith("hooks.state=") for o in _overrides(spawn["command"]))
+        assert f"{home / 'hooks.json'}:stop:0:0" in (real / "config.toml").read_text(encoding="utf-8")
     finally:
         convenience_wiring.install(None)
