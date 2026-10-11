@@ -1008,6 +1008,32 @@ def test_a_skills_manifest_linked_outside_is_refused_for_safety_and_never_logged
     assert gate.state("cursor.project-skills") == ("allowed", "default")
 
 
+def test_a_skills_manifest_hard_linked_elsewhere_is_refused_for_safety_and_never_logged(
+    gate, tmp_path, monkeypatch
+) -> None:
+    """R4-L2: a hard-linked manifest is someone else's file under the
+    manifest's name: never written, its lines never logged, the user told."""
+    import os
+
+    from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
+
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export SECRET_PATH=1\n", encoding="utf-8")
+    repo = _cursor_repo(tmp_path)
+    target = repo / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    os.link(victim, target / skills_wiring.MANIFEST_FILE)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is False
+
+    assert victim.read_text(encoding="utf-8") == "export SECRET_PATH=1\n"
+    assert _unsafe_rows(gate, "cursor.project-skills") == [(str(target), True)]
+    assert not [e for e in gate.history() if e["action"] == "removed-entry"]
+
+
 def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link(
     gate, homes, tmp_path, monkeypatch
 ) -> None:

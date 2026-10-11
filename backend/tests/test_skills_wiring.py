@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -1115,3 +1116,17 @@ def test_a_git_exclude_linked_outside_the_workspace_is_never_written(tmp_path: P
     skills_wiring.remove_project_dir(cwd / ".cursor" / "skills", root=cwd)
 
     assert victim.read_text(encoding="utf-8") == "export A=1\n/.cursor/skills/\n"
+
+
+def test_a_manifest_hard_linked_to_another_file_is_not_safe(tmp_path: Path) -> None:
+    """R4-L2: a manifest with a second name is never read or written."""
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export SECRET=1\n", encoding="utf-8")
+    target = tmp_path / "repo" / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    os.link(victim, target / skills_wiring.MANIFEST_FILE)
+
+    assert skills_wiring.manifest_safe(target) is False
+    assert skills_wiring.has_manifest(target) is False
+

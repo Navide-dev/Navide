@@ -463,16 +463,22 @@ def manifest_safe(target: Path) -> bool:
 
 def has_manifest(target: Path) -> bool:
     """Whether ``target`` holds a manifest Navide could have written: a
-    regular file, never a link."""
+    regular file with one name, never a link."""
     try:
-        return stat.S_ISREG((target / MANIFEST_FILE).lstat().st_mode)
+        return _sole_regular((target / MANIFEST_FILE).lstat())
     except OSError:
         return False
 
 
+def _sole_regular(info: os.stat_result) -> bool:
+    """A regular file with one name: not a link, not a hard link to a file
+    that lives under another name somewhere else."""
+    return stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+
+
 def _regular_or_absent(path: Path) -> bool:
     try:
-        return stat.S_ISREG(path.lstat().st_mode)
+        return _sole_regular(path.lstat())
     except FileNotFoundError:
         return True
     except OSError:
@@ -489,7 +495,7 @@ def _read_regular(path: Path) -> str | None:
     except FileNotFoundError:
         return None
     with os.fdopen(fd, "rb") as handle:
-        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+        if not _sole_regular(os.fstat(handle.fileno())):
             raise OSError(f"{path} is not a regular file")
         return handle.read().decode("utf-8")
 
