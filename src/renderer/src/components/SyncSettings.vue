@@ -720,7 +720,7 @@ onBeforeUnmount(() => offResult?.())
       </div>
     </div>
 
-    <SyncVersionHistory :backend="props.backend" />
+    <SyncVersionHistory v-if="connected" :backend="props.backend" />
 
     <p v-if="error" class="err-msg">{{ error }}</p>
   </SettingsSection>
