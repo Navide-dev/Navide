@@ -32,6 +32,7 @@ MAGIC = b"NAVIDE-TRUST-1\n"
 #: the record's place, nor the other way round.
 AAD_RECORD = b"navide/device-trust/v1"
 AAD_JOURNAL = b"navide/device-trust-journal/v1"
+AAD_MIRROR = b"navide/device-trust-mirror/v1"
 
 _KEY_LEN = 32
 _NONCE_LEN = 12

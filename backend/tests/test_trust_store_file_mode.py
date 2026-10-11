@@ -340,3 +340,47 @@ def test_a_sealed_journal_that_does_not_open_is_set_aside():
     assert not trust_store.has_seen_message("k-1")
     assert "set aside" in trust_store.journal_problem()
     assert trust_store.locked_reason() == ""
+
+
+def test_coming_back_after_a_downgrade_merges_rather_than_replaces(tmp_path, monkeypatch):
+    """Review F2: 20 pins and blocks on d1 and d2 here; the downgrade copy held
+    only what fit — 14 pins and d1. The earlier build forgot two devices and
+    blocked d4. Taking its copy whole lost the pins it never saw and the block
+    on d2. A three-way merge against what was last mirrored keeps both sides:
+    its forgets and its block, our pins it never saw, and every block."""
+    from agent_team_backend.credential_vault import CredentialVault
+    from tests.test_trust_store_capacity import _Security
+
+    monkeypatch.setattr(app, "credential_vault", CredentialVault(
+        root=tmp_path / "r", real_home=tmp_path / "h", security_runner=_Security(), platform="darwin"))
+    trust_store.load()
+    for index in range(20):
+        _pin(index)
+    trust_store.note_blocked(_device(1), "")
+    trust_store.note_blocked(_device(2), "")
+    trust_store.note_encrypted_peer(_device(3))
+    mirrored = _keychain_doc()
+    seen = set(mirrored["pins"])
+    assert 0 < len(seen) < 20
+    never_mirrored = [_device(i) for i in range(20) if _device(i) not in seen]
+
+    # The earlier build, on what it could read: forgets two devices, blocks d4.
+    earlier = json.loads(json.dumps(mirrored))
+    forgotten = sorted(seen - {_device(1), _device(2), _device(3)})[:2]
+    for device_id in forgotten:
+        earlier["pins"].pop(device_id)
+    earlier["blocked"] = list(earlier.get("blocked") or []) + [{"deviceId": _device(4), "memberId": ""}]
+    app.credential_vault.write_app_secret(trust_store.SECRET_NAME, json.dumps(earlier, separators=(",", ":")))
+    _restart()
+
+    for device_id in forgotten:
+        assert trust_store.pin_for(device_id) is None, "its forget stands"
+    for device_id in never_mirrored:
+        assert trust_store.pin_for(device_id) is not None, "a pin it never saw is kept"
+    for device_id in (_device(1), _device(2), _device(4)):
+        assert trust_store.is_blocked_locally(device_id=device_id, member_id=""), device_id
+    assert trust_store.is_encrypted_peer(_device(3))
+    # And the merge is what the file holds now.
+    _restart()
+    assert trust_store.is_blocked_locally(device_id=_device(2), member_id="")
+    assert all(trust_store.pin_for(d) is not None for d in never_mirrored)

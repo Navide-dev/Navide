@@ -97,6 +97,10 @@ RECORD_FILENAME = "device-trust.json.sealed"
 #: that says so is never read back from the Keychain item, so the item an
 #: earlier build left cannot roll the record back.
 STORE_FILE = "file-v1"
+#: What the Keychain item held when this build last wrote it, sealed like the
+#: record: the common ancestor when an earlier build has changed that item
+#: since (review F2), so coming back merges rather than replaces.
+MIRROR_FILENAME = "device-trust-mirror.json.sealed"
 #: Whether a record still in the Keychain moves into the file. A hotfix switch,
 #: not a setting: off, a new record stays in the Keychain as before.
 FILE_STORE = True
@@ -369,6 +373,68 @@ def _record_path() -> Path:
     return app_data_dir() / JOURNAL_DIRNAME / RECORD_FILENAME
 
 
+def _mirror_base_path() -> Path:
+    return app_data_dir() / JOURNAL_DIRNAME / MIRROR_FILENAME
+
+
+def _remember_mirror_locked(text: str) -> None:
+    """Keep *text* as what the Keychain item now holds. Never raises: a copy
+    that is missing, or does not match the marker, only means the next merge
+    has no common ancestor (see ``_read_mirror_base``)."""
+    try:
+        durable_secret_files.write(
+            _mirror_base_path(), trust_file.seal(_record_key, text.encode("utf-8"), trust_file.AAD_MIRROR)
+        )
+    except Exception as err:  # noqa: BLE001 - a merge aid, never a failure
+        log.warning("the last downgrade copy of the device trust record was not kept (%s)", err)
+
+
+def _read_mirror_base(digest: Any) -> dict[str, Any] | None:
+    """What this build last wrote to the Keychain item, or None when that is
+    not known — never one that differs from what the marker says it wrote."""
+    try:
+        path = _mirror_base_path()
+        if path.is_symlink():
+            return None
+        text = trust_file.unseal(_record_key, durable_secret_files.read(path), trust_file.AAD_MIRROR).decode("utf-8")
+    except Exception:  # noqa: BLE001 - unknown ancestor
+        return None
+    return _parse(text) if _digest(text) == digest else None
+
+
+def _merge_returned(ours: dict[str, Any], theirs: dict[str, Any], base: dict[str, Any] | None) -> dict[str, Any]:
+    """The record after a downgrade and back (review F2). *theirs* is what the
+    earlier build left in the Keychain item, *base* what this build last put
+    there. An entry the earlier build changed or removed takes its value; one
+    it did not touch keeps ours — which is how a pin it never saw, because the
+    item could not hold it, survives. Blocks and encrypted peers are unions and
+    policy sequences maxima: each only ever fails closed. Without a known base,
+    pins and owned members are taken whole from theirs, as before."""
+    merged = dict(ours)
+    for key in ("ownMembers", "pins"):
+        mine, other = ours.get(key) or {}, theirs.get(key) or {}
+        if base is None:
+            merged[key] = dict(other)
+            continue
+        old = base.get(key) or {}
+        result = {}
+        for entry in {**mine, **other, **old}:
+            side = other if other.get(entry) != old.get(entry) else mine
+            if entry in side:
+                result[entry] = side[entry]
+        merged[key] = result
+    seqs = dict(ours.get("policySeqs") or {})
+    for device_id, seq in (theirs.get("policySeqs") or {}).items():
+        if isinstance(seq, int) and seq > seqs.get(device_id, -1):
+            seqs[device_id] = seq
+    merged["policySeqs"] = seqs
+    for key in ("blocked", "encryptedPeers"):
+        union = list(ours.get(key) or [])
+        union += [entry for entry in theirs.get(key) or [] if entry not in union]
+        merged[key] = union
+    return merged
+
+
 def _write_record_locked(core: str) -> None:
     """Seal *core* into the record file. Raises what the writer raises."""
     durable_secret_files.write(
@@ -387,6 +453,7 @@ def _mirror_locked(core: str) -> None:
     try:
         if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
             return
+        _remember_mirror_locked(core)
         cloud_secrets.write(_vault(), SECRET_NAME, core)
         _last_mirror = core
         marker = _database().kv_get(INITIALISED_KEY)
@@ -431,6 +498,7 @@ def _mark_file_store_locked(marker: Any, mirror: str | None) -> None:
     base = dict(marker) if isinstance(marker, dict) else {"at": int(time.time())}
     base["store"] = STORE_FILE
     if mirror:
+        _remember_mirror_locked(mirror)
         base["mirror"] = _digest(mirror)
     _database().kv_set(INITIALISED_KEY, base, now=int(time.time()))
 
@@ -752,6 +820,7 @@ def _load_locked() -> dict[str, Any]:
     if in_file:
         marker["store"] = STORE_FILE
         if _last_mirror:
+            _remember_mirror_locked(_last_mirror)
             marker["mirror"] = _digest(_last_mirror)
     database.kv_set(INITIALISED_KEY, marker, now=int(time.time()))
     return _state
@@ -808,12 +877,18 @@ def _load_file_locked(marker: dict[str, Any]) -> dict[str, Any]:
     if returned is not None:
         # The Keychain item changed since this build last wrote it, so an
         # earlier build has been running on it — a downgrade and back. What it
-        # decided there is newer than the file; the file takes it.
-        log.warning("the device trust record was changed by an earlier build; taking its copy")
-        core = json.dumps(_core_of(returned), ensure_ascii=False, separators=(",", ":"))
+        # decided there is newer than the file, but it could only decide on
+        # what fit in the item: merge, against what this build last put there.
+        base = _read_mirror_base(marker.get("mirror"))
+        log.warning(
+            "the device trust record was changed by an earlier build; merging its copy%s",
+            "" if base is not None else " (no common ancestor: its pins are taken whole)",
+        )
+        merged = _merge_returned(_core_of(parsed), _core_of(returned), base)
+        core = json.dumps(merged, ensure_ascii=False, separators=(",", ":"))
         _write_record_locked(core)
         _mark_file_store_locked(_database().kv_get(INITIALISED_KEY), mirror)
-        parsed, raw = returned, core
+        parsed, raw = merged, core
     _adopt_journal(parsed, raw)
     _remember_committed(parsed)
     _state = parsed
@@ -2145,6 +2220,7 @@ def rebuild_locked_store() -> dict[str, Any]:
         cloud_secrets.write(_vault(), SECRET_NAME, None)
         _journal_path().unlink(missing_ok=True)
         _record_path().unlink(missing_ok=True)
+        _mirror_base_path().unlink(missing_ok=True)
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)
