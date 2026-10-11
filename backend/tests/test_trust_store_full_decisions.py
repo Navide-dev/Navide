@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from agent_team_backend import app, server_link, trust_store
+from agent_team_backend import app, device_trust, server_link, trust_store
 from agent_team_backend.credential_vault import CredentialVault
 from tests.test_trust_store_capacity import KEY, _device, _Security
 
@@ -111,40 +111,56 @@ def policy(monkeypatch):
     confirm_token._reset_for_test()
 
 
-async def test_a_block_that_cannot_be_kept_locally_is_taken_back_and_reported(policy, monkeypatch):
+def _full_record(monkeypatch):
+    """The real note_blocked, with a record that has no room left."""
+    from agent_team_backend import cloud_secrets
+
+    monkeypatch.setattr(cloud_secrets, "fits", lambda *_a, **_k: False)
+
+
+async def test_a_block_that_cannot_be_kept_locally_stays_in_force(policy, monkeypatch):
+    """Fail closed: the server's block stands and this machine refuses the
+    device too. Taking the server's block back when the local copy could not
+    be saved left the device trusted — the opposite of what was asked for."""
     from tests.test_ws_handlers_trust import _call
 
     trust_store.load()
-
-    def full(*_a, **_k):
-        raise trust_store.TrustStoreFull("the pairing record is full")
-
-    monkeypatch.setattr(trust_store, "note_blocked", full)
+    _full_record(monkeypatch)
     reply = await _call("p2p.trust.block", {"deviceId": "dev-y"})
 
     assert reply["ok"] is False
     assert reply["error"]["code"] == server_link.TRUST_STORE_FULL
-    assert not [e for e in policy.policy.get("blocked", []) if e.get("deviceId") == "dev-y"]
+    assert [e for e in policy.policy["blocked"] if e.get("deviceId") == "dev-y"]
+    assert len(policy.writes) == 1
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-y")
 
 
-async def test_a_block_whose_rollback_also_fails_says_the_two_disagree(policy, monkeypatch):
+async def test_a_block_whose_local_save_failed_otherwise_says_so(policy, monkeypatch):
+    from agent_team_backend import cloud_secrets
+    from agent_team_backend.credential_vault import CredentialVaultError
     from tests.test_ws_handlers_trust import _call
 
     trust_store.load()
 
-    def full(*_a, **_k):
-        raise trust_store.TrustStoreFull("the pairing record is full")
+    def refuse(*_a, **_k):
+        raise CredentialVaultError("keychain write failed")
 
-    monkeypatch.setattr(trust_store, "note_blocked", full)
-    real = policy.set_policy
-
-    async def once_then_offline(p):
-        if policy.writes:
-            return {"ok": False, "error": {"code": "LINK_OFFLINE", "message": "gone"}}
-        return await real(p)
-
-    monkeypatch.setattr(server_link, "set_policy", once_then_offline)
+    monkeypatch.setattr(cloud_secrets, "write", refuse)
     reply = await _call("p2p.trust.block", {"deviceId": "dev-y"})
 
     assert reply["ok"] is False
     assert reply["error"]["code"] == "P2P_BLOCK_NOT_SAVED_LOCALLY"
+    assert len(policy.writes) == 1
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-y")
+
+
+def test_a_block_that_could_not_be_saved_holds_until_restart(monkeypatch):
+    trust_store.load()
+    _full_record(monkeypatch)
+    with pytest.raises(trust_store.TrustStoreFull):
+        trust_store.note_blocked("dev-z", "m-z")
+    assert trust_store.is_blocked_locally(device_id="dev-z", member_id="")
+    assert trust_store.is_blocked_locally(device_id="", member_id="m-z")
+    # Lifting it is a decision too, and lifts the unsaved copy with it.
+    trust_store.note_unblocked("dev-z", "m-z")
+    assert not trust_store.is_blocked_locally(device_id="dev-z", member_id="m-z")

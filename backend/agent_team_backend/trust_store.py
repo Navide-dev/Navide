@@ -997,6 +997,11 @@ def approve_device(device_id: str) -> bool:
         return True
 
 
+#: Blocks that could not be saved, held for the life of the process so this
+#: machine refuses the device anyway. See ``note_blocked``.
+_unsaved_blocks: list[dict[str, str]] = []
+
+
 def note_blocked(device_id: str, member_id: str) -> bool:
     """Keep a local copy of a block. Blocking; call off the event loop.
 
@@ -1019,7 +1024,15 @@ def note_blocked(device_id: str, member_id: str) -> bool:
             if member_id and not device_id and entry.get("memberId") == member_id:
                 return False
         blocked.append({"deviceId": device_id, "memberId": member_id})
-        _save_locked(state)
+        try:
+            _save_locked(state)
+        except Exception:
+            # Fail closed: a block that could not be saved still holds until
+            # the restart. _save_locked took it back out of the state, as it
+            # does every decision it could not store, and for a block that is
+            # the unsafe direction — the device would be trusted again.
+            _unsaved_blocks.append({"deviceId": device_id, "memberId": member_id})
+            raise
         return True
 
 
@@ -1033,21 +1046,20 @@ def note_unblocked(device_id: str, member_id: str) -> bool:
     with _lock:
         device_id = str(device_id or "")
         member_id = str(member_id or "")
+
+        def lifted(entry: Any) -> bool:
+            return isinstance(entry, dict) and bool(
+                (device_id and entry.get("deviceId") == device_id)
+                or (member_id and entry.get("memberId") == member_id)
+            )
+
+        unsaved = len(_unsaved_blocks)
+        _unsaved_blocks[:] = [entry for entry in _unsaved_blocks if not lifted(entry)]
         state = _load_locked()
         blocked = state.setdefault("blocked", [])
-        kept = [
-            entry
-            for entry in blocked
-            if not (
-                isinstance(entry, dict)
-                and (
-                    (device_id and entry.get("deviceId") == device_id)
-                    or (member_id and entry.get("memberId") == member_id)
-                )
-            )
-        ]
+        kept = [entry for entry in blocked if not lifted(entry)]
         if len(kept) == len(blocked):
-            return False
+            return len(_unsaved_blocks) != unsaved
         state["blocked"] = kept
         _save_locked(state)
         return True
@@ -1064,7 +1076,7 @@ def is_blocked_locally(*, device_id: str, member_id: str) -> bool:
     try:
         with _lock:
             state = _try_load() if _state is None else _state
-            for entry in (state or {}).get("blocked") or []:
+            for entry in [*((state or {}).get("blocked") or []), *_unsaved_blocks]:
                 if not isinstance(entry, dict):
                     continue
                 if entry.get("deviceId") and entry["deviceId"] == device_id:
@@ -1823,6 +1835,7 @@ def _reset_for_test() -> None:
         _seen_pending.clear()
         _seen_last_flush = 0.0
         _disarm_seen_timer_locked()
+        _unsaved_blocks.clear()
         _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.

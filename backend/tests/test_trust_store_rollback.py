@@ -46,10 +46,13 @@ def test_a_pin_that_cannot_be_saved_is_not_trusted(saves_fail):
     assert trust_store.pin_for(DEVICE) is None
 
 
-def test_a_block_that_cannot_be_saved_is_not_reported_as_held(saves_fail):
+def test_a_block_that_cannot_be_saved_still_holds_until_restart(saves_fail):
+    """The one decision that is not taken back: a block that failed to save
+    still refuses the device for the life of the process (fail closed). The
+    save still fails loudly, so the caller can say the copy was not kept."""
     with pytest.raises(CloudSecretError):
         trust_store.note_blocked("dev-known", "m1")
-    assert not trust_store.is_blocked_locally(device_id="dev-known", member_id="m1")
+    assert trust_store.is_blocked_locally(device_id="dev-known", member_id="m1")
 
 
 def test_a_policy_sequence_that_cannot_be_saved_is_not_spent(saves_fail):
