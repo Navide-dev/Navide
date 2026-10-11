@@ -449,6 +449,37 @@ def test_scan_time_stays_near_linear(name: str) -> None:
     assert time.perf_counter() - started < 3.0, name
 
 
+_BACKSLASH_RUNS = {
+    "bare run": lambda n: "x " + "\\" * n,
+    "quoted, never closed": lambda n: 'password: "' + "\\" * n + "x",
+    "entity quote, never closed": lambda n: "password: &quot;" + "\\" * n,
+    "unquoted value": lambda n: "token=" + "\\" * n,
+}
+
+
+def _best_of(runs: int, text: str) -> float:
+    import time
+
+    best = float("inf")
+    for _ in range(runs):
+        started = time.perf_counter()
+        share_scan.scan(text, kind="plan")
+        best = min(best, time.perf_counter() - started)
+    return best
+
+
+@pytest.mark.parametrize("name", sorted(_BACKSLASH_RUNS))
+def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
+    """B7-1: the doubled-backslash quote branches (B5-1) could start at every
+    backslash of a run, so a run alone scanned in quadratic time (10 000 took
+    1.1 s, 100 000 over 20 s). Ten times the input must cost about ten times
+    the time: a quadratic shows up as a hundredfold."""
+    make = _BACKSLASH_RUNS[name]
+    small = _best_of(3, make(10_000))
+    large = _best_of(3, make(100_000))
+    assert large / max(small, 1e-4) < 30, (name, small, large)
+
+
 @pytest.mark.parametrize(
     "text",
     [

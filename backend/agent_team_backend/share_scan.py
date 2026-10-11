@@ -99,9 +99,10 @@ _REDACTED = "[redacted]"
 #: as backslash-u0022, and escaped once more when the text itself held a
 #: backslashed quote), and as an HTML entity (escaped visible markup, also
 #: after backslashes). Longest first, so a value ends at the very spelling
-#: it began with.
+#: it began with. The doubled-backslash branches start only at the first
+#: backslash of a run: tried at every one, a long run is quadratic (B7-1).
 _QUOTE = (
-    r"""(?:(?:\\\\)+\\"|(?:\\\\)+\\&quot;|\\u0022|\\&quot;|\\"|\\'|&quot;|&\#0*34;|&\#x0*22;"""
+    r"""(?:(?<!\\)(?:\\\\)+\\"|(?<!\\)(?:\\\\)+\\&quot;|\\u0022|\\&quot;|\\"|\\'|&quot;|&\#0*34;|&\#x0*22;"""
     r"""|&\#0*39;|&\#x0*27;|&apos;|"|')"""
 )
 #: Suffixes that make a credential word name something that is not a secret:
