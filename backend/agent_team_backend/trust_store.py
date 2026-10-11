@@ -64,7 +64,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from agent_team_backend import cloud_secrets, device_signing
+from agent_team_backend import cloud_secrets, device_signing, trust_file
 from agent_team_backend.applog import app_data_dir, in_data_dir
 from agent_team_backend.osplat import durable_secret_files
 
@@ -88,6 +88,17 @@ JOURNAL_FILENAME = "device-trust-journal.json"
 #: depend on how the rest of the data dir was created.
 JOURNAL_DIRNAME = "device-trust"
 _JOURNAL_KEYS = ("notices", "seenMessages")
+#: The record itself, sealed with a key the Keychain keeps (plan 797ad7, B1).
+#: It outgrew the one Keychain line ``security -i`` writes, which capped
+#: pairing at a handful of devices; a file has no such line.
+RECORD_FILENAME = "device-trust.json.sealed"
+#: The marker's ``store`` once the record lives in the sealed file. A marker
+#: that says so is never read back from the Keychain item, so the item an
+#: earlier build left cannot roll the record back.
+STORE_FILE = "file-v1"
+#: Whether a record still in the Keychain moves into the file. A hotfix switch,
+#: not a setting: off, a new record stays in the Keychain as before.
+FILE_STORE = True
 
 STATE_VERSION = 1
 
@@ -327,6 +338,15 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
     return doc
 
 
+#: Where the record lives in this process: "file", "keychain", or None before
+#: the first load. Decided by the marker; see ``_load_locked``.
+_store_mode: str | None = None
+#: The key the sealed record opens with, once read.
+_record_key: bytes | None = None
+#: The record as last written to the Keychain item in file mode, so it is
+#: rewritten only when it changed (plan 797ad7, B3). See ``_mirror_locked``.
+_last_mirror: str | None = None
+
 #: What was last written to (or read from) each store, so a save that changed
 #: only the journal does not rewrite the Keychain item, and vice versa.
 _last_core: str | None = None
@@ -342,6 +362,64 @@ def _core_of(state: dict[str, Any]) -> dict[str, Any]:
 
 def _journal_path() -> Path:
     return app_data_dir() / JOURNAL_DIRNAME / JOURNAL_FILENAME
+
+
+def _record_path() -> Path:
+    return app_data_dir() / JOURNAL_DIRNAME / RECORD_FILENAME
+
+
+def _write_record_locked(core: str) -> None:
+    """Seal *core* into the record file. Raises what the writer raises."""
+    durable_secret_files.write(
+        _record_path(), trust_file.seal(_record_key, core.encode("utf-8"), trust_file.AAD_RECORD)
+    )
+
+
+def _mirror_locked(core: str) -> None:
+    """Keep the Keychain item an earlier build reads current, while it fits
+    (plan 797ad7, B3: one release of dual writes, so a downgrade sees the
+    pairings and blocks made since the move). Never raises: the file is the
+    record, and this copy is only for going back."""
+    global _last_mirror
+    if core == _last_mirror:
+        return
+    try:
+        if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
+            return
+        cloud_secrets.write(_vault(), SECRET_NAME, core)
+        _last_mirror = core
+    except Exception as err:  # noqa: BLE001 - a downgrade copy, never a failure
+        log.warning("the downgrade copy of the device trust record was not updated (%s)", err)
+
+
+def _read_mirror() -> str | None:
+    try:
+        return _vault().read_app_secret(SECRET_NAME)
+    except Exception:  # noqa: BLE001 - unknown means "rewrite on the next save"
+        return None
+
+
+def _enter_file_store_locked(marker: Any) -> bool:
+    """Move this process onto the sealed file, making the key if there is none.
+    False, and the Keychain item stays the record, when that cannot be done."""
+    global _store_mode, _record_key
+    if not FILE_STORE:
+        _store_mode = "keychain"
+        return False
+    try:
+        _record_key = trust_file.key(create=True)
+    except Exception as err:  # noqa: BLE001 - stay where the record already is
+        log.warning("the device trust record stays in the Keychain for now (%s)", err)
+        _store_mode = "keychain"
+        return False
+    _store_mode = "file"
+    return True
+
+
+def _mark_file_store_locked(marker: Any) -> None:
+    base = dict(marker) if isinstance(marker, dict) else {"at": int(time.time())}
+    base["store"] = STORE_FILE
+    _database().kv_set(INITIALISED_KEY, base, now=int(time.time()))
 
 
 def _read_journal_bytes(path: Path) -> bytes:
@@ -487,7 +565,7 @@ def _carry_unsaved_blocks_locked(state: dict[str, Any]) -> list[dict[str, str]]:
             continue
         blocked.append(dict(entry))
         core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
-        if cloud_secrets.fits(_vault(), SECRET_NAME, core):
+        if _store_mode == "file" or cloud_secrets.fits(_vault(), SECRET_NAME, core):
             carried.append(entry)
         else:
             blocked.pop()
@@ -502,7 +580,12 @@ def _write(state: dict[str, Any]) -> None:
     # a state document that parses as far as "{" and locks this machine out.
     core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
     try:
-        if core != _last_core:
+        if _store_mode == "file":
+            if core != _last_core:
+                _write_record_locked(core)
+                _last_core = core
+            _mirror_locked(core)
+        elif core != _last_core:
             cloud_secrets.write(_vault(), SECRET_NAME, core)
             _last_core = core
         _committed_core = json.loads(core)
@@ -555,7 +638,8 @@ def _load_locked() -> dict[str, Any]:
     pinned the process until it restarted — with the only exit on that screen
     being one that erases a record nothing was ever wrong with.
     """
-    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
+    global _state, _transient_reason, _transient_failures
+    global _store_mode, _last_core, _last_mirror
     if _state is not None:
         return _state
     if _locked_reason:
@@ -563,71 +647,41 @@ def _load_locked() -> dict[str, Any]:
 
     database = _database()
     marker = database.kv_get(INITIALISED_KEY)
+    if isinstance(marker, dict) and marker.get("store") == STORE_FILE:
+        return _load_file_locked(marker)
     try:
         raw = _vault().read_app_secret(SECRET_NAME)
     except Exception as err:  # noqa: BLE001 - a vault that will not answer is a lock
         if marker is not None:
-            # Not latched on the first one. A locked keychain, a dismissed
-            # authorisation dialog and a `security` timeout all land here, and
-            # none of them says anything about the record — while latching sent
-            # the person to the one screen that offers to erase it.
-            _transient_failures += 1
-            reason = f"the device trust store could not be read ({err})"
-            if _transient_failures >= TRANSIENT_RETRY_LIMIT:
-                _transient_reason = ""
-                _locked_reason = reason
-            else:
-                _transient_reason = reason
-            raise TrustStoreLocked(reason) from err
+            _note_unreadable_locked(err)
         raw = None
     _transient_failures = 0
     _transient_reason = ""
     parsed = _parse(raw)
 
     if marker is not None:
-        if parsed is None and raw:
-            # Only a record that is not JSON at all is "cut off": a whole record
-            # of another version or shape may be perfectly good, and telling
-            # its owner to pair again would have them erase it.
-            try:
-                whole = json.loads(raw)
-            except ValueError:
-                whole = _NOT_JSON
-            if whole is _NOT_JSON:
-                _damaged = True
-                _locked_reason = (
-                    "the cross-device pairing record on this machine is damaged: it was "
-                    f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
-                    "so none of it can be trusted. Pair your devices again — start over "
-                    "here, then pair each other device from both ends"
-                    + _provenance(marker)
-                )
-            elif isinstance(whole, dict) and whole.get("v") != STATE_VERSION:
-                _locked_reason = (
-                    "the cross-device trust record on this machine was written by a "
-                    f"different version of Navide (record version {whole.get('v')!r}, this "
-                    f"build reads {STATE_VERSION}). It is left as it is: run the version "
-                    "that wrote it rather than starting over"
-                    + _provenance(marker)
-                )
-            else:
-                _locked_reason = (
-                    "the cross-device trust record on this machine is complete but not in "
-                    "the shape this build expects. It is left as it is; do not start over "
-                    "until it is clear why"
-                    + _provenance(marker)
-                )
-            raise TrustStoreLocked(_locked_reason)
         if parsed is None:
-            _locked_reason = (
-                "this machine has a cross-device trust record but its contents are "
-                "missing or unreadable"
-                + _provenance(marker)
-            )
-            raise TrustStoreLocked(_locked_reason)
+            _refuse_unparsed_locked(raw, marker)
         _adopt_journal(parsed, raw)
         _remember_committed(parsed)
         _state = parsed
+        _store_mode = "keychain"
+        # A record from before the move: into the sealed file now, and the
+        # Keychain item stays as the downgrade copy (see _mirror_locked).
+        if _enter_file_store_locked(marker):
+            core = json.dumps(_core_of(parsed), ensure_ascii=False, separators=(",", ":"))
+            try:
+                _write_record_locked(core)
+                _mark_file_store_locked(marker)
+            except Exception as err:  # noqa: BLE001 - stays in the Keychain, tries again
+                log.warning("the device trust record could not move into its file yet (%s)", err)
+                _store_mode = "keychain"
+            else:
+                _last_core = core
+                _last_mirror = raw
+                # Notices and the ledger an older record still carried are now
+                # only in memory: the file holds the core alone.
+                _write_journal_locked(parsed)
         return _state
 
     # No marker: a first start. An existing, readable document is adopted rather
@@ -643,16 +697,133 @@ def _load_locked() -> dict[str, Any]:
     # Read even for a blank start: the journal outlives the record, and writing
     # the blank state without reading it first replaced it with nothing.
     _adopt_journal(_state, raw if parsed is not None else None)
+    in_file = _enter_file_store_locked(None)
+    if in_file:
+        _last_core = None
+        _last_mirror = raw if parsed is not None else None
     _write(_state)
-    database.kv_set(
-        INITIALISED_KEY,
+    marker = {
         # See the module note: this is read back into the lock message so the
         # person looking at a stopped link is told what created the record
         # rather than having to remember. It decides nothing.
-        {"at": int(time.time()), "by": Path(sys.argv[0] or "?").name},
-        now=int(time.time()),
-    )
+        "at": int(time.time()), "by": Path(sys.argv[0] or "?").name,
+    }
+    if in_file:
+        marker["store"] = STORE_FILE
+    database.kv_set(INITIALISED_KEY, marker, now=int(time.time()))
     return _state
+
+
+def _load_file_locked(marker: dict[str, Any]) -> dict[str, Any]:
+    """Read the sealed record. Caller holds ``_lock``. The same two kinds of
+    failure as the Keychain item: a key or file that could not be read at all
+    is retried; one that is missing, or does not open, is latched."""
+    global _state, _locked_reason, _damaged, _transient_reason, _transient_failures
+    global _store_mode, _record_key, _last_mirror
+    path = _record_path()
+    try:
+        key = trust_file.key(create=False)
+        blob = None if key is None or path.is_symlink() else durable_secret_files.read(path)
+    except FileNotFoundError:
+        key, blob = key, None
+    except trust_file.SealError:
+        key, blob = None, None
+    except Exception as err:  # noqa: BLE001 - the same as a Keychain that will not answer
+        _note_unreadable_locked(err)
+    _transient_failures = 0
+    _transient_reason = ""
+    if key is None:
+        _damaged = True
+        _locked_reason = (
+            "the key that opens this machine's cross-device pairing record is missing, "
+            "so none of the record can be read. Pair your devices again — start over "
+            "here, then pair each other device from both ends"
+            + _provenance(marker)
+        )
+        raise TrustStoreLocked(_locked_reason)
+    if blob is None:
+        _refuse_unparsed_locked(None, marker)
+    try:
+        raw = trust_file.unseal(key, blob, trust_file.AAD_RECORD).decode("utf-8")
+    except (trust_file.SealError, UnicodeDecodeError):
+        _damaged = True
+        _locked_reason = (
+            "the cross-device pairing record on this machine is damaged: it does not "
+            "open with its key, so none of it can be trusted. Pair your devices again "
+            "— start over here, then pair each other device from both ends"
+            + _provenance(marker)
+        )
+        raise TrustStoreLocked(_locked_reason) from None
+    parsed = _parse(raw)
+    if parsed is None:
+        _refuse_unparsed_locked(raw, marker)
+    _adopt_journal(parsed, raw)
+    _remember_committed(parsed)
+    _store_mode = "file"
+    _record_key = key
+    _last_mirror = _read_mirror()
+    _state = parsed
+    return _state
+
+
+def _note_unreadable_locked(err: Exception) -> None:
+    """A store that could not be read at all: retried, not latched at first. A
+    locked keychain, a dismissed authorisation dialog and a `security` timeout
+    all land here, and none of them says anything about the record — while
+    latching sent the person to the one screen that offers to erase it."""
+    global _locked_reason, _transient_reason, _transient_failures
+    _transient_failures += 1
+    reason = f"the device trust store could not be read ({err})"
+    if _transient_failures >= TRANSIENT_RETRY_LIMIT:
+        _transient_reason = ""
+        _locked_reason = reason
+    else:
+        _transient_reason = reason
+    raise TrustStoreLocked(reason) from err
+
+
+def _refuse_unparsed_locked(raw: str | None, marker: Any) -> None:
+    """Latch the lock for a record that is there and is not a record."""
+    global _locked_reason, _damaged
+    if raw:
+        # Only a record that is not JSON at all is "cut off": a whole record
+        # of another version or shape may be perfectly good, and telling
+        # its owner to pair again would have them erase it.
+        try:
+            whole = json.loads(raw)
+        except ValueError:
+            whole = _NOT_JSON
+        if whole is _NOT_JSON:
+            _damaged = True
+            _locked_reason = (
+                "the cross-device pairing record on this machine is damaged: it was "
+                f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
+                "so none of it can be trusted. Pair your devices again — start over "
+                "here, then pair each other device from both ends"
+                + _provenance(marker)
+            )
+        elif isinstance(whole, dict) and whole.get("v") != STATE_VERSION:
+            _locked_reason = (
+                "the cross-device trust record on this machine was written by a "
+                f"different version of Navide (record version {whole.get('v')!r}, this "
+                f"build reads {STATE_VERSION}). It is left as it is: run the version "
+                "that wrote it rather than starting over"
+                + _provenance(marker)
+            )
+        else:
+            _locked_reason = (
+                "the cross-device trust record on this machine is complete but not in "
+                "the shape this build expects. It is left as it is; do not start over "
+                "until it is clear why"
+                + _provenance(marker)
+            )
+        raise TrustStoreLocked(_locked_reason)
+    _locked_reason = (
+        "this machine has a cross-device trust record but its contents are "
+        "missing or unreadable"
+        + _provenance(marker)
+    )
+    raise TrustStoreLocked(_locked_reason)
 
 
 def _provenance(marker: Any) -> str:
@@ -733,7 +904,7 @@ def _save_locked(state: dict[str, Any]) -> None:
         # is refused as what it is — the record is full — rather than as a
         # Keychain error after the fact.
         core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
-        if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
+        if _store_mode != "file" and not cloud_secrets.fits(_vault(), SECRET_NAME, core):
             raise TrustStoreFull(_FULL_MESSAGE)
         _write(state)
     except Exception:
@@ -750,7 +921,10 @@ def _fits_with_reserve_locked(state: dict[str, Any]) -> bool:
     — plus one more block (KC2R-1). Checked when a pin is taken, so a full
     record refuses the next pairing rather than a later decision about a device
     already paired. A block keeps the pin (main's behaviour, kept on purpose),
-    so its room is reserved here rather than freed by the block."""
+    so its room is reserved here rather than freed by the block. A sealed file
+    has no line to fit in."""
+    if _store_mode == "file":
+        return True
     worst = copy.deepcopy(_core_of(state))
     peers = worst.setdefault("encryptedPeers", [])
     seqs = worst.setdefault("policySeqs", {})
@@ -1797,6 +1971,7 @@ def rebuild_locked_store() -> dict[str, Any]:
     confirmation that says a person asked for this; nothing here can tell.
     """
     global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
+    global _store_mode, _record_key
     with _lock:
         if not _locked_reason:
             try:
@@ -1816,10 +1991,13 @@ def rebuild_locked_store() -> dict[str, Any]:
         _transient_failures = 0
         cloud_secrets.write(_vault(), SECRET_NAME, None)
         _journal_path().unlink(missing_ok=True)
+        _record_path().unlink(missing_ok=True)
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)
         _state = None
+        _store_mode = None
+        _record_key = None
         _locked_reason = ""
         _damaged = False
         _seen_pending.clear()
@@ -1835,6 +2013,8 @@ def _remember_committed(state: dict[str, Any]) -> None:
 
 def _forget_written() -> None:
     global _last_core, _last_journal, _committed_core, _journal_blocked, _journal_problem
+    global _last_mirror
+    _last_mirror = None
     _last_core = None
     _last_journal = None
     _committed_core = None
@@ -1846,9 +2026,11 @@ def _reset_for_test() -> None:
     """Forget the process cache and the marker. Tests run against a throwaway
     vault and a throwaway data dir, so this touches nothing real."""
     global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
-    global _seen_last_flush
+    global _seen_last_flush, _store_mode, _record_key
     with _lock:
         _state = None
+        _store_mode = None
+        _record_key = None
         _locked_reason = ""
         _transient_reason = ""
         _transient_failures = 0
