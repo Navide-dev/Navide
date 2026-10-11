@@ -3992,10 +3992,10 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
     connected = link is not None and link._authenticated  # noqa: SLF001 - same module
     # A scope sync no longer offers (memory) is left out of the whole-account
     # listing, and answers "retired" when asked for by name.
-    wanted = [scope] if scope else [s for s in engine_mod.SCOPES if s not in sync_scopes.NEVER_SYNCED]
+    wanted = [scope] if scope else [s for s in engine_mod.SCOPES if s not in sync_approvals.RETIRED_SCOPES]
     scopes: dict[str, Any] = {}
     for name in wanted:
-        if name in sync_scopes.NEVER_SYNCED:
+        if name in sync_approvals.RETIRED_SCOPES:
             scopes[name] = {"scope": name, "status": sync_approvals.INVENTORY_RETIRED, "items": []}
         elif name not in engine_mod.SCOPES:
             scopes[name] = {
@@ -4009,6 +4009,10 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
                 "status": engine_mod.INVENTORY_NOT_CONNECTED,
                 "items": [],
             }
+        elif name in sync_scopes.NEVER_SYNCED:
+            # Credentials never sync: answered as main answers a switched-off
+            # sensitive scope, without asking the server or opening a secret.
+            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_DISABLED, "items": []}
         else:
             try:
                 scopes[name] = await link.sync_engine().inventory(name)

@@ -47,7 +47,13 @@ def _settings():
 def enabled_scopes() -> dict[str, bool]:
     raw = _settings().get().get(SCOPES_SETTING)
     stored = raw if isinstance(raw, dict) else {}
-    return {scope: bool(stored.get(scope, False)) for scope in sync_engine.SCOPES}
+    # Credentials never sync (NEVER_SYNCED), so a switch an older build left
+    # on reads as what it is: off. Memory keeps its stored value, so a window
+    # can still show a switch left on and let it be turned off.
+    return {
+        scope: bool(stored.get(scope, False)) and scope != "credentials"
+        for scope in sync_engine.SCOPES
+    }
 
 
 #: Internal scopes and the switch each one rides with.

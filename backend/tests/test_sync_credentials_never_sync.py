@@ -147,15 +147,47 @@ async def test_the_round_and_listing_window_entries_skip_credentials(wired, msg_
     assert recorder.credential_traffic() == []
 
 
-async def test_the_inventory_names_credentials_as_not_synced(wired) -> None:
-    listing = await server_link.sync_inventory()
-    assert "credentials" not in listing["scopes"]
-    only = await server_link.sync_inventory("credentials")
-    assert only["scopes"]["credentials"]["status"] == "retired"
-    assert only["scopes"]["credentials"]["items"] == []
 
 
 def test_the_app_store_is_what_the_engine_writes(wired) -> None:
     # Sanity: the wiring under test is the app's own store, not a stand-in.
     _link, engine, _recorder, _settings = wired
     assert engine._store is app.sync_store  # noqa: SLF001
+
+
+# ── review N1: what the windows are told matches main ─────────────────────────
+# A switch an older build left on must not surface as anything main would not
+# show. Main's answers, offline: status carried the raw switch, and the
+# inventory listed credentials as not-connected; connected, a switched-off
+# sensitive scope answered "disabled". The CLI accounts page (useCliProfiles,
+# unchanged) shows a blank cloud error for anything else.
+async def _status(scopes_on_disk: dict) -> dict:
+    session = _Session()
+    await ws_handlers.lookup("sync.status")(session, "m1", "sync.status", {})
+    (reply,) = session.sent
+    return reply["payload"]
+
+
+async def test_status_says_credentials_are_off_whatever_the_disk_says(wired, monkeypatch) -> None:
+    monkeypatch.setattr(server_link, "_link", None)
+    payload = await _status({})
+    assert payload["scopes"]["credentials"] is False
+    assert payload["scopes"]["prompts"] is True
+
+
+async def test_offline_inventory_answers_credentials_as_main_did(wired, monkeypatch) -> None:
+    monkeypatch.setattr(server_link, "_link", None)
+    only = await server_link.sync_inventory("credentials")
+    assert only["scopes"]["credentials"] == {"scope": "credentials", "status": "not-connected", "items": []}
+    listing = await server_link.sync_inventory()
+    assert listing["scopes"]["credentials"] == {"scope": "credentials", "status": "not-connected", "items": []}
+    assert "memory" not in listing["scopes"]
+
+
+async def test_connected_inventory_answers_credentials_as_a_switched_off_scope(wired) -> None:
+    _link, _engine, recorder, _settings = wired
+    only = await server_link.sync_inventory("credentials")
+    assert only["scopes"]["credentials"] == {"scope": "credentials", "status": "disabled", "items": []}
+    listing = await server_link.sync_inventory()
+    assert listing["scopes"]["credentials"]["status"] == "disabled"
+    assert recorder.credential_traffic() == []
