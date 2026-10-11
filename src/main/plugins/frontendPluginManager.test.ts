@@ -11840,6 +11840,10 @@ describe('first-party Git private bridge', () => {
     const outside = await call('shareCreate', { path: '../secrets.html' }) as { ok: boolean }
     expect(outside.ok).toBe(false)
     expect(sent).toHaveLength(4)
+    // Inside the workspace but not a plan document: refused before any send.
+    const notPlan = await call('shareCreate', { path: 'top_abc123.html' }) as { ok: boolean }
+    expect(notPlan.ok).toBe(false)
+    expect(sent).toHaveLength(4)
 
     reply = { ok: true, payload: { ok: true, chats: [{ chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' }] }, error: null }
     expect(await call('shareChatTargets', {})).toEqual({
