@@ -1519,6 +1519,21 @@ def pin_paired_device(
         return True
 
 
+def note_signs_v2(device_id: str) -> bool:
+    """Record that *device_id* has sent a message whose v2 signature verified
+    (plan 797ad7, B4). From then on its messages without one are refused, the
+    same no-going-back rule as ``encryptedPeers``. Returns whether anything
+    changed. Blocking; call off the event loop."""
+    with _lock:
+        state = _load_locked()
+        pin = state["pins"].get(device_id)
+        if not isinstance(pin, dict) or pin.get("sigV2") is True:
+            return False
+        pin["sigV2"] = True
+        _save_locked(state)
+        return True
+
+
 def pinned_encryption_key(device_id: str) -> str:
     """The X25519 key a completed pairing pinned for *device_id*, or "".
 

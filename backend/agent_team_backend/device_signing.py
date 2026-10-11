@@ -68,6 +68,9 @@ KEYS_FILENAME = "device-signing-key.json"
 #: canonical payload with a separator that cannot occur inside JSON text, so no
 #: payload can ever be made to read as another context's payload.
 _MESSAGE_CONTEXT = b"navide/cross-device-message-signature/v1"
+#: v2 adds the send time (plan 797ad7, B4). Its own context, so no v1 signature
+#: can be read as a v2 one or the other way round.
+_MESSAGE_CONTEXT_V2 = b"navide/cross-device-message-signature/v2"
 _POLICY_CONTEXT = b"navide/pane-policy-signature/v1"
 _SYNC_CONTEXT = b"navide/sync-record-signature/v1"
 _SEPARATOR = b"\x00"
@@ -290,6 +293,43 @@ def verify_message(
         signature,
         public_key_b64,
     )
+
+
+def sign_message_v2(
+    *, msg_key: str, from_device: str, to_device: str, kind: str, body: str, sent_at: int
+) -> str:
+    """The v2 signature as it travels in ``sig2``: ``v2.<sent_at>.<signature>``,
+    the signature covering the v1 tuple plus the send time."""
+    payload = {
+        **message_payload(msg_key=msg_key, from_device=from_device, to_device=to_device, kind=kind, body=body),
+        "sentAt": sent_at,
+    }
+    return f"v2.{sent_at}.{_sign(_MESSAGE_CONTEXT_V2, payload)}"
+
+
+def verify_message_v2(
+    signature: str,
+    *,
+    public_key_b64: str,
+    msg_key: str,
+    from_device: str,
+    to_device: str,
+    kind: str,
+    body: str,
+) -> int | None:
+    """The send time a ``sig2`` vouches for, or None when it does not verify.
+    Whether that time is acceptable is the caller's to decide."""
+    if not isinstance(signature, str):
+        return None
+    parts = signature.split(".", 2)
+    if len(parts) != 3 or parts[0] != "v2" or not parts[1].isdigit() or len(parts[1]) > 12:
+        return None
+    sent_at = int(parts[1])
+    payload = {
+        **message_payload(msg_key=msg_key, from_device=from_device, to_device=to_device, kind=kind, body=body),
+        "sentAt": sent_at,
+    }
+    return sent_at if _verify(_MESSAGE_CONTEXT_V2, payload, parts[2], public_key_b64) else None
 
 
 def sign_policy(*, device_id: str, seq: int, document: Any) -> str:

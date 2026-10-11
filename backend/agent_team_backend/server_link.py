@@ -171,6 +171,12 @@ STATUS_NOT_OPENED = "not-opened"
 #: with a sender attached to it.
 MESSAGE_MEMORY_MAX = 500
 MESSAGE_MEMORY_TTL_S = 3600.0
+#: How old, and how far ahead of this clock, a v2-signed message may be (plan
+#: 797ad7, B4). Together inside the ledger's one-hour TTL, so a message still
+#: accepted is one the ledger still remembers, and a replay after that is
+#: refused for its age.
+SIG2_MAX_AGE_S = 55 * 60
+SIG2_MAX_AHEAD_S = 5 * 60
 
 #: How long a message this device relayed may go unanswered before it asks the
 #: server what became of it, and how often it asks again after that. The
@@ -2533,7 +2539,24 @@ class ServerLink:
             # somehow got through would be one nobody could attribute.
             log.warning("refusing to send an unsigned message to %s: %s", to_device, err)
             return self._trust_refusal()
-        payload: dict[str, Any] = {"to": to, "msgKey": msg_key, "sig": signature, **body}
+        # v2 beside it, covering the send time. A server that does not know the
+        # field drops it, and a receiver that does not know it reads sig only.
+        try:
+            signature_v2 = await asyncio.to_thread(
+                device_signing.sign_message_v2,
+                msg_key=msg_key,
+                from_device=self._device_id,
+                to_device=to_device,
+                kind=kind,
+                body=body[kind],
+                sent_at=int(time.time()),
+            )
+        except device_signing.SigningError as err:
+            log.warning("refusing to send an unsigned message to %s: %s", to_device, err)
+            return self._trust_refusal()
+        payload: dict[str, Any] = {
+            "to": to, "msgKey": msg_key, "sig": signature, "sig2": signature_v2, **body
+        }
         if sender:
             payload["from"] = sender
         try:
@@ -2739,7 +2762,42 @@ class ServerLink:
             )
             return None
 
-        if not device_signing.verify_message(
+        signature_v2 = str(data.get("sig2") or "")
+        if signature_v2:
+            # v2 (plan 797ad7, B4): the same tuple plus the send time, so a
+            # message the relay held back past the window is refused for its age
+            # rather than accepted once the ledger has forgotten it.
+            sent_at = device_signing.verify_message_v2(
+                signature_v2,
+                public_key_b64=key,
+                msg_key=msg_key,
+                from_device=device_id,
+                to_device=self._device_id,
+                kind=kind,
+                body=body,
+            )
+            if sent_at is None:
+                log.warning("refusing message %s: its v2 signature does not verify", msg_key)
+                return None
+            age = time.time() - sent_at
+            if age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
+                log.warning(
+                    "refusing message %s: sent %ds from now, outside the window — check "
+                    "both machines' clocks if this repeats", msg_key, int(-age),
+                )
+                return None
+            if not pin.get("sigV2"):
+                # Marked only now that it has proven it sends v2, never before.
+                try:
+                    await asyncio.to_thread(trust_store.note_signs_v2, device_id)
+                except Exception as err:  # noqa: BLE001 - asked again with the next one
+                    log.warning("could not record that %s signs v2 (%s)", device_id, err)
+        elif pin.get("sigV2"):
+            # This device has signed v2 before, so a message without it had it
+            # removed on the way — or is older than the device's switch to it.
+            log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
+            return None
+        elif not device_signing.verify_message(
             signature,
             public_key_b64=key,
             msg_key=msg_key,
