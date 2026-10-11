@@ -3318,17 +3318,11 @@ def _guard_vault(tmp_path):
     return CredentialVault(root=tmp_path, platform="darwin", security_runner=lambda args, stdin=None: (0, ""))
 
 
-_NEEDS_CLOUD_SECRETS = pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="set_access_token goes through cloud_secrets.write only once fix/keychain-line-limit "
-    "is merged; strict, so this XPASSes into a failure the day it lands and the marker must go",
-)
 
 
 @pytest.mark.parametrize(
     "path",
-    [pytest.param("login", marks=_NEEDS_CLOUD_SECRETS), pytest.param("rotate", marks=_NEEDS_CLOUD_SECRETS), "logout"],
+    ["login", "rotate", "logout"],
 )
 async def test_cloud_token_writes_never_call_the_cli_keychain_writer(path, tmp_path, monkeypatch):
     from agent_team_backend import app as app_module
