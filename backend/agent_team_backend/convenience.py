@@ -322,6 +322,9 @@ class ConvenienceGate:
         """
         feature(feature_id)
         key = str(target)
+        # Before the lock: respelling stats every folder on each recorded
+        # path, and one on an offline network mount must not stall the gate.
+        alias = self._spelling_alias(feature_id, key) if per_target else None
         with self._lock:
             if not self.allowed(feature_id):
                 return "off"
@@ -329,8 +332,8 @@ class ConvenienceGate:
             if _unreachable(file, seen_device) or _unreachable(reset_folder, seen_device):
                 log.warning("%s: %s is unreachable right now; treating as unknown", feature_id, key)
                 return "unknown"
-            if per_target:
-                self._adopt_spelling(feature_id, key)
+            if alias is not None:
+                self._adopt_spelling(feature_id, key, alias)
             folder = self._folder(feature_id, key)
             known = folder is not None
             was_present = _probe(present)
@@ -507,6 +510,15 @@ class ConvenienceGate:
         """Log and announce ``action`` for ``target`` unless the log already
         has it: True the first time."""
         key = str(target)
+        with self.db.transaction() as cur:
+            logged = {
+                row["target"] for row in cur.execute(
+                    "SELECT DISTINCT target FROM convenience_log WHERE feature = ? AND action = ?",
+                    (feature_id, action),
+                ).fetchall()
+            }
+        # Outside the lock, bounded: see _respell_all.
+        spellings = _respell_all(logged - {key}) if key not in logged else {}
         with self._lock:
             with self.db.transaction() as cur:
                 seen = cur.execute(
@@ -514,30 +526,36 @@ class ConvenienceGate:
                     (feature_id, action, key),
                 ).fetchone()
                 if seen is None:
-                    seen = next((
-                        row for row in cur.execute(
-                            "SELECT target FROM convenience_log WHERE feature = ? AND action = ?",
-                            (feature_id, action),
-                        ).fetchall()
-                        if row["target"] != key and respelled(row["target"]) == key
-                    ), None)
+                    seen = next((old for old, spelled in spellings.items() if spelled == key), None)
             if seen is not None:
                 return False
             self.record(feature_id, action, key, detail=detail)
             return True
 
-    def _adopt_spelling(self, feature_id: str, key: str) -> None:
-        """Move a per-workspace target recorded under another spelling of
-        ``key`` (a link to the workspace, another case, ``..``: rows written
-        before such keys were canonical) onto ``key``, refusals included."""
+    def _spelling_alias(self, feature_id: str, key: str) -> str | None:
+        """The target recorded under another spelling of ``key``, if any.
+        Called without the lock: it respells every recorded target."""
+        with self.db.transaction() as cur:
+            rows = {
+                row["target"] for row in cur.execute(
+                    "SELECT target FROM convenience_targets WHERE feature = ?", (feature_id,)
+                ).fetchall()
+            }
+        if key in rows:
+            return None
+        return next((old for old, spelled in _respell_all(rows).items() if spelled == key), None)
+
+    def _adopt_spelling(self, feature_id: str, key: str, old: str) -> None:
+        """Move a per-workspace target recorded as ``old``, another spelling
+        of ``key`` (a link to the workspace, another case, ``..``: rows written
+        before such keys were canonical), onto ``key``, refusals included.
+        Under the lock; ``old`` comes from ``_spelling_alias``."""
         if self._known(feature_id, key):
             return
         with self.db.transaction() as cur:
-            rows = cur.execute(
-                "SELECT target FROM convenience_targets WHERE feature = ?", (feature_id,)
-            ).fetchall()
-            old = next((row["target"] for row in rows if respelled(row["target"]) == key), None)
-            if old is None:
+            if cur.execute(
+                "SELECT 1 FROM convenience_targets WHERE feature = ? AND target = ?", (feature_id, old)
+            ).fetchone() is None:
                 return
             cur.execute(
                 "UPDATE convenience_targets SET target = ? WHERE feature = ? AND target = ?",
@@ -793,6 +811,36 @@ def canonical_path(path: str | Path) -> Path:
             name = next((n for n in names if _name_key(n) == key), name)
         out = out / name
     return out
+
+
+#: How long one recorded path may take to respell before it is skipped (an
+#: offline network mount can block a stat for a long time).
+_RESPELL_TIMEOUT_S = 1.0
+
+
+def _respell_all(targets: set[str]) -> dict[str, str]:
+    """``respelled`` for each of ``targets``, all at once and within one
+    ``_RESPELL_TIMEOUT_S``. A path still being respelled then (a folder on an
+    offline network mount) is left out and logged; its thread is a daemon
+    and ends when the stat returns."""
+    out: dict[str, str] = {}
+
+    def one(target: str) -> None:
+        try:
+            out[target] = respelled(target)
+        except OSError:
+            pass
+
+    threads = [threading.Thread(target=one, args=(t,), daemon=True) for t in sorted(targets)]
+    for thread in threads:
+        thread.start()
+    deadline = time.monotonic() + _RESPELL_TIMEOUT_S
+    for thread in threads:
+        thread.join(max(0.0, deadline - time.monotonic()))
+    done = dict(out)
+    for target in targets - done.keys():
+        log.warning("respelling %s took too long; skipped", target)
+    return done
 
 
 def respelled(target: str) -> str:

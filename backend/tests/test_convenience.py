@@ -338,3 +338,46 @@ def test_a_workspace_spelled_in_another_unicode_form_has_one_key(tmp_path) -> No
 
     assert convenience.canonical_path(tmp_path / nfc) == convenience.canonical_path(tmp_path / nfd)
 
+
+def test_an_offline_mount_in_the_ledger_never_holds_up_the_gate(gate, tmp_path, monkeypatch) -> None:
+    """Respelling a recorded workspace stats every folder on its path; one on
+    an offline network mount can hang. That must happen outside the gate's
+    lock and give up in bounded time, so creating another pane never waits
+    on it."""
+    import threading
+
+    stuck = threading.Event()
+    real = convenience.respelled
+
+    def respelled(target: str) -> str:
+        if target.startswith("/offline/"):
+            stuck.wait(30)
+        return real(target)
+
+    monkeypatch.setattr(convenience, "respelled", respelled)
+    monkeypatch.setattr(convenience, "_RESPELL_TIMEOUT_S", 0.2)
+    gate._mark("cursor.project-skills", "/offline/ws/.cursor/skills", present=True)
+    gate.record("cursor.project-skills", "refused-unsafe", "/offline/ws/.cursor/skills")
+    workspace = tmp_path / "ws" / ".cursor" / "skills"
+    results: list[object] = []
+
+    def run() -> None:
+        results.append(gate.apply(
+            "cursor.project-skills", workspace, write=lambda: None, present=lambda: False, per_target=True,
+        ))
+        results.append(gate.record_once("cursor.project-skills", "refused-unsafe", workspace))
+
+    worker = threading.Thread(target=run, daemon=True)
+    try:
+        worker.start()
+        worker.join(5)
+        assert not worker.is_alive()
+        assert len(results) == 2 and results[1] is True
+        holder = threading.Thread(target=lambda: gate.allowed("claude.hooks"), daemon=True)
+        holder.start()
+        holder.join(2)
+        assert not holder.is_alive()
+    finally:
+        stuck.set()
+        worker.join(5)
+
