@@ -459,6 +459,7 @@ function loadOverview(): void {
 
 // Pane names and states change without channels.changed: fetch afresh whenever the page shows.
 onMounted(loadOverview)
+onMounted(() => void store.loadShareOpenNotify())
 watch(() => [store.lastLinked.value, connectedKey.value], loadOverview)
 
 // An invite waiting for the link guide, on a bot whose guide will not show
@@ -550,6 +551,21 @@ function formatTime(ts: number | null | undefined): string {
             :disabled="busy"
             :aria-label="t('channels.global.title')"
             @update:model-value="(v: boolean) => run(null, () => store.setGlobalEnabled(v))"
+          />
+        </template>
+      </SettingRow>
+      <SettingRow
+        v-if="store.shareOpenNotify.value !== null"
+        :title="t('channels.shareOpenNotify.title')"
+        :description="t('channels.shareOpenNotify.desc')"
+      >
+        <template #control>
+          <ToggleSwitch
+            data-testid="channels-share-open-notify-toggle"
+            :model-value="store.shareOpenNotify.value"
+            :disabled="busy"
+            :aria-label="t('channels.shareOpenNotify.title')"
+            @update:model-value="(v: boolean) => run(null, () => store.setShareOpenNotify(v))"
           />
         </template>
       </SettingRow>

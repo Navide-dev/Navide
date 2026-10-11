@@ -276,6 +276,8 @@ function emptyStatus(): ChannelStatus {
 
 function createChannelsStore(backend: Backend) {
   const enabled = ref(true)
+  // Tell bound chats when a new device opens a share link; null until a backend that has the setting answers.
+  const shareOpenNotify = ref<boolean | null>(null)
   const platforms = ref<ChannelPlatformState[]>([])
   const bindings = ref<ChannelBinding[]>([])
   const pairing = ref<ChannelPairingRequest[]>([])
@@ -421,6 +423,7 @@ function createChannelsStore(backend: Backend) {
 
   return {
     enabled,
+    shareOpenNotify,
     platforms,
     bindings,
     pairing,
@@ -494,6 +497,15 @@ function createChannelsStore(backend: Backend) {
     renameAccount: (platform: ChannelPlatform, account: string, name: string) =>
       mutate('channels.rename_account', { platform, account, name }),
     setGlobalEnabled: (on: boolean) => mutate('channels.set_global_enabled', { enabled: on }),
+    loadShareOpenNotify: async (): Promise<void> => {
+      const res = await call<{ enabled: boolean }>('channels.get_share_open_notify')
+      if (res.ok && res.data) shareOpenNotify.value = res.data.enabled !== false
+    },
+    setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
+      const res = await call<{ enabled: boolean }>('channels.set_share_open_notify', { enabled: on })
+      if (res.ok && res.data) shareOpenNotify.value = res.data.enabled !== false
+      return res
+    },
     /** One bot when `account` is given (always sent, even "default"); without it
      *  the whole platform: every bot, its allowlist and pairing requests. */
     remove: (platform: ChannelPlatform, account?: string) =>
