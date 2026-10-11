@@ -27,6 +27,7 @@ data) plus the CLIs' memory files, which never leave the machine.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -52,23 +53,77 @@ _GUARD_CATEGORIES = (
 if len(_GUARD_CATEGORIES) != len(_SECRET_PATTERNS):  # pragma: no cover - caught by the test suite
     raise RuntimeError("share_scan: guard._SECRET_PATTERNS changed; name the new pattern's category")
 
+#: Where a token may start: not right after a letter or digit, so "task-…"
+#: is not read as "sk-…". Underscores and punctuation still count as a start.
+_B = r"(?<![A-Za-z0-9])"
+
+
+def _share_form(pattern: re.Pattern[str]) -> re.Pattern[str]:
+    """A guard pattern with its leading ``\b`` widened to ``_B``."""
+    src = pattern.pattern
+    return re.compile(_B + src[2:] if src.startswith(r"\b") else src, pattern.flags)
+
+
 _PRIVATE_KEY_RE = re.compile(
-    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----.*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----",
+    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
+    r"(?:.*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|[A-Za-z0-9+/=\s\\]*)",  # or cut short
     re.DOTALL,
+)
+# The guard's "/bot<anything>/" is right for a command line and wrong for a
+# document, where it rewrites /bottles/ and /both; a share wants the token shape.
+_BOT_URL = (re.compile(r"/bot(\d{5,}:[A-Za-z0-9_-]{30,})(?=/|\b)"), "/bot<redacted>", "bot-token")
+#: JSON / YAML / .env keys with a quoted value: the whole quoted value goes,
+#: spaces included ('SECRET="abc def"' used to keep "def").
+_QUOTED_CREDENTIAL = (
+    re.compile(
+        r"""(?i)(["']?(?:password|passwd|pwd|secret|client[_-]?secret|token|api[_-]?key|apikey|access[_-]?key"""
+        r"""|private[_-]?key)["']?\s*[:=]\s*["'])[^"'\n]+"""
+    ),
+    r"\1<redacted>",
+    "credential-assignment",
+)
+#: Provider token shapes the guard list does not cover.
+_PROVIDERS = (
+    (r"AIza[\w-]{35}", "google-api-key"),
+    (r"glpat-[\w-]{20,}", "gitlab-token"),
+    (r"[sr]k_(?:live|test)_[0-9A-Za-z]{24,}", "stripe-key"),
+    (r"npm_[A-Za-z0-9]{36}", "npm-token"),
+    (r"hf_[A-Za-z0-9]{30,}", "huggingface-token"),
+    (r"(?:AKIA|ASIA|AGPA|AIDA|AROA)[0-9A-Z]{16}", "aws-access-key"),
+    (r"xapp-\d-[\w-]+", "slack-app-token"),
+    (r"SG\.[\w-]{22}\.[\w-]{43}", "sendgrid-key"),
+    (r"pypi-AgE[\w-]{50,}", "pypi-token"),
+    (r"\d{8,10}:AA[\w-]{33}", "telegram-bot-token"),
+    (r"[MNO][\w-]{23,25}\.[\w-]{6}\.[\w-]{27,}", "discord-bot-token"),
 )
 
 #: (pattern, replacement template, category), checked in this order.
 HIGH_CONFIDENCE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (_PRIVATE_KEY_RE, "<redacted private key>", "private-key"),
-    *((pattern, repl, category) for (pattern, repl), category in zip(_SECRET_PATTERNS, _GUARD_CATEGORIES)),
+    _QUOTED_CREDENTIAL,
+    _BOT_URL,
+    *(
+        (_share_form(pattern), repl, category)
+        for (pattern, repl), category in zip(_SECRET_PATTERNS, _GUARD_CATEGORIES)
+        if category != "bot-token"
+    ),
+    *((re.compile(_B + src), "<redacted>", category) for src, category in _PROVIDERS),
 )
 
-_DATA_URI_RE = re.compile(r"data:[\w/+.-]+(?:;[\w=.+-]+)*,[A-Za-z0-9+/=%_.-]*")
+#: An inline image, font or media file. Only these are exempt, and only from
+#: the heuristic: a high-confidence format is masked wherever it sits.
+_DATA_URI_RE = re.compile(r"(?<![\w-])data:(?:image|font|audio|video)/[\w.+-]+;base64,([A-Za-z0-9+/]+={0,2})")
+#: What may legitimately follow a data URI's payload; anything glued on (a
+#: "-" or "_" is not base64) means the "image" is a disguise.
+_GLUED_RUN = re.compile(r"[\w+/=-]*")
 _SHA1_RE = re.compile(r"[0-9a-fA-F]{40}")
 #: A heuristic hit this long is a value (a hex or base64 run), not a keyword.
 _RUN_MIN = 32
+_ZERO_WIDTH_RE = re.compile("[​‌‍⁠﻿­]")
 
 #: Kinds whose heuristic hits are masked rather than only warned about.
+#: TODO(Phase 3, transcript kind): the length rule masks long file paths in
+#: command output; judge runs by entropy before any transcript can be shared.
 _MASK_HEURISTICS = frozenset({"transcript"})
 
 MASKED = "masked"
@@ -92,25 +147,37 @@ def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
     return any(start < s_end and s_start < end for s_start, s_end in spans)
 
 
-def scan(text: str, *, kind: str) -> ScanResult:
-    """``text`` with its secrets masked, and where each finding was."""
-    skip = [m.span() for m in _DATA_URI_RE.finditer(text)]
+def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
     edits: list[tuple[int, int, str, str]] = []  # start, end, replacement, category
     for pattern, repl, category in HIGH_CONFIDENCE:
         for m in pattern.finditer(text):
-            if m.start() == m.end() or _overlaps(*m.span(), skip):
-                continue
-            edits.append((m.start(), m.end(), m.expand(repl), category))
+            if m.start() != m.end():
+                edits.append((m.start(), m.end(), m.expand(repl), category))
     # Two patterns can match the same secret ("Authorization: Bearer x"): the
     # earliest, then longest, wins and the rest are dropped.
     edits.sort(key=lambda e: (e[0], -(e[1] - e[0])))
-    masked: list[tuple[int, int, str, str]] = []
+    kept: list[tuple[int, int, str, str]] = []
     for edit in edits:
-        if not masked or edit[0] >= masked[-1][1]:
-            masked.append(edit)
+        if not kept or edit[0] >= kept[-1][1]:
+            kept.append(edit)
+    return kept
+
+
+def scan(text: str, *, kind: str) -> ScanResult:
+    """``text`` with its secrets masked, and where each finding was."""
+    masked = _high_confidence(text)
+    skip: list[tuple[int, int]] = []
+    for m in _DATA_URI_RE.finditer(text):
+        glued = _GLUED_RUN.match(text, m.end()).end()
+        if glued > m.end():
+            if not _overlaps(m.start(1), glued, [(s, e) for s, e, _, _ in masked]):
+                masked.append((m.start(1), glued, "<redacted>", "possible-secret"))
+        else:
+            skip.append(m.span())
+    masked.sort()
     taken = [(s, e) for s, e, _, _ in masked]
 
-    warned: list[tuple[int, int]] = []
+    warned: list[tuple[int, str]] = []
     for m in _SECRET_HINT_RE.finditer(text):
         start, end = m.span()
         if _overlaps(start, end, skip) or _overlaps(start, end, taken):
@@ -120,11 +187,24 @@ def scan(text: str, *, kind: str) -> ScanResult:
         if kind in _MASK_HEURISTICS and end - start >= _RUN_MIN:
             masked.append((start, end, "<redacted>", "possible-secret"))
         else:
-            warned.append((start, end))
+            warned.append((start, "possible-secret"))
     masked.sort()
 
+    # A token split by zero-width or written in full-width characters reads
+    # the same to a person; check a normalised copy and warn about what only
+    # it shows. Removing zero-width characters and NFKC keep line breaks.
+    folded = unicodedata.normalize("NFKC", _ZERO_WIDTH_RE.sub("", text))
+    if folded != text:
+        plain = {text[s:e] for s, e, _, _ in masked}
+        for start, end, _, category in _high_confidence(folded):
+            if folded[start:end] not in plain:
+                warned.append((folded.count("\n", 0, start) + 1, f"obfuscated-{category}"))
+
     findings = [Finding(text.count("\n", 0, s) + 1, category, MASKED) for s, _, _, category in masked]
-    findings += [Finding(text.count("\n", 0, s) + 1, "possible-secret", WARNED) for s, _ in warned]
+    findings += [
+        Finding(pos if category.startswith("obfuscated-") else text.count("\n", 0, pos) + 1, category, WARNED)
+        for pos, category in warned
+    ]
     findings.sort(key=lambda f: f.line)
 
     out: list[str] = []

@@ -22,9 +22,8 @@ PRIVATE_KEY = (
     "-----END OPENSSH PRIVATE KEY-----"
 )
 SHA40 = "9395b302c0ffee1234567890abcdef1234567890"
-# A data: URI whose base64 is long enough to trip the 40+ base64 heuristic and
-# happens to contain an AKIA-shaped run between "/" separators.
-DATA_URI = "data:image/png;base64," + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" * 4 + "/AKIAABCDEFGHIJKLMNOP/" + "Q" * 60
+# A data: URI whose base64 is long enough to trip the 40+ base64 heuristic.
+DATA_URI = "data:image/png;base64," + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" * 4 + "/Q+" + "Q" * 60 + "=="
 
 
 def test_ghp_token_is_masked_and_reported_by_line_not_value() -> None:
@@ -79,7 +78,7 @@ def test_transcript_masks_heuristic_hits_too() -> None:
 def test_every_guard_pattern_has_a_category() -> None:
     from agent_team_backend.guard import engine
 
-    assert len(share_scan.HIGH_CONFIDENCE) == len(engine._SECRET_PATTERNS) + 1  # + private-key block
+    assert len(share_scan._GUARD_CATEGORIES) == len(engine._SECRET_PATTERNS)
 
 
 @pytest.fixture
