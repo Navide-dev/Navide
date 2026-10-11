@@ -617,8 +617,9 @@ def _load_locked() -> dict[str, Any]:
             "never marked initialised; starting a new one"
         )
     _state = parsed if parsed is not None else _blank()
-    if parsed is not None:
-        _adopt_journal(_state)
+    # Read even for a blank start: the journal outlives the record, and writing
+    # the blank state without reading it first replaced it with nothing.
+    _adopt_journal(_state)
     _write(_state)
     database.kv_set(
         INITIALISED_KEY,

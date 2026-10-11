@@ -95,3 +95,20 @@ def test_a_rebuild_clears_the_journal_too():
 
     assert not trust_store._journal_path().exists()
     assert trust_store.notices() == []
+
+
+def test_a_first_start_keeps_an_existing_journal():
+    """Review KC-10: with no marker and no readable record, initialising wrote
+    _blank() and replaced the journal it never read."""
+    from agent_team_backend.trust_store import INITIALISED_KEY
+
+    trust_store.load()
+    _fill(2, 1)
+    app.credential_vault.write_app_secret(trust_store.SECRET_NAME, "{")
+    app.database.kv_set(INITIALISED_KEY, None, now=0)
+    trust_store._state = None
+    trust_store._forget_written()
+
+    trust_store.load()
+    assert len(trust_store.notices()) == 2
+    assert trust_store.has_seen_message(f"{DEVICE}:mcp:{0:016x}")
