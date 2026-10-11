@@ -11754,6 +11754,94 @@ describe('first-party Git private bridge', () => {
     }])
   })
 
+  it('bridges navide.plans ui.shareCaps and ui.shareCreate to share.* with codes as values', async () => {
+    const mgr = new FrontendPluginManager()
+    const workspacePath = '/workspace'
+    const packageVersion = '0.1.0'
+    const viewWindow = {
+      id: 'window',
+      contributionKey: 'navide.plans.window',
+      kind: 'custom' as const,
+      location: 'window' as const,
+      title: 'Plans',
+      entryFile: '/path/to/plans/window.html',
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: '/path/to/plans',
+      requires: ['fs', 'ui', 'plans', 'terminal'],
+      capabilityPolicy: { kind: 'manifest-v2', system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', grants: [] },
+      devUrl: '',
+      entryFile: viewWindow.entryFile,
+      views: [viewWindow],
+    }
+    mgr.registerDescriptor(descriptor, { builtin: true })
+    mgr.setCapabilityGrantResolver((pluginId, version) => (
+      pluginId === PLANS_PLUGIN_ID && version === packageVersion
+        ? { packageVersion, system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', storage: true }
+        : null
+    ))
+    const capabilityContext = mgr.plansCapabilityContext(packageVersion, workspacePath, 'plans-window')
+    const host = new FakeBrowserWindow()
+    await mgr.openView(descriptor, viewWindow, { hostWindow: asHost(host), bounds: 'fill', workspacePath, capabilityContext })
+    const view = host.children[0] as FakeViewLike
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+
+    const sent: Array<{ type: string; payload: Record<string, unknown> }> = []
+    let reply: { ok: boolean; payload: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }
+    ;(mgr as unknown as { ensureBackend: () => unknown }).ensureBackend = () => ({
+      send: async (type: string, payload: Record<string, unknown>) => {
+        sent.push({ type, payload })
+        return reply
+      },
+    })
+    const handler = ipcHandlers.get(CAPABILITY_CALL)!
+    const call = (method: string, args: Record<string, unknown>) => handler(
+      { sender: { id: view.webContents.id } },
+      { reqId: method, ns: 'ui', method, args },
+    )
+
+    reply = { ok: true, payload: { links: true }, error: null }
+    expect(await call('shareCaps', {})).toEqual({ reqId: 'shareCaps', ok: true, result: { ok: true } })
+    reply = { ok: false, payload: null, error: { code: 'NOT_CONFIGURED', message: 'not linked' } }
+    expect(await call('shareCaps', {})).toEqual({
+      reqId: 'shareCaps', ok: true, result: { ok: false, code: 'NOT_CONFIGURED', message: 'not linked' },
+    })
+
+    const link = {
+      linkId: 'l1', url: 'https://share.example/l/l1#k', expiresAt: '2026-10-14T00:00:00Z', createdBy: 'user',
+      pane: '', agent: '', masked: [{ line: 132, category: 'github-token', action: 'masked' }],
+    }
+    reply = { ok: true, payload: link, error: null }
+    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html', ttlSeconds: 259200, requireLogin: true, sendToChat: false })).toEqual({
+      reqId: 'shareCreate',
+      ok: true,
+      result: {
+        ok: true,
+        link: { linkId: 'l1', url: link.url, expiresAt: link.expiresAt, masked: link.masked },
+      },
+    })
+    expect(sent.slice(0, 3)).toEqual([
+      { type: 'share.caps', payload: {} },
+      { type: 'share.caps', payload: {} },
+      {
+        type: 'share.create',
+        payload: { path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan', ttlSeconds: 259200, requireLogin: true, sendToChat: false },
+      },
+    ])
+
+    reply = { ok: false, payload: null, error: { code: 'SHARE_REFUSED', message: 'never shared', details: { reason: 'memory' } } }
+    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html' })).toEqual({
+      reqId: 'shareCreate', ok: true, result: { ok: false, code: 'SHARE_REFUSED', message: 'never shared', reason: 'memory' },
+    })
+    expect(sent[3].payload).toEqual({ path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan' })
+
+    const outside = await call('shareCreate', { path: '../secrets.html' }) as { ok: boolean }
+    expect(outside.ok).toBe(false)
+    expect(sent).toHaveLength(4)
+  })
+
   it('routes ui.openPlansWindow for nested repos strictly with .git directory and blocks .git file/symlink escape', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'navide-open-plans-test-'))
     const extDir = mkdtempSync(join(tmpdir(), 'navide-open-ext-test-'))

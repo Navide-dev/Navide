@@ -806,6 +806,24 @@
       "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "WORKSPACE_SCOPE_VIOLATION", "BACKEND_UNAVAILABLE", "INTERNAL_ERROR"]
     },
     {
+      "address": "ui.shareCaps",
+      "visibility": "public",
+      "eligibility": "firstParty",
+      "permission": { "id": "system", "access": "ui", "scope": "workspace" },
+      "params": { "type": "object", "additionalProperties": false, "properties": {} },
+      "result": { "oneOf": [{ "type": "object", "additionalProperties": false, "required": ["ok"], "properties": { "ok": { "const": true } } }, { "type": "object", "additionalProperties": false, "required": ["ok", "code", "message"], "properties": { "ok": { "const": false }, "code": { "type": "string" }, "message": { "type": "string" } } }] },
+      "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "INTERNAL_ERROR"]
+    },
+    {
+      "address": "ui.shareCreate",
+      "visibility": "public",
+      "eligibility": "firstParty",
+      "permission": { "id": "system", "access": "ui", "scope": "workspace" },
+      "params": { "type": "object", "additionalProperties": false, "required": ["path"], "properties": { "path": { "type": "string" }, "ttlSeconds": { "type": "integer", "minimum": 1 }, "requireLogin": { "type": "boolean" }, "sendToChat": { "type": "boolean" } } },
+      "result": { "oneOf": [{ "type": "object", "additionalProperties": false, "required": ["ok", "link"], "properties": { "ok": { "const": true }, "link": { "type": "object", "additionalProperties": false, "required": ["linkId", "url", "expiresAt", "masked"], "properties": { "linkId": { "type": "string" }, "url": { "type": "string" }, "expiresAt": { "type": "string" }, "masked": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["line", "category", "action"], "properties": { "line": { "type": "integer" }, "category": { "type": "string" }, "action": { "type": "string" } } } } } } } }, { "type": "object", "additionalProperties": false, "required": ["ok", "code", "message"], "properties": { "ok": { "const": false }, "code": { "type": "string" }, "message": { "type": "string" }, "reason": { "type": "string" } } }] },
+      "errors": ["CAPABILITY_DENIED", "INVALID_ARGUMENT", "WORKSPACE_SCOPE_VIOLATION", "INTERNAL_ERROR"]
+    },
+    {
       "address": "ui.openExternal",
       "visibility": "public",
       "permission": { "id": "system", "access": "ui", "scope": "plugin" },
