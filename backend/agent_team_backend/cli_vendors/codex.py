@@ -944,9 +944,12 @@ class CodexHomeManager:
         ledger), or a pane home still links to it."""
         if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
             return True
+        from ..credential_vault import _link_target
+
         for link in self.panes_root.glob("*/auth.json"):
             try:
-                if link.is_symlink() and Path(os.readlink(link)) == real_auth:
+                # Windows reads a link back as an extended-length path.
+                if link.is_symlink() and Path(_link_target(os.readlink(link))) == real_auth:
                     return True
             except OSError:
                 continue

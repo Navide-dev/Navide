@@ -1412,6 +1412,32 @@ def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, t
     assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
 
 
+def test_codex_login_link_read_back_as_a_windows_extended_path_still_counts(gate, tmp_path, monkeypatch) -> None:
+    """Windows' os.readlink answers with an extended-length path (\\\\?\\...),
+    which never equals the plain path the link was made from: the user's own
+    login, signed out outside Navide, must still never be replaced."""
+    import os
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    plain = os.readlink
+    monkeypatch.setattr(os, "readlink", lambda link: "\\\\?\\" + str(plain(link)))
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
+
+
 # ── Account auto-repair (D7) ─────────────────────────────────────────────────
 
 
