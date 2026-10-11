@@ -1819,11 +1819,15 @@ const p2pLinkReady = computed(() => p2pState.value === 'connected')
 const cloudSubtabsShown = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
 const shareProbe = useShareLinks(props.backend)
 const cloudTabs = computed<CloudSubtab[]>(() =>
-  shareProbe.status.value === 'ok' ? ['sync', 'share', 'devices'] : ['sync', 'devices']
+  shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
 )
 watch(cloudSubtabsShown, (shown) => {
-  if (shown) void shareProbe.refresh()
-  else forgetSyncInventory()
+  if (shown) {
+    void shareProbe.refresh()
+  } else {
+    forgetSyncInventory()
+    shareProbe.reset()
+  }
 })
 // The inventory is module-wide; the next Settings window must not open on this one's.
 onBeforeUnmount(forgetSyncInventory)

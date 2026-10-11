@@ -60,6 +60,9 @@ export function useShareLinks(backend: Backend) {
   const links = ref<ShareLink[]>([])
   const status = ref<ShareLinksStatus>('idle')
   const loading = ref(false)
+  /** share.list has answered at least once since the last reset: the backend
+   *  does share links, so a later failed reload is an error, not "unsupported". */
+  const supported = ref(false)
 
   async function refresh(): Promise<void> {
     loading.value = true
@@ -72,6 +75,7 @@ export function useShareLinks(backend: Backend) {
       }
       links.value = readShareLinks(resp.payload)
       status.value = 'ok'
+      supported.value = true
     } catch {
       links.value = []
       status.value = 'error'
@@ -87,5 +91,12 @@ export function useShareLinks(backend: Backend) {
     return resp.payload ?? {}
   }
 
-  return { links, status, loading, refresh, act }
+  /** Forget everything (the Cloud link dropped): no list, nothing known. */
+  function reset(): void {
+    links.value = []
+    status.value = 'idle'
+    supported.value = false
+  }
+
+  return { links, status, loading, supported, refresh, act, reset }
 }

@@ -35,6 +35,7 @@ function backend(options: Options = {}) {
   const link = { state: options.state ?? 'connected' }
   const held: Array<() => void> = []
   const hold = { inventory: options.holdInventory ?? false }
+  const share = { reply: options.shareList }
   let device = options.device ?? 'ACCOUNT-A'
   const send = vi.fn((type: string, _payload?: unknown, _timeout?: number) => {
     if (type === 'p2p.link.status') {
@@ -53,7 +54,7 @@ function backend(options: Options = {}) {
       if (hold.inventory) return new Promise((resolve) => held.push(() => resolve(body)))
       return Promise.resolve(body)
     }
-    if (type === 'share.list' && options.shareList) return Promise.resolve(options.shareList)
+    if (type === 'share.list' && share.reply) return Promise.resolve(share.reply)
     return Promise.resolve({ ok: false, error: { code: 'UNKNOWN_TYPE', message: type } })
   })
   const on = vi.fn(() => () => {})
@@ -63,6 +64,7 @@ function backend(options: Options = {}) {
     link,
     held,
     hold,
+    share,
     setDevice: (name: string) => {
       device = name
     },
@@ -214,5 +216,33 @@ describe('Navide Cloud page lifecycle', () => {
     await chooseSubtab('share')
     expect(document.querySelector('[data-subtab-panel="share"]')).not.toBeNull()
     expect(count(b, 'share.list')).toBe(1)
+  })
+
+  it('keeps Share when a later reload fails for a moment (UI-F8)', async () => {
+    const b = backend({ shareList: { ok: true, payload: { links: [] } } })
+    await mountModal(b)
+    await chooseSubtab('share')
+    b.share.reply = { ok: false, error: { code: 'LINK_OFFLINE', message: 'blip' } }
+    const reload = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-subtab-panel="share"] button')).find(
+      (el) => el.textContent?.includes(i18n.global.t('settings.cloud.share.refresh')),
+    )
+    reload!.click()
+    await flushPromises()
+    const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
+    expect(tabs).toEqual(['Sync', 'Share', 'Devices'])
+    expect(document.querySelector('[data-subtab-panel="share"] [data-notice="error"]')).not.toBeNull()
+  })
+
+  it('forgets the share list when the link drops (UI-F7)', async () => {
+    const b = backend({ shareList: { ok: true, payload: { links: [{ linkId: 'ab'.repeat(16), title: 'Old title', active: true }] } } })
+    await mountModal(b)
+    b.link.state = 'unreachable'
+    await tick()
+    b.share.reply = { ok: false, error: { code: 'UNKNOWN_TYPE', message: 'share.list' } }
+    b.link.state = 'connected'
+    await tick()
+    const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
+    expect(tabs).toEqual(['Sync', 'Devices'])
+    expect(document.body.textContent).not.toContain('Old title')
   })
 })
