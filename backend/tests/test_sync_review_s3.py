@@ -4,6 +4,10 @@ D-H1  a restore over a pending pulled hold, then rejected, pushed the old
       local copy over a newer edit from another device.
 D-H2  the D3 migration met an unpushed edit or delete on another device and
       read it as a delete (two conflicts, the item lost) instead of a rename.
+D-M3  object downloads were uncapped and any URL scheme was followed.
+D-L2  a restore that applied nothing still read as restored.
+D-L3  HMAC_NOT_READY's {blockingDevices: [...]} was read as a list.
+c5    the two halves of a D3 migration are judged separately.
 """
 
 from __future__ import annotations
@@ -302,6 +306,140 @@ async def test_a_refused_adoption_logs_the_devices_it_waits_for(tmp_path, accoun
     with caplog.at_level(logging.INFO, logger="agent_team_backend"):
         assert (await a.sync())["ok"] is True
     assert "waiting for dev-old" in caplog.text
+
+
+# ── contract c5: the two halves of a migration are judged separately ─────────
+class _PickyServer(V3Server):
+    """Turns away the pushed items ``refuse`` names, once each, as rejected;
+    ``before_push`` runs ahead of a device's next push."""
+
+    def __init__(self, s3, **kw) -> None:
+        super().__init__(s3, **kw)
+        self.refuse: set[str] = set()
+        self.before_push = None
+
+    async def handle(self, device, msg_type, payload):
+        if msg_type == "sync.push" and self.before_push is not None:
+            hook, self.before_push = self.before_push, None
+            await hook()
+        turned = [i for i in payload.get("items", []) if msg_type == "sync.push" and i["itemId"] in self.refuse]
+        if not turned:
+            return await super().handle(device, msg_type, payload)
+        self.refuse -= {i["itemId"] for i in turned}
+        reply = await super().handle(device, msg_type, {**payload, "items": [
+            i for i in payload["items"] if i not in turned
+        ]})
+        if reply.get("ok"):
+            reply["payload"]["rejected"] = [{"itemId": i["itemId"], "code": "QUOTA_EXCEEDED"} for i in turned]
+        return reply
+
+
+async def _legacy_pair(tmp_path, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = _PickyServer(s3, adopt_ready=False)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    b = V3Device(tmp_path, server, "B")
+    await a.sync(); await b.sync()
+    server.adopt_ready = True
+    a.reconnect()
+    return server, a, b
+
+
+def _legacy_live(server) -> list[str]:
+    return [i for i in _live_ids(server) if not HASHED.match(i)]
+
+
+async def test_hashed_copy_accepted_tombstone_refused_owes_only_the_tombstone(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server, a, b = await _legacy_pair(tmp_path, s3)
+    server.refuse = {ALPHA}
+    assert (await a.sync())["ok"] is True
+    h1 = sync_keyring.hashed_item_id("prompts", ALPHA, server.item_id_kid)
+    state = a.store.state("prompts", ALPHA)
+    assert state.wire_id == h1 and state.rev == server.rows[("prompts", h1)]["rev"]
+    assert _legacy_live(server) == [ALPHA]
+    sent = len(server.wire)
+    assert (await a.sync())["ok"] is True
+    again = server.wire[sent:]
+    assert [(i["itemId"], i["deleted"]) for i in again] == [(ALPHA, 1)]  # the tombstone, not the h1 copy
+    assert _legacy_live(server) == [] and a.store.conflicts("prompts") == []
+    sent = len(server.wire)
+    await a.sync()
+    assert server.wire[sent:] == []  # owed once, paid once
+    b.reconnect()
+    await b.sync()
+    assert b.adapter.items == NAMES and b.store.conflicts("prompts") == []
+
+
+@pytest.mark.parametrize("keep", [sync_engine.KEEP_REMOTE, sync_engine.KEEP_LOCAL])
+async def test_a_tombstone_that_meets_a_changed_legacy_row_is_a_conflict_then_sent_again(
+    tmp_path, account_key, s3, keep
+):
+    server, a, b = await _legacy_pair(tmp_path, s3)
+
+    async def b_edits_on_its_legacy_connection():
+        saved, server.item_ids = server.item_ids, "legacy"
+        b.adapter.items[ALPHA] = {"v": "b-edit"}
+        assert (await b.sync())["ok"] is True
+        server.item_ids = saved
+
+    server.before_push = b_edits_on_its_legacy_connection
+    await a.sync()
+    h1 = sync_keyring.hashed_item_id("prompts", ALPHA, server.item_id_kid)
+    assert a.store.state("prompts", ALPHA).wire_id == h1
+    (conflict,) = a.store.conflicts("prompts")
+    assert conflict["itemId"] == ALPHA and conflict["remote"] == {"v": "b-edit"}
+    assert _legacy_live(server) == [ALPHA]
+    a.engine.resolve("prompts", ALPHA, keep)
+    winner = {"v": "b-edit"} if keep == sync_engine.KEEP_REMOTE else {"v": "alpha"}
+    b.reconnect()
+    for _ in range(3):
+        await a.sync(); await b.sync()
+    assert a.store.conflicts("prompts") == [] and b.store.conflicts("prompts") == []
+    assert a.adapter.items[ALPHA] == winner and b.adapter.items[ALPHA] == winner
+    assert _legacy_live(server) == [] and len(_live_ids(server)) == 2
+
+
+async def test_tombstone_accepted_hashed_copy_refused_resends_the_copy(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server, a, b = await _legacy_pair(tmp_path, s3)
+    h1_alpha = None
+
+    async def refuse_alpha_h1():
+        nonlocal h1_alpha
+        h1_alpha = sync_keyring.hashed_item_id("prompts", ALPHA, server.item_id_kid)
+        server.refuse = {h1_alpha}
+
+    server.before_push = refuse_alpha_h1
+    assert (await a.sync())["ok"] is True
+    assert ("prompts", h1_alpha) not in server.rows and _legacy_live(server) == []
+    assert a.adapter.items == NAMES  # not lost, not read as deleted here
+    assert (await a.sync())["ok"] is True
+    assert server.rows[("prompts", h1_alpha)]["deleted"] == 0
+    assert a.store.state("prompts", ALPHA).wire_id == h1_alpha and a.store.conflicts("prompts") == []
+    sent = len(server.wire)
+    await a.sync()
+    assert server.wire[sent:] == []
+    b.reconnect()
+    await b.sync(); await b.sync()
+    assert b.adapter.items == NAMES and b.store.conflicts("prompts") == []
+    assert a.adapter.items == NAMES
+
+
+def test_the_owed_tombstone_column_is_step_6_and_set_state_keeps_it(tmp_path):
+    from agent_team_backend.db import Database
+
+    path = tmp_path / "s.db"
+    store = sync_engine.SyncStore(Database(path))
+    assert store._db.schema_version("sync") == 6  # noqa: SLF001
+    store.set_state("prompts", "p", rev=1, synced_hash="h", deleted=False, wire_id="h1." + "a" * 64)
+    store.set_legacy_rev("prompts", "p", 7)
+    store.set_state("prompts", "p", rev=2, synced_hash="h2", deleted=False)
+    again = sync_engine.SyncStore(Database(path))
+    assert again.state("prompts", "p").legacy_rev == 7
 
 
 # ── contract c6: conditional PUT, GC race ────────────────────────────────────

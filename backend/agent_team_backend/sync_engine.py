@@ -235,6 +235,8 @@ _UNOPENED: Any = object()
 #: Keys an item carries between building and sending; never on the wire.
 _NAME_KEY = "_localName"
 _PAIR_KEY = "_pairHead"
+#: Marks the legacy tombstone a migrated item still owes (contract c5).
+_OWED_KEY = "_owedTombstone"
 
 
 def _name_of(item: dict[str, Any]) -> str:
@@ -355,6 +357,10 @@ class ItemState:
     #: D3: the hashed id (``h1.``…) the server knows the item by, or "" when
     #: it knows it by its name (a legacy id).
     wire_id: str = ""
+    #: D3, contract c5: the rev of the legacy row this item still owes a
+    #: tombstone for — its hashed copy went up, the legacy half did not — or
+    #: 0 when nothing is owed.
+    legacy_rev: int = 0
 
 
 def _stamp(updated_at: Any) -> str:
@@ -478,6 +484,16 @@ def _schema_v5(cur: Any) -> None:
             cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
+def _schema_v6(cur: Any) -> None:
+    # Contract c5: the server judges the two halves of a D3 migration
+    # separately. ``sync_state.legacy_rev``: see ItemState. Additive with a
+    # default: a build that predates v6 reads and writes the table unchanged
+    # and only never sends an owed legacy tombstone, as before.
+    columns = {str(row[1]) for row in cur.execute("PRAGMA table_info(sync_state)").fetchall()}
+    if "legacy_rev" not in columns:
+        cur.execute("ALTER TABLE sync_state ADD COLUMN legacy_rev INTEGER NOT NULL DEFAULT 0")
+
+
 #: Stands in for the two payloads of a sealed conflict row when the account
 #: key that would open them is not here. A row the user can neither read nor
 #: resolve still has to be listed, or the item stays silently blocked.
@@ -501,6 +517,7 @@ class SyncStore:
         self._db.migrate(_COMPONENT, 3, _schema_v3)
         self._db.migrate(_COMPONENT, 4, _schema_v4)
         self._db.migrate(_COMPONENT, 5, _schema_v5)
+        self._db.migrate(_COMPONENT, 6, _schema_v6)
         #: The account the live rows belong to; "" until the link settles on one.
         self._account = ""
         self._redactors: dict[str, Callable[[Any], dict[str, Any] | None]] = {}
@@ -618,13 +635,14 @@ class SyncStore:
     def state(self, scope: str, item_id: str) -> ItemState | None:
         with self._db.transaction() as cur:
             row = cur.execute(
-                "SELECT rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id FROM sync_state"
-                " WHERE scope = ? AND item_id = ?",
+                "SELECT rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id, legacy_rev"
+                " FROM sync_state WHERE scope = ? AND item_id = ?",
                 (scope, item_id),
             ).fetchone()
         return (
             ItemState(
-                int(row[0]), str(row[1]), bool(row[2]), str(row[3] or ""), str(row[4] or ""), str(row[5] or "")
+                int(row[0]), str(row[1]), bool(row[2]), str(row[3] or ""), str(row[4] or ""), str(row[5] or ""),
+                int(row[6] or 0),
             )
             if row
             else None
@@ -633,13 +651,14 @@ class SyncStore:
     def states(self, scope: str) -> dict[str, ItemState]:
         with self._db.transaction() as cur:
             rows = cur.execute(
-                "SELECT item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id"
+                "SELECT item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id, legacy_rev"
                 " FROM sync_state WHERE scope = ?",
                 (scope,),
             ).fetchall()
         return {
             str(r[0]): ItemState(
-                int(r[1]), str(r[2]), bool(r[3]), str(r[4] or ""), str(r[5] or ""), str(r[6] or "")
+                int(r[1]), str(r[2]), bool(r[3]), str(r[4] or ""), str(r[5] or ""), str(r[6] or ""),
+                int(r[7] or 0),
             )
             for r in rows
         }
@@ -693,6 +712,16 @@ class SyncStore:
                     scope, item_id, int(rev), synced_hash, 1 if deleted else 0,
                     sealed_kid or "", stamp, self._account, wire_id or "",
                 ),
+            )
+
+    def set_legacy_rev(self, scope: str, item_id: str, rev: int) -> None:
+        """Record the legacy tombstone *item_id* owes (``ItemState.legacy_rev``;
+        0: none). ``set_state`` leaves the column as it is."""
+        self._check_round()
+        with self._db.transaction() as cur:
+            cur.execute(
+                "UPDATE sync_state SET legacy_rev = ? WHERE scope = ? AND item_id = ?",
+                (max(int(rev), 0), scope, item_id),
             )
 
     # ── cursor ──────────────────────────────────────────────────────────
@@ -1401,7 +1430,10 @@ class SyncEngine:
         is held — a key this machine lacks, or files still on their way — or
         None. A held row does not stop the rows behind it.
         """
-        snapshot = adapter.snapshot()
+        # A copy, kept current as rows land: two rows of one item can share a
+        # page (a migration's legacy tombstone, then its hashed copy resent),
+        # and the second must be compared with what the first left here.
+        snapshot = dict(adapter.snapshot())
         blocked = self._store.conflict_ids(adapter.scope)
         applied = 0
         held: int | None = None
@@ -1621,6 +1653,12 @@ class SyncEngine:
                 # item is listed as refused and waits for its next change.
                 self._note(scope, "refused", item_id)
                 return False
+            if held and _hmac_kid(_caps_now()):
+                # D3 only: a page can hold two rows of one item there.
+                if remote is None:
+                    snapshot.pop(item_id, None)
+                else:
+                    snapshot[item_id] = remote
         self._store.set_state(
             scope,
             item_id,
@@ -1852,7 +1890,7 @@ class SyncEngine:
             # server would refuse a manifest naming a missing blob anyway, and
             # the adapter starts the upload that lets it go next round.
             keep = {item_id for item_id, payload, _ in pending if payload is None or await ready(item_id, payload)}
-            built = [entry for entry in built if _name_of(entry[0]) in keep]
+            built = [entry for entry in built if entry[0].get(_OWED_KEY) or _name_of(entry[0]) in keep]
         return await self._send_all(adapter.scope, pending, built)
 
     async def _send_all(
@@ -1973,6 +2011,15 @@ class SyncEngine:
                 for i, p, h in pending
                 for entry in self._build_hashed(scope, i, p, h, states, updated_at, id_kid)
             ]
+            # Contract c5: a migrated item whose legacy half did not go up
+            # still owes the server that tombstone, on its own — the hashed
+            # copy is never sent again from rev 0.
+            for name, state in sorted(states.items()):
+                if state.legacy_rev <= 0 or not state.wire_id or name in blocked or name in withheld:
+                    continue
+                owed = self._wire_item(scope, name, name, state.legacy_rev, updated_at, None, "")
+                owed[0][_OWED_KEY] = True
+                built.append(owed)
             return pending, built
         built = [
             entry
@@ -2095,11 +2142,15 @@ class SyncEngine:
         by_id = {item_id: (payload, item_hash) for item_id, payload, item_hash in pending}
         names: dict[str, str] | None = None
         pairs: dict[str, str] = {}
+        owed: set[str] = set()
         if any(_NAME_KEY in item for item in wire):
             # D3: the wire speaks ids, the record speaks names.
             names = {str(item["itemId"]): _name_of(item) for item in wire}
             pairs = {str(item["itemId"]): _name_of(item) for item in wire if item.get(_PAIR_KEY)}
-            wire = [{k: v for k, v in item.items() if k not in (_NAME_KEY, _PAIR_KEY)} for item in wire]
+            owed = {_name_of(item) for item in wire if item.get(_OWED_KEY)}
+            wire = [
+                {k: v for k, v in item.items() if k not in (_NAME_KEY, _PAIR_KEY, _OWED_KEY)} for item in wire
+            ]
         caps = _caps_now()
         if _is_v3(caps) and caps.get("storage") == "s3":
             wire = await self._objectify(scope, wire, caps)
@@ -2115,7 +2166,7 @@ class SyncEngine:
                 # met again, readable or not, by the next round.
                 failure = err
                 reply = {**reply, "conflicts": []}
-        count = await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps, names, pairs)
+        count = await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps, names, pairs, owed)
         if failure is not None:
             raise failure
         return count
@@ -2236,16 +2287,19 @@ class SyncEngine:
         stamps: dict[str, str] | None = None,
         names: dict[str, str] | None = None,
         pairs: dict[str, str] | None = None,
+        owed: set[str] | None = None,
     ) -> int:
         """Write what the server said into the local record. Off the loop.
 
-        ``names`` (D3) maps each wire id of the batch to its local name, and
+        ``names`` (D3) maps each wire id of the batch to its local name,
         ``pairs`` each migration's hashed id to the name whose legacy
-        tombstone rode behind it; both None/empty on the legacy wire.
+        tombstone rode behind it, and ``owed`` the names whose owed legacy
+        tombstone went alone (contract c5); all None/empty on the legacy wire.
         """
         self._store._check_round()
         accepted = reply.get("accepted")
         pairs = pairs or {}
+        owed = owed or set()
         migrating = set(pairs.values())
         revs: dict[str, int] = {}
         for entry in accepted if isinstance(accepted, list) else []:
@@ -2253,6 +2307,10 @@ class SyncEngine:
                 continue
             wire_id = str(entry.get("itemId") or "")
             item_id = (names or {}).get(wire_id, wire_id)
+            if wire_id in owed:
+                # The legacy row is gone: nothing is owed any more.
+                self._store.set_legacy_rev(scope, wire_id, 0)
+                continue
             if item_id not in by_id:
                 continue
             revs[wire_id] = int(entry.get("rev") or 0)
@@ -2278,13 +2336,13 @@ class SyncEngine:
         conflicts = reply.get("conflicts")
         adapter = self._adapters.get(scope)
         for entry in conflicts if isinstance(conflicts, list) else []:
-            if (
-                isinstance(entry, dict) and str(entry.get("itemId") or "") in migrating
-                and not sync_keyring.is_hashed_item_id(str(entry.get("itemId") or ""))
+            wire_id = str(entry.get("itemId") or "") if isinstance(entry, dict) else ""
+            if wire_id and not sync_keyring.is_hashed_item_id(wire_id) and (
+                wire_id in migrating or wire_id in owed
             ):
-                # The legacy half of a migration clashed: the pull of the next
-                # round reads that row, and the migration is tried again.
-                log.info("sync.push on %s: a legacy tombstone of a migration clashed", scope)
+                # The legacy half clashed: that row changed since this machine
+                # last read it (contract c5).
+                self._record_legacy_conflict(scope, wire_id, entry, adapter)
                 continue
             self._record_push_conflict(scope, entry, by_id, sealed=_sensitive(adapter), names=names)
         cursor = _contiguous_cursor(self._store.cursor(scope), accepted)
@@ -2309,21 +2367,63 @@ class SyncEngine:
         sent: tuple[Any, str],
         stamp: str,
     ) -> None:
-        """D3: what a migration pair came to. The server commits the two in
-        one transaction, so both are accepted or neither; either half alone
-        is still written down as the server now holds it."""
+        """D3: what a migration pair came to. The server judges the two
+        halves separately (contract c5), so each is written down as the
+        server now holds it; the migration is complete only when both went."""
         payload, item_hash = sent
         if hashed in revs:
-            if name not in revs:
-                log.warning("sync.push on %s: a hashed copy went up without its legacy tombstone", scope)
+            before = self._store.state(scope, name)
             self._store.set_state(
                 scope, name, rev=revs[hashed], synced_hash=item_hash, deleted=False,
                 sealed_kid=sync_keyring.active_key_id() or "", synced_updated_at=stamp, wire_id=hashed,
             )
+            if name not in revs and before is not None and before.rev > 0:
+                # Migrated, but the legacy row still stands: its tombstone is
+                # owed, at the rev it was sent against (a clash, recorded
+                # after this, moves it to the row's current rev).
+                log.info("sync.push on %s: a hashed copy went up without its legacy tombstone", scope)
+                self._store.set_legacy_rev(scope, name, before.rev)
         elif name in revs:
             # Only the legacy row went: the item is gone from the server, and
             # the next push sends the hashed copy as new.
             self._store.set_state(scope, name, rev=revs[name], synced_hash="", deleted=True)
+
+    def _record_legacy_conflict(self, scope: str, name: str, entry: dict[str, Any], adapter: Any) -> None:
+        """The legacy tombstone of a migrated item met a changed legacy row.
+
+        A row deleted since owes nothing. A live one that holds what this
+        machine holds is simply owed at its new rev. Anything else was
+        written by a device still on legacy ids and is a conflict like any
+        other; the tombstone waits for its answer (see ``resolve``).
+        """
+        state = self._store.state(scope, name)
+        if state is None or not state.wire_id:
+            return
+        rev = int(entry.get("rev") or 0)
+        if entry.get("deleted") or rev <= 0:
+            self._store.set_legacy_rev(scope, name, 0)
+            return
+        self._store.set_legacy_rev(scope, name, rev)
+        body = str(entry.get("body") or "")
+        try:
+            remote = self._open_payload(scope, name, body)
+        except Exception as err:  # noqa: BLE001 - asked again on the next push
+            log.warning("the legacy copy of %s/%s did not open: %s", scope, name, _why(err))
+            return
+        local = adapter.snapshot().get(name) if adapter is not None else None
+        if local is not None and digest(local) == digest(remote):
+            return
+        self._store.record_conflict(
+            scope,
+            name,
+            local=local,
+            remote=remote,
+            remote_rev=rev,
+            remote_device=str(entry.get("deviceId") or ""),
+            sealed=_sensitive(adapter),
+            remote_kid=_kid_of(body),
+            remote_wire="",
+        )
 
     def _record_push_conflict(
         self,
@@ -2416,6 +2516,10 @@ class SyncEngine:
             ) from err
         if row is None:
             raise SyncError(f"no unresolved conflict for {scope}/{item_id}")
+        state = self._store.state(scope, item_id)
+        if state is not None and state.wire_id and state.legacy_rev > 0 and not row.get("remoteWire"):
+            self._resolve_legacy_half(adapter, item_id, keep, row, state)
+            return
         if keep == KEEP_REMOTE:
             remote = row["remote"]
             if int(row["remoteRev"]) == 0:
@@ -2461,6 +2565,32 @@ class SyncEngine:
             )
         else:
             raise SyncError(f"{keep!r} is neither {KEEP_LOCAL!r} nor {KEEP_REMOTE!r}")
+        self._store.clear_conflict(scope, item_id)
+
+    def _resolve_legacy_half(
+        self, adapter: ScopeAdapter, item_id: str, keep: str, row: dict[str, Any], state: ItemState
+    ) -> None:
+        """Answer a conflict between a migrated item and its changed legacy
+        row (contract c5). Either way the item stays on its hashed id at the
+        rev it holds there, and the legacy tombstone stays owed at the rev
+        the conflict reported: keeping the remote copy writes it in and
+        leaves it unagreed, so the next push carries it up under the hashed
+        id; keeping the local copy sends only the tombstone."""
+        scope = adapter.scope
+        if keep == KEEP_REMOTE:
+            try:
+                refused = adapter.apply(item_id, row["remote"]) is False
+            except DeferItem as err:
+                raise SyncError(f"{scope}/{item_id} is still downloading; try again shortly") from err
+            if refused:
+                raise SyncError(f"{scope}/{item_id} could not be written here; the conflict stays open")
+            self._store.set_state(
+                scope, item_id, rev=state.rev, synced_hash="", deleted=False,
+                sealed_kid=state.sealed_kid, wire_id=state.wire_id,
+            )
+        elif keep != KEEP_LOCAL:
+            raise SyncError(f"{keep!r} is neither {KEEP_LOCAL!r} nor {KEEP_REMOTE!r}")
+        self._store.set_legacy_rev(scope, item_id, int(row["remoteRev"]))
         self._store.clear_conflict(scope, item_id)
 
     # ── inventory ───────────────────────────────────────────────────────
@@ -2745,7 +2875,7 @@ class SyncEngine:
         write does not change what the next comparison reads.
         """
         scope = adapter.scope
-        snapshot = adapter.snapshot()
+        snapshot = dict(adapter.snapshot())
         blocked = self._store.conflict_ids(scope)
         out: list[dict[str, Any]] = []
         refused = self._notes.setdefault(scope, {}).setdefault("refused", [])
