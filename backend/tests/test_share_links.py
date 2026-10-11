@@ -9,6 +9,7 @@ key and the metadata reach the server only wrapped under the account ring.
 from __future__ import annotations
 
 import base64
+import os
 import json
 from pathlib import Path
 from typing import Any
@@ -195,7 +196,7 @@ def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Pa
     assert commit["kid"] == sync_keyring.active_key_id()
     assert sync_keyring.unwrap_aux(f"link:{created.link_id}:v1", commit["wrappedKey"]) == key
     assert "Secret Roadmap" not in commit["metaEnc"]
-    meta = json.loads(sync_keyring.unwrap_aux(f"link-meta:{created.link_id}", commit["metaEnc"]))
+    meta = json.loads(sync_keyring.unwrap_aux(f"link-meta:{created.link_id}:v1", commit["metaEnc"]))
     assert meta["title"] == "Secret Roadmap"
     assert meta["createdBy"] == "agent" and meta["pane"] == "release" and meta["agent"] == "claude"
     assert meta["masked"] == [{"line": 2, "category": "github-token", "action": "masked"}]
@@ -207,3 +208,102 @@ def test_create_share_without_a_ring_fails_before_anything_is_sent(home: Path) -
     with pytest.raises(sync_keyring.KeyringError):
         share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
     assert client.created == []
+
+
+# ---- review round 1 ---------------------------------------------------------------
+
+
+def test_whitespace_around_the_path_is_refused(home: Path) -> None:
+    """The check used to strip the path and the read did not, so 'ok.html ' was
+    checked as ok.html and read as whatever 'ok.html ' pointed to."""
+    plans = _plan(home, "<p/>").parent
+    secret = home / "creds.txt"
+    secret.write_text("TOPSECRET\n")
+    os.link(secret, plans / "hl.html")
+    (plans / "ok.html").write_text("benign")
+    (plans / "ok.html ").symlink_to(plans / "hl.html")
+    share_links.prepare(str(plans / "ok.html"), "plan")
+    with pytest.raises(share_links.ShareRefused):
+        share_links.prepare(str(plans / "ok.html") + " ", "plan")
+
+
+def test_the_file_read_is_the_file_checked(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A swap between the check and the read is refused, not followed."""
+    from agent_team_backend.channels import media
+
+    path = _plan(home, "<p>benign</p>")
+    secret = home / "creds.txt"
+    secret.write_text("TOPSECRET\n")
+    hard = path.parent / "hl.html"  # a second name: refused if it were checked
+    os.link(secret, hard)
+    real_check = media._check
+    calls = {"n": 0}
+
+    def swapping(raw: str):
+        out = real_check(raw)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            path.unlink()
+            path.symlink_to(hard)
+        return out
+
+    monkeypatch.setattr(media, "_check", swapping)
+    with pytest.raises(share_links.ShareRefused):
+        share_links.prepare(str(path), "plan")
+
+
+def test_uppercase_suffix_is_accepted(home: Path) -> None:
+    path = _plan(home, "<p/>")
+    upper = path.with_name("UP.HTML")
+    path.rename(upper)
+    assert share_links.prepare(str(upper), "plan").path.name == "UP.HTML"
+
+
+@pytest.mark.parametrize("bad", ["x/../../evil", "x?q=1", "x#k=ATTACKER", "a:v1", "short"])
+def test_a_malformed_link_id_from_the_server_is_refused_before_upload(ring, home: Path, bad: str) -> None:
+    client = FakeLinks()
+    client.create = lambda **_: {"linkId": bad, "uploadUrl": "https://s3.example/put"}  # type: ignore[method-assign]
+    uploads: list[str] = []
+    with pytest.raises(share_links.ShareError):
+        share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda url, _d: uploads.append(url))
+    assert uploads == [] and client.committed == []
+
+
+def test_upload_url_must_be_https() -> None:
+    with pytest.raises(share_links.ShareError):
+        share_links._http_put("http://s3.example/put", b"x")
+
+
+def test_objects_with_the_same_key_cannot_be_spliced() -> None:
+    key = share_links.new_key()
+    size = share_links.SEGMENT_SIZE * 2 + 5
+    a = share_links.encrypt_object(b"a" * size, key, kind="plan", version=1)
+    b = share_links.encrypt_object(b"b" * size, key, kind="plan", version=1)
+    _, sa = _segments(a)
+    _, sb = _segments(b)
+    with pytest.raises(share_links.ShareError):
+        share_links.decrypt_object(a[: share_links.HEADER_LEN] + sa[0] + sb[1] + sa[2], key)
+
+
+def test_an_older_version_is_refused_when_a_newer_one_is_expected() -> None:
+    key = share_links.new_key()
+    v1 = share_links.encrypt_object(b"old", key, kind="plan", version=1)
+    assert share_links.decrypt_object(v1, key, expected_version=1)[1] == 1
+    with pytest.raises(share_links.ShareError):
+        share_links.decrypt_object(v1, key, expected_version=2)
+
+
+def test_metadata_label_names_the_version(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
+    meta_enc = client.committed[0]["metaEnc"]
+    assert json.loads(sync_keyring.unwrap_aux(f"link-meta:{created.link_id}:v1", meta_enc))["title"]
+    with pytest.raises(sync_keyring.KeyringError):
+        sync_keyring.unwrap_aux(f"link-meta:{created.link_id}", meta_enc)
+
+
+def test_kind_codes_are_the_shared_table() -> None:
+    assert share_links.KIND_CODES == {
+        "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "transcript": 6, "bundle": 7,
+    }
+    assert all(share_links.KINDS[k].code == share_links.KIND_CODES[k] for k in share_links.KINDS)

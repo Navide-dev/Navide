@@ -10,12 +10,16 @@ so any device of the account can rebuild the URL and the server cannot.
 Object format (the viewer page decrypts it with WebCrypto)::
 
     object  = header ‖ segment*
-    header  = "NVL1" ‖ kind code (1) ‖ version (4, big-endian)
+    header  = "NVL1" ‖ kind code (1) ‖ version (4, big-endian) ‖ object id (16)
     segment = nonce (12) ‖ AES-256-GCM(plaintext ≤ 1 MiB) ‖ tag (16)
     AAD     = header ‖ segment index (4, big-endian) ‖ is-last (1)
 
 Every segment binds the header, its position and whether it is the last one,
-so an object cannot be relabelled, reordered or cut short.
+so an object cannot be relabelled, reordered or cut short; the random object
+id in the header keeps two objects sealed under the same key from being
+spliced together. ``version`` is the link's *content* version (1 at create,
++1 per content update), not a format version — the format is the magic.
+The kind byte is ``KIND_CODES``, the table the viewer page decodes with.
 
 Creating a link: check the path and the kind, mask the content
 (``share_scan``), encrypt, ask the server for a row and an upload URL, PUT
@@ -47,7 +51,8 @@ from . import share_scan, sync_keyring
 SHARE_BASE = "https://share.navide.dev"
 
 MAGIC = b"NVL1"
-HEADER_LEN = len(MAGIC) + 1 + 4
+_OBJECT_ID_LEN = 16
+HEADER_LEN = len(MAGIC) + 1 + 4 + _OBJECT_ID_LEN
 SEGMENT_SIZE = 1024 * 1024
 _NONCE_LEN = 12
 SEGMENT_OVERHEAD = _NONCE_LEN + 16
@@ -57,6 +62,15 @@ MAX_PLAINTEXT = 32 * 1024 * 1024
 MAX_TTL_DAYS = 30
 
 _HTTP_TIMEOUT_S = 60
+#: What a server-assigned link id may look like before it goes into a URL or a label.
+_LINK_ID_RE = re.compile(r"[A-Za-z0-9_-]{22,64}")
+
+#: The kind byte of every kind the format knows, shipped or not. Shared with
+#: the viewer page (Navide-Server share-web/), which must decode the same
+#: table; a code is never reused for another kind.
+KIND_CODES: dict[str, int] = {
+    "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "transcript": 6, "bundle": 7,
+}
 
 
 @dataclass(frozen=True)
@@ -70,10 +84,10 @@ class KindSpec:
 
 #: Phase 1 kinds. A kind not listed here cannot be shared at all.
 KINDS: dict[str, KindSpec] = {
-    "plan": KindSpec(1, 7, False, (".html", ".plan.md"), ((".agent-team", "plans"), (".cursor", "plans"))),
-    "report": KindSpec(2, 7, False, (".html",), ((".agent-team", "plans"), ("docs", "reports"))),
+    "plan": KindSpec(KIND_CODES["plan"], 7, False, (".html", ".plan.md"), ((".agent-team", "plans"), (".cursor", "plans"))),
+    "report": KindSpec(KIND_CODES["report"], 7, False, (".html",), ((".agent-team", "plans"), ("docs", "reports"))),
 }
-_KIND_BY_CODE = {spec.code: name for name, spec in KINDS.items()}
+_KIND_BY_CODE = {code: name for name, code in KIND_CODES.items()}
 
 _PLAN_META_RE = re.compile(r'<script id="plan-meta" type="application/json">(.*?)</script>', re.DOTALL)
 
@@ -110,7 +124,7 @@ def new_key() -> bytes:
 
 
 def _header(kind: str, version: int) -> bytes:
-    return MAGIC + bytes([KINDS[kind].code]) + struct.pack(">I", version)
+    return MAGIC + bytes([KIND_CODES[kind]]) + struct.pack(">I", version) + os.urandom(_OBJECT_ID_LEN)
 
 
 def _segment_aad(header: bytes, index: int, last: bool) -> bytes:
@@ -128,8 +142,11 @@ def encrypt_object(plaintext: bytes, key: bytes, *, kind: str, version: int) -> 
     return b"".join(out)
 
 
-def decrypt_object(blob: bytes, key: bytes) -> tuple[str, int, bytes]:
-    """(kind, version, plaintext) of an object sealed by ``encrypt_object``."""
+def decrypt_object(blob: bytes, key: bytes, *, expected_version: int | None = None) -> tuple[str, int, bytes]:
+    """(kind, version, plaintext) of an object sealed by ``encrypt_object``.
+
+    With ``expected_version``, an object of any other version is refused — an
+    older copy served in place of the current one opens fine otherwise."""
     if len(blob) < HEADER_LEN + SEGMENT_OVERHEAD or blob[:4] != MAGIC:
         raise ShareError("not a share-link object")
     header = blob[:HEADER_LEN]
@@ -137,6 +154,8 @@ def decrypt_object(blob: bytes, key: bytes) -> tuple[str, int, bytes]:
     if kind is None:
         raise ShareError("unknown kind in the share-link header")
     (version,) = struct.unpack(">I", header[5:9])
+    if expected_version is not None and version != expected_version:
+        raise ShareError(f"expected content version {expected_version}, got {version}")
     body = blob[HEADER_LEN:]
     step = SEGMENT_SIZE + SEGMENT_OVERHEAD
     starts = list(range(0, len(body), step))
@@ -163,8 +182,8 @@ def key_label(link_id: str, version: int) -> str:
     return f"link:{link_id}:v{version}"
 
 
-def meta_label(link_id: str) -> str:
-    return f"link-meta:{link_id}"
+def meta_label(link_id: str, version: int) -> str:
+    return f"link-meta:{link_id}:v{version}"
 
 
 # ---- preparing ----------------------------------------------------------------------
@@ -181,7 +200,7 @@ class Prepared:
 
 
 def _source_ok(real: Path, spec: KindSpec) -> bool:
-    if not real.name.endswith(spec.suffixes):
+    if not real.name.lower().endswith(spec.suffixes):
         return False
     parent = tuple(real.parent.parts)
     return any(parent[-len(folder):] == folder for folder in spec.folders)
@@ -203,19 +222,24 @@ def prepare(raw_path: str, kind: str) -> Prepared:
     """The masked content of ``raw_path`` as ``kind``, or ``ShareRefused``."""
     spec = KINDS.get(kind)
     if spec is None:
-        raise ShareRefused("unknown_kind", f"'{kind}' cannot be shared.")
-    refused = share_scan.refusal(raw_path)
-    if refused is not None:
+        raise ShareRefused("unknown_kind", f"A {kind!r} cannot be shared.")
+    out, refused = share_scan.open_shareable(raw_path)
+    if out is None:
+        assert refused is not None
         raise ShareRefused(refused.code, refused.message)
-    real = Path(raw_path).resolve()
-    if not _source_ok(real, spec):
-        raise ShareRefused("kind_source", f"This file is not a {kind} document.")
-    if real.stat().st_size > MAX_PLAINTEXT:
+    with out.fh:
+        real = out.path
+        if not _source_ok(real, spec):
+            where = " or ".join("/".join(folder) + "/" for folder in spec.folders)
+            raise ShareRefused("kind_source", f"Only files in {where} can be shared as a {kind}.")
+        if out.size > MAX_PLAINTEXT:
+            raise ShareRefused("too_large", f"Files over {MAX_PLAINTEXT // (1024 * 1024)} MiB cannot be shared.")
+        try:
+            text = out.fh.read(MAX_PLAINTEXT + 1).decode("utf-8")
+        except (OSError, UnicodeDecodeError) as err:
+            raise ShareRefused("unreadable", "The file could not be read as UTF-8 text.") from err
+    if len(text.encode("utf-8")) > MAX_PLAINTEXT:
         raise ShareRefused("too_large", f"Files over {MAX_PLAINTEXT // (1024 * 1024)} MiB cannot be shared.")
-    try:
-        text = real.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as err:
-        raise ShareRefused("unreadable", "The file could not be read as UTF-8 text.") from err
     result = share_scan.scan(text, kind=kind)
     return Prepared(
         kind=kind,
@@ -239,6 +263,8 @@ class Created:
 
 
 def _http_put(url: str, data: bytes) -> None:
+    if not url.startswith("https://"):
+        raise ShareError("refusing to upload over a non-https URL")
     req = Request(url, data=data, method="PUT", headers={"Content-Type": "application/octet-stream"})
     try:
         with urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:  # noqa: S310 - a presigned https URL from the server
@@ -284,7 +310,9 @@ def create_share(
         require_login=spec.require_login if require_login is None else require_login,
         created_by=created_by,
     )
-    link_id = row["linkId"]
+    link_id = row.get("linkId")
+    if not isinstance(link_id, str) or not _LINK_ID_RE.fullmatch(link_id):
+        raise ShareError("the server returned a malformed link id")
     put(row["uploadUrl"], blob)
     meta: dict[str, Any] = {
         "title": prepared.title,
@@ -300,6 +328,6 @@ def create_share(
         link_id=link_id,
         wrapped_key=wrapped,
         kid=_kid_of(wrapped),
-        meta_enc=sync_keyring.wrap_aux(meta_label(link_id), json.dumps(meta).encode("utf-8")),
+        meta_enc=sync_keyring.wrap_aux(meta_label(link_id, 1), json.dumps(meta).encode("utf-8")),
     )
     return Created(link_id, link_url(link_id, key), row.get("expiresAt", ""), prepared.findings)

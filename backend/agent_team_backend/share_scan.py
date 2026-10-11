@@ -233,6 +233,7 @@ _MESSAGES = {
     "hard_link": "A file with more than one name (a hard link) is never shared.",
     "changed": "The file changed or became unreadable while it was checked.",
     "memory": "Agent memory files (CLAUDE.md, AGENTS.md and the like) are never shared.",
+    "whitespace": "The path starts or ends with a space; name the file exactly.",
 }
 
 
@@ -250,11 +251,29 @@ def _is_memory(real: Path) -> bool:
     return any(p == "memory" and any(q.startswith(".") for q in parts[:i]) for i, p in enumerate(parts))
 
 
+def open_shareable(raw: str) -> tuple[media.Outbound | None, Refusal | None]:
+    """``raw`` opened for reading after the checks, or why it never may be.
+
+    The returned handle is the very file that passed (``media.open_outbound``
+    rechecks it while open), so read from it and use its ``path``; reopening
+    by name would read whatever the name points at by then. The caller closes
+    the handle. A path with whitespace around it is refused rather than
+    trimmed: the check and the read must name the same file.
+    """
+    if raw != raw.strip():
+        return None, Refusal("not_absolute", _MESSAGES["whitespace"])
+    out, reason = media.open_outbound(raw)
+    if out is None:
+        return None, Refusal(reason, _MESSAGES.get(reason, "This file cannot be shared."))
+    if _is_memory(out.path):
+        out.fh.close()
+        return None, Refusal("memory", _MESSAGES["memory"])
+    return out, None
+
+
 def refusal(raw: str) -> Refusal | None:
     """Why ``raw`` can never be shared, or None when it may be."""
-    real, reason = media.resolve_outbound(raw)
-    if real is None:
-        return Refusal(reason, _MESSAGES.get(reason, "This file cannot be shared."))
-    if _is_memory(real):
-        return Refusal("memory", _MESSAGES["memory"])
-    return None
+    out, refused = open_shareable(raw)
+    if out is not None:
+        out.fh.close()
+    return refused
