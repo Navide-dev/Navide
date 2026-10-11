@@ -6851,6 +6851,7 @@
         "block": "Block",
         "blocked-title": "Blocked",
         "blocked-hint": "A block is refused ahead of every rule, including your own other devices.",
+        "block-full": "This machine's pairing record is full, so the block could not be saved. Unpair this device first, then block it.",
         "unblock": "Unblock",
         "unpair": "Unpair",
         "unpair-title": "Forget this device. It is not blocked.",

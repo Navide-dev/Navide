@@ -1095,6 +1095,8 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
     const resp = await props.backend.send(type, args)
     await loadNetwork()
     if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    // KC3-1: a record that was already full has no room for a block.
+    if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1124,6 +1126,7 @@ async function blockPending(row: PendingDevice): Promise<void> {
     )
     await loadNetwork()
     if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    if (resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {

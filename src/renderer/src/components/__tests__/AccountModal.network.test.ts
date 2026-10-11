@@ -317,6 +317,16 @@ describe('account modal — your network', () => {
     }
   })
 
+  it('tells someone whose pairing record is full to unpair before blocking', () => {
+    // KC3-1: a machine paired with many devices before the reserve existed
+    // cannot store a block; the way out is to unpair that device first.
+    expect(MODAL).toMatch(/code === 'p2p-trust-store-full'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-full'\)/)
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      const messages = i18n.global.getLocaleMessage(locale) as Record<string, any>
+      expect(messages?.settings?.p2p?.trust?.['block-full'], locale).toBeTruthy()
+    }
+  })
+
   it('reads the trust state from the snapshot it already polls', () => {
     // Not a second timer and not a subscription: one read, so the panel cannot
     // draw half of one moment and half of the next.
