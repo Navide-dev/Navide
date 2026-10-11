@@ -58,8 +58,11 @@ which runs, in order:
    `apply` returns `"unknown"` until the link leads somewhere again. The same
    holds for a folder on a volume that is not mounted: when the first missing
    folder on the way down is a mount root (`/Volumes/<name>`, `/mnt/<name>`,
-   `/media/<user>/<name>`, `/run/media/<user>/<name>`) or a missing drive root
-   (`E:\`). Any other missing folder is judged as before.
+   `/media/<user>/<name>`, `/run/media/<user>/<name>`) that the last write saw
+   on another device than the folder it is now missing from, or a missing
+   drive root (`E:\`). The path alone is no proof: a plain folder under
+   `/Volumes` that was deleted is a reset. Any other missing folder is judged
+   as before.
    A workspace is keyed by its canonical path (links resolved, `..`
    collapsed, each folder spelled as stored), so a refusal holds however the
    pane spells it.

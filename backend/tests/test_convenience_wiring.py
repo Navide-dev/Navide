@@ -247,18 +247,47 @@ def test_a_config_folder_on_an_unmounted_volume_is_unknown_not_a_reset(
     settings.write_text(json.dumps(data), encoding="utf-8")
     convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
     volume.rename(tmp_path / "unmounted")
+    # A mounted volume is another device than the folder it is mounted in.
+    real_device = convenience._device
+    monkeypatch.setattr(convenience, "_device", lambda path: -1)
 
     out = convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
 
     assert out["convenience"] == "unknown"
     assert not volume.exists()
     (tmp_path / "unmounted").rename(volume)
+    monkeypatch.setattr(convenience, "_device", real_device)
     assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] == (
         "unchanged"
     )
     assert not any(part.startswith("PreToolUse:") for part in claude_hooks.hook_parts(settings))
     assert gate.state("claude.hooks") == ("allowed", "default")
     assert "reset" not in [e["action"] for e in gate.history("claude.hooks")]
+
+
+def test_a_plain_folder_under_volumes_deleted_is_a_reset_not_unknown(gate, tmp_path, monkeypatch) -> None:
+    """R4-L5: a path under /Volumes is not proof of a volume. A folder that
+    sat on the same device as /Volumes itself was deleted, not unmounted."""
+    from agent_team_backend import convenience
+
+    root = tmp_path / "Volumes"
+    monkeypatch.setattr(convenience, "_MOUNT_PARENTS", (root,))
+    folder = root / "X" / "claude"
+    folder.mkdir(parents=True)
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(folder))
+    port = str(tmp_path / "port")
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    import shutil
+
+    shutil.rmtree(root / "X")
+
+    assert convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)["convenience"] != (
+        "unknown"
+    )
+    folder.mkdir(parents=True, exist_ok=True)
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    assert "reset" in [e["action"] for e in gate.history("claude.hooks")]
+    assert gate.state("claude.hooks") == ("allowed", "default")
 
 
 def test_a_config_folder_gone_inside_a_mounted_volume_is_still_a_reset(gate, tmp_path, monkeypatch) -> None:

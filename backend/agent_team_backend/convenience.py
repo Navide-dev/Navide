@@ -323,8 +323,9 @@ class ConvenienceGate:
         with self._lock:
             if not self.allowed(feature_id):
                 return "off"
-            if _unreachable(file) or _unreachable(reset_folder):
-                log.warning("%s: %s is behind a link that leads nowhere; treating as unknown", feature_id, key)
+            seen_device = _seen_device(self._folder(feature_id, key))
+            if _unreachable(file, seen_device) or _unreachable(reset_folder, seen_device):
+                log.warning("%s: %s is unreachable right now; treating as unknown", feature_id, key)
                 return "unknown"
             if per_target:
                 self._adopt_spelling(feature_id, key)
@@ -808,7 +809,22 @@ _MOUNT_PARENTS: tuple[Path, ...] = (Path("/Volumes"), Path("/mnt"))
 _MOUNT_GRANDPARENTS: tuple[Path, ...] = (Path("/media"), Path("/run/media"))
 
 
-def _unreachable(path: Path | None) -> bool:
+def _device(path: Path) -> int | None:
+    """``path``'s device number, None when it cannot be read."""
+    try:
+        return path.stat().st_dev
+    except OSError:
+        return None
+
+
+def _seen_device(folder: str | None) -> int | None:
+    """The device a write last saw the reset folder on (``_folder_identity``),
+    None when no write recorded one."""
+    head = (folder or "").split(":", 1)[0]
+    return int(head) if head.isdigit() else None
+
+
+def _unreachable(path: Path | None, seen_device: int | None = None) -> bool:
     """Whether ``path`` or a folder above it is a link that leads nowhere, or
     sits on a volume that is not mounted (``_on_unmounted_volume``)."""
     if path is None:
@@ -819,14 +835,16 @@ def _unreachable(path: Path | None) -> bool:
                 return True
         except OSError:
             return True
-    return _on_unmounted_volume(path)
+    return _on_unmounted_volume(path, seen_device)
 
 
-def _on_unmounted_volume(path: Path) -> bool:
+def _on_unmounted_volume(path: Path, seen_device: int | None = None) -> bool:
     """Whether the first missing folder on the way down to ``path`` is a
-    volume's mount root (``_MOUNT_PARENTS``/``_MOUNT_GRANDPARENTS``), or its
-    drive root is missing (Windows ``E:\\``). Anything else that is missing
-    is an ordinary deletion."""
+    volume's mount root (``_MOUNT_PARENTS``/``_MOUNT_GRANDPARENTS``) that a
+    write saw on another device than the folder it is missing from now, or
+    its drive root is missing (Windows ``E:\\``). A path alone is no proof:
+    a plain folder under /Volumes that was deleted is an ordinary deletion,
+    and so is anything else that is missing."""
     missing = None
     for step in (path, *path.parents):
         try:
@@ -840,9 +858,10 @@ def _on_unmounted_volume(path: Path) -> bool:
     if missing is None:
         return False
     parent = missing.parent
-    return parent in _MOUNT_PARENTS or (
+    at_mount_root = parent in _MOUNT_PARENTS or (
         parent.parent in _MOUNT_GRANDPARENTS and parent != parent.parent
     )
+    return at_mount_root and seen_device is not None and seen_device != _device(step)
 
 
 def _was_reset(seen: str, folder: Path) -> bool:
