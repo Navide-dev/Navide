@@ -108,7 +108,7 @@ describe('Navide Cloud page lifecycle', () => {
         cliProfilesApi: api(),
         stagesApi: api(),
         analyzerApi: api(),
-        initialTab,
+        initialTab: initialTab as never,
       },
       global: { plugins: [i18n], stubs: STUBS },
     })
