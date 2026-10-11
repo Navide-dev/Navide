@@ -333,6 +333,40 @@ def _schema_v3(cur: Any) -> None:
         cur.execute("ALTER TABLE sync_state ADD COLUMN synced_updated_at TEXT NOT NULL DEFAULT ''")
 
 
+#: The tables whose rows belong to one account (D4).
+_ACCOUNT_TABLES = ("sync_state", "sync_cursor", "sync_conflicts")
+
+
+def _schema_v4(cur: Any) -> None:
+    # ``account``: the namespace (``sync_keyring.namespace_for``) a row was
+    # agreed under. ``sync_parked`` holds the rows of every account other than
+    # the current one, each as a JSON object of its columns, so switching back
+    # resumes where that account left off. Additive only: a build that
+    # predates v4 never names the column, so its writes take the "" default,
+    # and the next settle adopts them (``SyncStore.adopt_account``).
+    #
+    # Downgrade: a build that predates v4 skips this step (its highest step is
+    # lower), reads and writes the live rows as before and never looks at
+    # ``sync_parked`` or ``sync-approvals-parked/``. An account switch made by
+    # it wipes the live rows the way it always did; the parked ones survive,
+    # so after upgrading again only the accounts it switched through are
+    # read afresh. Nothing it can do makes another account's rows live.
+    for table in _ACCOUNT_TABLES:
+        columns = {str(row[1]) for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "account" not in columns:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN account TEXT NOT NULL DEFAULT ''")
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_parked (
+            account  TEXT NOT NULL,
+            tbl      TEXT NOT NULL,
+            row_json TEXT NOT NULL
+        )
+        """
+    )
+    cur.execute("CREATE INDEX IF NOT EXISTS sync_parked_account ON sync_parked (account)")
+
+
 #: Stands in for the two payloads of a sealed conflict row when the account
 #: key that would open them is not here. A row the user can neither read nor
 #: resolve still has to be listed, or the item stays silently blocked.
@@ -354,6 +388,9 @@ class SyncStore:
         self._db.migrate(_COMPONENT, 1, _create_schema)
         self._db.migrate(_COMPONENT, 2, _schema_v2)
         self._db.migrate(_COMPONENT, 3, _schema_v3)
+        self._db.migrate(_COMPONENT, 4, _schema_v4)
+        #: The account the live rows belong to; "" until the link settles on one.
+        self._account = ""
         self._redactors: dict[str, Callable[[Any], dict[str, Any] | None]] = {}
         #: Bumped when the account changes. A round records the generation it
         #: began under, and a write from a round of an older one is refused:
@@ -374,6 +411,96 @@ class SyncStore:
 
     def set_redactor(self, scope: str, fn: Callable[[Any], dict[str, Any] | None]) -> None:
         self._redactors[scope] = fn
+
+    # ── accounts (D4) ───────────────────────────────────────────────────
+    @property
+    def account(self) -> str:
+        return self._account
+
+    def adopt_account(self, account: str | None) -> None:
+        """Settle on *account* without a switch: the live rows are its, and
+        any that no account claimed yet (written before v4, or by a build
+        that predates it) are claimed for it."""
+        self._account = account or ""
+        if not self._account:
+            return
+        with self._db.transaction() as cur:
+            for table in _ACCOUNT_TABLES:
+                cur.execute(f"UPDATE {table} SET account = ? WHERE account = ''", (self._account,))
+
+    def park_account(self, account: str | None) -> None:
+        """Move every live row aside under its account and empty the tables.
+
+        A row claimed by no account is *account*'s; with no *account* either
+        it is dropped, which is what a switch did before v4. Whatever was
+        parked earlier for an account whose rows are live now is stale and is
+        replaced.
+        """
+        with self._db.transaction() as cur:
+            parked: list[tuple[str, str, str]] = []
+            for table in _ACCOUNT_TABLES:
+                cur.execute(f"SELECT * FROM {table}")
+                names = [d[0] for d in cur.description]
+                for row in cur.fetchall():
+                    values = dict(zip(names, row))
+                    owner = str(values.get("account") or account or "")
+                    if owner:
+                        parked.append((owner, table, json.dumps(values)))
+                cur.execute(f"DELETE FROM {table}")
+            for owner in {p[0] for p in parked}:
+                cur.execute("DELETE FROM sync_parked WHERE account = ? AND tbl IN (?, ?, ?)",
+                            (owner, *_ACCOUNT_TABLES))
+            cur.executemany("INSERT INTO sync_parked (account, tbl, row_json) VALUES (?, ?, ?)", parked)
+        self._account = ""
+
+    def restore_account(self, account: str | None) -> None:
+        """Bring *account*'s parked rows back as the live ones. The live
+        tables are expected empty (``park_account`` first)."""
+        self._account = account or ""
+        if not self._account:
+            return
+        with self._db.transaction() as cur:
+            for table in _ACCOUNT_TABLES:
+                columns = {str(r[1]) for r in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+                rows = cur.execute(
+                    "SELECT row_json FROM sync_parked WHERE account = ? AND tbl = ? ORDER BY rowid",
+                    (self._account, table),
+                ).fetchall()
+                for (raw,) in rows:
+                    values = {k: v for k, v in json.loads(raw).items() if k in columns}
+                    values["account"] = self._account
+                    keys = list(values)
+                    cur.execute(
+                        f"INSERT OR REPLACE INTO {table} ({', '.join(keys)})"
+                        f" VALUES ({', '.join('?' for _ in keys)})",
+                        [values[k] for k in keys],
+                    )
+            cur.execute(
+                "DELETE FROM sync_parked WHERE account = ? AND tbl IN (?, ?, ?)",
+                (self._account, *_ACCOUNT_TABLES),
+            )
+
+    def switch_account(self, previous: str | None, account: str | None) -> None:
+        self.park_account(previous)
+        self.restore_account(account)
+
+    def park_value(self, account: str, name: str, value: Any) -> None:
+        """Keep one JSON value of *account*'s aside until it comes back."""
+        with self._db.transaction() as cur:
+            cur.execute("DELETE FROM sync_parked WHERE account = ? AND tbl = ?", (account, f"value:{name}"))
+            if value is not None:
+                cur.execute(
+                    "INSERT INTO sync_parked (account, tbl, row_json) VALUES (?, ?, ?)",
+                    (account, f"value:{name}", json.dumps(value)),
+                )
+
+    def take_parked_value(self, account: str, name: str) -> Any:
+        with self._db.transaction() as cur:
+            row = cur.execute(
+                "SELECT row_json FROM sync_parked WHERE account = ? AND tbl = ?", (account, f"value:{name}")
+            ).fetchone()
+            cur.execute("DELETE FROM sync_parked WHERE account = ? AND tbl = ?", (account, f"value:{name}"))
+        return json.loads(row[0]) if row else None
 
     # ── agreed state ────────────────────────────────────────────────────
     def state(self, scope: str, item_id: str) -> ItemState | None:
@@ -421,9 +548,10 @@ class SyncStore:
             cur.execute(
                 """
                 INSERT INTO sync_state
-                    (scope, item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (scope, item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, account)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scope, item_id) DO UPDATE SET
+                    account = excluded.account,
                     rev = excluded.rev,
                     synced_hash = excluded.synced_hash,
                     deleted = excluded.deleted,
@@ -436,7 +564,7 @@ class SyncStore:
                 """,
                 (
                     scope, item_id, int(rev), synced_hash, 1 if deleted else 0,
-                    sealed_kid or "", stamp,
+                    sealed_kid or "", stamp, self._account,
                 ),
             )
 
@@ -453,10 +581,10 @@ class SyncStore:
         with self._db.transaction() as cur:
             cur.execute(
                 """
-                INSERT INTO sync_cursor (scope, cursor) VALUES (?, ?)
-                ON CONFLICT(scope) DO UPDATE SET cursor = excluded.cursor
+                INSERT INTO sync_cursor (scope, cursor, account) VALUES (?, ?, ?)
+                ON CONFLICT(scope) DO UPDATE SET cursor = excluded.cursor, account = excluded.account
                 """,
-                (scope, int(value)),
+                (scope, int(value), self._account),
             )
 
     # ── conflicts ───────────────────────────────────────────────────────
@@ -491,9 +619,10 @@ class SyncStore:
                 """
                 INSERT INTO sync_conflicts
                     (scope, item_id, local_json, remote_json, remote_rev, remote_device,
-                     seen_at, sealed, remote_kid)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     seen_at, sealed, remote_kid, account)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scope, item_id) DO UPDATE SET
+                    account = excluded.account,
                     local_json = excluded.local_json,
                     remote_json = excluded.remote_json,
                     remote_rev = excluded.remote_rev,
@@ -512,6 +641,7 @@ class SyncStore:
                     int(time.time()),
                     1 if sealed else 0,
                     remote_kid or "",
+                    self._account,
                 ),
             )
         log.info("sync conflict on %s/%s — waiting for the user", scope, item_id)

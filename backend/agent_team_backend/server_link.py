@@ -3798,6 +3798,12 @@ async def _note_account(namespace: str | None) -> None:
     if previous is None or previous == namespace:
         _settled_account = namespace
         await _record_account(namespace)
+        try:
+            from . import sync_scopes
+
+            await asyncio.to_thread(sync_scopes.adopt_account, namespace)
+        except Exception as err:  # noqa: BLE001 - rows stay unclaimed until the next settle
+            log.warning("could not mark the sync state as this account's: %s", err)
         # Back on the account a failed switch was leaving: whatever that
         # switch did let go of belonged to this account, so sync reopens
         # rather than staying shut for a switch that is no longer happening.
@@ -3810,7 +3816,7 @@ async def _note_account(namespace: str | None) -> None:
     try:
         from . import sync_scopes
 
-        await asyncio.to_thread(sync_scopes.on_account_changed)
+        await asyncio.to_thread(sync_scopes.switch_account, previous, namespace)
     except Exception as err:  # noqa: BLE001 - retried on the next call
         log.warning("could not let go of the previous account's sync state; will retry: %s", err)
         _settled_account = previous

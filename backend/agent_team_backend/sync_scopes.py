@@ -2611,6 +2611,61 @@ def on_account_changed() -> None:
         raise sync_engine.SyncError("; ".join(failures))
 
 
+def switch_account(previous: str | None, namespace: str | None) -> None:
+    """An account change that keeps each account's sync bookkeeping (D4).
+
+    *previous*'s agreed state, cursors, conflicts, pending approvals and
+    detached marks are parked under it, ``on_account_changed`` lets go of
+    everything else exactly as before (every scope switched off), and
+    *namespace*'s parked bookkeeping comes back, so switching back resumes
+    rather than reading the account again from the start.
+
+    The parts move together or not at all: a held approval whose agreed
+    state came back without it would let the older local copy be pushed over
+    the record waiting for approval. Whatever cannot be parked or restored
+    is let go of instead — the pre-v4 behaviour, a fresh read, never a wrong one.
+    """
+    from . import app
+
+    store = app.sync_store
+    store.new_generation()
+    if previous:
+        try:
+            parked_approvals = sync_approvals.park_approvals(previous)
+        except OSError as err:
+            log.warning("account change: could not park the pending approvals: %s", err)
+            parked_approvals = False
+        if parked_approvals:
+            try:
+                store.park_account(previous)
+                store.park_value(previous, DETACHED_KEY, _settings().get().get(DETACHED_KEY))
+            except Exception as err:  # noqa: BLE001 - fall back to letting go
+                log.warning("account change: could not park the sync state: %s", err)
+                sync_approvals.discard_parked_approvals(previous)
+    on_account_changed()
+    if not namespace:
+        return
+    try:
+        store.restore_account(namespace)
+        detached = store.take_parked_value(namespace, DETACHED_KEY)
+        if detached:
+            _settings().set({DETACHED_KEY: detached})
+        sync_approvals.restore_approvals(namespace)
+    except Exception as err:  # noqa: BLE001 - fall back to a fresh read
+        log.warning("account change: could not restore the sync state; reading afresh: %s", err)
+        for scope in sync_engine.SCOPES + sync_engine.INTERNAL_SCOPES:
+            store.forget(scope)
+        forget_detached()
+        forget_approvals()
+
+
+def adopt_account(namespace: str | None) -> None:
+    """The link settled on the account the live sync rows already belong to."""
+    from . import app
+
+    app.sync_store.adopt_account(namespace)
+
+
 def forget_detached(scope: str | None = None) -> None:
     """Drop the detached marks of *scope*, or of every scope.
 

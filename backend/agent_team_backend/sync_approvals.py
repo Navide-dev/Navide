@@ -730,6 +730,57 @@ def land_approved(adapter: Any) -> None:
             log.warning("%s", err)
 
 
+def _parked_dir(account: str) -> Path | None:
+    from . import app
+
+    # A namespace is hex; anything else never names a directory.
+    if not account or not all(c in "0123456789abcdef" for c in account):
+        return None
+    return app.app_data_dir() / "sync-approvals-parked" / account
+
+
+def park_approvals(account: str) -> bool:
+    """Move every hold aside under *account* (D4), sealed as they are under
+    that account's key, so switching back finds them waiting. False when
+    there is no such place, and the holds stay for ``forget_approvals``."""
+    import shutil
+
+    dest = _parked_dir(account)
+    if dest is None:
+        return False
+    with _lock:
+        src = _stash_dir()
+        if dest.exists():
+            shutil.rmtree(dest)
+        if src.exists():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(src, dest)
+    return True
+
+
+def restore_approvals(account: str) -> None:
+    """Bring *account*'s parked holds back. Raises OSError when they cannot be."""
+    import shutil
+
+    src = _parked_dir(account)
+    if src is None or not src.exists():
+        return
+    with _lock:
+        live = _stash_dir()
+        if live.exists():
+            shutil.rmtree(live)
+        live.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(src, live)
+
+
+def discard_parked_approvals(account: str) -> None:
+    import shutil
+
+    parked = _parked_dir(account)
+    if parked is not None:
+        shutil.rmtree(parked, ignore_errors=True)
+
+
 def forget_approvals(scope: str | None = None) -> None:
     """Drop every hold of *scope*, or of every scope — on an account change,
     whose key the held payloads are sealed under."""
