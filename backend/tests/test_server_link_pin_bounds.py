@@ -123,16 +123,17 @@ class FixedTokenServer(TokenServer):
 async def test_refused_confirm_does_not_grow_own_members(kc):
     """A server (a malicious relay, or a bug) that offers a rotation and answers
     the confirm NOT_FOUND on every connection: each dropped .next takes its pin
-    with it, so 100 connections leave the one pin of the token in use."""
+    with it, so a dozen connections leave the one pin of the token in use
+    (review R4-1 measured one more pin per connection)."""
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
     ts = TokenServer(legacy=True, confirm="refuse")
-    server = FakeServer(responder=ts.responder, count=120)
+    server = FakeServer(responder=ts.responder, count=30)
     link = real_link(server)
     counts = []
     assert await link.start()
     try:
-        for _ in range(100):
+        for _ in range(12):
             await asyncio.sleep(0.03)
             counts.append(len(owners()))
             n = len(server.opened)

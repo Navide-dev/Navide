@@ -60,34 +60,39 @@ def another_pairing_fits() -> bool:
 
 # ------------------------------------------------------------------ 1. bounded
 
+# Each rotation is a reconnect (about a second), and the bound shows from the
+# first one on: the audit ran 200 per case, which no CI per-test limit takes.
+ROTATIONS = 12
+
+
 @pytest.mark.parametrize("paired", [0, 1, 3, 5, 8])
 async def test_real_rotations_keep_own_members_bounded(kc, paired):
-    """200 rotations through the real ServerLink and the real Keychain chain
+    """ROTATIONS rotations through the real ServerLink and the real Keychain chain
     (set_access_token -> cloud_secrets.write -> security -i)."""
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
     pair(paired)
     ts = TokenServer(age_s=server_link.ROTATE_AFTER_S + 1)
-    server = FakeServer(responder=ts.responder, count=230)
+    server = FakeServer(responder=ts.responder, count=ROTATIONS + 30)
     link = real_link(server)
     sizes, counts = [], []
     assert await link.start() is True
     try:
         prev = CONFIG.token
-        for r in range(200):
+        for r in range(ROTATIONS):
             await _until(lambda: server_link.access_token() != prev and server_link.next_access_token() == "", timeout=5)
             prev = server_link.access_token()
             await asyncio.sleep(0)
             counts.append(len(owners()))
             sizes.append(core_cmd_len())
-            if r < 199:
+            if r < ROTATIONS - 1:
                 n = len(server.opened)
                 await server.opened[-1].close()
                 await next_connection(server, n)
         assert link._trust_locked == ""
     finally:
         await link.stop()
-    print(f"\nPAIRED={paired} rotations=200 ownMembers(min/max/final)={min(counts)}/{max(counts)}/{counts[-1]} "
+    print(f"\nPAIRED={paired} rotations={ROTATIONS} ownMembers(min/max/final)={min(counts)}/{max(counts)}/{counts[-1]} "
           f"cmd bytes(min/max/final)={min(sizes)}/{max(sizes)}/{sizes[-1]} longest -i={kc.longest} "
           f"another pairing fits={another_pairing_fits()}")
     assert counts[-1] == 1 and max(counts) == 1
@@ -240,45 +245,34 @@ async def test_forget_failure_does_not_stop_promotion(kc):
 
 
 async def test_refused_confirms_never_fill_the_record(kc):
-    """With nothing paired, 150 server-refused rotations (review R4-1 measured
-    pairing refused after about 73) leave room for the next pairing."""
+    """With as many devices paired as the record takes, review R4-1 measured
+    the record full after 3 server-refused rotations. Ten leave the one pin of
+    the token in use, every promised decision, and room for a fresh sign-in."""
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
+    trust_store.adopt_own_member(URL, CONFIG.token, "m1")
+    paired = pair_max()
     ts = TokenServer(legacy=True, confirm="refuse")
-    server = FakeServer(responder=ts.responder, count=200)
+    server = FakeServer(responder=ts.responder, count=30)
     link = real_link(server)
-    first_refused = None
     assert await link.start()
     try:
-        for i in range(150):
+        for _ in range(10):
             await asyncio.sleep(0.03)
-            if first_refused is None and not another_pairing_fits():
-                first_refused = i
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
         await asyncio.sleep(0.05)
+        assert link._trust_locked == ""
     finally:
         await link.stop()
-    total = len(owners())
-    # Then a legitimate sign-out / sign-in: one pin freed, one taken.
+    print(f"\nrefused-confirm at max pairing: paired={paired} ownMembers={len(owners())} cmd bytes={core_cmd_len()}")
+    assert len(owners()) == 1
+    # A sign-out and a fresh sign-in still fit; then every decision the
+    # reserve promises (those fill it, so they go last).
     trust_store.forget_own_member(URL, CONFIG.token)
-    server_link.set_access_token("tok-fresh")
-    try:
-        trust_store.adopt_own_member(URL, "tok-fresh", "m1")
-        fresh = "ok"
-    except trust_store.TrustStoreFull:
-        fresh = "TrustStoreFull"
-    try:
-        trust_store.pin_paired_device(_device(1), sign_key=KEY, enc_key="b" * 64, member_id="m-000000000001")
-        pairing = "ok"
-    except trust_store.TrustStoreFull:
-        pairing = "TrustStoreFull"
-    print(f"\nN fill: pairing refused after {first_refused} failed rotations; ownMembers plateau={total}; "
-          f"cmd bytes={core_cmd_len()}; fresh sign-in pin={fresh}; new pairing={pairing}")
-    assert first_refused is None and total == 1
-    assert fresh == "ok" and pairing == "ok"
-
+    trust_store.adopt_own_member(URL, "tok-fresh", "m1")
+    assert decide_all(paired) == []
 
 
 def test_max_pairing_then_rotation_pin(kc):
