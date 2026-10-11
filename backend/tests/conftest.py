@@ -172,6 +172,19 @@ def _isolated_skills_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_security_binary(monkeypatch):
+    """A CredentialVault built without a ``security_runner`` falls back to
+    ``/usr/bin/security`` — the developer's login Keychain. A write that goes
+    wrong there is not cleaned up by any tmp_path, so it is refused outright."""
+    from agent_team_backend import credential_vault
+
+    def refuse(args, input_text=None):
+        raise AssertionError(f"a test reached the real Keychain: security {args[:1]}")
+
+    monkeypatch.setattr(credential_vault, "_default_security_runner", refuse)
+
+
+@pytest.fixture(autouse=True)
 def _isolated_credential_vault(tmp_path, monkeypatch):
     """Tests must NEVER touch the real home or the real Keychain: swap the
     app-wide vault for one rooted in tmp, backed by an in-process stand-in for
