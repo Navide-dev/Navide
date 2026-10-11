@@ -4125,7 +4125,9 @@ async def _history_engine(scope: str) -> Any:
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
         raise ConnectionError("the navide-server link is not connected")
-    if not await link.ensure_sync_key():
+    # Looking at history never mints a key (ensure_sync_key would, on a
+    # machine paired with nobody): no key here means nothing to read.
+    if not await asyncio.to_thread(sync_keyring.has_account_key):
         raise ConnectionError("this machine does not hold the account sync key")
     return link.sync_engine()
 

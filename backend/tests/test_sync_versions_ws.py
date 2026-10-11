@@ -42,6 +42,13 @@ class _Link:
         return self.engine
 
 
+@pytest.fixture(autouse=True)
+def _key_held(monkeypatch):
+    from agent_team_backend import sync_keyring
+
+    monkeypatch.setattr(sync_keyring, "has_account_key", lambda: True)
+
+
 async def _ask(msg_type: str, payload: dict) -> dict:
     session = _Session()
     await ws_handlers.lookup(msg_type)(session, "m1", msg_type, payload)
@@ -90,3 +97,25 @@ async def test_no_link_is_said_plainly(monkeypatch) -> None:
     reply = await _ask("sync.versions", {"scope": "prompts", "itemId": "x"})
     assert reply["error"]["code"] == "SYNC_VERSIONS_FAILED"
     assert "not connected" in reply["error"]["message"]
+
+
+async def test_looking_at_history_never_mints_a_key(monkeypatch) -> None:
+    """Review D-L2: listing versions went through ensure_sync_key, which mints
+    an account key on a machine paired with nobody."""
+    from agent_team_backend import sync_keyring
+
+    link = _Link()
+    minted: list[str] = []
+
+    async def would_mint() -> bool:
+        minted.append("minted")
+        return True
+
+    monkeypatch.setattr(link, "ensure_sync_key", would_mint)
+    monkeypatch.setattr(sync_keyring, "has_account_key", lambda: False)
+    monkeypatch.setattr(server_link, "_link", link)
+    for msg_type, extra in (("sync.versions", {}), ("sync.restore_version", {"rev": 1})):
+        reply = await _ask(msg_type, {"scope": "prompts", "itemId": "x", **extra})
+        assert reply["error"]["code"] in ("SYNC_VERSIONS_FAILED", "SYNC_RESTORE_FAILED")
+        assert "account sync key" in reply["error"]["message"]
+    assert minted == [] and link.engine.calls == []
