@@ -2603,10 +2603,12 @@ async def test_an_ack_pushed_while_away_is_recovered_on_reconnect(monkeypatch):
         await server.opened[0].close()
         await _until(lambda: "pa:mcp:away" in gets, timeout=8.0)
         await _until(lambda: plan_mcp._mcp_message_status["pa:mcp:away"]["status"] == "delivered")
-        assert any(
+        # The window's delivery_result is broadcast from a spawned task, so it
+        # can land after the status row: wait for it rather than race it.
+        await _until(lambda: any(
             e["type"] == "agent_msg.delivery_result" and e["payload"]["msg_key"] == "pa:mcp:away"
             for e in events
-        )
+        ))
         assert "pa:mcp:away" not in link._outbound
     finally:
         plan_mcp._mcp_message_status.pop("pa:mcp:away", None)
