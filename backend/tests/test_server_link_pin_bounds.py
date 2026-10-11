@@ -68,13 +68,19 @@ class Sec:
         return any(re.search(rf" {re.escape(name)}(@|$)", service) for name in names)
 
 
-@pytest.fixture(autouse=True)
-def _keychain_store(monkeypatch):
-    """The record kept in its Keychain item, whose one `security -i` line is the
-    room these tests measure — the store before the sealed file, and still the
-    one used when the move cannot happen (test_trust_store_capacity does the
-    same). A sealed file has no such line, so nothing here can fill it."""
-    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+@pytest.fixture(autouse=True, params=["file", "keychain"])
+def store_mode(request, monkeypatch):
+    """Every test here runs against both trust record stores: the sealed file
+    (the default) and the Keychain item (before it, and still the store when
+    the move cannot happen). A test that fills the record, or fails the trust
+    write through `security`, needs the Keychain item's one `security -i` line
+    and says so with KEYCHAIN_ONLY; a sealed file has no such line to fill."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", request.param == "file")
+    return request.param
+
+
+KEYCHAIN_ONLY = pytest.mark.parametrize("store_mode", ["keychain"], indirect=True)
+FILE_ONLY = pytest.mark.parametrize("store_mode", ["file"], indirect=True)
 
 
 @pytest.fixture
@@ -260,6 +266,7 @@ async def _connect_once(server):
     return link
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 async def test_revocations_at_max_pairing_keep_sign_in_working(kc):
     """auth.revoked (password changed elsewhere, token revoked, device removed)
     clears the token and its pin: with the record holding as many devices as it
@@ -346,6 +353,7 @@ async def test_sign_in_over_a_stored_token_forgets_its_pin(kc, monkeypatch, verb
 # ------------------------------------------- R4-3: a full record says so
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 async def test_a_full_record_is_its_own_lock_code(kc):
     """A sign-in whose pin does not fit is not "the trust store could not be
     opened": the snapshot names it `full`, which the account view words as

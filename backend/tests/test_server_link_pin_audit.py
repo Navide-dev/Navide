@@ -15,7 +15,8 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store
 from agent_team_backend.server_link import ServerLink
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc is a fixture
-    URL, _call, _keychain_store, core_cmd_len, kc, next_connection, owners, pair_max, real_link,
+    FILE_ONLY, KEYCHAIN_ONLY, URL, _call, core_cmd_len, kc, next_connection, owners, pair_max,
+    real_link, store_mode,
 )
 from tests.test_trust_store_capacity import KEY, _device
 
@@ -147,6 +148,7 @@ def test_forget_only_removes_that_credential(kc):
     assert len(owners()) == 2
 
 
+@KEYCHAIN_ONLY  # fails the trust write through security; the file case is below
 def test_forget_save_failure_rolls_back_and_raises(kc):
     trust_store.load()
     trust_store.adopt_own_member(URL, "a1", "m1")
@@ -209,6 +211,7 @@ async def test_forget_called_after_settle_promotion(kc, monkeypatch):
     assert len(owners()) == 1 and trust_store.member_for_credential(URL, server_link.access_token()) == "m1"
 
 
+@KEYCHAIN_ONLY  # fails the trust write through security; the file case is below
 async def test_forget_failure_does_not_stop_promotion(kc):
     """The trust record write fails exactly when forget runs: the rotation still
     promotes; the stale pin stays (costs room, not safety)."""
@@ -236,6 +239,7 @@ async def test_forget_failure_does_not_stop_promotion(kc):
 
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 async def test_refused_confirms_never_fill_the_record(kc):
     """With as many devices paired as the record takes, review R4-1 measured
     the record full after 3 server-refused rotations. Ten leave the one pin of
@@ -267,6 +271,7 @@ async def test_refused_confirms_never_fill_the_record(kc):
     assert decide_all(paired) == []
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 def test_max_pairing_then_rotation_pin(kc):
     """At the most devices the record takes, does a rotation's transient second
     own pin still fit (adopt with the KC2R-1 reserve)?"""
@@ -280,3 +285,76 @@ def test_max_pairing_then_rotation_pin(kc):
         rot = "TrustStoreFull"
     print(f"\nM max-pair: paired={n} cmd bytes={core_cmd_len()} rotation pin={rot} decisions failing={decide_all(n)}")
     assert decide_all(n) == []
+
+
+# ------------------------------- the sealed file: where a forget can fail
+
+
+@pytest.fixture
+def broken_file(monkeypatch):
+    """Fails the sealed record's write while switched on — the one place the
+    file store can refuse a save, as `security` is for the Keychain item."""
+    state = {"on": False}
+    real = trust_store._write_record_locked
+
+    def write(core):
+        if state["on"]:
+            raise OSError("record file write refused")
+        return real(core)
+
+    monkeypatch.setattr(trust_store, "_write_record_locked", write)
+    return state
+
+
+@FILE_ONLY
+def test_file_forget_save_failure_rolls_back_and_raises(kc, broken_file):
+    trust_store.load()
+    assert trust_store._store_mode == "file"
+    trust_store.adopt_own_member(URL, "a1", "m1")
+    broken_file["on"] = True
+    with pytest.raises(OSError):
+        trust_store.forget_own_member(URL, "a1")
+    assert trust_store.member_for_credential(URL, "a1") == "m1"   # rolled back in memory
+    broken_file["on"] = False
+    trust_store._reset_for_test()
+    assert trust_store.member_for_credential(URL, "a1") == "m1"   # and in the file
+    assert not trust_store.locked_reason()
+
+
+@FILE_ONLY
+def test_file_forget_persists_across_restart(kc):
+    trust_store.load()
+    assert trust_store._store_mode == "file"
+    trust_store.adopt_own_member(URL, "a1", "m1")
+    trust_store.adopt_own_member(URL, "a2", "m1")
+    assert trust_store.forget_own_member(URL, "a1") is True
+    trust_store._reset_for_test()
+    assert trust_store.member_for_credential(URL, "a1") == ""
+    assert trust_store.member_for_credential(URL, "a2") == "m1"
+
+
+@FILE_ONLY
+async def test_file_forget_failure_does_not_stop_promotion(kc, broken_file):
+    """The record file refuses exactly when forget runs: the rotation still
+    promotes; the stale pin stays (costs room, not safety)."""
+    trust_store.load()
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    base = ts.responder
+
+    def responder(conn, message):
+        if message.get("type") == "auth.token.confirm":
+            broken_file["on"] = True
+        return base(conn, message)
+
+    server = FakeServer(responder=responder)
+    link = real_link(server)
+    assert await link.start()
+    try:
+        await _until(lambda: server_link.access_token().startswith("nvd_rotated") and server_link.next_access_token() == "")
+        assert link._trust_locked == ""
+    finally:
+        await link.stop()
+        broken_file["on"] = False
+    assert trust_store._store_mode == "file"
+    assert len(owners()) == 2

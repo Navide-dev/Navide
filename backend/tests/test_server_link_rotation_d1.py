@@ -8,8 +8,8 @@ import pytest
 
 from agent_team_backend import server_link, trust_store
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
-from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc and _keychain_store are fixtures
-    CUR_S, NXT_S, _keychain_store, kc, owners, real_link,
+from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc and store_mode are fixtures
+    CUR_S, KEYCHAIN_ONLY, NXT_S, kc, owners, real_link, store_mode,
 )
 
 
@@ -112,7 +112,10 @@ async def test_old_server_no_rotation_no_writes(kc):
     assert server_link.access_token() == CONFIG.token
 
 
-@pytest.mark.parametrize("paired", [5, "max"])
+# Pairing as many devices as the record takes fills it, so "max" is the
+# Keychain item's alone: a sealed file has no 4095-byte line to fill.
+@pytest.mark.parametrize("store_mode,paired", [("file", 5), ("keychain", 5), ("keychain", "max")],
+                         indirect=["store_mode"])
 async def test_revocations_never_refuse_sign_in(kc, paired):
     """auth.revoked (password changed elsewhere, token revoked, device removed)
     clears the token and its pin (review R4-2 measured sign-in refused after 5
@@ -140,6 +143,7 @@ async def test_revocations_never_refuse_sign_in(kc, paired):
     assert decide_all(n) == []
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 async def test_a_full_record_recovers_by_unpairing_and_not_by_starting_over(kc):
     """A record filled some other way: starting over refuses an intact record,
     and unpairing one device lets the next sign-in take its pin."""

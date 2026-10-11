@@ -15,7 +15,8 @@ import pytest
 from agent_team_backend import cloud_secrets, trust_store
 from agent_team_backend.server_link import ServerLink
 
-from .test_trust_store_capacity import KEY, _device, _keychain_store, keychain  # noqa: F401 - fixtures
+from .test_server_link_pin_bounds import KEYCHAIN_ONLY, store_mode  # noqa: F401 - store_mode is a fixture
+from .test_trust_store_capacity import KEY, _device, keychain  # noqa: F401 - keychain is a fixture
 
 URL = "wss://server.navide.dev/ws"
 MEMBER = "m-0123456789ab"  # the server's newId("m"): m- and 12 hex
@@ -68,6 +69,7 @@ async def test_rotations_and_sign_ins_keep_the_member_pins_bounded(keychain):  #
     assert keychain.longest <= cloud_secrets.SECURITY_LINE_MAX_BYTES
 
 
+@KEYCHAIN_ONLY  # fills the record: a sealed file has no 4095-byte line to fill
 def test_a_new_member_pin_that_would_eat_the_reserve_is_refused(keychain):  # noqa: F811
     """KC2R-1 for ownMembers: when the record has no room left for a new pin and the
     reserve, the pin is refused as full and nothing is kept; an existing pin still answers."""
