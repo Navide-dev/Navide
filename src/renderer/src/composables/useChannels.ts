@@ -276,8 +276,10 @@ function emptyStatus(): ChannelStatus {
 
 function createChannelsStore(backend: Backend) {
   const enabled = ref(true)
-  // Tell bound chats when a new device opens a share link; null until a backend that has the setting answers.
+  // Tell bound chats when a new device opens a share link. Null (no switch shown) unless
+  // Navide Cloud is connected and the backend has the setting.
   const shareOpenNotify = ref<boolean | null>(null)
+  let shareOpenNotifyWanted = false
   const platforms = ref<ChannelPlatformState[]>([])
   const bindings = ref<ChannelBinding[]>([])
   const pairing = ref<ChannelPairingRequest[]>([])
@@ -376,6 +378,19 @@ function createChannelsStore(backend: Backend) {
     return res
   }
 
+  async function fetchShareOpenNotify(): Promise<void> {
+    const link = await call<{ status?: { state?: string } }>('p2p.link.status')
+    if (!link.ok || link.data?.status?.state !== 'connected') {
+      shareOpenNotify.value = null
+      return
+    }
+    const res = await call<{ enabled: boolean }>('channels.get_share_open_notify')
+    shareOpenNotify.value = res.ok && res.data ? res.data.enabled !== false : null
+  }
+
+  backend.on('p2p.link.changed', () => {
+    if (shareOpenNotifyWanted) void fetchShareOpenNotify()
+  })
   backend.on('channels.changed', () => {
     void refresh()
   })
@@ -497,9 +512,10 @@ function createChannelsStore(backend: Backend) {
     renameAccount: (platform: ChannelPlatform, account: string, name: string) =>
       mutate('channels.rename_account', { platform, account, name }),
     setGlobalEnabled: (on: boolean) => mutate('channels.set_global_enabled', { enabled: on }),
-    loadShareOpenNotify: async (): Promise<void> => {
-      const res = await call<{ enabled: boolean }>('channels.get_share_open_notify')
-      if (res.ok && res.data) shareOpenNotify.value = res.data.enabled !== false
+    /** Start keeping the switch (Settings → Channels shows it) and fetch it now. */
+    loadShareOpenNotify: (): Promise<void> => {
+      shareOpenNotifyWanted = true
+      return fetchShareOpenNotify()
     },
     setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
       const res = await call<{ enabled: boolean }>('channels.set_share_open_notify', { enabled: on })
