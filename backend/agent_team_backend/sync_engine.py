@@ -200,6 +200,48 @@ def _retired(caps: dict[str, Any], scope: str) -> bool:
     return scope in RETIRED_SCOPES or (isinstance(listed, list) and scope in listed)
 
 
+def _hmac_kid(caps: dict[str, Any]) -> str:
+    """D3: the account's ``itemIdKid`` when it has adopted hashed item ids
+    on this connection, else ""."""
+    if _is_v3(caps) and caps.get("itemIds") == "hmac":
+        return str(caps.get("itemIdKid") or "")
+    return ""
+
+
+def _require_item_id_key(caps: dict[str, Any]) -> None:
+    """c3: an hmac account whose ``itemIdKid`` this ring lacks stops here —
+    no push, no migration, no pull it could not name. Never another key:
+    ids under it would be new items, and the old ones would read as deleted.
+    Blocking (reads the ring)."""
+    if not (_is_v3(caps) and caps.get("itemIds") == "hmac"):
+        return
+    kid = str(caps.get("itemIdKid") or "")
+    held = sync_keyring.ring() or {}
+    if not kid or kid not in (held.get("keys") or {}):
+        raise SyncError(
+            "ITEM_ID_KEY_MISSING: this machine does not hold the key the account's item ids are "
+            "made with; pair it again from a device that does",
+            code="ITEM_ID_KEY_MISSING",
+        )
+
+
+class _BadWrapper(ValueError):
+    """A hashed-id record whose sealed wrapper is malformed or names an item
+    whose id is not the one it came under."""
+
+
+#: ``_resolve_hashed`` found nothing it opened.
+_UNOPENED: Any = object()
+#: Keys an item carries between building and sending; never on the wire.
+_NAME_KEY = "_localName"
+_PAIR_KEY = "_pairHead"
+
+
+def _name_of(item: dict[str, Any]) -> str:
+    """The local name of a built wire item."""
+    return str(item.get(_NAME_KEY) or item.get("itemId") or "")
+
+
 def _batches(items: list[Any], size: int) -> list[list[Any]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
@@ -310,6 +352,9 @@ class ItemState:
     #: The ``updatedAt`` of the agreed copy, normalised by ``_stamp`` ("" when
     #: unknown). Only ever moves forward; a record older than it is a replay.
     synced_updated_at: str = ""
+    #: D3: the hashed id (``h1.``…) the server knows the item by, or "" when
+    #: it knows it by its name (a legacy id).
+    wire_id: str = ""
 
 
 def _stamp(updated_at: Any) -> str:
@@ -421,6 +466,18 @@ def _schema_v4(cur: Any) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS sync_parked_account ON sync_parked (account)")
 
 
+def _schema_v5(cur: Any) -> None:
+    # D3. ``sync_state.wire_id``: see ItemState. ``sync_conflicts.remote_wire``:
+    # the hashed id the remote half came under ("" for a legacy id), so an
+    # answer to the conflict is recorded against the id the server holds.
+    # Additive with defaults: a build that predates v5 reads and writes the
+    # tables unchanged (and, on an hmac account, is refused by the server).
+    for table, column in (("sync_state", "wire_id"), ("sync_conflicts", "remote_wire")):
+        columns = {str(row[1]) for row in cur.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+
+
 #: Stands in for the two payloads of a sealed conflict row when the account
 #: key that would open them is not here. A row the user can neither read nor
 #: resolve still has to be listed, or the item stays silently blocked.
@@ -443,6 +500,11 @@ class SyncStore:
         self._db.migrate(_COMPONENT, 2, _schema_v2)
         self._db.migrate(_COMPONENT, 3, _schema_v3)
         self._db.migrate(_COMPONENT, 4, _schema_v4)
+        # D3's columns. Applied on every open rather than as a numbered step:
+        # the step is additive and guarded, and the recorded schema version
+        # stays 4 (a downgrade reads the tables exactly as before).
+        with self._db.transaction() as cur:
+            _schema_v5(cur)
         #: The account the live rows belong to; "" until the link settles on one.
         self._account = ""
         self._redactors: dict[str, Callable[[Any], dict[str, Any] | None]] = {}
@@ -560,12 +622,14 @@ class SyncStore:
     def state(self, scope: str, item_id: str) -> ItemState | None:
         with self._db.transaction() as cur:
             row = cur.execute(
-                "SELECT rev, synced_hash, deleted, sealed_kid, synced_updated_at FROM sync_state"
+                "SELECT rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id FROM sync_state"
                 " WHERE scope = ? AND item_id = ?",
                 (scope, item_id),
             ).fetchone()
         return (
-            ItemState(int(row[0]), str(row[1]), bool(row[2]), str(row[3] or ""), str(row[4] or ""))
+            ItemState(
+                int(row[0]), str(row[1]), bool(row[2]), str(row[3] or ""), str(row[4] or ""), str(row[5] or "")
+            )
             if row
             else None
         )
@@ -573,12 +637,14 @@ class SyncStore:
     def states(self, scope: str) -> dict[str, ItemState]:
         with self._db.transaction() as cur:
             rows = cur.execute(
-                "SELECT item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at"
+                "SELECT item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, wire_id"
                 " FROM sync_state WHERE scope = ?",
                 (scope,),
             ).fetchall()
         return {
-            str(r[0]): ItemState(int(r[1]), str(r[2]), bool(r[3]), str(r[4] or ""), str(r[5] or ""))
+            str(r[0]): ItemState(
+                int(r[1]), str(r[2]), bool(r[3]), str(r[4] or ""), str(r[5] or ""), str(r[6] or "")
+            )
             for r in rows
         }
 
@@ -592,19 +658,30 @@ class SyncStore:
         deleted: bool,
         sealed_kid: str = "",
         synced_updated_at: str = "",
+        wire_id: str = "",
     ) -> None:
         """Record what was agreed. ``synced_updated_at`` only moves forward:
         a later write with an older (or no) stamp keeps the newer one, which
-        is what lets a replayed old record be told apart from a new one."""
+        is what lets a replayed old record be told apart from a new one.
+
+        ``wire_id`` likewise only moves forward: a hashed id is recorded when
+        given, and a write that gives none ("", what every legacy-id write
+        and every caller that predates D3 passes) keeps the one recorded. An
+        account never goes back from hashed ids, so nothing needs to unset it.
+        """
         self._check_round()
         stamp = _stamp(synced_updated_at)
         with self._db.transaction() as cur:
             cur.execute(
                 """
                 INSERT INTO sync_state
-                    (scope, item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, account)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (scope, item_id, rev, synced_hash, deleted, sealed_kid, synced_updated_at, account, wire_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scope, item_id) DO UPDATE SET
+                    wire_id = CASE
+                        WHEN excluded.wire_id = '' THEN sync_state.wire_id
+                        ELSE excluded.wire_id
+                    END,
                     account = excluded.account,
                     rev = excluded.rev,
                     synced_hash = excluded.synced_hash,
@@ -618,7 +695,7 @@ class SyncStore:
                 """,
                 (
                     scope, item_id, int(rev), synced_hash, 1 if deleted else 0,
-                    sealed_kid or "", stamp, self._account,
+                    sealed_kid or "", stamp, self._account, wire_id or "",
                 ),
             )
 
@@ -653,6 +730,7 @@ class SyncStore:
         remote_device: str,
         sealed: bool = False,
         remote_kid: str = "",
+        remote_wire: str = "",
     ) -> None:
         """Remember a clash. ``sealed`` stores both payloads as ciphertext.
 
@@ -673,8 +751,8 @@ class SyncStore:
                 """
                 INSERT INTO sync_conflicts
                     (scope, item_id, local_json, remote_json, remote_rev, remote_device,
-                     seen_at, sealed, remote_kid, account)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     seen_at, sealed, remote_kid, account, remote_wire)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(scope, item_id) DO UPDATE SET
                     account = excluded.account,
                     local_json = excluded.local_json,
@@ -683,7 +761,8 @@ class SyncStore:
                     remote_device = excluded.remote_device,
                     seen_at = excluded.seen_at,
                     sealed = excluded.sealed,
-                    remote_kid = excluded.remote_kid
+                    remote_kid = excluded.remote_kid,
+                    remote_wire = excluded.remote_wire
                 """,
                 (
                     scope,
@@ -696,6 +775,7 @@ class SyncStore:
                     1 if sealed else 0,
                     remote_kid or "",
                     self._account,
+                    remote_wire or "",
                 ),
             )
         log.info("sync conflict on %s/%s — waiting for the user", scope, item_id)
@@ -703,7 +783,7 @@ class SyncStore:
     def _conflict_rows(self, scope: str | None) -> list[tuple[Any, ...]]:
         sql = (
             "SELECT scope, item_id, local_json, remote_json, remote_rev, remote_device, "
-            "seen_at, sealed, remote_kid FROM sync_conflicts"
+            "seen_at, sealed, remote_kid, remote_wire FROM sync_conflicts"
         )
         args: tuple[Any, ...] = ()
         if scope:
@@ -800,6 +880,7 @@ class SyncStore:
                 "seenAt": int(r[6]),
                 "sealed": sealed,
                 "remoteKid": str(r[8] or ""),
+                "remoteWire": str(r[9] or ""),
             }
         return None
 
@@ -904,6 +985,8 @@ class SyncEngine:
         #: reason ("refused", "held", "tooLarge"). Filled from worker threads,
         #: read once the round ends; one round per scope runs at a time.
         self._notes: dict[str, dict[str, list[str]]] = {}
+        #: Per scope, the last ``_reverse`` map and the snapshot it is for.
+        self._reverse_cache: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
         #: What this connection negotiated (``sync.caps``); None until asked.
         self._caps: dict[str, Any] | None = None
         #: Whether this connection already asked to adopt hashed item ids.
@@ -943,6 +1026,46 @@ class SyncEngine:
         if not isinstance(payload, dict) or payload.get("version") != 3:
             return dict(_V1_CAPS)
         return dict(payload)
+
+    async def _maybe_adopt(self, caps: dict[str, Any]) -> dict[str, Any]:
+        """D3: ask once per connection to move the account to hashed ids.
+
+        Rooted at this machine's active key. The server agrees only when every
+        recently seen device speaks v3; until then (HMAC_NOT_READY, or any
+        other refusal) items keep their legacy ids for this connection.
+        """
+        if not _is_v3(caps) or caps.get("itemIds") != "legacy" or self._adopt_tried:
+            return caps
+        root = await asyncio.to_thread(sync_keyring.active_key_id)
+        if not root:
+            return caps
+        self._adopt_tried = True
+        try:
+            reply = await self._call("sync.adoptHmacIds", {"rootKid": root})
+        except StaleRound:
+            raise
+        except Exception as err:  # noqa: BLE001 - stays on legacy ids
+            log.info("sync.adoptHmacIds got no answer (%s); item ids stay legacy", _why(err))
+            return caps
+        payload = reply.get("payload") if isinstance(reply, dict) and reply.get("ok") else None
+        if not isinstance(payload, dict) or payload.get("itemIds") != "hmac" or not payload.get("itemIdKid"):
+            error = reply.get("error") if isinstance(reply, dict) and isinstance(reply.get("error"), dict) else {}
+            details = error.get("details")
+            blocking = [
+                f"{d.get('deviceId')} (last seen {d.get('lastSeenAt')})"
+                for d in (details if isinstance(details, list) else []) if isinstance(d, dict)
+            ]
+            log.info(
+                "the account stays on legacy item ids for now (%s)%s",
+                error.get("code") or "no answer",
+                f"; waiting for {', '.join(blocking)}" if blocking else "",
+            )
+            return caps
+        adopted = {**caps, "itemIds": "hmac", "itemIdKid": str(payload["itemIdKid"])}
+        if self._caps is caps:
+            self._caps = adopted
+        log.info("the account now names synced items by hashed ids")
+        return adopted
 
     def _heed_refusal(self, msg_type: str, reply: Any) -> None:
         """Forget the negotiated capabilities when a refusal says they no
@@ -1034,6 +1157,8 @@ class SyncEngine:
         caps = await self._negotiate()
         if _retired(caps, scope):
             return {"skipped": "retired"}
+        caps = await self._maybe_adopt(caps)
+        await asyncio.to_thread(_require_item_id_key, caps)
         with _using(caps):
             return await self._round_under_caps(scope, adapter)
 
@@ -1312,7 +1437,23 @@ class SyncEngine:
         self._store._check_round()
         if not isinstance(raw, dict):
             return False
-        item_id = str(raw.get("itemId") or "")
+        # D3: the row's id is what the server knows it by and what its
+        # signature and sealing are bound to; the name is what this machine
+        # keeps it under. The same string on a legacy id.
+        wire_id = str(raw.get("itemId") or "")
+        hashed_wire = wire_id if sync_keyring.is_hashed_item_id(wire_id) else ""
+        opened: Any = _UNOPENED
+        if hashed_wire:
+            item_id, opened = self._resolve_hashed(adapter, raw, snapshot)
+        else:
+            item_id = wire_id
+            if item_id and _hmac_kid(_caps_now()):
+                prior_state = self._store.state(scope, item_id)
+                if prior_state is not None and prior_state.wire_id:
+                    # The item moved to its hashed id: a legacy row of it —
+                    # the migration's tombstone above all — is a rename,
+                    # not a delete or an edit.
+                    return False
         if not item_id or item_id in blocked:
             return False
         rev = int(raw.get("rev") or 0)
@@ -1320,7 +1461,7 @@ class SyncEngine:
         updated_at = str(raw.get("updatedAt") or "")
         deleted = bool(raw.get("deleted"))
         body = str(raw.get("body") or "")
-        origin = self._origin(raw, scope=scope, item_id=item_id)
+        origin = self._origin(raw, scope=scope, item_id=wire_id)
         if origin == _ORIGIN_FORGED:
             log.warning("dropping %s/%s: its signature does not match the pinned key", scope, item_id)
             self._note(scope, "refused", item_id)
@@ -1329,7 +1470,7 @@ class SyncEngine:
             # Deleted here before a reset (see ``_pull``): the row is not
             # applied — even when it came as a too-large stub — only its rev
             # recorded, so the push that follows sends the delete against it.
-            self._store.set_state(scope, item_id, rev=rev, synced_hash="", deleted=deleted)
+            self._store.set_state(scope, item_id, rev=rev, synced_hash="", deleted=deleted, wire_id=hashed_wire)
             self._reset_deletes[scope].discard(item_id)
             return False
         if raw.get("tooLarge"):
@@ -1367,11 +1508,13 @@ class SyncEngine:
                     deleted=deleted,
                     sealed_kid="" if deleted else (_kid_of(body) or state.sealed_kid),
                     synced_updated_at=stamp,
+                    wire_id=hashed_wire,
                 )
             return False
         try:
-            remote = None if deleted else json.loads(
-                sync_keyring.decrypt(body, scope=scope, item_id=item_id)
+            remote = None if deleted else (
+                opened if opened is not _UNOPENED
+                else json.loads(sync_keyring.decrypt(body, scope=scope, item_id=wire_id))
             )
         except sync_keyring.UnknownKeyId:
             raise _HoldPull(rev, item_id)
@@ -1423,6 +1566,7 @@ class SyncEngine:
                 remote_device=device,
                 sealed=_sensitive(adapter),
                 remote_kid="" if deleted else _kid_of(body),
+                remote_wire=hashed_wire,
             )
             return False
         held = True
@@ -1463,8 +1607,118 @@ class SyncEngine:
             deleted=remote is None,
             sealed_kid=_kid_of(body) if (held and not deleted) else "",
             synced_updated_at=stamp,
+            wire_id=hashed_wire,
         )
         return held
+
+    # ── D3: hashed item ids on the way in ───────────────────────────────
+    def _unwrap(self, scope: str, wire_id: str, text: str) -> tuple[str, Any]:
+        """The name and payload a hashed-id record carries, checked: its
+        wrapper is well formed and the name hashes to the id it came under.
+        Raises ``_BadWrapper`` otherwise."""
+        kid = _hmac_kid(_caps_now())
+        if not kid:
+            # A hashed id on a connection that negotiated legacy ids: the
+            # account moved on since. Ask again next round.
+            self._caps = None
+            raise SyncError("ITEM_IDS_CHANGED: the account now uses hashed item ids", code="ITEM_IDS_CHANGED")
+        try:
+            doc = json.loads(text)
+        except ValueError as err:
+            raise _BadWrapper("the record is not a wrapper") from err
+        name = doc.get("name") if isinstance(doc, dict) else None
+        if not isinstance(doc, dict) or doc.get("v") != 1 or not isinstance(name, str) or not name \
+                or "payload" not in doc:
+            raise _BadWrapper("the record is not a wrapper")
+        if sync_keyring.hashed_item_id(scope, name, kid) != wire_id:
+            raise _BadWrapper("the record's name is not the one its id is made from")
+        return name, doc["payload"]
+
+    def _open_payload(self, scope: str, wire_id: str, body: str) -> Any:
+        """A record's payload, opened under the id it travels by (and, for a
+        hashed id, unwrapped). On a legacy id exactly what v1 always did."""
+        text = sync_keyring.decrypt(body, scope=scope, item_id=wire_id)
+        if not sync_keyring.is_hashed_item_id(wire_id):
+            return json.loads(text)
+        return self._unwrap(scope, wire_id, text)[1]
+
+    def _reverse(self, scope: str, snapshot: dict[str, Any]) -> dict[str, str]:
+        """Hashed id → name for every item this machine knows of: what it
+        holds, what it agreed on, what clashed. How a bodiless row (a
+        tombstone, a too-large stub) is named. Cached per snapshot."""
+        cached = self._reverse_cache.get(scope)
+        if cached is not None and cached[0] is snapshot:
+            return cached[1]
+        kid = _hmac_kid(_caps_now())
+        states = self._store.states(scope)
+        out = {state.wire_id: name for name, state in states.items() if state.wire_id}
+        if kid:
+            for name in set(snapshot) | set(states) | self._store.conflict_ids(scope):
+                out.setdefault(sync_keyring.hashed_item_id(scope, name, kid), name)
+        self._reverse_cache[scope] = (snapshot, out)
+        return out
+
+    def _resolve_hashed(
+        self, adapter: ScopeAdapter, raw: dict[str, Any], snapshot: dict[str, Any]
+    ) -> tuple[str, Any]:
+        """The local name of a hashed-id row, and its payload when it had to
+        be opened to find it; ("", ...) for a row to step over."""
+        scope = adapter.scope
+        wire_id = str(raw.get("itemId") or "")
+        if not _hmac_kid(_caps_now()):
+            self._caps = None
+            raise SyncError("ITEM_IDS_CHANGED: the account now uses hashed item ids", code="ITEM_IDS_CHANGED")
+        body = str(raw.get("body") or "")
+        if raw.get("deleted") or not body:
+            # Nothing sealed to read the name from: one this machine knows of,
+            # or a row about an item it never had (a no-op).
+            return self._reverse(scope, snapshot).get(wire_id, ""), _UNOPENED
+        try:
+            text = sync_keyring.decrypt(body, scope=scope, item_id=wire_id)
+        except sync_keyring.UnknownKeyId:
+            raise _HoldPull(int(raw.get("rev") or 0), wire_id) from None
+        except Exception as err:  # noqa: BLE001 - an unreadable record is not fatal
+            if _sensitive(adapter):
+                raise SyncError(f"{scope}/{wire_id} could not be opened ({type(err).__name__})") from err
+            log.warning("dropping %s/%s: %s", scope, wire_id, _why(err))
+            return "", _UNOPENED
+        try:
+            return self._unwrap(scope, wire_id, text)
+        except _BadWrapper as err:
+            log.warning("refusing %s/%s: %s", scope, wire_id, type(err).__name__)
+            self._note(scope, "refused", wire_id)
+            return "", _UNOPENED
+
+    def _name_rows(self, adapter: ScopeAdapter, rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Listed rows by local name. A hashed row wins over a legacy row of
+        the same name (the migration's tombstone). Worker thread."""
+        if not _hmac_kid(_caps_now()):
+            return {str(row.get("itemId") or ""): row for row in rows if row.get("itemId")}
+        scope = adapter.scope
+        snapshot = adapter.snapshot()
+        out: dict[str, dict[str, Any]] = {}
+        legacy: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            wire_id = str(row.get("itemId") or "")
+            if not wire_id:
+                continue
+            if not sync_keyring.is_hashed_item_id(wire_id):
+                legacy[wire_id] = row
+                continue
+            name = ""
+            if not row.get("deleted") and row.get("body"):
+                try:
+                    name = self._unwrap(
+                        scope, wire_id, sync_keyring.decrypt(str(row["body"]), scope=scope, item_id=wire_id)
+                    )[0]
+                except Exception as err:  # noqa: BLE001 - listed only if it can be named
+                    log.warning("the cloud copy of %s/%s did not open: %s", scope, wire_id, _why(err))
+            name = name or self._reverse(scope, snapshot).get(wire_id, "")
+            if name:
+                out[name] = row
+        for name, row in legacy.items():
+            out.setdefault(name, row)
+        return out
 
     def _backing_off(self, scope: str, item_id: str) -> bool:
         entry = self._defers.get((scope, item_id))
@@ -1576,7 +1830,7 @@ class SyncEngine:
             # server would refuse a manifest naming a missing blob anyway, and
             # the adapter starts the upload that lets it go next round.
             keep = {item_id for item_id, payload, _ in pending if payload is None or await ready(item_id, payload)}
-            built = [entry for entry in built if entry[0]["itemId"] in keep]
+            built = [entry for entry in built if _name_of(entry[0]) in keep]
         return await self._send_all(adapter.scope, pending, built)
 
     async def _send_all(
@@ -1592,11 +1846,17 @@ class SyncEngine:
         sent = 0
         batch: list[dict[str, Any]] = []
         budget = 0
-        for item, size in built:
-            if batch and (len(batch) >= PUSH_BATCH or budget + size > MAX_PUSH_BYTES):
+        index = 0
+        while index < len(built):
+            # A D3 migration pair (hashed copy, then legacy tombstone) is one
+            # unit: the server commits a batch in one transaction.
+            group = built[index : index + (2 if built[index][0].get(_PAIR_KEY) else 1)]
+            index += len(group)
+            size = sum(cost for _item, cost in group)
+            if batch and (len(batch) + len(group) > PUSH_BATCH or budget + size > MAX_PUSH_BYTES):
                 sent += await self._send_batch(scope, batch, pending)
                 batch, budget = [], 0
-            batch.append(item)
+            batch.extend(item for item, _cost in group)
             budget += size
         if batch:
             sent += await self._send_batch(scope, batch, pending)
@@ -1632,6 +1892,7 @@ class SyncEngine:
         # active key — v1, or a retired key a lagging device wrote under — and
         # the whole point of the rotation is that it goes up again.
         rotated = held_ring is not None and len(held_ring.get("keys") or {}) > 1
+        id_kid = _hmac_kid(_caps_now())
         for item_id, payload in snapshot.items():
             if item_id in blocked or item_id in withheld:
                 continue
@@ -1658,7 +1919,11 @@ class SyncEngine:
                 # this release reads them (sync_keyring falls back on the v1
                 # format), and a real rotation names a concrete key that
                 # differs from the active one.
-                if state.sealed_kid == active_kid or (state.sealed_kid == "" and not rotated):
+                if (state.sealed_kid == active_kid or (state.sealed_kid == "" and not rotated)) and not (
+                    # D3: an item the server still knows by its name moves
+                    # to its hashed id, changed or not.
+                    id_kid and not state.wire_id
+                ):
                     continue
             pending.append((item_id, payload, item_hash))
 
@@ -1680,6 +1945,13 @@ class SyncEngine:
                 pending.append((item_id, None, ""))
 
         updated_at = now_iso()
+        if id_kid:
+            built = [
+                entry
+                for i, p, h in pending
+                for entry in self._build_hashed(scope, i, p, h, states, updated_at, id_kid)
+            ]
+            return pending, built
         built = [
             entry
             for entry in (self._build(scope, i, p, h, states, updated_at) for i, p, h in pending)
@@ -1736,10 +2008,76 @@ class SyncEngine:
             item["refs"] = refs(payload)
         return item, len(canonical(item).encode("utf-8"))
 
+    def _build_hashed(
+        self,
+        scope: str,
+        name: str,
+        payload: Any,
+        item_hash: str,
+        states: dict[str, ItemState],
+        updated_at: str,
+        id_kid: str,
+    ) -> list[tuple[dict[str, Any], int]]:
+        """D3: the wire items for one item of an hmac account.
+
+        A live item goes up under its hashed id with its name sealed inside a
+        wrapper. One the server still holds under its name is migrated: the
+        hashed copy from rev 0 and, right behind it in the same batch, a
+        tombstone for the legacy id. A delete goes to whichever id the item
+        was last agreed under.
+        """
+        state = states.get(name)
+        if payload is None:
+            wire_id = state.wire_id if state is not None and state.wire_id else name
+            return [self._wire_item(scope, name, wire_id, state.rev if state else 0, updated_at, None, "")]
+        hashed = sync_keyring.hashed_item_id(scope, name, id_kid)
+        on_hashed = state is not None and state.wire_id == hashed
+        body = sync_keyring.encrypt(
+            canonical({"v": 1, "name": name, "payload": payload}), scope=scope, item_id=hashed
+        )
+        if len(body.encode("utf-8")) > MAX_BODY_BYTES:
+            log.warning("skipping %s/%s: over the %d byte record limit", scope, name, MAX_BODY_BYTES)
+            self._note(scope, "tooLarge", name)
+            return []
+        head = self._wire_item(scope, name, hashed, state.rev if on_hashed else 0, updated_at, payload, body)
+        if state is None or on_hashed or state.deleted or state.rev <= 0:
+            return [head]
+        head[0][_PAIR_KEY] = True
+        return [head, self._wire_item(scope, name, name, state.rev, updated_at, None, "")]
+
+    def _wire_item(
+        self, scope: str, name: str, wire_id: str, base_rev: int, updated_at: str, payload: Any, body: str
+    ) -> tuple[dict[str, Any], int]:
+        """One D3 wire item, signed under the id it travels by (see ``_build``)."""
+        deleted = payload is None
+        item: dict[str, Any] = {
+            "itemId": wire_id,
+            "baseRev": base_rev,
+            "updatedAt": updated_at,
+            "deleted": 1 if deleted else 0,
+            "body": body,
+            "sig": device_signing.sign_sync(
+                scope=scope, item_id=wire_id, updated_at=updated_at, deleted=deleted, body=body
+            ),
+        }
+        refs = getattr(self._adapters.get(scope), "refs", None)
+        if refs is not None and not deleted:
+            item["refs"] = refs(payload)
+        size = len(canonical(item).encode("utf-8"))
+        item[_NAME_KEY] = name
+        return item, size
+
     async def _send_batch(
         self, scope: str, wire: list[dict[str, Any]], pending: list[tuple[str, Any, str]]
     ) -> int:
         by_id = {item_id: (payload, item_hash) for item_id, payload, item_hash in pending}
+        names: dict[str, str] | None = None
+        pairs: dict[str, str] = {}
+        if any(_NAME_KEY in item for item in wire):
+            # D3: the wire speaks ids, the record speaks names.
+            names = {str(item["itemId"]): _name_of(item) for item in wire}
+            pairs = {str(item["itemId"]): _name_of(item) for item in wire if item.get(_PAIR_KEY)}
+            wire = [{k: v for k, v in item.items() if k not in (_NAME_KEY, _PAIR_KEY)} for item in wire]
         caps = _caps_now()
         if _is_v3(caps) and caps.get("storage") == "s3":
             wire = await self._objectify(scope, wire, caps)
@@ -1755,7 +2093,7 @@ class SyncEngine:
                 # met again, readable or not, by the next round.
                 failure = err
                 reply = {**reply, "conflicts": []}
-        count = await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps)
+        count = await asyncio.to_thread(self._record_reply, scope, reply, by_id, stamps, names, pairs)
         if failure is not None:
             raise failure
         return count
@@ -1874,16 +2212,30 @@ class SyncEngine:
         reply: dict[str, Any],
         by_id: dict[str, tuple[Any, str]],
         stamps: dict[str, str] | None = None,
+        names: dict[str, str] | None = None,
+        pairs: dict[str, str] | None = None,
     ) -> int:
-        """Write what the server said into the local record. Off the loop."""
+        """Write what the server said into the local record. Off the loop.
+
+        ``names`` (D3) maps each wire id of the batch to its local name, and
+        ``pairs`` each migration's hashed id to the name whose legacy
+        tombstone rode behind it; both None/empty on the legacy wire.
+        """
         self._store._check_round()
         accepted = reply.get("accepted")
+        pairs = pairs or {}
+        migrating = set(pairs.values())
+        revs: dict[str, int] = {}
         for entry in accepted if isinstance(accepted, list) else []:
             if not isinstance(entry, dict):
                 continue
-            item_id = str(entry.get("itemId") or "")
+            wire_id = str(entry.get("itemId") or "")
+            item_id = (names or {}).get(wire_id, wire_id)
             if item_id not in by_id:
                 continue
+            revs[wire_id] = int(entry.get("rev") or 0)
+            if wire_id in pairs or (item_id in migrating and wire_id == item_id):
+                continue  # recorded below, as a pair
             payload, item_hash = by_id[item_id]
             self._store.set_state(
                 scope,
@@ -1893,15 +2245,26 @@ class SyncEngine:
                 deleted=payload is None,
                 sealed_kid=(sync_keyring.active_key_id() or "") if payload is not None else "",
                 # The updatedAt this push carried: what the server now holds.
-                synced_updated_at=(stamps or {}).get(item_id, ""),
+                synced_updated_at=(stamps or {}).get(wire_id, ""),
+                wire_id=wire_id if sync_keyring.is_hashed_item_id(wire_id) else "",
             )
+        for hashed, name in pairs.items():
+            self._record_migration(scope, hashed, name, revs, by_id[name], (stamps or {}).get(hashed, ""))
         for entry in reply.get("rejected") or []:
             # Not recorded, so the next round offers it again.
             log.info("sync.push on %s: %s was turned away: %s", scope, entry.get("itemId"), entry.get("code"))
         conflicts = reply.get("conflicts")
         adapter = self._adapters.get(scope)
         for entry in conflicts if isinstance(conflicts, list) else []:
-            self._record_push_conflict(scope, entry, by_id, sealed=_sensitive(adapter))
+            if (
+                isinstance(entry, dict) and str(entry.get("itemId") or "") in migrating
+                and not sync_keyring.is_hashed_item_id(str(entry.get("itemId") or ""))
+            ):
+                # The legacy half of a migration clashed: the pull of the next
+                # round reads that row, and the migration is tried again.
+                log.info("sync.push on %s: a legacy tombstone of a migration clashed", scope)
+                continue
+            self._record_push_conflict(scope, entry, by_id, sealed=_sensitive(adapter), names=names)
         cursor = _contiguous_cursor(self._store.cursor(scope), accepted)
         barrier = self._cursor_barrier.get(scope)
         if barrier is not None:
@@ -1915,6 +2278,31 @@ class SyncEngine:
             self._store.set_cursor(scope, cursor)
         return len(accepted) if isinstance(accepted, list) else 0
 
+    def _record_migration(
+        self,
+        scope: str,
+        hashed: str,
+        name: str,
+        revs: dict[str, int],
+        sent: tuple[Any, str],
+        stamp: str,
+    ) -> None:
+        """D3: what a migration pair came to. The server commits the two in
+        one transaction, so both are accepted or neither; either half alone
+        is still written down as the server now holds it."""
+        payload, item_hash = sent
+        if hashed in revs:
+            if name not in revs:
+                log.warning("sync.push on %s: a hashed copy went up without its legacy tombstone", scope)
+            self._store.set_state(
+                scope, name, rev=revs[hashed], synced_hash=item_hash, deleted=False,
+                sealed_kid=sync_keyring.active_key_id() or "", synced_updated_at=stamp, wire_id=hashed,
+            )
+        elif name in revs:
+            # Only the legacy row went: the item is gone from the server, and
+            # the next push sends the hashed copy as new.
+            self._store.set_state(scope, name, rev=revs[name], synced_hash="", deleted=True)
+
     def _record_push_conflict(
         self,
         scope: str,
@@ -1922,10 +2310,13 @@ class SyncEngine:
         by_id: dict[str, tuple[Any, str]],
         *,
         sealed: bool = False,
+        names: dict[str, str] | None = None,
     ) -> None:
         if not isinstance(entry, dict):
             return
-        item_id = str(entry.get("itemId") or "")
+        wire_id = str(entry.get("itemId") or "")
+        item_id = (names or {}).get(wire_id, wire_id)
+        hashed_wire = wire_id if sync_keyring.is_hashed_item_id(wire_id) else ""
         if item_id not in by_id:
             return
         if entry.get("tooLarge"):
@@ -1944,7 +2335,7 @@ class SyncEngine:
         opened = True
         if not entry.get("deleted"):
             try:
-                remote = json.loads(sync_keyring.decrypt(body, scope=scope, item_id=item_id))
+                remote = self._open_payload(scope, wire_id, body)
             except Exception as err:  # noqa: BLE001 - show the clash even unreadable
                 if sealed:
                     # An unreadable remote half must not be written down as
@@ -1968,6 +2359,7 @@ class SyncEngine:
                 deleted=False,
                 sealed_kid=_kid_of(body),
                 synced_updated_at=str(entry.get("updatedAt") or ""),
+                wire_id=hashed_wire,
             )
             return
         self._store.record_conflict(
@@ -1979,6 +2371,7 @@ class SyncEngine:
             remote_device=str(entry.get("deviceId") or ""),
             sealed=sealed,
             remote_kid="" if remote is None else _kid_of(body),
+            remote_wire=hashed_wire,
         )
 
     # ── conflict resolution ─────────────────────────────────────────────
@@ -2029,6 +2422,7 @@ class SyncEngine:
                 synced_hash="" if remote is None else digest(remote),
                 deleted=remote is None,
                 sealed_kid="" if remote is None else str(row.get("remoteKid") or ""),
+                wire_id=str(row.get("remoteWire") or ""),
             )
         elif keep == KEEP_LOCAL:
             # The agreed hash is cleared, not kept: the local copy may well be
@@ -2041,6 +2435,7 @@ class SyncEngine:
                 rev=int(row["remoteRev"]),
                 synced_hash="",
                 deleted=False,
+                wire_id=str(row.get("remoteWire") or ""),
             )
         else:
             raise SyncError(f"{keep!r} is neither {KEEP_LOCAL!r} nor {KEEP_REMOTE!r}")
@@ -2076,7 +2471,9 @@ class SyncEngine:
             return {"scope": scope, "status": INVENTORY_DISABLED, "items": []}
         if not await asyncio.to_thread(sync_keyring.has_account_key):
             return {"scope": scope, "status": INVENTORY_NO_KEY, "items": []}
-        with _using(await self._negotiate()):
+        caps = await self._negotiate()
+        await asyncio.to_thread(_require_item_id_key, caps)
+        with _using(caps):
             rows = await self._list_remote(scope)
             items = await asyncio.to_thread(self._compare, adapter, rows)
         return {"scope": scope, "status": INVENTORY_OK, "items": items}
@@ -2131,9 +2528,7 @@ class SyncEngine:
         scope = adapter.scope
         snapshot = adapter.snapshot()
         blocked = self._store.conflict_ids(scope)
-        remote_rows = {
-            str(row.get("itemId") or ""): row for row in rows if row.get("itemId")
-        }
+        remote_rows = self._name_rows(adapter, rows)
         out: list[dict[str, Any]] = []
         for item_id in sorted(set(snapshot) | set(remote_rows)):
             local = (
@@ -2175,9 +2570,7 @@ class SyncEngine:
         readable = True
         if not deleted:
             try:
-                payload = json.loads(
-                    sync_keyring.decrypt(str(row.get("body") or ""), scope=scope, item_id=item_id)
-                )
+                payload = self._open_payload(scope, str(row.get("itemId") or item_id), str(row.get("body") or ""))
                 fingerprint = digest(payload)
                 meta = _describe(adapter, payload)
             except Exception as err:  # noqa: BLE001 - an unreadable record still lists
@@ -2218,6 +2611,7 @@ class SyncEngine:
             caps = await self._negotiate()
             if _retired(caps, scope):
                 raise SyncError(f"SCOPE_RETIRED: {scope} does not sync any more", code="SCOPE_RETIRED")
+            await asyncio.to_thread(_require_item_id_key, caps)
             # One transfer per scope at a time, like a round, and under the
             # generation it began with (see ``_round``).
             async with self._locks.setdefault(scope, asyncio.Lock()):
@@ -2236,7 +2630,7 @@ class SyncEngine:
             pending, built = await asyncio.to_thread(self._prepare_push, adapter)
             chosen_pending = [entry for entry in pending if entry[0] in wanted]
             chosen_built = [
-                entry for entry in built if str(entry[0].get("itemId") or "") in wanted
+                entry for entry in built if _name_of(entry[0]) in wanted
             ]
             if chosen_built:
                 await self._send_all(scope, chosen_pending, chosen_built)
@@ -2260,7 +2654,7 @@ class SyncEngine:
         different to the engine, and only this direction can tell them apart.
         """
         hashes = {item_id: item_hash for item_id, _payload, item_hash in pending}
-        buildable = {str(item.get("itemId") or "") for item, _size in built}
+        buildable = {_name_of(item) for item, _size in built}
         states = self._store.states(scope)
         blocked_now = self._store.conflict_ids(scope)
         out: list[dict[str, Any]] = []
@@ -2311,9 +2705,11 @@ class SyncEngine:
                     # this machine" mark for some items lifts it here, before the
                     # rows are read, so the pull below can take them.
                     await asyncio.to_thread(requested, wanted)
-                with _using(await self._negotiate()):
+                caps = await self._negotiate()
+                await asyncio.to_thread(_require_item_id_key, caps)
+                with _using(caps):
                     rows = await self._list_remote(scope)
-                    by_id = {str(row.get("itemId") or ""): row for row in rows if row.get("itemId")}
+                    by_id = await asyncio.to_thread(self._name_rows, adapter, rows)
                     return await asyncio.to_thread(self._apply_chosen, adapter, wanted, by_id)
         finally:
             _round_generation.reset(token)

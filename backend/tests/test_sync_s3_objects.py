@@ -48,6 +48,7 @@ class FakeS3:
         self.gets: list[str] = []
         self.fail_get: set[str] = set()
         self.fail_put: set[str] = set()
+        self.content_types: list[str | None] = []
         self.connections = 0
         s3 = self
 
@@ -64,6 +65,14 @@ class FakeS3:
             def do_PUT(self) -> None:  # noqa: N802 - http.server naming
                 blob_id = self.path.rsplit("/", 1)[1]
                 data = self.rfile.read(int(self.headers["Content-Length"]))
+                s3.content_types.append(self.headers.get("Content-Type"))
+                # moto (and S3 behind some proxies) reads a form-encoded body
+                # as a form and stores nothing: the type must be octet-stream.
+                if self.headers.get("Content-Type") != "application/octet-stream":
+                    self.send_response(400)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
                 if blob_id in s3.fail_put:
                     self.send_response(500)
                     self.send_header("Content-Length", "0")
@@ -129,7 +138,7 @@ class V3Server(FakeServer):
         caps: bool = True,
         caps_error: str = "UNKNOWN_TYPE",
         item_ids: str = "legacy",
-        adopt_ready: bool = True,
+        adopt_ready: bool = False,
     ) -> None:
         super().__init__()
         self.s3 = s3
@@ -452,6 +461,7 @@ async def test_puts_reuse_kept_alive_connections(tmp_path, account_key, s3):
     a = V3Device(tmp_path, server, "A", {f"p{i}": {"v": i} for i in range(30)})
     assert (await a.sync())["ok"] is True
     assert len(s3.puts) == 30
+    assert set(s3.content_types) == {"application/octet-stream"}
     assert s3.connections <= sync_objects.POOL_PER_HOST
 
 
