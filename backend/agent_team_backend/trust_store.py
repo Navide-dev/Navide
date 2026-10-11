@@ -446,29 +446,43 @@ def _merge_journal(state: dict[str, Any], journal: dict[str, Any]) -> None:
         state["seenMessages"] = merged
 
 
-def _adopt_journal(state: dict[str, Any]) -> None:
+def _adopt_journal(state: dict[str, Any], stored_core: str | None) -> None:
     """Fold the journal into a freshly parsed vault document. Caller holds
     ``_lock``. A vault entry written before the move still carries its own
     notices and ledger; both halves are kept, merged by key, and the vault's
-    copy leaves it on the next save."""
+    copy leaves it on the next save.
+
+    ``stored_core`` is the vault item as read, so the first save after a load
+    rewrites it only if it changed (R2-5): a flush that rewrote it anyway was
+    one Keychain write per restart, and one more way to fail."""
     global _last_core, _last_journal
     journal = _read_journal()
     if journal:
         _merge_journal(state, journal)
-    _last_core = None
+    _last_core = stored_core
     _last_journal = None
 
 
 def _write(state: dict[str, Any]) -> None:
-    global _last_core, _last_journal, _committed_core
+    global _last_core, _committed_core
     # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
     core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
-    if core != _last_core:
-        cloud_secrets.write(_vault(), SECRET_NAME, core)
-        _last_core = core
-    _committed_core = json.loads(core)
+    try:
+        if core != _last_core:
+            cloud_secrets.write(_vault(), SECRET_NAME, core)
+            _last_core = core
+        _committed_core = json.loads(core)
+    finally:
+        # The journal is written even when the vault half was refused (R2-5):
+        # the ledger and notices do not depend on it, and a refused Keychain
+        # write used to cost them as well.
+        _write_journal_locked(state)
+
+
+def _write_journal_locked(state: dict[str, Any]) -> None:
+    global _last_journal
     if _journal_blocked:
         # Try again rather than overwrite: a read that succeeds now brings back
         # what was on disk, merged with what this process recorded meanwhile.
@@ -485,7 +499,7 @@ def _write(state: dict[str, Any]) -> None:
         try:
             _write_journal_bytes(_journal_path(), journal.encode("utf-8"))
         except OSError as err:
-            # The vault half — the part that decides trust — is already saved.
+            # The vault half — the part that decides trust — is saved apart from this.
             log.warning("the device trust journal could not be saved (%s)", err)
             return
         _last_journal = journal
@@ -577,7 +591,7 @@ def _load_locked() -> dict[str, Any]:
                 + _provenance(marker)
             )
             raise TrustStoreLocked(_locked_reason)
-        _adopt_journal(parsed)
+        _adopt_journal(parsed, raw)
         _remember_committed(parsed)
         _state = parsed
         return _state
@@ -594,7 +608,7 @@ def _load_locked() -> dict[str, Any]:
     _state = parsed if parsed is not None else _blank()
     # Read even for a blank start: the journal outlives the record, and writing
     # the blank state without reading it first replaced it with nothing.
-    _adopt_journal(_state)
+    _adopt_journal(_state, raw if parsed is not None else None)
     _write(_state)
     database.kv_set(
         INITIALISED_KEY,
