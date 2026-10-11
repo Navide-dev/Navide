@@ -321,33 +321,98 @@ def _journal_path() -> Path:
     return app_data_dir() / JOURNAL_FILENAME
 
 
-def _read_journal() -> dict[str, Any]:
-    """The journal's notices and ledger, or {} when there is none to be had.
+#: Set while the journal exists but cannot be read. No journal is written until
+#: a read succeeds: writing then would replace a file that was only momentarily
+#: locked with this process's empty view of it.
+_journal_blocked = False
+#: What is wrong with the journal, for the account view, or "" when nothing is.
+_journal_problem = ""
 
-    Never raises, and never locks: an unreadable journal is logged and read as
-    empty, because nothing in it decides trust.
+
+def journal_problem() -> str:
+    """Why the journal is not in use as it should be, or "" when it is."""
+    return _journal_problem
+
+
+def _read_journal() -> dict[str, Any] | None:
+    """The journal's notices and ledger: {} when there is no journal yet, None
+    when there is one that cannot be read right now. Never raises, never locks
+    — nothing in it decides trust.
+
+    A journal that reads but is not a journal (bad JSON, wrong shape) is set
+    aside under a ``.damaged-<time>`` name rather than overwritten, and reads as
+    empty; one that cannot be read at all is left where it is.
     """
+    global _journal_blocked, _journal_problem
+    path = _journal_path()
     try:
-        raw = secret_files.read_private(_journal_path()).decode("utf-8")
+        raw = secret_files.read_private(path)
     except FileNotFoundError:
         return {}
-    except (OSError, UnicodeDecodeError) as err:
-        log.warning("the device trust journal could not be read; starting it empty (%s)", err)
-        return {}
+    except OSError as err:
+        if not _journal_blocked:
+            log.warning("the device trust journal could not be read; leaving it untouched (%s)", err)
+        _journal_blocked = True
+        _journal_problem = (
+            f"the device trust journal could not be read ({err}); it is left untouched "
+            "and not written until it can be — notices and the delivered-message "
+            "ledger are kept in memory meanwhile"
+        )
+        return None
+    doc: Any = None
     try:
-        doc = json.loads(raw)
-    except ValueError:
-        log.warning("the device trust journal is not valid JSON; starting it empty")
+        doc = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        pass
+    if not isinstance(doc, dict) or not isinstance(doc.get("notices", []), list) or not isinstance(
+        doc.get("seenMessages", {}), dict
+    ):
+        aside = path.with_name(f"{path.name}.damaged-{int(time.time())}")
+        try:
+            path.replace(aside)
+        except OSError as err:
+            log.warning("a damaged device trust journal could not be set aside (%s)", err)
+            _journal_blocked = True
+            _journal_problem = (
+                f"the device trust journal is damaged and could not be set aside ({err}); "
+                "it is not written until that is resolved"
+            )
+            return None
+        log.warning("the device trust journal was damaged; set it aside as %s", aside.name)
+        _journal_blocked = False
+        _journal_problem = (
+            f"the device trust journal was damaged and was set aside as {aside.name}; "
+            "notices and the delivered-message ledger started over from empty"
+        )
         return {}
-    if not isinstance(doc, dict):
-        log.warning("the device trust journal has the wrong shape; starting it empty")
-        return {}
+    if _journal_blocked:
+        _journal_blocked = False
+        _journal_problem = ""
     journal: dict[str, Any] = {}
     if isinstance(doc.get("notices"), list):
         journal["notices"] = doc["notices"]
     if isinstance(doc.get("seenMessages"), dict):
         journal["seenMessages"] = doc["seenMessages"]
     return journal
+
+
+def _merge_journal(state: dict[str, Any], journal: dict[str, Any]) -> None:
+    """Fold *journal* into *state*, keeping both sides: notices merged by key,
+    ledgers merged by message key."""
+    if "notices" in journal:
+        known = {notice.get("key") for notice in journal["notices"] if isinstance(notice, dict)}
+        others = [
+            notice for notice in state.get("notices") or []
+            if isinstance(notice, dict) and notice.get("key") not in known
+        ]
+        state["notices"] = sorted(
+            others + journal["notices"],
+            key=lambda notice: int(notice.get("at") or 0) if isinstance(notice, dict) else 0,
+        )
+    if "seenMessages" in journal:
+        merged = dict(state.get("seenMessages") or {})
+        merged.update(journal["seenMessages"])
+        state["seenMessages"] = merged
 
 
 def _adopt_journal(state: dict[str, Any]) -> None:
@@ -357,20 +422,8 @@ def _adopt_journal(state: dict[str, Any]) -> None:
     copy leaves it on the next save."""
     global _last_core, _last_journal
     journal = _read_journal()
-    if "notices" in journal:
-        known = {notice.get("key") for notice in journal["notices"] if isinstance(notice, dict)}
-        legacy = [
-            notice for notice in state.get("notices") or []
-            if isinstance(notice, dict) and notice.get("key") not in known
-        ]
-        state["notices"] = sorted(
-            legacy + journal["notices"],
-            key=lambda notice: int(notice.get("at") or 0) if isinstance(notice, dict) else 0,
-        )
-    if "seenMessages" in journal:
-        merged = dict(state.get("seenMessages") or {})
-        merged.update(journal["seenMessages"])
-        state["seenMessages"] = merged
+    if journal:
+        _merge_journal(state, journal)
     _last_core = None
     _last_journal = None
 
@@ -385,6 +438,13 @@ def _write(state: dict[str, Any]) -> None:
         cloud_secrets.write(_vault(), SECRET_NAME, core)
         _last_core = core
     _committed_core = json.loads(core)
+    if _journal_blocked:
+        # Try again rather than overwrite: a read that succeeds now brings back
+        # what was on disk, merged with what this process recorded meanwhile.
+        recovered = _read_journal()
+        if recovered is None:
+            return
+        _merge_journal(state, recovered)
     journal = json.dumps(
         {"v": STATE_VERSION, **{key: state.get(key) for key in _JOURNAL_KEYS}},
         ensure_ascii=False,
@@ -1564,10 +1624,12 @@ def _remember_committed(state: dict[str, Any]) -> None:
 
 
 def _forget_written() -> None:
-    global _last_core, _last_journal, _committed_core
+    global _last_core, _last_journal, _committed_core, _journal_blocked, _journal_problem
     _last_core = None
     _last_journal = None
     _committed_core = None
+    _journal_blocked = False
+    _journal_problem = ""
 
 
 def _reset_for_test() -> None:

@@ -603,6 +603,19 @@ describe('account modal — your network', () => {
     return MODAL.slice(start, end)
   }
 
+  it('says when the trust journal cannot be used, without calling pairing broken', () => {
+    // Review KC-3: an unreadable journal is kept, not overwritten, and the
+    // person is told — pairing itself is unaffected, so this is not the lock card.
+    const start = MODAL.indexOf('v-if="trustJournalProblem"')
+    expect(start).toBeGreaterThan(-1)
+    expect(start).toBeLessThan(MODAL.indexOf('class="card locked-card"'))
+    const card = MODAL.slice(start, MODAL.indexOf('</div>', start))
+    expect(card).toContain("t('settings.p2p.trust.journal-problem')")
+    expect(card).toContain('{{ trustJournalProblem }}')
+    expect(card).not.toMatch(/<button/)
+    expect(MODAL).toContain("const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')")
+  })
+
   it('says a damaged record is damaged and that pairing again is the fix', () => {
     // 2026-10-11: a record cut off by a Keychain write read as "had trust state
     // and no longer does", which points at an attack, not at the one fix.

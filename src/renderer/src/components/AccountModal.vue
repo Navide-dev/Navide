@@ -260,6 +260,9 @@ interface NetworkSnapshot {
   /** The record is there but cut off — a damaged record is known to be
    *  useless, so the card says so and that pairing again is the fix. */
   trustDamaged?: boolean
+  /** The trust journal (notices, delivered-message ledger) is unreadable or
+   *  was set aside; the backend's sentence says which. Pairing is unaffected. */
+  trustJournalProblem?: string
 }
 
 /** The four the server defines; anything else is shown as the server spelled it. */
@@ -444,6 +447,7 @@ const readFailed = pairingState.readFailed
  *  it to erase, and that offer is the one act here nobody can undo. */
 const trustLockedTransient = computed(() => network.value?.trustLockedTransient === true)
 const trustDamaged = computed(() => network.value?.trustDamaged === true)
+const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')
 /** Two clicks, not one: the first only reveals what the second costs. A single
  *  button beside an explanation of a lock is a button people press to make the
  *  red text go away. */
@@ -1982,6 +1986,10 @@ onUnmounted(() => {
                say that, and would have to be worth interrupting somebody for.
                The backend still reports `policyEmpty`; it is a true fact with
                no honest use here yet. -->
+          <div v-if="trustJournalProblem" class="card journal-card">
+            <p class="req-what">{{ t('settings.p2p.trust.journal-problem') }}</p>
+            <p class="hint">{{ trustJournalProblem }}</p>
+          </div>
           <div v-if="trustLocked" class="card locked-card">
             <h2 class="net-title">{{ t('settings.p2p.trust.locked-title') }}</h2>
             <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
@@ -2695,6 +2703,7 @@ input:focus {
    warning has to be read from — so it needs the same gap the connection card
    carries. Restored: the rule was written when the card moved there and was
    lost to a parallel edit before it reached any commit. */
+.journal-card { margin-bottom: 10px; }
 .locked-card { border-color: var(--danger-fg); margin-bottom: 10px; }
 .req { padding: 8px 0; border-bottom: 1px solid var(--border-muted); }
 .req:last-child { border-bottom: none; }

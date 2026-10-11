@@ -2392,6 +2392,9 @@ class ServerLink:
             # The record is there but cut off, so the card can say "damaged —
             # pair again" instead of an unexplained lock.
             "trustDamaged": trust_store.damaged(),
+            # The journal (notices, delivered-message ledger) is unreadable or
+            # was set aside. Pairing is unaffected; the card says so.
+            "trustJournalProblem": trust_store.journal_problem(),
             # This device first, then by label: the row a user recognises is
             # the one that should not move as other machines come and go.
             "devices": sorted(
