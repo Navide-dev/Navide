@@ -279,7 +279,8 @@ function createChannelsStore(backend: Backend) {
   // Tell bound chats when a new device opens a share link. Null (no switch shown) unless
   // Navide Cloud is connected and the backend has the setting.
   const shareOpenNotify = ref<boolean | null>(null)
-  let shareOpenNotifyWanted = false
+  // Listening for link changes only while Settings → Channels shows the switch.
+  let shareOpenNotifyOff: (() => void) | null = null
   const platforms = ref<ChannelPlatformState[]>([])
   const bindings = ref<ChannelBinding[]>([])
   const pairing = ref<ChannelPairingRequest[]>([])
@@ -391,9 +392,6 @@ function createChannelsStore(backend: Backend) {
     takeShareOpenNotify(await call<ShareOpenNotifyReply>('channels.get_share_open_notify'))
   }
 
-  backend.on('p2p.link.changed', () => {
-    if (shareOpenNotifyWanted) void fetchShareOpenNotify()
-  })
   backend.on('channels.changed', () => {
     void refresh()
   })
@@ -517,8 +515,13 @@ function createChannelsStore(backend: Backend) {
     setGlobalEnabled: (on: boolean) => mutate('channels.set_global_enabled', { enabled: on }),
     /** Start keeping the switch (Settings → Channels shows it) and fetch it now. */
     loadShareOpenNotify: (): Promise<void> => {
-      shareOpenNotifyWanted = true
+      shareOpenNotifyOff ??= backend.on('p2p.link.changed', () => void fetchShareOpenNotify())
       return fetchShareOpenNotify()
+    },
+    /** The page is gone: stop following link changes for the switch. */
+    releaseShareOpenNotify: (): void => {
+      shareOpenNotifyOff?.()
+      shareOpenNotifyOff = null
     },
     setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
       const res = await call<ShareOpenNotifyReply>('channels.set_share_open_notify', { enabled: on })

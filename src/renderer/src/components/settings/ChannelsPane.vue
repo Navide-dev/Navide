@@ -460,6 +460,7 @@ function loadOverview(): void {
 // Pane names and states change without channels.changed: fetch afresh whenever the page shows.
 onMounted(loadOverview)
 onMounted(() => void store.loadShareOpenNotify())
+onBeforeUnmount(() => store.releaseShareOpenNotify())
 watch(() => [store.lastLinked.value, connectedKey.value], loadOverview)
 
 // An invite waiting for the link guide, on a bot whose guide will not show

@@ -114,4 +114,22 @@ describe('ChannelsPane share-link opened notices switch', () => {
     await flushPromises()
     expect(w.find(TOGGLE).exists()).toBe(false)
   })
+
+  it('stops asking once the page is gone, and asks again when it comes back', async () => {
+    notifySetting(true, true)
+    const gets = () => mock.sent.filter((s) => s.type === 'channels.get_share_open_notify').length
+    const w = await render()
+    expect(gets()).toBe(1)
+    w.unmount()
+    wrapper = undefined
+    mock.emit('p2p.link.changed', { status: { state: 'connected' } })
+    await flushPromises()
+    expect(gets()).toBe(1)
+    const again = await render()
+    expect(gets()).toBe(2)
+    mock.emit('p2p.link.changed', { status: { state: 'connected' } })
+    await flushPromises()
+    expect(gets()).toBe(3)  // one listener, not one per visit
+    expect(again.find(TOGGLE).exists()).toBe(true)
+  })
 })
