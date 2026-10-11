@@ -745,7 +745,8 @@ def test_credentials_cannot_be_switched_on_while_a_legacy_pin_remains(monkeypatc
         sync_scopes.set_scope_enabled("credentials", True)
 
     monkeypatch.setattr(trust_store, "legacy_pinned_devices", lambda: [])
-    assert sync_scopes.set_scope_enabled("credentials", True)["credentials"] is True
+    with pytest.raises(sync_engine.SyncError, match="not synced any more"):
+        sync_scopes.set_scope_enabled("credentials", True)
 
 
 # ── the accounts listing ─────────────────────────────────────────────────────

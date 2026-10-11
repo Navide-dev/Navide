@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import sys
 
 import pytest
 
@@ -40,6 +41,10 @@ def test_the_guard_survives_monkeypatch_undo(monkeypatch):
         subprocess.run([SECURITY, "-i"], input="", text=True, timeout=5)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="asyncio on Windows spawns through its own Popen subclass; there is no Keychain or security binary there",
+)
 def test_an_asyncio_subprocess_cannot_start_security():
     async def start():
         await asyncio.create_subprocess_exec("/usr/bin/security", "-i")

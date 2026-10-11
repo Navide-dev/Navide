@@ -18,6 +18,7 @@ import type { useBackend } from '../composables/useBackend'
 import { maskMcpRecord } from '../lib/syncMask'
 import { visible } from '../lib/syncVisible'
 import SyncRecordSummary from './SyncRecordSummary.vue'
+import SyncVersionHistory from './SyncVersionHistory.vue'
 import SettingRow from './settings/SettingRow.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingsSection from './settings/SettingsSection.vue'
@@ -718,6 +719,8 @@ onBeforeUnmount(() => offResult?.())
         </div>
       </div>
     </div>
+
+    <SyncVersionHistory v-if="connected" :backend="props.backend" />
 
     <p v-if="error" class="err-msg">{{ error }}</p>
   </SettingsSection>

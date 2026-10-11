@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+import agent_team_backend
 from agent_team_backend import (
     agent_messaging,
     app,
@@ -457,6 +458,9 @@ async def test_authenticates_and_publishes_the_roster():
         hello = conn.hellos[0]
         assert hello["credential"] == CONFIG.token
         assert hello["client"] == server_link.CLIENT_NAME
+        # The server records the last version each device reported, which is
+        # how a protocol migration knows whether old builds are still online.
+        assert hello["clientVersion"] == agent_team_backend.__version__
         assert hello["deviceName"] == "test-box"
         assert hello["deviceId"]
         assert link.member_id == "m1"

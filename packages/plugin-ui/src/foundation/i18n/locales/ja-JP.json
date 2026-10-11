@@ -6503,7 +6503,21 @@
       "secret-same": "同じ",
       "secret-differs": "異なる",
       "secret-local-only": "このデバイスのみ",
-      "secret-remote-only": "もう一方のデバイスのみ"
+      "secret-remote-only": "もう一方のデバイスのみ",
+      "history-title": "バージョン履歴",
+      "history-hint": "クラウドは同期項目ごとに直近 10 バージョン、または 30 日以内のバージョンのうち、先に上限に達した方まで保持します。",
+      "history-scope": "セクション",
+      "history-item": "項目",
+      "history-show": "バージョンを表示",
+      "history-no-items": "このセクションにはまだ同期された項目がありません。",
+      "history-empty": "この項目に以前のバージョンはありません。",
+      "history-restore-previous": "前のバージョンに戻す",
+      "history-restore": "このバージョンに戻す",
+      "history-device": "{device} から",
+      "history-restored": "このデバイスで復元しました。次回の同期でほかのデバイスにも反映されます。",
+      "history-held": "復元したバージョンは上で承認待ちです。",
+      "history-error": "バージョン履歴を読み込めませんでした。",
+      "history-not-applied": "このデバイスでは何も変更されていません。このバージョンは適用されませんでした（以前に拒否された可能性があります）。"
     },
     "sharing": {
       "intro": "この 4 つの項目をマシン間で移す方法は、ファイルを受け渡す方法と、共通のアカウントを使う方法の 2 つです。",
