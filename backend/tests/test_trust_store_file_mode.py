@@ -219,16 +219,27 @@ def test_a_copy_that_stopped_because_it_no_longer_fit_is_not_taken_back():
     assert all(trust_store.pin_for(_device(index)) for index in range(30))
 
 
-def _cut_after_pins(complete: int) -> str:
-    """A Keychain record from before the move, cut off by security -i inside the
-    pin after *complete* whole ones — the way a write too long was stored."""
+def _legacy_record(cut_at_key: str, *, blocked: bool = True) -> str:
+    """A Keychain record from before the move with three pairings, a block, an
+    encrypted peer and a policy sequence, cut off by security -i inside the field
+    *cut_at_key* — the way a write too long was stored — and the marker of a
+    build from before the move."""
     trust_store.load()
-    for index in range(complete + 1):
+    for index in range(3):
         _pin(index)
-    whole = json.dumps(_keychain_doc(), separators=(",", ":"))
-    cut_at = whole.index(f'"{_device(complete)}"') + 20
+    if blocked:
+        trust_store.note_blocked(_device(1), "")
+    trust_store.note_encrypted_peer(_device(0))
+    trust_store.reserve_policy_seq("dev-self")
+    trust_store.note_remote_command(_device(0), device_name="TKM5", workspace="w", pane_name="p")
+    doc = dict(_keychain_doc())
+    doc["notices"] = [{"key": f"n-{i}", "kind": "remote-command", "deviceId": "d", "at": 1, "pad": "x" * 40}
+                      for i in range(5)]
+    whole = json.dumps(doc, separators=(",", ":"))
+    cut_at = whole.index(f'"{cut_at_key}":') + len(cut_at_key) + 12
     app.credential_vault.write_app_secret(trust_store.SECRET_NAME, whole[:cut_at])
     trust_store._record_path().unlink()
+    trust_store._journal_path().unlink(missing_ok=True)
     marker = dict(_marker())
     marker.pop("store")
     marker.pop("mirror", None)
@@ -237,26 +248,33 @@ def _cut_after_pins(complete: int) -> str:
     return whole[:cut_at]
 
 
-def test_whole_pins_in_a_cut_off_record_are_salvaged_unapproved():
-    """Q2: a record cut off mid-write keeps the pins that were written whole.
-    They pin the key — nobody can swap it — but go back to the default-deny
-    rules until a person approves them again."""
-    _cut_after_pins(3)
+@pytest.mark.parametrize("file_store", [True, False])
+def test_a_record_cut_off_in_its_notices_keeps_every_decision(file_store, monkeypatch):
+    """Q2, review F1: the cut usually lands in the notices at the end, after
+    the blocks, encrypted peers and policy sequences were written whole. Those
+    are kept — a block above all — and the pins go back to unapproved."""
+    _legacy_record("notices")
+    monkeypatch.setattr(trust_store, "FILE_STORE", file_store)
     assert trust_store.locked_reason() == ""
+    assert trust_store.is_blocked_locally(device_id=_device(1), member_id="")
+    assert trust_store.is_encrypted_peer(_device(0))
+    assert trust_store.policy_seq("dev-self") == 1
     for index in range(3):
         pin = trust_store.pin_for(_device(index))
         assert pin is not None and pin["signKey"] == KEY and pin["approved"] is False
-    assert trust_store.pin_for(_device(3)) is None
     salvaged = [n for n in trust_store.notices()
                 if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == "salvaged"]
     assert sorted(n["deviceId"] for n in salvaged) == sorted(_device(i) for i in range(3))
-    assert trust_store._record_path().exists()
-    _restart()
-    assert trust_store.pin_for(_device(0))["approved"] is False
 
 
-def test_a_record_cut_off_before_any_whole_pin_still_locks():
-    _cut_after_pins(0)
+@pytest.mark.parametrize("cut_in", ["pins", "policySeqs", "blocked", "encryptedPeers"])
+@pytest.mark.parametrize("file_store", [True, False])
+def test_a_record_cut_off_in_a_decision_still_locks_like_main(cut_in, file_store, monkeypatch):
+    """Review F1: kept pins without the blocks after them trusted a blocked
+    device again. A cut anywhere in what decides trust locks as damaged, as
+    main does — salvage is never looser than main."""
+    _legacy_record(cut_in)
+    monkeypatch.setattr(trust_store, "FILE_STORE", file_store)
     assert trust_store.locked_reason()
     assert trust_store.damaged()
 

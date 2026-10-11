@@ -822,54 +822,54 @@ def _load_file_locked(marker: dict[str, Any]) -> dict[str, Any]:
 
 def _salvage(raw: str) -> dict[str, Any] | None:
     """What can be trusted in a record cut off mid-write (plan 797ad7, Q2), or
-    None when nothing can.
+    None when the cut makes it no safer to read than main would (review F1).
 
-    ``security -i`` stored the first 4095 bytes of a write that was too long, so
-    a record from before the move may end in the middle of a pin. The pins
-    written whole before that point are kept, and only them: each keeps its
-    key, so nobody can swap it, and goes back to ``approved: False`` — the
-    default-deny rules — until a person approves it again. Owned members are
-    kept when that map was written whole. Everything after the cut (blocks,
-    policy sequences, encrypted peers) is gone; the server's policy is still
-    where blocks are enforced.
+    ``security -i`` stored the first 4095 bytes of a write that was too long.
+    The record's fields are written in order — owned members, pins, policy
+    sequences, blocks, encrypted peers, then the ledger and the notices — and
+    the cut usually lands in those last two, which decide nothing. So every
+    field that decides trust must have been written whole: a pin kept without
+    the block written after it would trust a blocked device again. Then the
+    record is taken as it was, its pins going back to ``approved: False`` — the
+    default-deny rules — until a person approves them again. A cut anywhere
+    before that locks the record as damaged, exactly as main does.
     """
     decoder = json.JSONDecoder()
-    if not raw.startswith('{"v":%d,' % STATE_VERSION):
+    head = '{"v":%d,' % STATE_VERSION
+    if not raw.startswith(head):
         return None
-
-    def value_after(name: str) -> tuple[Any, int] | None:
-        at = raw.find(f'"{name}":')
-        if at < 0:
-            return None
+    whole: dict[str, Any] = {}
+    pos = len(head)
+    while pos < len(raw):
         try:
-            return decoder.raw_decode(raw, at + len(name) + 3)
-        except ValueError:
-            return None
-
-    state = _blank()
-    owned = value_after("ownMembers")
-    if owned is not None and isinstance(owned[0], dict):
-        state["ownMembers"] = {str(k): str(v) for k, v in owned[0].items() if isinstance(v, str)}
-    at = raw.find('"pins":{')
-    if at < 0:
-        return None
-    pos = at + len('"pins":{')
-    while True:
-        while pos < len(raw) and raw[pos] in " ,":
-            pos += 1
-        try:
-            device_id, pos = decoder.raw_decode(raw, pos)
-            if raw[pos] != ":":
+            key, pos = decoder.raw_decode(raw, pos)
+            if not isinstance(key, str) or raw[pos] != ":":
                 break
-            pin, pos = decoder.raw_decode(raw, pos + 1)
+            value, pos = decoder.raw_decode(raw, pos + 1)
         except (ValueError, IndexError):
             break
-        if (
-            isinstance(device_id, str) and isinstance(pin, dict)
-            and isinstance(pin.get("signKey"), str) and pin.get("signKey")
-        ):
-            state["pins"][device_id] = {**pin, "approved": False}
-    return state if state["pins"] else None
+        whole[key] = value
+        if pos < len(raw) and raw[pos] == ",":
+            pos += 1
+        else:
+            break
+    state = _blank()
+    for key in ("ownMembers", "pins", "policySeqs", "blocked", "encryptedPeers"):
+        if key not in whole or not isinstance(whole[key], type(state[key])):
+            return None
+        state[key] = whole[key]
+    for key in _JOURNAL_KEYS:
+        if isinstance(whole.get(key), type(state[key])):
+            state[key] = whole[key]
+    pins = {
+        device_id: {**pin, "approved": False}
+        for device_id, pin in state["pins"].items()
+        if isinstance(pin, dict) and isinstance(pin.get("signKey"), str) and pin.get("signKey")
+    }
+    if not pins:
+        return None
+    state["pins"] = pins
+    return state
 
 
 def _note_unreadable_locked(err: Exception) -> None:
