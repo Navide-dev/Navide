@@ -95,10 +95,20 @@ SERVER_URL_SETTING = "agentTeam.p2p.serverUrl"
 # the vault.
 ACCOUNT_EMAIL_SETTING = "agentTeam.p2p.accountEmail"
 
-#: Vault secret name for the access token. It is a *long-lived* credential —
-#: the server neither expires nor rotates it, the only way it stops working is
-#: an admin revoking it — so it is stored once and read back, never refreshed.
+#: Vault secret name for the access token: this device's own token (servers
+#: with per-device tokens) or, from an older sign-in, the account-wide one. It
+#: is rewritten only by a rotation, and only after the server handed out the
+#: replacement; the old one stays valid until the new one is confirmed as
+#: stored (see ``ServerLink._maybe_rotate``).
 ACCESS_TOKEN_SECRET = "navide-server-token"
+
+#: Rotate on connect when the token is older than this, or is still the
+#: account-wide token a pre-C1 sign-in stored. Checked only when connecting.
+ROTATE_AFTER_S = 30 * 24 * 3600
+
+#: After a server answered that it has no rotation (UNKNOWN_TYPE), how long
+#: before asking again — once per connection would ask on every reconnect.
+ROTATE_RETRY_COOLDOWN_S = 24 * 3600
 
 #: Reported in ``auth.hello`` so the server can tell client kinds apart.
 CLIENT_NAME = "navide-desktop"
@@ -350,6 +360,17 @@ def access_token() -> str:
     except Exception as err:  # noqa: BLE001 - a vault that will not answer is not a logout
         log.warning("the navide-server token could not be read (%s)", err)
         return ""
+
+
+def _now_iso() -> str:
+    """The current time in the server's timestamp format (a seam for tests)."""
+    return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+
+
+def _read_access_token_strict() -> str:
+    """The stored token, raising if the Keychain will not answer. Rotation's
+    read-back uses this: a read that fails must not count as a match."""
+    return (_vault().read_app_secret(ACCESS_TOKEN_SECRET) or "").strip()
 
 
 def set_access_token(token: str | None) -> None:
@@ -613,6 +634,17 @@ async def _warm_tls(url: str) -> None:
             await asyncio.to_thread(_tls_context)
 
 
+#: What each auth.revoked reason means for the person at this machine.
+REVOKE_REASONS = {
+    "password-changed": "the account password was changed on another device; sign in with the new password",
+    "logged-out": "this device was signed out",
+    "token-revoked": "this device's sign-in was revoked from another device",
+    "device-removed": "this device was removed from the account",
+    "account-deleted": "the account was deleted",
+    "rotated": "this device's sign-in was replaced by a newer one",
+}
+
+
 class ServerLink:
     """One outbound connection: authenticate, then keep the roster published."""
 
@@ -622,11 +654,22 @@ class ServerLink:
         connect: Callable[..., Any] | None = None,
         config_loader: Callable[[], ServerLinkConfig] | None = None,
         token_clearer: Callable[[], None] | None = None,
+        token_writer: Callable[[str], None] | None = None,
+        token_reader: Callable[[], str] | None = None,
         device_name: str | None = None,
     ) -> None:
         self._connect = connect or _dial
         self._load_config = config_loader or load_config
         self._clear_token = token_clearer or (lambda: set_access_token(None))
+        # Rotation stores through the same function as sign-in, so a write is
+        # a write wherever it comes from (and a test that swaps one swaps all).
+        self._token_writer = token_writer or set_access_token
+        self._token_reader = token_reader or _read_access_token_strict
+        # What the last accepted auth.hello said about the token it carried.
+        self._token_id = ""
+        self._token_issued_at: str | None = None
+        self._legacy_token = False
+        self._rotate_retry_after = 0.0
         self._device_name = device_name or platform.node() or "unknown"
         self._task: asyncio.Task | None = None
         self._stopped = False
@@ -954,6 +997,9 @@ class ServerLink:
                 # connection may have swallowed: acks this device could not send,
                 # and acks for its own sends that were pushed while it was away.
                 self._spawn(self._resend_unsent_acks())
+                # At most once per connection, and never on a server that does
+                # not describe its tokens.
+                self._spawn(self._maybe_rotate())
                 reconciler = asyncio.create_task(self._reconcile_loop())
                 reporter = asyncio.create_task(self._report_loop())
                 # Deliberately *not* in the wait below. That set means "the
@@ -1292,6 +1338,85 @@ class ServerLink:
         except Exception as err:  # noqa: BLE001 - same reason as above
             log.warning("syncing %s after a change notice failed: %s", scope, err)
 
+    def _rotation_due(self) -> bool:
+        if not self._token_id or time.time() < self._rotate_retry_after:
+            return False
+        if self._legacy_token:
+            return True
+        if not self._token_issued_at:
+            return False
+        try:
+            issued = time.mktime(time.strptime(self._token_issued_at[:19], "%Y-%m-%dT%H:%M:%S"))
+            now = time.mktime(time.strptime(_now_iso()[:19], "%Y-%m-%dT%H:%M:%S"))
+        except ValueError:
+            return False
+        return now - issued > ROTATE_AFTER_S
+
+    async def _maybe_rotate(self) -> None:
+        """Swap this device's token for a fresh one, without ever being left
+        with none.
+
+        The server keeps the old token valid until it hears the new one is
+        stored, so the order is: ask, store, read back, confirm. A failed write,
+        a read-back that differs (a truncated Keychain item, a locked keychain,
+        a dismissed dialog) or any error stops before the confirm: the old token
+        still works, the unconfirmed one expires on the server, and the next
+        connection tries again. A confirm lost with the connection is harmless
+        too — the next hello carries the new token, which the server counts as
+        the confirm.
+        """
+        if not self._rotation_due():
+            return
+        try:
+            reply = await self._request("auth.token.rotate", {})
+        except Exception as err:  # noqa: BLE001 - the connection went; next one retries
+            log.info("navide-server token rotation did not complete: %s", err)
+            return
+        if not reply.get("ok"):
+            code = self._conflict_code(reply)
+            if code == "UNKNOWN_TYPE":
+                self._rotate_retry_after = time.time() + ROTATE_RETRY_COOLDOWN_S
+            log.info("navide-server declined to rotate the token (%s)", code or "no code")
+            return
+        payload = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
+        token = str(payload.get("token") or "")
+        token_id = str(payload.get("tokenId") or "")
+        if not token or not token_id:
+            return
+        try:
+            await asyncio.to_thread(self._token_writer, token)
+            stored = await asyncio.to_thread(self._token_reader)
+        except Exception as err:  # noqa: BLE001
+            log.warning("storing the rotated navide-server token failed; keeping the current one (%s)", err)
+            return
+        if stored != token:
+            log.warning("the rotated navide-server token did not read back intact; keeping the current one")
+            return
+        try:
+            confirmed = await self._request("auth.token.confirm", {"tokenId": token_id})
+        except Exception as err:  # noqa: BLE001
+            log.info("navide-server token confirm did not complete (%s); the next hello confirms it", err)
+            return
+        if confirmed.get("ok"):
+            self._token_id = token_id
+            self._legacy_token = False
+            self._token_issued_at = _now_iso()
+            log.info("navide-server token rotated")
+
+    async def logout_on_server(self) -> bool:
+        """Tell the server this device signs out, so its token stops working
+        there too. Best effort: False when not connected or the server did not
+        confirm — the caller erases the local token either way."""
+        if not self._authenticated or self._ws is None:
+            return False
+        try:
+            async with asyncio.timeout(DIAL_TIMEOUT_S):
+                reply = await self._request("auth.logout", {})
+        except Exception as err:  # noqa: BLE001
+            log.info("navide-server auth.logout did not complete: %s", err)
+            return False
+        return bool(reply.get("ok"))
+
     async def _on_revoked(self, payload: Any) -> None:
         """The server withdrew this member's access mid-connection.
 
@@ -1304,7 +1429,11 @@ class ServerLink:
         data = payload if isinstance(payload, dict) else {}
         reason = str(data.get("reason") or "no reason given")
         member = str(data.get("memberId") or "unknown")
-        self.terminated_reason = f"access revoked for member {member}: {reason}"
+        explained = REVOKE_REASONS.get(reason)
+        self.terminated_reason = (
+            f"access revoked for member {member}: {reason}"
+            + (f" ({explained})" if explained else "")
+        )
         log.error(
             "navide-server revoked this device's access (member %s): %s — the stored "
             "access token has been cleared; sign in again to reconnect",
@@ -1469,6 +1598,12 @@ class ServerLink:
         )
         await self._adopt_member(config, member)
         self.display_name = str(payload.get("displayName") or "")
+        # Servers before per-device tokens send none of these, and nothing
+        # below treats their absence as "rotate": an old server cannot.
+        self._token_id = str(payload.get("tokenId") or "")
+        issued = payload.get("tokenIssuedAt")
+        self._token_issued_at = issued if isinstance(issued, str) else None
+        self._legacy_token = payload.get("legacyToken") is True
         self.email_verified = bool(payload.get("emailVerified"))
         # Per connection, not per process: the server this dialled may be a
         # newer one than the last. A sticky flag meant a machine that met an old
@@ -3873,6 +4008,13 @@ async def stop() -> None:
     if _link is not None:
         await _link.stop()
         _link = None
+
+
+async def logout_on_server() -> bool:
+    """Ask the server to revoke this device's token (best effort; see
+    ``ServerLink.logout_on_server``). False when there is no live link."""
+    link = _link
+    return await link.logout_on_server() if link is not None else False
 
 
 async def reconfigure() -> None:

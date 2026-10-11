@@ -4456,6 +4456,9 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
     """
     from . import app
 
+    # Revoke the token on the server first, while the link can still carry the
+    # request; offline that is skipped and the local token is erased anyway.
+    revoked = await server_link.logout_on_server()
     try:
         await vault_to_thread(server_link.set_access_token, None)
     except Exception as err:  # noqa: BLE001
@@ -4463,6 +4466,11 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
             make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
         )
         return
+    if not revoked:
+        log.info(
+            "signed out locally only: the navide-server was not reached, so this "
+            "device's token stays valid there until it is revoked from another device"
+        )
     delta = app.ui_settings_store.set({server_link.ACCOUNT_EMAIL_SETTING: None})
     await server_link.reconfigure()
     await session.send_json(

@@ -2700,3 +2700,244 @@ async def test_a_message_the_server_no_longer_has_stops_being_asked_about():
         assert "pa:mcp:gone" not in link._outbound
     finally:
         await link.stop()
+
+
+# ---- token lifecycle (C1) ----------------------------------------------------
+#
+# The server issues per-device tokens; this device rotates its own on connect
+# when it still holds the legacy shared token or its token is older than
+# ROTATE_AFTER_S, and confirms only after the new token is stored and read back.
+
+
+class TokenStore:
+    """Stands in for the Keychain item, with switchable failures."""
+
+    def __init__(self, token: str = CONFIG.token) -> None:
+        self.token = token
+        self.writes: list[str | None] = []
+        self.fail_write = False
+        self.truncate = False
+
+    def write(self, value: str | None) -> None:
+        if self.fail_write:
+            raise RuntimeError("keychain write failed")
+        self.writes.append(value)
+        self.token = (value[:10] if (self.truncate and value) else value) or ""
+
+    def read(self) -> str:
+        return self.token
+
+
+def token_responder(*, legacy: bool = False, issued_at: str = "2026-10-01T00:00:00.000Z",
+                    rotate_code: str | None = None):
+    """default_responder plus the C1 verbs. `rotate_code` makes rotate fail with it."""
+
+    def responder(conn: "FakeConnection", message: dict) -> dict | None:
+        kind = message.get("type")
+        if kind == "auth.hello":
+            reply = default_responder(conn, message)
+            reply["payload"].update(
+                tokenId="legacy" if legacy else "tok-1",
+                tokenIssuedAt=None if legacy else issued_at,
+                legacyToken=legacy,
+            )
+            return reply
+        if kind == "auth.token.rotate":
+            if rotate_code:
+                return {"id": message["id"], "type": "auth.token.rotate.result", "ok": False,
+                        "error": {"code": rotate_code, "message": "nope"}}
+            return _ok(message, {"token": "nvd_rotated-token-value", "tokenId": "tok-2",
+                                 "pendingUntil": "2026-10-11T08:00:00.000Z"})
+        if kind in ("auth.token.confirm", "auth.logout"):
+            return _ok(message, {})
+        return default_responder(conn, message)
+
+    return responder
+
+
+def token_link(server: FakeServer, store: TokenStore, cleared=None) -> ServerLink:
+    return ServerLink(
+        connect=server.connect,
+        config_loader=lambda: ServerLinkConfig(url=CONFIG.url, token=store.read()),
+        token_clearer=(lambda: cleared.append(True)) if cleared is not None else (lambda: None),
+        token_writer=store.write,
+        token_reader=store.read,
+        device_name="test-box",
+    )
+
+
+def _sent(conn: "FakeConnection", kind: str) -> list[dict]:
+    return [m for m in conn.sent if m.get("type") == kind]
+
+
+@pytest.fixture
+def _old_token(monkeypatch):
+    """Anything issued before 'now - ROTATE_AFTER_S' is due; pin 'now' for the tests."""
+    monkeypatch.setattr(server_link, "_now_iso", lambda: "2026-11-15T00:00:00.000Z")
+
+
+async def test_rotates_a_legacy_token_stores_reads_back_then_confirms():
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(legacy=True))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+        conn = server.opened[0]
+        assert store.token == "nvd_rotated-token-value"
+        assert _sent(conn, "auth.token.confirm")[0]["payload"] == {"tokenId": "tok-2"}
+        assert len(_sent(conn, "auth.token.rotate")) == 1
+    finally:
+        await link.stop()
+
+
+async def test_rotates_a_token_older_than_thirty_days(_old_token):
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(issued_at="2026-10-01T00:00:00.000Z"))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+        assert store.token == "nvd_rotated-token-value"
+    finally:
+        await link.stop()
+
+
+async def test_a_recent_token_is_left_alone():
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[0], "auth.token.rotate") == []
+        assert store.writes == []
+    finally:
+        await link.stop()
+
+
+@pytest.mark.parametrize("failure", ["fail_write", "truncate"])
+async def test_no_confirm_unless_the_new_token_reads_back_intact(failure):
+    store = TokenStore()
+    setattr(store, failure, True)
+    server = FakeServer(responder=token_responder(legacy=True))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+        if failure == "fail_write":
+            assert store.token == CONFIG.token  # the old token is untouched
+    finally:
+        await link.stop()
+
+
+async def test_an_old_server_without_rotate_is_not_asked_again(monkeypatch):
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(legacy=True, rotate_code="UNKNOWN_TYPE"))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        # Drop the connection: the next one must not ask again inside the cooldown.
+        await server.opened[0].close()
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[1], "auth.token.rotate") == []
+        assert store.writes == []
+    finally:
+        await link.stop()
+
+
+async def test_after_a_confirm_the_next_connection_uses_the_new_token():
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(legacy=True))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+        await server.opened[0].close()
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos))
+        assert server.opened[1].hellos[0]["credential"] == "nvd_rotated-token-value"
+    finally:
+        await link.stop()
+
+
+async def test_logout_on_server_sends_auth_logout_when_connected():
+    store = TokenStore()
+    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        assert await link.logout_on_server() is True
+        assert len(_sent(server.opened[0], "auth.logout")) == 1
+    finally:
+        await link.stop()
+
+
+async def test_logout_on_server_offline_is_a_quiet_false():
+    link = token_link(FakeServer(count=0), TokenStore())
+    assert await link.logout_on_server() is False
+
+
+@pytest.mark.parametrize(
+    "reason, words",
+    [("password-changed", "password was changed"), ("logged-out", "signed out"),
+     ("token-revoked", "revoked from another device"), ("device-removed", "removed")],
+)
+async def test_revocation_reasons_are_explained(reason, words):
+    store = TokenStore()
+    cleared: list = []
+    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
+    link = token_link(server, store, cleared=cleared)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await server.opened[0].push({"type": "auth.revoked", "payload": {"deviceId": "x", "reason": reason}})
+        await _until(lambda: bool(cleared))
+        assert words in link.terminated_reason
+    finally:
+        await link.stop()
+
+
+# ---- Cloud token writes never touch the CLI account writer (user ruling 10-11)
+
+
+def _guard_vault(tmp_path):
+    from agent_team_backend.credential_vault import CredentialVault
+
+    return CredentialVault(root=tmp_path, platform="darwin", security_runner=lambda args, stdin=None: (0, ""))
+
+
+_NEEDS_CLOUD_SECRETS = pytest.mark.xfail(
+    strict=True,
+    reason="set_access_token goes through cloud_secrets.write only once fix/keychain-line-limit "
+    "is merged; strict, so this XPASSes into a failure the day it lands and the marker must go",
+)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [pytest.param("login", marks=_NEEDS_CLOUD_SECRETS), pytest.param("rotate", marks=_NEEDS_CLOUD_SECRETS), "logout"],
+)
+async def test_cloud_token_writes_never_call_the_cli_keychain_writer(path, tmp_path, monkeypatch):
+    from agent_team_backend import app as app_module
+    from agent_team_backend.credential_vault import CredentialVault
+
+    def forbidden(self, *args, **kwargs):
+        raise AssertionError("a Navide Cloud token write reached CredentialVault._keychain_write")
+
+    monkeypatch.setattr(CredentialVault, "_keychain_write", forbidden)
+    monkeypatch.setattr(app_module, "credential_vault", _guard_vault(tmp_path))
+    if path == "login":
+        # ws_handlers' sign-in stores the issued token through this function.
+        server_link.set_access_token("nvd_from-login")
+    elif path == "rotate":
+        # A link built without a token_writer stores rotated tokens the same way.
+        link = ServerLink(connect=FakeServer().connect, config_loader=lambda: CONFIG, device_name="test-box")
+        link._token_writer("nvd_from-rotate")
+    else:
+        server_link.set_access_token(None)
