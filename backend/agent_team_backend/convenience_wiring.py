@@ -96,6 +96,25 @@ HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "cop
 _PER_HOOK = frozenset({"claude", "qwen"})
 
 
+#: Phase 3: vendors whose hooks ride on the panes Navide starts instead of
+#: the shared settings file. ``prepare(port_file, skip)`` writes the pane-side
+#: copy inside Navide's own data (``skip``: the hooks the user removed).
+_PANE_CARRIERS: dict[str, Callable[[str, frozenset[str]], Any]] = {}
+
+#: The carried vendors whose panes carry the hooks right now: their shared
+#: entry is gone and the pane-side copy is ready.
+_CARRYING: set[str] = set()
+
+
+def register_pane_carrier(agent_key: str, prepare: Callable[[str, frozenset[str]], Any]) -> None:
+    _PANE_CARRIERS[agent_key] = prepare
+
+
+def pane_carries_hooks(agent_key: str) -> bool:
+    """Whether a pane of ``agent_key`` starts with Navide's hooks injected."""
+    return agent_key in _CARRYING
+
+
 def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
     """(file, present, remove) for one vendor's hook installation."""
     if agent_key == "claude":
@@ -129,6 +148,10 @@ def install_hooks_gated(
     if g is None or feature_id is None:
         return install(port_file)
     path, present, _ = _hook_target(agent_key)
+    if agent_key in _PANE_CARRIERS:
+        carried = _carry_in_panes(agent_key, feature_id, path, port_file)
+        if carried is not None:
+            return {"convenience": carried}
     result: dict[str, Any] = {}
     parts = None
     if agent_key in _PER_HOOK:
@@ -147,6 +170,28 @@ def install_hooks_gated(
         reset_folder=path.parent if agent_key in _PER_HOOK else path.parent.parent,
     )
     return {**result, "convenience": outcome}
+
+
+def _carry_in_panes(agent_key: str, feature_id: str, path: Path, port_file: str) -> str | None:
+    """Phase 3 for a carried vendor: take Navide's entry back out of the
+    shared file and let the panes carry the hooks. Returns the outcome, or
+    None when the shared hooks must stay in use (Phase 2): the entry could
+    not be taken back, or the pane-side copy could not be prepared. Never
+    both at once — every hook would run twice."""
+    g = _gate
+    _CARRYING.discard(agent_key)
+    if not g.allowed(feature_id):
+        return "off"
+    if not g.retract(feature_id, _hook_takeback(agent_key)):
+        return None
+    skip = g.excluded(feature_id, path) if agent_key in _PER_HOOK else frozenset()
+    try:
+        _PANE_CARRIERS[agent_key](port_file, skip)
+    except Exception as err:  # noqa: BLE001 — the shared hooks take over again
+        log.warning("preparing the %s pane hooks failed; using the shared file: %s", agent_key, err)
+        return None
+    _CARRYING.add(agent_key)
+    return "pane"
 
 
 def install_cli_hooks(port_file: str) -> dict[str, dict[str, Any]]:
@@ -196,6 +241,8 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str =
     if agent_key is not None:
         takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
     refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
+    if not allowed and agent_key is not None:
+        _CARRYING.discard(agent_key)
     g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
     if refusing:
         _clear_refused_skills(refusing)

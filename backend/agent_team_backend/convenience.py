@@ -262,7 +262,8 @@ class ConvenienceGate:
 
         Each target still holding the entry is backed up, cleared and
         announced as ``retract``, then forgotten, so its absence is never read
-        as the user's removal. One that cannot be cleared is announced as
+        as the user's removal; the entries the user deleted by hand stay
+        excluded. One that cannot be cleared is announced as
         ``retract-failed`` and kept. Returns whether none is left behind.
         """
         clear = True
@@ -291,7 +292,17 @@ class ConvenienceGate:
                         feature_id, "retract", item.target,
                         detail="moved into the panes Navide starts", backup=backup,
                     )
-                self.forget(feature_id, item.target)
+                # Forgotten, except the entries the user deleted by hand: the
+                # panes carry the hooks from now on, still without those.
+                with self.db.transaction() as cur:
+                    cur.execute(
+                        "DELETE FROM convenience_targets WHERE feature = ? AND target = ?",
+                        (feature_id, item.target),
+                    )
+                    cur.execute(
+                        "DELETE FROM convenience_parts WHERE feature = ? AND target = ? AND state != 'removed'",
+                        (feature_id, item.target),
+                    )
         return clear
 
     def _set_state(self, feature_id: str, state: str, reason: str) -> None:

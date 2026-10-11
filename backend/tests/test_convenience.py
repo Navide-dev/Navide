@@ -439,3 +439,25 @@ def test_a_retract_that_cannot_take_the_entry_back_says_so_and_keeps_it(gate, tm
     assert "read-only" in entry["detail"]
     # Still Navide's own, still known: nothing reads its later absence as the user's.
     assert [t["path"] for t in gate.listing_feature("claude.hooks")["targets"]] == [str(target.path)]
+
+
+def test_retract_keeps_the_hooks_the_user_removed_out(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    parts = {"Stop:stop", "PreToolUse:guard"}
+    assert gate.apply(
+        "claude.hooks", target.path, write=target.write, present=target.present,
+        file=target.path, parts=lambda: set(parts),
+    ) == "first"
+    parts.discard("PreToolUse:guard")  # the user deletes one hook by hand
+    gate.apply(
+        "claude.hooks", target.path, write=target.write, present=target.present,
+        file=target.path, parts=lambda: set(parts),
+    )
+    assert gate.excluded("claude.hooks", target.path) == {"PreToolUse:guard"}
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ]) is True
+
+    # The panes carry the hooks now, still without the one the user removed.
+    assert gate.excluded("claude.hooks", target.path) == {"PreToolUse:guard"}

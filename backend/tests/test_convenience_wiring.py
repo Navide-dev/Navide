@@ -1631,3 +1631,105 @@ def test_the_account_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) ->
 
     assert "other@example.com" in gate.history()[0]["detail"]
     assert "@example.com" not in caplog.text
+
+
+# ── Phase 3: hooks carried by the panes instead of the shared file ───────────
+
+@pytest.fixture
+def carrier(monkeypatch: pytest.MonkeyPatch):
+    """A fake claude pane carrier: records what it was asked to prepare."""
+    prepared: list[tuple[str, frozenset[str]]] = []
+    monkeypatch.setattr(convenience_wiring, "_PANE_CARRIERS", {"claude": lambda port, skip: prepared.append((port, skip))})
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    return prepared
+
+
+def test_a_carried_vendor_retracts_its_shared_entry_and_the_panes_take_over(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    port = str(homes["port"])
+    # Phase 2 wrote the shared entry (no carrier yet).
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+    assert claude_hooks.hooks_present(settings)
+
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    assert result["convenience"] == "pane"
+    # The user's own settings stay; uninstall_hooks leaves an empty "hooks"
+    # behind, as the off switch always has.
+    assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark", "hooks": {}}
+    assert not claude_hooks.hooks_present(settings)
+    assert carrier == [(port, frozenset())]
+    assert convenience_wiring.pane_carries_hooks("claude")
+    assert gate.history("claude.hooks", limit=1)[0]["action"] == "retract"
+
+
+def test_a_carried_vendor_never_writes_the_shared_file(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    before = settings.read_bytes()
+
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    assert settings.read_bytes() == before
+    assert convenience_wiring.pane_carries_hooks("claude")
+
+
+def test_a_carried_vendor_that_is_off_carries_nothing(gate, homes, carrier) -> None:
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    assert result["convenience"] == "off"
+    assert carrier == []
+    assert not convenience_wiring.pane_carries_hooks("claude")
+
+
+def test_switching_a_carried_vendor_off_stops_the_panes_carrying_it(gate, homes, carrier) -> None:
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("claude")
+
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    assert not convenience_wiring.pane_carries_hooks("claude")
+    convenience_wiring.set_feature("claude.hooks", True, port_file=str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("claude")
+    assert not claude_hooks.hooks_present(_target("claude"))
+
+
+def test_a_shared_entry_that_cannot_be_retracted_keeps_the_shared_hooks(gate, homes, carrier, monkeypatch) -> None:
+    settings = _target("claude")
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    def stuck() -> None:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(claude_hooks, "uninstall_hooks", stuck)
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    # Never both at once: the panes would run every hook twice.
+    assert not convenience_wiring.pane_carries_hooks("claude")
+    assert carrier == []
+    assert claude_hooks.hooks_present(settings)
+    assert result["convenience"] in {"unchanged", "repair"}
+
+
+def test_a_carried_vendor_keeps_the_hooks_the_user_removed_out(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text("{}", encoding="utf-8")
+    port = str(homes["port"])
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        del data["hooks"]["Notification"]
+        settings.write_text(json.dumps(data), encoding="utf-8")
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    assert carrier and "Notification:notification" in carrier[-1][1]
