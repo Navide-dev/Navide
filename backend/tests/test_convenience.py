@@ -323,3 +323,18 @@ def test_a_log_written_before_the_source_column_still_reads(tmp_path) -> None:
     gate = convenience.ConvenienceGate(db, backup_root=tmp_path / "b")
 
     assert gate.history()[0]["source"] == ""
+
+
+def test_a_workspace_spelled_in_another_unicode_form_has_one_key(tmp_path) -> None:
+    """R4-L4: "café" typed precomposed (NFC) and stored decomposed (NFD) is
+    one folder on a normalization-insensitive volume; it must be one key."""
+    import unicodedata
+
+    nfd = unicodedata.normalize("NFD", "café")
+    nfc = unicodedata.normalize("NFC", "café")
+    (tmp_path / nfd).mkdir()
+    if not (tmp_path / nfc).exists():
+        pytest.skip("this file system tells the two spellings apart")
+
+    assert convenience.canonical_path(tmp_path / nfc) == convenience.canonical_path(tmp_path / nfd)
+

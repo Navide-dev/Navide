@@ -26,10 +26,12 @@ import logging
 import os
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from . import osplat
 from .db import Database
 
 log = logging.getLogger("agent_team_backend.convenience")
@@ -761,6 +763,18 @@ def _probe(present: Callable[[], bool]) -> bool | None:
         return None
 
 
+#: Whether this platform's usual volume ignores case (APFS, NTFS); every one
+#: here ignores the Unicode normalization form, which is compared first.
+_FOLDS_CASE = {"darwin": True, "win32": True}.get(osplat.platform_id, False)
+
+
+def _name_key(name: str) -> str:
+    """How a folder name compares: NFC, and case-folded where the platform's
+    volumes ignore case."""
+    name = unicodedata.normalize("NFC", name)
+    return name.casefold() if _FOLDS_CASE else name
+
+
 def canonical_path(path: str | Path) -> Path:
     """The one spelling of ``path``: links resolved, ``..`` collapsed, and
     every existing component spelled as the file system stores it, so a
@@ -775,7 +789,8 @@ def canonical_path(path: str | Path) -> Path:
         if name not in names:
             if not (out / name).exists():
                 return out.joinpath(*resolved.parts[index:])
-            name = next((n for n in names if n.casefold() == name.casefold()), name)
+            key = _name_key(name)
+            name = next((n for n in names if _name_key(n) == key), name)
         out = out / name
     return out
 
