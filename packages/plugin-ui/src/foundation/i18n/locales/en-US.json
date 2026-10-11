@@ -6440,6 +6440,7 @@
         "title": "Devices that wrote to the cloud",
         "hint": "Every device that has written a record to this account.",
         "none": "No device has written to the cloud yet.",
+        "partial": "Some sections could not be read, so this list may be incomplete.",
         "last-write": "Last write {when}",
         "last-seen": "Last online {when}",
         "refresh": "Refresh"

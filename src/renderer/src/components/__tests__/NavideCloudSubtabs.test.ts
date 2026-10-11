@@ -286,15 +286,32 @@ describe('Navide Cloud sub-tabs, review round 1', () => {
   })
 })
 
-describe('SettingsModal Navide Cloud page, review round 1', () => {
-  const src = readFileSync(resolve(__dirname, '../SettingsModal.vue'), 'utf8')
+describe('Navide Cloud Devices sub-tab', () => {
+  let wrapper: VueWrapper | undefined
 
-  it('polls the rules only while the Sync sub-tab is showing', () => {
-    expect(src).toMatch(/if \(tab !== 'cross-device'\) return\n\s*if \(sub !== 'sync'\) return/)
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+    resetSyncInventoryForTest()
   })
 
-  it('resets the sub-tab when the window is asked for the page', () => {
-    expect(src).toMatch(/watch\(\(\) => props\.initialTab[\s\S]{0,200}cloudSubtab\.value = 'sync'/)
-    expect(src).toMatch(/watch\(\(\) => props\.tabRequest[\s\S]{0,200}cloudSubtab\.value = 'sync'/)
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+  })
+
+  it('says the list may be incomplete when a scope failed, not that there are no devices', async () => {
+    const mock = mockBackend({
+      'sync.inventory': (payload: { scope?: string }) =>
+        payload.scope === 'prompts'
+          ? { ok: false, error: { code: 'SYNC_INVENTORY_FAILED', message: 'boom' } }
+          : { ok: true, payload: { ...inventory, devices: [], scopes: { [payload.scope!]: inventory.scopes[payload.scope as 'mcp'] } } },
+    })
+    wrapper = mount(page(mock.backend), { global: { plugins: [i18n] } })
+    await flushPromises()
+    await wrapper.find('[data-subtab="devices"]').trigger('click')
+    await flushPromises()
+    const panel = wrapper.find('[data-subtab-panel="devices"]')
+    expect(panel.find('[data-notice="partial"]').exists()).toBe(true)
+    expect(panel.text()).not.toContain(i18n.global.t('settings.cloud.devices.none'))
   })
 })

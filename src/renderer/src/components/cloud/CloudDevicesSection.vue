@@ -8,7 +8,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import { formatWhen as when, useSyncInventory } from '../../composables/useSyncInventory'
-import { deviceLabel } from '../../lib/sharing'
+import { CLOUD_SCOPES, deviceLabel } from '../../lib/sharing'
 import SettingsCard from '../settings/SettingsCard.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
 
@@ -21,6 +21,8 @@ onMounted(() => {
 })
 
 const devices = computed(() => view.value?.devices ?? [])
+/** A scope that did not load may hold the only rows naming some device. */
+const partial = computed(() => CLOUD_SCOPES.some((scope) => view.value?.scopes[scope]?.status === 'error'))
 </script>
 
 <template>
@@ -30,8 +32,11 @@ const devices = computed(() => view.value?.devices ?? [])
     <p v-else-if="view?.status === 'not-connected'" class="dev-note" data-notice="not-connected">
       {{ t('settings.cloud.inventory.notice-not-connected') }}
     </p>
-    <p v-else-if="view && !devices.length" class="dev-note">{{ t('settings.cloud.devices.none') }}</p>
-    <SettingsCard v-else-if="devices.length">
+    <p v-else-if="partial" class="dev-note" data-notice="partial">{{ t('settings.cloud.devices.partial') }}</p>
+    <p v-if="!error && view?.status !== 'not-connected' && view && !devices.length && !partial" class="dev-note">
+      {{ t('settings.cloud.devices.none') }}
+    </p>
+    <SettingsCard v-if="!error && devices.length">
       <ul class="dev-list">
         <li v-for="device in devices" :key="device.deviceId" class="dev-row" :data-device-id="device.deviceId">
           <span v-truncate="device.deviceName?.trim() || device.deviceId" class="dev-name">
