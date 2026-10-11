@@ -2867,7 +2867,9 @@ async def test_rotation_writes_next_reads_back_confirms_then_promotes():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"))
+        # The promotion and the .next clear are two writes; wait for both before
+        # reading the order (a slow runner showed the first without the second).
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == "" and len(store.writes) >= 3)
         conn = server.opened[0]
         assert [w[0] for w in store.writes] == [NXT, CUR, NXT]  # next, promote, clear next
         assert store.slots[NXT] == ""
