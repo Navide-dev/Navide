@@ -3852,6 +3852,41 @@ async def sync_pull_items(session: "Session", msg_id: str, msg_type: str, payloa
     await session.send_json(make_response(msg_id, msg_type, {"scope": scope, "results": results}))
 
 
+@handler("sync.versions")
+async def sync_versions(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    scope = str(payload.get("scope") or "")
+    item_id = str(payload.get("itemId") or "")
+    if not scope or not item_id:
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_BAD_CHOICE", "scope and itemId are required"))
+        return
+    try:
+        versions = await server_link.sync_versions(scope, item_id)
+    except Exception as err:  # noqa: BLE001 - a link that went down is not a crash
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_VERSIONS_FAILED", str(err)))
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, {"scope": scope, "itemId": item_id, "versions": versions})
+    )
+
+
+@handler("sync.restore_version")
+async def sync_restore_version(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    scope = str(payload.get("scope") or "")
+    item_id = str(payload.get("itemId") or "")
+    rev = payload.get("rev")
+    if not scope or not item_id or not isinstance(rev, int) or isinstance(rev, bool) or rev < 1:
+        await session.send_json(
+            make_error(msg_id, msg_type, "SYNC_BAD_CHOICE", "scope, itemId and a positive rev are required")
+        )
+        return
+    try:
+        result = await server_link.sync_restore_version(scope, item_id, rev)
+    except Exception as err:  # noqa: BLE001 - same reason as the listing above
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_RESTORE_FAILED", str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 def _sync_item_ids(payload: dict) -> list[str]:
     raw = payload.get("itemIds")
     return [str(i) for i in raw if isinstance(i, str) and i] if isinstance(raw, list) else []

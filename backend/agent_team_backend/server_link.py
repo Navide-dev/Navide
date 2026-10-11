@@ -4117,6 +4117,36 @@ async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     return await link.sync_engine().pull_items(scope, item_ids)
 
 
+#: Scopes with no version history to offer: memory is retired, and
+#: credentials never go through the object store.
+_NO_HISTORY_SCOPES = frozenset({"credentials"})
+
+
+async def _history_engine(scope: str) -> Any:
+    from . import sync_approvals
+
+    if scope in sync_approvals.RETIRED_SCOPES:
+        raise sync_approvals.RetiredScopeError(scope)
+    if scope in _NO_HISTORY_SCOPES:
+        raise ValueError(f"{scope} keeps no version history")
+    link = _link
+    if link is None or not link._authenticated:  # noqa: SLF001 - same module
+        raise ConnectionError("the navide-server link is not connected")
+    if not await link.ensure_sync_key():
+        raise ConnectionError("this machine does not hold the account sync key")
+    return link.sync_engine()
+
+
+async def sync_versions(scope: str, item_id: str) -> list[dict[str, Any]]:
+    """The earlier versions the server keeps of one item, newest first."""
+    return await (await _history_engine(scope)).versions(scope, item_id)
+
+
+async def sync_restore_version(scope: str, item_id: str, rev: int) -> dict[str, Any]:
+    """Bring version *rev* of one item back here; ``held`` says it waits for approval."""
+    return await (await _history_engine(scope)).restore(scope, item_id, rev)
+
+
 def sync_conflicts(scope: str = "") -> list[dict[str, Any]]:
     """Unresolved conflicts, readable whether or not the link is up. MCP
     secrets are masked (``sync_scopes.conflict_preview``)."""
