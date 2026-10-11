@@ -12,6 +12,7 @@ cloud_secrets.write -> security -i), with a fake `security` that honours the
 
 import asyncio
 import json
+import re
 import shlex
 
 import pytest
@@ -48,17 +49,23 @@ class Sec:
         service = tokens[tokens.index("-s") + 1]
         self.calls.append(f"{tokens[0]} {service}")
         if tokens[0] == "add-generic-password":
-            if any(f" {s}@" in service for s in self.fail_add):
+            if self._named(service, self.fail_add):
                 return 1, ""
             self.items[service] = tokens[tokens.index("-w") + 1]
             return 0, ""
         if tokens[0] == "find-generic-password":
             return (0, security_g_output(self.items[service])) if service in self.items else (44, "")
         if tokens[0] == "delete-generic-password":
-            if any(f" {s}@" in service for s in self.silent_delete):
+            if self._named(service, self.silent_delete):
                 return 1, ""
             return (0, "") if self.items.pop(service, None) is not None else (44, "")
         return 1, ""
+
+    @staticmethod
+    def _named(service: str, names: set[str]) -> bool:
+        # "Navide secret <name>", plus "@<digest>" only beside a default install
+        # (credential_vault._app_secret_suffix); CI runs without the suffix.
+        return any(re.search(rf" {re.escape(name)}(@|$)", service) for name in names)
 
 
 @pytest.fixture
@@ -81,15 +88,33 @@ def core_cmd_len() -> int:
     return len(cloud_secrets._command(trust_store._vault(), trust_store.SECRET_NAME, core).encode())
 
 
+def diagnosis() -> str:
+    """What decides whether the record is full, for a loop that never filled it."""
+    vault = trust_store._vault()
+    return (f"vault is app's={vault is app.credential_vault} macos={vault._is_macos} "
+            f"service={vault.app_secret_service(trust_store.SECRET_NAME)!r} "
+            f"cmd bytes={core_cmd_len()} limit={cloud_secrets.SECURITY_LINE_MAX_BYTES}")
+
+
 def pair_max() -> int:
-    """Pair devices until the record takes no more; how many it took."""
-    n = 0
-    while True:
+    """Pair devices until the record takes no more; how many it took. The size
+    of one Keychain line stops it at about eight, long before the device cap."""
+    for n in range(trust_store.MAX_DEVICES):
         try:
             trust_store.pin_paired_device(_device(n), sign_key=KEY, enc_key="b" * 64, member_id=f"m-{n:012x}")
-            n += 1
         except trust_store.TrustStoreFull:
             return n
+    raise AssertionError(f"the record never filled: {diagnosis()}")
+
+
+def fill_with_own_pins() -> None:
+    """Pin throwaway tokens to m1 until the record refuses one."""
+    for n in range(1, 200):
+        try:
+            trust_store.adopt_own_member(URL, f"tok-filler-{n:03d}", "m1")
+        except trust_store.TrustStoreFull:
+            return
+    raise AssertionError(f"no member pin was ever refused: {diagnosis()}")
 
 
 def real_link(server):
@@ -220,7 +245,9 @@ async def _connect_once(server):
     n = len(server.opened)
     assert await link.start()
     await _until(lambda: len(server.opened) > n and bool(server.opened[-1].hellos), timeout=5)
-    await asyncio.sleep(0.05)
+    # Adoption runs off the loop after the hello reply (a slow fsync on the
+    # Windows runner): wait for its outcome, a pin or a stop, not a fixed time.
+    await _until(lambda: bool(link._own_member or link._trust_locked), timeout=10)
     return link
 
 
@@ -317,11 +344,7 @@ async def test_a_full_record_is_its_own_lock_code(kc):
     trust_store.load()
     trust_store.adopt_own_member(URL, "tok-0", "m1")
     pair_max()
-    n = 1
-    with pytest.raises(trust_store.TrustStoreFull):
-        while True:
-            trust_store.adopt_own_member(URL, f"tok-filler-{n:03d}", "m1")
-            n += 1
+    fill_with_own_pins()
     server_link.set_access_token("tok-new")
     link = await _connect_once(FakeServer(count=4))
     try:

@@ -73,13 +73,15 @@ def test_a_new_member_pin_that_would_eat_the_reserve_is_refused(keychain):  # no
     reserve, the pin is refused as full and nothing is kept; an existing pin still answers."""
     trust_store.load()
     trust_store.adopt_own_member(URL, "tok-signin", MEMBER)
-    n = 0
-    while True:
+    vault = trust_store._vault()
+    diagnosis = (f"vault macos={vault._is_macos} service={vault.app_secret_service(trust_store.SECRET_NAME)!r} "
+                 f"limit={cloud_secrets.SECURITY_LINE_MAX_BYTES}")
+    for n in range(trust_store.MAX_DEVICES):
         try:
             trust_store.pin_paired_device(_device(n), sign_key=KEY, enc_key="b" * 64, member_id=f"m-{n:012x}")
-            n += 1
         except trust_store.TrustStoreFull:
             break
+    assert n < trust_store.MAX_DEVICES - 1, f"the record never filled ({diagnosis} bytes={_core_len()})"
     # A device pin is larger than a member pin, so a few member pins may still fit; keep
     # pinning new tokens (as unforgotten rotations would) until one is refused.
     refused = None
@@ -90,7 +92,7 @@ def test_a_new_member_pin_that_would_eat_the_reserve_is_refused(keychain):  # no
         except trust_store.TrustStoreFull:
             refused = f"nvd_rotated-{k:03d}"
             break
-    assert refused is not None, "a member pin was never refused"
+    assert refused is not None, f"a member pin was never refused ({diagnosis} bytes={_core_len()})"
     assert _own_members() == before                       # nothing kept from the refused pin
     assert trust_store.member_for_credential(URL, refused) == ""
     with trust_store._lock:

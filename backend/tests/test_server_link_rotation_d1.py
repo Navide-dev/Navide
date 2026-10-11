@@ -52,7 +52,7 @@ async def test_D1_real_chain(kc, scenario):
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
     if scenario == "next_too_long":
-        ts = LongTokenServer("nvd_" + "x" * 4000, legacy=True)
+        ts = LongTokenServer("nvd_" + "x" * 4100, legacy=True)
     elif scenario == "next_newline":
         ts = LongTokenServer("nvd_abc\nadd-generic-password -s evil -w x", legacy=True)
     else:
@@ -141,16 +141,12 @@ async def test_revocations_never_refuse_sign_in(kc, paired):
 async def test_a_full_record_recovers_by_unpairing_and_not_by_starting_over(kc):
     """A record filled some other way: starting over refuses an intact record,
     and unpairing one device lets the next sign-in take its pin."""
-    from tests.test_server_link_pin_audit import pair_max
+    from tests.test_server_link_pin_bounds import fill_with_own_pins, pair_max
     from tests.test_trust_store_capacity import _device
     trust_store.load()
     trust_store.adopt_own_member(CONFIG.url, "tok-0", "m1")
     pair_max()
-    n = 1
-    with pytest.raises(trust_store.TrustStoreFull):
-        while True:
-            trust_store.adopt_own_member(CONFIG.url, f"tok-filler-{n:03d}", "m1")
-            n += 1
+    fill_with_own_pins()
     server = FakeServer(count=8)
 
     async def sign_in(tok):

@@ -15,7 +15,7 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store
 from agent_team_backend.server_link import ServerLink
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc is a fixture
-    URL, _call, core_cmd_len, kc, next_connection, owners, real_link,
+    URL, _call, core_cmd_len, kc, next_connection, owners, pair_max, real_link,
 )
 from tests.test_trust_store_capacity import KEY, _device
 
@@ -25,14 +25,6 @@ def pair(n):
         trust_store.pin_paired_device(_device(i), sign_key=KEY, enc_key="b" * 64, member_id=f"m-{i:012x}")
 
 
-def pair_max(start=0):
-    n = start
-    while True:
-        try:
-            trust_store.pin_paired_device(_device(n), sign_key=KEY, enc_key="b" * 64, member_id=f"m-{n:012x}")
-            n += 1
-        except trust_store.TrustStoreFull:
-            return n
 
 
 def decide_all(n):
