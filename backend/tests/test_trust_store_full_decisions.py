@@ -164,3 +164,46 @@ def test_a_block_that_could_not_be_saved_holds_until_restart(monkeypatch):
     # Lifting it is a decision too, and lifts the unsaved copy with it.
     trust_store.note_unblocked("dev-z", "m-z")
     assert not trust_store.is_blocked_locally(device_id="dev-z", member_id="m-z")
+
+
+def _restart() -> None:
+    with trust_store._lock:
+        trust_store._state = None
+        trust_store._unsaved_blocks.clear()   # a restart forgets the process copy
+        trust_store._forget_written()
+
+
+def test_an_unsaved_block_is_written_with_the_next_save_that_succeeds(monkeypatch):
+    from agent_team_backend import cloud_secrets
+
+    trust_store.load()
+    real_fits = cloud_secrets.fits
+    monkeypatch.setattr(cloud_secrets, "fits", lambda *_a, **_k: False)
+    with pytest.raises(trust_store.TrustStoreFull):
+        trust_store.note_blocked("dev-z", "m-z")
+    monkeypatch.setattr(cloud_secrets, "fits", real_fits)
+
+    trust_store.reserve_policy_seq("dev-self")
+    assert trust_store._unsaved_blocks == []
+    _restart()
+    assert trust_store.is_blocked_locally(device_id="dev-z", member_id="")
+
+
+def test_an_unsaved_block_that_still_does_not_fit_stays_in_memory(monkeypatch):
+    from agent_team_backend import cloud_secrets
+
+    trust_store.load()
+    real_fits = cloud_secrets.fits
+    # Room for anything but the block.
+    monkeypatch.setattr(cloud_secrets, "fits",
+                        lambda vault, name, secret: "dev-z" not in secret and real_fits(vault, name, secret))
+    with pytest.raises(trust_store.TrustStoreFull):
+        trust_store.note_blocked("dev-z", "m-z")
+
+    assert trust_store.reserve_policy_seq("dev-self") == 1   # this save is not disturbed
+    assert trust_store.is_blocked_locally(device_id="dev-z", member_id="")
+    assert [e["deviceId"] for e in trust_store._unsaved_blocks] == ["dev-z"]
+    with trust_store._lock:
+        trust_store._state = None
+        trust_store._forget_written()
+    assert trust_store.policy_seq("dev-self") == 1

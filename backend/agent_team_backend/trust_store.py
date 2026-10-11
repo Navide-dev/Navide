@@ -474,8 +474,29 @@ def _adopt_journal(state: dict[str, Any], stored_core: str | None) -> None:
     _last_journal = None
 
 
+def _carry_unsaved_blocks_locked(state: dict[str, Any]) -> list[dict[str, str]]:
+    """Put back into *state* each block an earlier save could not keep, as far
+    as the record has room for it, and return the ones carried. One that still
+    does not fit stays in ``_unsaved_blocks`` and changes nothing about this
+    save: the save it rides on is somebody else's, and must not fail for it."""
+    carried = []
+    blocked = state.setdefault("blocked", [])
+    for entry in list(_unsaved_blocks):
+        if entry in blocked:
+            carried.append(entry)
+            continue
+        blocked.append(dict(entry))
+        core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
+        if cloud_secrets.fits(_vault(), SECRET_NAME, core):
+            carried.append(entry)
+        else:
+            blocked.pop()
+    return carried
+
+
 def _write(state: dict[str, Any]) -> None:
     global _last_core, _committed_core
+    carried = _carry_unsaved_blocks_locked(state)
     # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
@@ -485,6 +506,8 @@ def _write(state: dict[str, Any]) -> None:
             cloud_secrets.write(_vault(), SECRET_NAME, core)
             _last_core = core
         _committed_core = json.loads(core)
+        # Saved now, so no longer only in memory.
+        _unsaved_blocks[:] = [entry for entry in _unsaved_blocks if entry not in carried]
     finally:
         # The journal is written even when the vault half was refused (R2-5):
         # the ledger and notices do not depend on it, and a refused Keychain
