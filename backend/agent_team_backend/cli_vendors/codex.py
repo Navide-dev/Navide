@@ -1429,10 +1429,16 @@ _CODEX_PANES_ROOT_NAME = ".codex-panes"
 
 def _discard_temp(path: Path) -> None:
     """Remove a temp file of ours. Windows refuses to delete a read-only
-    file, and the temp file takes the original's mode before the replace."""
+    file, and the temp file takes the original's mode before the replace.
+    Only there, and never through a link: chmod follows one, onto a file
+    that is not ours."""
+    from .. import osplat
+
     try:
         path.unlink(missing_ok=True)
     except PermissionError:
+        if osplat.paths.enforces_posix_modes() or path.is_symlink():
+            raise
         os.chmod(path, 0o600)
         path.unlink(missing_ok=True)
 
