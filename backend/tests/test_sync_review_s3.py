@@ -2,15 +2,17 @@
 
 D-H1  a restore over a pending pulled hold, then rejected, pushed the old
       local copy over a newer edit from another device.
+D-H2  the D3 migration met an unpushed edit or delete on another device and
+      read it as a delete (two conflicts, the item lost) instead of a rename.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from agent_team_backend import sync_approvals, sync_engine, sync_scopes
+from agent_team_backend import sync_approvals, sync_engine, sync_keyring, sync_scopes
 from agent_team_backend.mcp_settings import MCPSettingsStore
-from tests.test_sync_s3_objects import V3Server, account_key, s3  # noqa: F401 - fixtures
+from tests.test_sync_s3_objects import HASHED, V3Device, V3Server, account_key, s3  # noqa: F401 - fixtures
 from tests.test_sync_scope_adapters import Dev, _mcp
 
 
@@ -58,3 +60,80 @@ async def test_restore_is_refused_while_an_incoming_change_waits_for_approval(
     a.use(); await a.sync()
     assert _runs(sa)["runner"] == "/usr/bin/third"
     assert _runs(sb)["runner"] == "/usr/bin/second"
+
+
+# ── D-H2: the D3 migration meets an unpushed change on another device ────────
+ALPHA = "alpha-secret-name"
+
+
+def _live_ids(server) -> list[str]:
+    return sorted(k[1] for k, r in server.rows.items() if k[0] == "prompts" and not r["deleted"])
+
+
+async def test_migration_keeps_an_unpushed_edit_on_the_other_device(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES, _legacy_then_adopted
+
+    server, a, b, _revs, _calls = await _legacy_then_adopted(tmp_path, s3)
+    b.reconnect()
+    b.adapter.items[ALPHA] = {"v": "b-local-edit"}
+    assert (await b.sync())["ok"] is True
+    assert b.store.conflicts("prompts") == []
+    h1 = sync_keyring.hashed_item_id("prompts", ALPHA, server.item_id_kid)
+    assert b.store.state("prompts", ALPHA).wire_id == h1
+    assert server.rows[("prompts", h1)]["deviceId"] == "B"  # pushed under h1
+    assert b.adapter.items[ALPHA] == {"v": "b-local-edit"}
+    await a.sync()
+    assert a.adapter.items == {**NAMES, ALPHA: {"v": "b-local-edit"}}
+    assert all(HASHED.match(i) for i in _live_ids(server)) and len(_live_ids(server)) == 2
+    pushes = server.pushes
+    await b.sync(); await a.sync()
+    assert server.pushes == pushes and a.store.conflicts("prompts") == []
+
+
+async def test_migration_keeps_an_unpushed_delete_on_the_other_device(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import _legacy_then_adopted
+
+    server, a, b, _revs, _calls = await _legacy_then_adopted(tmp_path, s3)
+    b.reconnect()
+    del b.adapter.items[ALPHA]
+    assert (await b.sync())["ok"] is True
+    assert b.store.conflicts("prompts") == []
+    h1 = sync_keyring.hashed_item_id("prompts", ALPHA, server.item_id_kid)
+    assert server.rows[("prompts", h1)]["deleted"] == 1
+    await a.sync(); await b.sync(); await a.sync()
+    assert ALPHA not in a.adapter.items and ALPHA not in b.adapter.items
+    assert len(_live_ids(server)) == 1
+
+
+async def _genuine_migration_conflict(tmp_path, s3):
+    """A edits alpha and migrates it; B edited it too and has not pushed."""
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=False)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    b = V3Device(tmp_path, server, "B")
+    await a.sync(); await b.sync()
+    a.adapter.items[ALPHA] = {"v": "a-edit"}
+    server.adopt_ready = True
+    a.reconnect()
+    assert (await a.sync())["ok"] is True
+    b.reconnect()
+    b.adapter.items[ALPHA] = {"v": "b-edit"}
+    await b.sync()
+    (conflict,) = b.store.conflicts("prompts")
+    assert conflict["itemId"] == ALPHA and conflict["remote"] == {"v": "a-edit"}
+    return server, a, b
+
+
+@pytest.mark.parametrize("keep,winner", [
+    (sync_engine.KEEP_REMOTE, {"v": "a-edit"}),
+    (sync_engine.KEEP_LOCAL, {"v": "b-edit"}),
+])
+async def test_a_genuine_migration_conflict_converges_either_way(tmp_path, account_key, s3, keep, winner):
+    server, a, b = await _genuine_migration_conflict(tmp_path, s3)
+    b.engine.resolve("prompts", ALPHA, keep)
+    for _ in range(3):
+        await b.sync(); await a.sync()
+    assert a.adapter.items[ALPHA] == winner and b.adapter.items[ALPHA] == winner
+    assert a.store.conflicts("prompts") == [] and b.store.conflicts("prompts") == []
+    assert all(HASHED.match(i) for i in _live_ids(server)) and len(_live_ids(server)) == 2

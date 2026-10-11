@@ -1550,6 +1550,25 @@ class SyncEngine:
             remote is None and origin == _ORIGIN_UNKNOWN and item_id in snapshot
             and not _sensitive(adapter)
         )
+        if (
+            hashed_wire and not replayed and state is not None and state.wire_id != hashed_wire
+            and agreed_hash and remote_hash == agreed_hash and local_hash != agreed_hash
+        ):
+            # D3: another device migrated the very copy this machine agreed
+            # on to its hashed id. A rename, not an edit: the id and rev move
+            # over, the agreed hash stays, and an edit or delete made here
+            # and not pushed yet goes up under the hashed id next.
+            self._store.set_state(
+                scope,
+                item_id,
+                rev=rev,
+                synced_hash=agreed_hash,
+                deleted=False,
+                sealed_kid=_kid_of(body),
+                synced_updated_at=stamp,
+                wire_id=hashed_wire,
+            )
+            return False
         if unproven_delete or (replayed and local_hash != remote_hash) or (
             local_hash != agreed_hash and local_hash != remote_hash and not absent_ok
         ):
@@ -1564,6 +1583,10 @@ class SyncEngine:
                 remote_kid="" if deleted else _kid_of(body),
                 remote_wire=hashed_wire,
             )
+            # Later rows of the same page about this item — the migration's
+            # legacy tombstone right behind its hashed copy — must not record
+            # a second conflict over this one.
+            blocked.add(item_id)
             return False
         held = True
         if local_hash != remote_hash:
