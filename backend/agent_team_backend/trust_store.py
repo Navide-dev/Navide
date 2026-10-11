@@ -64,6 +64,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_team_backend import device_signing
+from agent_team_backend.applog import app_data_dir
+from agent_team_backend.osplat import secret_files
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +74,16 @@ log = logging.getLogger(__name__)
 #: not the same store.
 SECRET_NAME = "navide-device-trust"
 INITIALISED_KEY = "p2p.trust.initialised"
+
+#: The fast-growing half of the state — up to MAX_NOTICES notices and
+#: MAX_SEEN_MESSAGES ledger keys — kept in an owner-only file in the data dir
+#: rather than in the vault entry. Inside it they pushed the Keychain item past
+#: `security -i`'s 4095-byte line after about fifteen remote commands, and a
+#: write that long was stored truncated. Neither decides whom to trust: losing
+#: the file costs the notices and, for one TTL, replay protection — the same
+#: price ``_parse`` already accepts for a document that predates the ledger.
+JOURNAL_FILENAME = "device-trust-journal.json"
+_JOURNAL_KEYS = ("notices", "seenMessages")
 
 STATE_VERSION = 1
 
@@ -267,7 +279,6 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
         ("ownMembers", dict),
         ("pins", dict),
         ("encryptedPeers", list),
-        ("notices", list),
     ):
         if not isinstance(doc.get(key), kind):
             return None
@@ -277,7 +288,9 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
     # sequences (C2), the downgrade list (H1/H2) — is read out of this same
     # document. A missing ledger costs replay protection for one restart; an
     # unreadable document costs all four at once.
-    for later, empty in (("policySeqs", {}), ("seenMessages", {})):
+    # The notices are among them now: a vault entry written since they moved to
+    # the journal no longer carries them.
+    for later, empty in (("policySeqs", {}), ("seenMessages", {}), ("notices", [])):
         value = doc.get(later)
         if value is None:
             doc[later] = empty
@@ -286,13 +299,96 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
     return doc
 
 
+#: What was last written to (or read from) each store, so a save that changed
+#: only the journal does not rewrite the Keychain item, and vice versa.
+_last_core: str | None = None
+_last_journal: str | None = None
+
+
+def _journal_path() -> Path:
+    return app_data_dir() / JOURNAL_FILENAME
+
+
+def _read_journal() -> dict[str, Any]:
+    """The journal's notices and ledger, or {} when there is none to be had.
+
+    Never raises, and never locks: an unreadable journal is logged and read as
+    empty, because nothing in it decides trust.
+    """
+    try:
+        raw = secret_files.read_private(_journal_path()).decode("utf-8")
+    except FileNotFoundError:
+        return {}
+    except (OSError, UnicodeDecodeError) as err:
+        log.warning("the device trust journal could not be read; starting it empty (%s)", err)
+        return {}
+    try:
+        doc = json.loads(raw)
+    except ValueError:
+        log.warning("the device trust journal is not valid JSON; starting it empty")
+        return {}
+    if not isinstance(doc, dict):
+        log.warning("the device trust journal has the wrong shape; starting it empty")
+        return {}
+    journal: dict[str, Any] = {}
+    if isinstance(doc.get("notices"), list):
+        journal["notices"] = doc["notices"]
+    if isinstance(doc.get("seenMessages"), dict):
+        journal["seenMessages"] = doc["seenMessages"]
+    return journal
+
+
+def _adopt_journal(state: dict[str, Any]) -> None:
+    """Fold the journal into a freshly parsed vault document. Caller holds
+    ``_lock``. A vault entry written before the move still carries its own
+    notices and ledger; both halves are kept, merged by key, and the vault's
+    copy leaves it on the next save."""
+    global _last_core, _last_journal
+    journal = _read_journal()
+    if "notices" in journal:
+        known = {notice.get("key") for notice in journal["notices"] if isinstance(notice, dict)}
+        legacy = [
+            notice for notice in state.get("notices") or []
+            if isinstance(notice, dict) and notice.get("key") not in known
+        ]
+        state["notices"] = sorted(
+            legacy + journal["notices"],
+            key=lambda notice: int(notice.get("at") or 0) if isinstance(notice, dict) else 0,
+        )
+    if "seenMessages" in journal:
+        merged = dict(state.get("seenMessages") or {})
+        merged.update(journal["seenMessages"])
+        state["seenMessages"] = merged
+    _last_core = None
+    _last_journal = None
+
+
 def _write(state: dict[str, Any]) -> None:
+    global _last_core, _last_journal
     # One line, always: `_keychain_write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
-    _vault().write_app_secret(
-        SECRET_NAME, json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    core = json.dumps(
+        {key: value for key, value in state.items() if key not in _JOURNAL_KEYS},
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
+    if core != _last_core:
+        _vault().write_app_secret(SECRET_NAME, core)
+        _last_core = core
+    journal = json.dumps(
+        {"v": STATE_VERSION, **{key: state.get(key) for key in _JOURNAL_KEYS}},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    if journal != _last_journal:
+        try:
+            secret_files.write_private(_journal_path(), journal.encode("utf-8"))
+        except OSError as err:
+            # The vault half — the part that decides trust — is already saved.
+            log.warning("the device trust journal could not be saved (%s)", err)
+            return
+        _last_journal = journal
 
 
 def _load_locked() -> dict[str, Any]:
@@ -348,6 +444,7 @@ def _load_locked() -> dict[str, Any]:
                 + _provenance(marker)
             )
             raise TrustStoreLocked(_locked_reason)
+        _adopt_journal(parsed)
         _state = parsed
         return _state
 
@@ -361,6 +458,8 @@ def _load_locked() -> dict[str, Any]:
             "never marked initialised; starting a new one"
         )
     _state = parsed if parsed is not None else _blank()
+    if parsed is not None:
+        _adopt_journal(_state)
     _write(_state)
     database.kv_set(
         INITIALISED_KEY,
@@ -1405,14 +1504,22 @@ def rebuild_locked_store() -> dict[str, Any]:
         _transient_reason = ""
         _transient_failures = 0
         _vault().write_app_secret(SECRET_NAME, None)
+        _journal_path().unlink(missing_ok=True)
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)
         _state = None
         _locked_reason = ""
         _seen_pending.clear()
+        _forget_written()
         log.warning("device trust store rebuilt after a lock: %s", cleared)
         return {"rebuilt": True, "was": cleared}
+
+
+def _forget_written() -> None:
+    global _last_core, _last_journal
+    _last_core = None
+    _last_journal = None
 
 
 def _reset_for_test() -> None:
@@ -1430,6 +1537,7 @@ def _reset_for_test() -> None:
         # when the next starts and lands in its state document instead.
         _seen_pending.clear()
         _seen_last_flush = 0.0
+        _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)
