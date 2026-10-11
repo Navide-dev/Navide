@@ -25,6 +25,7 @@ and the reconnect drain checks the link before asking.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -47,6 +48,11 @@ _SEEN_FILE = "share-feedback-seen.json"
 _SEEN_MAX = 2000
 _APPROVABLE = ("draft", "in-review")
 _MAX_TEXT = 4000
+#: Failures worth retrying on the next drain: the link is down (the local
+#: link-state codes), or this machine has no account ring yet. Anything else
+#: will fail the same way forever, so it is refused and acked rather than
+#: left to block the queue.
+_RETRY_CODES = frozenset({"LINK_OFFLINE", "LINK_UNAUTHORIZED", "NOT_CONFIGURED"})
 
 
 class _Refused(Exception):
@@ -140,8 +146,10 @@ async def _handle(client: share_links.LinksClient, item: dict[str, Any]) -> dict
         if not published or body.get("contentSha256") != published or item.get("contentHash") != published:
             raise _Refused("content-changed")
         path = str(meta.get("path") or "")
+        _plan_location(path)  # before reading a byte of it
         try:
-            prepared = share_links.prepare(path, str(row.get("kind") or "plan"))
+            # Off the event loop: masking a large file takes a while (B7-4).
+            prepared = await asyncio.to_thread(share_links.prepare, path, str(row.get("kind") or "plan"))
         except share_links.ShareRefused as err:
             raise _Refused("content-changed" if err.code in ("missing", "changed") else err.code) from err
         if prepared.sha256 != published:
@@ -152,6 +160,16 @@ async def _handle(client: share_links.LinksClient, item: dict[str, Any]) -> dict
         result["result"] = _apply(path, action, str(body.get("text") or ""))
     except _Refused as refused:
         result.update(result="rejected", reason=refused.reason)
+    except share_links.ShareRemoteError as err:
+        if err.code in _RETRY_CODES:
+            raise
+        result.update(result="rejected", reason=err.code.lower().replace("_", "-"))
+    except sync_keyring.KeyringError:
+        if sync_keyring.account_key() is None:
+            raise
+        result.update(result="rejected", reason="unreadable")
+    except share_links.ShareError:
+        result.update(result="rejected", reason="unreadable")
     return result
 
 
@@ -165,26 +183,30 @@ async def _announce(payload: dict[str, Any]) -> None:
         log.warning("announcing share-link feedback failed: %s", err)
 
 
-async def handle_event(client: share_links.LinksClient, item: dict[str, Any]) -> None:
-    """One feedback item: apply or refuse it (once), announce, ack.
+async def handle_event(client: share_links.LinksClient, item: dict[str, Any]) -> bool:
+    """One feedback item: apply or refuse it (once), announce, ack. True once
+    it is acked.
 
-    A transient failure (the link dropped, the ring is unreadable) leaves it
-    unacked so the next drain retries it."""
+    Only a transient failure (the link dropped, no account ring on this
+    machine yet) leaves it unacked so the next drain retries it; a link that
+    is gone or an id that does not parse is refused and acked (B7-3)."""
     feedback_id = item.get("feedbackId")
     if not isinstance(feedback_id, str) or not feedback_id:
-        return
+        return False
     if feedback_id not in _seen():
         try:
             outcome = await _handle(client, item)
         except (share_links.ShareError, sync_keyring.KeyringError) as err:
             log.warning("share-link feedback %s left for a retry: %s", feedback_id[:8], err)
-            return
+            return False
         _remember(feedback_id)
         await _announce(outcome)
     try:
         await client.request("feedback.ack", {"feedbackIds": [feedback_id]})
     except share_links.ShareError as err:
         log.info("acking share-link feedback %s failed; it will be seen again: %s", feedback_id[:8], err)
+        return False
+    return True
 
 
 async def drain(client: share_links.LinksClient) -> None:
@@ -197,9 +219,12 @@ async def drain(client: share_links.LinksClient) -> None:
                 log.info("listing share-link feedback failed: %s", err)
             return
         items = [f for f in page.get("feedback") or [] if isinstance(f, dict)]
+        acked = 0
         for item in items:
-            await handle_event(client, item)
-        if len(items) < _PAGE:
+            acked += await handle_event(client, item)
+        if len(items) < _PAGE or not acked:
+            # A page with nothing acked would come back the same: wait for
+            # the next connection rather than ask again now.
             return
 
 

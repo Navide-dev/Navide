@@ -250,3 +250,112 @@ def test_the_link_drains_feedback_once_per_connection() -> None:
 
     source = inspect.getsource(server_link.ServerLink)
     assert source.count("self._spawn(self._drain_link_feedback())") == 1
+
+
+# ---- review round 7 ---------------------------------------------------------------
+
+
+async def test_feedback_for_a_link_that_is_gone_is_refused_and_acked(ring, home, broadcasts) -> None:
+    """B7-3: LINK_INACTIVE / NOT_FOUND will never change; leaving it unacked
+    replayed it on every reconnect."""
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    real = client.request
+
+    async def gone(verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if verb == "unwrap":
+            raise share_links.ShareRemoteError("LINK_INACTIVE", "revoked")
+        return await real(verb, payload)
+
+    client.request = gone  # type: ignore[method-assign]
+    client.queue.append(_item(link, {"v": 1, "action": "approve", "text": "", "contentSha256": sha, "version": 1}))
+    await share_feedback.drain(client)
+    assert client.acked == ["f1" * 16]
+    assert broadcasts[-1]["payload"]["result"] == "rejected"
+    assert broadcasts[-1]["payload"]["reason"] == "link-inactive"
+    assert _meta(path)["stage"] == "in-review"
+
+
+async def test_fifty_dead_items_do_not_keep_a_valid_approval_behind_them(ring, home, broadcasts) -> None:
+    """B7-3: a full page of permanently failing items used to be listed 20
+    times and acked 0 times, so the approval after it never ran."""
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    dead = [
+        {"feedbackId": f"{i:032x}", "linkId": "bad id!", "cipher": "x", "version": 1, "contentHash": sha}
+        for i in range(50)
+    ]
+    good = _item(link, {"v": 1, "action": "approve", "text": "", "contentSha256": sha, "version": 1}, fid="ab" * 16)
+    client.queue.extend([*dead, good])
+    await share_feedback.drain(client)
+    assert _meta(path)["stage"] == "approved"
+    assert len(client.acked) == 51
+
+
+@pytest.mark.parametrize("code", ["LINK_OFFLINE", "LINK_UNAUTHORIZED", "NOT_CONFIGURED"])
+async def test_a_dropped_link_leaves_feedback_for_the_next_drain(ring, home, broadcasts, code) -> None:
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    real = client.request
+
+    async def offline(verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if verb == "unwrap":
+            raise share_links.ShareRemoteError(code, "down")
+        return await real(verb, payload)
+
+    client.request = offline  # type: ignore[method-assign]
+    client.queue.append(_item(link, {"v": 1, "action": "approve", "text": "", "contentSha256": sha, "version": 1}))
+    await share_feedback.drain(client)
+    assert client.acked == [] and broadcasts == []
+    assert sum(1 for verb, _ in client.calls if verb == "feedback.list") == 1  # stops, does not spin
+    client.request = real  # type: ignore[method-assign]
+    await share_feedback.drain(client)
+    assert _meta(path)["stage"] == "approved"
+
+
+async def test_no_account_ring_leaves_feedback_for_later(home, broadcasts, monkeypatch) -> None:
+    client = FeedbackLinks()
+    monkeypatch.setattr(sync_keyring, "account_key", lambda: None)
+
+    async def no_ring(verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        if verb == "unwrap":
+            raise sync_keyring.KeyringError("no ring")
+        return await FeedbackLinks.request(client, verb, payload)
+
+    client.request = no_ring  # type: ignore[method-assign]
+    client.queue.append({"feedbackId": "cd" * 16, "linkId": "ab" * 16, "cipher": "x", "version": 1})
+    await share_feedback.drain(client)
+    assert client.acked == [] and broadcasts == []
+
+
+async def test_the_masking_scan_runs_off_the_event_loop(ring, home, broadcasts, monkeypatch) -> None:
+    """B7-4: prepare masks up to 32 MiB; on the loop it froze the backend."""
+    import threading
+
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    loop_thread = threading.get_ident()
+    seen: list[bool] = []
+    real = share_links.prepare
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        seen.append(threading.get_ident() == loop_thread)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(share_links, "prepare", spy)
+    client.queue.append(_item(link, {"v": 1, "action": "approve", "text": "", "contentSha256": sha, "version": 1}))
+    await share_feedback.drain(client)
+    assert seen == [False]
+
+
+async def test_a_path_outside_the_plans_folder_is_refused_before_it_is_read(ring, home, broadcasts, monkeypatch) -> None:
+    """B7-4: the plan-location check comes before prepare reads the file."""
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    read: list[str] = []
+    monkeypatch.setattr(share_links, "_open_meta", lambda *a: {"path": str(home / "notes.html"), "sha256": sha, "title": "t"})
+    monkeypatch.setattr(share_links, "prepare", lambda p, k: read.append(p))
+    client.queue.append(_item(link, {"v": 1, "action": "approve", "text": "", "contentSha256": sha, "version": 1}))
+    await share_feedback.drain(client)
+    assert read == []
+    assert broadcasts[-1]["payload"]["reason"] == "not-a-plan"
