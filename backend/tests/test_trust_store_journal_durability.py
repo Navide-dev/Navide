@@ -38,11 +38,17 @@ def test_the_journal_is_fsynced_with_its_directory(monkeypatch):
 
 
 def test_a_short_write_still_writes_everything(monkeypatch):
+    # Short writes in the journal writer only. Patched on `os` itself, they
+    # also cut the vault's own single-write file on a platform with no
+    # Keychain (Linux CI), which then read back as a damaged record.
+    from types import SimpleNamespace
+
+    from agent_team_backend.osplat import _posix_durable
+
     real = os.write
-    monkeypatch.setattr(os, "write", lambda fd, data: real(fd, bytes(data[:7])))
+    short = SimpleNamespace(**{**vars(os), "write": lambda fd, data: real(fd, bytes(data[:7]))})
+    monkeypatch.setattr(_posix_durable, "os", short)
     _write_some()
-    # Put back by hand: monkeypatch.undo() would also undo conftest's isolation.
-    monkeypatch.setattr(os, "write", real)
     trust_store._state = None
     trust_store._forget_written()
     assert [n["kind"] for n in trust_store.notices()] == ["remote-command"]
