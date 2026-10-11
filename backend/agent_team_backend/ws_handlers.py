@@ -5016,8 +5016,11 @@ async def p2p_trust_block(session: "Session", msg_id: str, msg_type: str, payloa
 
 
 def _block_not_kept(err: Exception, msg_id: str, msg_type: str) -> dict:
+    # Its own code even for a full record (review F2): p2p-trust-store-full is
+    # also what a block refused before it reached the server answers, and the
+    # two must not read alike — this one is in force.
     code = (
-        server_link.TRUST_STORE_FULL
+        "P2P_BLOCK_NOT_SAVED_LOCALLY_FULL"
         if isinstance(err, trust_store.TrustStoreFull)
         else "P2P_BLOCK_NOT_SAVED_LOCALLY"
     )

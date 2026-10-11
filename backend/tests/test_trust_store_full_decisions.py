@@ -129,7 +129,7 @@ async def test_a_block_that_cannot_be_kept_locally_stays_in_force(policy, monkey
     reply = await _call("p2p.trust.block", {"deviceId": "dev-y"})
 
     assert reply["ok"] is False
-    assert reply["error"]["code"] == server_link.TRUST_STORE_FULL
+    assert reply["error"]["code"] == "P2P_BLOCK_NOT_SAVED_LOCALLY_FULL"
     assert [e for e in policy.policy["blocked"] if e.get("deviceId") == "dev-y"]
     assert len(policy.writes) == 1
     assert device_trust.is_blocked(None, member_id="", device_id="dev-y")
@@ -223,3 +223,20 @@ def test_a_block_whose_store_could_not_be_read_still_holds(monkeypatch):
     with pytest.raises(trust_store.TrustStoreLocked):
         trust_store.note_blocked("dev-f1", "m-f1")
     assert [e["deviceId"] for e in trust_store._unsaved_blocks] == ["dev-f1"]
+
+
+async def test_a_block_the_server_never_got_is_not_reported_as_in_force(policy, monkeypatch):
+    """Review F2: a policy write refused as full (the sequence could not be
+    reserved) answered with the same code as a block the server has, so the
+    window said "blocked on the server" for a block nobody made."""
+    from tests.test_ws_handlers_trust import _call
+
+    trust_store.load()
+
+    async def full(_policy):
+        return {"ok": False, "error": {"code": server_link.TRUST_STORE_FULL, "message": "full"}}
+
+    monkeypatch.setattr(server_link, "set_policy", full)
+    reply = await _call("p2p.trust.block", {"deviceId": "dev-f2"})
+    assert reply["error"]["code"] == server_link.TRUST_STORE_FULL
+    assert not device_trust.is_blocked(None, member_id="", device_id="dev-f2")
