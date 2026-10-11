@@ -129,10 +129,14 @@ _CRED_PREFIX = rf"(?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s{{0,64}}[:=]\s{{0,64}}"
 _PWD_PATH = r"(?(pwd)(?![/~.]|[A-Za-z]:\\))"
 #: A backslash pair inside an unquoted value (C:\\Users\\x, or the doubled
 #: backslashes of the same path inside JSON) — but never a backslashed quote,
-#: which is the end of a surrounding JSON string, and never backslash-n, -r
-#: or -t, which in JSON text are a line break or a tab. The pair and the
-#: single character below never match the same text, so this cannot backtrack.
-_ESCAPE_PAIR = r"""\\(?![\"'&nrt]|u0022)\S"""
+#: which is the end of a surrounding JSON string. The pair and the single
+#: character below never match the same text, so this cannot backtrack.
+_ESCAPE_PAIR = r"""\\(?![\"'&]|u0022)\S"""
+#: The same inside the plan-meta JSON island, where backslash-n, -r and -t
+#: are a line break or a tab and end the value (B5-2). Elsewhere they are
+#: just as likely a path (C:\\Users\\neil) or a literal, and the value
+#: goes on: masking too much beats leaking the rest (B7-2).
+_JSON_ESCAPE_PAIR = r"""\\(?![\"'&nrt]|u0022)\S"""
 #: A credential key with a quoted value: the whole value goes, spaces
 #: included, and an escaped quote inside it does not end it. The two value
 #: branches never match the same character (a backslash starts an escape,
@@ -147,11 +151,15 @@ _QUOTED_CREDENTIAL = (
 )
 #: The same, with the closing quote missing: mask up to the next space,
 #: quote, backslash or markup, as an unquoted value would be.
-_UNCLOSED_CREDENTIAL = (
-    re.compile(rf"(?i)({_CRED_PREFIX}{_QUOTE}){_PWD_PATH}(?:{_ESCAPE_PAIR}|[^\s\"'\\&<>]){{1,4096}}"),
-    r"\1" + _REDACTED,
-    "credential-assignment",
-)
+def _unclosed_credential(pair: str) -> tuple[re.Pattern[str], str, str]:
+    return (
+        re.compile(rf"(?i)({_CRED_PREFIX}{_QUOTE}){_PWD_PATH}(?:{pair}|[^\s\"'\\&<>]){{1,4096}}"),
+        r"\1" + _REDACTED,
+        "credential-assignment",
+    )
+
+
+_UNCLOSED_CREDENTIAL = _unclosed_credential(_ESCAPE_PAIR)
 #: Values that are settings or type names, not secrets: literals, a number
 #: of at most 5 digits (a port, a size, a count — 12345678 is a PIN), and the
 #: words a schema or a code sample puts after a key.
@@ -161,14 +169,25 @@ _NOT_A_SECRET = (
 )
 #: The same keys with a bare value (.env, YAML). The value stops at a
 #: backslash, so the \" that closes a surrounding JSON string survives.
-_BARE_CREDENTIAL = (
-    re.compile(
-        rf"(?i)((?<!\w){_CRED_KEY}\s{{0,64}}[:=]\s{{0,64}})(?!{_QUOTE}){_PWD_PATH}{_NOT_A_SECRET}"
-        rf"(?:{_ESCAPE_PAIR}|[^\s'\"&<>,;\\]){{4,4096}}"
-    ),
-    r"\1" + _REDACTED,
-    "credential-assignment",
-)
+def _bare_credential(pair: str) -> tuple[re.Pattern[str], str, str]:
+    return (
+        re.compile(
+            rf"(?i)((?<!\w){_CRED_KEY}\s{{0,64}}[:=]\s{{0,64}})(?!{_QUOTE}){_PWD_PATH}{_NOT_A_SECRET}"
+            rf"(?:{pair}|[^\s'\"&<>,;\\]){{4,4096}}"
+        ),
+        r"\1" + _REDACTED,
+        "credential-assignment",
+    )
+
+
+_BARE_CREDENTIAL = _bare_credential(_ESCAPE_PAIR)
+#: The unquoted-value patterns as they read inside the plan-meta island
+#: (``_JSON_ESCAPE_PAIR``), and where that island is.
+_IN_JSON = {
+    id(_UNCLOSED_CREDENTIAL[0]): _unclosed_credential(_JSON_ESCAPE_PAIR)[0],
+    id(_BARE_CREDENTIAL[0]): _bare_credential(_JSON_ESCAPE_PAIR)[0],
+}
+_JSON_ISLAND_RE = re.compile(r'<script\b[^>]{0,256}\bid="plan-meta"[^>]{0,256}>(.*?)</script>', re.DOTALL)
 #: user:password@ in a URL, also with no user (redis://:pw@host), a "/" in
 #: the password, or an "@" in it (up to the last "@" before the host). A port
 #: followed by a path (localhost:5173/@vite) is not a password, and neither is
@@ -273,8 +292,17 @@ def _newlines(text: str) -> list[int]:
 
 def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
     edits: list[tuple[int, int, str, str]] = []  # start, end, replacement, category
+    islands = [m.span(1) for m in _JSON_ISLAND_RE.finditer(text)]
     for pattern, repl, category in HIGH_CONFIDENCE:
-        for m in pattern.finditer(text):
+        json_form = _IN_JSON.get(id(pattern))
+        if json_form is None or not islands:
+            matches = list(pattern.finditer(text))
+        else:
+            # Outside the island the text form; inside it the JSON form.
+            matches = [m for m in pattern.finditer(text) if not any(a <= m.start() < b for a, b in islands)]
+            for a, b in islands:
+                matches += json_form.finditer(text, a, b)
+        for m in matches:
             if m.start() != m.end():
                 edits.append((m.start(), m.end(), m.expand(repl), category))
     # Two patterns can match the same secret ("Authorization: Bearer x"): the

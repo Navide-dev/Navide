@@ -483,7 +483,7 @@ def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        "secret: C:\\Users\\dev\\" + Z,  # B5-2: a \\n, \\r or \\t segment would end the value
+        "secret: C:\\Users\\neil\\" + Z,
         'password: "C:\\d0\\d1\\d2' + Z,
     ],
 )
@@ -521,11 +521,34 @@ def test_a_doubly_escaped_quote_in_plan_meta_still_delimits_the_value(tmp_path, 
 
 
 def test_a_json_newline_escape_ends_a_bare_value() -> None:
-    """B5-2: `TOKEN=S\\nnext line` inside JSON keeps the next line."""
+    """B5-2: `TOKEN=S\\nnext line` inside the plan-meta island keeps the next line."""
     import json
 
-    out = _masked(json.dumps({"c": "TOKEN=" + Z + "\nnext line"}))
-    assert Z not in out and json.loads(out)["c"].endswith("\nnext line")
+    island = json.dumps({"c": "TOKEN=" + Z + "\nnext line"})
+    out = _masked('<script type="application/json" id="plan-meta">' + island + "</script>")
+    body = out.split(">", 1)[1].rsplit("</script>", 1)[0]
+    assert Z not in out and json.loads(body)["c"].endswith("\nnext line")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "secret: C:\\Users\\neil\\" + Z,
+        "token=C:\\tmp\\" + Z,
+        "password=Ab\\n" + Z,
+        "password=abcd\\r" + Z,
+        "api_key=k3y\\t" + Z,
+        "SECRET=\\n" + Z,
+        'password: "C:\\new\\' + Z + '"',
+        "<li>password=ab\\n" + Z + "</li>",
+    ],
+)
+@pytest.mark.parametrize("kind", ["plan", "file"])
+def test_backslash_n_r_t_outside_plan_meta_do_not_end_a_value(text: str, kind: str) -> None:
+    """B7-2: only inside the plan-meta JSON island is backslash-n a line
+    break; in prose and markup it is as likely a path or a literal, so the
+    value goes on and is masked whole, as before B5-2."""
+    assert Z not in share_scan.scan(text, kind=kind).text
 
 
 @pytest.mark.parametrize("value", ["./build", "C:\\Users\\neil", "c:\\work"])
