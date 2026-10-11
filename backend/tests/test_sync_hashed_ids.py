@@ -248,6 +248,8 @@ def test_the_wire_id_columns_are_added_once_and_kept(tmp_path):
 
     path = tmp_path / "s.db"
     store = sync_engine.SyncStore(Database(path))
+    # A numbered step, so a later build knows it ran.
+    assert store._db.schema_version("sync") == 5  # noqa: SLF001
     store.set_state("prompts", "p", rev=1, synced_hash="h", deleted=False, wire_id="h1." + "a" * 64)
     # A legacy-id write never erases the hashed id.
     store.set_state("prompts", "p", rev=2, synced_hash="h", deleted=False)

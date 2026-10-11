@@ -500,11 +500,7 @@ class SyncStore:
         self._db.migrate(_COMPONENT, 2, _schema_v2)
         self._db.migrate(_COMPONENT, 3, _schema_v3)
         self._db.migrate(_COMPONENT, 4, _schema_v4)
-        # D3's columns. Applied on every open rather than as a numbered step:
-        # the step is additive and guarded, and the recorded schema version
-        # stays 4 (a downgrade reads the tables exactly as before).
-        with self._db.transaction() as cur:
-            _schema_v5(cur)
+        self._db.migrate(_COMPONENT, 5, _schema_v5)
         #: The account the live rows belong to; "" until the link settles on one.
         self._account = ""
         self._redactors: dict[str, Callable[[Any], dict[str, Any] | None]] = {}

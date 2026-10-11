@@ -39,7 +39,7 @@ def _columns(db_path, table: str) -> set[str]:
 def test_schema_v4_only_adds(tmp_path) -> None:
     db = Database(tmp_path / "s.db")
     sync_engine.SyncStore(db)
-    assert db.schema_version("sync") == 4
+    assert db.schema_version("sync") >= 4
     for table in ("sync_state", "sync_cursor", "sync_conflicts"):
         assert "account" in _columns(tmp_path / "s.db", table)
     db.close()
