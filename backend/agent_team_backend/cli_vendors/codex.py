@@ -973,29 +973,13 @@ class CodexHomeManager:
         are seeded, and only when the pane file is byte-identical. Returns
         the number of entries appended.
         """
-        pane_hooks = pane_home / "hooks.json"
-        real_hooks = self.real_home / "hooks.json"
         config = self.real_home / "config.toml"
-        try:
-            if not (pane_hooks.is_file() and real_hooks.is_file()):
-                return 0
-            if pane_hooks.read_bytes() != real_hooks.read_bytes():
-                return 0
-            rows = _hook_state_rows(config.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return 0
-        real_prefix = f"{real_hooks}:"
-        pane_prefix = f"{pane_hooks}:"
-        additions = []
-        seeded = []
-        for key, hashed in rows.items():
-            if hashed is None or not key.startswith(real_prefix):
-                continue
-            new_key = pane_prefix + key[len(real_prefix):]
-            if new_key in rows:
-                continue
-            seeded.append(new_key)
-            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n')
+        trust = self._pane_hook_trust(pane_home)
+        additions = [
+            f'[hooks.state."{_toml_escape(key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n'
+            for key, hashed in trust.items()
+        ]
+        seeded = list(trust)
         if not additions:
             return 0
         try:
@@ -1007,6 +991,47 @@ class CodexHomeManager:
             return 0
         self._remember_seeded_trust(pane_home, seeded)
         return len(additions)
+
+    def hook_trust_override(self, pane_home: Path) -> str:
+        """The rows `seed_hook_trust` would write, as one ``-c`` value instead.
+
+        Phase 3: ``hooks.state={"<pane key>"={trusted_hash="<hash>"}, ...}``
+        given on the command line merges with the rows persisted in
+        config.toml (codex 0.160), so the pane starts trusted and the user's
+        file is never written. Only the inline-table form does; the dotted
+        ``hooks.state."<key>".trusted_hash=`` is ignored. '' when there is
+        nothing to carry.
+        """
+        rows = [
+            f"{_toml_inline_key(key)}={{trusted_hash={_toml_inline_key(hashed)}}}"
+            for key, hashed in self._pane_hook_trust(pane_home).items()
+        ]
+        return "hooks.state={" + ",".join(rows) + "}" if rows else ""
+
+    def _pane_hook_trust(self, pane_home: Path) -> dict[str, str]:
+        """The user's trusted rows for the real hooks.json, re-keyed on the
+        pane home's mirror of it: only when the pane file is byte-identical,
+        and never a row config.toml already holds for that key."""
+        pane_hooks = pane_home / "hooks.json"
+        real_hooks = self.real_home / "hooks.json"
+        try:
+            if not (pane_hooks.is_file() and real_hooks.is_file()):
+                return {}
+            if pane_hooks.read_bytes() != real_hooks.read_bytes():
+                return {}
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        real_prefix = f"{real_hooks}:"
+        pane_prefix = f"{pane_hooks}:"
+        trust: dict[str, str] = {}
+        for key, hashed in rows.items():
+            if hashed is None or not key.startswith(real_prefix):
+                continue
+            new_key = pane_prefix + key[len(real_prefix):]
+            if new_key not in rows:
+                trust[new_key] = hashed
+        return trust
 
     @staticmethod
     def _seeded_trust(pane_home: Path) -> list[str]:
@@ -1454,6 +1479,15 @@ def _toml_key(quoted: str) -> str | None:
 def _toml_escape(value: str) -> str:
     """Quoted-key body for a TOML basic string (paths: backslash and quote)."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _toml_inline_key(value: str) -> str:
+    """`value` quoted for an inline ``-c`` table: a literal string, so it
+    adds no `"` for cmd.exe to mangle (see codex_session_hooks._toml_literal);
+    a basic string only when the value itself holds a `'`."""
+    if "'" not in value and "\n" not in value:
+        return "'" + value + "'"
+    return '"' + _toml_escape(value) + '"'
 
 
 def _toml_unescape(value: str) -> str:

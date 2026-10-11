@@ -107,7 +107,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `claude.hooks` | claude | `~/.claude/settings.json` hooks (turn detection, Navide Guard, rewake) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
 | `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
-| `codex.hook-trust` | codex | `[hooks.state]` rows in `~/.codex/config.toml` | yes | every Codex pane asks you to trust your own hooks again |
+| `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
@@ -118,6 +118,30 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 
 Required features are listed for disclosure only. They have no switch because
 the panes they serve cannot run without them.
+
+### Codex hook trust carried by the panes
+
+Codex keys hook trust by the path of the `hooks.json` that defines a hook, so
+a pane's own `CODEX_HOME` (whose `hooks.json` links to `~/.codex/hooks.json`)
+would ask you to trust your own hooks again. Navide copies your trusted hash
+for each hook under the pane home's key — the hash is content-only — but no
+longer writes it into `~/.codex/config.toml`: every spawn and resume passes
+the rows on the command line instead, as one shell-quoted inline table,
+`-c hooks.state={'<pane home>/hooks.json:<event>:<i>:<j>'={trusted_hash='<hash>'},...}`
+(TOML literal strings, so cmd.exe on Windows meets no `"`).
+Codex merges it with the rows in `config.toml` (verified on 0.160; the dotted
+form `-c hooks.state."<key>".trusted_hash=` is ignored). It comes after
+Navide's own `-c hooks.SessionStart` / `-c hooks.PreToolUse`, which are left
+out when the command already holds any `-c hooks…`. The hashes are read from
+your own rows in `config.toml`, as before; no Codex process is asked.
+
+At startup (and when the switch is turned back on) the rows earlier versions
+seeded into `config.toml` — every row keyed on a pane home — are taken back
+out, backed up and logged as `retract`. Only once that succeeded do panes get
+the inline table. If a row cannot be taken back (`retract-failed`), spawns
+keep seeding `config.toml` as before and carry nothing inline: never both.
+With the switch off, neither happens. A session that lives in `~/.codex`
+itself (no pane home) gets nothing, as before.
 
 ## Persistence (navide.db)
 

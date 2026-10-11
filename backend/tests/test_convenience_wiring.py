@@ -1733,3 +1733,90 @@ def test_a_carried_vendor_keeps_the_hooks_the_user_removed_out(gate, homes, carr
     convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
 
     assert carrier and "Notification:notification" in carrier[-1][1]
+
+
+# ── Phase 3: codex hook trust carried inline by the panes ────────────────────
+
+@pytest.fixture
+def codex_app(gate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agent_team_backend import app
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    return manager, real
+
+
+def test_codex_startup_retracts_seeded_trust_rows_and_the_panes_carry_them_inline(gate, codex_app) -> None:
+    import tomllib
+
+    manager, real = codex_app
+    before = (real / "config.toml").read_text(encoding="utf-8")
+    # Phase 2 seeded a row for pane A into the user's config.toml.
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+
+    assert convenience_wiring.carry_codex_hook_trust() is True
+
+    assert (real / "config.toml").read_text(encoding="utf-8").rstrip("\n") == before.rstrip("\n")
+    assert convenience_wiring.pane_carries_hooks("codex")
+    assert gate.history("codex.hook-trust", limit=1)[0]["action"] == "retract"
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+    home_b = manager.prepare(PANE_B)
+    override = manager.hook_trust_override(home_b)
+    assert tomllib.loads(override) == {"hooks": {"state": {
+        f"{home_b / 'hooks.json'}:stop:0:0": {"trusted_hash": "sha256:aaaa"},
+    }}}
+
+
+def test_codex_hook_trust_that_cannot_be_retracted_keeps_seeding_and_no_pane_carries_it(
+    gate, codex_app
+) -> None:
+    manager, real = codex_app
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    real.chmod(0o555)  # the rewrite cannot land
+    try:
+        assert convenience_wiring.carry_codex_hook_trust() is False
+    finally:
+        real.chmod(0o755)
+
+    assert not convenience_wiring.pane_carries_hooks("codex")
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
+    assert gate.history("codex.hook-trust", limit=1)[0]["action"] == "retract-failed"
+
+
+def test_codex_hook_trust_off_stops_the_panes_carrying_it_and_re_allow_brings_it_back(
+    gate, homes, codex_app
+) -> None:
+    manager, real = codex_app
+    assert convenience_wiring.carry_codex_hook_trust() is True
+
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    assert not convenience_wiring.pane_carries_hooks("codex")
+    assert convenience_wiring.carry_codex_hook_trust() is False
+
+    convenience_wiring.set_feature("codex.hook-trust", True, port_file=str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("codex")
+
+
+def test_codex_hook_trust_override_skips_rows_the_user_already_trusts_for_the_pane(gate, codex_app) -> None:
+    import tomllib
+
+    manager, real = codex_app
+    home = manager.prepare(PANE_A)
+    assert manager.seed_hook_trust(home) == 1
+
+    assert manager.hook_trust_override(home) == ""
+    assert manager.hook_trust_override(manager.prepare(PANE_B)) != ""
+    assert tomllib.loads(manager.hook_trust_override(manager.prepare(PANE_B)))
+
+
+def test_reclaiming_a_pane_home_nothing_was_seeded_for_leaves_config_toml_unwritten(gate, codex_app) -> None:
+    manager, real = codex_app
+    assert convenience_wiring.carry_codex_hook_trust() is True
+    manager.prepare(PANE_A)
+    config = real / "config.toml"
+    before = (config.read_bytes(), config.stat().st_ino, config.stat().st_mtime_ns)
+
+    assert manager.reclaim(PANE_A)
+
+    assert (config.read_bytes(), config.stat().st_ino, config.stat().st_mtime_ns) == before
