@@ -719,3 +719,51 @@ async def test_an_account_the_server_keeps_on_legacy_ids_is_asked_once_per_conne
     assert all(not HASHED.match(k[1]) for k in server.rows)
     assert all(not s.wire_id for s in a.store.states("prompts").values())
     assert server.rows[("prompts", "extra-3")]["objectRef"]
+
+
+
+# ── contract c8: adoption only when caps says the account may ───────────────
+async def test_no_adoption_is_asked_when_caps_says_the_account_may_not(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True, hmac_listed=False)
+    assert server.caps_payload()["adoptHmac"] is False
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    for _ in range(3):
+        assert (await a.sync())["ok"] is True
+    a.reconnect()
+    assert (await a.sync())["ok"] is True
+    assert "sync.adoptHmacIds" not in server.types("A")
+    assert server.item_ids == "legacy"
+    assert all(not HASHED.match(k[1]) for k in server.rows)
+
+
+async def test_a_c7_server_without_the_flag_is_asked_once_per_connection(tmp_path, account_key, s3):
+    """No ``adoptHmac`` in caps (a c7 server): the device asks once per
+    connection and stays on legacy ids when the server says UNSUPPORTED."""
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True, hmac_listed=False, caps_has_adopt_flag=False)
+    assert "adoptHmac" not in server.caps_payload()
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    for _ in range(3):
+        assert (await a.sync())["ok"] is True
+    assert server.types("A").count("sync.adoptHmacIds") == 1
+    a.reconnect()
+    assert (await a.sync())["ok"] is True
+    assert server.types("A").count("sync.adoptHmacIds") == 2
+    assert server.item_ids == "legacy"
+    assert all(not HASHED.match(k[1]) for k in server.rows)
+
+
+async def test_an_account_on_the_list_is_moved_once_and_then_offered_no_more(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True, hmac_listed=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    assert (await a.sync())["ok"] is True
+    assert server.item_ids == "hmac"
+    assert server.caps_payload()["adoptHmac"] is False
+    a.reconnect()
+    assert (await a.sync())["ok"] is True
+    assert server.types("A").count("sync.adoptHmacIds") == 1

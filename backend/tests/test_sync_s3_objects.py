@@ -164,6 +164,8 @@ class V3Server(FakeServer):
         caps_error: str = "UNKNOWN_TYPE",
         item_ids: str = "legacy",
         adopt_ready: bool = False,
+        hmac_listed: bool = True,
+        caps_has_adopt_flag: bool = True,
         retired: tuple[str, ...] = (),
     ) -> None:
         super().__init__()
@@ -176,6 +178,10 @@ class V3Server(FakeServer):
         self.item_ids = item_ids
         self.item_id_kid: str | None = None
         self.adopt_ready = adopt_ready
+        # c8: the deployment's list of accounts allowed to move to hashed ids.
+        self.hmac_listed = hmac_listed
+        # A c7 server answers caps without ``adoptHmac``.
+        self.caps_has_adopt_flag = caps_has_adopt_flag
         self.negotiated: set[str] = set()
         self.calls: list[tuple[str, str, dict]] = []
         self.committed: dict[str, int] = {}
@@ -201,6 +207,8 @@ class V3Server(FakeServer):
             "maxItems": 64, "maxBodyBytes": 524288, "maxPushBytes": 786432, "maxObjectBytes": 5242880,
             "maxBatch": 100, "maxPullPage": 500, "quotaItems": 10000, "quotaBytes": 1 << 30,
             "usedItems": 0, "usedBytes": 0, "versions": {"keep": 10, "maxAgeS": 2592000}, "presignTtlS": 900,
+            **({"adoptHmac": self.hmac_listed and self.storage == "s3" and self.item_ids == "legacy"}
+               if self.caps_has_adopt_flag else {}),
         }
 
     async def handle(self, device: str, msg_type: str, payload: dict) -> dict:
@@ -236,6 +244,8 @@ class V3Server(FakeServer):
             if self.item_ids == "hmac":
                 return ok({"itemIds": "hmac", "itemIdKid": self.item_id_kid}) if root == self.item_id_kid \
                     else err("BAD_REQUEST")
+            if not self.hmac_listed and self.item_ids != "hmac":
+                return err("UNSUPPORTED")
             if not self.adopt_ready:
                 return err("HMAC_NOT_READY", {"blockingDevices": [{"deviceId": "old", "deviceName": "Old", "lastSeenAt": "x"}]})
             self.item_ids, self.item_id_kid = "hmac", root

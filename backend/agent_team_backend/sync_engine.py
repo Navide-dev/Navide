@@ -1061,11 +1061,14 @@ class SyncEngine:
         """
         if (
             not _is_v3(caps) or caps.get("storage") != "s3" or caps.get("itemIds") != "legacy"
-            or self._adopt_tried
+            or caps.get("adoptHmac") is False or self._adopt_tried
         ):
             # Only an object account on a v3 connection changes its item ids;
             # the server refuses the rest (UNSUPPORTED), and a v1 connection
             # (an older server, a caps answer that never came) never asks.
+            # Contract c8: not when caps says the account may not
+            # (``adoptHmac: false``). A server that does not say (c7) is asked
+            # once per connection, and its UNSUPPORTED ends it.
             return caps
         root = await asyncio.to_thread(sync_keyring.active_key_id)
         if not root:
