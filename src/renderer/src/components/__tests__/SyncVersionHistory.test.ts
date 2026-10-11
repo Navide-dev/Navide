@@ -87,6 +87,18 @@ describe('SyncVersionHistory', () => {
     expect(wrapper.text()).toContain(i18n.global.t('settings.sync.history-held'))
   })
 
+  it('does not claim a restore that applied nothing', async () => {
+    const { wrapper } = await mounted({
+      'sync.restore_version': { ok: true, payload: { held: false, outcome: 'not-applied' } },
+    })
+    await wrapper.find('[data-test="history-show"]').trigger('click')
+    await flushPromises()
+    await wrapper.find('[data-test="history-restore-previous"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(i18n.global.t('settings.sync.history-not-applied'))
+    expect(wrapper.text()).not.toContain(i18n.global.t('settings.sync.history-restored'))
+  })
+
   it('shows the server’s refusal instead of an empty list', async () => {
     const { wrapper } = await mounted({
       'sync.versions': { ok: false, error: { message: 'VERSIONS_UNAVAILABLE: not on this account' } },

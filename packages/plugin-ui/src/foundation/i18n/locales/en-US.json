@@ -6511,7 +6511,8 @@
       "history-device": "from {device}",
       "history-restored": "Restored here. It reaches your other devices on the next sync.",
       "history-held": "The restored version is waiting for your approval above.",
-      "history-error": "Version history could not be loaded."
+      "history-error": "Version history could not be loaded.",
+      "history-not-applied": "Nothing changed here: this version was not applied (it may have been declined before)."
     },
     "sharing": {
       "intro": "Two ways to move these four sections between machines: a file you hand over, and the account they already share.",

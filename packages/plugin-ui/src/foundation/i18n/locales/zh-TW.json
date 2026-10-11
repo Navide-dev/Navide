@@ -6511,7 +6511,8 @@
       "history-device": "來自 {device}",
       "history-restored": "已在這台還原，下一輪同步時會送到其他裝置。",
       "history-held": "還原的版本正在上方等你核准。",
-      "history-error": "無法載入版本記錄。"
+      "history-error": "無法載入版本記錄。",
+      "history-not-applied": "這台沒有任何變更：這個版本沒有被套用（可能之前已經拒絕過）。"
     },
     "sharing": {
       "intro": "把這四個區段搬到別台機器的兩條路：一份可以交出去的檔案，以及這些機器本來就共用的帳號。",

@@ -100,8 +100,17 @@ async function restore(version: Version): Promise<void> {
       error.value = resp?.error?.message ?? t('settings.sync.history-error')
       return
     }
-    const held = isRecord(resp.payload) && resp.payload.held === true
-    notice.value = t(held ? 'settings.sync.history-held' : 'settings.sync.history-restored')
+    // `outcome` says what actually happened here; `held` alone is what an
+    // older backend answered.
+    const payload = isRecord(resp.payload) ? resp.payload : {}
+    const outcome = typeof payload.outcome === 'string' ? payload.outcome : payload.held === true ? 'held' : 'applied'
+    notice.value = t(
+      outcome === 'held'
+        ? 'settings.sync.history-held'
+        : outcome === 'not-applied'
+          ? 'settings.sync.history-not-applied'
+          : 'settings.sync.history-restored',
+    )
   } finally {
     busy.value = false
   }
