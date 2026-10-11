@@ -60,14 +60,33 @@ export function useShareLinks(backend: Backend) {
   const links = ref<ShareLink[]>([])
   const status = ref<ShareLinksStatus>('idle')
   const loading = ref(false)
-  /** share.list has answered at least once since the last reset: the backend
+  /** share.caps (or share.list) has answered since the last reset: the server
    *  does share links, so a later failed reload is an error, not "unsupported". */
   const supported = ref(false)
+  /** Bumped by reset(), so a reply that left before it changes nothing. */
+  let generation = 0
+
+  /** Ask whether the server does share links, and list them only if it does.
+   *  A server without them hears share.caps once (the backend asks it once
+   *  per connection) and nothing else. */
+  async function probe(): Promise<void> {
+    const asked = generation
+    try {
+      const resp = await backend.send('share.caps', {}, LIST_TIMEOUT_MS)
+      if (asked !== generation || !resp.ok) return
+    } catch {
+      return
+    }
+    supported.value = true
+    await refresh()
+  }
 
   async function refresh(): Promise<void> {
+    const asked = generation
     loading.value = true
     try {
       const resp = await backend.send('share.list', {}, LIST_TIMEOUT_MS)
+      if (asked !== generation) return
       if (!resp.ok) {
         links.value = []
         status.value = resp.error?.code === 'UNKNOWN_TYPE' ? 'unavailable' : 'error'
@@ -77,10 +96,11 @@ export function useShareLinks(backend: Backend) {
       status.value = 'ok'
       supported.value = true
     } catch {
+      if (asked !== generation) return
       links.value = []
       status.value = 'error'
     } finally {
-      loading.value = false
+      if (asked === generation) loading.value = false
     }
   }
 
@@ -93,10 +113,12 @@ export function useShareLinks(backend: Backend) {
 
   /** Forget everything (the Cloud link dropped): no list, nothing known. */
   function reset(): void {
+    generation += 1
+    loading.value = false
     links.value = []
     status.value = 'idle'
     supported.value = false
   }
 
-  return { links, status, loading, supported, refresh, act, reset }
+  return { links, status, loading, supported, probe, refresh, act, reset }
 }

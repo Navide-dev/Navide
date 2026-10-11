@@ -27,13 +27,16 @@ function api(): never {
 
 type LinkState = 'unconfigured' | 'connecting' | 'connected' | 'unreachable'
 
-function backend(initial: LinkState = 'unconfigured') {
+/** shares: whether the server does share links (share.caps answers). */
+function backend(initial: LinkState = 'unconfigured', shares = true) {
   const link = { state: initial }
   const send = vi.fn(async (type: string, _payload?: unknown) => {
     if (type === 'p2p.link.status') {
       return { ok: true, payload: { status: { state: link.state, serverUrl: '', hasToken: false, detail: '' } } }
     }
     if (type === 'sync.inventory') return { ok: true, payload: { status: 'ok', scopes: {}, devices: [], scopeEnabled: {} } }
+    if (type === 'share.caps' && shares) return { ok: true, payload: { kinds: {} } }
+    if (type === 'share.list' && shares) return { ok: true, payload: { links: [] } }
     return { ok: false, error: { code: 'UNKNOWN_TYPE', message: type } }
   })
   const on = vi.fn(() => () => {})
@@ -54,8 +57,8 @@ describe('SettingsModal Navide Cloud page', () => {
     vi.useRealTimers()
   })
 
-  async function mountModal(linkState: LinkState, props: Record<string, unknown> = {}) {
-    const b = backend(linkState)
+  async function mountModal(linkState: LinkState, props: Record<string, unknown> = {}, shares = true) {
+    const b = backend(linkState, shares)
     wrapper = shallowMount(SettingsModal, {
       props: {
         backend: b as never,
@@ -112,11 +115,21 @@ describe('SettingsModal Navide Cloud page', () => {
     expect(count(b, 'share.list')).toBe(0)
   })
 
-  it('shows the sub-tabs once connected, without Share while the backend has no share.list', async () => {
+  it('renders exactly what main renders when connected to a server without share links (F7-2)', async () => {
+    const b = await mountModal('connected', {}, false)
+    await tick(2)
+    expect(topLevel()).toEqual(MAIN_PAGE)
+    expect(body().find('[role="tablist"]').exists()).toBe(false)
+    expect(count(b, 'share.caps')).toBe(1)
+    expect(count(b, 'share.list')).toBe(0)
+    expect(count(b, 'sync.inventory')).toBe(0)
+  })
+
+  it('shows the sub-tabs once connected to a server that does share links', async () => {
     const b = await mountModal('connected')
     const tabs = body().find('[role="tablist"]')
     expect(tabs.exists()).toBe(true)
-    expect(tabs.findAll('[role="tab"]').map((t) => t.text())).toEqual(['Sync', 'Devices'])
+    expect(tabs.findAll('[role="tab"]').map((t) => t.text())).toEqual(['Sync', 'Share', 'Devices'])
     expect(b.send.mock.calls.filter(([t]) => t === 'sync.inventory').map(([, p]) => p)).toEqual([
       { scope: 'prompts' },
       { scope: 'mcp' },

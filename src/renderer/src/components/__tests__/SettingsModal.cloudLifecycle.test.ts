@@ -29,13 +29,16 @@ interface Options {
   device?: string
   holdInventory?: boolean
   shareList?: unknown
+  /** share.caps' reply; a server that does share links by default. */
+  caps?: unknown
+  holdCaps?: boolean
 }
 
 function backend(options: Options = {}) {
   const link = { state: options.state ?? 'connected' }
   const held: Array<() => void> = []
   const hold = { inventory: options.holdInventory ?? false }
-  const share = { reply: options.shareList }
+  const share = { reply: options.shareList, caps: options.caps ?? { ok: true, payload: { kinds: {} } }, holdCaps: options.holdCaps ?? false }
   let device = options.device ?? 'ACCOUNT-A'
   const send = vi.fn((type: string, _payload?: unknown, _timeout?: number) => {
     if (type === 'p2p.link.status') {
@@ -53,6 +56,10 @@ function backend(options: Options = {}) {
       }
       if (hold.inventory) return new Promise((resolve) => held.push(() => resolve(body)))
       return Promise.resolve(body)
+    }
+    if (type === 'share.caps') {
+      if (share.holdCaps) return new Promise((resolve) => held.push(() => resolve(share.caps)))
+      return Promise.resolve(share.caps)
     }
     if (type === 'share.list' && share.reply) return Promise.resolve(share.reply)
     return Promise.resolve({ ok: false, error: { code: 'UNKNOWN_TYPE', message: type } })
@@ -202,11 +209,39 @@ describe('Navide Cloud page lifecycle', () => {
     expect(count(b, 'sync.inventory')).toBe(asked)
   })
 
-  it('hides Share on any share.list error (UI-F6)', async () => {
+  it.each([
+    ['UNKNOWN_TYPE'],
+    ['UNSUPPORTED'],
+    ['NOT_CONFIGURED'],
+    ['LINK_OFFLINE'],
+  ])('is the page main shows when share.caps answers %s: no bar, no inventory, no list (F7-2)', async (code) => {
+    const b = backend({ caps: { ok: false, error: { code, message: 'no' } }, shareList: { ok: true, payload: { links: [] } } })
+    await mountModal(b)
+    await tick(2)
+    expect(document.querySelector('.nvc-subtabs')).toBeNull()
+    expect(document.querySelector('[data-subtab-panel]')).toBeNull()
+    expect(count(b, 'share.caps')).toBe(1)
+    expect(count(b, 'share.list')).toBe(0)
+    expect(count(b, 'sync.inventory')).toBe(0)
+    expect(document.body.textContent).toContain(i18n.global.t('settings.p2p.title'))
+  })
+
+  it('shows nothing from a share.caps reply that arrives after the link dropped (F7-2)', async () => {
+    const b = backend({ holdCaps: true, shareList: { ok: true, payload: { links: [] } } })
+    await mountModal(b)
+    b.link.state = 'unreachable'
+    await tick()
+    b.held.splice(0).forEach((resolve) => resolve())
+    await flushPromises()
+    expect(document.querySelector('.nvc-subtabs')).toBeNull()
+    expect(count(b, 'share.list')).toBe(0)
+  })
+
+  it('shows Share with an error when share.list fails on a server that does share links (UI-F6)', async () => {
     const b = backend({ shareList: { ok: false, error: { code: 'SHARE_LIST_FAILED', message: 'server said no' } } })
     await mountModal(b)
     const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
-    expect(tabs).toEqual(['Sync', 'Devices'])
+    expect(tabs).toEqual(['Sync', 'Share', 'Devices'])
   })
 
   it('does not ask for share.list again when Share opens (UI-F6)', async () => {
@@ -238,11 +273,10 @@ describe('Navide Cloud page lifecycle', () => {
     await mountModal(b)
     b.link.state = 'unreachable'
     await tick()
-    b.share.reply = { ok: false, error: { code: 'UNKNOWN_TYPE', message: 'share.list' } }
+    b.share.caps = { ok: false, error: { code: 'UNKNOWN_TYPE', message: 'share.caps' } }
     b.link.state = 'connected'
     await tick()
-    const tabs = Array.from(document.querySelectorAll('.nvc-subtabs [role="tab"]')).map((t) => t.textContent?.trim())
-    expect(tabs).toEqual(['Sync', 'Devices'])
+    expect(document.querySelector('.nvc-subtabs')).toBeNull()
     expect(document.body.textContent).not.toContain('Old title')
   })
 })

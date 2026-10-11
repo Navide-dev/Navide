@@ -1813,17 +1813,19 @@ const policyDevices = computed<P2pPolicyDevice[]>(() => p2pPolicy.value?.devices
  * broken rather than unavailable.
  */
 const p2pLinkReady = computed(() => p2pState.value === 'connected')
-// The Navide Cloud page grows sub-tabs only while the Cloud link is up. Until
-// then it is exactly the page it was before them: no bar, no inventory, no
-// share probe. Share is offered only once the backend answers share.list.
-const cloudSubtabsShown = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
+// The Navide Cloud page grows sub-tabs only while the Cloud link is up and
+// its server does share links. Otherwise — not connected, or connected to a
+// server without them — it is exactly the page it was before them: no bar,
+// no inventory, no share list; an old server is asked share.caps once (F7-2).
+const cloudLinkUp = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
 const shareProbe = useShareLinks(props.backend)
+const cloudSubtabsShown = computed(() => cloudLinkUp.value && shareProbe.supported.value)
 const cloudTabs = computed<CloudSubtab[]>(() =>
   shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
 )
-watch(cloudSubtabsShown, (shown) => {
-  if (shown) {
-    void shareProbe.refresh()
+watch(cloudLinkUp, (up) => {
+  if (up) {
+    void shareProbe.probe()
   } else {
     forgetSyncInventory()
     shareProbe.reset()
