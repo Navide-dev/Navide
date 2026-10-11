@@ -106,7 +106,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 |---|---|---|---|---|
 | `claude.hooks` | claude | its panes' `--settings` file in Navide's data (turn detection, Navide Guard, rewake); `~/.claude/settings.json` only when that cannot be used (see below) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
-| `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
+| `copilot.hooks` | copilot | the pane's `hooks/` folder in `~/.navide-panes/copilot/<pane>/` (see [Copilot hooks ride on the panes](#copilot-hooks-ride-on-the-panes)); `~/.copilot/hooks/agent-team.json` only when that cannot be done | yes | same for Copilot |
 | `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
@@ -181,6 +181,49 @@ when it cannot be, that pane starts without the hooks rather than failing.
 - Known limit: a command that already names a settings file (`--settings`)
   is left alone, so that pane runs without Navide's hooks (logged as a
   warning). Whether Claude Code would merge a second `--settings` is untested.
+
+### Copilot hooks ride on the panes
+
+Copilot reads every hook file in its hooks folder and runs them all, so
+Navide's hooks no longer go into `~/.copilot/hooks`. Each Copilot pane starts
+with `COPILOT_HOME` pointing at its shim (`~/.navide-panes/copilot/<pane>`,
+built by the skills wiring), and while `copilot.hooks` is allowed the shim's
+`hooks` entry is a real folder holding:
+
+- `agent-team.json`: a link to Navide's file in
+  `<app data>/runtime/copilot/hooks/agent-team.json` (0600, written
+  atomically at startup and on re-allow), the same document Phase 2 wrote
+  into `~/.copilot/hooks`. A link, not a copy, so no pane keeps a stale one.
+- a link to every entry of `~/.copilot/hooks`, rebuilt on each spawn (fresh
+  or `--resume`), so a hook file the user adds later is seen and both sets
+  fire. A file of the user's named `agent-team.json` is linked as
+  `agent-team.user.json` rather than hidden. Another backend's Navide file
+  there (the installed app's, seen from a dev backend beside it, or the
+  other way round) is left out: this pane reports to this backend only.
+  Links Navide did not make there (the CLI's own) are kept, and anything
+  else in Navide's place is moved aside to that same `.user` name, so it can
+  never hide Navide's hooks (Navide Guard included).
+
+Nothing is written under `~/.copilot`, and the shim's `hooks` folder is
+never moved into it. At startup a Phase 2 `~/.copilot/hooks/agent-team.json`
+is taken back (`retract`, backed up first); one another backend wrote is left
+alone. If it cannot be taken back (`retract-failed`), or Navide's file cannot
+be written, the shared file stays in use and panes keep today's link to
+`~/.copilot/hooks` with no file of Navide's in it: never both, or every hook
+would fire twice. With the feature off a pane's `hooks` is that same link.
+
+The panes carry the hooks only where every pane gets a shim: the skills
+plugin (`navide.skills`) must be running, and the backend's `COPILOT_HOME`,
+if set, must be the `~/.copilot` the shims mirror. Otherwise the shared file
+stays in use, as in Phase 2. The CLI hooks pass therefore runs after the
+plugins start, and a plugin starting later re-runs it. A plugin stops only at
+quit; that only stops the panes carrying the hooks, without writing the
+shared file back.
+
+Known limit: a single pane whose shim is not built — a `COPILOT_HOME` set in
+the window's own env settings for Copilot, or a shim that fails to build —
+starts without Navide's hooks. It is logged as a warning ("copilot pane …
+starts without Navide's hooks").
 
 ## Persistence (navide.db)
 

@@ -115,6 +115,25 @@ def pane_carries_hooks(agent_key: str) -> bool:
     return agent_key in _CARRYING
 
 
+def pane_carrier_changed(agent_key: str, ready: bool) -> None:
+    """What a carrier needs came or went while running (Copilot: the skills
+    plugin that builds its pane shims). Ready re-runs the vendor's hook pass
+    once the startup pass has registered the carrier, so the panes take the
+    hooks over. Not ready only stops the panes carrying them: a plugin stops
+    only at quit, and writing the shared file back then would be undone at
+    the next start."""
+    if not ready:
+        _CARRYING.discard(agent_key)
+        return
+    if _gate is None or agent_key not in _PANE_CARRIERS:
+        return
+    installer = _installer(agent_key)
+    if installer is not None:
+        from .applog import backend_port_file
+
+        install_hooks_gated(agent_key, installer, str(backend_port_file()))
+
+
 def _hook_target(agent_key: str, port_file: str = "") -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
     """(file, present, remove) for one vendor's hook installation. For a dev
     backend (``port_file`` in a ``-dev`` data dir) claude's are its own
@@ -235,6 +254,13 @@ def remove_hooks(agent_key: str) -> Any:
 
 def _hook_takeback(agent_key: str, port_file: str = "") -> list[Takeback]:
     path, present, remove = _hook_target(agent_key, port_file)
+    if agent_key == "copilot":
+        from . import copilot_hooks
+
+        # Another backend's file (the installed app beside a dev one) is not
+        # this backend's to take back: its panes would lose their hooks.
+        mine = present
+        present = lambda: mine() and not copilot_hooks.another_backends(path)  # noqa: E731
     return [Takeback(str(path), remove, present, path)]
 
 

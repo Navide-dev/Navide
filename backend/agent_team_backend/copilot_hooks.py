@@ -104,7 +104,27 @@ def install_hooks(port_file: str, hooks_directory: Path | None = None) -> dict[s
         return {"installed": False, "path": str(directory), "reason": "copilot not configured"}
 
     path = directory / _HOOK_FILENAME
-    document = {
+    document = _document(port_file)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        try:
+            tmp.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            os.replace(tmp, path)
+        except Exception:
+            tmp.unlink(missing_ok=True)
+            raise
+    except OSError as err:
+        log.warning("could not write copilot hook file: %s", err)
+        return {"installed": False, "path": str(path), "error": str(err)}
+
+    log.info("installed Copilot hook → %s (port_file=%s)", path, port_file)
+    return {"installed": True, "path": str(path), "events": 2, "port_file": port_file}
+
+
+def _document(port_file: str) -> dict[str, Any]:
+    """Navide's hook file, the same for the shared folder and the panes."""
+    return {
         "version": 1,
         "disableAllHooks": False,
         "hooks": {
@@ -131,21 +151,6 @@ def install_hooks(port_file: str, hooks_directory: Path | None = None) -> dict[s
             ],
         },
     }
-    try:
-        directory.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(path.suffix + ".tmp")
-        try:
-            tmp.write_text(json.dumps(document, indent=2), encoding="utf-8")
-            os.replace(tmp, path)
-        except Exception:
-            tmp.unlink(missing_ok=True)
-            raise
-    except OSError as err:
-        log.warning("could not write copilot hook file: %s", err)
-        return {"installed": False, "path": str(path), "error": str(err)}
-
-    log.info("installed Copilot hook → %s (port_file=%s)", path, port_file)
-    return {"installed": True, "path": str(path), "events": 2, "port_file": port_file}
 
 
 def uninstall_hooks(hooks_directory: Path | None = None) -> dict[str, Any]:
@@ -160,3 +165,157 @@ def uninstall_hooks(hooks_directory: Path | None = None) -> dict[str, Any]:
         return {"removed": False, "path": str(path), "error": str(err)}
     log.info("removed Copilot hook → %s", path)
     return {"removed": True, "path": str(path)}
+
+
+# ── Phase 3: the hooks ride on the panes Navide starts ─────────────────────
+#
+# Copilot merges every hook file it finds, so a pane whose COPILOT_HOME shim
+# has a real ``hooks`` folder — Navide's file plus a link to each of the
+# user's — runs both sets (verified for sessionStart, userPromptSubmitted,
+# preToolUse and sessionEnd, fresh and --resume) and nothing is written under
+# ~/.copilot. The shim's folder links to Navide's file rather than copying it:
+# the one file in Navide's data is rewritten at every startup, so no pane can
+# keep a stale copy of it.
+
+
+def pane_hooks_file() -> Path:
+    """Navide's hook file for the panes, inside Navide's own data."""
+    from .applog import app_data_dir
+
+    return app_data_dir() / "runtime" / "copilot" / "hooks" / _HOOK_FILENAME
+
+
+def prepare_pane_hooks(port_file: str, skip: frozenset[str]) -> Path:
+    """The pane carrier's ``prepare``: write the file the shared folder held.
+
+    ``skip`` is always empty here — the file is Navide's alone, so the user
+    removes it whole, never one hook of it (convenience_wiring._PER_HOOK).
+
+    Raises when the panes could not carry it — no skills plugin to build
+    their shims, or a COPILOT_HOME the shims do not mirror — so the shared
+    file stays in use instead.
+    """
+    from .osplat import secret_files
+    from .plugins.builtin.navide_skills import skills_wiring
+
+    if not skills_wiring.active():
+        raise RuntimeError("the skills plugin that builds the pane shims is not running")
+    mirrored = skills_wiring.real_home() / ".copilot"
+    if _resolved(hooks_dir().parent) != _resolved(mirrored):
+        raise RuntimeError(f"COPILOT_HOME {hooks_dir().parent} is not the {mirrored} the pane shims mirror")
+    path = pane_hooks_file()
+    secret_files.make_private_dir(path.parent)
+    secret_files.write_private_plain(path, json.dumps(_document(port_file), indent=2).encode("utf-8"))
+    return path
+
+
+def another_backends(path: Path) -> bool:
+    """Whether ``path`` is a Navide hook file another backend wrote — the
+    installed app's, seen from a dev backend beside it, or the other way
+    round. Its commands read their secret from that backend's data folder."""
+    from . import hook_auth
+    from .applog import app_data_dir
+
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    text = "\n".join(_strings(document))
+    return "/hooks/copilot" in text and str(app_data_dir() / hook_auth.FILENAME) not in text
+
+
+def _resolved(folder: Path) -> Path:
+    try:
+        return folder.resolve()
+    except OSError:
+        return folder
+
+
+def _strings(node: Any) -> list[str]:
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        node = list(node.values())
+    if isinstance(node, list):
+        return [text for item in node for text in _strings(item)]
+    return []
+
+
+def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
+    """Rebuild a pane shim's ``hooks`` entry; run on every spawn.
+
+    While the panes carry Navide's hooks it is a real folder: Navide's file
+    plus a fresh link to each entry of ``user_hooks``, so a file the user
+    adds later is seen. A user file with Navide's name is linked under
+    ``agent-team.user.json`` rather than hidden, and anything the pane holds
+    in Navide's place is moved aside the same way; another backend's Navide
+    file is left out, as this pane reports to this backend only. Otherwise
+    it is what it always was, a link to ``user_hooks``. Nothing is written
+    under ``user_hooks``.
+    """
+    from .convenience_wiring import pane_carries_hooks
+
+    hooks = shim / "hooks"
+    if hooks.is_dir() and not hooks.is_symlink():
+        # Only the links made here; one the CLI made itself stays.
+        for entry in hooks.iterdir():
+            if entry.is_symlink() and _ours(entry, user_hooks):
+                entry.unlink()
+    if not pane_carries_hooks("copilot"):
+        if hooks.is_dir() and not hooks.is_symlink():
+            try:
+                hooks.rmdir()
+            except OSError:
+                # Something the CLI made here: kept, never moved into ~/.copilot.
+                log.warning("%s holds files of its own; leaving it a folder", hooks)
+                return
+        if not hooks.is_symlink() and user_hooks.is_dir():
+            hooks.symlink_to(user_hooks, target_is_directory=True)
+        return
+    if hooks.is_symlink():
+        hooks.unlink()
+    hooks.mkdir(exist_ok=True)
+    theirs = sorted(user_hooks.iterdir()) if user_hooks.is_dir() else []
+    names = {entry.name for entry in theirs} | {entry.name for entry in hooks.iterdir()}
+    mine = hooks / _HOOK_FILENAME
+    if mine.exists() or mine.is_symlink():
+        # Anything else in Navide's place would silently cost the pane its
+        # hooks, Navide Guard included: moved aside, kept and still loaded.
+        aside = hooks / _free_name(names)
+        log.warning("moving %s aside to %s to make room for Navide's hooks", mine, aside)
+        os.replace(mine, aside)
+        names.add(aside.name)
+    links = {_HOOK_FILENAME: pane_hooks_file()}
+    for entry in theirs:
+        name = entry.name
+        if name == _HOOK_FILENAME:
+            if another_backends(entry):
+                log.info("leaving another backend's %s out of the pane", entry)
+                continue
+            name = _free_name(names)
+        links[name] = entry
+    for name, target in links.items():
+        link = hooks / name
+        if link.exists() or link.is_symlink():
+            log.warning("%s is a file of the pane's own; not linking %s", link, target)
+            continue
+        link.symlink_to(target, target_is_directory=target.is_dir())
+
+
+def _ours(link: Path, user_hooks: Path) -> bool:
+    """Whether ``link`` is one wire_pane_hooks made: to Navide's file or
+    to an entry of the user's hooks folder."""
+    try:
+        target = Path(os.readlink(link))
+    except OSError:
+        return False
+    return target == pane_hooks_file() or target.parent == user_hooks
+
+
+def _free_name(taken: set[str]) -> str:
+    stem, suffix = os.path.splitext(_HOOK_FILENAME)
+    name, n = f"{stem}.user{suffix}", 1
+    while name in taken:
+        n += 1
+        name = f"{stem}.user{n}{suffix}"
+    return name
