@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import os
+import sys
 import json
 from pathlib import Path
 from typing import Any
@@ -259,6 +260,18 @@ async def test_create_share_without_a_ring_fails_before_anything_is_sent(home: P
 # ---- review round 1 ---------------------------------------------------------------
 
 
+@pytest.mark.parametrize("pad", [(" ", ""), ("", " "), ("\t", ""), ("", "\n")])
+def test_a_path_with_whitespace_around_it_is_refused_before_it_is_opened(home: Path, pad) -> None:
+    """The guard is on the string: whitespace on either end is refused with
+    its own code before any file is opened, on every platform."""
+    path = _plan(home, "<p/>")
+    share_links.prepare(str(path), "plan")
+    with pytest.raises(share_links.ShareRefused) as err:
+        share_links.prepare(pad[0] + str(path) + pad[1], "plan")
+    assert err.value.code == "whitespace"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows cannot create a file name ending in a space")
 def test_whitespace_around_the_path_is_refused(home: Path) -> None:
     """The check used to strip the path and the read did not, so 'ok.html ' was
     checked as ok.html and read as whatever 'ok.html ' pointed to."""
@@ -269,8 +282,9 @@ def test_whitespace_around_the_path_is_refused(home: Path) -> None:
     (plans / "ok.html").write_text("benign")
     (plans / "ok.html ").symlink_to(plans / "hl.html")
     share_links.prepare(str(plans / "ok.html"), "plan")
-    with pytest.raises(share_links.ShareRefused):
+    with pytest.raises(share_links.ShareRefused) as err:
         share_links.prepare(str(plans / "ok.html") + " ", "plan")
+    assert err.value.code == "whitespace"
 
 
 def test_the_file_read_is_the_file_checked(home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
