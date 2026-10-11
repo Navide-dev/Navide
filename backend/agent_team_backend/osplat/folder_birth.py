@@ -47,14 +47,20 @@ _STATX_BTIME = 0x800
 def _libc_statx():
     try:
         return getattr(ctypes.CDLL(None, use_errno=True), "statx", None)
-    except OSError:
+    except (OSError, TypeError):
         return None
 
 
-_statx = _libc_statx()
+#: Looked up on the first Linux call, never at import: elsewhere loading the
+#: C library this way raises (TypeError on Windows).
+_UNSET = object()
+_statx: object = _UNSET
 
 
 def from_statx(folder: Path) -> float | None:
+    global _statx
+    if _statx is _UNSET:
+        _statx = _libc_statx()
     if _statx is None:
         return None
     buf = _Statx()

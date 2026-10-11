@@ -1245,3 +1245,25 @@ def test_folder_birth_time_on_linux_falls_back_to_none_never_raising(tmp_path: P
 
     monkeypatch.setattr(folder_birth, "_statx", unconvertible)
     assert folder_birth.from_statx(tmp_path) is None
+
+
+def test_folder_birth_never_loads_libc_at_import() -> None:
+    """ctypes.CDLL(None) raises TypeError on Windows: loading libc when the
+    module is imported took the whole backend down there. It is loaded on
+    the first Linux lookup only, and a failure to load is no birth time."""
+    import ctypes
+    import importlib
+
+    from agent_team_backend.osplat import folder_birth
+
+    def windows_cdll(name, *_args, **_kwargs):
+        raise TypeError("argument of type 'NoneType' is not iterable")
+
+    # Its own MonkeyPatch: undoing the test's own would undo conftest's too.
+    try:
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(ctypes, "CDLL", windows_cdll)
+            importlib.reload(folder_birth)  # must not raise
+            assert folder_birth.from_statx(Path.cwd()) is None
+    finally:
+        importlib.reload(folder_birth)
