@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
 }))
 
 const planPath = '.agent-team/plans/alpha-plan_a1b2c3.html'
+const betaPath = '.agent-team/plans/beta-plan_d4e5f6.html'
 const planMeta = {
   schemaVersion: 1,
   name: 'Alpha plan',
@@ -95,7 +96,10 @@ beforeEach(() => {
         return {
           reqId,
           ok: true,
-          result: [{ rel_path: planPath, name: planMeta.name, stage: planMeta.stage, overview: planMeta.overview, mtime: 1, kind: 'plan', meta: planMeta }],
+          result: [
+            { rel_path: planPath, name: planMeta.name, stage: planMeta.stage, overview: planMeta.overview, mtime: 1, kind: 'plan', meta: planMeta },
+            { rel_path: betaPath, name: 'Beta plan', stage: planMeta.stage, overview: planMeta.overview, mtime: 1, kind: 'plan', meta: { ...planMeta, name: 'Beta plan' } },
+          ],
         }
       }
       if (name === 'plans.read') {
@@ -271,6 +275,25 @@ describe('Plan view — share link', () => {
     create.click()
     await flushPromises()
     expect(state.capabilityCalls.some(call => call.address === 'ui.shareCreate')).toBe(false)
+  })
+
+  it('keeps a late caps answer for the previous plan off the plan now open', async () => {
+    const answers: Array<(response: CapabilityResponse) => void> = []
+    state.shareCaps = () => new Promise<CapabilityResponse>(resolve => { answers.push(resolve) })
+    const view = await mountPlans()
+    expect(answers).toHaveLength(1)
+
+    const beta = view.findAll('.plan-row').find(row => row.text().includes('Beta plan'))!
+    await beta.trigger('click')
+    await flushPromises()
+    expect(answers).toHaveLength(2)
+
+    answers[1]({ reqId: 'caps-beta', ok: true, result: { ok: false, code: 'NOT_CONFIGURED', message: 'offline' } })
+    await flushPromises()
+    answers[0]({ reqId: 'caps-alpha', ok: true, result: { ok: true } })
+    await flushPromises()
+
+    expect(view.find('[data-test="plan-share-btn"]').exists()).toBe(false)
   })
 
   it('shows the refusal reason when the share is refused', async () => {
