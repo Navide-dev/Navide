@@ -37,6 +37,9 @@ def _seed() -> None:
 
 @pytest.fixture
 def first_read_fails(monkeypatch):
+    """A journal is seeded first: since KC-10 initialising reads the journal
+    too, so a failure armed before seeding is spent on the seeding itself."""
+    _seed()
     real = trust_store._read_journal_bytes
     calls = {"n": 0}
 
@@ -50,7 +53,6 @@ def first_read_fails(monkeypatch):
 
 
 def test_a_journal_that_could_not_be_read_is_not_overwritten(first_read_fails):
-    _seed()
     trust_store.load()
     assert "could not be read" in trust_store.journal_problem()
     trust_store.note_remote_command("d9", device_name="n", workspace="w", pane_name="p")
@@ -98,6 +100,5 @@ def test_no_journal_yet_is_not_a_problem():
 def test_the_account_view_is_told_about_the_journal(first_read_fails):
     from tests.test_server_link_trust import _trust_link
 
-    _seed()
     trust_store.load()
     assert _trust_link().network_snapshot()["trustJournalProblem"]

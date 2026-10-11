@@ -17,6 +17,10 @@ import pytest
 from agent_team_backend import app
 from agent_team_backend.credential_vault import CredentialVault
 
+#: Never executed — the guard refuses it by name on every platform — so the
+#: POSIX-path hygiene check has nothing to gate.
+SECURITY = "/usr/bin/security"
+
 
 @pytest.mark.parametrize("argv", [
     ["/usr/bin/security", "find-generic-password", "-s", "x"],
@@ -33,7 +37,7 @@ def test_subprocess_cannot_start_security(argv):
 def test_the_guard_survives_monkeypatch_undo(monkeypatch):
     monkeypatch.undo()
     with pytest.raises(AssertionError, match="real Keychain"):
-        subprocess.run(["/usr/bin/security", "-i"], input="", text=True, timeout=5)
+        subprocess.run([SECURITY, "-i"], input="", text=True, timeout=5)
 
 
 def test_an_asyncio_subprocess_cannot_start_security():
