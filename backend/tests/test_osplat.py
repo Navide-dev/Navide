@@ -1217,3 +1217,31 @@ def test_a_folder_created_again_has_another_birth_time(tmp_path: Path) -> None:
     again = osplat.folder_birth_time(folder)
     assert again is not None and again != first
     assert osplat.folder_birth_time(tmp_path / "missing") is None
+
+
+def test_folder_birth_time_on_linux_falls_back_to_none_never_raising(tmp_path: Path, monkeypatch) -> None:
+    """No statx (old glibc, musl), a kernel without it (ENOSYS), a filesystem
+    without birth times (no STATX_BTIME in the mask) or a call ctypes cannot
+    make: the folder identity then stands on device and inode, as before."""
+    from agent_team_backend.osplat import folder_birth
+
+    monkeypatch.setattr(folder_birth, "_statx", None)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    monkeypatch.setattr(folder_birth, "_statx", lambda *_args: -1)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def no_btime(_dirfd, _path, _flags, _mask, buf) -> int:
+        buf._obj.stx_mask = 0x7FF  # STATX_BASIC_STATS, no STATX_BTIME
+        return 0
+
+    monkeypatch.setattr(folder_birth, "_statx", no_btime)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def unconvertible(*_args) -> int:
+        raise ctypes.ArgumentError("argument 2: wrong type")
+
+    import ctypes
+
+    monkeypatch.setattr(folder_birth, "_statx", unconvertible)
+    assert folder_birth.from_statx(tmp_path) is None

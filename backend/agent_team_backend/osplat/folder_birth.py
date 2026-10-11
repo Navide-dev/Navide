@@ -58,7 +58,12 @@ def from_statx(folder: Path) -> float | None:
     if _statx is None:
         return None
     buf = _Statx()
-    if _statx(_AT_FDCWD, os.fsencode(folder), 0, _STATX_BTIME, ctypes.byref(buf)) != 0:
+    try:
+        # A kernel without statx answers -1 (ENOSYS); glibc's fallback for
+        # it fills the basic fields only, without STATX_BTIME.
+        if _statx(_AT_FDCWD, os.fsencode(folder), 0, _STATX_BTIME, ctypes.byref(buf)) != 0:
+            return None
+    except (ctypes.ArgumentError, ValueError, OSError):
         return None
     if not buf.stx_mask & _STATX_BTIME:
         return None
