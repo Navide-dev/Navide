@@ -58,3 +58,14 @@ def test_the_vault_app_builds_at_import_cannot_reach_it(monkeypatch):
 def test_other_programs_still_run():
     assert subprocess.run(["true"]).returncode == 0
     assert isinstance(CredentialVault, type)
+
+
+def test_a_reloaded_app_cannot_reach_it_either():
+    """``importlib.reload(app)`` (test_analyzer_routing does it) builds a fresh
+    vault with the real runner. The guard is on subprocess, not on the vault,
+    so that vault is refused too."""
+    import importlib
+
+    reloaded = importlib.reload(app)
+    with pytest.raises(AssertionError, match="real Keychain"):
+        reloaded.credential_vault._security(["find-generic-password", "-s", "x"], None)
