@@ -549,9 +549,14 @@ def test_files_the_user_dropped_in_may_be_sent_but_not_their_neighbours(tmp_path
 def test_trailing_dots_and_spaces_cannot_hide_a_denied_name_on_windows(ws: Path, monkeypatch, rel: str) -> None:
     from agent_team_backend import osplat
 
-    f = _file(ws / "out" / rel)
+    written = ws / "out" / rel
+    if sys.platform == "win32":
+        # Windows strips them while creating, and cannot create "keychains . /db.txt" as written.
+        _file(ws / "out" / "/".join(part.rstrip(". ") for part in rel.split("/")))
+    else:
+        _file(written)
     monkeypatch.setattr(osplat, "platform_id", "win32")
-    assert media.resolve_outbound(str(f)) == (None, "denied_name")
+    assert media.resolve_outbound(str(written)) == (None, "denied_name")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows cannot create a name ending in a dot")
