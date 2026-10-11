@@ -110,6 +110,9 @@ MAX_NOTICES = 50
 #: in-memory version it replaces: a map fed by a remote peer needs a ceiling,
 #: and a delivered message stops being interesting once no sender would retry.
 MAX_SEEN_MESSAGES = 500
+#: Longest string kept in a notice. Names and ids in one come from the other
+#: machine or the relay, and fifty notices are kept.
+MAX_NOTICE_TEXT = 200
 SEEN_MESSAGE_TTL_S = 3600
 
 #: How long recording a delivery may stay in memory before it reaches disk.
@@ -1511,15 +1514,21 @@ def note_encrypted_peer(device_id: str) -> None:
 # ---- notices -----------------------------------------------------------------
 
 
+def _bounded(value: Any) -> Any:
+    return value[:MAX_NOTICE_TEXT] if isinstance(value, str) else value
+
+
 def _record_locked(state: dict[str, Any], kind: str, *, device_id: str, detail: dict) -> None:
     notices = state["notices"]
+    # Device ids and names here come from the other machine or the relay.
+    device_id = _bounded(device_id)
     notices.append(
         {
             "key": f"{kind}:{device_id}:{int(time.time() * 1000)}",
             "kind": kind,
             "deviceId": device_id,
             "at": int(time.time()),
-            **detail,
+            **{field: _bounded(value) for field, value in detail.items()},
         }
     )
     # Evict the oldest *dismissible* notice first, and only fall back to the

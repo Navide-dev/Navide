@@ -58,3 +58,14 @@ def test_a_remote_command_on_a_locked_store_does_not_raise():
     trust_store._state = None
     trust_store._locked_reason = "this machine has a cross-device trust record but its contents are missing or unreadable"
     trust_store.note_remote_command(DEVICE, device_name="TKM5", workspace="IDA", pane_name="p")
+
+
+def test_names_another_device_supplies_are_bounded_in_a_notice():
+    """Review KC-11: the device, workspace and pane names in a notice come from
+    the other machine, and the journal keeps fifty notices."""
+    trust_store.load()
+    trust_store.note_remote_command(DEVICE * 300, device_name="N" * 10_000,
+                                    workspace="W" * 10_000, pane_name="P" * 10_000)
+    notice = trust_store.notices()[-1]
+    for field in ("deviceId", "deviceName", "workspace", "paneName", "key"):
+        assert len(notice[field]) <= trust_store.MAX_NOTICE_TEXT + 64, field
