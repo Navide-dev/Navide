@@ -2017,16 +2017,16 @@ class ChannelManager:
         return report.Caption(self._for_chat(loc, card.title), self._for_chat(loc, card.summary),
                               self._for_chat(loc, card.info))
 
-    def _share_targets(self, pane_id: str) -> list[tuple[Location, bool]]:
-        """(chat, is direct) for a share notice: the creating pane's chat, else every
-        bound direct chat; one entry per chat."""
-        bindings = self.store.bindings()
-        own = [b for b in bindings if pane_id and b.pane_id == pane_id]
-        targets: dict[str, tuple[Location, bool]] = {}
-        for b in own or bindings:
-            direct = self._chat_kind(b) == "direct"
-            if own or direct:
-                targets.setdefault(b.location().key(), (b.location(), direct))
+    def _share_targets(self, pane_id: str, chat_id: str = "") -> list[Location]:
+        """Where a share notice goes: only ever a bound direct chat. The one the creator
+        picked (``chat_id``, a ``Location.key()``) when given, else the creating pane's;
+        nothing when that chat is not a bound direct chat or there is no pane."""
+        targets: dict[str, Location] = {}
+        for b in self.store.bindings():
+            key = b.location().key()
+            if (key == chat_id if chat_id else bool(pane_id) and b.pane_id == pane_id) \
+                    and self._chat_kind(b) == "direct":
+                targets.setdefault(key, b.location())
         return list(targets.values())
 
     async def _share_notice(self, loc: Location, text: str) -> None:
@@ -2037,9 +2037,14 @@ class ChannelManager:
                         share_cmds.mask_links(str(exc)))
 
     async def notify_share_created(self, link: dict[str, Any]) -> None:
+        chat_id = str(link.get("chatId") or "")
+        targets = self._share_targets(str(link.get("paneId") or ""), chat_id)
+        if chat_id and not targets:
+            log.info("channels: the chat picked for share link %s is not a bound direct chat; not sent",
+                     share_cmds.short(link))
         lang = prompt_skills.language(await self._ui_settings())
-        for loc, direct in self._share_targets(str(link.get("paneId") or "")):
-            await self._share_notice(loc, share_cmds.created_text(lang, link, in_group=not direct))
+        for loc in targets:
+            await self._share_notice(loc, share_cmds.created_text(lang, link))
 
     async def notify_share_opened(self, event: dict[str, Any]) -> None:
         """Only for a new viewer, only with the switch on, and only on the device that
@@ -2062,7 +2067,7 @@ class ChannelManager:
         opens = event.get("openCount")
         opens = opens if isinstance(opens, int) else int(link.get("openCount") or 0)
         lang = prompt_skills.language(await self._ui_settings())
-        for loc, _direct in self._share_targets(str(link.get("paneId") or "")):
+        for loc in self._share_targets(str(link.get("paneId") or "")):
             await self._share_notice(loc, share_cmds.opened_text(lang, link, opens))
 
     async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:

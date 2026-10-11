@@ -98,7 +98,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_usage": "用法：/revoke <連結代碼前 6 碼>；傳 /shares 查看代碼",
         "share_created": "🔗 已建立分享連結 · {kind} · 到期 {expires} · {short}",
         "share_masked": "已遮罩 {count} 處",
-        "share_group_no_link": "群組不顯示完整連結；請在私訊或 Navide 的分享分頁取得",
         "share_opened": "👀「{title}」（{short}）被新的裝置開啟，累計開啟 {opens} 次",
     },
     "en-US": {
@@ -129,7 +128,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_usage": "Usage: /revoke <first 6 characters of the link code>. Send /shares to see the codes",
         "share_created": "🔗 Share link created · {kind} · expires {expires} · {short}",
         "share_masked": "{count} masked",
-        "share_group_no_link": "Full links are not shown in groups. Get it in a direct chat or Navide's Share tab",
         "share_opened": "👀 \"{title}\" ({short}) was opened on a new device, {opens} opens in all",
     },
     "ja-JP": {
@@ -160,7 +158,6 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_usage": "使い方：/revoke <リンクコードの先頭 6 文字>。/shares でコードを確認できます",
         "share_created": "🔗 共有リンクを作成しました · {kind} · 期限 {expires} · {short}",
         "share_masked": "{count} 件をマスク",
-        "share_group_no_link": "グループには完全なリンクを表示しません。ダイレクトチャットか Navide の共有タブで取得してください",
         "share_opened": "👀「{title}」（{short}）が新しいデバイスで開かれました。累計 {opens} 回",
     },
 }

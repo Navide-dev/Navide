@@ -156,20 +156,19 @@ class RevokeButtons:
 
 # --- notices ---------------------------------------------------------------------------
 #
-# Where a notice goes: the chat bound to the pane that created the link, or, when
-# there is none, every bound direct chat; never another group. A group never sees a
-# link's URL or full id. Nothing is sent unless Navide Cloud is connected and chat
-# channels are on, so with no share links (or no Cloud) chat behaves as before.
+# A notice only ever goes to a bound direct chat: the one the creator picked, else the
+# one bound to the pane that created the link; with neither, nobody is told. Nothing
+# is sent unless Navide Cloud is connected and chat channels are on, so with no share
+# links (or no Cloud) chat behaves as before.
 
 
-def created_text(lang: str, link: dict[str, Any], *, in_group: bool) -> str:
+def created_text(lang: str, link: dict[str, Any]) -> str:
     summary = quick_menu.text(lang, "share_created", kind=link.get("kind") or "",
                               expires=_when(link.get("expiresAt")), short=short(link))
     masked = int(link.get("maskedTotal") or 0)
     if masked:
         summary += " · " + quick_menu.text(lang, "share_masked", count=masked)
-    info = quick_menu.text(lang, "share_group_no_link") if in_group else str(link.get("url") or "")
-    return report.Caption(title(lang, link), summary, info).plain()
+    return report.Caption(title(lang, link), summary, str(link.get("url") or "")).plain()
 
 
 def opened_text(lang: str, link: dict[str, Any], opens: int) -> str:
