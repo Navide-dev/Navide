@@ -2388,6 +2388,9 @@ class ServerLink:
             # erase everything, which has nothing to erase when the keychain was
             # merely locked for a moment.
             "trustLockedTransient": trust_store.transient_lock(),
+            # The record is there but cut off, so the card can say "damaged —
+            # pair again" instead of an unexplained lock.
+            "trustDamaged": trust_store.damaged(),
             # This device first, then by label: the row a user recognises is
             # the one that should not move as other machines come and go.
             "devices": sorted(

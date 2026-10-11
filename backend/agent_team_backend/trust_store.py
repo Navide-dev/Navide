@@ -191,6 +191,10 @@ class TrustStoreFull(RuntimeError):
 _lock = threading.RLock()
 _state: dict[str, Any] | None = None
 _locked_reason = ""
+#: Whether the latched lock is a record that is there but does not parse — cut
+#: off by a write, rather than missing. Said apart because the way out differs:
+#: a damaged record is known to be useless, so pairing again is the fix.
+_damaged = False
 #: A read that failed for a reason that may not still be true — a locked
 #: keychain, a dismissed authorisation dialog, a ``security`` timeout. Reported
 #: like a lock, because nothing works while it holds, but not latched.
@@ -407,7 +411,7 @@ def _load_locked() -> dict[str, Any]:
     pinned the process until it restarted — with the only exit on that screen
     being one that erases a record nothing was ever wrong with.
     """
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     if _state is not None:
         return _state
     if _locked_reason:
@@ -437,6 +441,16 @@ def _load_locked() -> dict[str, Any]:
     parsed = _parse(raw)
 
     if marker is not None:
+        if parsed is None and raw:
+            _damaged = True
+            _locked_reason = (
+                "the cross-device pairing record on this machine is damaged: it was "
+                f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
+                "so none of it can be trusted. Pair your devices again — start over "
+                "here, then pair each other device from both ends"
+                + _provenance(marker)
+            )
+            raise TrustStoreLocked(_locked_reason)
         if parsed is None:
             _locked_reason = (
                 "this machine has a cross-device trust record but its contents are "
@@ -507,6 +521,11 @@ def transient_lock() -> bool:
     """
     with _lock:
         return bool(_transient_reason) and not _locked_reason
+
+
+def damaged() -> bool:
+    """Whether the lock in force is a record that exists but is cut off."""
+    return bool(_locked_reason) and _damaged
 
 
 def locked_reason() -> str:
@@ -1485,7 +1504,7 @@ def rebuild_locked_store() -> dict[str, Any]:
     to pair again, which is the point. The caller is responsible for the
     confirmation that says a person asked for this; nothing here can tell.
     """
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     with _lock:
         if not _locked_reason:
             try:
@@ -1510,6 +1529,7 @@ def rebuild_locked_store() -> dict[str, Any]:
         _database().kv_set(INITIALISED_KEY, None, now=0)
         _state = None
         _locked_reason = ""
+        _damaged = False
         _seen_pending.clear()
         _forget_written()
         log.warning("device trust store rebuilt after a lock: %s", cleared)
@@ -1525,13 +1545,14 @@ def _forget_written() -> None:
 def _reset_for_test() -> None:
     """Forget the process cache and the marker. Tests run against a throwaway
     vault and a throwaway data dir, so this touches nothing real."""
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     global _seen_last_flush
     with _lock:
         _state = None
         _locked_reason = ""
         _transient_reason = ""
         _transient_failures = 0
+        _damaged = False
         # Module-level too, and just as much part of "this process has seen
         # nothing". Left behind, a batch recorded by one test is still pending
         # when the next starts and lands in its state document instead.

@@ -603,6 +603,18 @@ describe('account modal — your network', () => {
     return MODAL.slice(start, end)
   }
 
+  it('says a damaged record is damaged and that pairing again is the fix', () => {
+    // 2026-10-11: a record cut off by a Keychain write read as "had trust state
+    // and no longer does", which points at an attack, not at the one fix.
+    const locked = lockedMarkup()
+    expect(locked).toMatch(
+      /v-if="trustDamaged"[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.damaged-body'\) \}\}[\s\S]*v-else[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.locked-body'\) \}\}/,
+    )
+    const armed = locked.slice(locked.indexOf('v-else-if="rebuildArmed"'), locked.indexOf('rebuildTrust()'))
+    expect(armed).toContain("trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn'")
+    expect(MODAL).toContain("const trustDamaged = computed(() => network.value?.trustDamaged === true)")
+  })
+
   it('offers no way out at all while the read is still being retried', () => {
     // The dangerous state, and the one that used to be indistinguishable from a
     // record that is really gone: a locked keychain, a dismissed authorisation

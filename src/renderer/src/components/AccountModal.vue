@@ -257,6 +257,9 @@ interface NetworkSnapshot {
   /** True when that stop is a read that may succeed next time — the offer to
    *  erase everything waits on this being false. */
   trustLockedTransient?: boolean
+  /** The record is there but cut off — a damaged record is known to be
+   *  useless, so the card says so and that pairing again is the fix. */
+  trustDamaged?: boolean
 }
 
 /** The four the server defines; anything else is shown as the server spelled it. */
@@ -440,6 +443,7 @@ const readFailed = pairingState.readFailed
  *  to erase everything: a keychain locked for a moment has nothing wrong with
  *  it to erase, and that offer is the one act here nobody can undo. */
 const trustLockedTransient = computed(() => network.value?.trustLockedTransient === true)
+const trustDamaged = computed(() => network.value?.trustDamaged === true)
 /** Two clicks, not one: the first only reveals what the second costs. A single
  *  button beside an explanation of a lock is a button people press to make the
  *  red text go away. */
@@ -1980,7 +1984,8 @@ onUnmounted(() => {
                no honest use here yet. -->
           <div v-if="trustLocked" class="card locked-card">
             <h2 class="net-title">{{ t('settings.p2p.trust.locked-title') }}</h2>
-            <p class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
+            <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
+            <p v-else class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
             <p class="hint">{{ trustLocked }}</p>
             <p v-if="trustLockedTransient" class="hint locked-warn">
               {{ t('settings.p2p.trust.locked-retrying') }}
@@ -1989,7 +1994,9 @@ onUnmounted(() => {
               {{ t('settings.p2p.trust.rebuild-done') }}
             </p>
             <template v-else-if="rebuildArmed">
-              <p class="hint locked-warn">{{ t('settings.p2p.trust.rebuild-warn') }}</p>
+              <p class="hint locked-warn">
+                {{ t(trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn') }}
+              </p>
               <div class="locked-acts">
                 <button
                   class="dev-review locked-go"

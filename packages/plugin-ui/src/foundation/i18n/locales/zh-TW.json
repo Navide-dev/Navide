@@ -6867,6 +6867,8 @@
         "policy-signed-default": "沒有規則可重新簽署，所以簽的是預設值：目前不允許任何裝置。",
         "locked-title": "Navide Cloud 已停止",
         "locked-body": "這台裝置原本有信任狀態，現在沒有了。在弄清楚之前不送也不收。",
+        "damaged-body": "配對資料損毀，請重新配對。這台機器上的配對紀錄只存到一半（鑰匙圈寫入被截斷），裡面的內容都不能再信任。",
+        "damaged-rebuild-warn": "這會清除這台機器上損毀的配對紀錄。之後每一台其他裝置都要重新配對，兩邊都要操作。紀錄已經損毀，重新開始就是修復的方法。",
         "plaintext-refused": "已拒收來自 {device} 的未加密訊息",
         "plaintext-refused-body": "這台裝置一向送加密訊息，這一則是明文，因此被拒收。",
         "plaintext-refused-what-to-do": "不用做什麼，它已被拒收。若那台裝置是正常的，解除配對後重新配對。",
