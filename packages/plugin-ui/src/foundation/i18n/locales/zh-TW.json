@@ -1011,6 +1011,7 @@
       "require-login": "開啟時需要登入",
       "send-to-chat": "傳到聊天室",
       "send-to-chat-note": "連結含解密金鑰，會經過該聊天平台（例如 Telegram）傳送。",
+    "send-to-chat-direct-only": "只會送到已綁定的私訊聊天室。",
       "create": "建立連結",
       "creating": "建立中…",
       "copy": "複製",

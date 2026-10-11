@@ -1011,6 +1011,7 @@
       "require-login": "Require sign-in to open",
       "send-to-chat": "Send to the chat",
       "send-to-chat-note": "The link contains its decryption key and is sent through that chat platform (for example Telegram).",
+    "send-to-chat-direct-only": "It is sent only to a direct-message chat you have bound.",
       "create": "Create link",
       "creating": "Creating…",
       "copy": "Copy",

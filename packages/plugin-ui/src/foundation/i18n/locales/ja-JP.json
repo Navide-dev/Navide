@@ -1011,6 +1011,7 @@
       "require-login": "開くときにサインインを必須にする",
       "send-to-chat": "チャットに送信",
       "send-to-chat-note": "リンクには復号キーが含まれ、そのチャットサービス（例：Telegram）を経由して送信されます。",
+    "send-to-chat-direct-only": "連携済みのダイレクトメッセージのチャットにのみ送信されます。",
       "create": "リンクを作成",
       "creating": "作成中…",
       "copy": "コピー",
