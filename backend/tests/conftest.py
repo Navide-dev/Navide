@@ -12,7 +12,32 @@ import time
 
 import pytest
 
-from tests.cli_regression.support.isolation import isolated_environment, real_cli_in
+
+# No test may start the real `security` binary — it is the developer's login
+# Keychain, and nothing a tmp_path cleans up. Installed here, before anything
+# imports app (whose vault is built at import with the real runner), and not
+# through monkeypatch: a test calling ``monkeypatch.undo()`` would remove a
+# monkeypatched guard along with its own patches, which on 2026-10-11 put a
+# `security -i` write in reach of a test.
+def _argv0(args) -> str:
+    if isinstance(args, (str, bytes, os.PathLike)):
+        first = os.fsdecode(args).strip().split(" ", 1)[0]
+    else:
+        args = list(args)
+        first = os.fsdecode(args[0]) if args else ""
+    return os.path.basename(first)
+
+
+class _NoKeychainPopen(subprocess.Popen):
+    def __init__(self, args, *rest, **kwargs):
+        if _argv0(args) == "security" or _argv0(kwargs.get("executable") or "x") == "security":
+            raise AssertionError(f"a test reached the real Keychain: {args!r}"[:200])
+        super().__init__(args, *rest, **kwargs)
+
+
+subprocess.Popen = _NoKeychainPopen
+
+from tests.cli_regression.support.isolation import isolated_environment, real_cli_in  # noqa: E402
 
 pytest_plugins = ["tests.cli_regression.catalog"]
 
