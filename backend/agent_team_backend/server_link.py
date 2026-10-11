@@ -3137,6 +3137,18 @@ class ServerLink:
                 member_id=member_id or member_id_for(device_id),
                 own_member_id=self._own_member,
             )
+        except trust_store.TrustStoreFull as err:
+            # Said where the person looks, not only in the log: the digits
+            # matched and nothing else explains why the device is not paired.
+            log.warning("could not pin %s after pairing: %s", device_id, err)
+            await asyncio.to_thread(
+                trust_store.note_pairing,
+                device_id,
+                kind="full",
+                device_name=pairing.device_name or self._device_name_for(device_id),
+            )
+            await self._announce_trust_notices()
+            return False
         except Exception as err:  # noqa: BLE001
             log.error("could not pin %s after pairing: %s", device_id, err)
             return False

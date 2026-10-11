@@ -40,6 +40,21 @@ def _quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def _command(vault, name: str, secret: str) -> str:
+    return " ".join(
+        ["add-generic-password", "-U", "-a", _quote(getpass.getuser()),
+         "-s", _quote(vault.app_secret_service(name)), "-w", _quote(secret)]
+    )
+
+
+def fits(vault, name: str, secret: str) -> bool:
+    """Whether ``write`` would accept *secret* under *name* for its size. Pure:
+    runs nothing. True wherever there is no Keychain line to fit in."""
+    if not vault._is_macos:
+        return True
+    return len(_command(vault, name, secret).encode("utf-8")) <= SECURITY_LINE_MAX_BYTES
+
+
 def write(vault, name: str, secret: str | None) -> None:
     """Store *secret* under *name* in *vault*'s app-secret namespace, or erase
     it when None. Callers pass the vault they read from, so a test that swaps
@@ -54,10 +69,7 @@ def write(vault, name: str, secret: str | None) -> None:
     # everything before it and fail on the rest.
     if "\n" in secret:
         raise CloudSecretError(f"refusing to write a multi-line secret for {service!r}")
-    command = " ".join(
-        ["add-generic-password", "-U", "-a", _quote(getpass.getuser()),
-         "-s", _quote(service), "-w", _quote(secret)]
-    )
+    command = _command(vault, name, secret)
     size = len(command.encode("utf-8"))
     if size > SECURITY_LINE_MAX_BYTES:
         raise CloudSecretError(

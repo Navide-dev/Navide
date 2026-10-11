@@ -6701,6 +6701,7 @@
         "paired": "Paired with {device}",
         "refused": "{device} refused the pairing",
         "revoked": "{device} unpaired from this device",
+        "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
         "start-title": "Ask to pair with this device. Both screens show six digits to compare, and nothing changes until both sides confirm.",

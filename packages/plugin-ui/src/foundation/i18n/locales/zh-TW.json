@@ -6701,6 +6701,7 @@
         "paired": "已與 {device} 配對",
         "refused": "{device} 拒絕了配對",
         "revoked": "{device} 已解除與這台裝置的配對",
+        "full": "配對數已達上限，無法與 {device} 配對。需要升級 Navide 後才能新增。",
         "sending": "確認中…",
         "start": "配對",
         "start-title": "向這台裝置請求配對。兩邊會各自顯示六位數驗證碼供比對，兩邊都確認之前不會有任何改變。",

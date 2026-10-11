@@ -603,6 +603,21 @@ describe('account modal — your network', () => {
     return MODAL.slice(start, end)
   }
 
+  it('names the pairing limit in every language when a pin does not fit', () => {
+    // Review KC-2: the backend records a device-pairing notice with pairing
+    // "full", and the row renders t('settings.p2p.pair.' + n.pairing).
+    expect(MODAL).toContain("t('settings.p2p.pair.' + n.pairing")
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.full).toContain('{device}')
+    }
+  })
+
   it('says when the trust journal cannot be used, without calling pairing broken', () => {
     // Review KC-3: an unreadable journal is kept, not overwritten, and the
     // person is told — pairing itself is unaffected, so this is not the lock card.

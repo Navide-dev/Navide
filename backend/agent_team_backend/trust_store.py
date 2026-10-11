@@ -649,6 +649,15 @@ def _save_locked(state: dict[str, Any]) -> None:
     a record-only save that failed.
     """
     try:
+        # Checked before anything is written, so a change that cannot be stored
+        # is refused as what it is — the record is full — rather than as a
+        # Keychain error after the fact.
+        core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
+        if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
+            raise TrustStoreFull(
+                "the pairing record is full: this build keeps it in one macOS Keychain "
+                "item, which has no room for this change. Update Navide to pair more devices"
+            )
         _write(state)
     except Exception:
         if _committed_core is not None:
@@ -1254,6 +1263,8 @@ def note_pairing(device_id: str, *, kind: str, device_name: str = "") -> None:
     the *other* machine did, which is exactly the class of event the old
     one-sided pairing had no way to report: it granted access without anybody
     at the far end being asked, and without telling them afterwards.
+    "full" is this machine's own: the digits matched but the pin did not fit in
+    the record, so the person is told why the device is not paired.
     """
     with _lock:
         state = _try_load()
