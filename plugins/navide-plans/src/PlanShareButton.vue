@@ -17,7 +17,7 @@ type CreateResult =
   | { ok: true; link: CreatedLink }
   | { ok: false; code: string; message?: string; reason?: string }
 
-const props = defineProps<{ relPath: string }>()
+const props = defineProps<{ relPath: string; beforeOpen?: () => Promise<boolean> }>()
 const { t, te } = useI18n()
 const { toast } = useNotify()
 
@@ -33,7 +33,10 @@ const creating = ref(false)
 const link = ref<CreatedLink | null>(null)
 const errorText = ref('')
 
-function openDialog(): void {
+async function openDialog(): Promise<void> {
+  // Links may have stopped working since the button appeared (Cloud went
+  // offline); the parent hides the button when this answers false.
+  if (props.beforeOpen && !(await props.beforeOpen())) return
   ttlDays.value = '7'
   requireLogin.value = false
   sendToChat.value = false
@@ -143,7 +146,7 @@ function expiryText(value: string): string {
     type="button"
     :title="t('plans.share.button')"
     :aria-label="t('plans.share.button')"
-    @click="openDialog"
+    @click="void openDialog()"
   >🔗</button>
   <Teleport v-if="open" to="body">
     <div class="psb-modal" @click.self="closeDialog">

@@ -153,17 +153,32 @@ const renameValue = ref('')
 // toolbar exactly as it is without the feature.
 const shareAvailable = ref(false)
 let shareCapsToken = 0
-watch(() => selected.value?.rel_path, async (relPath) => {
-  const token = ++shareCapsToken
+watch(() => selected.value?.rel_path, (relPath) => {
   shareAvailable.value = false
-  if (!relPath || isLeftContribution()) return
+  void refreshShareCaps(relPath)
+})
+/** Ask the Host again whether share links work; the answer for a plan that
+ *  is no longer open is dropped. The Cloud link has no event a plugin can
+ *  follow, so this also runs when the window regains focus (back from
+ *  linking in the account window) and before the share dialog opens. */
+async function refreshShareCaps(relPath = selected.value?.rel_path): Promise<boolean> {
+  const token = ++shareCapsToken
+  if (!relPath || isLeftContribution()) return false
+  let available = false
   try {
     const caps = await callCapability('ui', 'shareCaps', {}) as { ok?: unknown } | null
-    if (token === shareCapsToken) shareAvailable.value = caps?.ok === true
+    available = caps?.ok === true
   } catch {
     // Unavailable: leave the toolbar unchanged.
   }
-})
+  if (token === shareCapsToken) shareAvailable.value = available
+  return token === shareCapsToken && available
+}
+function onShareWindowFocus(): void {
+  void refreshShareCaps()
+}
+window.addEventListener('focus', onShareWindowFocus)
+onUnmounted(() => window.removeEventListener('focus', onShareWindowFocus))
 let stopTarget: (() => void) | null = null
 let plansSubscription: ReturnType<typeof plansBackend.subscribe> | null = null
 /** One saved document produces several plans.changed events and a file storm
@@ -1654,7 +1669,7 @@ onUnmounted(() => {
             @deleted="void onToolbarDeleted($event)"
           >
             <template v-if="shareAvailable" #actions>
-              <PlanShareButton :rel-path="selected.rel_path" />
+              <PlanShareButton :rel-path="selected.rel_path" :before-open="refreshShareCaps" />
             </template>
           </PlanReviewToolbar>
           <div v-if="snapshotPreview" class="plan-snapshot-banner">

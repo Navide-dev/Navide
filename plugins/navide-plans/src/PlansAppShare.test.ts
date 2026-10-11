@@ -188,7 +188,7 @@ describe('Plan view — share link', () => {
     const button = view.find('[data-test="plan-share-btn"]')
     expect(button.exists()).toBe(true)
     await button.trigger('click')
-    await nextTick()
+    await flushPromises()
 
     const dialog = document.querySelector('[data-test="plan-share-dialog"]') as HTMLElement
     expect(dialog).not.toBeNull()
@@ -226,7 +226,7 @@ describe('Plan view — share link', () => {
     state.shareCreate = async () => ({ reqId: 'create', ok: true, result: { ok: false, code: 'NO_SYNC_KEY', message: 'no key' } })
     const view = await mountPlans()
     await view.find('[data-test="plan-share-btn"]').trigger('click')
-    await nextTick()
+    await flushPromises()
     const chat = document.querySelector('[data-test="plan-share-chat"]') as HTMLInputElement
     expect(chat.checked).toBe(false)
     expect(document.querySelector('[data-test="plan-share-chat-target"]')).toBeNull()
@@ -262,7 +262,7 @@ describe('Plan view — share link', () => {
     state.shareChatTargets = async () => ({ reqId: 'targets', ok: true, result: { ok: true, chats: [] } })
     const view = await mountPlans()
     await view.find('[data-test="plan-share-btn"]').trigger('click')
-    await nextTick()
+    await flushPromises()
     const chat = document.querySelector('[data-test="plan-share-chat"]') as HTMLInputElement
     chat.checked = true
     chat.dispatchEvent(new Event('change'))
@@ -275,6 +275,32 @@ describe('Plan view — share link', () => {
     create.click()
     await flushPromises()
     expect(state.capabilityCalls.some(call => call.address === 'ui.shareCreate')).toBe(false)
+  })
+
+  it('re-checks caps when the share button is pressed and drops it after a disconnect', async () => {
+    capsOk()
+    const view = await mountPlans()
+    expect(view.find('[data-test="plan-share-btn"]').exists()).toBe(true)
+
+    state.shareCaps = async () => ({ reqId: 'caps', ok: true, result: { ok: false, code: 'LINK_OFFLINE', message: 'offline' } })
+    await view.find('[data-test="plan-share-btn"]').trigger('click')
+    await flushPromises()
+
+    expect(document.querySelector('[data-test="plan-share-dialog"]')).toBeNull()
+    expect(view.find('[data-test="plan-share-btn"]').exists()).toBe(false)
+    expect(state.capabilityCalls.some(call => call.address === 'ui.shareCreate')).toBe(false)
+  })
+
+  it('shows the share button after a reconnect when the window regains focus', async () => {
+    state.shareCaps = async () => ({ reqId: 'caps', ok: true, result: { ok: false, code: 'NOT_CONFIGURED', message: 'offline' } })
+    const view = await mountPlans()
+    expect(view.find('[data-test="plan-share-btn"]').exists()).toBe(false)
+
+    capsOk()
+    window.dispatchEvent(new Event('focus'))
+    await flushPromises()
+
+    expect(view.find('[data-test="plan-share-btn"]').exists()).toBe(true)
   })
 
   it('keeps a late caps answer for the previous plan off the plan now open', async () => {
@@ -305,7 +331,7 @@ describe('Plan view — share link', () => {
     })
     const view = await mountPlans()
     await view.find('[data-test="plan-share-btn"]').trigger('click')
-    await nextTick()
+    await flushPromises()
     ;(document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement).click()
     await flushPromises()
 
@@ -323,7 +349,7 @@ describe('Plan view — share link', () => {
     })
     const view = await mountPlans()
     await view.find('[data-test="plan-share-btn"]').trigger('click')
-    await nextTick()
+    await flushPromises()
     ;(document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement).click()
     await flushPromises()
 
