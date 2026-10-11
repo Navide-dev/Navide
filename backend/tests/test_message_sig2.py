@@ -189,6 +189,9 @@ async def test_an_unusable_sig2_with_a_v1_that_does_not_verify_is_still_refused(
     payload["sig"] = payload["sig"][:-4] + "AAA="
     delivered, acks = await _receive(payload, broadcasts)
     assert delivered == [] and acks and acks[0]["state"] == "rejected"
+    # Review L1: the notice says "delivered on v1"; a refused message must
+    # not leave it, nor use up the device's one notice.
+    assert _sig2_unusable_notices() == []
 
 
 @pytest.mark.parametrize("make", [_stale_v2, _ahead_v2, _forged_v2], ids=["behind", "ahead", "forged"])

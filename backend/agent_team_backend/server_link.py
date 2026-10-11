@@ -2804,10 +2804,10 @@ class ServerLink:
                 # 0.2.20 (review B4-1): a clock that is off puts every message of
                 # a device outside the window, and refusing them would cut it off
                 # where main delivers. v1 decides instead, as if there were no
-                # sig2, and a notice says why — once per device.
+                # sig2, and a notice says why — once per device, and only once
+                # v1 has taken it (review L1): the notice says it was delivered.
                 log.warning("message %s from %s: %s — check both machines' clocks; deciding on v1",
                             msg_key, device_id, problem)
-                await asyncio.to_thread(trust_store.note_sig2_unusable, device_id)
         if v2_verified:
             pass
         elif not signature_v2 and pin.get("sigV2") and REFUSE_V1_FROM_V2_PEERS:
@@ -2832,6 +2832,9 @@ class ServerLink:
             # a relay that removed it. Said once per device, not per message.
             log.warning("message %s from %s carries no v2 signature; taken on v1", msg_key, device_id)
             await asyncio.to_thread(trust_store.note_sig2_missing, device_id)
+        elif signature_v2:
+            # A sig2 that could not be used, and the v1 beside it verified.
+            await asyncio.to_thread(trust_store.note_sig2_unusable, device_id)
 
         # It reached us again. Whoever said "not now" was answering the attempts
         # they had already seen, so a fresh one puts the row back in front of
