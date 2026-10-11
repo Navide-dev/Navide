@@ -318,8 +318,11 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
 def _ours(link: Path, user_hooks: Path) -> bool:
     """Whether ``link`` is one wire_pane_hooks made: to Navide's file or
     to an entry of the user's hooks folder."""
+    from .credential_vault import _link_target
+
     try:
-        target = Path(os.readlink(link))
+        # Windows reads a link back as an extended-length path.
+        target = Path(_link_target(os.readlink(link)))
     except OSError:
         return False
     return target == pane_hooks_file() or target.parent == user_hooks

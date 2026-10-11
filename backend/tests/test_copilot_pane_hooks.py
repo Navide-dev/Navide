@@ -132,6 +132,26 @@ def test_a_carried_pane_gets_its_own_hooks_folder_with_both_sets(gate, sandbox) 
     assert sorted(p.name for p in hooks.iterdir()) == ["agent-team.json", "later.json"]
 
 
+def test_links_read_back_as_windows_extended_paths_are_still_navides(gate, sandbox, monkeypatch) -> None:
+    """Windows' os.readlink answers with an extended-length path (\\\\?\\...),
+    which never equals the plain path the link was made from: the links made
+    here must still be told apart, or a deleted user hook lingers and off
+    can never turn the folder back into a link."""
+    plain = os.readlink
+    monkeypatch.setattr(os, "readlink", lambda link: "\\\\?\\" + str(plain(link)))
+    _carry(gate, sandbox)
+    hooks = _spawn(sandbox) / "hooks"
+    (sandbox["copilot"] / "hooks" / "later.json").write_text("{}", encoding="utf-8")
+    (sandbox["copilot"] / "hooks" / "mine.json").unlink()
+
+    _spawn(sandbox)
+
+    assert sorted(p.name for p in hooks.iterdir()) == ["agent-team.json", "later.json"]
+    convenience_wiring.set_feature("copilot.hooks", False, port_file=str(sandbox["port"]))
+    _spawn(sandbox)
+    assert hooks.is_symlink()
+
+
 def test_the_users_copilot_tree_is_byte_identical_across_fresh_and_resumed_spawns(gate, sandbox) -> None:
     _carry(gate, sandbox)
     before = _tree(sandbox["home"])
