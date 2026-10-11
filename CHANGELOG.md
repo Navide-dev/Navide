@@ -4,6 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [Unreleased]
 
+### Fixed
+
+- Cross-device pairing no longer breaks after a restart: the pairing record outgrew the one macOS Keychain line it is written through, was saved cut off, and locked the machine out until it paired again. Notices and the delivered-message ledger now live in an owner-only file beside it, a record that would not fit is refused before anything is written, and a record that was already cut off is reported as damaged with the way out.
+
+### Known limitations
+
+- The pairing record still lives in one Keychain item, so it holds a limited number of paired devices, and each pairing now keeps room for the decisions that may follow (block, encrypted send, policy). A machine paired with more devices than that before this release (roughly eight to fourteen) cannot block a device or start encrypting to a new one: the account window says the record is full and to unpair the device before blocking it. Moving the record to an encrypted file lifts the limit.
+
 ## [0.2.19] — 2026-10-11 — signed release
 
 ### Added
