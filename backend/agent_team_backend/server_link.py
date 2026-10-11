@@ -1473,8 +1473,14 @@ class ServerLink:
             log.info("navide-server token confirm did not complete (%s); the next hello settles it", err)
             return
         if not confirmed.get("ok"):
-            log.info("navide-server refused the rotation confirm; keeping the current token")
-            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            # N3: only NOT_FOUND says the server did not swap. Any other error
+            # may come after the swap was committed (the current token already
+            # revoked), so .next stays and the next hello settles it.
+            if self._conflict_code(confirmed) == "NOT_FOUND":
+                log.info("navide-server refused the rotation confirm; keeping the current token")
+                await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            else:
+                log.info("navide-server rotation confirm failed (%s); the next hello settles it", self._conflict_code(confirmed) or "no code")
             return
         self._token_id = token_id
         self._legacy_token = False

@@ -3088,6 +3088,38 @@ async def test_no_rotation_without_a_pinned_member(monkeypatch):
         await link.stop()
 
 
+async def test_a_confirm_error_after_the_server_applied_keeps_next(monkeypatch):
+    """N3: only NOT_FOUND means the server did not swap; any other error keeps
+    .next, and the next hello settles it (the current token was revoked)."""
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    base = ts.responder
+
+    def apply_then_error(conn, message):
+        if message.get("type") == "auth.token.confirm":
+            new = (message.get("payload") or {}).get("tokenId")
+            if new in ts.pending:
+                ts._apply(new)
+            return {"id": message["id"], "type": "auth.token.confirm.result", "ok": False,
+                    "error": {"code": "INTERNAL", "message": "db hiccup"}}
+        return base(conn, message)
+
+    server = FakeServer(responder=apply_then_error)
+    link = token_link(server, store)
+    assert await link.start() is True
+    await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+    await asyncio.sleep(0.1)
+    await link.stop()
+    assert store.slots[NXT].startswith("nvd_rotated")  # kept
+    ts.rotate_code = "UNKNOWN_TYPE"
+    link2 = token_link(server, store)
+    assert await link2.start() is True
+    try:
+        await _until(lambda: any(c.syncs for c in server.opened[1:]))
+        assert store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == ""
+    finally:
+        await link2.stop()
+
+
 # ---- compatibility: behaviour against a server from before C1, and signed out
 
 
