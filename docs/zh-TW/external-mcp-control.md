@@ -140,6 +140,11 @@ group ID below with values returned for the target workspace:
 佇列已滿）、`inject-failed`（輸入到該 Pane 沒有生效）、`pane-closed`（目標在
 遞送前就消失了），或 `no-report`（該次嘗試從未回報結果）。
 
+`unconfirmed`（reason 為 `delivery-unconfirmed`）兩者都不是：文字和 Enter 已送進
+一個剛 resume 的 CLI，但該 CLI 還沒顯示收到。訊息已送出，可能正在執行，所以不要
+只憑這個狀態就重送 —— 先用 `cli_get_status` 或 `cli_read_log` 看一下該 Pane。
+若之後 CLI 的 transcript 出現這則訊息，狀態會改成 `delivered`。
+
 失敗也會在未被主動查詢的情況下推送到寄件 Pane：Navide 會在該 Pane 進入 Idle 後，
 透過與一般訊息相同的佇列與注入路徑，寫入一則 `[Navide MSG] delivery failed`
 通知，指出目標與原因。這是給從不輪詢的 Agent 的提醒 —— `cli_check_message`

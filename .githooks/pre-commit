@@ -64,7 +64,13 @@ while IFS= read -r file; do
         # Normalise ./ and ../ so the index lookup sees the same path git stores.
         norm=$(python3 -c 'import os,sys; print(os.path.normpath(sys.argv[1]))' "$base" 2>/dev/null || echo "$base")
         found=0
-        for cand in "$norm" "$norm.ts" "$norm.tsx" "$norm.mts" "$norm.vue" "$norm.d.ts" "$norm/index.ts" "$norm/index.vue" "$norm.js" "$norm.mjs" "$norm.json"; do
+        # ESM-style specifiers name the emitted file: './x.js' is './x.ts' in source.
+        case "$norm" in
+          *.js) esm="${norm%.js}.ts ${norm%.js}.tsx" ;;
+          *.mjs) esm="${norm%.mjs}.mts" ;;
+          *) esm="" ;;
+        esac
+        for cand in "$norm" "$norm.ts" "$norm.tsx" "$norm.mts" "$norm.vue" "$norm.d.ts" "$norm/index.ts" "$norm/index.vue" "$norm.js" "$norm.mjs" "$norm.json" $esm; do
           if git cat-file -e ":$cand" 2>/dev/null; then found=1; break; fi
         done
         [ $found = 1 ] || missing="$missing

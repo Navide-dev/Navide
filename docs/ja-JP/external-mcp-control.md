@@ -152,6 +152,12 @@ group ID below with values returned for the target workspace:
 （Pane への打ち込みが通らなかった）、`pane-closed`（配信前に対象が消えた）、
 `no-report`（試行が結果を報告しなかった）です。
 
+`unconfirmed`（reason は `delivery-unconfirmed`）はそのどちらでもありません。
+テキストと Enter は Resume した直後の CLI に送られましたが、その CLI はまだ受信を
+示していません。送信は済んでおり実行中の可能性もあるため、これだけで再送しないで
+ください。先に `cli_get_status` か `cli_read_log` で Pane を確認してください。
+後から CLI の Transcript にメッセージが現れると、状態は `delivered` になります。
+
 失敗は、要求がなくても送信側の Pane にも Push されます。Navide は対象と理由を
 記した `[Navide MSG] delivery failed` の通知を、その Pane が Idle になった時点で、
 通常のメッセージと同じ Queue と注入経路を通じて書き込みます。これは一度も Poll

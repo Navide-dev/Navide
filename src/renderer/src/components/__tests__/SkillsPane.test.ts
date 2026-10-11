@@ -1205,3 +1205,19 @@ describe('SkillsPane merged browse/route layout', () => {
     expect(wrapper!.find('.skills-drawer').exists()).toBe(false)
   })
 })
+
+// "Move into shared library" moves a CLI's own skill and leaves a link, so the
+// page intro must not promise that nothing here ever moves those skills.
+describe('SkillsPane intro', () => {
+  it.each(['zh-TW', 'en-US', 'ja-JP'] as const)('names the one action that moves a CLI skill (%s)', (locale) => {
+    const previous = i18n.global.locale.value
+    i18n.global.locale.value = locale
+    try {
+      const intro = i18n.global.t('settings.skills.intro')
+      expect(intro).toContain(i18n.global.t('settings.skills.migrate'))
+      expect(intro).toContain(i18n.global.t('settings.skills.restore'))
+    } finally {
+      i18n.global.locale.value = previous
+    }
+  })
+})
