@@ -65,10 +65,13 @@ def write(vault, name: str, secret: str | None) -> None:
         vault.write_app_secret(name, secret)
         return
     service = vault.app_secret_service(name)
-    # `security -i` parses one command per line: a newline would store
-    # everything before it and fail on the rest.
-    if "\n" in secret:
-        raise CloudSecretError(f"refusing to write a multi-line secret for {service!r}")
+    # `security -i` parses one command per line, and a CR ends one too: either
+    # would store everything before it and fail on the rest. A NUL ends the C
+    # string the line is read into, with the same result.
+    if any(char in secret for char in "\n\r\x00"):
+        raise CloudSecretError(
+            f"refusing to write {service!r}: the secret holds a line break or NUL"
+        )
     command = _command(vault, name, secret)
     size = len(command.encode("utf-8"))
     if size > SECURITY_LINE_MAX_BYTES:

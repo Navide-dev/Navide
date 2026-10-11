@@ -179,3 +179,14 @@ def test_tests_cannot_reach_the_real_security_binary(tmp_path, write):
     vault = CredentialVault(root=tmp_path / "r", real_home=tmp_path / "h", platform="darwin")
     with pytest.raises(AssertionError, match="real Keychain"):
         write(vault)
+
+
+@pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b"])
+def test_a_line_breaking_or_nul_character_is_refused_before_security_runs(tmp_path, monkeypatch, bad):
+    """Review KC-6: `security -i` ends a command at \\n and at \\r, and a NUL
+    ends the C string it is read into — each cuts the secret short."""
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
+    vault, sec = _vault(tmp_path)
+    with pytest.raises(CloudSecretError):
+        cloud_secrets.write(vault, "navide-server-token", bad)
+    assert sec.interactive_lines == []
