@@ -134,6 +134,8 @@ import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
 import CloudInventorySection from './cloud/CloudInventorySection.vue'
 import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
 import ShareLinksPane from './cloud/ShareLinksPane.vue'
+import { useShareLinks } from '../composables/useShareLinks'
+import { forgetSyncInventory } from '../composables/useSyncInventory'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
@@ -1807,6 +1809,20 @@ const policyDevices = computed<P2pPolicyDevice[]>(() => p2pPolicy.value?.devices
  * broken rather than unavailable.
  */
 const p2pLinkReady = computed(() => p2pState.value === 'connected')
+// The Navide Cloud page grows sub-tabs only while the Cloud link is up. Until
+// then it is exactly the page it was before them: no bar, no inventory, no
+// share probe. Share is offered only once the backend answers share.list.
+const cloudSubtabsShown = computed(() => p2pLinkReady.value)
+const shareProbe = useShareLinks(props.backend)
+const cloudTabs = computed<CloudSubtab[]>(() =>
+  shareProbe.status.value === 'ok' || shareProbe.status.value === 'error'
+    ? ['sync', 'share', 'devices']
+    : ['sync', 'devices']
+)
+watch(cloudSubtabsShown, (shown) => {
+  if (shown) void shareProbe.refresh()
+  else forgetSyncInventory()
+})
 /** The socket's own words. "Not connected" is the half already on screen;
  *  which kind it is decides whether waiting is the right thing to do. */
 const p2pLinkError = computed(() =>
@@ -1965,12 +1981,14 @@ watch([activeTab, cloudSubtab], ([tab, sub]) => {
   // General is open would keep asking for something nobody is looking at, and
   // stop the moment somebody actually opened it.
   if (tab !== 'cross-device') return
-  if (sub !== 'sync') return
+  // The link is watched on every sub-tab, since it decides whether there are
+  // sub-tabs at all; the rules only on Sync, the one sub-tab that shows them.
+  const rules = sub === 'sync'
   void loadP2pStatus()
-  void loadP2pPolicy()
+  if (rules) void loadP2pPolicy()
   p2pTimer = setInterval(() => {
     void loadP2pStatus()
-    void loadP2pPolicy()
+    if (rules) void loadP2pPolicy()
   }, P2P_POLL_MS)
 }, { immediate: true })
 
@@ -3832,10 +3850,10 @@ watch(activeTab, (tab) => {
             <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
             {{ $t('settings.nav.crossDevice') }}
           </h1>
-          <CloudSubtabs v-model="cloudSubtab">
+          <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
           <template #sync>
           <SyncSettings :backend="props.backend" />
-          <CloudInventorySection v-if="activeTab === 'cross-device'" :backend="props.backend" />
+          <CloudInventorySection v-if="activeTab === 'cross-device' && cloudSubtabsShown" :backend="props.backend" />
           <SettingsSection :label="$t('settings.p2p.title')">
             <SettingsCard>
               <div class="s-fullrow" data-settings-section="general-p2p">

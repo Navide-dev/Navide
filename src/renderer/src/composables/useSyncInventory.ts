@@ -28,6 +28,8 @@ const view = ref<SyncInventoryView | null>(null)
 const error = ref('')
 const loading = ref(false)
 let inflight: Promise<void> | null = null
+/** Bumped by forgetSyncInventory, so a read begun before it cannot land after it. */
+let generation = 0
 
 export interface ScopeCounts {
   local: number
@@ -109,9 +111,11 @@ export function useSyncInventory(backend: Backend) {
   function refresh(): Promise<void> {
     if (inflight) return inflight
     loading.value = true
+    const started = generation
     inflight = (async () => {
       try {
         const reads = await Promise.all(CLOUD_SCOPES.map((scope) => readScope(backend, scope)))
+        if (started !== generation) return
         const failed = reads.filter((read): read is { ok: false; message: string } => !read.ok)
         if (failed.length === reads.length) {
           error.value = failed[0]?.message ?? 'error'
@@ -130,10 +134,15 @@ export function useSyncInventory(backend: Backend) {
   return { view, error, loading, refresh }
 }
 
-/** Test hook: forget the shared result between mounts. */
-export function resetSyncInventoryForTest(): void {
+/** Drop the shared result — when the Cloud link goes down, so a reconnect
+ *  never shows the previous session's devices or counts. */
+export function forgetSyncInventory(): void {
+  generation += 1
   view.value = null
   error.value = ''
   loading.value = false
   inflight = null
 }
+
+/** Test hook: forget the shared result between mounts. */
+export const resetSyncInventoryForTest = forgetSyncInventory

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
+import { DOMWrapper, flushPromises, shallowMount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import SettingsModal from '../SettingsModal.vue'
@@ -25,13 +25,22 @@ function api(): never {
   }) as never
 }
 
-function backend() {
-  const send = vi.fn(async (type: string) => ({ ok: false, error: { code: 'UNKNOWN_TYPE', message: type } }))
+type LinkState = 'unconfigured' | 'connecting' | 'connected' | 'unreachable'
+
+function backend(initial: LinkState = 'unconfigured') {
+  const link = { state: initial }
+  const send = vi.fn(async (type: string, _payload?: unknown) => {
+    if (type === 'p2p.link.status') {
+      return { ok: true, payload: { status: { state: link.state, serverUrl: '', hasToken: false, detail: '' } } }
+    }
+    if (type === 'sync.inventory') return { ok: true, payload: { status: 'ok', scopes: {}, devices: [], scopeEnabled: {} } }
+    return { ok: false, error: { code: 'UNKNOWN_TYPE', message: type } }
+  })
   const on = vi.fn(() => () => {})
-  return { send, on, state: ref('connected'), connected: ref(true) }
+  return { send, on, link, state: ref('connected'), connected: ref(true) }
 }
 
-describe('SettingsModal Navide Cloud sub-tab', () => {
+describe('SettingsModal Navide Cloud page', () => {
   let wrapper: VueWrapper | undefined
 
   beforeEach(() => {
@@ -45,8 +54,8 @@ describe('SettingsModal Navide Cloud sub-tab', () => {
     vi.useRealTimers()
   })
 
-  async function mountModal(props: Record<string, unknown> = {}) {
-    const b = backend()
+  async function mountModal(linkState: LinkState, props: Record<string, unknown> = {}) {
+    const b = backend(linkState)
     wrapper = shallowMount(SettingsModal, {
       props: {
         backend: b as never,
@@ -57,42 +66,103 @@ describe('SettingsModal Navide Cloud sub-tab', () => {
         initialTab: 'cross-device',
         ...props,
       },
-      global: { plugins: [i18n], stubs: { teleport: false } },
+      global: {
+        plugins: [i18n],
+        // The page's own pieces render for real; everything inside them stays a stub.
+        stubs: {
+          teleport: false,
+          CloudSubtabs: false,
+          CloudInventorySection: false,
+          CloudDevicesSection: false,
+          ShareLinksPane: false,
+        },
+      },
     })
     await flushPromises()
     return b
   }
 
+  // The modal teleports to <body>, outside the wrapper's own element.
+  const body = () => new DOMWrapper(document.querySelector('.cross-device-body') as Element)
+  /** The page's top-level elements, as main renders them: title, sync settings, rules. */
+  const MAIN_PAGE = ['H1', 'SYNC-SETTINGS-STUB', 'SETTINGS-SECTION-STUB']
+  const topLevel = () => Array.from(body().element.children).map((el) => el.tagName)
   const subtabs = () => wrapper!.findComponent(CloudSubtabs)
+  const count = (b: ReturnType<typeof backend>, type: string) => b.send.mock.calls.filter(([t]) => t === type).length
   async function chooseSubtab(tab: string) {
     subtabs().vm.$emit('update:modelValue', tab)
     await flushPromises()
   }
-  const polls = (b: ReturnType<typeof backend>) => b.send.mock.calls.filter(([type]) => type === 'p2p.link.status').length
+  async function tick(times = 1) {
+    await vi.advanceTimersByTimeAsync(POLL_MS * times)
+    await flushPromises()
+  }
 
-  it('polls the rules only while the Sync sub-tab shows', async () => {
-    const b = await mountModal()
-    expect(polls(b)).toBe(1)
-    await vi.advanceTimersByTimeAsync(POLL_MS)
-    expect(polls(b)).toBe(2)
+  it('renders exactly what main renders while Navide Cloud is not connected', async () => {
+    const b = await mountModal('unconfigured')
+    expect(topLevel()).toEqual(MAIN_PAGE)
+    expect(body().find('[role="tablist"]').exists()).toBe(false)
+    expect(count(b, 'sync.inventory')).toBe(0)
+    expect(count(b, 'share.list')).toBe(0)
+    // main polls the link and the rules every P2P_POLL_MS while the page is open.
+    await tick(2)
+    expect(count(b, 'p2p.link.status')).toBe(3)
+    expect(count(b, 'p2p.policy.get')).toBe(3)
+    expect(count(b, 'sync.inventory')).toBe(0)
+    expect(count(b, 'share.list')).toBe(0)
+  })
 
-    await chooseSubtab('share')
-    await vi.advanceTimersByTimeAsync(POLL_MS * 3)
-    expect(polls(b)).toBe(2)
+  it('shows the sub-tabs once connected, without Share while the backend has no share.list', async () => {
+    const b = await mountModal('connected')
+    const tabs = body().find('[role="tablist"]')
+    expect(tabs.exists()).toBe(true)
+    expect(tabs.findAll('[role="tab"]').map((t) => t.text())).toEqual(['Sync', 'Devices'])
+    expect(b.send.mock.calls.filter(([t]) => t === 'sync.inventory').map(([, p]) => p)).toEqual([
+      { scope: 'prompts' },
+      { scope: 'mcp' },
+      { scope: 'skills' },
+    ])
+    expect(count(b, 'share.list')).toBe(1)
+  })
+
+  it('goes back to main\'s page when the link drops, and starts on Sync after reconnecting', async () => {
+    const b = await mountModal('connected')
+    await chooseSubtab('devices')
+    b.link.state = 'unreachable'
+    await tick()
+    expect(topLevel()).toEqual(MAIN_PAGE)
+    expect(body().find('[role="tablist"]').exists()).toBe(false)
+
+    const inventoryBefore = count(b, 'sync.inventory')
+    b.link.state = 'connected'
+    await tick()
+    expect(subtabs().props('modelValue')).toBe('sync')
+    expect(body().find('[data-subtab-panel="devices"]').exists()).toBe(false)
+    expect(count(b, 'sync.inventory')).toBe(inventoryBefore + 3)
+  })
+
+  it('pauses the rules while another sub-tab shows, but keeps watching the link', async () => {
+    const b = await mountModal('connected')
+    await chooseSubtab('devices')
+    const policy = count(b, 'p2p.policy.get')
+    const status = count(b, 'p2p.link.status')
+    await tick(3)
+    expect(count(b, 'p2p.policy.get')).toBe(policy)
+    expect(count(b, 'p2p.link.status')).toBe(status + 3)
 
     await chooseSubtab('sync')
-    expect(polls(b)).toBe(3)
+    expect(count(b, 'p2p.policy.get')).toBe(policy + 1)
   })
 
   it('opens on Sync when the window is asked for the page again', async () => {
-    await mountModal({ tabRequest: 1 })
+    await mountModal('connected', { tabRequest: 1 })
     await chooseSubtab('devices')
     expect(subtabs().props('modelValue')).toBe('devices')
 
     await wrapper!.setProps({ tabRequest: 2 })
     expect(subtabs().props('modelValue')).toBe('sync')
 
-    await chooseSubtab('share')
+    await chooseSubtab('devices')
     await wrapper!.setProps({ initialTab: 'general' })
     await wrapper!.setProps({ initialTab: 'cross-device' })
     expect(subtabs().props('modelValue')).toBe('sync')
