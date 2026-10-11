@@ -29,6 +29,15 @@ def _account(payload: dict) -> str:
     return _s(payload, "account") or DEFAULT_ACCOUNT
 
 
+def _share_open_notify(m: ChannelManager) -> dict[str, Any]:
+    """The switch, and whether Navide Cloud is connected (the window shows the switch only
+    then); the link state is the cheap read, never the Keychain."""
+    from .. import server_link
+
+    return {"ok": True, "enabled": m.store.share_open_notify(),
+            "cloudConnected": server_link.link_state() == server_link.STATE_CONNECTED}
+
+
 async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]:
     if msg_type == "channels.list":
         return {"ok": True, **m.list()}
@@ -90,12 +99,12 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
     if msg_type == "channels.focus_pane":
         return m.focus_pane(_s(p, "pane_id"))
     if msg_type == "channels.get_share_open_notify":
-        return {"ok": True, "enabled": m.store.share_open_notify()}
+        return _share_open_notify(m)
     if msg_type == "channels.share_targets":
         return m.share_targets()
     if msg_type == "channels.set_share_open_notify":
         m.store.set_share_open_notify(bool(p.get("enabled")))
-        return {"ok": True, "enabled": m.store.share_open_notify()}
+        return _share_open_notify(m)
     return {"ok": False, "error": f"unknown request {msg_type}"}
 
 

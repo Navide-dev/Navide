@@ -211,14 +211,30 @@ async def test_the_users_language_is_used(env: Env, links: FakeLinks) -> None:
 # --- the switch over ws ----------------------------------------------------------------
 
 
-async def test_the_switch_over_ws(env: Env) -> None:
+async def test_the_switch_over_ws(env: Env, monkeypatch) -> None:
     assert "channels.get_share_open_notify" in ws_api.MESSAGE_TYPES
     assert "channels.set_share_open_notify" in ws_api.MESSAGE_TYPES
-    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {"ok": True, "enabled": True}
+    monkeypatch.setattr(server_link, "link_state", lambda: server_link.STATE_CONNECTED)
+    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
+        "ok": True, "enabled": True, "cloudConnected": True}
     assert await ws_api._dispatch(env.m, "channels.set_share_open_notify", {"enabled": False}) == {
-        "ok": True, "enabled": False}
+        "ok": True, "enabled": False, "cloudConnected": True}
     assert env.store.share_open_notify() is False
-    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {"ok": True, "enabled": False}
+    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
+        "ok": True, "enabled": False, "cloudConnected": True}
+
+
+@pytest.mark.parametrize("state", [server_link.STATE_UNCONFIGURED, server_link.STATE_CONNECTING,
+                                   server_link.STATE_UNREACHABLE, server_link.STATE_UNAUTHORIZED])
+async def test_the_switch_says_when_cloud_is_not_connected(env: Env, monkeypatch, state: str) -> None:
+    monkeypatch.setattr(server_link, "link_state", lambda: state)
+
+    def no_device() -> str:
+        raise AssertionError("must not reach for the device identity without Cloud")
+
+    monkeypatch.setattr(server_link, "local_device_id", no_device)
+    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
+        "ok": True, "enabled": True, "cloudConnected": False}
 
 
 # --- the chats a creator can pick ----------------------------------------------------

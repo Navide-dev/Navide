@@ -378,14 +378,13 @@ function createChannelsStore(backend: Backend) {
     return res
   }
 
+  /** The backend says whether Navide Cloud is connected along with the switch. */
+  function takeShareOpenNotify(res: ChannelResult<{ enabled: boolean; cloudConnected?: boolean }>): void {
+    shareOpenNotify.value = res.ok && res.data?.cloudConnected === true ? res.data.enabled !== false : null
+  }
+
   async function fetchShareOpenNotify(): Promise<void> {
-    const link = await call<{ status?: { state?: string } }>('p2p.link.status')
-    if (!link.ok || link.data?.status?.state !== 'connected') {
-      shareOpenNotify.value = null
-      return
-    }
-    const res = await call<{ enabled: boolean }>('channels.get_share_open_notify')
-    shareOpenNotify.value = res.ok && res.data ? res.data.enabled !== false : null
+    takeShareOpenNotify(await call<{ enabled: boolean; cloudConnected?: boolean }>('channels.get_share_open_notify'))
   }
 
   backend.on('p2p.link.changed', () => {
@@ -518,8 +517,8 @@ function createChannelsStore(backend: Backend) {
       return fetchShareOpenNotify()
     },
     setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
-      const res = await call<{ enabled: boolean }>('channels.set_share_open_notify', { enabled: on })
-      if (res.ok && res.data) shareOpenNotify.value = res.data.enabled !== false
+      const res = await call<{ enabled: boolean; cloudConnected?: boolean }>('channels.set_share_open_notify', { enabled: on })
+      if (res.ok) takeShareOpenNotify(res)
       return res
     },
     /** One bot when `account` is given (always sent, even "default"); without it
