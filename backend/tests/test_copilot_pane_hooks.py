@@ -139,7 +139,11 @@ def test_links_read_back_as_windows_extended_paths_are_still_navides(gate, sandb
     here must still be told apart, or a deleted user hook lingers and off
     can never turn the folder back into a link."""
     plain = os.readlink
-    monkeypatch.setattr(os, "readlink", lambda link: "\\\\?\\" + str(plain(link)))
+    # Windows already answers this way; elsewhere it is made to.
+    extended = "\\\\?\\"
+    monkeypatch.setattr(
+        os, "readlink", lambda link: raw if (raw := str(plain(link))).startswith(extended) else extended + raw
+    )
     _carry(gate, sandbox)
     hooks = _spawn(sandbox) / "hooks"
     (sandbox["copilot"] / "hooks" / "later.json").write_text("{}", encoding="utf-8")
