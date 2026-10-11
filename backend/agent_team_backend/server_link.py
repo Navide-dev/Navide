@@ -438,6 +438,35 @@ def next_access_token() -> str:
         return ""
 
 
+def replace_access_token(token: str | None) -> None:
+    """A user-level change of the stored token (sign-in, sign-in over another
+    token, sign-out, a revocation) that also forgets the member pins of the
+    tokens it replaces (R4-2). Each of those used to leave its pin behind, and
+    the trust record has room for only so many before pairing and sign-in are
+    refused. A pin goes only once its token reads back gone (R4-4): a delete
+    that failed quietly leaves the token stored, and it keeps its pin. Blocking.
+    """
+    value = (token or "").strip()
+    current = access_token()
+    replaced = {current, next_access_token() if current else ""} - {"", value}
+    set_access_token(value or None)
+    if not replaced:
+        return
+    try:
+        left = {_read_token_slot_strict(ACCESS_TOKEN_SECRET), _read_token_slot_strict(ACCESS_TOKEN_NEXT_SECRET)}
+    except Exception as err:  # noqa: BLE001 - unconfirmed gone, the pins stay
+        log.warning("kept the replaced navide-server token's member pin: the token could not be read back (%s)", err)
+        return
+    url = server_url()
+    for old in replaced - left:
+        try:
+            trust_store.forget_own_member(url, old)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not the sign-in
+            log.warning("could not forget the replaced navide-server token's member pin: %s", err)
+    if replaced & left:
+        log.warning("the replaced navide-server token is still stored; its member pin is kept")
+
+
 class KeychainTokenStore:
     """The two token slots as ServerLink uses them; tests pass their own."""
 
@@ -734,7 +763,7 @@ class ServerLink:
     ) -> None:
         self._connect = connect or _dial
         self._load_config = config_loader or load_config
-        self._clear_token = token_clearer or (lambda: set_access_token(None))
+        self._clear_token = token_clearer or (lambda: replace_access_token(None))
         # Rotation and the hello fallback store through set_access_token, the
         # same writer sign-in uses (KeychainTokenStore), so a write is a write
         # wherever it comes from.

@@ -16,11 +16,12 @@ import shlex
 
 import pytest
 
-from agent_team_backend import app, cloud_secrets, server_link, trust_store
+from agent_team_backend import app, cloud_secrets, server_link, trust_store, ws_handlers  # noqa: F401 - registers the handlers
 from agent_team_backend.credential_vault import CredentialVault
 from agent_team_backend.server_link import ServerLink
 from tests.keychain_fake import security_g_output
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
+from tests.test_trust_store_capacity import KEY, _device
 
 URL = CONFIG.url
 CUR_S = server_link.ACCESS_TOKEN_SECRET
@@ -78,6 +79,17 @@ def core_cmd_len() -> int:
     with trust_store._lock:
         core = json.dumps(trust_store._core_of(trust_store._load_locked()), ensure_ascii=False, separators=(",", ":"))
     return len(cloud_secrets._command(trust_store._vault(), trust_store.SECRET_NAME, core).encode())
+
+
+def pair_max() -> int:
+    """Pair devices until the record takes no more; how many it took."""
+    n = 0
+    while True:
+        try:
+            trust_store.pin_paired_device(_device(n), sign_key=KEY, enc_key="b" * 64, member_id=f"m-{n:012x}")
+            n += 1
+        except trust_store.TrustStoreFull:
+            return n
 
 
 def real_link(server):
@@ -197,3 +209,98 @@ async def test_dropping_next_never_forgets_the_current_tokens_pin(kc):
     assert server_link.access_token() == CONFIG.token
     assert server_link.next_access_token() == ""
     assert trust_store.member_for_credential(URL, CONFIG.token) == "m1"
+
+
+# ------------------------------------- R4-2: a revoked or replaced token
+
+
+async def _connect_once(server):
+    link = real_link(server)
+    n = len(server.opened)
+    assert await link.start()
+    await _until(lambda: len(server.opened) > n and bool(server.opened[-1].hellos), timeout=5)
+    await asyncio.sleep(0.05)
+    return link
+
+
+async def test_revocations_at_max_pairing_keep_sign_in_working(kc):
+    """auth.revoked (password changed elsewhere, token revoked, device removed)
+    clears the token and its pin: with the record holding as many devices as it
+    takes, 20 revocations in a row and the next sign-in still works."""
+    trust_store.load()
+    trust_store.adopt_own_member(URL, "tok-0", "m1")
+    paired = pair_max()
+    trust_store.forget_own_member(URL, "tok-0")
+    server = FakeServer(count=30)
+    for i in range(20):
+        server_link.set_access_token(f"tok-signin-{i:03d}")
+        link = await _connect_once(server)
+        try:
+            assert link._trust_locked == "", f"sign-in {i} refused with {paired} devices paired"
+            await link._on_revoked({"reason": "password-changed", "memberId": "m1"})
+        finally:
+            await link.stop()
+        assert server_link.access_token() == ""
+        assert owners() == {}
+    server_link.set_access_token("tok-after")
+    link = await _connect_once(server)
+    try:
+        assert link._trust_locked == ""
+        assert link._own_member == "m1"
+    finally:
+        await link.stop()
+    assert len(owners()) == 1
+
+
+class _Settings:
+    def get(self):
+        return {}
+
+    def set(self, delta):
+        return {}
+
+
+async def _call(msg_type, payload):
+    sent = []
+
+    class _Ws:
+        async def send_json(self, message):
+            sent.append(message)
+
+    await app.handle_message(app.Session(_Ws()), {"id": "x", "type": msg_type, "payload": payload})
+    return sent[-1]
+
+
+@pytest.mark.parametrize("verb", ["p2p.link.configure", "p2p.account.login"])
+async def test_sign_in_over_a_stored_token_forgets_its_pin(kc, monkeypatch, verb):
+    """Signing in while signed in replaces the stored token; the replaced one's
+    pin goes with it, so the record keeps one pin however often that happens."""
+    trust_store.load()
+
+    async def _noop(*_a, **_k):
+        return None
+
+    async def _status():
+        return {}
+
+    monkeypatch.setattr(app, "ui_settings_store", _Settings())
+    monkeypatch.setattr(app, "broadcast", _noop)
+    monkeypatch.setattr(server_link, "reconfigure", _noop)
+    monkeypatch.setattr(server_link, "status", _status)
+    server = FakeServer(count=8)
+    for tok in ("tok-1", "tok-2", "tok-3"):
+        if verb == "p2p.link.configure":
+            resp = await _call(verb, {"token": tok})
+        else:
+            async def _account(url, msg_type, payload, tok=tok):
+                return {"memberId": "m1", "email": "a@example.invalid", "token": tok}
+
+            monkeypatch.setattr(server_link, "account_request", _account)
+            resp = await _call(verb, {"email": "a@example.invalid", "password": "pw-" + "x"})
+        assert resp["ok"] is True, resp
+        assert server_link.access_token() == tok
+        link = await _connect_once(server)
+        await link.stop()
+        assert link._own_member == "m1"
+    assert len(owners()) == 1
+    assert trust_store.member_for_credential(URL, "tok-3") == "m1"

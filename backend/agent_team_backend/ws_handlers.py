@@ -4258,7 +4258,7 @@ async def p2p_link_configure(session: "Session", msg_id: str, msg_type: str, pay
     delta = app.ui_settings_store.set({server_link.SERVER_URL_SETTING: None})
     if token is not None:
         try:
-            await vault_to_thread(server_link.set_access_token, token)
+            await vault_to_thread(server_link.replace_access_token, token)
         except Exception as err:  # noqa: BLE001
             await session.send_json(
                 make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
@@ -4341,7 +4341,7 @@ async def _account_call(
         }
     )
     try:
-        await vault_to_thread(server_link.set_access_token, token)
+        await vault_to_thread(server_link.replace_access_token, token)
     except Exception as err:  # noqa: BLE001
         await session.send_json(
             make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
