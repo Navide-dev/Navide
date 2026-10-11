@@ -62,8 +62,10 @@ const extend = (id: string) =>
   }, true)
 const rekey = (id: string) =>
   run(id, async () => {
-    await copy((await act('share.rekey', { linkId: id })).url)
-    return t('settings.cloud.share.rekeyed')
+    const moved = await act('share.rekey', { linkId: id })
+    await copy(moved.url)
+    // Only a commit that revoked the old link means its URL stopped working.
+    return moved.oldRevoked === true ? t('settings.cloud.share.rekeyed') : t('settings.cloud.share.rekeyed-old-alive')
   }, true)
 const revoke = (id: string) =>
   run(id, async () => {
@@ -127,9 +129,23 @@ const revokeAll = () =>
               <button type="button" data-action="extend" :disabled="!!busy" @click="extend(link.linkId)">
                 {{ t('settings.cloud.share.extend') }}
               </button>
-              <button type="button" data-action="rekey" :disabled="!!busy" @click="rekey(link.linkId)">
+              <button
+                v-if="armed !== 'rekey:' + link.linkId"
+                type="button"
+                data-action="rekey"
+                :disabled="!!busy"
+                @click="armed = 'rekey:' + link.linkId"
+              >
                 {{ t('settings.cloud.share.rekey') }}
               </button>
+              <template v-else>
+                <button type="button" data-action="rekey-confirm" @click="rekey(link.linkId)">
+                  {{ t('settings.cloud.share.rekey-confirm') }}
+                </button>
+                <button type="button" data-action="rekey-cancel" @click="armed = ''">
+                  {{ t('settings.cloud.share.cancel') }}
+                </button>
+              </template>
               <button
                 v-if="armed !== link.linkId"
                 type="button"

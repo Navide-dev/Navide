@@ -78,12 +78,27 @@ describe('ShareLinksPane actions', () => {
     expect(calls(send, 'share.list')).toHaveLength(2)
   })
 
-  it('re-keys and copies the new link', async () => {
-    const { send } = await mountPane()
+  it('asks before re-keying, copies the new link and says the old one stopped (B5-6)', async () => {
+    const { send } = await mountPane({
+      'share.rekey': { ok: true, payload: { linkId: 'ef'.repeat(16), url: 'https://share.navide.dev/s/new#k=N', replaces: LIVE, oldRevoked: true } },
+    })
     await action(LIVE, 'rekey').trigger('click')
+    expect(calls(send, 'share.rekey')).toHaveLength(0)
+    await action(LIVE, 'rekey-confirm').trigger('click')
     await flushPromises()
     expect(calls(send, 'share.rekey')[0][1]).toEqual({ linkId: LIVE })
     expect(writeText).toHaveBeenCalledWith('https://share.navide.dev/s/new#k=N')
+    expect(wrapper!.find('[data-notice="done"]').text()).toBe(i18n.global.t('settings.cloud.share.rekeyed'))
+  })
+
+  it('does not claim the old link stopped unless the server said so (B5-6)', async () => {
+    await mountPane({
+      'share.rekey': { ok: true, payload: { linkId: 'ef'.repeat(16), url: 'https://share.navide.dev/s/new#k=N', replaces: LIVE, oldRevoked: false } },
+    })
+    await action(LIVE, 'rekey').trigger('click')
+    await action(LIVE, 'rekey-confirm').trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-notice="done"]').text()).toBe(i18n.global.t('settings.cloud.share.rekeyed-old-alive'))
   })
 
   it('asks before revoking one link or all of them', async () => {
@@ -104,6 +119,7 @@ describe('ShareLinksPane actions', () => {
   it('says why an action failed', async () => {
     await mountPane({ 'share.rekey': { ok: false, error: { code: 'NO_SYNC_KEY', message: 'no key' } } })
     await action(LIVE, 'rekey').trigger('click')
+    await action(LIVE, 'rekey-confirm').trigger('click')
     await flushPromises()
     const notice = wrapper!.find('[data-notice="action-error"]')
     expect(notice.exists()).toBe(true)
