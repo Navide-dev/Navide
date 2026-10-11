@@ -991,8 +991,10 @@ def _was_reset(seen: str, folder: Path) -> bool:
         return False
     # A birth time on one side only (statx newly available, or no longer)
     # says nothing: then device and inode alone decide.
-    if not seen.rsplit(":", 1)[1] or not now.rsplit(":", 1)[1]:
-        return seen.rsplit(":", 1)[0] != now.rsplit(":", 1)[0]
+    seen_head, _, seen_birth = seen.rpartition(":")
+    now_head, _, now_birth = now.rpartition(":")
+    if not seen_birth or not now_birth:
+        return seen_head != now_head
     return now != seen
 
 

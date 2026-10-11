@@ -472,3 +472,14 @@ def test_a_folder_whose_birth_time_came_or_went_is_the_same_folder(tmp_path, mon
 
     assert convenience._was_reset(seen, tmp_path) is False
     assert convenience._was_reset("7:43:", tmp_path) is True
+
+
+@pytest.mark.parametrize("seen", ["7", "garbage"])
+def test_an_identity_with_no_colon_is_compared_never_raised(tmp_path, monkeypatch, seen) -> None:
+    """Only _folder_identity writes the ledger's folder, always with two
+    colons; anything else must still be compared, never raise."""
+    monkeypatch.setattr(convenience, "_folder_identity", lambda _folder: "7:42:1700000000.5")
+
+    assert convenience._was_reset(seen, tmp_path) is True
+    monkeypatch.setattr(convenience, "_folder_identity", lambda _folder: seen)
+    assert convenience._was_reset("7:42:1700000000.5", tmp_path) is True
