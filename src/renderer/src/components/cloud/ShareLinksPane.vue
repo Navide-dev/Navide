@@ -12,12 +12,14 @@ import { formatWhen as when } from '../../composables/useSyncInventory'
 import SettingsCard from '../settings/SettingsCard.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
 
-const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
+// `source`: a list the host already loaded (Settings probes share.list to
+// decide whether to offer this tab), so opening it does not ask again.
+const props = defineProps<{ backend: ReturnType<typeof useBackend>; source?: ReturnType<typeof useShareLinks> }>()
 const { t } = useI18n()
-const { links, status, loading, refresh } = useShareLinks(props.backend)
+const { links, status, loading, refresh } = props.source ?? useShareLinks(props.backend)
 
 onMounted(() => {
-  void refresh()
+  if (!props.source) void refresh()
 })
 </script>
 

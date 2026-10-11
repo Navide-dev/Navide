@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { canonicalJson } from '../../../shared/canonicalJson'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { disabledReasonKey } from '../lib/linkStatus'
 import type { LegalRoute } from '../../../shared/legalLinks'
@@ -1755,6 +1755,9 @@ interface P2pLinkStatus {
  *  on screen rather than freezing on whatever the save call answered. */
 const P2P_POLL_MS = 3000
 const p2pStatus = ref<P2pLinkStatus | null>(null)
+// False from leaving the Navide Cloud page until the next status reply, so a
+// status read before the link dropped elsewhere never opens the cloud views.
+const p2pStatusFresh = ref(false)
 let p2pTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadP2pStatus(): Promise<void> {
@@ -1762,6 +1765,7 @@ async function loadP2pStatus(): Promise<void> {
     const resp = await props.backend.send<{ status: P2pLinkStatus }>('p2p.link.status', {})
     if (!resp.ok || !resp.payload?.status) return
     p2pStatus.value = resp.payload.status
+    p2pStatusFresh.value = true
   } catch { /* non-fatal — the status line keeps its last value */ }
 }
 
@@ -1812,17 +1816,17 @@ const p2pLinkReady = computed(() => p2pState.value === 'connected')
 // The Navide Cloud page grows sub-tabs only while the Cloud link is up. Until
 // then it is exactly the page it was before them: no bar, no inventory, no
 // share probe. Share is offered only once the backend answers share.list.
-const cloudSubtabsShown = computed(() => p2pLinkReady.value)
+const cloudSubtabsShown = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
 const shareProbe = useShareLinks(props.backend)
 const cloudTabs = computed<CloudSubtab[]>(() =>
-  shareProbe.status.value === 'ok' || shareProbe.status.value === 'error'
-    ? ['sync', 'share', 'devices']
-    : ['sync', 'devices']
+  shareProbe.status.value === 'ok' ? ['sync', 'share', 'devices'] : ['sync', 'devices']
 )
 watch(cloudSubtabsShown, (shown) => {
   if (shown) void shareProbe.refresh()
   else forgetSyncInventory()
 })
+// The inventory is module-wide; the next Settings window must not open on this one's.
+onBeforeUnmount(forgetSyncInventory)
 /** The socket's own words. "Not connected" is the half already on screen;
  *  which kind it is decides whether waiting is the right thing to do. */
 const p2pLinkError = computed(() =>
@@ -1980,6 +1984,7 @@ watch([activeTab, cloudSubtab], ([tab, sub]) => {
   // Follows the cards, not the page they used to be on: polling the link while
   // General is open would keep asking for something nobody is looking at, and
   // stop the moment somebody actually opened it.
+  if (tab !== 'cross-device') p2pStatusFresh.value = false
   if (tab !== 'cross-device') return
   // The link is watched on every sub-tab, since it decides whether there are
   // sub-tabs at all; the rules only on Sync, the one sub-tab that shows them.
@@ -3852,9 +3857,13 @@ watch(activeTab, (tab) => {
           </h1>
           <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
           <template #sync>
-          <SyncSettings :backend="props.backend" />
-          <CloudInventorySection v-if="activeTab === 'cross-device' && cloudSubtabsShown" :backend="props.backend" />
-          <SettingsSection :label="$t('settings.p2p.title')">
+          <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
+          <CloudInventorySection
+            v-if="activeTab === 'cross-device' && cloudSubtabsShown"
+            v-show="cloudSubtab === 'sync'"
+            :backend="props.backend"
+          />
+          <SettingsSection v-show="cloudSubtab === 'sync'" :label="$t('settings.p2p.title')">
             <SettingsCard>
               <div class="s-fullrow" data-settings-section="general-p2p">
                 <p class="ap-hint">{{ $t('settings.p2p.hint') }}</p>
@@ -4028,7 +4037,7 @@ watch(activeTab, (tab) => {
           </SettingsSection>
           </template>
           <template #share>
-            <ShareLinksPane :backend="props.backend" />
+            <ShareLinksPane :backend="props.backend" :source="shareProbe" />
           </template>
           <template #devices>
             <CloudDevicesSection :backend="props.backend" />

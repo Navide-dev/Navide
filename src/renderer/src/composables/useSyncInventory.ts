@@ -125,8 +125,11 @@ export function useSyncInventory(backend: Backend) {
         error.value = ''
         view.value = merge(reads)
       } finally {
-        loading.value = false
-        inflight = null
+        // A round forgotten while in flight leaves the current one's state alone.
+        if (started === generation) {
+          loading.value = false
+          inflight = null
+        }
       }
     })()
     return inflight

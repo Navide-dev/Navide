@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { defineComponent, h, ref } from 'vue'
+import { defineComponent, h, ref, vShow, withDirectives } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import CloudSubtabs, { type CloudSubtab } from '../cloud/CloudSubtabs.vue'
 import CloudInventorySection from '../cloud/CloudInventorySection.vue'
@@ -74,7 +74,12 @@ function page(backend: never) {
           CloudSubtabs,
           { modelValue: tab.value, 'onUpdate:modelValue': (v: CloudSubtab) => (tab.value = v) },
           {
-            sync: () => [h(SyncSettings, { backend }), h(CloudInventorySection, { backend })],
+            // SettingsModal hides its sync elements with v-show; one wrapper stands in for them here.
+            sync: () =>
+              withDirectives(
+                h('div', { 'data-subtab-panel': 'sync' }, [h(SyncSettings, { backend }), h(CloudInventorySection, { backend })]),
+                [[vShow, tab.value === 'sync']],
+              ),
             share: () => h(ShareLinksPane, { backend }),
             devices: () => h(CloudDevicesSection, { backend }),
           },
@@ -195,7 +200,7 @@ describe('SettingsModal Navide Cloud page', () => {
 
   it('puts the existing sync and rules content under the Sync sub-tab', () => {
     const sync = body.slice(body.indexOf('<template #sync>'), body.indexOf('<template #share>'))
-    expect(sync).toContain('<SyncSettings :backend="props.backend" />')
+    expect(sync).toContain('<SyncSettings v-show="cloudSubtab === \'sync\'" :backend="props.backend" />')
     expect(sync).toContain('data-settings-section="general-p2p-policy"')
     expect(sync).toContain('<CloudInventorySection')
   })

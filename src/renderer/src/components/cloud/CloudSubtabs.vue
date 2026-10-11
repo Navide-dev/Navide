@@ -1,15 +1,17 @@
 <script setup lang="ts">
 /**
  * The Navide Cloud page's sub-tab bar — Sync, Share, Devices — and the slots
- * it switches between. Sync is always mounted (it holds the page's existing
- * content, which listens for sync events from the moment Settings opens);
- * the others mount on first visit and stay, so leaving and coming back keeps
+ * it switches between. The Sync slot renders bare, with no wrapper, in the
+ * same place whether or not the bar is shown, so its content (the page as it
+ * was before sub-tabs) is never remounted by the link coming and going; the
+ * host hides it with v-show while another sub-tab is chosen. Share and
+ * Devices mount on first visit and stay, so leaving and coming back keeps
  * what they loaded.
  *
  * With `enabled` false (Navide Cloud not connected) only the Sync slot
- * renders, bare — no bar, no wrapper element — so the page is exactly the
- * one it was before there were sub-tabs. Turning it off also forgets which
- * tabs were visited, so a reconnect starts on Sync with nothing stale.
+ * renders, so the page is exactly the one it was before there were sub-tabs.
+ * Turning it off also forgets which tabs were visited, so a reconnect starts
+ * on Sync with nothing stale.
  */
 import { reactive, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -38,43 +40,38 @@ watch(
 </script>
 
 <template>
-  <slot v-if="!enabled" name="sync"></slot>
-  <template v-else>
-    <div class="nvc-subtabs" role="tablist" :aria-label="t('settings.cloud.subtab.aria')">
-      <button
-        v-for="tab in tabs"
-        :key="tab"
-        type="button"
-        role="tab"
-        class="nvc-subtab"
-        :class="{ active: model === tab }"
-        :aria-selected="model === tab"
-        :data-subtab="tab"
-        @click="model = tab"
-      >
-        {{ t('settings.cloud.subtab.' + tab) }}
-      </button>
-    </div>
-    <div v-show="model === 'sync'" role="tabpanel" data-subtab-panel="sync">
-      <slot name="sync"></slot>
-    </div>
-    <div
-      v-if="tabs.includes('share') && visited.has('share')"
-      v-show="model === 'share'"
-      role="tabpanel"
-      data-subtab-panel="share"
+  <div v-if="enabled" class="nvc-subtabs" role="tablist" :aria-label="t('settings.cloud.subtab.aria')">
+    <button
+      v-for="tab in tabs"
+      :key="tab"
+      type="button"
+      role="tab"
+      class="nvc-subtab"
+      :class="{ active: model === tab }"
+      :aria-selected="model === tab"
+      :data-subtab="tab"
+      @click="model = tab"
     >
-      <slot name="share"></slot>
-    </div>
-    <div
-      v-if="tabs.includes('devices') && visited.has('devices')"
-      v-show="model === 'devices'"
-      role="tabpanel"
-      data-subtab-panel="devices"
-    >
-      <slot name="devices"></slot>
-    </div>
-  </template>
+      {{ t('settings.cloud.subtab.' + tab) }}
+    </button>
+  </div>
+  <slot name="sync"></slot>
+  <div
+    v-if="enabled && tabs.includes('share') && visited.has('share')"
+    v-show="model === 'share'"
+    role="tabpanel"
+    data-subtab-panel="share"
+  >
+    <slot name="share"></slot>
+  </div>
+  <div
+    v-if="enabled && tabs.includes('devices') && visited.has('devices')"
+    v-show="model === 'devices'"
+    role="tabpanel"
+    data-subtab-panel="devices"
+  >
+    <slot name="devices"></slot>
+  </div>
 </template>
 
 <style scoped>
