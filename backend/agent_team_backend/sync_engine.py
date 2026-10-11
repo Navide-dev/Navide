@@ -2761,6 +2761,127 @@ class SyncEngine:
             # come in, and the listing says so.
             return False
 
+    # ── versions (v3, storage "s3") ─────────────────────────────────────
+    async def versions(self, scope: str, item_id: str) -> list[dict[str, Any]]:
+        """The earlier versions the server keeps of one item, newest first:
+        ``rev``, ``updatedAt``, ``deviceId``, ``supersededAt`` each. Only an
+        object account on a v3 connection keeps them."""
+        token = _round_generation.set((self._store, self._store.generation))
+        try:
+            self._require_adapter(scope)
+            await self._require_key()
+            caps = await self._versioned_caps()
+            with _using(caps):
+                wire_id = await asyncio.to_thread(self._wire_id_of, scope, item_id)
+                rows = await self._version_rows(scope, wire_id)
+            return [
+                {
+                    "rev": int(v.get("rev") or 0),
+                    "updatedAt": str(v.get("updatedAt") or ""),
+                    "deviceId": str(v.get("deviceId") or ""),
+                    "supersededAt": str(v.get("supersededAt") or ""),
+                }
+                for v in rows
+            ]
+        finally:
+            _round_generation.reset(token)
+
+    async def restore(self, scope: str, item_id: str, rev: int) -> dict[str, Any]:
+        """Bring back version *rev* of one item.
+
+        The version is fetched and checked like any pulled record and handed
+        to the scope's adapter the way a pulled record is — so a version that
+        would run something here (an MCP server, a skill) waits for approval
+        like any incoming change. Nothing is sent: a version that lands is a
+        local edit, and the next round pushes it from the current rev.
+        """
+        token = _round_generation.set((self._store, self._store.generation))
+        try:
+            adapter = self._require_adapter(scope)
+            self._require_enabled(scope)
+            await self._require_key()
+            caps = await self._versioned_caps()
+            if _retired(caps, scope):
+                raise SyncError(f"SCOPE_RETIRED: {scope} does not sync any more", code="SCOPE_RETIRED")
+            async with self._locks.setdefault(scope, asyncio.Lock()):
+                self._store._check_round()
+                self._drop_memory_of_other_accounts()
+                with _using(caps):
+                    wire_id = await asyncio.to_thread(self._wire_id_of, scope, item_id)
+                    rows = await self._version_rows(scope, wire_id)
+                    version = next((v for v in rows if int(v.get("rev") or 0) == int(rev)), None)
+                    if version is None or not isinstance(version.get("objectRef"), dict):
+                        raise SyncError(
+                            f"VERSION_NOT_FOUND: {scope}/{item_id} has no version {rev} to restore",
+                            code="VERSION_NOT_FOUND",
+                        )
+                    row = {
+                        "itemId": wire_id, "rev": int(rev), "updatedAt": version.get("updatedAt"),
+                        "deviceId": version.get("deviceId"), "deleted": 0, "body": None,
+                        "sig": version.get("sig"), "objectRef": version["objectRef"],
+                    }
+                    await self._hydrate(scope, [row])
+                    held = await asyncio.to_thread(self._restore_one, adapter, item_id, row)
+            return {"scope": scope, "itemId": item_id, "rev": int(rev), "held": held}
+        finally:
+            _round_generation.reset(token)
+
+    async def _versioned_caps(self) -> dict[str, Any]:
+        caps = await self._negotiate()
+        if not _is_v3(caps) or caps.get("storage") != "s3":
+            raise SyncError(
+                "VERSIONS_UNAVAILABLE: this account's server keeps no earlier versions",
+                code="VERSIONS_UNAVAILABLE",
+            )
+        await asyncio.to_thread(_require_item_id_key, caps)
+        return caps
+
+    async def _version_rows(self, scope: str, wire_id: str) -> list[dict[str, Any]]:
+        reply = _payload(await self._call("sync.versions", {"scope": scope, "itemId": wire_id}))
+        rows = reply.get("versions")
+        return [v for v in rows if isinstance(v, dict)] if isinstance(rows, list) else []
+
+    def _wire_id_of(self, scope: str, item_id: str) -> str:
+        """The id the server holds *item_id* under now. Blocking."""
+        state = self._store.state(scope, item_id)
+        if state is not None and state.wire_id:
+            return state.wire_id
+        kid = _hmac_kid(_caps_now())
+        if kid and state is None:
+            return sync_keyring.hashed_item_id(scope, item_id, kid)
+        return item_id
+
+    def _restore_one(self, adapter: ScopeAdapter, item_id: str, row: dict[str, Any]) -> bool:
+        """Open one fetched version and hand it to the adapter. Worker
+        thread. True when the adapter filed it for approval."""
+        scope = adapter.scope
+        self._store._check_round()
+        if item_id in self._store.conflict_ids(scope):
+            raise SyncError(f"{scope}/{item_id} has an unresolved conflict; answer it first")
+        wire_id = str(row["itemId"])
+        if self._origin(row, scope=scope, item_id=wire_id) == _ORIGIN_FORGED:
+            raise SyncError(f"version {row['rev']} of {scope}/{item_id} is not signed by the device it names")
+        try:
+            payload = self._open_payload(scope, wire_id, str(row.get("body") or ""))
+        except SyncError:
+            raise
+        except Exception as err:  # noqa: BLE001 - named by class only
+            raise SyncError(f"version {row['rev']} of {scope}/{item_id} could not be opened ({type(err).__name__})") from err
+        try:
+            taken = adapter.apply(item_id, payload) is not False
+        except DeferItem as err:
+            raise SyncError(f"{scope}/{item_id} is still downloading; try again shortly") from err
+        except SyncError:
+            raise
+        except Exception as err:  # noqa: BLE001 - the class only: the message may quote the payload
+            raise SyncError(f"{scope}/{item_id} could not be restored here ({type(err).__name__})") from err
+        if not taken:
+            raise SyncError(f"{scope}/{item_id} could not be restored here")
+        from . import sync_approvals
+
+        entry = sync_approvals.entry(scope, item_id)
+        return bool(entry and entry.get("status") == sync_approvals.PENDING and entry.get("digest") == digest(payload))
+
     def _require_adapter(self, scope: str) -> ScopeAdapter:
         adapter = self._adapters.get(scope)
         if adapter is None:
