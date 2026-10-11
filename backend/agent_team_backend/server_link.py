@@ -4365,6 +4365,13 @@ def link_state() -> str:
     return _link.state() if _link is not None else STATE_UNCONFIGURED
 
 
+def connection_token() -> object | None:
+    """An object that stays the same for as long as one server connection lasts
+    and changes on every reconnect (None without one) — for caching what the
+    server on the other end supports."""
+    return getattr(_link, "_ws", None) if _link is not None else None
+
+
 def local_device_id() -> str:
     """This machine's device id, or "" before a link has one."""
     return _link._device_id if _link is not None else ""

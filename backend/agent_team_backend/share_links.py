@@ -208,8 +208,22 @@ def decrypt_object(blob: bytes, key: bytes, *, expected_version: int | None = No
     return kind, version, b"".join(out)
 
 
+#: Fragments (``#k=`` values) of every link URL this process built, newest
+#: last, so a chat mask can strip a key however it was rewritten around it.
+_SEEN_FRAGMENTS: list[str] = []
+_SEEN_MAX = 256
+
+
+def known_key_fragments() -> tuple[str, ...]:
+    """The base64url keys of links built by this process (see ``link_url``)."""
+    return tuple(_SEEN_FRAGMENTS)
+
+
 def link_url(link_id: str, key: bytes, base: str = SHARE_BASE) -> str:
     fragment = base64.urlsafe_b64encode(key).rstrip(b"=").decode("ascii")
+    if fragment not in _SEEN_FRAGMENTS:
+        _SEEN_FRAGMENTS.append(fragment)
+        del _SEEN_FRAGMENTS[:-_SEEN_MAX]
     return f"{base}/s/{link_id}#k={fragment}"
 
 
@@ -419,8 +433,50 @@ async def _upload(put: Callable[[str, bytes], None] | None, url: Any, blob: byte
     await asyncio.to_thread(put or _http_put, url, blob)
 
 
+#: (connection, whether its server does share links), answered once per
+#: connection: an old server must see share questions no more than that.
+_support: tuple[object, bool] | None = None
+
+
+def supported_now() -> bool | None:
+    """Whether the server on this connection does share links; None until it
+    has been asked (``caps``/``ensure_supported``) on this connection."""
+    from . import server_link
+
+    conn = server_link.connection_token()
+    if conn is None or _support is None or _support[0] is not conn:
+        return None
+    return _support[1]
+
+
 async def caps(client: LinksClient) -> dict[str, Any]:
-    return await client.request("caps", {})
+    global _support
+    from . import server_link
+
+    conn = server_link.connection_token()
+    try:
+        answer = await client.request("caps", {})
+    except ShareRemoteError as err:
+        if err.code in UNAVAILABLE_CODES and conn is not None:
+            _support = (conn, False)
+        raise
+    if conn is not None:
+        _support = (conn, True)
+    return answer
+
+
+async def ensure_supported(client: LinksClient) -> bool:
+    """Ask the server once per connection whether it does share links."""
+    known = supported_now()
+    if known is not None:
+        return known
+    try:
+        await caps(client)
+    except ShareRemoteError as err:
+        if err.code in UNAVAILABLE_CODES:
+            return False
+        raise
+    return True
 
 
 async def create_share(

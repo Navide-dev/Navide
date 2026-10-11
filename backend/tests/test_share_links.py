@@ -529,3 +529,49 @@ async def test_rekey_says_whether_the_old_link_is_gone(ring, home: Path, monkeyp
     client.next_ids.append("12" * 16)
     later = await share_links.rekey(client, again.link_id, put=client.put, get=client.get)
     assert later.replaced is False
+
+
+class _CapsClient:
+    def __init__(self, code: str = "") -> None:
+        self.code = code
+        self.calls = 0
+
+    async def request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        assert verb == "caps"
+        self.calls += 1
+        if self.code:
+            raise share_links.ShareRemoteError(self.code, "no")
+        return {"kinds": {}}
+
+
+async def test_support_is_asked_once_per_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import server_link
+
+    conn = [object()]
+    monkeypatch.setattr(server_link, "connection_token", lambda: conn[0])
+    monkeypatch.setattr(share_links, "_support", None)
+    old = _CapsClient("UNKNOWN_TYPE")
+    assert share_links.supported_now() is None
+    assert await share_links.ensure_supported(old) is False
+    assert await share_links.ensure_supported(old) is False
+    assert old.calls == 1 and share_links.supported_now() is False
+    conn[0] = object()  # a reconnect may land on an upgraded server
+    new = _CapsClient()
+    assert share_links.supported_now() is None
+    assert await share_links.ensure_supported(new) is True
+    assert new.calls == 1
+
+
+async def test_support_is_not_remembered_without_a_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import server_link
+
+    monkeypatch.setattr(server_link, "connection_token", lambda: None)
+    monkeypatch.setattr(share_links, "_support", None)
+    await share_links.ensure_supported(_CapsClient())
+    assert share_links.supported_now() is None
+
+
+def test_built_link_keys_are_remembered_for_masking() -> None:
+    key = bytes(range(32))
+    url = share_links.link_url("ab" * 16, key)
+    assert url.split("#k=")[1] in share_links.known_key_fragments()
