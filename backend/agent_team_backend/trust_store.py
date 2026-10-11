@@ -723,20 +723,21 @@ def _save_locked(state: dict[str, Any]) -> None:
 
 def _fits_with_reserve_locked(state: dict[str, Any]) -> bool:
     """Whether the vault half fits with room left for what every pinned device
-    may still add — an encrypted-peer entry and a long policy sequence — and for
-    one block (KC2R-1). Checked when a pin is taken, so a full record refuses
-    the next pairing rather than a later decision about a device already paired.
-    Blocking a paired device drops its pin, which frees more than the block
-    takes, so one block's room covers the rest."""
+    may still add — an encrypted-peer entry, a long policy sequence and a block
+    — plus one more block (KC2R-1). Checked when a pin is taken, so a full
+    record refuses the next pairing rather than a later decision about a device
+    already paired. A block keeps the pin (main's behaviour, kept on purpose),
+    so its room is reserved here rather than freed by the block."""
     worst = copy.deepcopy(_core_of(state))
     peers = worst.setdefault("encryptedPeers", [])
     seqs = worst.setdefault("policySeqs", {})
-    for device_id in list(worst.get("pins", {})) + [_OWN_DEVICE_PLACEHOLDER]:
+    blocked = worst.setdefault("blocked", [])
+    for device_id, pin in list(worst.get("pins", {}).items()) + [(_OWN_DEVICE_PLACEHOLDER, {})]:
         if device_id not in peers:
             peers.append(device_id)
         seqs[device_id] = max(int(seqs.get(device_id) or 0), _RESERVED_SEQ)
-    worst.setdefault("blocked", []).append(
-        {"deviceId": _OWN_DEVICE_PLACEHOLDER, "memberId": "m-" + "0" * 32})
+        member_id = pin.get("memberId", "") if isinstance(pin, dict) else ""
+        blocked.append({"deviceId": device_id, "memberId": member_id or "m-" + "0" * 32})
     core = json.dumps(worst, ensure_ascii=False, separators=(",", ":"))
     return cloud_secrets.fits(_vault(), SECRET_NAME, core)
 
@@ -1018,10 +1019,6 @@ def note_blocked(device_id: str, member_id: str) -> bool:
             if member_id and not device_id and entry.get("memberId") == member_id:
                 return False
         blocked.append({"deviceId": device_id, "memberId": member_id})
-        # A blocked device keeps no pin (KC2R-1): it frees the room the block
-        # takes, and lifting the block later means pairing again — comparing
-        # digits — rather than trusting a key nobody re-checked.
-        state["pins"].pop(device_id, None)
         _save_locked(state)
         return True
 

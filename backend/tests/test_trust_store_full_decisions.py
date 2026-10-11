@@ -49,12 +49,19 @@ def test_every_paired_device_can_still_be_decided_on_when_full(keychain):
     assert keychain.longest <= 4095
 
 
-def test_blocking_a_paired_device_drops_its_pin():
+def test_blocking_and_unblocking_a_paired_device_keeps_its_pin():
+    """main's behaviour, kept on purpose (16:50: do not change what works): a
+    block leaves the pin where it is, so lifting the block restores the device
+    without pairing again. The room a block takes is reserved instead."""
     trust_store.load()
     trust_store.pin_paired_device("dev-x", sign_key=KEY, enc_key="b" * 64, member_id="m-x")
     assert trust_store.note_blocked("dev-x", "m-x") is True
-    assert trust_store.pin_for("dev-x") is None
+    assert trust_store.pin_for("dev-x") is not None
     assert trust_store.is_blocked_locally(device_id="dev-x", member_id="")
+    assert trust_store.note_unblocked("dev-x", "m-x") is True
+    pin = trust_store.pin_for("dev-x")
+    assert pin is not None and pin["approved"] is True
+    assert not trust_store.is_blocked_locally(device_id="dev-x", member_id="")
 
 
 async def test_a_policy_that_cannot_reserve_its_sequence_says_the_record_is_full(monkeypatch):
