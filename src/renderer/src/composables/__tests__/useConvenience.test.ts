@@ -257,6 +257,20 @@ describe('convenience announcement rows', () => {
     expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
+  it('tells an entry moved out of a shared file into the panes in its own words', () => {
+    useAnnouncements().noteConvenience({
+      features: [feature()],
+      notices: [
+        entry({ id: 1, action: 'retract', target: '/home/u/.claude/settings.json' }),
+        entry({ id: 2, action: 'retract-failed', target: '/home/u/.copilot/hooks/agent-team.json' }),
+      ],
+      upgrade: null,
+    })
+    const titles = rows().map((row) => row.title)
+    expect(titles.some((t) => t.includes('/home/u/.claude/settings.json 的項目收回'))).toBe(true)
+    expect(titles.some((t) => t.includes('無法從 /home/u/.copilot/hooks/agent-team.json 收回'))).toBe(true)
+  })
+
   it('offers re-allow on a removal only while the removal keeps the feature off', () => {
     const removed = entry({ id: 9, action: 'removed' })
     useAnnouncements().noteConvenience({ features: [feature({ state: 'off', reason: 'removed' })], notices: [removed], upgrade: null })

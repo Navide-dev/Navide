@@ -381,3 +381,61 @@ def test_an_offline_mount_in_the_ledger_never_holds_up_the_gate(gate, tmp_path, 
         stuck.set()
         worker.join(5)
 
+
+
+# ── retract: per-pane injection replaces a shared-file entry (Phase 3) ────────
+
+def _strip(target: _File):
+    def remove() -> None:
+        target.path.write_text(target.path.read_text(encoding="utf-8").replace("# navide\n", ""), encoding="utf-8")
+    return remove
+
+
+def test_retract_takes_navides_entry_back_backed_up_announced_and_forgotten(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    assert _apply(gate, target) == "first"
+
+    ok = gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ])
+
+    assert ok is True
+    assert target.path.read_text(encoding="utf-8") == "user: 1\n"
+    assert gate.allowed("claude.hooks")
+    entry = gate.history("claude.hooks", limit=1)[0]
+    assert (entry["action"], entry["target"], entry["notify"]) == ("retract", str(target.path), True)
+    assert Path(entry["backup"]).read_text(encoding="utf-8") == "user: 1\n# navide\n"
+    # Navide took it back itself: its absence is no removal by the user.
+    assert gate.listing_feature("claude.hooks")["targets"] == []
+    assert gate.sent[-1]["entry"]["id"] == entry["id"]
+
+
+def test_retract_with_nothing_there_is_silent(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ]) is True
+
+    assert gate.history("claude.hooks") == []
+    assert target.path.read_text(encoding="utf-8") == "user: 1\n"
+
+
+def test_a_retract_that_cannot_take_the_entry_back_says_so_and_keeps_it(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    assert _apply(gate, target) == "first"
+
+    def stuck() -> None:
+        raise OSError("read-only")
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), stuck, target.present, target.path),
+    ]) is False
+
+    assert target.present()
+    assert gate.allowed("claude.hooks")
+    entry = gate.history("claude.hooks", limit=1)[0]
+    assert (entry["action"], entry["target"]) == ("retract-failed", str(target.path))
+    assert "read-only" in entry["detail"]
+    # Still Navide's own, still known: nothing reads its later absence as the user's.
+    assert [t["path"] for t in gate.listing_feature("claude.hooks")["targets"]] == [str(target.path)]

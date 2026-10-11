@@ -131,7 +131,7 @@ the panes they serve cannot run without them.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `reset`, `removed`, `off`,
   `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`,
-  `refused-unsafe`, `refused-name`, `refused-exclude`.
+  `refused-unsafe`, `refused-name`, `refused-exclude`, `retract`, `retract-failed`.
 - `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
   — the entries of a target with several: `state` is `written` (Navide's
   last write left it there) or `removed` (the user deleted it; never written
@@ -155,7 +155,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude'
+  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude' | 'retract' | 'retract-failed'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (credentials.auto-repair) it is a JSON object,

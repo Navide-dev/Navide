@@ -21,6 +21,8 @@
         "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください",
         "refused-unsafe": "{target} がある .cursor はプロジェクトフォルダーの外を指しているため、安全のため Navide はここで便利機能「{feature}」を設定していません。使うには、.cursor をプロジェクト内の通常のフォルダーにしてください",
         "refused-name": "Skill「{name}」は Navide のリストファイル .navide-links と同じ名前のため、Navide は {target} にリンクを作成していません。名前を変えると表示されます",
+        "retract": "Navide は便利機能「{feature}」の項目を {target} から引き上げました。Navide が開くペインが自分で持つようになり、このファイルにはもう含まれません（バックアップを保存しました）",
+        "retract-failed": "便利機能「{feature}」の項目を {target} から引き上げられなかったため、ペインは引き続きこのファイルの項目を使います。ファイルを手動で修正してから（有効な JSON でない可能性があります）、Navide を再起動してください",
         "refused-exclude": "{target} があるリポジトリの .git または .git/info/exclude がリンク、または別ファイルの別名のため、安全のため Navide は git exclude に書き込んでいません。便利機能「{feature}」が作成したリンクは git status に表示されます"
       },
       "button": {
@@ -45,6 +47,8 @@
       "prompt": "Navide の外でログインが変更",
       "refused-unsafe": "安全のため未設定",
       "refused-name": "名前のためリンク未作成",
+      "retract": "Navide のペインへ移動",
+      "retract-failed": "Navide のペインへ移動できず",
       "refused-exclude": "安全のため git exclude 未書き込み"
     },
     "overview": {
