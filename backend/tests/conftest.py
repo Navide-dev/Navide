@@ -37,6 +37,12 @@ class _NoKeychainPopen(subprocess.Popen):
 
 subprocess.Popen = _NoKeychainPopen
 
+# The same refusal in every Python process a test starts — a spawned backend
+# builds its own vault with the real runner and never sees this module.
+os.environ["PYTHONPATH"] = os.pathsep.join(
+    filter(None, [str(Path(__file__).resolve().parent / "child_guard"), os.environ.get("PYTHONPATH")])
+)
+
 from tests.cli_regression.support.isolation import isolated_environment, real_cli_in  # noqa: E402
 
 pytest_plugins = ["tests.cli_regression.catalog"]
