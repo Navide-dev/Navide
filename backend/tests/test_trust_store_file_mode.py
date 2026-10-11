@@ -37,6 +37,20 @@ def _restart() -> None:
         trust_store._forget_written()
 
 
+def _contents(path) -> bytes:
+    """A file as the store reads it: on Windows the DPAPI wrapper comes off."""
+    from agent_team_backend.osplat import durable_secret_files
+
+    return durable_secret_files.read(path)
+
+
+def _replace(path, data: bytes) -> None:
+    """Put *data* where the store reads it, wrapped as the store wraps it."""
+    from agent_team_backend.osplat import durable_secret_files
+
+    durable_secret_files.write(path, data)
+
+
 def _marker() -> dict:
     return app.database.kv_get(trust_store.INITIALISED_KEY)
 
@@ -50,7 +64,7 @@ def test_a_first_start_keeps_the_record_in_a_sealed_file():
     trust_store.load()
     _pin(1)
     path = trust_store._record_path()
-    blob = path.read_bytes()
+    blob = _contents(path)
     assert blob.startswith(trust_file.MAGIC)
     assert _device(1).encode() not in blob
     assert _marker()["store"] == trust_store.STORE_FILE
@@ -94,7 +108,14 @@ def test_the_file_has_no_line_to_outgrow():
     assert trust_store.is_blocked_locally(device_id=_device(29), member_id="")
 
 
-def test_a_mirror_that_no_longer_fits_stops_quietly():
+def test_a_mirror_that_no_longer_fits_stops_quietly(tmp_path, monkeypatch):
+    # A Keychain line to outgrow, on every platform: the fake macOS Keychain the
+    # capacity tests use.
+    from agent_team_backend.credential_vault import CredentialVault
+    from tests.test_trust_store_capacity import _Security
+
+    monkeypatch.setattr(app, "credential_vault", CredentialVault(
+        root=tmp_path / "r", real_home=tmp_path / "h", security_runner=_Security(), platform="darwin"))
     trust_store.load()
     for index in range(30):
         _pin(index)
@@ -109,9 +130,9 @@ def test_a_sealed_record_that_cannot_be_trusted_locks(damage):
     _pin(1)
     path = trust_store._record_path()
     if damage == "tampered":
-        blob = bytearray(path.read_bytes())
+        blob = bytearray(_contents(path))
         blob[-1] ^= 1
-        path.write_bytes(bytes(blob))
+        _replace(path, bytes(blob))
     elif damage == "missing-file":
         path.unlink()
     else:
@@ -126,9 +147,9 @@ def test_a_tampered_record_reads_as_damaged():
     trust_store.load()
     _pin(1)
     path = trust_store._record_path()
-    blob = bytearray(path.read_bytes())
+    blob = bytearray(_contents(path))
     blob[-1] ^= 1
-    path.write_bytes(bytes(blob))
+    _replace(path, bytes(blob))
     _restart()
     trust_store.locked_reason()
     assert trust_store.damaged()
@@ -137,7 +158,7 @@ def test_a_tampered_record_reads_as_damaged():
 def test_starting_over_clears_the_file_too():
     trust_store.load()
     _pin(1)
-    trust_store._record_path().write_bytes(b"garbage")
+    _replace(trust_store._record_path(), b"garbage")
     _restart()
     trust_store.locked_reason()
     trust_store.rebuild_locked_store()
@@ -286,7 +307,7 @@ def test_the_journal_is_sealed_with_the_record_key():
     trust_store.note_remote_command(_device(1), device_name="TKM5", workspace="w", pane_name="p")
     trust_store.note_seen_message("k-sealed")
     trust_store.flush_seen_messages()
-    blob = trust_store._journal_path().read_bytes()
+    blob = _contents(trust_store._journal_path())
     assert blob.startswith(trust_file.MAGIC)
     assert b"k-sealed" not in blob and b"TKM5" not in blob
     _restart()
@@ -296,14 +317,13 @@ def test_the_journal_is_sealed_with_the_record_key():
 def test_a_plaintext_journal_from_before_is_read_and_sealed_on_the_next_save():
     trust_store.load()
     _pin(1)
-    trust_store._journal_path().write_text(
-        '{"v":1,"notices":[],"seenMessages":{"old-key":%d}}' % int(__import__("time").time()),
-        encoding="utf-8")
+    _replace(trust_store._journal_path(),
+             b'{"v":1,"notices":[],"seenMessages":{"old-key":%d}}' % int(__import__("time").time()))
     _restart()
     assert trust_store.has_seen_message("old-key")
     trust_store.note_seen_message("new-key")
     trust_store.flush_seen_messages()
-    assert trust_store._journal_path().read_bytes().startswith(trust_file.MAGIC)
+    assert _contents(trust_store._journal_path()).startswith(trust_file.MAGIC)
     _restart()
     assert trust_store.has_seen_message("old-key") and trust_store.has_seen_message("new-key")
 
@@ -313,9 +333,9 @@ def test_a_sealed_journal_that_does_not_open_is_set_aside():
     trust_store.note_seen_message("k-1")
     trust_store.flush_seen_messages()
     path = trust_store._journal_path()
-    blob = bytearray(path.read_bytes())
+    blob = bytearray(_contents(path))
     blob[-1] ^= 1
-    path.write_bytes(bytes(blob))
+    _replace(path, bytes(blob))
     _restart()
     assert not trust_store.has_seen_message("k-1")
     assert "set aside" in trust_store.journal_problem()
