@@ -860,7 +860,9 @@ def _folder_identity(folder: Path | None) -> str | None:
         st = folder.stat()
     except OSError:
         return None
-    birth = getattr(st, "st_birthtime", None)
+    # Linux hands a folder made again the same inode back: only its birth
+    # time tells it apart there.
+    birth = osplat.folder_birth_time(folder)
     return f"{st.st_dev}:{st.st_ino}:{birth if birth is not None else ''}"
 
 
