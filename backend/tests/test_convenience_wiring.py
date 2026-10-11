@@ -1346,6 +1346,9 @@ def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes
 
     assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
     assert gate.state("codex.hook-trust")[0] == "allowed"
+    # Nothing of Navide's is left in the user's folder (Windows copies the
+    # read-only bit onto the temp file and then refuses to delete it).
+    assert sorted(p.name for p in real.iterdir() if "navide" in p.name) == []
     # Once the file is writable again, off takes the rows back.
     convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
     assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 1

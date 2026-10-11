@@ -1332,13 +1332,16 @@ class CodexHomeManager:
         try:
             # Private from the first byte, then the original's mode: the file
             # can carry secrets, and a default-umask rewrite would widen it.
-            tmp.unlink(missing_ok=True)
+            _discard_temp(tmp)
             with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
                 f.write(kept)
             shutil.copymode(target, tmp)
             os.replace(tmp, target)
         except OSError as err:
-            tmp.unlink(missing_ok=True)
+            try:
+                _discard_temp(tmp)
+            except OSError as cleanup:
+                log.warning("removing %s failed: %s", tmp, cleanup)
             log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
             return False
         return True
@@ -1422,6 +1425,16 @@ class CodexHomeManager:
 # ---- attribution/watch hooks ----------------------------------------------
 
 _CODEX_PANES_ROOT_NAME = ".codex-panes"
+
+
+def _discard_temp(path: Path) -> None:
+    """Remove a temp file of ours. Windows refuses to delete a read-only
+    file, and the temp file takes the original's mode before the replace."""
+    try:
+        path.unlink(missing_ok=True)
+    except PermissionError:
+        os.chmod(path, 0o600)
+        path.unlink(missing_ok=True)
 
 
 def _hook_state_rows(text: str) -> dict[str, str | None]:
