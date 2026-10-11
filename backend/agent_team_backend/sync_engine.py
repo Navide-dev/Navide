@@ -1047,6 +1047,9 @@ class SyncEngine:
         if not isinstance(payload, dict) or payload.get("itemIds") != "hmac" or not payload.get("itemIdKid"):
             error = reply.get("error") if isinstance(reply, dict) and isinstance(reply.get("error"), dict) else {}
             details = error.get("details")
+            # {blockingDevices: [...]} per the contract; a bare list tolerated.
+            if isinstance(details, dict):
+                details = details.get("blockingDevices")
             blocking = [
                 f"{d.get('deviceId')} (last seen {d.get('lastSeenAt')})"
                 for d in (details if isinstance(details, list) else []) if isinstance(d, dict)

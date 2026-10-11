@@ -280,3 +280,25 @@ async def test_a_held_restore_reads_held(tmp_path, account_key, s3, monkeypatch)
     (old,) = await a.engine.versions("mcp", "runner")
     result = await a.engine.restore("mcp", "runner", old["rev"])
     assert result["outcome"] == "held" and result["held"] is True
+
+
+# ── D-L3: HMAC_NOT_READY names the devices it waits for ──────────────────────
+@pytest.mark.parametrize("shape", ["object", "list"])
+async def test_a_refused_adoption_logs_the_devices_it_waits_for(tmp_path, account_key, s3, caplog, shape):
+    import logging
+
+    server = V3Server(s3, adopt_ready=False)
+    a = V3Device(tmp_path, server, "A", {"p1": {"v": 0}})
+    devices = [{"deviceId": "dev-old", "deviceName": "Old laptop", "lastSeenAt": "2026-10-01T00:00:00Z"}]
+    details = {"blockingDevices": devices} if shape == "object" else devices
+    real = a.engine._request
+
+    async def request(msg_type, payload):
+        if msg_type == "sync.adoptHmacIds":
+            return {"ok": False, "error": {"code": "HMAC_NOT_READY", "message": "", "details": details}}
+        return await real(msg_type, payload)
+
+    a.engine._request = request
+    with caplog.at_level(logging.INFO, logger="agent_team_backend"):
+        assert (await a.sync())["ok"] is True
+    assert "waiting for dev-old" in caplog.text

@@ -203,7 +203,7 @@ class V3Server(FakeServer):
                 return ok({"itemIds": "hmac", "itemIdKid": self.item_id_kid}) if root == self.item_id_kid \
                     else err("BAD_REQUEST")
             if not self.adopt_ready:
-                return err("HMAC_NOT_READY", [{"deviceId": "old", "deviceName": "Old", "lastSeenAt": "x"}])
+                return err("HMAC_NOT_READY", {"blockingDevices": [{"deviceId": "old", "deviceName": "Old", "lastSeenAt": "x"}]})
             self.item_ids, self.item_id_kid = "hmac", root
             return ok({"itemIds": "hmac", "itemIdKid": root})
         if msg_type.startswith("blobs."):
