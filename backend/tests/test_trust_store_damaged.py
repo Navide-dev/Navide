@@ -62,3 +62,31 @@ def test_the_account_view_is_told_the_record_is_damaged():
     link._trust_locked = trust_store.locked_reason()
 
     assert link.network_snapshot()["trustDamaged"] is True
+
+
+def _rewrite_record(change) -> None:
+    trust_store.load()
+    doc = json.loads(app.credential_vault.read_app_secret(trust_store.SECRET_NAME))
+    change(doc)
+    app.credential_vault.write_app_secret(trust_store.SECRET_NAME, json.dumps(doc))
+    trust_store._state = None
+
+
+def test_a_record_from_another_version_is_not_called_damaged():
+    """Review KC-4: a whole record of another version (a downgrade, say) is not
+    cut off, and "pair again" would erase something that may be fine."""
+    _rewrite_record(lambda doc: doc.update(v=trust_store.STATE_VERSION + 1))
+    with pytest.raises(trust_store.TrustStoreLocked) as locked:
+        trust_store.load()
+    reason = str(locked.value)
+    assert "version" in reason and "damaged" not in reason and "Pair your devices again" not in reason
+    assert trust_store.damaged() is False
+
+
+def test_a_record_of_the_wrong_shape_is_not_called_damaged():
+    _rewrite_record(lambda doc: doc.update(pins=[]))
+    with pytest.raises(trust_store.TrustStoreLocked) as locked:
+        trust_store.load()
+    reason = str(locked.value)
+    assert "shape" in reason and "damaged" not in reason and "Pair your devices again" not in reason
+    assert trust_store.damaged() is False

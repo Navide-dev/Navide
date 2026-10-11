@@ -507,14 +507,37 @@ def _load_locked() -> dict[str, Any]:
 
     if marker is not None:
         if parsed is None and raw:
-            _damaged = True
-            _locked_reason = (
-                "the cross-device pairing record on this machine is damaged: it was "
-                f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
-                "so none of it can be trusted. Pair your devices again — start over "
-                "here, then pair each other device from both ends"
-                + _provenance(marker)
-            )
+            # Only a record that is not JSON at all is "cut off": a whole record
+            # of another version or shape may be perfectly good, and telling
+            # its owner to pair again would have them erase it.
+            try:
+                whole = json.loads(raw)
+            except ValueError:
+                whole = _NOT_JSON
+            if whole is _NOT_JSON:
+                _damaged = True
+                _locked_reason = (
+                    "the cross-device pairing record on this machine is damaged: it was "
+                    f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
+                    "so none of it can be trusted. Pair your devices again — start over "
+                    "here, then pair each other device from both ends"
+                    + _provenance(marker)
+                )
+            elif isinstance(whole, dict) and whole.get("v") != STATE_VERSION:
+                _locked_reason = (
+                    "the cross-device trust record on this machine was written by a "
+                    f"different version of Navide (record version {whole.get('v')!r}, this "
+                    f"build reads {STATE_VERSION}). It is left as it is: run the version "
+                    "that wrote it rather than starting over"
+                    + _provenance(marker)
+                )
+            else:
+                _locked_reason = (
+                    "the cross-device trust record on this machine is complete but not in "
+                    "the shape this build expects. It is left as it is; do not start over "
+                    "until it is clear why"
+                    + _provenance(marker)
+                )
             raise TrustStoreLocked(_locked_reason)
         if parsed is None:
             _locked_reason = (
@@ -587,6 +610,9 @@ def transient_lock() -> bool:
     """
     with _lock:
         return bool(_transient_reason) and not _locked_reason
+
+
+_NOT_JSON = object()
 
 
 def damaged() -> bool:
