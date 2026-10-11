@@ -188,7 +188,7 @@ def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Pa
     key = base64.urlsafe_b64decode(created.url.partition("#k=")[2] + "=")
     kind, version, plaintext = share_links.decrypt_object(blob, key)
     assert (kind, version) == ("plan", 1)
-    assert GHP not in plaintext.decode() and "<redacted>" in plaintext.decode()
+    assert GHP not in plaintext.decode() and "[redacted]" in plaintext.decode()
     assert [(f.line, f.category, f.action) for f in created.findings] == [(2, "github-token", "masked")]
 
     [commit] = client.committed

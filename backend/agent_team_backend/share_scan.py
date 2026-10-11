@@ -12,9 +12,16 @@ cannot be taken back, so the content is scanned before it is encrypted:
   and each inline screenshot; 40-character SHAs are skipped. A ``transcript``
   is command output nobody reviewed line by line, so there the long runs are
   masked as well.
-* **``data:`` URIs are left alone.** An inline image is base64, not text a
-  reader could lift a secret from, and rewriting any byte of it breaks the
-  picture.
+* **Inline media is exempt from the heuristic only.** A base64
+  ``data:image|font|audio|video`` payload is not flagged as a "long run";
+  high-confidence formats are masked wherever they sit, and a payload with
+  non-base64 text glued on is masked as a disguise.
+
+Masked text becomes ``[redacted]`` — square brackets, so the marker reads the
+same in a JSON string and in HTML (``<redacted>`` would become an element).
+Quoted values are recognised with every quote spelling a plan file carries:
+plain, backslash-escaped (plan-meta is JSON) and HTML entities (visible
+markup is escaped), and the value ends at the same spelling it opened with.
 
 A finding names the line and a category, never the matched value — the same
 "say where, not what" rule as the sync secret warnings.
@@ -71,16 +78,44 @@ _PRIVATE_KEY_RE = re.compile(
 )
 # The guard's "/bot<anything>/" is right for a command line and wrong for a
 # document, where it rewrites /bottles/ and /both; a share wants the token shape.
-_BOT_URL = (re.compile(r"/bot(\d{5,}:[A-Za-z0-9_-]{30,})(?=/|\b)"), "/bot<redacted>", "bot-token")
-#: JSON / YAML / .env keys with a quoted value: the whole quoted value goes,
-#: spaces included ('SECRET="abc def"' used to keep "def").
+_BOT_URL = (re.compile(r"/bot(\d{5,}:[A-Za-z0-9_-]{30,})(?=/|\b)"), "/bot[redacted]", "bot-token")
+_REDACTED = "[redacted]"
+#: Every way a plan file spells a quote: plain, JSON-escaped (plan-meta) and
+#: as an HTML entity (escaped visible markup). Longest first.
+_QUOTE = r"""(?:\\"|\\'|&quot;|&\#0*34;|&\#x0*22;|&\#0*39;|&\#x0*27;|&apos;|"|')"""
+#: A credential-looking key, prefixes and suffixes included (SECRET_KEY_BASE,
+#: secretKey, signing_key). "auth" is left out on purpose: author, authority
+#: and oauth_url are far more common in a plan than an auth secret.
+_CRED_KEY = (
+    r"\w*?(?:secret|passw(?:or)?d|passphrase|pwd|token|api[_-]?key|apikey|private[_-]?key"
+    r"|signing[_-]?key|encryption[_-]?key|access[_-]?key)\w*"
+)
+#: A credential key with a quoted value: the whole value goes, spaces
+#: included, and an escaped quote inside it does not end it.
 _QUOTED_CREDENTIAL = (
     re.compile(
-        r"""(?i)(["']?(?:password|passwd|pwd|secret|client[_-]?secret|token|api[_-]?key|apikey|access[_-]?key"""
-        r"""|private[_-]?key)["']?\s*[:=]\s*["'])[^"'\n]+"""
+        rf"(?i)((?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s*[:=]\s*(?P<q>{_QUOTE}))"
+        r"(?:(?!(?P=q))(?:\\.|[^\n]))+(?=(?P=q))"
     ),
-    r"\1<redacted>",
+    r"\1" + _REDACTED,
     "credential-assignment",
+)
+#: The same keys with a bare value (.env, YAML); a literal like true or null
+#: is a setting, not a secret.
+_BARE_CREDENTIAL = (
+    re.compile(
+        rf"(?i)((?<!\w){_CRED_KEY}\s*[:=]\s*)(?!{_QUOTE})(?!(?:true|false|null|none|undefined)\b)"
+        r"[^\s'\"&<>,;]{4,}"
+    ),
+    r"\1" + _REDACTED,
+    "credential-assignment",
+)
+#: user:password@ in a URL, also with no user (redis://:pw@host), a "/" in
+#: the password, or an "@" in it (up to the last "@" before the host).
+_URL_CREDENTIALS = (
+    re.compile(r"(://[^/\s:@]*:)(?:[^\s@]|@(?=[^\s/@]*@))+@(?=[\w.-]+)"),
+    r"\1" + _REDACTED + "@",
+    "url-credentials",
 )
 #: Provider token shapes the guard list does not cover.
 _PROVIDERS = (
@@ -99,15 +134,19 @@ _PROVIDERS = (
 
 #: (pattern, replacement template, category), checked in this order.
 HIGH_CONFIDENCE: tuple[tuple[re.Pattern[str], str, str], ...] = (
-    (_PRIVATE_KEY_RE, "<redacted private key>", "private-key"),
+    (_PRIVATE_KEY_RE, "[redacted private key]", "private-key"),
     _QUOTED_CREDENTIAL,
+    _BARE_CREDENTIAL,
+    _URL_CREDENTIALS,
     _BOT_URL,
     *(
-        (_share_form(pattern), repl, category)
+        (_share_form(pattern), repl.replace("<redacted>", _REDACTED), category)
         for (pattern, repl), category in zip(_SECRET_PATTERNS, _GUARD_CATEGORIES)
-        if category != "bot-token"
+        # Replaced share-side: _BOT_URL needs the token shape, and the
+        # credential keys are _QUOTED/_BARE_CREDENTIAL's wider list.
+        if category not in ("bot-token", "credential-assignment")
     ),
-    *((re.compile(_B + src), "<redacted>", category) for src, category in _PROVIDERS),
+    *((re.compile(_B + src), _REDACTED, category) for src, category in _PROVIDERS),
 )
 
 #: An inline image, font or media file. Only these are exempt, and only from
@@ -171,7 +210,7 @@ def scan(text: str, *, kind: str) -> ScanResult:
         glued = _GLUED_RUN.match(text, m.end()).end()
         if glued > m.end():
             if not _overlaps(m.start(1), glued, [(s, e) for s, e, _, _ in masked]):
-                masked.append((m.start(1), glued, "<redacted>", "possible-secret"))
+                masked.append((m.start(1), glued, _REDACTED, "possible-secret"))
         else:
             skip.append(m.span())
     masked.sort()
@@ -185,7 +224,7 @@ def scan(text: str, *, kind: str) -> ScanResult:
         if _SHA1_RE.fullmatch(m.group(0)):
             continue
         if kind in _MASK_HEURISTICS and end - start >= _RUN_MIN:
-            masked.append((start, end, "<redacted>", "possible-secret"))
+            masked.append((start, end, _REDACTED, "possible-secret"))
         else:
             warned.append((start, "possible-secret"))
     masked.sort()
@@ -261,7 +300,7 @@ def open_shareable(raw: str) -> tuple[media.Outbound | None, Refusal | None]:
     trimmed: the check and the read must name the same file.
     """
     if raw != raw.strip():
-        return None, Refusal("not_absolute", _MESSAGES["whitespace"])
+        return None, Refusal("whitespace", _MESSAGES["whitespace"])
     out, reason = media.open_outbound(raw)
     if out is None:
         return None, Refusal(reason, _MESSAGES.get(reason, "This file cannot be shared."))

@@ -29,7 +29,7 @@ DATA_URI = "data:image/png;base64," + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB" * 4 + "
 def test_ghp_token_is_masked_and_reported_by_line_not_value() -> None:
     result = share_scan.scan(f"line one\ntoken here {GHP} end\n", kind="plan")
     assert GHP not in result.text
-    assert "<redacted>" in result.text
+    assert "[redacted]" in result.text
     assert [(f.line, f.category, f.action) for f in result.findings] == [(2, "github-token", "masked")]
     assert GHP not in repr(result.findings)
 
@@ -114,3 +114,11 @@ def test_ordinary_plan_path_is_not_refused(home: Path) -> None:
     target.parent.mkdir(parents=True)
     target.write_text("<html></html>")
     assert share_scan.refusal(str(target)) is None
+
+
+def test_whitespace_around_a_path_has_its_own_code(home: Path) -> None:
+    target = home / "work" / ".agent-team" / "plans" / "demo_abc123.html"
+    target.parent.mkdir(parents=True)
+    target.write_text("<html></html>")
+    reason = share_scan.refusal(str(target) + " ")
+    assert reason is not None and reason.code == "whitespace"
