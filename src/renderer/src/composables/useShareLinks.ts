@@ -27,6 +27,8 @@ export interface ShareLink {
   revokedAt: string
   openCount: number
   lastOpenedAt: string
+  /** Still opens: committed, not revoked, not expired (the server's word). */
+  active: boolean
 }
 
 export type ShareLinksStatus = 'idle' | 'ok' | 'unavailable' | 'error'
@@ -50,6 +52,7 @@ export function readShareLinks(payload: unknown): ShareLink[] {
       revokedAt: str(raw.revokedAt),
       openCount: typeof raw.openCount === 'number' ? raw.openCount : 0,
       lastOpenedAt: str(raw.lastOpenedAt),
+      active: typeof raw.active === 'boolean' ? raw.active : !str(raw.revokedAt),
     }))
 }
 
@@ -77,5 +80,12 @@ export function useShareLinks(backend: Backend) {
     }
   }
 
-  return { links, status, loading, refresh }
+  /** One share.* action; the reply's payload, or the error code as thrown. */
+  async function act(type: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const resp = await backend.send<Record<string, unknown>>(type, payload, LIST_TIMEOUT_MS)
+    if (!resp.ok) throw new Error(resp.error?.code ?? 'SHARE_FAILED')
+    return resp.payload ?? {}
+  }
+
+  return { links, status, loading, refresh, act }
 }
