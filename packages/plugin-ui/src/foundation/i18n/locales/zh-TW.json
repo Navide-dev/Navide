@@ -1053,7 +1053,7 @@
       "placeholder": "搜尋設定…",
       "item": {
         "cliExtensions": {
-          "title": "CLI 擴充",
+          "title": "擴充",
           "summary": "每個 AI CLI 自己安裝的 CLI 擴充與 hook、執行等級與能力（唯讀）。"
         },
         "cli-agents-list": {
@@ -1883,7 +1883,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "帳號",
       "cliAgents": "CLI Agents",
-      "cliExtensions": "CLI 擴充",
+      "cliExtensions": "擴充",
       "roles": "角色",
       "pipelines": "流程",
       "mcp": "MCP",
@@ -4702,7 +4702,7 @@
             "workspace_switch": "把自己所在的視窗切到它本來就持有的另一個專案；被切走的專案，它的 pane 會繼續跑。視窗裡有 pipeline 正在跑時會拒絕，因為切換會中止它",
             "prompt_list": "使用者在「設定 → Prompt 技能」存的提示技能有哪些；唯讀，新增與編輯是使用者的事",
             "mcp_list": "Navide 自己連的 MCP server 與各家 CLI 自己設定的 server 各有哪些，含連線狀態與工具數量；唯讀，跟「設定 → MCP」看到的是同一份",
-            "cli_extensions_list": "每個 AI CLI 自己安裝的 CLI 擴充與 hook：種類、執行等級、能力，以及是誰裝的。只有名稱與中繼資料；唯讀，跟「設定 → CLI 擴充」看到的是同一份",
+            "cli_extensions_list": "每個 AI CLI 自己安裝的 CLI 擴充與 hook：種類、執行等級、能力，以及是誰裝的。只有名稱與中繼資料；唯讀，跟「設定 → 擴充」看到的是同一份",
             "credentials_list": "掃描盤點到的憑證，只含類型與名稱，絕不含值",
             "credentials_findings": "憑證風險發現與嚴重度、提醒狀態；唯讀"
           },
@@ -6852,6 +6852,8 @@
         "blocked-title": "已封鎖",
         "blocked-hint": "封鎖優先於所有規則，連你自己的其他裝置也一樣擋。",
         "block-full": "這台機器的配對紀錄已滿，封鎖無法儲存。請先解除與這台裝置的配對，再封鎖它。",
+        "block-not-saved-full": "已在伺服器封鎖，但這台機器的配對紀錄已滿，本機沒存到副本。重啟前本機仍會拒絕這台裝置。要讓本機也保存，請先解除與這台裝置的配對，再封鎖一次。",
+        "block-not-saved": "已在伺服器封鎖，但本機沒存到副本。重啟前本機仍會拒絕這台裝置。請稍後再封鎖一次，讓本機也保存副本。",
         "unblock": "解除封鎖",
         "unpair": "解除配對",
         "unpair-title": "忘掉這台裝置。這不等於封鎖。",

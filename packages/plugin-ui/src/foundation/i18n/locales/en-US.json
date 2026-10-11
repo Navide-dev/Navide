@@ -1053,7 +1053,7 @@
       "placeholder": "Search settings…",
       "item": {
         "cliExtensions": {
-          "title": "CLI Extensions",
+          "title": "Extensions",
           "summary": "Each AI CLI's own CLI extensions and hooks, with execution tier and capabilities (read-only)."
         },
         "cli-agents-list": {
@@ -1883,7 +1883,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Accounts",
       "cliAgents": "CLI Agents",
-      "cliExtensions": "CLI Extensions",
+      "cliExtensions": "Extensions",
       "roles": "Roles",
       "pipelines": "Pipelines",
       "mcp": "MCP",
@@ -4702,7 +4702,7 @@
             "workspace_switch": "Switch my own window to another project it already holds; panes of the project being left keep running. Refused while a pipeline is running in that window, because switching would abort it",
             "prompt_list": "The prompt skills the user keeps in Settings → Prompts; read-only, since creating and editing them is the user's job",
             "mcp_list": "Which MCP servers Navide connects to and which each CLI keeps in its own config, with live state and tool counts; read-only, and the same list Settings → MCP shows",
-            "cli_extensions_list": "Each AI CLI's own CLI extensions and hooks: type, execution tier, capabilities and who installed them. Names and metadata only; read-only, the same inventory Settings → CLI Extensions shows",
+            "cli_extensions_list": "Each AI CLI's own CLI extensions and hooks: type, execution tier, capabilities and who installed them. Names and metadata only; read-only, the same inventory Settings → Extensions shows",
             "credentials_list": "Credentials the scan inventoried, with kind and label only; never a value",
             "credentials_findings": "Credential risk findings with severity and reminder state; read-only"
           },
@@ -6852,6 +6852,8 @@
         "blocked-title": "Blocked",
         "blocked-hint": "A block is refused ahead of every rule, including your own other devices.",
         "block-full": "This machine's pairing record is full, so the block could not be saved. Unpair this device first, then block it.",
+        "block-not-saved-full": "Blocked on the server, but this machine's pairing record is full, so it did not save its own copy. This machine still refuses the device until it restarts. To save the copy, unpair this device, then block it again.",
+        "block-not-saved": "Blocked on the server, but this machine did not save its own copy. This machine still refuses the device until it restarts. Block it again later so this machine keeps a copy.",
         "unblock": "Unblock",
         "unpair": "Unpair",
         "unpair-title": "Forget this device. It is not blocked.",

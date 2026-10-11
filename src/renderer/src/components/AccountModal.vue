@@ -1099,8 +1099,11 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
     const resp = await props.backend.send(type, args)
     await loadNetwork()
     if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
-    // KC3-1: a record that was already full has no room for a block.
+    // KC3-1: a block refused before it reached the server (p2p-trust-store-full)
+    // made nothing; one whose local copy was not saved is in force (fail closed).
     if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
+    if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
+    if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1131,6 +1134,8 @@ async function blockPending(row: PendingDevice): Promise<void> {
     await loadNetwork()
     if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
     if (resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
+    if (resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
+    if (resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {

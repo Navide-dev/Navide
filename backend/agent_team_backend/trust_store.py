@@ -474,8 +474,29 @@ def _adopt_journal(state: dict[str, Any], stored_core: str | None) -> None:
     _last_journal = None
 
 
+def _carry_unsaved_blocks_locked(state: dict[str, Any]) -> list[dict[str, str]]:
+    """Put back into *state* each block an earlier save could not keep, as far
+    as the record has room for it, and return the ones carried. One that still
+    does not fit stays in ``_unsaved_blocks`` and changes nothing about this
+    save: the save it rides on is somebody else's, and must not fail for it."""
+    carried = []
+    blocked = state.setdefault("blocked", [])
+    for entry in list(_unsaved_blocks):
+        if entry in blocked:
+            carried.append(entry)
+            continue
+        blocked.append(dict(entry))
+        core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
+        if cloud_secrets.fits(_vault(), SECRET_NAME, core):
+            carried.append(entry)
+        else:
+            blocked.pop()
+    return carried
+
+
 def _write(state: dict[str, Any]) -> None:
     global _last_core, _committed_core
+    carried = _carry_unsaved_blocks_locked(state)
     # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
@@ -485,6 +506,8 @@ def _write(state: dict[str, Any]) -> None:
             cloud_secrets.write(_vault(), SECRET_NAME, core)
             _last_core = core
         _committed_core = json.loads(core)
+        # Saved now, so no longer only in memory.
+        _unsaved_blocks[:] = [entry for entry in _unsaved_blocks if entry not in carried]
     finally:
         # The journal is written even when the vault half was refused (R2-5):
         # the ledger and notices do not depend on it, and a refused Keychain
@@ -1026,6 +1049,11 @@ def approve_device(device_id: str) -> bool:
         return True
 
 
+#: Blocks that could not be saved, held for the life of the process so this
+#: machine refuses the device anyway. See ``note_blocked``.
+_unsaved_blocks: list[dict[str, str]] = []
+
+
 def note_blocked(device_id: str, member_id: str) -> bool:
     """Keep a local copy of a block. Blocking; call off the event loop.
 
@@ -1038,17 +1066,26 @@ def note_blocked(device_id: str, member_id: str) -> bool:
         member_id = str(member_id or "")
         if not device_id and not member_id:
             return False
-        state = _load_locked()
-        blocked = state.setdefault("blocked", [])
-        for entry in blocked:
-            if not isinstance(entry, dict):
-                continue
-            if device_id and entry.get("deviceId") == device_id:
-                return False
-            if member_id and not device_id and entry.get("memberId") == member_id:
-                return False
-        blocked.append({"deviceId": device_id, "memberId": member_id})
-        _save_locked(state)
+        try:
+            state = _load_locked()
+            blocked = state.setdefault("blocked", [])
+            for entry in blocked:
+                if not isinstance(entry, dict):
+                    continue
+                if device_id and entry.get("deviceId") == device_id:
+                    return False
+                if member_id and not device_id and entry.get("memberId") == member_id:
+                    return False
+            blocked.append({"deviceId": device_id, "memberId": member_id})
+            _save_locked(state)
+        except Exception:
+            # Fail closed: a block that could not be saved — or whose record
+            # could not even be read (review F1) — still holds until the
+            # restart, and the next save that succeeds writes it. _save_locked
+            # took it back out of the state, as it does every decision it could
+            # not store, and for a block that is the unsafe direction.
+            _unsaved_blocks.append({"deviceId": device_id, "memberId": member_id})
+            raise
         return True
 
 
@@ -1062,21 +1099,20 @@ def note_unblocked(device_id: str, member_id: str) -> bool:
     with _lock:
         device_id = str(device_id or "")
         member_id = str(member_id or "")
+
+        def lifted(entry: Any) -> bool:
+            return isinstance(entry, dict) and bool(
+                (device_id and entry.get("deviceId") == device_id)
+                or (member_id and entry.get("memberId") == member_id)
+            )
+
+        unsaved = len(_unsaved_blocks)
+        _unsaved_blocks[:] = [entry for entry in _unsaved_blocks if not lifted(entry)]
         state = _load_locked()
         blocked = state.setdefault("blocked", [])
-        kept = [
-            entry
-            for entry in blocked
-            if not (
-                isinstance(entry, dict)
-                and (
-                    (device_id and entry.get("deviceId") == device_id)
-                    or (member_id and entry.get("memberId") == member_id)
-                )
-            )
-        ]
+        kept = [entry for entry in blocked if not lifted(entry)]
         if len(kept) == len(blocked):
-            return False
+            return len(_unsaved_blocks) != unsaved
         state["blocked"] = kept
         _save_locked(state)
         return True
@@ -1093,7 +1129,7 @@ def is_blocked_locally(*, device_id: str, member_id: str) -> bool:
     try:
         with _lock:
             state = _try_load() if _state is None else _state
-            for entry in (state or {}).get("blocked") or []:
+            for entry in [*((state or {}).get("blocked") or []), *_unsaved_blocks]:
                 if not isinstance(entry, dict):
                     continue
                 if entry.get("deviceId") and entry["deviceId"] == device_id:
@@ -1852,6 +1888,7 @@ def _reset_for_test() -> None:
         _seen_pending.clear()
         _seen_last_flush = 0.0
         _disarm_seen_timer_locked()
+        _unsaved_blocks.clear()
         _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.

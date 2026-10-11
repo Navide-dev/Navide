@@ -5016,41 +5016,37 @@ async def p2p_trust_block(session: "Session", msg_id: str, msg_type: str, payloa
     # succeeded so the two cannot disagree about a block that was never made.
     # The local copy is what still refuses this device when the policy document
     # cannot be verified — see device_trust.is_blocked.
+    problem: Exception | None = None
     try:
         await asyncio.to_thread(trust_store.note_blocked, device_id, member_id)
     except Exception as err:  # noqa: BLE001
-        # The policy already says blocked. Take that back, so the two agree that
-        # nothing changed, and say why (KC2R-1); if even that fails, say plainly
-        # that the server has a block this machine could not keep a copy of.
-        await session.send_json(await _block_not_kept(entry, err, msg_id, msg_type))
-        return
+        problem = err
     if device_id and server_link.forget_access_requests_for_device(device_id):
         await _announce_requests()
+    if problem is not None:
+        # Fail closed. The server's block stands, and note_blocked holds the
+        # local one in memory until the restart; only the saved copy is missing.
+        # Taking the server's block back instead left the device trusted.
+        await session.send_json(_block_not_kept(problem, msg_id, msg_type))
+        return
     await session.send_json(make_response(msg_id, msg_type, await _policy_payload()))
 
 
-async def _block_not_kept(entry: dict, err: Exception, msg_id: str, msg_type: str) -> dict:
-    state = await server_link.policy_state()
-    policy = state.get("policy")
-    reply = None
-    if isinstance(policy, dict):
-        policy = json.loads(json.dumps(policy))
-        policy["blocked"] = [e for e in policy.get("blocked") or [] if e != entry]
-        reply = await server_link.set_policy(policy)
-    if reply is not None and reply.get("ok"):
-        code = (
-            server_link.TRUST_STORE_FULL
-            if isinstance(err, trust_store.TrustStoreFull)
-            else "P2P_BLOCK_NOT_SAVED"
-        )
-        return make_error(msg_id, msg_type, code, f"the block was not made: {err}")
+def _block_not_kept(err: Exception, msg_id: str, msg_type: str) -> dict:
+    # Its own code even for a full record (review F2): p2p-trust-store-full is
+    # also what a block refused before it reached the server answers, and the
+    # two must not read alike — this one is in force.
+    code = (
+        "P2P_BLOCK_NOT_SAVED_LOCALLY_FULL"
+        if isinstance(err, trust_store.TrustStoreFull)
+        else "P2P_BLOCK_NOT_SAVED_LOCALLY"
+    )
     return make_error(
         msg_id,
         msg_type,
-        "P2P_BLOCK_NOT_SAVED_LOCALLY",
-        "the block is in force on the server, but this machine could not keep its own "
-        f"copy ({err}) and could not take the server's back. Block again once this is "
-        "resolved, so the two agree",
+        code,
+        "the block is in force on the server, and on this machine until it restarts, "
+        f"but this machine could not save its own copy ({err})",
     )
 
 
