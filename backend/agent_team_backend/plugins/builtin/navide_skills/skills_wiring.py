@@ -838,10 +838,10 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
     exclude, rel = found
     line = f"/{rel}/" if directory else f"/{rel}"
     try:
-        # Never through a link: the exclude file or its folder may lead
+        # Never through a link: the exclude file or its folders may lead
         # outside the repository.
-        if exclude.parent.is_symlink():
-            raise OSError(f"{exclude.parent} is a link")
+        if not _exclude_path_safe(exclude):
+            raise OSError(f"{exclude} is behind a link")
         existing = _read_regular(exclude) or ""
         lines = existing.splitlines()
         if line in lines or (not directory and f"/{PurePosixPath(rel).parent}/" in lines):
@@ -850,11 +850,31 @@ def _exclude_from_git(target: Path, *, directory: bool = True) -> None:
         prefix = "" if not existing or existing.endswith("\n") else "\n"
         fd = os.open(exclude, os.O_WRONLY | os.O_APPEND | os.O_CREAT | _NOFOLLOW, 0o644)
         with os.fdopen(fd, "a", encoding="utf-8") as handle:
-            if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            if not _sole_regular(os.fstat(handle.fileno())):
                 raise OSError(f"{exclude} is not a regular file")
             handle.write(f"{prefix}{line}\n")
     except OSError as err:
         log.warning("could not add %s to git exclude: %s", target, err)
+
+
+def _exclude_path_safe(exclude: Path) -> bool:
+    """Whether ``.git/info/exclude`` is reached without a link: neither
+    ``.git`` nor ``info`` is one, and the file is absent or a regular file
+    with no second name."""
+    try:
+        for folder in (exclude.parent.parent, exclude.parent):
+            if folder.is_symlink():
+                return False
+    except OSError:
+        return False
+    return _regular_or_absent(exclude)
+
+
+def exclude_safe(target: Path) -> bool:
+    """Whether the git exclude for ``target`` may be written: True when
+    ``target`` is in no repository at all."""
+    found = _exclude_file(target)
+    return found is None or _exclude_path_safe(found[0])
 
 
 def _exclude_file(target: Path) -> tuple[Path, str] | None:
@@ -883,6 +903,8 @@ def _excluded_from_git(target: Path) -> bool:
     if found is None:
         return False
     exclude, rel = found
+    if not _exclude_path_safe(exclude):
+        return False
     try:
         return f"/{rel}/" in (_read_regular(exclude) or "").splitlines()
     except OSError:
@@ -899,7 +921,7 @@ def _unexclude_from_git(target: Path, names: set[str], *, directory: bool) -> No
     if directory:
         ours.add(f"/{rel}/")
     try:
-        if exclude.parent.is_symlink():
+        if not _exclude_path_safe(exclude):
             return
         text = _read_regular(exclude)
     except OSError:

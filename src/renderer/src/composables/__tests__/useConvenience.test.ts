@@ -245,6 +245,18 @@ describe('convenience announcement rows', () => {
     expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
+  it('tells a git exclude left unwritten for safety in its own words', () => {
+    useAnnouncements().noteConvenience({
+      features: [feature()],
+      notices: [entry({ action: 'refused-exclude', target: '/repo/.cursor/skills' })],
+      upgrade: null,
+    })
+    const [row] = rows()
+    expect(row.title).toContain('/repo/.cursor/skills 所在儲存庫的 .git 或 .git/info/exclude 是連結')
+    expect(row.title).toContain('沒有寫入 git exclude')
+    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
   it('offers re-allow on a removal only while the removal keeps the feature off', () => {
     const removed = entry({ id: 9, action: 'removed' })
     useAnnouncements().noteConvenience({ features: [feature({ state: 'off', reason: 'removed' })], notices: [removed], upgrade: null })

@@ -1118,6 +1118,41 @@ def test_a_git_exclude_linked_outside_the_workspace_is_never_written(tmp_path: P
     assert victim.read_text(encoding="utf-8") == "export A=1\n/.cursor/skills/\n"
 
 
+def test_a_git_folder_linked_outside_the_workspace_is_never_written(tmp_path: Path) -> None:
+    """R4-L3: .git itself may be a link to another repository's folder;
+    the exclude there is never written or rewritten."""
+    _skill(tmp_path / "managed", "alpha")
+    outside = tmp_path / "other" / ".git"
+    (outside / "info").mkdir(parents=True)
+    victim = outside / "info" / "exclude"
+    victim.write_text("keep\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    cwd.mkdir()
+    (cwd / ".git").symlink_to(outside)
+
+    assert _sync(tmp_path, cwd) is True
+    assert victim.read_text(encoding="utf-8") == "keep\n"
+    assert skills_wiring.exclude_safe(cwd / ".cursor" / "skills") is False
+    victim.write_text("keep\n/.cursor/skills/\n", encoding="utf-8")
+    skills_wiring.remove_project_dir(cwd / ".cursor" / "skills", root=cwd)
+    assert victim.read_text(encoding="utf-8") == "keep\n/.cursor/skills/\n"
+
+
+def test_a_git_exclude_hard_linked_to_another_file_is_never_written(tmp_path: Path) -> None:
+    """R4-L3: a hard link is a second name for someone else's file."""
+    _skill(tmp_path / "managed", "alpha")
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export A=1\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    (cwd / ".git" / "info").mkdir(parents=True)
+    os.link(victim, cwd / ".git" / "info" / "exclude")
+
+    assert _sync(tmp_path, cwd) is True
+    assert victim.read_text(encoding="utf-8") == "export A=1\n"
+    assert skills_wiring.exclude_safe(cwd / ".cursor" / "skills") is False
+
+
 def test_a_manifest_hard_linked_to_another_file_is_not_safe(tmp_path: Path) -> None:
     """R4-L2: a manifest with a second name is never read or written."""
     victim = tmp_path / "home" / ".zshrc"

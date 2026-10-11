@@ -20,7 +20,8 @@
         "removed-entry": "你移除了 {target}；Navide 不會再加回這一項，便利功能「{feature}」的其他部分照常運作。要恢復，請在總覽頁把這個功能關閉再重新允許",
         "cleanup-failed": "無法移除 {target}，便利功能「{feature}」仍維持開啟。請先手動修好這個檔案（它可能不是有效的 JSON），再關閉一次",
         "refused-unsafe": "{target} 所在的 .cursor 指向專案資料夾外，為了安全，Navide 沒有在這裡設定便利功能「{feature}」。要使用，請把 .cursor 改成專案內的一般資料夾",
-        "refused-name": "Skill「{name}」和 Navide 的清單檔 .navide-links 同名，Navide 沒有在 {target} 為它建立連結；改名後就會出現"
+        "refused-name": "Skill「{name}」和 Navide 的清單檔 .navide-links 同名，Navide 沒有在 {target} 為它建立連結；改名後就會出現",
+        "refused-exclude": "{target} 所在儲存庫的 .git 或 .git/info/exclude 是連結，或是另一個檔案的別名，為了安全，Navide 沒有寫入 git exclude；便利功能「{feature}」建立的連結會出現在 git status 裡"
       },
       "button": {
         "overview": "查看總覽",
@@ -43,7 +44,8 @@
       "cleanup-failed": "無法清理",
       "prompt": "登入在 Navide 外被換過",
       "refused-unsafe": "為了安全未設定",
-      "refused-name": "因名稱未建立連結"
+      "refused-name": "因名稱未建立連結",
+      "refused-exclude": "為了安全未寫入 git exclude"
     },
     "overview": {
       "title": "便利功能與 Navide 對你電腦的修改",

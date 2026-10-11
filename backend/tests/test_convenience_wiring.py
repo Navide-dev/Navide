@@ -1034,6 +1034,25 @@ def test_a_skills_manifest_hard_linked_elsewhere_is_refused_for_safety_and_never
     assert not [e for e in gate.history() if e["action"] == "removed-entry"]
 
 
+def test_a_git_exclude_that_is_not_safe_is_skipped_and_announced_once(gate, tmp_path, monkeypatch) -> None:
+    """R4-L3: the links are still planted, but they cannot be hidden from
+    git status; the user is told once for that workspace."""
+    wiring = _cursor_skills(tmp_path, monkeypatch)
+    outside = tmp_path / "other" / ".git"
+    (outside / "info").mkdir(parents=True)
+    (outside / "info" / "exclude").write_text("keep\n", encoding="utf-8")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / ".git").symlink_to(outside)
+
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+    assert convenience_wiring.sync_project_dir_gated("cursor", wiring, str(repo)) is True
+
+    assert (outside / "info" / "exclude").read_text(encoding="utf-8") == "keep\n"
+    rows = [(e["target"], e["notify"]) for e in gate.history("cursor.project-skills") if e["action"] == "refused-exclude"]
+    assert rows == [(str(repo / ".cursor" / "skills"), True)]
+
+
 def test_a_skill_named_like_the_manifest_is_never_planted_and_off_leaves_no_link(
     gate, homes, tmp_path, monkeypatch
 ) -> None:

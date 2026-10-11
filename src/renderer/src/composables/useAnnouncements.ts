@@ -592,7 +592,8 @@ function convenienceItems(seen: Set<string>): Announcement[] {
         })
         break
       }
-      // 'refused-unsafe' among them: a workspace left alone for safety.
+      // 'refused-unsafe' among them: a workspace left alone for safety; and
+      // 'refused-exclude': a git exclude behind a link, left unwritten.
       default:
         title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })
     }

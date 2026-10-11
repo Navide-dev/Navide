@@ -358,6 +358,14 @@ def sync_project_dir_gated(agent_key: str, wiring: Any, cwd: str) -> bool:
             "cursor.project-skills", "refused-name", link,
             detail="a skill with the manifest's name; not linked here",
         )
+    if delivered[0] and not skills_wiring.exclude_safe(target):
+        # The links are planted, but the repository's .git (or its exclude)
+        # is a link or a second name for another file: they stay visible to
+        # git status rather than writing there.
+        g.record_once(
+            "cursor.project-skills", "refused-exclude", target,
+            detail="the git exclude is behind a link; not written",
+        )
     if not skills_wiring.has_manifest(target):
         g.forget("cursor.project-skills", target)
     return delivered[0]
