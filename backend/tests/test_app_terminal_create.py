@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import app, guard_hooks
+from agent_team_backend import app, guard_hooks, osplat
 
 
 class FakeWebSocket:
@@ -1369,9 +1369,8 @@ def _tree(root: Path) -> dict[str, bytes]:
 
 
 def _overrides(command: Any) -> list[str]:
-    import shlex
-
-    words = shlex.split(command[-1] if isinstance(command, list) else command)
+    # Split the way this platform's shell will: Windows quotes differently.
+    words = osplat.terminal_backend.parse_command(command[-1] if isinstance(command, list) else command)
     return [words[i + 1] for i, w in enumerate(words) if w == "-c"]
 
 
@@ -1474,6 +1473,10 @@ async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
         spawn = session.terminals.created[0]  # type: ignore[attr-defined]
         home = Path(spawn["env"]["CODEX_HOME"])
         assert not any(o.startswith("hooks.state=") for o in _overrides(spawn["command"]))
-        assert f"{home / 'hooks.json'}:stop:0:0" in (real / "config.toml").read_text(encoding="utf-8")
+        # As TOML, not text: the key is escaped there (Windows backslashes doubled).
+        import tomllib
+
+        rows = tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))["hooks"]["state"]
+        assert f"{home / 'hooks.json'}:stop:0:0" in rows
     finally:
         convenience_wiring.install(None)

@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_team_backend import convenience, convenience_wiring, copilot_hooks
+from agent_team_backend import convenience, convenience_wiring, copilot_hooks, osplat
 from agent_team_backend.cli_vendors.registry import VENDORS
 from agent_team_backend.db import Database
 from agent_team_backend.plugins.builtin.navide_skills import skills_wiring
@@ -93,7 +93,8 @@ def test_the_pane_file_is_what_phase_2_wrote_into_the_shared_folder(sandbox, tmp
     assert json.loads(pane_file.read_text(encoding="utf-8")) == json.loads(
         (shared / "agent-team.json").read_text(encoding="utf-8")
     )
-    assert stat.S_IMODE(pane_file.stat().st_mode) == 0o600
+    if osplat.paths.enforces_posix_modes():  # Windows keeps no mode bits
+        assert stat.S_IMODE(pane_file.stat().st_mode) == 0o600
 
 
 def test_startup_retracts_the_shared_file_after_backing_it_up(gate, sandbox) -> None:

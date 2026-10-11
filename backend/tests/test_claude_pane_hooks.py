@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import app, claude_hooks, convenience_wiring, push_delivery, ws_handlers
+from agent_team_backend import app, claude_hooks, convenience_wiring, osplat, push_delivery, ws_handlers
 from agent_team_backend.osplat import paths
 
 from .test_app_terminal_create import FakeAttribution, _session
@@ -31,6 +31,8 @@ def homes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     config = home / ".claude"
     config.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
+    # Windows takes the home from USERPROFILE, not HOME.
+    monkeypatch.setenv(osplat.paths.home_env_var(), str(home))
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     (config / "settings.json").write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
     port = tmp_path / "backend-port"
@@ -92,7 +94,8 @@ def test_the_pane_file_holds_exactly_the_hooks_phase_2_wrote(homes, tmp_path) ->
 
     pane = claude_hooks.pane_settings_path()
     assert json.loads(pane.read_text(encoding="utf-8")) == _phase2_hooks(tmp_path, port)
-    assert stat.S_IMODE(pane.stat().st_mode) == 0o600
+    if osplat.paths.enforces_posix_modes():  # Windows keeps no mode bits
+        assert stat.S_IMODE(pane.stat().st_mode) == 0o600
     assert pane.parent == push_delivery.runtime_dir("claude")
 
 

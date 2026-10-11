@@ -1806,10 +1806,14 @@ def test_codex_hook_trust_that_cannot_be_retracted_keeps_seeding_and_no_pane_car
 ) -> None:
     manager, real = codex_app
     convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
-    real.chmod(0o555)  # the rewrite cannot land
+    # The rewrite cannot land (see test_codex_hook_trust_off_that_cannot_write_is_not_reported_done).
+    config = real / "config.toml"
+    real.chmod(0o555)
+    config.chmod(0o444)
     try:
         assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is False
     finally:
+        config.chmod(0o644)
         real.chmod(0o755)
 
     assert not convenience_wiring.pane_carries_hooks("codex")
