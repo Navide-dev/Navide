@@ -155,6 +155,30 @@ def config_document(wiring: SkillsWiring, existing: str, view: Path) -> str:
     return json.dumps(document)
 
 
+#: Whether this plugin is running, i.e. whether pane spawns get shims.
+_active = False
+
+
+def active() -> bool:
+    return _active
+
+
+def set_active(running: bool) -> None:
+    """The plugin started or stopped: Copilot's hooks ride on the shims."""
+    global _active
+    _active = running
+    from agent_team_backend.convenience_wiring import pane_carrier_changed
+
+    pane_carrier_changed("copilot", running)
+
+
+def _warn_uncarried(agent_key: str, pane_id: str, why: str) -> None:
+    from agent_team_backend.convenience_wiring import pane_carries_hooks
+
+    if agent_key == "copilot" and pane_carries_hooks(agent_key):
+        log.warning("copilot pane %s starts without Navide's hooks: %s", pane_id, why)
+
+
 def real_home() -> Path:
     """The user's home, read the way pane_home reads it.
 
@@ -205,11 +229,13 @@ def prepare_root(
     be wired.
     """
     if not _SAFE_PANE_ID.match(pane_id or ""):
+        _warn_uncarried(agent_key, pane_id, "no pane shim for this pane id")
         return None
     try:
         home = home or real_home()
         existing = env.get(wiring.root_env)
         if existing:
+            _warn_uncarried(agent_key, pane_id, f"it runs with its own {wiring.root_env}")
             root = Path(existing)
             # Someone else's shim: it does its own reconciliation, and a
             # directory *it* built (its MCP config dir) is not ours to move
@@ -254,6 +280,7 @@ def prepare_root(
         return str(root)
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills root for %s failed: %s", agent_key, err)
+        _warn_uncarried(agent_key, pane_id, "its shim could not be built")
         return None
 
 

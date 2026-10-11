@@ -32,6 +32,8 @@ def sandbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(data))
     monkeypatch.setenv("COPILOT_HOME", str(copilot))
     monkeypatch.setattr(skills_wiring, "panes_root", lambda: tmp_path / "panes")
+    monkeypatch.setattr(skills_wiring, "real_home", lambda: home)
+    monkeypatch.setattr(skills_wiring, "_active", True)
     port = data / "backend-port"
     port.write_text("1234", encoding="utf-8")
     return {"home": home, "copilot": copilot, "data": data, "port": port, "panes": tmp_path / "panes"}
@@ -213,7 +215,6 @@ def test_a_shared_file_that_cannot_be_retracted_stays_and_the_pane_keeps_the_lin
 
 @pytest.mark.parametrize("command", ["copilot", "copilot --resume 0a1b2c3d"])
 def test_a_spawn_carries_the_hooks_through_its_copilot_home(gate, sandbox, monkeypatch, command) -> None:
-    monkeypatch.setattr(skills_wiring, "real_home", lambda: sandbox["home"])
     _carry(gate, sandbox)
     before = _tree(sandbox["home"])
     env: dict[str, str] = {}
@@ -224,3 +225,74 @@ def test_a_spawn_carries_the_hooks_through_its_copilot_home(gate, sandbox, monke
     assert (hooks / "agent-team.json").resolve() == copilot_hooks.pane_hooks_file().resolve()
     assert (hooks / "mine.json").is_symlink()
     assert _tree(sandbox["home"]) == before
+
+
+def test_without_the_skills_plugin_the_shared_file_stays_in_use(gate, sandbox, monkeypatch) -> None:
+    monkeypatch.setattr(skills_wiring, "_active", False)
+
+    assert _install(sandbox["port"])["convenience"] != "pane"
+
+    assert not convenience_wiring.pane_carries_hooks("copilot")
+    assert (sandbox["copilot"] / "hooks" / "agent-team.json").is_file()
+
+
+def test_a_copilot_home_the_shims_do_not_mirror_keeps_the_shared_file(gate, sandbox, tmp_path, monkeypatch) -> None:
+    # The backend inherited the user's own COPILOT_HOME: Phase 2 writes there,
+    # but a shim mirrors ~/.copilot, so the panes could not carry the hooks.
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "hooks").mkdir(parents=True)
+    monkeypatch.setenv("COPILOT_HOME", str(elsewhere))
+
+    _install(sandbox["port"])
+
+    assert not convenience_wiring.pane_carries_hooks("copilot")
+    assert (elsewhere / "hooks" / "agent-team.json").is_file()
+
+
+def test_the_skills_plugin_starting_or_stopping_moves_the_carrying(gate, sandbox, monkeypatch) -> None:
+    from agent_team_backend.plugins.builtin.navide_skills import backend
+
+    monkeypatch.setattr(skills_wiring, "_active", False)
+    monkeypatch.setattr(convenience_wiring, "_installer", lambda key: copilot_hooks.install_hooks)
+    _install(sandbox["port"])
+    assert not convenience_wiring.pane_carries_hooks("copilot")
+
+    backend.activate(type("Context", (), {"register_spawn_transformer": print, "register_mcp_tools": print})())
+
+    assert convenience_wiring.pane_carries_hooks("copilot")
+    assert not (sandbox["copilot"] / "hooks" / "agent-team.json").exists()
+    backend.deactivate()
+    assert not convenience_wiring.pane_carries_hooks("copilot")
+
+
+def test_a_pane_with_its_own_copilot_home_is_warned_about(gate, sandbox, caplog) -> None:
+    _carry(gate, sandbox)
+    wiring = VENDORS["copilot"].skills_wiring
+
+    skills_wiring.prepare_root("copilot", wiring, "pane-1", {"COPILOT_HOME": str(sandbox["home"] / "mine")})
+
+    assert "without Navide's hooks" in caplog.text
+
+
+def test_a_link_the_cli_made_in_the_pane_hooks_folder_is_kept(gate, sandbox, tmp_path) -> None:
+    _carry(gate, sandbox)
+    hooks = _spawn(sandbox) / "hooks"
+    elsewhere = tmp_path / "theirs.json"
+    elsewhere.write_text("{}", encoding="utf-8")
+    (hooks / "cli-made.json").symlink_to(elsewhere)
+
+    _spawn(sandbox)
+
+    assert (hooks / "cli-made.json").resolve() == elsewhere.resolve()
+
+
+def test_a_real_file_in_navides_place_is_moved_aside_not_left_to_hide_the_guard(gate, sandbox) -> None:
+    _carry(gate, sandbox)
+    hooks = _spawn(sandbox) / "hooks"
+    (hooks / "agent-team.json").unlink()
+    (hooks / "agent-team.json").write_text('{"hooks": {}}', encoding="utf-8")
+
+    _spawn(sandbox)
+
+    assert (hooks / "agent-team.json").resolve() == copilot_hooks.pane_hooks_file().resolve()
+    assert (hooks / "agent-team.user.json").read_text(encoding="utf-8") == '{"hooks": {}}'

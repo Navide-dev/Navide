@@ -115,6 +115,25 @@ def pane_carries_hooks(agent_key: str) -> bool:
     return agent_key in _CARRYING
 
 
+def pane_carrier_changed(agent_key: str, ready: bool) -> None:
+    """What a carrier needs came or went while running (Copilot: the skills
+    plugin that builds its pane shims). Ready re-runs the vendor's hook pass
+    once the startup pass has registered the carrier, so the panes take the
+    hooks over. Not ready only stops the panes carrying them: a plugin stops
+    only at quit, and writing the shared file back then would be undone at
+    the next start."""
+    if not ready:
+        _CARRYING.discard(agent_key)
+        return
+    if _gate is None or agent_key not in _PANE_CARRIERS:
+        return
+    installer = _installer(agent_key)
+    if installer is not None:
+        from .applog import backend_port_file
+
+        install_hooks_gated(agent_key, installer, str(backend_port_file()))
+
+
 def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
     """(file, present, remove) for one vendor's hook installation."""
     if agent_key == "claude":

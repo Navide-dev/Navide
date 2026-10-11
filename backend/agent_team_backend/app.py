@@ -2322,11 +2322,6 @@ async def _start_log_watcher() -> None:
     # feature "<cli>.hooks": announced when it changes a file, skipped when the
     # user turned it off or deleted the hooks by hand.
     convenience_wiring.remember_loop(asyncio.get_running_loop())
-    # Copilot's hooks ride on the panes Navide starts instead (copilot_hooks).
-    from . import copilot_hooks
-
-    convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
-    convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.
     # The Host-bound Manifest v2 activation catalog is validated by the wiring
@@ -2348,6 +2343,14 @@ async def _start_log_watcher() -> None:
         await plugin_wiring.run_startup_hooks(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin host startup failed: %s", err)
+
+    # The CLI hooks pass (see above), after the plugins: Copilot's hooks ride
+    # on the pane shims the skills plugin builds (copilot_hooks), and fall
+    # back to the shared file when that plugin is not running.
+    from . import copilot_hooks
+
+    convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
+    convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Navide's own MCP server. Deliberately outside the guard above: this is
     # the endpoint every CLI pane is wired to, and it must come up even if

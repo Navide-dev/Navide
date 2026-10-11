@@ -190,9 +190,19 @@ def prepare_pane_hooks(port_file: str, skip: frozenset[str]) -> Path:
 
     ``skip`` is always empty here — the file is Navide's alone, so the user
     removes it whole, never one hook of it (convenience_wiring._PER_HOOK).
+
+    Raises when the panes could not carry it — no skills plugin to build
+    their shims, or a COPILOT_HOME the shims do not mirror — so the shared
+    file stays in use instead.
     """
     from .osplat import secret_files
+    from .plugins.builtin.navide_skills import skills_wiring
 
+    if not skills_wiring.active():
+        raise RuntimeError("the skills plugin that builds the pane shims is not running")
+    mirrored = skills_wiring.real_home() / ".copilot"
+    if _resolved(hooks_dir().parent) != _resolved(mirrored):
+        raise RuntimeError(f"COPILOT_HOME {hooks_dir().parent} is not the {mirrored} the pane shims mirror")
     path = pane_hooks_file()
     secret_files.make_private_dir(path.parent)
     secret_files.write_private_plain(path, json.dumps(_document(port_file), indent=2).encode("utf-8"))
@@ -214,6 +224,13 @@ def another_backends(path: Path) -> bool:
     return "/hooks/copilot" in text and str(app_data_dir() / hook_auth.FILENAME) not in text
 
 
+def _resolved(folder: Path) -> Path:
+    try:
+        return folder.resolve()
+    except OSError:
+        return folder
+
+
 def _strings(node: Any) -> list[str]:
     if isinstance(node, str):
         return [node]
@@ -230,7 +247,8 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
     While the panes carry Navide's hooks it is a real folder: Navide's file
     plus a fresh link to each entry of ``user_hooks``, so a file the user
     adds later is seen. A user file with Navide's name is linked under
-    ``agent-team.user.json`` rather than hidden; another backend's Navide
+    ``agent-team.user.json`` rather than hidden, and anything the pane holds
+    in Navide's place is moved aside the same way; another backend's Navide
     file is left out, as this pane reports to this backend only. Otherwise
     it is what it always was, a link to ``user_hooks``. Nothing is written
     under ``user_hooks``.
@@ -239,8 +257,9 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
 
     hooks = shim / "hooks"
     if hooks.is_dir() and not hooks.is_symlink():
+        # Only the links made here; one the CLI made itself stays.
         for entry in hooks.iterdir():
-            if entry.is_symlink():
+            if entry.is_symlink() and _ours(entry, user_hooks):
                 entry.unlink()
     if not pane_carries_hooks("copilot"):
         if hooks.is_dir() and not hooks.is_symlink():
@@ -257,7 +276,15 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
         hooks.unlink()
     hooks.mkdir(exist_ok=True)
     theirs = sorted(user_hooks.iterdir()) if user_hooks.is_dir() else []
-    names = {entry.name for entry in theirs}
+    names = {entry.name for entry in theirs} | {entry.name for entry in hooks.iterdir()}
+    mine = hooks / _HOOK_FILENAME
+    if mine.exists() or mine.is_symlink():
+        # Anything else in Navide's place would silently cost the pane its
+        # hooks, Navide Guard included: moved aside, kept and still loaded.
+        aside = hooks / _free_name(names)
+        log.warning("moving %s aside to %s to make room for Navide's hooks", mine, aside)
+        os.replace(mine, aside)
+        names.add(aside.name)
     links = {_HOOK_FILENAME: pane_hooks_file()}
     for entry in theirs:
         name = entry.name
@@ -273,6 +300,16 @@ def wire_pane_hooks(shim: Path, user_hooks: Path) -> None:
             log.warning("%s is a file of the pane's own; not linking %s", link, target)
             continue
         link.symlink_to(target, target_is_directory=target.is_dir())
+
+
+def _ours(link: Path, user_hooks: Path) -> bool:
+    """Whether ``link`` is one wire_pane_hooks made: to Navide's file or
+    to an entry of the user's hooks folder."""
+    try:
+        target = Path(os.readlink(link))
+    except OSError:
+        return False
+    return target == pane_hooks_file() or target.parent == user_hooks
 
 
 def _free_name(taken: set[str]) -> str:

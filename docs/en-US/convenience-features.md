@@ -137,6 +137,9 @@ built by the skills wiring), and while `copilot.hooks` is allowed the shim's
   `agent-team.user.json` rather than hidden. Another backend's Navide file
   there (the installed app's, seen from a dev backend beside it, or the
   other way round) is left out: this pane reports to this backend only.
+  Links Navide did not make there (the CLI's own) are kept, and anything
+  else in Navide's place is moved aside to that same `.user` name, so it can
+  never hide Navide's hooks (Navide Guard included).
 
 Nothing is written under `~/.copilot`, and the shim's `hooks` folder is
 never moved into it. At startup a Phase 2 `~/.copilot/hooks/agent-team.json`
@@ -146,8 +149,18 @@ be written, the shared file stays in use and panes keep today's link to
 `~/.copilot/hooks` with no file of Navide's in it: never both, or every hook
 would fire twice. With the feature off a pane's `hooks` is that same link.
 
-A pane started with a `COPILOT_HOME` of the user's own, or one whose skills
-wiring is not running, gets no shim and so no Navide hooks.
+The panes carry the hooks only where every pane gets a shim: the skills
+plugin (`navide.skills`) must be running, and the backend's `COPILOT_HOME`,
+if set, must be the `~/.copilot` the shims mirror. Otherwise the shared file
+stays in use, as in Phase 2. The CLI hooks pass therefore runs after the
+plugins start, and a plugin starting later re-runs it. A plugin stops only at
+quit; that only stops the panes carrying the hooks, without writing the
+shared file back.
+
+Known limit: a single pane whose shim is not built — a `COPILOT_HOME` set in
+the window's own env settings for Copilot, or a shim that fails to build —
+starts without Navide's hooks. It is logged as a warning ("copilot pane …
+starts without Navide's hooks").
 
 ## Persistence (navide.db)
 
