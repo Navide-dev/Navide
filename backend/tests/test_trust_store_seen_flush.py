@@ -104,7 +104,8 @@ def test_a_timer_writes_where_it_was_armed(monkeypatch, tmp_path):
 
     assert later.calls == []
     assert not (tmp_path / "elsewhere").exists()
-    assert "m-bound" in armed_journal.read_text(encoding="utf-8")
+    # Through the store's reader: on Windows the journal is DPAPI-wrapped.
+    assert "m-bound" in trust_store._read_journal_bytes(armed_journal).decode("utf-8")
     monkeypatch.setattr(app, "credential_vault", armed_vault)
 
 

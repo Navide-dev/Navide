@@ -49,4 +49,6 @@ def test_a_refused_keychain_write_still_saves_the_journal(monkeypatch):
     monkeypatch.setattr(cloud_secrets, "write", refuse)
     trust_store.note_seen_message("k-2")
     trust_store.flush_seen_messages()
-    assert "k-2" in trust_store._journal_path().read_text(encoding="utf-8")
+    # Through the store's reader: on Windows the journal is DPAPI-wrapped.
+    journal = trust_store._read_journal_bytes(trust_store._journal_path())
+    assert "k-2" in journal.decode("utf-8")
