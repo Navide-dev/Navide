@@ -1053,7 +1053,7 @@
       "placeholder": "設定を検索…",
       "item": {
         "cliExtensions": {
-          "title": "CLI 拡張",
+          "title": "拡張機能",
           "summary": "各 AI CLI が自分でインストールした CLI 拡張と hook、実行レベルと機能（読み取り専用）。"
         },
         "cli-agents-list": {
@@ -1883,7 +1883,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "アカウント",
       "cliAgents": "CLI エージェント",
-      "cliExtensions": "CLI 拡張",
+      "cliExtensions": "拡張機能",
       "roles": "ロール",
       "pipelines": "パイプライン",
       "mcp": "MCP",
@@ -4702,7 +4702,7 @@
             "workspace_switch": "自分のウィンドウを、そのウィンドウが保持する別のプロジェクトに切り替えます。元のプロジェクトのペインは実行を続けます。そのウィンドウでパイプラインが動作中の場合は、切り替えで実行が中止されるため拒否します",
             "prompt_list": "ユーザーが「設定 → プロンプト」に保存したプロンプトスキルを取得します。作成と編集はユーザーが行うため、読み取り専用です",
             "mcp_list": "Navide の接続先と、各 CLI 固有の設定にある MCP サーバーを、現在の状態とツール数付きで取得します。読み取り専用で、「設定 → MCP」と同じ一覧です",
-            "cli_extensions_list": "各 AI CLI が自分でインストールした CLI 拡張と hook：種類、実行レベル、機能、誰がインストールしたか。名前とメタデータのみ。読み取り専用で、「設定 → CLI 拡張」と同じ一覧です",
+            "cli_extensions_list": "各 AI CLI が自分でインストールした CLI 拡張と hook：種類、実行レベル、機能、誰がインストールしたか。名前とメタデータのみ。読み取り専用で、「設定 → 拡張機能」と同じ一覧です",
             "credentials_list": "スキャンで棚卸しした認証情報（種類とラベルのみ、値は含みません）",
             "credentials_findings": "認証情報のリスク検出（深刻度とリマインダー状態付き、読み取り専用）"
           },

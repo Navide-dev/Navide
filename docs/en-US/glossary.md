@@ -24,6 +24,12 @@ The rule behind every term: **name a thing by who owns its files.**
   市集, プラグイン, 拡張, マーケット(プレイス). Prefix them with `Navide` or `CLI`,
   or name the vendor. `packages/plugin-ui/src/foundation/i18n/__tests__/glossary.test.ts`
   enforces this for every locale string.
+- **One exception, the CLI extensions page.** The Settings page that lists
+  CLI extensions is shown as **Extensions / 擴充 / 拡張機能** (the user's call,
+  2026-10-11): its nav label, page title and search title, and prose that
+  points at it ("Settings → Extensions", 「設定 → 擴充」, 「設定 → 拡張機能」).
+  The guard test allows the bare name there and nowhere else. Navide's own
+  packages are still always written Navide Plugins / Navide 外掛.
 - **Never use** 插件, 外掛程式, 擴充功能, 拡張機能 or "extension pack" for
   Navide plugins; those were the old labels.
 - **Keep vendor terms in the vendor's language.** "Claude plugin" stays

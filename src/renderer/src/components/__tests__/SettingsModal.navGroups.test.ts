@@ -25,8 +25,8 @@ describe('SettingsModal nav groups', () => {
   it('gives Navide plugins their own group between Agent Assets and System', () => {
     expect(navGroups()).toEqual([
       { title: 'general', tabs: ['general', 'appearance', 'language', 'statusBadges', 'layout', 'notifications', 'voice'] },
-      { title: 'accountsAgents', tabs: ['accounts', 'cliAgents', 'cliExtensions', 'analyzer', 'security', 'channels', 'cross-device', 'credentials'] },
-      { title: 'integration', tabs: ['mcp', 'skills', 'prompts', 'memory'] },
+      { title: 'accountsAgents', tabs: ['accounts', 'cliAgents', 'analyzer', 'security', 'channels', 'cross-device'] },
+      { title: 'integration', tabs: ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'] },
       { title: 'navidePlugins', tabs: ['extensions', 'marketplace'] },
       { title: 'system', tabs: ['keybindings', 'updates', 'help'] },
     ])
@@ -41,6 +41,14 @@ describe('SettingsModal nav groups', () => {
       const entries = [...source.matchAll(new RegExp(`tab: '${tab}',[\\s\\S]*?group: t\\('settings\\.nav\\.group\\.(\\w+)'\\)`, 'g'))]
       expect(entries.length).toBeGreaterThan(0)
       for (const entry of entries) expect(entry[1]).toBe('navidePlugins')
+    }
+  })
+
+  it('files the search hits of Credentials and Extensions under Agent Assets', () => {
+    for (const tab of ['credentials', 'cliExtensions']) {
+      const entries = [...source.matchAll(new RegExp(`tab: '${tab}',[\\s\\S]*?group: t\\('settings\\.nav\\.group\\.(\\w+)'\\)`, 'g'))]
+      expect(entries.length).toBeGreaterThan(0)
+      for (const entry of entries) expect(entry[1]).toBe('integration')
     }
   })
 
