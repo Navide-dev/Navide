@@ -459,7 +459,7 @@ function noteEvolveNotice(notice: EvolveNotice, at: number = Date.now()): void {
  *  was created, or opened for the first time or by a new viewer. Never the
  *  URL — the key in it belongs to whoever the creator gave it to. */
 export interface ShareNotice {
-  kind: 'created' | 'opened'
+  kind: 'created' | 'opened' | 'feedback'
   linkId: string
   createdBy?: 'user' | 'agent'
   pane?: string
@@ -467,6 +467,10 @@ export interface ShareNotice {
   maskedTotal?: number
   openCount?: number
   newViewer?: boolean
+  /** Phone feedback: approved | noted | already | rejected, and why. */
+  title?: string
+  result?: string
+  reason?: string
 }
 
 /** Share notices this window heard, newest first. Not persisted: the Share
@@ -486,6 +490,17 @@ function shareItems(): Announcement[] {
           ? t('share.notice.created-agent', { pane: notice.pane || '—', id: short })
           : t('share.notice.created-user', { id: short })
       if (notice.maskedTotal) highlights.push(t('share.notice.masked', { count: notice.maskedTotal }))
+    } else if (notice.kind === 'feedback') {
+      const name = notice.title || short
+      const result = ['approved', 'noted', 'already', 'rejected'].includes(notice.result ?? '') ? notice.result : 'rejected'
+      title = t(`share.notice.feedback-${result}`, { title: name })
+      if (result === 'rejected') {
+        highlights.push(
+          notice.reason === 'content-changed'
+            ? t('share.notice.reason-content-changed')
+            : t('share.notice.reason-other', { reason: notice.reason || '—' })
+        )
+      }
     } else {
       title = notice.newViewer ? t('share.notice.opened-new-viewer', { id: short }) : t('share.notice.opened-first', { id: short })
       highlights.push(t('share.notice.open-count', { count: notice.openCount ?? 0 }))

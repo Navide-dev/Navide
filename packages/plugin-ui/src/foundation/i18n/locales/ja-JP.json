@@ -993,7 +993,13 @@
       "masked": "アップロード前に機密らしき値を {count} か所マスクしました",
       "opened-first": "共有リンク（{id}）が開かれました",
       "opened-new-viewer": "共有リンク（{id}）が新しい閲覧者に開かれました",
-      "open-count": "これまでに {count} 回開かれました"
+      "open-count": "これまでに {count} 回開かれました",
+      "feedback-approved": "スマートフォンから承認：{title}",
+      "feedback-noted": "スマートフォンからレビューメモ：{title}",
+      "feedback-already": "スマートフォンからの承認を記録（段階は変更なし）：{title}",
+      "feedback-rejected": "スマートフォンからのフィードバックは適用されませんでした：{title}",
+      "reason-content-changed": "共有後に内容が変更されました。リンクを開き直して再送信してください。",
+      "reason-other": "理由：{reason}"
     }
   },
   "plans": {

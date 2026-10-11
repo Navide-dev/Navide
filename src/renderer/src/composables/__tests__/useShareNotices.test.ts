@@ -77,3 +77,21 @@ describe('useShareNotices', () => {
     expect(handlers.size).toBe(0)
   })
 })
+
+describe('useShareNotices, phone feedback', () => {
+  beforeEach(() => {
+    store.clear()
+    store.set('agentTeam.announcements.readIds', [])
+  })
+
+  it('announces an approval or note applied from the phone, and a refusal with its reason', async () => {
+    const { handlers, shareRows } = await load()
+    const feedback = handlers.get('share.feedback')!
+    feedback({ feedbackId: 'f1', linkId: 'ab'.repeat(16), title: 'Roadmap', result: 'approved' })
+    feedback({ feedbackId: 'f2', linkId: 'ab'.repeat(16), title: 'Roadmap', result: 'rejected', reason: 'content-changed' })
+    const rows = shareRows()
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.title).join(' ')).toContain('Roadmap')
+    expect(rows[0].highlights.join(' ')).toContain('changed')
+  })
+})

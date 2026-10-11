@@ -993,7 +993,13 @@
       "masked": "{count} possible secrets were masked before upload",
       "opened-first": "Your share link ({id}) was opened",
       "opened-new-viewer": "Your share link ({id}) was opened by a new viewer",
-      "open-count": "Opened {count} times so far"
+      "open-count": "Opened {count} times so far",
+      "feedback-approved": "Approved from a phone: {title}",
+      "feedback-noted": "Review note from a phone: {title}",
+      "feedback-already": "Approval from a phone noted, stage unchanged: {title}",
+      "feedback-rejected": "Phone feedback not applied: {title}",
+      "reason-content-changed": "The plan changed since it was shared; open the link again and resend.",
+      "reason-other": "Reason: {reason}"
     }
   },
   "plans": {

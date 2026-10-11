@@ -3,8 +3,9 @@
  *
  * Turns the backend's share-link events into announcements: `share.created`
  * (by the user or an agent's pane, with how many secrets were masked) and
- * `share.opened` for the first open or a new viewer. Neither event carries a
- * URL. Without Navide Cloud no such event is ever sent, so nothing changes.
+ * `share.opened` for the first open or a new viewer, and `share.feedback` for
+ * an approval or note from the phone applied — or refused because the plan
+ * changed since it was shared. None of these carries a URL. Without Navide Cloud no such event is ever sent, so nothing changes.
  */
 import type { useBackend } from './useBackend'
 import { useAnnouncements } from './useAnnouncements'
@@ -41,6 +42,22 @@ export function useShareNotices(backend: Backend): () => void {
     announcements.noteShareNotice({ kind: 'opened', linkId, openCount, newViewer: newViewer && openCount !== 1 })
   })
   if (typeof offOpened === 'function') offs.push(offOpened)
+
+  // Approvals and notes left from a phone on a shared plan, applied or refused
+  // on this device (share_feedback).
+  const offFeedback = backend.on('share.feedback', (raw) => {
+    const ev = (raw ?? {}) as Record<string, unknown>
+    const linkId = str(ev.linkId)
+    if (!linkId) return
+    announcements.noteShareNotice({
+      kind: 'feedback',
+      linkId,
+      title: str(ev.title),
+      result: str(ev.result),
+      reason: str(ev.reason),
+    })
+  })
+  if (typeof offFeedback === 'function') offs.push(offFeedback)
 
   return () => offs.splice(0).forEach((off) => off())
 }

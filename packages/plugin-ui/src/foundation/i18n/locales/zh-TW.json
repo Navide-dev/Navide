@@ -993,7 +993,13 @@
       "masked": "上傳前遮罩了 {count} 處疑似機密",
       "opened-first": "你的分享連結（{id}）被開啟了",
       "opened-new-viewer": "你的分享連結（{id}）被新的檢視者開啟",
-      "open-count": "目前共開啟 {count} 次"
+      "open-count": "目前共開啟 {count} 次",
+      "feedback-approved": "已從手機核准：{title}",
+      "feedback-noted": "收到手機留言：{title}",
+      "feedback-already": "收到手機核准，但階段未變更：{title}",
+      "feedback-rejected": "手機回饋未套用：{title}",
+      "reason-content-changed": "分享之後內容已變更，請重新開啟連結再送一次。",
+      "reason-other": "原因：{reason}"
     }
   },
   "plans": {
