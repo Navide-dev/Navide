@@ -302,3 +302,36 @@ async def test_a_refused_adoption_logs_the_devices_it_waits_for(tmp_path, accoun
     with caplog.at_level(logging.INFO, logger="agent_team_backend"):
         assert (await a.sync())["ok"] is True
     assert "waiting for dev-old" in caplog.text
+
+
+# ── contract c6: conditional PUT, GC race ────────────────────────────────────
+def test_a_put_of_a_key_already_written_counts_as_uploaded(s3):
+    """412 means the object is there (a retried PUT whose first answer was
+    lost): carry on to blobs.commit, which checks its size."""
+    from agent_team_backend import sync_objects
+
+    url = s3.url("b" * 64)
+    sync_objects.put_all([(url, b"sealed")])
+    sync_objects.put_all([(url, b"sealed")])
+    assert s3.precondition_failed == ["b" * 64]
+    assert s3.objects["b" * 64] == b"sealed"
+
+
+async def test_storage_unavailable_on_push_fails_the_round_and_the_next_one_lands(tmp_path, account_key, s3):
+    server = V3Server(s3)
+    a = V3Device(tmp_path, server, "A", {"p1": {"v": 1}})
+    original = server.handle
+    state = {"left": 1}
+
+    async def gc_race(device, msg_type, payload):
+        if msg_type == "sync.push" and state["left"]:
+            state["left"] -= 1
+            return {"ok": False, "error": {"code": "STORAGE_UNAVAILABLE", "message": "gc"}}
+        return await original(device, msg_type, payload)
+
+    server.handle = gc_race
+    result = await a.sync()
+    assert result["ok"] is False and "STORAGE_UNAVAILABLE" in result["error"]
+    assert a.store.state("prompts", "p1") is None
+    assert (await a.sync())["ok"] is True
+    assert server.rows[("prompts", "p1")]["objectRef"]

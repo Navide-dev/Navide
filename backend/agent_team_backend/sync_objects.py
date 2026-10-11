@@ -199,15 +199,22 @@ def _run_all(fn: Callable[[Any], Any], jobs: list[Any]) -> list[Any]:
 
 def put_all(uploads: list[tuple[str, bytes]]) -> None:
     """PUT each ``(url, bytes)``, PARALLEL at a time. Blocking; raises
-    ``ObjectError`` unless every one was answered 2xx."""
+    ``ObjectError`` unless every one was answered 2xx or 412.
+
+    The URL is signed with ``If-None-Match: *`` (contract c6), so the header
+    must go with it or S3 answers 403. 412 means the key was already written
+    — a retried PUT whose first answer was lost — and counts as uploaded:
+    ``blobs.commit`` checks its size and asks for a restart when it is wrong."""
 
     def one(job: tuple[str, bytes]) -> None:
         url, data = job
         _require_safe_url(url)
         try:
-            status, _ = _POOL.request("PUT", url, body=data)
+            status, _ = _POOL.request("PUT", url, body=data, headers={"If-None-Match": "*"})
         except (OSError, http.client.HTTPException) as err:
             raise ObjectError(f"an object upload failed ({type(err).__name__})") from err
+        if status == 412:
+            return
         if not 200 <= status < 300:
             raise ObjectError(f"an object upload was answered {status}")
 

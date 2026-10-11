@@ -49,6 +49,7 @@ class FakeS3:
         self.fail_get: set[str] = set()
         self.fail_put: set[str] = set()
         self.content_types: list[str | None] = []
+        self.precondition_failed: list[str] = []
         self.connections = 0
         s3 = self
 
@@ -70,6 +71,19 @@ class FakeS3:
                 # as a form and stores nothing: the type must be octet-stream.
                 if self.headers.get("Content-Type") != "application/octet-stream":
                     self.send_response(400)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                # c6: If-None-Match is signed into the presigned URL, so real
+                # S3 answers 403 without it, and 412 for a key already written.
+                if self.headers.get("If-None-Match") != "*":
+                    self.send_response(403)
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                if blob_id in s3.objects:
+                    s3.precondition_failed.append(blob_id)
+                    self.send_response(412)
                     self.send_header("Content-Length", "0")
                     self.end_headers()
                     return
