@@ -556,7 +556,10 @@ def test_trailing_dots_and_spaces_cannot_hide_a_denied_name_on_windows(ws: Path,
     else:
         _file(written)
     monkeypatch.setattr(osplat, "platform_id", "win32")
-    assert media.resolve_outbound(str(written)) == (None, "denied_name")
+    # Real Windows does not open a path whose folder is written "keychains . ",
+    # so nothing is sent and it says so; everywhere else the name rule refuses it.
+    unopenable = sys.platform == "win32" and "/" in rel
+    assert media.resolve_outbound(str(written)) == (None, "missing" if unopenable else "denied_name")
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows cannot create a name ending in a dot")
