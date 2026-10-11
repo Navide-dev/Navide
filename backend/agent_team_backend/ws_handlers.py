@@ -4907,6 +4907,10 @@ async def p2p_trust_device_unpair(
     # paired is a state where one silently refuses everything the other sends,
     # and the sender's only symptom is silence.
     await server_link.revoke_pairing(device_id)
+    if removed.get("found") and server_link.trust_full():
+        # R4-3: the room this made is what a full record was waiting for, and
+        # only a hello re-adopts the pin (see p2p.trust.rebuild).
+        await server_link.reconfigure()
     if removed.get("found"):
         # The pin and its notices both feed this event, so the panel that was
         # showing the device empties in the same tick it is forgotten.

@@ -304,3 +304,55 @@ async def test_sign_in_over_a_stored_token_forgets_its_pin(kc, monkeypatch, verb
         assert link._own_member == "m1"
     assert len(owners()) == 1
     assert trust_store.member_for_credential(URL, "tok-3") == "m1"
+
+
+# ------------------------------------------- R4-3: a full record says so
+
+
+async def test_a_full_record_is_its_own_lock_code(kc):
+    """A sign-in whose pin does not fit is not "the trust store could not be
+    opened": the snapshot names it `full`, which the account view words as
+    "unpair a device" and offers no start-over for."""
+    trust_store.load()
+    trust_store.adopt_own_member(URL, "tok-0", "m1")
+    pair_max()
+    n = 1
+    with pytest.raises(trust_store.TrustStoreFull):
+        while True:
+            trust_store.adopt_own_member(URL, f"tok-filler-{n:03d}", "m1")
+            n += 1
+    server_link.set_access_token("tok-new")
+    link = await _connect_once(FakeServer(count=4))
+    try:
+        snapshot = link.network_snapshot()
+    finally:
+        await link.stop()
+    assert snapshot["trustLockedCode"] == "full"
+    assert snapshot["trustLocked"]
+    assert "could not be opened" not in snapshot["trustLocked"]
+    # Unpairing one device makes the room; the next hello takes the pin.
+    trust_store.forget_device(_device(0))
+    link = await _connect_once(FakeServer(count=4))
+    try:
+        snapshot = link.network_snapshot()
+    finally:
+        await link.stop()
+    assert snapshot["trustLocked"] == "" and snapshot["trustLockedCode"] == ""
+    assert trust_store.member_for_credential(URL, "tok-new") == "m1"
+
+
+async def test_an_unreadable_record_keeps_no_full_code(kc, monkeypatch):
+    trust_store.load()
+    server_link.set_access_token("tok-new")
+
+    def _broken(*_a, **_k):
+        raise trust_store.TrustStoreLocked("the record cannot be read")
+
+    monkeypatch.setattr(trust_store, "adopt_own_member", _broken)
+    link = await _connect_once(FakeServer(count=4))
+    try:
+        snapshot = link.network_snapshot()
+    finally:
+        await link.stop()
+    assert snapshot["trustLocked"]
+    assert snapshot["trustLockedCode"] == ""

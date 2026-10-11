@@ -834,6 +834,10 @@ class ServerLink:
         # no-downgrade list at once, and every one of those fails *silently* if
         # the answer is to start over.
         self._trust_locked = ""
+        # Which stop `_trust_locked` is, when the account view must word it
+        # differently: "full" for a record with no room left (R4-3), where
+        # unpairing a device is the way back and starting over is no answer.
+        self._trust_locked_code = ""
         # The member id pinned for *this link's* credential. Never the one the
         # last auth.hello asserted: that is the value C1 moved.
         self._own_member = ""
@@ -1887,17 +1891,28 @@ class ServerLink:
             # changes the store's answer has to make adoption run again. That is
             # why `p2p.trust.rebuild` reconnects rather than clearing a string.
             self._trust_locked = ""
+            self._trust_locked_code = ""
             await self._bind_sync_keyring(config, self.member_id)
+        except trust_store.TrustStoreFull as err:
+            # Readable and intact, just out of room for this credential's pin:
+            # nothing was written, and unpairing a device makes the room.
+            self._trust_locked = str(err)
+            self._trust_locked_code = "full"
+            sync_keyring.unbind()
+            log.error("cross-device traffic is refused on this machine: %s", err)
+            await self._announce_trust_notices()
         except trust_store.TrustStoreLocked as err:
             # The link stays up: the account view, the roster and the team
             # management calls do not depend on any of this, and dropping the
             # connection would hide the reason. Message traffic is what stops.
             self._trust_locked = str(err)
+            self._trust_locked_code = ""
             sync_keyring.unbind()
             log.error("cross-device traffic is refused on this machine: %s", err)
             await self._announce_trust_notices()
         except Exception as err:  # noqa: BLE001
             self._trust_locked = f"the device trust store could not be opened ({err})"
+            self._trust_locked_code = ""
             sync_keyring.unbind()
             log.error("cross-device traffic is refused on this machine: %s", err)
             await self._announce_trust_notices()
@@ -2745,6 +2760,8 @@ class ServerLink:
             # device list it is about.
             "pairings": self.pairing_rows(),
             "trustLocked": self._trust_locked,
+            # "full" when that stop is a record with no room left; see above.
+            "trustLockedCode": self._trust_locked_code,
             # No rules written under this identity yet, so `is_allowed(None)`
             # refuses everything inbound. That is the correct state — it is
             # where a device that never wrote a policy already is — but it is
@@ -4722,6 +4739,12 @@ async def revoke_pairing(device_id: str) -> None:
 def own_member_id() -> str:
     """The member id pinned for this link's credential, or "" with no link."""
     return _link._own_member if _link is not None else ""
+
+
+def trust_full() -> bool:
+    """Whether the link stopped cross-device traffic because the trust record
+    had no room for its credential's pin (R4-3)."""
+    return _link is not None and _link._trust_locked_code == "full"
 
 
 def link_state() -> str:
