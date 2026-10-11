@@ -2024,15 +2024,19 @@ class ServerLink:
         from . import app
         from .ipc import make_event
 
+        from .share_links import _LINK_ID_RE
+
         data = payload if isinstance(payload, dict) else {}
         link_id = data.get("linkId")
-        if not isinstance(link_id, str) or not link_id:
+        if not isinstance(link_id, str) or not _LINK_ID_RE.fullmatch(link_id):
             return
+        count = data.get("openCount")
+        opened_at = data.get("openedAt")
         event = {
             "linkId": link_id,
-            "openCount": data.get("openCount"),
-            "openedAt": data.get("openedAt"),
-            "newViewer": bool(data.get("newViewer")),
+            "openCount": count if isinstance(count, int) and not isinstance(count, bool) else None,
+            "openedAt": opened_at if isinstance(opened_at, str) else None,
+            "newViewer": data.get("newViewer") is True,
         }
         try:
             await app.broadcast(make_event("share.opened", event))

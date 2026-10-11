@@ -126,11 +126,13 @@ async def _handle(client: share_links.LinksClient, item: dict[str, Any]) -> dict
     result: dict[str, Any] = {"feedbackId": item.get("feedbackId"), "linkId": link_id}
     try:
         row = await client.request("unwrap", {"linkId": share_links._check_link_id(link_id)})
-        current = int(row.get("version") or 1)
-        key = sync_keyring.unwrap_aux(share_links.key_label(link_id, current), str(row.get("wrappedKey") or ""))
+        current = share_links._version_of(row)
+        key = share_links._open_key(link_id, current, row.get("wrappedKey"))
         meta = share_links._open_meta(link_id, current, row.get("metaEnc")) or {}
         result["title"] = meta.get("title") or ""
-        version = int(item.get("version") or 0)
+        version = item.get("version")
+        if isinstance(version, bool) or not isinstance(version, int):
+            raise _Refused("content-changed")
         body = _open(str(item.get("cipher") or ""), key, link_id, version)
         published = str(meta.get("sha256") or "")
         if version != current or body.get("version") != current:

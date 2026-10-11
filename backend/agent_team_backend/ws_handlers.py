@@ -5616,6 +5616,12 @@ async def _share_links_call(
 ) -> None:
     from . import share_links, sync_keyring
 
+    # The link first: without it nothing may reach the account key or the server.
+    state = server_link.link_state()
+    if state != server_link.STATE_CONNECTED:
+        code = "NOT_CONFIGURED" if state == server_link.STATE_UNCONFIGURED else "LINK_OFFLINE"
+        await session.send_json(make_error(msg_id, msg_type, code, f"Navide Cloud is {state}"))
+        return
     try:
         result = await call(share_links.ServerLinksClient())
     except share_links.ShareRefused as err:
@@ -5673,7 +5679,10 @@ async def share_create(session: "Session", msg_id: str, msg_type: str, payload: 
             created_by="user",
         )
         result = share_created_payload(created, created_by="user")
-        await app.broadcast(make_event("share.created", {k: v for k, v in result.items() if k != "url"}))
+        try:
+            await app.broadcast(make_event("share.created", {k: v for k, v in result.items() if k != "url"}))
+        except Exception as err:  # noqa: BLE001 - the link exists; its creator must still get the URL
+            log.warning("announcing a new share link failed: %s", err)
         if payload.get("sendToChat") is True:
             await share_links.announce_to_chat(created, created_by="user")
         return result
@@ -5753,7 +5762,13 @@ async def share_rekey(session: "Session", msg_id: str, msg_type: str, payload: d
 
     async def call(client: Any) -> dict:
         moved = await share_links.rekey(client, link_id)
-        return {"linkId": moved.link_id, "url": moved.url, "expiresAt": moved.expires_at, "replaces": link_id}
+        return {
+            "linkId": moved.link_id,
+            "url": moved.url,
+            "expiresAt": moved.expires_at,
+            "replaces": link_id,
+            "oldRevoked": moved.replaced,
+        }
 
     await _share_links_call(session, msg_id, msg_type, call)
 

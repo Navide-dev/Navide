@@ -297,6 +297,8 @@ class Created:
     findings: list[share_scan.Finding]
     title: str = ""
     kind: str = ""
+    #: rekey only: the server's commit listed the old link as revoked.
+    replaced: bool = False
 
 
 def _http_put(url: str, data: bytes) -> None:
@@ -337,6 +339,26 @@ def _http_get(url: str) -> bytes:
 def _kid_of(wrapped: str) -> str:
     """The key id inside a ``wrap_aux`` envelope (bytes 1–8)."""
     return base64.b64decode(wrapped)[1:9].hex()
+
+
+def _version_of(row: dict[str, Any]) -> int:
+    """A row's content version, or ShareError: a server answer without a sane
+    one is a failed call, not a crash and not a missing key."""
+    version = row.get("version")
+    if isinstance(version, bool) or not isinstance(version, int) or version < 1:
+        raise ShareError("the server returned no valid content version for the link")
+    return version
+
+
+def _open_key(link_id: str, version: int, wrapped: Any) -> bytes:
+    """K from its wrapped form. No ring is KeyringError (pair this device);
+    a ring that does not open it is ShareError (the stored key is unusable)."""
+    if sync_keyring.account_key() is None:
+        raise sync_keyring.KeyringError("this machine has no sync key yet")
+    try:
+        return sync_keyring.unwrap_aux(key_label(link_id, version), str(wrapped or ""))
+    except sync_keyring.KeyringError as err:
+        raise ShareError("the link's stored key does not open with this account's key") from err
 
 
 def _check_link_id(link_id: Any) -> str:
@@ -527,7 +549,7 @@ async def _rewrap_if_stale(client: LinksClient, row: dict[str, Any]) -> None:
         if _kid_of(wrapped) == active:
             return
         link_id = str(row["linkId"])
-        version = int(row.get("version") or 1)
+        version = _version_of(row)
         key = sync_keyring.unwrap_aux(key_label(link_id, version), wrapped)
         meta = _open_meta(link_id, version, row.get("metaEnc"))
         rewrapped = sync_keyring.wrap_aux(key_label(link_id, version), key)
@@ -562,9 +584,7 @@ async def list_links(client: LinksClient) -> list[dict[str, Any]]:
 async def _unwrap(client: LinksClient, link_id: str) -> tuple[dict[str, Any], bytes]:
     link_id = _check_link_id(link_id)
     row = await client.request("unwrap", {"linkId": link_id})
-    version = int(row.get("version") or 1)
-    key = sync_keyring.unwrap_aux(key_label(link_id, version), str(row.get("wrappedKey") or ""))
-    return row, key
+    return row, _open_key(link_id, _version_of(row), row.get("wrappedKey"))
 
 
 async def copy_link(client: LinksClient, link_id: str) -> str:
@@ -598,7 +618,7 @@ async def update_content(
     the device that created the link may; the server says NOT_CREATOR)."""
     row, key = await _unwrap(client, link_id)
     kind = str(row.get("kind") or "")
-    old_meta = _open_meta(link_id, int(row.get("version") or 1), row.get("metaEnc")) or {}
+    old_meta = _open_meta(link_id, _version_of(row), row.get("metaEnc")) or {}
     path = raw_path or str(old_meta.get("path") or "")
     if not path:
         raise ShareRefused("missing", "This link does not say which file it was made from.")
@@ -641,7 +661,7 @@ async def rekey(
     stops working once the new one is committed. Any device of the account
     holding the ring can do this."""
     row, old_key = await _unwrap(client, link_id)
-    version = int(row.get("version") or 1)
+    version = _version_of(row)
     blob = await asyncio.to_thread(get or _http_get, str(row.get("downloadUrl") or ""))
     kind, _v, plaintext = decrypt_object(blob, old_key, expected_version=version)
     meta = _open_meta(link_id, version, row.get("metaEnc")) or {}
@@ -662,4 +682,5 @@ async def rekey(
         },
     )
     expires = done.get("expiresAt") or started.get("expiresAt") or ""
-    return Created(new_id, link_url(new_id, key), str(expires), [])
+    replaced = link_id in (done.get("revoked") or [])
+    return Created(new_id, link_url(new_id, key), str(expires), [], replaced=replaced)

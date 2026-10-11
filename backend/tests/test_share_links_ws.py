@@ -59,6 +59,7 @@ def server(monkeypatch: pytest.MonkeyPatch) -> FakeLinks:
             return {"ok": False, "error": {"code": err.code, "message": str(err)}}
 
     monkeypatch.setattr(ws_handlers.server_link, "links_request", links_request)
+    monkeypatch.setattr(ws_handlers.server_link, "link_state", lambda: ws_handlers.server_link.STATE_CONNECTED)
     monkeypatch.setattr(share_links, "_http_put", fake.put)
     monkeypatch.setattr(share_links, "_http_get", fake.get)
     return fake
@@ -128,6 +129,7 @@ async def test_a_server_without_share_links_answers_with_its_code(monkeypatch, r
         return reply
 
     monkeypatch.setattr(ws_handlers.server_link, "links_request", links_request)
+    monkeypatch.setattr(ws_handlers.server_link, "link_state", lambda: ws_handlers.server_link.STATE_CONNECTED)
     session = FakeSession()
     await ws_handlers.share_list(session, "1", "share.list", {})
     assert session.reply["error"]["code"] == code
@@ -180,3 +182,66 @@ async def test_an_open_notice_is_handed_to_channels(monkeypatch, broadcasts) -> 
     await server_link.ServerLink._on_link_opened(None, event)  # type: ignore[arg-type]
     assert opened == [event]
     assert broadcasts[0]["type"] == "share.opened"
+
+
+
+# ---- review round 5/6 ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("state", "code"),
+    [("unconfigured", "NOT_CONFIGURED"), ("unreachable", "LINK_OFFLINE"), ("connecting", "LINK_OFFLINE")],
+)
+async def test_without_a_live_link_nothing_reaches_the_ring_or_the_server(monkeypatch, home, state, code) -> None:
+    """W-F1: the link is checked before the account key is touched."""
+    monkeypatch.setattr(ws_handlers.server_link, "link_state", lambda: state)
+
+    def no_ring() -> Any:
+        raise AssertionError("the account key was read without a live link")
+
+    async def no_server(*_a: Any, **_k: Any) -> Any:
+        raise AssertionError("the server was asked without a live link")
+
+    monkeypatch.setattr(sync_keyring, "account_key", no_ring)
+    monkeypatch.setattr(ws_handlers.server_link, "links_request", no_server)
+    session = FakeSession()
+    await ws_handlers.share_create(session, "1", "share.create", {"path": str(_plan(home, "<p/>"))})
+    assert session.reply["error"]["code"] == code
+
+
+async def test_a_failed_announcement_still_hands_back_the_url(ring, home, server, monkeypatch) -> None:
+    """W-F3: the server has committed the link; the creator must get its URL."""
+
+    async def broken(event: dict[str, Any]) -> None:
+        raise RuntimeError("no window")
+
+    monkeypatch.setattr(app, "broadcast", broken)
+    session = FakeSession()
+    await ws_handlers.share_create(session, "1", "share.create", {"path": str(_plan(home, "<p/>"))})
+    assert session.reply["ok"] and session.reply["payload"]["url"].startswith("https://share.navide.dev/s/")
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"linkId": "x/../evil", "openCount": 1},
+        {"linkId": "ab" * 16, "openCount": True, "openedAt": 5},
+    ],
+)
+async def test_an_open_push_is_checked_before_anyone_hears_of_it(monkeypatch, broadcasts, payload) -> None:
+    """W-F2."""
+    from agent_team_backend import server_link
+    from agent_team_backend.channels import share_cmds
+
+    opened: list[dict[str, Any]] = []
+
+    async def notify_link_opened(event: dict[str, Any]) -> None:
+        opened.append(event)
+
+    monkeypatch.setattr(share_cmds, "notify_link_opened", notify_link_opened, raising=False)
+    await server_link.ServerLink._on_link_opened(None, payload)  # type: ignore[arg-type]
+    if payload["linkId"] == "x/../evil":
+        assert broadcasts == [] and opened == []
+    else:
+        [event] = opened
+        assert event["openCount"] is None and event["openedAt"] is None

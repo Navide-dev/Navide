@@ -472,3 +472,46 @@ async def test_a_lifetime_under_the_servers_upload_window_is_refused_here(ring, 
     assert err.value.code == "ttl" and client.calls == []
     with pytest.raises(share_links.ShareRefused):
         await share_links.extend(client, "ab" * 16, seconds)
+
+
+
+# ---- review round 5/6 ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("version", ["x", None, 0, -1])
+async def test_a_bad_version_from_the_server_is_a_share_failure(ring, home: Path, version) -> None:
+    """W-F4 / B5-7: not a crash, not a misleading 'no sync key'."""
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=client.put)
+    client.rows[created.link_id]["version"] = version
+    with pytest.raises(share_links.ShareError) as err:
+        await share_links.copy_link(client, created.link_id)
+    assert not isinstance(err.value, sync_keyring.KeyringError)
+
+
+async def test_a_corrupt_wrapped_key_is_a_share_failure_not_a_missing_key(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=client.put)
+    client.rows[created.link_id]["wrappedKey"] = "AAAA"
+    with pytest.raises(share_links.ShareError):
+        await share_links.copy_link(client, created.link_id)
+
+
+async def test_rekey_says_whether_the_old_link_is_gone(ring, home: Path, monkeypatch) -> None:
+    """B5-6: only a commit that lists the old id in `revoked` means the old URL stopped."""
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p>body</p>")), "plan", put=client.put)
+    moved = await share_links.rekey(client, created.link_id, put=client.put, get=client.get)
+    assert moved.replaced is True
+
+    again = await share_links.create_share(client, str(_plan(home, "<p>two</p>")), "plan", put=client.put)
+    real = client.request
+
+    async def forgetful(verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        reply = await real(verb, payload)
+        return {**reply, "revoked": []} if verb == "commit" else reply
+
+    monkeypatch.setattr(client, "request", forgetful)
+    client.next_ids.append("12" * 16)
+    later = await share_links.rekey(client, again.link_id, put=client.put, get=client.get)
+    assert later.replaced is False
