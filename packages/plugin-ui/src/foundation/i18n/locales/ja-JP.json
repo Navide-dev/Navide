@@ -6414,6 +6414,49 @@
       "enabled-hint": "無効にすると、Navide はどこにも配布しません。直接読み込む CLI からは引き続き利用できます。",
       "native-conflict-hint": "同じ名前の CLI 固有のスキルがあり、その CLI ではそちらが優先されます。"
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud のセクション",
+        "sync": "同期",
+        "share": "共有",
+        "devices": "デバイス"
+      },
+      "inventory": {
+        "title": "このマシンとクラウド",
+        "hint": "同期する各項目が、このマシンとクラウドにそれぞれ何件あるか。",
+        "counts": "このマシン {local} · クラウド {cloud} · 一致 {inSync} · 競合 {conflict}",
+        "last-write": "最終書き込み：{device} · {when}",
+        "no-writes": "まだクラウドに書き込まれていません",
+        "sync-off": "同期オフ",
+        "notice-no-key": "このデバイスはアカウントの同期キーをまだ持っていないため、クラウドのデータを開けません。キーを持つデバイスとペアリングすると、ここに件数が表示されます。",
+        "notice-not-connected": "Navide Cloud にサインインすると、このマシンとクラウドを比較できます。",
+        "notice-error": "クラウドを読み込めませんでした。",
+        "refresh": "更新"
+      },
+      "devices": {
+        "title": "クラウドに書き込んだデバイス",
+        "hint": "このアカウントにレコードを書き込んだことのあるすべてのデバイス。",
+        "none": "まだどのデバイスもクラウドに書き込んでいません。",
+        "last-write": "最終書き込み {when}",
+        "last-seen": "最終オンライン {when}",
+        "refresh": "更新"
+      },
+      "share": {
+        "title": "共有リンク",
+        "hint": "このマシンで暗号化した、プランやレポートの読み取り専用リンク。鍵はリンクの中にだけあり、サーバーは開けない暗号文だけを保存します。",
+        "col-item": "項目",
+        "col-creator": "作成者",
+        "col-created": "作成日時",
+        "col-expires": "有効期限",
+        "col-opens": "開封回数",
+        "col-last-open": "最終開封",
+        "creator-user": "あなた",
+        "creator-agent": "エージェント · {pane}",
+        "empty": "共有リンクはまだありません。",
+        "unavailable": "このバージョンではまだ共有リンクを使えません。",
+        "refresh": "更新"
+      }
+    },
     "sync": {
       "title": "同期",
       "hint": "項目を有効にすると、このアカウントでログインしているすべてのデバイスで同じ設定を保てます。データはこのマシンで暗号化され、サーバーには復号鍵のない暗号文が保存されます。",

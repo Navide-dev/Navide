@@ -6414,6 +6414,49 @@
       "enabled-hint": "Off means Navide delivers it nowhere; CLIs that read it on their own still see it.",
       "native-conflict-hint": "A CLI's own skill has this name and wins for that CLI."
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud sections",
+        "sync": "Sync",
+        "share": "Share",
+        "devices": "Devices"
+      },
+      "inventory": {
+        "title": "This machine and the cloud",
+        "hint": "How many items each synced section holds here and in the cloud.",
+        "counts": "Here {local} · Cloud {cloud} · Matching {inSync} · Conflicts {conflict}",
+        "last-write": "Last written by {device} · {when}",
+        "no-writes": "Nothing written to the cloud yet",
+        "sync-off": "Sync off",
+        "notice-no-key": "This device does not hold the account's sync key yet, so the cloud is closed to it. Pair it with a device that holds the key and the numbers appear here.",
+        "notice-not-connected": "Sign in to Navide Cloud to compare this machine with the cloud.",
+        "notice-error": "The cloud could not be read.",
+        "refresh": "Refresh"
+      },
+      "devices": {
+        "title": "Devices that wrote to the cloud",
+        "hint": "Every device that has written a record to this account.",
+        "none": "No device has written to the cloud yet.",
+        "last-write": "Last write {when}",
+        "last-seen": "Last online {when}",
+        "refresh": "Refresh"
+      },
+      "share": {
+        "title": "Share links",
+        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link; the server stores ciphertext it cannot open.",
+        "col-item": "Item",
+        "col-creator": "Created by",
+        "col-created": "Created",
+        "col-expires": "Expires",
+        "col-opens": "Opens",
+        "col-last-open": "Last opened",
+        "creator-user": "You",
+        "creator-agent": "Agent · {pane}",
+        "empty": "No share links yet.",
+        "unavailable": "Share links are not available in this version yet.",
+        "refresh": "Refresh"
+      }
+    },
     "sync": {
       "title": "Sync",
       "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine; the server stores ciphertext it has no key for.",

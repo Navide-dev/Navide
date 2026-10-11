@@ -6414,6 +6414,49 @@
       "enabled-hint": "關閉＝Navide 不投遞給任何一家；自己會讀的 CLI 仍看得到。",
       "native-conflict-hint": "某家 CLI 自己也有同名 skill，對那家來說它的優先。"
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud 子分頁",
+        "sync": "同步",
+        "share": "分享",
+        "devices": "裝置"
+      },
+      "inventory": {
+        "title": "這台機器與雲端",
+        "hint": "每個同步區塊在這台機器與雲端各有幾筆。",
+        "counts": "本機 {local} · 雲端 {cloud} · 相符 {inSync} · 衝突 {conflict}",
+        "last-write": "最後寫入：{device} · {when}",
+        "no-writes": "還沒有寫入雲端",
+        "sync-off": "未開啟同步",
+        "notice-no-key": "這台裝置還沒有帳號的同步金鑰，雲端記錄對它是打不開的。請與已經有金鑰的裝置配對，配對後這裡才會出現數字。",
+        "notice-not-connected": "登入 Navide Cloud 後才能比對這台機器與雲端。",
+        "notice-error": "讀不到雲端資料。",
+        "refresh": "重新整理"
+      },
+      "devices": {
+        "title": "曾寫入雲端的裝置",
+        "hint": "曾經寫入記錄到這個帳號的每一台裝置。",
+        "none": "還沒有任何裝置寫入雲端。",
+        "last-write": "最後寫入 {when}",
+        "last-seen": "最後上線 {when}",
+        "refresh": "重新整理"
+      },
+      "share": {
+        "title": "分享連結",
+        "hint": "在這台機器上加密的 plan 或報告唯讀連結。鑰匙只存在連結裡，伺服器只保存它打不開的密文。",
+        "col-item": "項目",
+        "col-creator": "建立者",
+        "col-created": "建立時間",
+        "col-expires": "到期",
+        "col-opens": "開啟次數",
+        "col-last-open": "最後開啟",
+        "creator-user": "你",
+        "creator-agent": "Agent · {pane}",
+        "empty": "還沒有分享連結。",
+        "unavailable": "這個版本還不能使用分享連結。",
+        "refresh": "重新整理"
+      }
+    },
     "sync": {
       "title": "同步",
       "hint": "打開一個區塊，它就會在登入同一個帳號的每台裝置上保持一致。內容在本機加密，伺服器只存它沒有金鑰的密文。",

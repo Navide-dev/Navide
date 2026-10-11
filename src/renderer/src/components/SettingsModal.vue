@@ -130,6 +130,10 @@ import SkillsPane from './SkillsPane.vue'
 import CredentialsPane from './CredentialsPane.vue'
 import PromptSkillsPane from './PromptSkillsPane.vue'
 import SyncSettings from './SyncSettings.vue'
+import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
+import CloudInventorySection from './cloud/CloudInventorySection.vue'
+import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
+import ShareLinksPane from './cloud/ShareLinksPane.vue'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
@@ -248,6 +252,8 @@ type HelpTopic =
   | 'crossPlatform'
   | 'icons'
 const helpTopic = ref<HelpTopic>('workspace')
+// Navide Cloud page sub-tab; every deep link into the page targets Sync.
+const cloudSubtab = ref<CloudSubtab>('sync')
 // Topic order is the reading order: what the main window is made of, then the
 // agents in it, then how they talk, then the code surfaces, then settings.
 const helpTopicComponents: Record<HelpTopic, Component> = {
@@ -300,6 +306,7 @@ defineExpose({
   // for one, which it used to do in prose and with nowhere to click.
   setSection: async (tab: Tab, section: string): Promise<void> => {
     activeTab.value = tab
+    if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'cliAgents') await openCliSection(section)
     await nextTick()
     requestAnimationFrame(() => {
@@ -1194,6 +1201,7 @@ async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void>
   if (item.tab === 'cliAgents') await openCliSection(item.section, settingsSearchQuery.value)
   if (item.tab === 'mcp' && item.mcpView) mView.value = item.mcpView
   if (item.tab === 'help' && item.helpTopic) helpTopic.value = item.helpTopic
+  if (item.tab === 'cross-device') cloudSubtab.value = 'sync'
   settingsSearchQuery.value = ''
   await nextTick()
   requestAnimationFrame(() => {
@@ -3817,7 +3825,10 @@ watch(activeTab, (tab) => {
             <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
             {{ $t('settings.nav.crossDevice') }}
           </h1>
+          <CloudSubtabs v-model="cloudSubtab">
+          <template #sync>
           <SyncSettings :backend="props.backend" />
+          <CloudInventorySection v-if="activeTab === 'cross-device'" :backend="props.backend" />
           <SettingsSection :label="$t('settings.p2p.title')">
             <SettingsCard>
               <div class="s-fullrow" data-settings-section="general-p2p">
@@ -3990,6 +4001,14 @@ watch(activeTab, (tab) => {
               </div>
             </SettingsCard>
           </SettingsSection>
+          </template>
+          <template #share>
+            <ShareLinksPane :backend="props.backend" />
+          </template>
+          <template #devices>
+            <CloudDevicesSection :backend="props.backend" />
+          </template>
+          </CloudSubtabs>
         </div>
 
         <!-- ══ UPDATES TAB ══ -->
