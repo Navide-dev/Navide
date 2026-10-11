@@ -2606,10 +2606,15 @@ class SyncEngine:
     ) -> None:
         """Answer a conflict between a migrated item and its changed legacy
         row (contract c5). Either way the item stays on its hashed id at the
-        rev it holds there, and the legacy tombstone stays owed at the rev
-        the conflict reported: keeping the remote copy writes it in and
-        leaves it unagreed, so the next push carries it up under the hashed
-        id; keeping the local copy sends only the tombstone."""
+        rev it holds there, the legacy tombstone stays owed at the rev the
+        conflict reported, and the copy kept is left unagreed, so the next
+        push carries it up under the hashed id again.
+
+        Keeping the local copy pushes it again too, though the hashed row
+        already holds those bytes: that row was stamped at the migration,
+        before the legacy edit it now overrides, and a device that agreed on
+        that edit reads an older stamp as a replay (D0) and asks instead of
+        taking it. Sent again, the choice carries the time it was made."""
         scope = adapter.scope
         if keep == KEEP_REMOTE:
             try:
@@ -2618,12 +2623,12 @@ class SyncEngine:
                 raise SyncError(f"{scope}/{item_id} is still downloading; try again shortly") from err
             if refused:
                 raise SyncError(f"{scope}/{item_id} could not be written here; the conflict stays open")
-            self._store.set_state(
-                scope, item_id, rev=state.rev, synced_hash="", deleted=False,
-                sealed_kid=state.sealed_kid, wire_id=state.wire_id,
-            )
         elif keep != KEEP_LOCAL:
             raise SyncError(f"{keep!r} is neither {KEEP_LOCAL!r} nor {KEEP_REMOTE!r}")
+        self._store.set_state(
+            scope, item_id, rev=state.rev, synced_hash="", deleted=False,
+            sealed_kid=state.sealed_kid, wire_id=state.wire_id,
+        )
         self._store.set_legacy_rev(scope, item_id, int(row["remoteRev"]))
         self._store.clear_conflict(scope, item_id)
 

@@ -373,10 +373,26 @@ async def test_hashed_copy_accepted_tombstone_refused_owes_only_the_tombstone(tm
     assert b.adapter.items == NAMES and b.store.conflicts("prompts") == []
 
 
-@pytest.mark.parametrize("keep", [sync_engine.KEEP_REMOTE, sync_engine.KEEP_LOCAL])
-async def test_a_tombstone_that_meets_a_changed_legacy_row_is_a_conflict_then_sent_again(
-    tmp_path, account_key, s3, keep
-):
+CLOCKS = {"same-second": 0, "ticking": 1, "backwards": -1}
+
+
+def set_clock(monkeypatch, clock: str) -> None:
+    """Every stamp the engine writes comes from this clock: all in one second,
+    one second later per write (devices acting seconds apart), or one second
+    earlier per write (a later writer whose clock is behind)."""
+    import itertools
+    from datetime import datetime, timedelta, timezone
+
+    base = datetime(2026, 10, 11, 12, 0, 0, tzinfo=timezone.utc)
+    step, ticks = CLOCKS[clock], itertools.count()
+    monkeypatch.setattr(
+        sync_engine, "now_iso", lambda: (base + timedelta(seconds=step * next(ticks))).isoformat(timespec="seconds")
+    )
+
+
+async def _legacy_row_changed_then_answered(tmp_path, s3, keep):
+    """B edits alpha on its legacy connection between A's pull and A's
+    migration push; A's tombstone meets that row and A answers *keep*."""
     server, a, b = await _legacy_pair(tmp_path, s3)
 
     async def b_edits_on_its_legacy_connection():
@@ -393,13 +409,66 @@ async def test_a_tombstone_that_meets_a_changed_legacy_row_is_a_conflict_then_se
     assert conflict["itemId"] == ALPHA and conflict["remote"] == {"v": "b-edit"}
     assert _legacy_live(server) == [ALPHA]
     a.engine.resolve("prompts", ALPHA, keep)
-    winner = {"v": "b-edit"} if keep == sync_engine.KEEP_REMOTE else {"v": "alpha"}
     b.reconnect()
     for _ in range(3):
         await a.sync(); await b.sync()
+    return server, a, b
+
+
+@pytest.mark.parametrize("clock", ["same-second", "ticking"])
+@pytest.mark.parametrize("keep", [sync_engine.KEEP_REMOTE, sync_engine.KEEP_LOCAL])
+async def test_a_tombstone_that_meets_a_changed_legacy_row_is_a_conflict_then_sent_again(
+    tmp_path, account_key, s3, keep, clock, monkeypatch
+):
+    # The clock is fixed so the outcome never rests on wall time: with it
+    # ticking, keep-local used to leave B a conflict (A's hashed copy kept
+    # the stamp of the migration, older than B's legacy edit, and read on B
+    # as a replay).
+    set_clock(monkeypatch, clock)
+    server, a, b = await _legacy_row_changed_then_answered(tmp_path, s3, keep)
+    winner = {"v": "b-edit"} if keep == sync_engine.KEEP_REMOTE else {"v": "alpha"}
     assert a.store.conflicts("prompts") == [] and b.store.conflicts("prompts") == []
     assert a.adapter.items[ALPHA] == winner and b.adapter.items[ALPHA] == winner
     assert _legacy_live(server) == [] and len(_live_ids(server)) == 2
+
+
+@pytest.mark.parametrize("keep", [sync_engine.KEEP_REMOTE, sync_engine.KEEP_LOCAL])
+async def test_a_legacy_row_answer_under_a_clock_running_backwards_loses_nothing(
+    tmp_path, account_key, s3, keep, monkeypatch
+):
+    """A later write stamped before what B agreed on is what D0 reads as a
+    server replay, and main does the same on plain v1 edits (see the control
+    below): B is asked rather than overwritten. Nothing is lost, and B's
+    answer converges both devices."""
+    set_clock(monkeypatch, "backwards")
+    server, a, b = await _legacy_row_changed_then_answered(tmp_path, s3, keep)
+    winner = {"v": "b-edit"} if keep == sync_engine.KEEP_REMOTE else {"v": "alpha"}
+    assert a.store.conflicts("prompts") == [] and a.adapter.items[ALPHA] == winner
+    if keep == sync_engine.KEEP_LOCAL:
+        (clash,) = b.store.conflicts("prompts")
+        assert clash["local"] == {"v": "b-edit"} and clash["remote"] == winner
+        assert b.adapter.items[ALPHA] == {"v": "b-edit"}
+        b.engine.resolve("prompts", ALPHA, sync_engine.KEEP_REMOTE)
+        for _ in range(2):
+            await b.sync(); await a.sync()
+    assert a.store.conflicts("prompts") == [] and b.store.conflicts("prompts") == []
+    assert a.adapter.items[ALPHA] == winner and b.adapter.items[ALPHA] == winner
+    assert _legacy_live(server) == [] and len(_live_ids(server)) == 2
+
+
+async def test_control_main_reads_a_backwards_stamped_v1_edit_as_a_replay(tmp_path, account_key, monkeypatch):
+    """Control for the test above, on the v1 wire main has always used."""
+    from tests.test_sync_engine import Device, FakeServer
+
+    set_clock(monkeypatch, "backwards")
+    server = FakeServer()
+    a = Device(tmp_path, server, "dev-a", {"p1": {"id": "p1", "prompt": "one"}})
+    b = Device(tmp_path, server, "dev-b")
+    await a.sync(); await b.sync()
+    a.adapter.items["p1"] = {"id": "p1", "prompt": "two"}
+    await a.sync(); await b.sync()
+    (clash,) = b.store.conflicts("prompts")
+    assert clash["remote"] == {"id": "p1", "prompt": "two"} and b.adapter.items["p1"]["prompt"] == "one"
 
 
 async def test_tombstone_accepted_hashed_copy_refused_resends_the_copy(tmp_path, account_key, s3):
@@ -767,3 +836,30 @@ async def test_an_account_on_the_list_is_moved_once_and_then_offered_no_more(tmp
     a.reconnect()
     assert (await a.sync())["ok"] is True
     assert server.types("A").count("sync.adoptHmacIds") == 1
+
+
+# ── the convergence tests again, with devices acting seconds apart ───────────
+_TICKING = [
+    ("test_migration_keeps_an_unpushed_edit_on_the_other_device", {}),
+    ("test_migration_keeps_an_unpushed_delete_on_the_other_device", {}),
+    ("test_a_genuine_migration_conflict_converges_either_way",
+     {"keep": sync_engine.KEEP_REMOTE, "winner": {"v": "a-edit"}}),
+    ("test_a_genuine_migration_conflict_converges_either_way",
+     {"keep": sync_engine.KEEP_LOCAL, "winner": {"v": "b-edit"}}),
+    ("test_hashed_copy_accepted_tombstone_refused_owes_only_the_tombstone", {}),
+    ("test_tombstone_accepted_hashed_copy_refused_resends_the_copy", {}),
+    ("test_a_device_that_meets_item_ids_changed_converges_within_two_rounds", {"change": "none"}),
+    ("test_a_device_that_meets_item_ids_changed_converges_within_two_rounds", {"change": "edit"}),
+    ("test_a_device_that_meets_item_ids_changed_converges_within_two_rounds", {"change": "delete"}),
+    ("test_a_legacy_push_that_lands_after_the_migration_converges", {"change": "edit"}),
+    ("test_a_legacy_push_that_lands_after_the_migration_converges", {"change": "delete"}),
+    ("test_an_hmac_account_taken_off_s3_keeps_v3_and_its_hashed_ids", {}),
+]
+
+
+@pytest.mark.parametrize(
+    "name,kwargs", _TICKING, ids=[f"{n}-{'-'.join(str(v) for v in k.values() if isinstance(v, str))}" for n, k in _TICKING]
+)
+async def test_convergence_holds_with_a_ticking_clock(tmp_path, account_key, s3, monkeypatch, name, kwargs):
+    set_clock(monkeypatch, "ticking")
+    await globals()[name](tmp_path=tmp_path, account_key=account_key, s3=s3, **kwargs)

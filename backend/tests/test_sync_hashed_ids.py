@@ -256,3 +256,21 @@ def test_the_wire_id_columns_are_added_once_and_kept(tmp_path):
     again = sync_engine.SyncStore(Database(path))
     assert again.state("prompts", "p").wire_id == "h1." + "a" * 64
     assert again.state("prompts", "p").rev == 2
+
+
+# ── the same, with devices acting seconds apart ─────────────────────────────
+@pytest.mark.parametrize("name", [
+    "test_after_adoption_the_server_never_sees_a_name",
+    "test_migration_sends_the_hashed_copy_and_the_legacy_tombstone_in_one_batch",
+    "test_another_device_reads_the_migration_as_a_rename",
+    "test_a_device_on_the_old_connection_catches_up_on_the_next_round",
+    "test_a_local_delete_of_a_legacy_item_is_a_legacy_tombstone",
+    "test_a_delete_of_a_hashed_item_reaches_the_other_device",
+    "test_a_conflict_on_a_hashed_item_is_kept_by_name_and_resolves",
+    "test_switching_accounts_and_back_resends_nothing",
+])
+async def test_with_a_ticking_clock(tmp_path, account_key, s3, monkeypatch, name):
+    from tests.test_sync_review_s3 import set_clock
+
+    set_clock(monkeypatch, "ticking")
+    await globals()[name](tmp_path=tmp_path, account_key=account_key, s3=s3)
