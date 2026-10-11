@@ -6498,7 +6498,20 @@
       "secret-same": "same",
       "secret-differs": "differs",
       "secret-local-only": "only on this device",
-      "secret-remote-only": "only on the other device"
+      "secret-remote-only": "only on the other device",
+      "history-title": "Version history",
+      "history-hint": "The cloud keeps each synced item's last 10 versions or 30 days of them, whichever ends first.",
+      "history-scope": "Section",
+      "history-item": "Item",
+      "history-show": "Show versions",
+      "history-no-items": "Nothing in this section is synced yet.",
+      "history-empty": "No earlier versions of this item.",
+      "history-restore-previous": "Restore previous version",
+      "history-restore": "Restore this version",
+      "history-device": "from {device}",
+      "history-restored": "Restored here. It reaches your other devices on the next sync.",
+      "history-held": "The restored version is waiting for your approval above.",
+      "history-error": "Version history could not be loaded."
     },
     "sharing": {
       "intro": "Two ways to move these four sections between machines: a file you hand over, and the account they already share.",

@@ -6498,7 +6498,20 @@
       "secret-same": "相同",
       "secret-differs": "兩邊不同",
       "secret-local-only": "只有此裝置有",
-      "secret-remote-only": "只有另一台裝置有"
+      "secret-remote-only": "只有另一台裝置有",
+      "history-title": "版本記錄",
+      "history-hint": "雲端會為每個同步項目保留最近 10 個版本，或最近 30 天內的版本，以先到者為準。",
+      "history-scope": "區塊",
+      "history-item": "項目",
+      "history-show": "顯示版本",
+      "history-no-items": "這個區塊還沒有同步任何項目。",
+      "history-empty": "這個項目沒有更早的版本。",
+      "history-restore-previous": "還原到上一版",
+      "history-restore": "還原此版本",
+      "history-device": "來自 {device}",
+      "history-restored": "已在這台還原，下一輪同步時會送到其他裝置。",
+      "history-held": "還原的版本正在上方等你核准。",
+      "history-error": "無法載入版本記錄。"
     },
     "sharing": {
       "intro": "把這四個區段搬到別台機器的兩條路：一份可以交出去的檔案，以及這些機器本來就共用的帳號。",
