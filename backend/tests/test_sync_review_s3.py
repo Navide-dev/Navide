@@ -229,3 +229,54 @@ def test_plain_http_is_allowed_on_loopback_only(host, monkeypatch):
     assert sync_objects.get_all([("b1", f"http://{host}:9/o")], {"b1": 10}) == {"b1": b"ok"}
     sync_objects.put_all([(f"http://{host}:9/o", b"sealed")])
     assert sync_objects.get_all([("b1", "https://bucket.example.com/o")], {"b1": 10}) == {"b1": b"ok"}
+
+
+# ── D-L2: restore says what actually happened ────────────────────────────────
+async def _prompt_versions(tmp_path, s3, values):
+    server = V3Server(s3, adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", {"p1": values[0]})
+    await a.sync()
+    for v in values[1:]:
+        a.adapter.items["p1"] = v
+        assert (await a.sync())["ok"] is True
+    return server, a
+
+
+async def test_a_restore_that_lands_reads_applied(tmp_path, account_key, s3):
+    _server, a = await _prompt_versions(tmp_path, s3, [{"v": 0}, {"v": 1}])
+    (old,) = await a.engine.versions("prompts", "p1")
+    result = await a.engine.restore("prompts", "p1", old["rev"])
+    assert result["outcome"] == "applied" and result["held"] is False
+    assert a.adapter.items["p1"] == {"v": 0}
+
+
+async def test_a_restore_of_the_copy_already_here_reads_not_applied(tmp_path, account_key, s3):
+    _server, a = await _prompt_versions(tmp_path, s3, [{"v": 0}, {"v": 1}, {"v": 0}])
+    oldest = (await a.engine.versions("prompts", "p1"))[-1]
+    result = await a.engine.restore("prompts", "p1", oldest["rev"])
+    assert result["outcome"] == "not-applied" and result["held"] is False
+
+
+async def test_a_restore_the_adapter_declines_reads_not_applied(tmp_path, account_key, s3, monkeypatch):
+    _server, a = await _prompt_versions(tmp_path, s3, [{"v": 0}, {"v": 1}])
+    (old,) = await a.engine.versions("prompts", "p1")
+    monkeypatch.setattr(a.adapter, "apply", lambda _i, _p: False)
+    result = await a.engine.restore("prompts", "p1", old["rev"])
+    assert result["outcome"] == "not-applied" and result["held"] is False
+    assert a.adapter.items["p1"] == {"v": 1}
+
+
+async def test_a_held_restore_reads_held(tmp_path, account_key, s3, monkeypatch):
+    from agent_team_backend import app
+
+    monkeypatch.setattr(app, "app_data_dir", lambda: tmp_path / "app-data")
+    server = V3Server(s3, adopt_ready=True)
+    store = MCPSettingsStore(tmp_path / "a.json")
+    a = Dev(tmp_path, server, "A", monkeypatch, sync_scopes.McpScope(), mcp_settings_store=store)
+    a.engine._request = lambda t, p: server.handle("A", t, p)
+    a.use()
+    store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/first"}]); await a.sync()
+    store.replace_servers([{**_mcp("runner"), "command": "/usr/bin/second"}]); await a.sync()
+    (old,) = await a.engine.versions("mcp", "runner")
+    result = await a.engine.restore("mcp", "runner", old["rev"])
+    assert result["outcome"] == "held" and result["held"] is True

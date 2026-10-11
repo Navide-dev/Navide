@@ -41,7 +41,8 @@ async def test_restoring_a_prompt_lands_it_and_pushes_it_next_round(tmp_path, ac
     oldest = (await a.engine.versions("prompts", "p1"))[-1]
     pushes = server.pushes
     result = await a.engine.restore("prompts", "p1", oldest["rev"])
-    assert result == {"scope": "prompts", "itemId": "p1", "rev": oldest["rev"], "held": False}
+    assert result == {"scope": "prompts", "itemId": "p1", "rev": oldest["rev"], "held": False,
+                      "outcome": "applied"}
     assert a.adapter.items["p1"] == {"v": 0}
     assert server.pushes == pushes  # nothing is sent by the restore itself
     assert (await a.sync())["ok"] is True

@@ -2840,8 +2840,11 @@ class SyncEngine:
                         "sig": version.get("sig"), "objectRef": version["objectRef"],
                     }
                     await self._hydrate(scope, [row])
-                    held = await asyncio.to_thread(self._restore_one, adapter, item_id, row)
-            return {"scope": scope, "itemId": item_id, "rev": int(rev), "held": held}
+                    outcome = await asyncio.to_thread(self._restore_one, adapter, item_id, row)
+            return {
+                "scope": scope, "itemId": item_id, "rev": int(rev),
+                "held": outcome == "held", "outcome": outcome,
+            }
         finally:
             _round_generation.reset(token)
 
@@ -2870,9 +2873,11 @@ class SyncEngine:
             return sync_keyring.hashed_item_id(scope, item_id, kid)
         return item_id
 
-    def _restore_one(self, adapter: ScopeAdapter, item_id: str, row: dict[str, Any]) -> bool:
+    def _restore_one(self, adapter: ScopeAdapter, item_id: str, row: dict[str, Any]) -> str:
         """Open one fetched version and hand it to the adapter. Worker
-        thread. True when the adapter filed it for approval."""
+        thread. What came of it: "held" (filed for approval), "applied" (the
+        local copy is now that version) or "not-applied" (the adapter took
+        nothing, filed no hold, or the local copy did not change)."""
         scope = adapter.scope
         self._store._check_round()
         if item_id in self._store.conflict_ids(scope):
@@ -2899,6 +2904,7 @@ class SyncEngine:
             raise
         except Exception as err:  # noqa: BLE001 - named by class only
             raise SyncError(f"version {row['rev']} of {scope}/{item_id} could not be opened ({type(err).__name__})") from err
+        before = adapter.snapshot().get(item_id, _UNOPENED)
         try:
             taken = adapter.apply(item_id, payload) is not False
         except DeferItem as err:
@@ -2908,12 +2914,17 @@ class SyncEngine:
         except Exception as err:  # noqa: BLE001 - the class only: the message may quote the payload
             raise SyncError(f"{scope}/{item_id} could not be restored here ({type(err).__name__})") from err
         if not taken:
-            raise SyncError(f"{scope}/{item_id} could not be restored here")
-        entry =sync_approvals.entry(scope, item_id)
+            return "not-applied"
+        entry = sync_approvals.entry(scope, item_id)
         held = bool(entry and entry.get("status") == sync_approvals.PENDING and entry.get("digest") == digest(payload))
         if held:
             sync_approvals.mark_restored(scope, item_id)
-        return held
+            return "held"
+        after = adapter.snapshot().get(item_id, _UNOPENED)
+        changed = (before is _UNOPENED) != (after is _UNOPENED) or (
+            after is not _UNOPENED and digest(before) != digest(after)
+        )
+        return "applied" if changed else "not-applied"
 
     def _require_adapter(self, scope: str) -> ScopeAdapter:
         adapter = self._adapters.get(scope)
