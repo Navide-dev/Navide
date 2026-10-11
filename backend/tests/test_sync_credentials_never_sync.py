@@ -168,11 +168,23 @@ async def _status(scopes_on_disk: dict) -> dict:
     return reply["payload"]
 
 
-async def test_status_says_credentials_are_off_whatever_the_disk_says(wired, monkeypatch) -> None:
+async def test_status_reports_the_stored_switches_as_main_did(wired, monkeypatch) -> None:
+    """The switch shown is the one stored (main's answer); whether a scope
+    actually syncs is said separately, under a key of its own."""
     monkeypatch.setattr(server_link, "_link", None)
     payload = await _status({})
-    assert payload["scopes"]["credentials"] is False
+    assert payload["scopes"]["credentials"] is True
     assert payload["scopes"]["prompts"] is True
+    assert set(payload["neverSynced"]) == {"memory", "credentials"}
+    # The engine still never runs it.
+    assert sync_scopes.scope_enabled("credentials") is False
+
+
+def test_switching_another_scope_leaves_the_stored_credentials_switch_alone(wired) -> None:
+    _link, _engine, _recorder, settings = wired
+    sync_scopes.set_scope_enabled("mcp", True)
+    sync_scopes.set_scope_enabled("mcp", False)
+    assert settings.values[sync_scopes.SCOPES_SETTING]["credentials"] is True
 
 
 async def test_offline_inventory_answers_credentials_as_main_did(wired, monkeypatch) -> None:

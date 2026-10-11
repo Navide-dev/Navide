@@ -3567,6 +3567,8 @@ async def sync_status(session: "Session", msg_id: str, msg_type: str, payload: d
             {
                 "available": list(sync_engine.SCOPES),
                 "scopes": scopes,
+                # Scopes no round ever syncs, whatever their switch above says.
+                "neverSynced": sorted(sync_scopes.NEVER_SYNCED),
                 "hasKey": has_key,
                 # The active key's id (never the key) so a person can see a
                 # rotation took, and whether a ring from before accounts were
