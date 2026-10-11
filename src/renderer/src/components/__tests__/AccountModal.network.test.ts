@@ -648,6 +648,9 @@ describe('account modal — your network', () => {
       // Plan 797ad7 B4 / Q4: a message without its time signature from a device
       // that signs v2 is taken in 0.2.20, and said once per device.
       expect(strings.settings.p2p.pair['sig2-missing'], locale).toContain('{device}')
+      // Review B4-1: a time signature that does not verify or is outside the
+      // window (usually a clock that is off) is decided on v1, and said once.
+      expect(strings.settings.p2p.pair['sig2-unusable'], locale).toContain('{device}')
     }
   })
 

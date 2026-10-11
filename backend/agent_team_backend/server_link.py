@@ -2768,6 +2768,7 @@ class ServerLink:
             return None
 
         signature_v2 = str(data.get("sig2") or "")
+        v2_verified = False
         if signature_v2:
             # v2 (plan 797ad7, B4): the same tuple plus the send time, so a
             # message the relay held back past the window is refused for its age
@@ -2781,23 +2782,35 @@ class ServerLink:
                 kind=kind,
                 body=body,
             )
+            age = None if sent_at is None else time.time() - sent_at
             if sent_at is None:
-                log.warning("refusing message %s: its v2 signature does not verify", msg_key)
+                problem = "its v2 signature does not verify"
+            elif age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
+                problem = f"sent {int(-age)}s from now, outside the window"
+            else:
+                problem = ""
+            if not problem:
+                v2_verified = True
+                if not pin.get("sigV2"):
+                    # Marked only now that it has proven it sends v2, never before.
+                    try:
+                        await asyncio.to_thread(trust_store.note_signs_v2, device_id)
+                    except Exception as err:  # noqa: BLE001 - asked again with the next one
+                        log.warning("could not record that %s signs v2 (%s)", device_id, err)
+            elif REFUSE_V1_FROM_V2_PEERS:
+                log.warning("refusing message %s: %s", msg_key, problem)
                 return None
-            age = time.time() - sent_at
-            if age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
-                log.warning(
-                    "refusing message %s: sent %ds from now, outside the window — check "
-                    "both machines' clocks if this repeats", msg_key, int(-age),
-                )
-                return None
-            if not pin.get("sigV2"):
-                # Marked only now that it has proven it sends v2, never before.
-                try:
-                    await asyncio.to_thread(trust_store.note_signs_v2, device_id)
-                except Exception as err:  # noqa: BLE001 - asked again with the next one
-                    log.warning("could not record that %s signs v2 (%s)", device_id, err)
-        elif pin.get("sigV2") and REFUSE_V1_FROM_V2_PEERS:
+            else:
+                # 0.2.20 (review B4-1): a clock that is off puts every message of
+                # a device outside the window, and refusing them would cut it off
+                # where main delivers. v1 decides instead, as if there were no
+                # sig2, and a notice says why — once per device.
+                log.warning("message %s from %s: %s — check both machines' clocks; deciding on v1",
+                            msg_key, device_id, problem)
+                await asyncio.to_thread(trust_store.note_sig2_unusable, device_id)
+        if v2_verified:
+            pass
+        elif not signature_v2 and pin.get("sigV2") and REFUSE_V1_FROM_V2_PEERS:
             # This device has signed v2 before, so a message without it had it
             # removed on the way — or is older than the device's switch to it.
             log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
@@ -2813,7 +2826,7 @@ class ServerLink:
         ):
             log.warning("refusing message %s: its signature does not verify", msg_key)
             return None
-        elif pin.get("sigV2"):
+        elif not signature_v2 and pin.get("sigV2"):
             # Taken in 0.2.20 (see REFUSE_V1_FROM_V2_PEERS): a v1 signature that
             # verifies, from a device that signs v2 — a server without sig2, or
             # a relay that removed it. Said once per device, not per message.

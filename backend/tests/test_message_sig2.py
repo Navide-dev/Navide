@@ -18,6 +18,8 @@ from __future__ import annotations
 import base64
 import time
 
+import pytest
+
 from agent_team_backend import device_identity, device_signing, server_link, trust_store
 
 from .test_server_link import (  # noqa: F401 - fixtures
@@ -148,25 +150,52 @@ async def test_the_refusal_waits_behind_its_switch(broadcasts, monkeypatch):
     assert acks[0]["reason"] == server_link.REASON_UNAUTHENTICATED
 
 
-async def test_a_sig2_sent_too_long_ago_is_refused(broadcasts):
-    old = int(time.time()) - server_link.SIG2_MAX_AGE_S - 30
-    delivered, acks = await _receive(_pending_v2("pa:mcp:held", sent_at=old), broadcasts)
-    assert delivered == [] and acks[0]["state"] == "rejected"
+def _sig2_unusable_notices() -> list:
+    return [n for n in trust_store.notices()
+            if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == "sig2-unusable"]
+
+
+def _stale_v2(msg_key: str) -> dict:
+    return _pending_v2(msg_key, sent_at=int(time.time()) - server_link.SIG2_MAX_AGE_S - 30)
+
+
+def _ahead_v2(msg_key: str) -> dict:
+    return _pending_v2(msg_key, sent_at=int(time.time()) + server_link.SIG2_MAX_AHEAD_S + 30)
+
+
+def _forged_v2(msg_key: str) -> dict:
+    payload = _pending_v2(msg_key)
+    head, sent_at, signature = payload["sig2"].split(".", 2)
+    payload["sig2"] = f"{head}.{int(sent_at) - 1}.{signature}"  # another time, same signature
+    return payload
+
+
+@pytest.mark.parametrize("make", [_stale_v2, _ahead_v2, _forged_v2], ids=["behind", "ahead", "forged"])
+async def test_a_sig2_that_cannot_be_used_falls_back_to_v1(make, broadcasts):
+    """Review B4-1: a device whose clock is off sends every message outside the
+    window, and refusing them cut it off where main delivers. With the switch
+    off, a sig2 that does not verify or is outside the window is treated as no
+    sig2 at all: v1 decides, the message is delivered, a notice says why, and
+    the pin is not marked."""
+    delivered, acks = await _receive(make("pa:mcp:unusable"), broadcasts)
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:unusable"]
+    assert acks == []
+    assert [n["deviceId"] for n in _sig2_unusable_notices()] == [PEER.device_id]
     assert not trust_store.pin_for(PEER.device_id).get("sigV2")
 
 
-async def test_a_sig2_from_too_far_ahead_is_refused(broadcasts):
-    ahead = int(time.time()) + server_link.SIG2_MAX_AHEAD_S + 30
-    delivered, acks = await _receive(_pending_v2("pa:mcp:ahead", sent_at=ahead), broadcasts)
-    assert delivered == [] and acks[0]["state"] == "rejected"
-
-
-async def test_a_sig2_that_does_not_verify_is_refused_and_marks_nothing(broadcasts):
-    payload = _pending_v2("pa:mcp:forged")
-    head, sent_at, signature = payload["sig2"].split(".", 2)
-    payload["sig2"] = f"{head}.{int(sent_at) - 1}.{signature}"  # another time, same signature
+async def test_an_unusable_sig2_with_a_v1_that_does_not_verify_is_still_refused(broadcasts):
+    payload = _stale_v2("pa:mcp:both-bad")
+    payload["sig"] = payload["sig"][:-4] + "AAA="
     delivered, acks = await _receive(payload, broadcasts)
-    assert delivered == [] and acks[0]["state"] == "rejected"
+    assert delivered == [] and acks and acks[0]["state"] == "rejected"
+
+
+@pytest.mark.parametrize("make", [_stale_v2, _ahead_v2, _forged_v2], ids=["behind", "ahead", "forged"])
+async def test_with_the_switch_on_an_unusable_sig2_is_refused(make, broadcasts, monkeypatch):
+    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", True)
+    delivered, acks = await _receive(make("pa:mcp:unusable"), broadcasts)
+    assert delivered == [] and acks and acks[0]["state"] == "rejected"
     assert not trust_store.pin_for(PEER.device_id).get("sigV2")
 
 

@@ -1534,23 +1534,36 @@ def note_signs_v2(device_id: str) -> bool:
         return True
 
 
-def note_sig2_missing(device_id: str) -> None:
-    """One notice per device that signs v2 and sent a message without it (plan
-    797ad7, B4): taken in 0.2.20, but something on the way dropped the time
-    signature — a server without sig2, or a relay removing it. Never raises."""
+def _note_device_once(device_id: str, pairing: str, what: str) -> None:
+    """One device-pairing notice *pairing* per device, recorded the first time
+    only. Never raises: these are notices, never a failed delivery."""
     try:
         with _lock:
             state = _load_locked()
             for notice in state.get("notices") or []:
                 if (
                     isinstance(notice, dict) and notice.get("kind") == NOTICE_PAIRING
-                    and notice.get("pairing") == "sig2-missing" and notice.get("deviceId") == device_id
+                    and notice.get("pairing") == pairing and notice.get("deviceId") == device_id
                 ):
                     return
-            _record_locked(state, NOTICE_PAIRING, device_id=device_id, detail={"pairing": "sig2-missing"})
-            _save_record_locked(state, "a missing v2 signature")
+            _record_locked(state, NOTICE_PAIRING, device_id=device_id, detail={"pairing": pairing})
+            _save_record_locked(state, what)
     except Exception as err:  # noqa: BLE001 - a notice, never a failed delivery
-        log.warning("could not record a missing v2 signature from %s (%s)", device_id, err)
+        log.warning("could not record %s from %s (%s)", what, device_id, err)
+
+
+def note_sig2_missing(device_id: str) -> None:
+    """A device that signs v2 sent a message without it (plan 797ad7, B4):
+    taken in 0.2.20, but something on the way dropped the time signature — a
+    server without sig2, or a relay removing it."""
+    _note_device_once(device_id, "sig2-missing", "a missing v2 signature")
+
+
+def note_sig2_unusable(device_id: str) -> None:
+    """A message's v2 signature did not verify, or its send time was outside
+    the window (review B4-1): decided on v1 in 0.2.20. Usually one of the two
+    machines' clocks is off."""
+    _note_device_once(device_id, "sig2-unusable", "an unusable v2 signature")
 
 
 def pinned_encryption_key(device_id: str) -> str:
