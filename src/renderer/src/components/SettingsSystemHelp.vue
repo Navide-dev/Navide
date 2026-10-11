@@ -62,12 +62,12 @@ const tabs: TabRow[] = [
   { key: 'skills', navKey: 'settings.nav.skills' },
   { key: 'prompts', navKey: 'settings.nav.prompts' },
   { key: 'memory', navKey: 'settings.nav.memory' },
-  // Navide Plugins and Navide Marketplace open SYSTEM — all five read off the
-  // fourth `.s-nav-group` in SettingsModal.vue. The execution policy is not a
-  // page of its own: it is the editable block at the top of Navide Plugins.
-  { key: 'extensions', groupKey: 'settings.nav.group.system', groupSpan: 5, navKey: 'settings.nav.extensions' },
+  // Navide Plugins and Navide Marketplace are the fourth `.s-nav-group` in
+  // SettingsModal.vue, System the fifth. The execution policy is not a page of
+  // its own: it is the editable block at the top of Navide Plugins.
+  { key: 'extensions', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 2, navKey: 'settings.nav.extensions' },
   { key: 'marketplace', navKey: 'settings.nav.marketplace' },
-  { key: 'shortcuts', navKey: 'settings.nav.keybindings' },
+  { key: 'shortcuts', groupKey: 'settings.nav.group.system', groupSpan: 3, navKey: 'settings.nav.keybindings' },
   { key: 'updates', navKey: 'settings.nav.updates' },
   { key: 'help', navKey: 'settings.nav.help' },
 ]
@@ -293,7 +293,7 @@ function sample(key: string): string {
 const navLegend = computed(() => mockLegend('nav', ['search', 'groups', 'active']))
 const resourceLegend = computed(() => mockLegend('resource', ['totals', 'rows', 'actions']))
 
-// The nav exactly as SettingsModal.vue renders it: four groups,
+// The nav exactly as SettingsModal.vue renders it: five groups,
 // twenty-three pages, in this order. Labels come from the same `settings.nav.*`
 // keys the real nav reads, so renaming a page renames it here.
 //
@@ -335,10 +335,15 @@ const settingsGroups = computed(() => [
     ],
   },
   {
-    title: t('settings.nav.group.system'),
+    title: t('settings.nav.group.navidePlugins'),
     items: [
       { label: t('settings.nav.extensions') },
       { label: t('settings.nav.marketplace') },
+    ],
+  },
+  {
+    title: t('settings.nav.group.system'),
+    items: [
       { label: t('settings.nav.keybindings') },
       { label: t('settings.nav.updates') },
       { label: t('settings.nav.help') },
