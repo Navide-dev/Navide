@@ -78,16 +78,6 @@ def _read_confirm_key(stream=None) -> str:
         return ""
 
 
-def _read_host_token(stream=None) -> str:
-    """The second line of stdin: the host token, or "" when there is none.
-
-    Same rules as the confirm key, read right after it. Main writes both lines
-    in one go, so on Windows -- where the pipe then stays open for the
-    `shutdown` line -- this does not wait on anything.
-    """
-    return _read_confirm_key(stream)
-
-
 def _read_handover(stream=None) -> tuple[str, str]:
     """``(confirm key, host token)`` from the first line of stdin.
 
