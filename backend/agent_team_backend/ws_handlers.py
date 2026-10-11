@@ -4468,8 +4468,9 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
         return
     if not revoked:
         log.info(
-            "signed out locally only: the navide-server was not reached, so this "
-            "device's token stays valid there until it is revoked from another device"
+            "signed out locally only: the navide-server did not confirm the sign-out "
+            "(offline, or a server without auth.logout), so this device's token may "
+            "stay valid there until it is revoked from another device"
         )
     delta = app.ui_settings_store.set({server_link.ACCOUNT_EMAIL_SETTING: None})
     await server_link.reconfigure()
