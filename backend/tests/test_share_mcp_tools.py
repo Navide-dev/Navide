@@ -24,6 +24,8 @@ from agent_team_backend.mcp_server import server as mcp
 from .test_share_links import FakeLinks, _plan
 
 SHARE_TOOLS = ["share_create", "share_list", "share_revoke"]
+#: Tools the built-in Navide plugins install at startup (navide.plans, navide.skills).
+PLUGIN_PREFIXES = ("plan_", "skills_")
 BASELINE = Path(__file__).parent / "data" / "mcp_core_tools_main.json"
 
 
@@ -37,9 +39,10 @@ def _tools() -> list[dict[str, Any]]:
 def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -> None:
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     core = {t["name"] for t in baseline}
-    # Other tests install plugin tools onto the same server; only main's core
-    # tools and the three share tools are this test's business.
-    tools = [t for t in _tools() if t["name"] in core or t["name"] in SHARE_TOOLS]
+    # Other tests install the built-in Navide plugins' tools (plan_*, skills_*)
+    # onto the same server; those are left out by their known prefixes, and
+    # anything else that is not main's must make this fail.
+    tools = [t for t in _tools() if t["name"] in core or not t["name"].startswith(PLUGIN_PREFIXES)]
     existing = [t for t in tools if t["name"] not in SHARE_TOOLS]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-3:]] == SHARE_TOOLS

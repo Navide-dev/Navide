@@ -420,6 +420,18 @@ _GENERATORS = {
 }
 
 
+def test_span_lookups_do_not_walk_every_span() -> None:
+    """R6-F5: _Spans answers by bisection; 100 000 spans and lookups stay fast."""
+    import time
+
+    spans = share_scan._Spans([(i * 10, i * 10 + 5) for i in range(100_000)])
+    started = time.perf_counter()
+    hits = sum(spans.overlaps(i * 10 + 2, i * 10 + 3) for i in range(100_000))
+    misses = sum(spans.overlaps(i * 10 + 6, i * 10 + 9) for i in range(100_000))
+    assert (hits, misses) == (100_000, 0)
+    assert time.perf_counter() - started < 2.0
+
+
 @pytest.mark.parametrize("name", sorted(_GENERATORS))
 def test_scan_time_stays_near_linear(name: str) -> None:
     """B-F2/B-F3 and the round-4 ReDoS sweep: patterns are bounded, so a long
