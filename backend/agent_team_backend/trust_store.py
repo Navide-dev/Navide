@@ -65,7 +65,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_team_backend import cloud_secrets, device_signing
-from agent_team_backend.applog import app_data_dir
+from agent_team_backend.applog import app_data_dir, in_data_dir
 from agent_team_backend.osplat import durable_secret_files
 
 log = logging.getLogger(__name__)
@@ -225,7 +225,13 @@ TRANSIENT_RETRY_LIMIT = 3
 # ---- storage -----------------------------------------------------------------
 
 
+#: The vault a timed flush was armed with, while it runs (see _arm_seen_timer_locked).
+_timer_vault: Any = None
+
+
 def _vault():
+    if _timer_vault is not None:
+        return _timer_vault
     # Late import for the same reason server_link does it: app imports both, and
     # tests swap the app-wide vault wholesale to stay off the real Keychain.
     from . import app
@@ -1543,9 +1549,13 @@ _seen_timer: threading.Timer | None = None
 
 
 def _arm_seen_timer_locked() -> None:
+    """Arm the flush with the vault and data dir in force now. Read when it fired
+    instead, a timer outliving the test that armed it wrote through whatever was
+    in force by then — the import-time vault, with its real runner (R2-9)."""
     global _seen_timer
     if _seen_timer is None:
-        _seen_timer = threading.Timer(SEEN_FLUSH_SECONDS, _timed_seen_flush)
+        _seen_timer = threading.Timer(
+            SEEN_FLUSH_SECONDS, in_data_dir(app_data_dir(), _timed_seen_flush, _vault()))
         _seen_timer.daemon = True
         _seen_timer.start()
 
@@ -1557,12 +1567,26 @@ def _disarm_seen_timer_locked() -> None:
         _seen_timer = None
 
 
-def _timed_seen_flush() -> None:
-    global _seen_timer
+def _timed_seen_flush(vault: Any) -> None:
+    global _seen_timer, _timer_vault
     with _lock:
         _seen_timer = None
         if _seen_pending:
-            _flush_seen_locked(time.time())
+            _timer_vault = vault
+            try:
+                _flush_seen_locked(time.time())
+            finally:
+                _timer_vault = None
+
+
+def _stop_seen_timer_for_test() -> None:
+    """Cancel a pending flush and wait for one already running, so nothing of
+    this test's is written after its patches are gone."""
+    with _lock:
+        timer = _seen_timer
+        _disarm_seen_timer_locked()
+    if timer is not None:
+        timer.join(timeout=10)
 
 
 def has_seen_message(msg_key: str) -> bool:

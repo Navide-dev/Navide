@@ -271,6 +271,11 @@ def _isolated_trust_store():
     # The sync key is cached in-process for the same reason the others are
     # singletons, and it outlives the per-test vault above.
     sync_keyring._reset_for_test()
+    yield
+    # The one thing stopped on the way out: the delivered-message timer is a
+    # thread, and one left running fires after this test's vault and data dir
+    # are gone (review R2-9). Stopping it touches neither.
+    trust_store._stop_seen_timer_for_test()
 
 
 @pytest.fixture(autouse=True)

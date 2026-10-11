@@ -62,3 +62,62 @@ def test_only_one_timer_is_armed_for_a_batch(monkeypatch):
     assert trust_store._seen_timer is timer
     trust_store.flush_seen_messages()
     assert trust_store._seen_timer is None
+
+
+class _RefusingVault:
+    """Stands in for whatever the app-wide vault is once a test has moved on."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __getattr__(self, name):
+        def record(*_args, **_kwargs):
+            self.calls.append(name)
+            raise AssertionError(f"the timer used a vault it was not armed with: {name}")
+        return record
+
+
+def test_a_timer_writes_where_it_was_armed(monkeypatch, tmp_path):
+    """Review R2-9: the timer read app.credential_vault and the data dir when it
+    fired, so one outliving its test wrote through whatever was in force then —
+    after monkeypatch undo, the import-time vault and its real runner."""
+    from agent_team_backend import app
+
+    monkeypatch.setattr(trust_store, "SEEN_FLUSH_SECONDS", 0.3)
+    trust_store.load()
+    armed_vault = app.credential_vault
+    armed_journal = trust_store._journal_path()
+    trust_store.note_seen_message("m-bound")
+    assert trust_store._seen_timer is not None
+
+    later = _RefusingVault()
+    monkeypatch.setattr(app, "credential_vault", later)
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "elsewhere"))
+
+    import time
+    deadline = time.monotonic() + 3
+    while trust_store._seen_pending and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    assert later.calls == []
+    assert not (tmp_path / "elsewhere").exists()
+    assert "m-bound" in armed_journal.read_text(encoding="utf-8")
+    monkeypatch.setattr(app, "credential_vault", armed_vault)
+
+
+def test_conftest_stops_the_timer_when_a_test_ends():
+    """Review R2-9: a reset on the way in left the window between one test's
+    teardown and the next test's setup, which the last test of a run never
+    closes at all."""
+    src = Path(__file__).resolve().parent / "conftest.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    fixture = next(n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "_isolated_trust_store")
+    after_yield = False
+    stops = False
+    for node in fixture.body:
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Yield):
+            after_yield = True
+        elif after_yield and "_stop_seen_timer_for_test" in ast.dump(node):
+            stops = True
+    assert stops
