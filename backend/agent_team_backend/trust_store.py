@@ -903,6 +903,12 @@ def adopt_own_member(url: str, token: str, member_id: str) -> str:
                 )
             return pinned
         owners[fingerprint] = member_id
+        # KC2R-1, as for a device pin: a new member pin must leave the room
+        # reserved for deciding about every paired device, or it is refused as
+        # full before anything is written. An existing pin (above) still answers.
+        if not _fits_with_reserve_locked(state):
+            del owners[fingerprint]
+            raise TrustStoreFull(_FULL_MESSAGE)
         _save_locked(state)
         return member_id
 

@@ -3231,6 +3231,32 @@ async def test_a_settled_promotion_forgets_the_old_pin(monkeypatch):
         await link.stop()
 
 
+async def test_a_rotation_whose_pin_does_not_fit_stops_before_the_confirm(monkeypatch):
+    """KC2R-1: if the trust record has no room to pin the rotated token, the rotation
+    stops before its confirm and the current token keeps working."""
+    original = trust_store.adopt_own_member
+
+    def full_for_rotated(url, token, member):
+        if token.startswith("nvd_rotated"):
+            raise trust_store.TrustStoreFull("no room left in the trust record")
+        return original(url, token, member)
+
+    monkeypatch.setattr(trust_store, "adopt_own_member", full_for_rotated)
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.1)
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+        assert server_link.access_token() == CONFIG.token
+        assert CONFIG.token in ts.live
+    finally:
+        await link.stop()
+
+
 # ---- compatibility: behaviour against a server from before C1, and signed out
 
 
