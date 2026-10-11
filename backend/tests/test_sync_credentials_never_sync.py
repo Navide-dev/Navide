@@ -196,10 +196,13 @@ async def test_offline_inventory_answers_credentials_as_main_did(wired, monkeypa
     assert "memory" not in listing["scopes"]
 
 
-async def test_connected_inventory_answers_credentials_as_a_switched_off_scope(wired) -> None:
+async def test_connected_inventory_answers_credentials_as_not_connected(wired) -> None:
+    """Decision B: connected, credentials answer exactly as offline. Main
+    listed the cloud's credentials here, which takes credential traffic; the
+    CLI accounts page shows "not connected" and offers nothing to act on."""
     _link, _engine, recorder, _settings = wired
     only = await server_link.sync_inventory("credentials")
-    assert only["scopes"]["credentials"] == {"scope": "credentials", "status": "disabled", "items": []}
+    assert only["scopes"]["credentials"] == {"scope": "credentials", "status": "not-connected", "items": []}
     listing = await server_link.sync_inventory()
-    assert listing["scopes"]["credentials"]["status"] == "disabled"
+    assert listing["scopes"]["credentials"] == {"scope": "credentials", "status": "not-connected", "items": []}
     assert recorder.credential_traffic() == []

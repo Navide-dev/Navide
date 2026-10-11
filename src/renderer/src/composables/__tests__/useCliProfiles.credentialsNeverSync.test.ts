@@ -7,10 +7,12 @@ import { createMockBackend, flush, withScope } from './mockBackend'
 // showed it. Offline, sync.status carries the stored switch (true) and the
 // inventory answers not-connected (the shapes test_sync_credentials_never_sync.py
 // pins), so the CLI accounts page says "not connected", never a blank error.
+// Connected, the inventory answers the same (decision B): main listed the
+// cloud's credentials there, which would take credential traffic.
 const SUPPORTED = ['claude']
 
 describe('useCliProfiles with credentials that never sync', () => {
-  it.each(['unreachable', 'connecting', 'unauthorized'] as const)(
+  it.each(['connected', 'unreachable', 'connecting', 'unauthorized'] as const)(
     'shows "not connected" as main did, never an error, when the link is %s',
     async (state) => {
       const mock = createMockBackend('connected')

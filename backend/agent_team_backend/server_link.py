@@ -4010,9 +4010,10 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
                 "items": [],
             }
         elif name in sync_scopes.NEVER_SYNCED:
-            # Credentials never sync: answered as main answers a switched-off
-            # sensitive scope, without asking the server or opening a secret.
-            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_DISABLED, "items": []}
+            # Credentials never sync, so the cloud's copy is never listed (that
+            # takes credential traffic): answered as offline, which the CLI
+            # accounts page shows as "not connected", nothing to act on.
+            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_NOT_CONNECTED, "items": []}
         else:
             try:
                 scopes[name] = await link.sync_engine().inventory(name)
