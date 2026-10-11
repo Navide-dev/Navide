@@ -11852,6 +11852,59 @@ describe('first-party Git private bridge', () => {
     })
   })
 
+  it('sends ui.shareCreate the canonical plan path, not the raw string it checked', async () => {
+    const real = mkdtempSync(join(tmpdir(), 'navide-share-canonical-'))
+    const linkParent = mkdtempSync(join(tmpdir(), 'navide-share-link-'))
+    try {
+      mkdirSync(join(real, '.agent-team', 'plans'), { recursive: true })
+      writeFileSync(join(real, '.agent-team', 'plans', 'doc_abc123.html'), '<html></html>')
+      const workspacePath = join(linkParent, 'ws')
+      symlinkSync(real, workspacePath, 'dir')
+
+      const mgr = new FrontendPluginManager()
+      const packageVersion = '0.1.0'
+      const viewWindow = {
+        id: 'window', contributionKey: 'navide.plans.window', kind: 'custom' as const,
+        location: 'window' as const, title: 'Plans', entryFile: '/path/to/plans/window.html',
+      }
+      const descriptor: PluginLaunchDescriptor = {
+        id: PLANS_PLUGIN_ID, packageVersion, packageDir: '/path/to/plans',
+        requires: ['fs', 'ui', 'plans', 'terminal'],
+        capabilityPolicy: { kind: 'manifest-v2', system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', grants: [] },
+        devUrl: '', entryFile: viewWindow.entryFile, views: [viewWindow],
+      }
+      mgr.registerDescriptor(descriptor, { builtin: true })
+      mgr.setCapabilityGrantResolver((pluginId, version) => (
+        pluginId === PLANS_PLUGIN_ID && version === packageVersion
+          ? { packageVersion, system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', storage: true }
+          : null
+      ))
+      const capabilityContext = mgr.plansCapabilityContext(packageVersion, workspacePath, 'plans-window')
+      const host = new FakeBrowserWindow()
+      await mgr.openView(descriptor, viewWindow, { hostWindow: asHost(host), bounds: 'fill', workspacePath, capabilityContext })
+      const view = host.children[0] as FakeViewLike
+      mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+      const sent: Array<Record<string, unknown>> = []
+      ;(mgr as unknown as { ensureBackend: () => unknown }).ensureBackend = () => ({
+        send: async (_type: string, payload: Record<string, unknown>) => {
+          sent.push(payload)
+          return { ok: false, payload: null, error: { code: 'SHARE_FAILED', message: 'stop' } }
+        },
+      })
+
+      await ipcHandlers.get(CAPABILITY_CALL)!(
+        { sender: { id: view.webContents.id } },
+        { reqId: 'share', ns: 'ui', method: 'shareCreate', args: { path: '.agent-team/plans/./doc_abc123.html' } },
+      )
+
+      expect(sent).toHaveLength(1)
+      expect(sent[0].path).toBe(join(realpathSync(real), '.agent-team', 'plans', 'doc_abc123.html'))
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true })
+      rmSync(real, { recursive: true, force: true })
+    }
+  })
+
   it('routes ui.openPlansWindow for nested repos strictly with .git directory and blocks .git file/symlink escape', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'navide-open-plans-test-'))
     const extDir = mkdtempSync(join(tmpdir(), 'navide-open-ext-test-'))

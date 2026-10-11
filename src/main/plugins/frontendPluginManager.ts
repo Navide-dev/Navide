@@ -7026,9 +7026,13 @@ export class FrontendPluginManager {
       if (!isAllowedPlanDocumentPath(relativePath, root)) {
         throw new Error('share path is outside the plans directory')
       }
+      // The document the check accepted, symlinks resolved: the backend
+      // must open that file, not re-resolve the string it was checked by.
+      const canonicalDoc = resolveWorkspaceRelativePath(root, relativePath.replace(/\\/g, '/'), false)
+      if (!canonicalDoc) throw new Error('share path is outside the plans directory')
       type = 'share.create'
       payload = {
-        path: resolve(root, relativePath),
+        path: canonicalDoc,
         kind: 'plan',
         ...(typeof plan.args.ttlSeconds === 'number' ? { ttlSeconds: plan.args.ttlSeconds } : {}),
         ...(typeof plan.args.requireLogin === 'boolean' ? { requireLogin: plan.args.requireLogin } : {}),
