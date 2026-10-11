@@ -245,3 +245,14 @@ def test_every_language_has_every_share_string() -> None:
     assert all(set(table) == keys for table in qm.STRINGS.values())
     assert {"shares_title", "shares_empty", "shares_failed", "revoke_button", "revoked", "revoke_none",
             "revoke_ambiguous", "revoke_usage", "shares_expired"} <= keys
+
+
+async def test_revoke_never_echoes_more_than_six_characters(env: Env, shares: FakeShares) -> None:
+    full = "abcdef0123456789abcdef"
+    shares.links = [_link("zzzzzz0123456789abcdef", "Other")]
+    await env.inbound(f"/revoke {full}")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "revoke_none", prefix="abcdef")
+    shares.links = [_link(full + "1", "A1"), _link(full + "2", "A2")]
+    await env.inbound(f"/revoke {full}")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "revoke_ambiguous", prefix="abcdef", count=2)
+    assert not any(full in t for t in env.tg.texts()) and shares.revoked == []

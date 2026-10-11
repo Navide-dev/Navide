@@ -1945,7 +1945,8 @@ class ChannelManager:
         matches = [link for link in live if str(link.get("linkId") or "").startswith(arg)]
         if len(matches) != 1:
             key = "revoke_none" if not matches else "revoke_ambiguous"
-            await self._reply(msg, quick_menu.text(lang, key, prefix=arg, count=len(matches)))
+            # Echo no more of the id than a link is ever named by: the full id may be typed in a group.
+            await self._reply(msg, quick_menu.text(lang, key, prefix=arg[:share_cmds.SHORT_LEN], count=len(matches)))
             return True
         return await self._share_revoke(msg, lang, matches[0])
 
