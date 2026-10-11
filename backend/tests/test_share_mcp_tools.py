@@ -170,3 +170,26 @@ async def test_revoke_goes_through(ring, home, connected, pane_caller, broadcast
     result = await mcp.share_revoke(link_id=created["linkId"], ctx=None)
     assert result["ok"] is True
     assert connected.rows[created["linkId"]]["active"] is False
+
+
+@pytest.fixture
+def chat(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    from agent_team_backend.channels import share_cmds
+
+    sent: list[dict[str, Any]] = []
+
+    async def notify_link_created(link: dict[str, Any]) -> None:
+        sent.append(link)
+
+    monkeypatch.setattr(share_cmds, "notify_link_created", notify_link_created, raising=False)
+    return sent
+
+
+async def test_an_agent_share_reaches_chat_only_with_send_to_chat(
+    ring, home, connected, pane_caller, broadcasts, chat
+) -> None:
+    await mcp.share_create(path=str(_plan(home, "<p/>")), ctx=None)
+    assert chat == []
+    result = await mcp.share_create(path=str(_plan(home, "<p/>")), ctx=None, send_to_chat=True)
+    [link] = chat
+    assert link["url"] == result["url"] and link["paneId"] == "p1" and link["createdBy"] == "agent"

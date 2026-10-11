@@ -8603,6 +8603,7 @@ async def share_create(
     kind: str = "plan",
     ttl_days: int = 7,
     require_login: bool = False,
+    send_to_chat: bool = False,
 ) -> dict:
     """Publish a plan or report as an encrypted, read-only share link (requires Navide Cloud).
 
@@ -8611,7 +8612,9 @@ async def share_create(
     (.agent-team/plans/*.html) or report; key, credential and memory files are
     refused with the reason. Secrets in the content are masked before upload
     and the answer lists where (line and kind, never the value). The link is
-    marked as created by your pane and the user is told it exists. Returns
+    marked as created by your pane and the user is told it exists.
+    send_to_chat=true also posts the link to the chat bound to your pane (or
+    the user's private chat); only set it when the user asked for that. Returns
     {ok, linkId, url, expiresAt, masked} — the url carries the only key, so
     hand it only to the user — or {ok: false, error, reason?}.
     """
@@ -8638,6 +8641,7 @@ async def share_create(
             created_by="agent",
             pane=pane,
             agent=agent,
+            pane_id=caller.pane_id,
         )
         masked = [{"line": f.line, "category": f.category, "action": f.action} for f in created.findings]
         await app.broadcast(
@@ -8653,6 +8657,8 @@ async def share_create(
                 },
             )
         )
+        if send_to_chat:
+            await share_links.announce_to_chat(created, created_by="agent", pane_id=caller.pane_id)
         return {"linkId": created.link_id, "url": created.url, "expiresAt": created.expires_at, "masked": masked}
 
     return await _share_run(call)
