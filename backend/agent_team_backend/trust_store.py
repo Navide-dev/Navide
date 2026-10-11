@@ -432,6 +432,20 @@ def _save_locked(state: dict[str, Any]) -> None:
     _write(state)
 
 
+def _save_record_locked(state: dict[str, Any], what: str) -> None:
+    """Save after a write that only *records* something. Caller holds ``_lock``.
+
+    Logged, never raised: these run on the delivery path, and a save that
+    failed used to fail the message it was recording — every relayed message
+    was acked failed once the record outgrew the Keychain. The change stays in
+    the in-memory state, so this process still acts on it.
+    """
+    try:
+        _write(state)
+    except Exception as err:  # noqa: BLE001
+        log.warning("the device trust record could not be saved after %s; kept in memory only (%s)", what, err)
+
+
 def _state_for_read() -> dict[str, Any]:
     """The state, for every public read. Caller holds ``_lock``.
 
@@ -1016,14 +1030,16 @@ def note_pairing(device_id: str, *, kind: str, device_name: str = "") -> None:
     at the far end being asked, and without telling them afterwards.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(
             state,
             NOTICE_PAIRING,
             device_id=device_id,
             detail={"pairing": kind, "deviceName": device_name},
         )
-        _save_locked(state)
+        _save_record_locked(state, "a pairing notice")
 
 
 def note_remote_command(device_id: str, *, device_name: str, workspace: str, pane_name: str) -> None:
@@ -1035,7 +1051,9 @@ def note_remote_command(device_id: str, *, device_name: str, workspace: str, pan
     driving my machines", which a log file nobody opens does not.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(
             state,
             NOTICE_REMOTE_COMMAND,
@@ -1046,7 +1064,7 @@ def note_remote_command(device_id: str, *, device_name: str, workspace: str, pan
                 "paneName": pane_name,
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a remote-command notice")
 
 
 def note_key_change(device_id: str, *, pinned_key: str, offered_key: str, member_id: str) -> None:
@@ -1074,7 +1092,7 @@ def note_key_change(device_id: str, *, pinned_key: str, offered_key: str, member
                 "offeredFingerprint": device_signing.fingerprint(offered_key),
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a key-change notice")
 
 
 # ---- the pane policy's sequence ----------------------------------------------
@@ -1140,7 +1158,7 @@ def note_policy_unverified(reason: str, *, device_id: str = "", seq: Any = None)
                 "expected": (state.get("policySeqs") or {}).get(device_id, 0),
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a policy-unverified notice")
 
 
 def clear_policy_notice() -> None:
@@ -1237,10 +1255,12 @@ def note_plaintext_refused(device_id: str, *, msg_key: str) -> None:
     something asked them to accept cleartext, which is the part worth seeing.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(state, NOTICE_PLAINTEXT_REFUSED,
                        device_id=device_id, detail={"msgKey": msg_key})
-        _save_locked(state)
+        _save_record_locked(state, "a plaintext-refused notice")
 
 
 # ---- messages already delivered ----------------------------------------------
@@ -1317,7 +1337,7 @@ def _flush_seen_locked(now: float) -> None:
     if len(seen) > MAX_SEEN_MESSAGES:
         for key in sorted(seen, key=lambda k: int(seen[k] or 0))[: len(seen) - MAX_SEEN_MESSAGES]:
             del seen[key]
-    _save_locked(state)
+    _save_record_locked(state, "the delivered-message ledger")
 
 
 def notices() -> list[dict[str, Any]]:
