@@ -160,6 +160,11 @@ class RevokeButtons:
 # one bound to the pane that created the link; with neither, nobody is told. Nothing
 # is sent unless Navide Cloud is connected and chat channels are on, so with no share
 # links (or no Cloud) chat behaves as before.
+#
+# "Direct" is the kind a chat was remembered with, which each adapter decides. Known
+# trade-off: Matrix has no reliable direct flag on a joined room, so it counts a room
+# with exactly two joined members as direct (matrix.py). A two-member room is then
+# treated as private: it can be picked, gets notices and sees share links whole.
 
 
 def created_text(lang: str, link: dict[str, Any]) -> str:
