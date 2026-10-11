@@ -462,3 +462,13 @@ async def test_the_creating_pane_id_is_kept_for_routing_notices(ring, home: Path
     assert meta["paneId"] == "pane-7"
     [row] = await share_links.list_links(client)
     assert row["paneId"] == "pane-7"
+
+
+@pytest.mark.parametrize("seconds", [1, 899])
+async def test_a_lifetime_under_the_servers_upload_window_is_refused_here(ring, home: Path, seconds: int) -> None:
+    client = FakeLinks()
+    with pytest.raises(share_links.ShareRefused) as err:
+        await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", ttl_seconds=seconds, put=client.put)
+    assert err.value.code == "ttl" and client.calls == []
+    with pytest.raises(share_links.ShareRefused):
+        await share_links.extend(client, "ab" * 16, seconds)

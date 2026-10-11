@@ -63,7 +63,9 @@ SEGMENT_OVERHEAD = _NONCE_LEN + 16
 KEY_LEN = 32
 #: Largest file shared as one object; one presigned PUT, no multipart.
 MAX_PLAINTEXT = 32 * 1024 * 1024
-#: The server's range for a link's lifetime (links.caps), in seconds.
+#: The server's range for a link's lifetime (links.caps), in seconds; the
+#: minimum is the upload URL's lifetime.
+MIN_TTL_SECONDS = 900
 MAX_TTL_SECONDS = 30 * 86400
 #: The server's cap on the wrapped metadata, so a page of links.list fits a frame.
 MAX_META_CHARS = 8 * 1024
@@ -379,8 +381,8 @@ def _open_meta(link_id: str, version: int, meta_enc: Any) -> dict[str, Any] | No
 
 def _ttl(kind: str, ttl_seconds: int | None) -> int:
     ttl = KINDS[kind].ttl_days * 86400 if ttl_seconds is None else ttl_seconds
-    if not 1 <= ttl <= MAX_TTL_SECONDS:
-        raise ShareRefused("ttl", f"A link lasts between 1 second and {MAX_TTL_SECONDS // 86400} days.")
+    if not MIN_TTL_SECONDS <= ttl <= MAX_TTL_SECONDS:
+        raise ShareRefused("ttl", f"A link lasts between {MIN_TTL_SECONDS // 60} minutes and {MAX_TTL_SECONDS // 86400} days.")
     return ttl
 
 
@@ -580,8 +582,8 @@ async def revoke_all(client: LinksClient, device_id: str = "") -> dict[str, Any]
 
 
 async def extend(client: LinksClient, link_id: str, ttl_seconds: int) -> dict[str, Any]:
-    if not 1 <= ttl_seconds <= MAX_TTL_SECONDS:
-        raise ShareRefused("ttl", f"A link lasts between 1 second and {MAX_TTL_SECONDS // 86400} days.")
+    if not MIN_TTL_SECONDS <= ttl_seconds <= MAX_TTL_SECONDS:
+        raise ShareRefused("ttl", f"A link lasts between {MIN_TTL_SECONDS // 60} minutes and {MAX_TTL_SECONDS // 86400} days.")
     return await client.request("extend", {"linkId": _check_link_id(link_id), "ttlSeconds": ttl_seconds})
 
 
