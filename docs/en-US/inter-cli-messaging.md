@@ -883,6 +883,7 @@ still never persisted.
 | `rate-limit` / `queue-full` | A guard rail above |
 | `pane-closed` | The target closed before delivery |
 | `inject-failed` / `inject-error` | Typing it into the pane did not take |
+| `delivery-unconfirmed` | Not a failure: typed and submitted into a just-resumed CLI that has not shown it received it. The row reads delivered with this caveat; check the pane before resending. Cleared when the transcript shows the message |
 | `window-reloaded` | The window reloaded while it was in flight |
 | `no-report` | The other window never reported an outcome |
 | `receiver-error` | Another device received it but failed while handling it; its backend log has the traceback. Retrying may succeed |

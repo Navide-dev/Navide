@@ -355,6 +355,7 @@ defineExpose({
   lastCommand: terminal.lastCommand,
   cleanBuffer: terminal.cleanBuffer,
   cleanBytesSeen: terminal.cleanBytesSeen,
+  resumeSpawnedAt: terminal.resumeSpawnedAt,
   lastActivityAt: terminal.lastActivityAt,
   lastRawActivityAt: terminal.lastRawActivityAt,
   // The person at the keyboard, for App.vue's messaging idle gate.

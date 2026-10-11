@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { i18n } from '@navide/plugin-ui/foundation'
 import CliExtensionsPane from '../CliExtensionsPane.vue'
 
@@ -106,5 +108,56 @@ describe('CliExtensionsPane', () => {
     render()
     await flushPromises()
     expect(wrapper.get('[role="alert"]').text()).toBe('Could not read CLI extensions: boom')
+  })
+
+  // Layout rules a DOM without CSS layout cannot measure, read from the SFC's
+  // own scoped styles. The Settings tab body is full-bleed (no gutter) and
+  // overflow:hidden, so the pane must carry the gutter and the scroll itself.
+  describe('layout', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/CliExtensionsPane.vue'), 'utf8')
+    const style = source.slice(source.indexOf('<style scoped>'))
+    const rule = (selector: string): string => {
+      const match = style.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))
+      expect(match, `no rule for ${selector}`).not.toBeNull()
+      return match![1]
+    }
+
+    it('owns the page gutter and its own vertical scroll inside the bleed tab body', () => {
+      const root = rule('.cli-ext')
+      expect(root).toMatch(/flex:\s*1/)
+      expect(root).toMatch(/min-height:\s*0/)
+      expect(root).toMatch(/overflow-y:\s*auto/)
+      expect(root).toMatch(/padding:\s*16px 22px 18px/)
+    })
+
+    it('never scrolls sideways: long names wrap, paths and command lines truncate', () => {
+      expect(rule('.cli-ext')).toMatch(/overflow-x:\s*hidden/)
+      expect(rule('.cli-ext-name')).toMatch(/overflow-wrap:\s*anywhere/)
+      expect(rule('.cli-ext-detail, .cli-ext-path')).toMatch(/text-overflow:\s*ellipsis/)
+    })
+
+    it('puts the name on its own line above the badges', async () => {
+      render()
+      await flushPromises()
+      const card = wrapper.get('[data-id="helper@mkt"]')
+      expect(card.get('.cli-ext-title .cli-ext-name').text()).toBe('helper')
+      expect(card.get('.cli-ext-title .cli-ext-version').text()).toBe('1.0.0')
+      expect(card.findAll('.cli-ext-badges > span').map((badge) => badge.classes()[0])).toEqual(['cli-ext-type', 'cli-ext-tier'])
+    })
+
+    it('shows a CLI with nothing to list as one compact row, not an open box', async () => {
+      render()
+      await flushPromises()
+      const kilo = wrapper.get('[data-cli="kilo"]')
+      expect(kilo.element.tagName).toBe('DIV')
+      expect(kilo.classes()).toContain('is-empty')
+      expect(kilo.get('.cli-ext-group-head .cli-ext-empty').text()).toBe('No CLI extensions found.')
+      const antigravity = wrapper.get('[data-cli="antigravity"]')
+      expect(antigravity.element.tagName).toBe('DIV')
+      expect(antigravity.find('.cli-ext-group-head .cli-ext-unsupported').exists()).toBe(true)
+      const claude = wrapper.get('[data-cli="claude"]')
+      expect(claude.element.tagName).toBe('DETAILS')
+      expect(claude.find('summary .cli-ext-chevron').exists()).toBe(true)
+    })
   })
 })

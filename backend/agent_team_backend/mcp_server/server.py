@@ -2052,6 +2052,12 @@ async def cli_send(
         the receiving window refused it. `ok` stays TRUE: the send itself
         happened and `msg_key` is real, so re-sending on this would dispatch
         the work twice. Read the reason and decide.
+      - `status: "unconfirmed"` and `reason: "delivery-unconfirmed"` — it was
+        typed and submitted into a CLI that had just been resumed, and that
+        CLI has not shown it received it. It may well be running. Do NOT
+        resend on this alone: check cli_get_status (is the pane busy?) or
+        cli_read_log (is the message in its output?) first. The status turns
+        "delivered" if the CLI shows it later.
       - `status: "queued"` with `waited_s`, plus `hold` and `held_for_s` when
         the receiving window said why — the message is still waiting. `hold.key`
         is "typing" (someone is at that keyboard), "mid-turn" (the agent is
@@ -2490,6 +2496,11 @@ def record_delivery_result(msg_key: str, ok: bool, reason: str) -> bool:
     # to prevent — the same reason "read" is reported as delivered.
     if not ok and decoded == "cancelled":
         entry["status"] = "cancelled"
+    elif not ok and decoded == "delivery-unconfirmed":
+        # Typed and submitted into a resumed CLI that has not shown it yet. Not
+        # a failure either: resending on it may dispatch the work twice. The
+        # window reports again, ok, if the transcript shows it later.
+        entry["status"] = "unconfirmed"
     else:
         entry["status"] = "delivered" if ok else "failed"
     entry["reason"] = decoded
@@ -2604,6 +2615,12 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
                       actually injected.
       - "delivered" — the receiving window injected and submitted it.
       - "failed"    — the receiving window refused or lost it; see `reason`.
+      - "unconfirmed" — typed and submitted into a just-resumed CLI that has
+                      not shown it received it (`reason`
+                      "delivery-unconfirmed"). Sent, not lost: it may be
+                      running. Check cli_get_status or cli_read_log before
+                      resending, or the work may run twice. Becomes
+                      "delivered" if the CLI shows it later.
       - "rejected"  — only for a message sent to another device: that device's
                       pane policy refuses this sender. Re-sending refuses
                       again; this is a permission question for a human, not
@@ -2684,7 +2701,8 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
 
     Takes no arguments and asks about no one but you: it returns the sends made
     from this caller — this pane, or this external client — that are currently
-    stale (queued more than two minutes) or failed. Everything that was
+    stale (queued more than two minutes), failed, or unconfirmed (see
+    cli_check_message — check the pane before resending one of those). Everything that was
     delivered, and everything still on its way in, is left out.
 
     This is the pull half of delivery feedback, and it exists for the agent the
@@ -2725,7 +2743,7 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
             continue
         tracked += 1
         stale = _is_stale(entry, now)
-        if not stale and entry["status"] not in ("failed", "rejected"):
+        if not stale and entry["status"] not in ("failed", "rejected", "unconfirmed"):
             continue
         row: dict[str, Any] = {
             "msg_key": key,
@@ -4640,8 +4658,9 @@ async def cli_send_and_wait(
       - "not_delivered" — the message never got into the pane, so there was no
         turn to wait for. `delivery_status` is "queued" (still waiting, with
         `hold` and `held_for_s` saying what for — typically someone typing in
-        that pane, or a queue ahead of it), or "failed"/"rejected" with
-        `reason`. A queued message is not lost: it goes in when the pane frees
+        that pane, or a queue ahead of it), "failed"/"rejected" with
+        `reason`, or "unconfirmed" (typed into a just-resumed CLI that has not
+        shown it — check cli_get_status or cli_read_log before resending). A queued message is not lost: it goes in when the pane frees
         up, and cli_check_message picks the story up. Do NOT resend on this.
 
     On timeout returns {ok: true, idle: false, source: "timeout", reason,

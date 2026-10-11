@@ -859,6 +859,7 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `rate-limit` / `queue-full` | 上記の Guard Rail |
 | `pane-closed` | 配信前に対象が閉じた |
 | `inject-failed` / `inject-error` | Pane への入力が通らなかった |
+| `delivery-unconfirmed` | 失敗ではない：Resume 直後の CLI に入力・送信したが、受信がまだ示されていない。行は delivered にこの注記付きで表示される。再送前に Pane を確認すること。Transcript にメッセージが現れると注記は消える |
 | `window-reloaded` | In-flight の間に Window が Reload した |
 | `no-report` | 相手の Window が結果を報告しなかった |
 | `receiver-error` | 別のデバイスが受け取ったが、処理中に失敗した。トレースバックはその Backend の Log にある。再試行で成功する可能性がある |

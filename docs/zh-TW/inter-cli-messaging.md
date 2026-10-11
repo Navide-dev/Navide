@@ -735,6 +735,7 @@ Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
 | `rate-limit` / `queue-full` | 上面的某條防護欄 |
 | `pane-closed` | 目標在投遞前就關閉了 |
 | `inject-failed` / `inject-error` | 把它輸入到該 Pane 沒有成功 |
+| `delivery-unconfirmed` | 不是失敗：已輸入並送出到剛 resume 的 CLI，但它還沒顯示收到。該列顯示為 delivered 並附上這個提醒；重送前先查看該 Pane。transcript 出現這則訊息後提醒會消失 |
 | `window-reloaded` | 視窗在它傳輸中途重新載入 |
 | `no-report` | 另一個視窗始終沒有回報結果 |
 | `receiver-error` | 另一台裝置收到了，但處理時出錯；錯誤堆疊在它的 Backend log 裡。重試可能會成功 |

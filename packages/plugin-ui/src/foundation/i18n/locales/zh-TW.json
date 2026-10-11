@@ -201,6 +201,7 @@
     "reason-pane-closed": "目標 pane 在投遞前已關閉",
     "reason-dropped": "訊息在投遞前已從記錄中移除",
     "reason-inject-failed": "注入失敗 — 目標 CLI 沒有回應這則訊息",
+    "reason-delivery-unconfirmed": "已送出，但目標 CLI 尚未顯示收到 — 重送前請先查看該 Pane",
     "reason-inject-error": "注入錯誤：{error}",
     "reason-push-stuck": "推送兩次後 CLI 輸入框仍清不掉",
     "reason-route-error": "路由錯誤：{error}",
@@ -1871,6 +1872,7 @@
         "general": "一般",
         "accountsAgents": "帳號與代理",
         "integration": "Agent 資產",
+        "navidePlugins": "Navide 外掛",
         "system": "系統"
       },
       "general": "一般",
@@ -1962,14 +1964,14 @@
         "intro": "設定視窗的十九個分頁分別管什麼、Navide Cloud 怎麼把幾台機器接成一個私有網路，以及選單、獨立視窗、用量統計與資源維護這些散在主畫面之外的系統面。",
         "s1": {
           "title": "設定總覽",
-          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分四組，共 <strong>23 個分頁</strong>。",
+          "p1": "設定視窗用 <kbd class=\"syh-kbd\">⌘,</kbd> 開啟，標題列的齒輪鈕是同一個入口。左側側欄分五組，共 <strong>24 個分頁</strong>。",
           "h1": "搜尋框",
           "p2": "側欄標題底下有一個搜尋框，提示字是 <code>搜尋設定…</code>。它<strong>跨分頁</strong>比對設定項的標題、所屬區塊與關鍵字（使用目前介面語言與已收錄的關鍵字），最多列 8 筆；點一筆會切到那個分頁並捲到對應區塊（「儲存空間」那筆例外：它會關掉設定、直接開「資源控管」），沒命中時顯示 <code>找不到相符設定</code>。<kbd class=\"syh-kbd\">Esc</kbd> 清空。",
           "callout": {
             "title": "搜尋索引不是全覆蓋",
             "text": "索引是一份人工維護的清單，<strong>{layout}、{notifications}、{security}、{channels} 這四個分頁沒有任何條目</strong>，搜尋不到它們裡面的東西，得自己點進去。CLI Agents 的條目點下去會直接打開某一家的設定抽屜（見「CLI Agent 與帳號」分頁）。"
           },
-          "h2": "二十三個分頁",
+          "h2": "二十四個分頁",
           "tabTable": {
             "group": "分組",
             "tab": "分頁",
@@ -2008,6 +2010,10 @@
             "cloud": {
               "what": "跨裝置連線狀態、本機指紋、誰可以命令這台機器",
               "more": "本頁第 5 章"
+            },
+            "credentials": {
+              "what": "唯讀掃描這台機器上的憑證與金鑰風險：發現、清單、掃描範圍與提醒",
+              "more": "頁面本身的說明；它只掃描，不修改任何檔案"
             },
             "accounts": {
               "what": "Git 帳號與 CLI 帳號",
@@ -6319,7 +6325,7 @@
     },
     "skills": {
       "title": "受管 Skills",
-      "intro": "在同一處看見所有 CLI 的 skill、決定誰收到哪一個，並在 ~/.agents/skills 建立新的。這裡不會搬動或修改各 CLI 自己資料夾裡的 skill。",
+      "intro": "在同一處看見所有 CLI 的 skill、決定誰收到哪一個，並在 ~/.agents/skills 建立新的。各 CLI 自己資料夾裡的 skill 只有在你按「移入共用庫」時才會被搬進共用庫，原位留下捷徑；按「還原」就會搬回去。",
       "new": "新增 skill",
       "search": "搜尋 skills",
       "empty-title": "尚無受管 skills",
