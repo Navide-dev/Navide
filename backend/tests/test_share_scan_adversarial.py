@@ -219,3 +219,98 @@ def test_a_bare_literal_after_a_credential_key_is_a_setting() -> None:
 
 def test_a_hyphenated_header_key_is_a_credential_key() -> None:
     assert R not in _masked("x-api-key: " + R)
+
+
+# ---- review round 3 ---------------------------------------------------------------
+
+Z = "Zx9QpL2mN7vB4kR8tY6wE3"
+
+
+@pytest.mark.parametrize("segments", [40])
+def test_an_unclosed_quote_before_a_long_backslash_path_is_linear(segments: int) -> None:
+    """R1: the quoted value's two branches overlapped on a backslash, so an
+    unclosed quote before C:\\d0\\d1… backtracked exponentially (14 segments
+    took 3.4 s, 20 never finished)."""
+    import json
+    import time
+
+    path = "C:" + "".join(f"\\d{i % 10}" for i in range(segments))
+    for text in ('pwd: "' + path, json.dumps({"content": 'set password: "' + path}), 'password: "' + "\\" * 400 + "x"):
+        started = time.perf_counter()
+        share_scan.scan(text, kind="plan")
+        assert time.perf_counter() - started < 1.0
+
+
+def test_a_bare_credential_inside_a_json_string_keeps_the_json_valid() -> None:
+    """R2: the bare value swallowed the backslash of the \\" that closes the
+    surrounding JSON string."""
+    import json
+
+    text = json.dumps({"c": 'Add "API_KEY=' + Z + '" to .env'})
+    out = _masked(text)
+    assert Z not in out
+    assert json.loads(out) == {"c": 'Add "API_KEY=[redacted]" to .env'}
+
+
+@pytest.mark.parametrize("text", ['password: "' + Z, '  "content": "set password: \\"' + Z + ' and go",'])
+def test_an_unclosed_quoted_value_is_still_masked(text: str) -> None:
+    """R3: with no closing quote the value fell through unmasked."""
+    assert Z not in _masked(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '"tokenizer": "gpt2-fast"',
+        "max_tokens: 4096",
+        '"maxTokens": 4096',
+        "passwordHash: bcrypt",
+        '"passwordPolicy": "8 chars"',
+        "tokens_used = 12345",
+        "secret_name: prod-db-creds",
+        "token_endpoint: https://oauth2.googleapis.com/token",
+        "pwd: /Users/neil/project",
+        "password: string",
+        "token: required",
+        "http://localhost:5173/@vite/client",
+        "https://registry.npmjs.org:443/@types/node",
+        "https://[::1]:8080/@scope",
+        "https://h:8080/x?u=a@b.com",
+    ],
+)
+def test_ordinary_text_is_not_masked(text: str) -> None:
+    """R4: key suffixes, numbers, type names, ports and paths are not secrets."""
+    assert _masked(text) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ("SECRET_KEY_BASE=" + Z, Z),
+        ('"accessKeyId": "' + Z + '"', Z),
+        ("auth_token=" + Z, Z),
+        ('"refreshToken": "' + Z + '"', Z),
+        ("postgres://user:Pa/55word" + Z + "@db:5432/x", "Pa/55word"),
+        ("amqp://u:" + Z + "@[::1]:5672/", Z),
+    ],
+)
+def test_round_three_still_masks_real_credentials(text: str, secret: str) -> None:
+    assert secret not in _masked(text)
+
+
+def test_a_real_plan_with_a_bare_credential_in_quotes_stays_a_valid_plan(tmp_path, set_home, monkeypatch) -> None:
+    from agent_team_backend.plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+    from agent_team_backend.plugins.builtin.navide_plans.plan_tools import _create_plan_sync
+
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "data"))
+    ws = set_home(tmp_path / "home") / "ws"
+    ws.mkdir(parents=True)
+    created = _create_plan_sync(
+        str(ws), "Env check", "A plan", ['Add "API_KEY=' + Z + '" to .env', 'password: "' + Z, "keep me intact"]
+    )
+    original = (ws / created["rel_path"]).read_text(encoding="utf-8")
+    out = share_scan.scan(original, kind="plan").text
+    assert Z not in out
+    meta = parse_plan_meta(out)
+    assert meta is not None, "plan-meta no longer parses"
+    assert [t["content"] for t in meta["todos"]][2] == "keep me intact"

@@ -83,37 +83,52 @@ _REDACTED = "[redacted]"
 #: Every way a plan file spells a quote: plain, JSON-escaped (plan-meta) and
 #: as an HTML entity (escaped visible markup). Longest first.
 _QUOTE = r"""(?:\\"|\\'|&quot;|&\#0*34;|&\#x0*22;|&\#0*39;|&\#x0*27;|&apos;|"|')"""
-#: A credential-looking key, prefixes and suffixes included (SECRET_KEY_BASE,
-#: secretKey, signing_key). "auth" is left out on purpose: author, authority
-#: and oauth_url are far more common in a plan than an auth secret.
+#: A credential-looking key. Any prefix (client_secret, auth_token,
+#: refreshToken), but only key/base/id as suffixes (SECRET_KEY_BASE, secretKey,
+#: accessKeyId): tokenizer, max_tokens and passwordHash are not credentials.
+#: "auth" and "pwd" are left out on purpose: author, authority, oauth_url and
+#: the shell's working directory are far more common in a plan than secrets.
 _CRED_KEY = (
-    r"\w*?(?:secret|passw(?:or)?d|passphrase|pwd|token|api[_-]?key|apikey|private[_-]?key"
-    r"|signing[_-]?key|encryption[_-]?key|access[_-]?key)\w*"
+    r"\w*?(?:secret|passw(?:or)?d|passphrase|token|api[_-]?key|apikey|private[_-]?key"
+    r"|signing[_-]?key|encryption[_-]?key|access[_-]?key)(?:[_-]?(?:key|base|id))*(?!\w)"
 )
+_CRED_PREFIX = rf"(?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s*[:=]\s*"
 #: A credential key with a quoted value: the whole value goes, spaces
-#: included, and an escaped quote inside it does not end it.
+#: included, and an escaped quote inside it does not end it. The two value
+#: branches never match the same character (a backslash starts an escape,
+#: anything else is one character), so a long run of backslashes with no
+#: closing quote cannot backtrack exponentially.
 _QUOTED_CREDENTIAL = (
-    re.compile(
-        rf"(?i)((?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s*[:=]\s*(?P<q>{_QUOTE}))"
-        r"(?:(?!(?P=q))(?:\\.|[^\n]))+(?=(?P=q))"
-    ),
+    re.compile(rf"(?i)({_CRED_PREFIX}(?P<q>{_QUOTE}))(?:(?!(?P=q))(?:\\.|[^\\\n]))+(?=(?P=q))"),
     r"\1" + _REDACTED,
     "credential-assignment",
 )
-#: The same keys with a bare value (.env, YAML); a literal like true or null
-#: is a setting, not a secret.
+#: The same, with the closing quote missing: mask up to the next space,
+#: quote, backslash or markup, as an unquoted value would be.
+_UNCLOSED_CREDENTIAL = (
+    re.compile(rf"(?i)({_CRED_PREFIX}{_QUOTE})[^\s\"'\\&<>]+"),
+    r"\1" + _REDACTED,
+    "credential-assignment",
+)
+#: Values that are settings or type names, not secrets: literals, a bare
+#: number, and the words a schema or a code sample puts after a key.
+_NOT_A_SECRET = (
+    r"(?!(?:true|false|null|none|undefined|string|number|boolean|required|optional)(?![\w-]))"
+    r"(?![0-9]+(?![^\s'\"&<>,;\\]))"
+)
+#: The same keys with a bare value (.env, YAML). The value stops at a
+#: backslash, so the \" that closes a surrounding JSON string survives.
 _BARE_CREDENTIAL = (
-    re.compile(
-        rf"(?i)((?<!\w){_CRED_KEY}\s*[:=]\s*)(?!{_QUOTE})(?!(?:true|false|null|none|undefined)\b)"
-        r"[^\s'\"&<>,;]{4,}"
-    ),
+    re.compile(rf"(?i)((?<!\w){_CRED_KEY}\s*[:=]\s*)(?!{_QUOTE}){_NOT_A_SECRET}[^\s'\"&<>,;\\]{{4,}}"),
     r"\1" + _REDACTED,
     "credential-assignment",
 )
 #: user:password@ in a URL, also with no user (redis://:pw@host), a "/" in
-#: the password, or an "@" in it (up to the last "@" before the host).
+#: the password, or an "@" in it (up to the last "@" before the host). A port
+#: followed by a path (localhost:5173/@vite) is not a password, and neither is
+#: anything whose "@" directly follows a "/".
 _URL_CREDENTIALS = (
-    re.compile(r"(://[^/\s:@]*:)(?:[^\s@]|@(?=[^\s/@]*@))+@(?=[\w.-]+)"),
+    re.compile(r"(://[^/\s:@]*:)(?!\d+/)(?:[^\s@]|@(?=[^\s/@]*@))+(?<!/)@(?=[\w.\[-])"),
     r"\1" + _REDACTED + "@",
     "url-credentials",
 )
@@ -136,6 +151,7 @@ _PROVIDERS = (
 HIGH_CONFIDENCE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     (_PRIVATE_KEY_RE, "[redacted private key]", "private-key"),
     _QUOTED_CREDENTIAL,
+    _UNCLOSED_CREDENTIAL,
     _BARE_CREDENTIAL,
     _URL_CREDENTIALS,
     _BOT_URL,
