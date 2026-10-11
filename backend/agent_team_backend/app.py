@@ -465,7 +465,8 @@ def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
     digest = hmac.new(
         expected.encode(), b"navide-window/v2\0" + challenge.encode(), hashlib.sha256
     ).hexdigest()
-    return secrets.compare_digest(proof, digest)
+    # Bytes, not str: compare_digest raises on a str with non-ASCII in it.
+    return secrets.compare_digest(proof.encode(), digest.encode())
 
 
 def set_host_session_token(token: str) -> bool:
@@ -482,7 +483,7 @@ def host_session_token_matches(token: Any) -> bool:
     return (
         isinstance(token, str)
         and bool(expected)
-        and secrets.compare_digest(token, expected)
+        and secrets.compare_digest(token.encode(), expected.encode())
     )
 
 

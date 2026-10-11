@@ -290,7 +290,7 @@ def test_the_right_proof_makes_a_navide_window_once(client, monkeypatch) -> None
         assert session.navide_window is True
 
 
-@pytest.mark.parametrize("wrong", ["bad-key", "other-nonce", "empty", "not-a-string"])
+@pytest.mark.parametrize("wrong", ["bad-key", "other-nonce", "empty", "not-a-string", "non-ascii"])
 def test_a_wrong_proof_is_refused(client, monkeypatch, wrong) -> None:
     """Refused without spending the challenge: a proof meant for the previous
     socket can land on a fresh one during a reconnect, and must not lock that
@@ -306,11 +306,21 @@ def test_a_wrong_proof_is_refused(client, monkeypatch, wrong) -> None:
             "other-nonce": _window_proof("host-secret", "a" * 64),
             "empty": "",
             "not-a-string": 7,
+            "non-ascii": "é" * 64,
         }[wrong]
         assert _prove(ws, "p1", bad).get("ok") is False
         assert session.navide_window is False
         assert _prove(ws, "p2", _window_proof("host-secret", nonce)).get("ok") is True
         assert session.navide_window is True
+
+
+def test_a_non_ascii_proof_or_host_token_is_refused_not_raised(monkeypatch) -> None:
+    """R4-L1: compare_digest raises TypeError on a str with non-ASCII
+    characters; a client must get a refusal, never a traceback."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    assert app_module.navide_window_proof_matches("a" * 64, "é" * 64) is False
+    assert app_module.host_session_token_matches("hést-secret") is False
+    assert app_module.host_session_token_matches("host-secret") is True
 
 
 def test_a_proof_replayed_on_another_connection_is_refused(client, monkeypatch) -> None:
