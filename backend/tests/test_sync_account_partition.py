@@ -258,12 +258,12 @@ def test_a_park_that_fails_leaves_nothing_parked(tmp_path, monkeypatch, account_
     def broken(*_a, **_k):
         raise OSError("disk full")
 
-    monkeypatch.setattr(store, "park_value", broken)
-    sync_scopes.switch_account(A, B)
-    monkeypatch.undo()
-    monkeypatch.setattr(sync_scopes, "_settings", lambda: settings)
-    monkeypatch.setattr(app, "sync_store", store)
-    monkeypatch.setattr(app, "app_data_dir", lambda: tmp_path)
+    # A scoped patch, never monkeypatch.undo(): undo would also revert the
+    # conftest fixtures sharing this monkeypatch, the fake credential vault
+    # among them, and let the test reach the real Keychain.
+    with monkeypatch.context() as scoped:
+        scoped.setattr(store, "park_value", broken)
+        sync_scopes.switch_account(A, B)
     sync_scopes.switch_account(B, A)
     assert store.states("skills") == {}
     assert sync_approvals.entry("skills", "s") is None
