@@ -35,8 +35,11 @@ def _tools() -> list[dict[str, Any]]:
 
 
 def test_the_existing_tools_are_exactly_mains_and_the_share_tools_come_after() -> None:
-    tools = _tools()
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+    core = {t["name"] for t in baseline}
+    # Other tests install plugin tools onto the same server; only main's core
+    # tools and the three share tools are this test's business.
+    tools = [t for t in _tools() if t["name"] in core or t["name"] in SHARE_TOOLS]
     existing = [t for t in tools if t["name"] not in SHARE_TOOLS]
     assert json.loads(json.dumps(existing, sort_keys=True)) == baseline
     assert [t["name"] for t in tools[-3:]] == SHARE_TOOLS
