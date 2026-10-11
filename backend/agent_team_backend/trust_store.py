@@ -55,6 +55,7 @@ treated here as an error.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import sys
@@ -307,6 +308,13 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
 #: only the journal does not rewrite the Keychain item, and vice versa.
 _last_core: str | None = None
 _last_journal: str | None = None
+#: The vault half as last read or confirmed written. A decision write whose save
+#: fails is rolled back to it (see ``_save_locked``).
+_committed_core: dict[str, Any] | None = None
+
+
+def _core_of(state: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in state.items() if key not in _JOURNAL_KEYS}
 
 
 def _journal_path() -> Path:
@@ -368,18 +376,15 @@ def _adopt_journal(state: dict[str, Any]) -> None:
 
 
 def _write(state: dict[str, Any]) -> None:
-    global _last_core, _last_journal
+    global _last_core, _last_journal, _committed_core
     # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
-    core = json.dumps(
-        {key: value for key, value in state.items() if key not in _JOURNAL_KEYS},
-        ensure_ascii=False,
-        separators=(",", ":"),
-    )
+    core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
     if core != _last_core:
         cloud_secrets.write(_vault(), SECRET_NAME, core)
         _last_core = core
+    _committed_core = json.loads(core)
     journal = json.dumps(
         {"v": STATE_VERSION, **{key: state.get(key) for key in _JOURNAL_KEYS}},
         ensure_ascii=False,
@@ -459,6 +464,7 @@ def _load_locked() -> dict[str, Any]:
             )
             raise TrustStoreLocked(_locked_reason)
         _adopt_journal(parsed)
+        _remember_committed(parsed)
         _state = parsed
         return _state
 
@@ -547,7 +553,23 @@ def locked_reason() -> str:
 
 
 def _save_locked(state: dict[str, Any]) -> None:
-    _write(state)
+    """Save after a decision. Caller holds ``_lock``.
+
+    A save that fails takes the decision back out of memory too: every caller
+    changed the cached state first, and a change left there was acted on until
+    the next restart — a pairing reported as failed was still trusted, a block
+    held only until the restart, a policy sequence could go backwards. Only the
+    vault half is rolled back; notices and the ledger stay, as they would after
+    a record-only save that failed.
+    """
+    try:
+        _write(state)
+    except Exception:
+        if _committed_core is not None:
+            for key in [key for key in state if key not in _JOURNAL_KEYS]:
+                del state[key]
+            state.update(copy.deepcopy(_committed_core))
+        raise
 
 
 def _save_record_locked(state: dict[str, Any], what: str) -> None:
@@ -1536,10 +1558,16 @@ def rebuild_locked_store() -> dict[str, Any]:
         return {"rebuilt": True, "was": cleared}
 
 
+def _remember_committed(state: dict[str, Any]) -> None:
+    global _committed_core
+    _committed_core = copy.deepcopy(_core_of(state))
+
+
 def _forget_written() -> None:
-    global _last_core, _last_journal
+    global _last_core, _last_journal, _committed_core
     _last_core = None
     _last_journal = None
+    _committed_core = None
 
 
 def _reset_for_test() -> None:
