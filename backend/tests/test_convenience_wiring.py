@@ -1331,11 +1331,17 @@ def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes
     manager, real = _codex(tmp_path)
     monkeypatch.setattr(app, "codex_home_manager", manager)
     convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
-    real.chmod(0o555)  # the rewrite cannot land
+    # The rewrite cannot land: POSIX refuses the temp file in a read-only
+    # folder; Windows ignores folder modes but refuses to replace a
+    # read-only file.
+    config = real / "config.toml"
+    real.chmod(0o555)
+    config.chmod(0o444)
     try:
         with pytest.raises(CleanupIncomplete):
             convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
     finally:
+        config.chmod(0o644)
         real.chmod(0o755)
 
     assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
