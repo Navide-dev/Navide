@@ -55,6 +55,7 @@ treated here as an error.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import sys
@@ -63,7 +64,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from agent_team_backend import device_signing
+from agent_team_backend import cloud_secrets, device_signing
+from agent_team_backend.applog import app_data_dir, in_data_dir
+from agent_team_backend.osplat import durable_secret_files
 
 log = logging.getLogger(__name__)
 
@@ -72,6 +75,19 @@ log = logging.getLogger(__name__)
 #: not the same store.
 SECRET_NAME = "navide-device-trust"
 INITIALISED_KEY = "p2p.trust.initialised"
+
+#: The fast-growing half of the state — up to MAX_NOTICES notices and
+#: MAX_SEEN_MESSAGES ledger keys — kept in an owner-only file in the data dir
+#: rather than in the vault entry. Inside it they pushed the Keychain item past
+#: `security -i`'s 4095-byte line after about fifteen remote commands, and a
+#: write that long was stored truncated. Neither decides whom to trust: losing
+#: the file costs the notices and, for one TTL, replay protection — the same
+#: price ``_parse`` already accepts for a document that predates the ledger.
+JOURNAL_FILENAME = "device-trust-journal.json"
+#: Its own owner-only directory, so the permission that guards it does not
+#: depend on how the rest of the data dir was created.
+JOURNAL_DIRNAME = "device-trust"
+_JOURNAL_KEYS = ("notices", "seenMessages")
 
 STATE_VERSION = 1
 
@@ -92,6 +108,9 @@ MAX_NOTICES = 50
 #: in-memory version it replaces: a map fed by a remote peer needs a ceiling,
 #: and a delivered message stops being interesting once no sender would retry.
 MAX_SEEN_MESSAGES = 500
+#: Longest string kept in a notice. Names and ids in one come from the other
+#: machine or the relay, and fifty notices are kept.
+MAX_NOTICE_TEXT = 200
 SEEN_MESSAGE_TTL_S = 3600
 
 #: How long recording a delivery may stay in memory before it reaches disk.
@@ -176,9 +195,24 @@ class TrustStoreFull(RuntimeError):
     """The device cap is reached, so a new pin cannot be taken."""
 
 
+_FULL_MESSAGE = (
+    "the pairing record is full: this build keeps it in one macOS Keychain "
+    "item, which has no room for this change. Update Navide to pair more devices"
+)
+#: A policy sequence as long as one is ever expected to get, for the reserve.
+_RESERVED_SEQ = 10**9
+#: Stands in for this machine's own device id in the reserve: its policy
+#: sequence lives in the same map and is not one of the pins.
+_OWN_DEVICE_PLACEHOLDER = "00000000-0000-4000-8000-000000000000"
+
+
 _lock = threading.RLock()
 _state: dict[str, Any] | None = None
 _locked_reason = ""
+#: Whether the latched lock is a record that is there but does not parse — cut
+#: off by a write, rather than missing. Said apart because the way out differs:
+#: a damaged record is known to be useless, so pairing again is the fix.
+_damaged = False
 #: A read that failed for a reason that may not still be true — a locked
 #: keychain, a dismissed authorisation dialog, a ``security`` timeout. Reported
 #: like a lock, because nothing works while it holds, but not latched.
@@ -202,7 +236,13 @@ TRANSIENT_RETRY_LIMIT = 3
 # ---- storage -----------------------------------------------------------------
 
 
+#: The vault a timed flush was armed with, while it runs (see _arm_seen_timer_locked).
+_timer_vault: Any = None
+
+
 def _vault():
+    if _timer_vault is not None:
+        return _timer_vault
     # Late import for the same reason server_link does it: app imports both, and
     # tests swap the app-wide vault wholesale to stay off the real Keychain.
     from . import app
@@ -267,7 +307,6 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
         ("ownMembers", dict),
         ("pins", dict),
         ("encryptedPeers", list),
-        ("notices", list),
     ):
         if not isinstance(doc.get(key), kind):
             return None
@@ -277,7 +316,9 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
     # sequences (C2), the downgrade list (H1/H2) — is read out of this same
     # document. A missing ledger costs replay protection for one restart; an
     # unreadable document costs all four at once.
-    for later, empty in (("policySeqs", {}), ("seenMessages", {})):
+    # The notices are among them now: a vault entry written since they moved to
+    # the journal no longer carries them.
+    for later, empty in (("policySeqs", {}), ("seenMessages", {}), ("notices", [])):
         value = doc.get(later)
         if value is None:
             doc[later] = empty
@@ -286,13 +327,193 @@ def _parse(raw: str | None) -> dict[str, Any] | None:
     return doc
 
 
+#: What was last written to (or read from) each store, so a save that changed
+#: only the journal does not rewrite the Keychain item, and vice versa.
+_last_core: str | None = None
+_last_journal: str | None = None
+#: The vault half as last read or confirmed written. A decision write whose save
+#: fails is rolled back to it (see ``_save_locked``).
+_committed_core: dict[str, Any] | None = None
+
+
+def _core_of(state: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in state.items() if key not in _JOURNAL_KEYS}
+
+
+def _journal_path() -> Path:
+    return app_data_dir() / JOURNAL_DIRNAME / JOURNAL_FILENAME
+
+
+def _read_journal_bytes(path: Path) -> bytes:
+    """The journal's bytes, never through a link. Raises FileNotFoundError when
+    there is none, OSError when it cannot be read."""
+    return durable_secret_files.read(path)
+
+
+def _write_journal_bytes(path: Path, data: bytes) -> None:
+    """Replace the journal durably: owner-only directory and file, every byte
+    written, file and directory fsynced, then an atomic rename — which replaces
+    a link at that path rather than writing through it.
+
+    Not ``secret_files.write_private``: that writer is shared with CLI account
+    slots and is left exactly as it was, and it writes once without fsync, so
+    a power cut could leave an empty journal behind.
+    """
+    durable_secret_files.write(path, data)
+
+
+#: Set while the journal exists but cannot be read. No journal is written until
+#: a read succeeds: writing then would replace a file that was only momentarily
+#: locked with this process's empty view of it.
+_journal_blocked = False
+#: What is wrong with the journal, for the account view, or "" when nothing is.
+_journal_problem = ""
+
+
+def journal_problem() -> str:
+    """Why the journal is not in use as it should be, or "" when it is."""
+    return _journal_problem
+
+
+def _read_journal() -> dict[str, Any] | None:
+    """The journal's notices and ledger: {} when there is no journal yet, None
+    when there is one that cannot be read right now. Never raises, never locks
+    — nothing in it decides trust.
+
+    A journal that reads but is not a journal (bad JSON, wrong shape) is set
+    aside under a ``.damaged-<time>`` name rather than overwritten, and reads as
+    empty; one that cannot be read at all is left where it is.
+    """
+    global _journal_blocked, _journal_problem
+    path = _journal_path()
+    try:
+        # A link is not a journal: set aside below like any other non-journal.
+        raw = b"" if path.is_symlink() else _read_journal_bytes(path)
+    except FileNotFoundError:
+        return {}
+    except OSError as err:
+        if not _journal_blocked:
+            log.warning("the device trust journal could not be read; leaving it untouched (%s)", err)
+        _journal_blocked = True
+        _journal_problem = (
+            f"the device trust journal could not be read ({err}); it is left untouched "
+            "and not written until it can be — notices and the delivered-message "
+            "ledger are kept in memory meanwhile"
+        )
+        return None
+    doc: Any = None
+    try:
+        doc = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        pass
+    if not isinstance(doc, dict) or not isinstance(doc.get("notices", []), list) or not isinstance(
+        doc.get("seenMessages", {}), dict
+    ):
+        aside = path.with_name(f"{path.name}.damaged-{int(time.time())}")
+        try:
+            path.replace(aside)
+        except OSError as err:
+            log.warning("a damaged device trust journal could not be set aside (%s)", err)
+            _journal_blocked = True
+            _journal_problem = (
+                f"the device trust journal is damaged and could not be set aside ({err}); "
+                "it is not written until that is resolved"
+            )
+            return None
+        log.warning("the device trust journal was damaged; set it aside as %s", aside.name)
+        _journal_blocked = False
+        _journal_problem = (
+            f"the device trust journal was damaged and was set aside as {aside.name}; "
+            "notices and the delivered-message ledger started over from empty"
+        )
+        return {}
+    if _journal_blocked:
+        _journal_blocked = False
+        _journal_problem = ""
+    journal: dict[str, Any] = {}
+    if isinstance(doc.get("notices"), list):
+        journal["notices"] = doc["notices"]
+    if isinstance(doc.get("seenMessages"), dict):
+        journal["seenMessages"] = doc["seenMessages"]
+    return journal
+
+
+def _merge_journal(state: dict[str, Any], journal: dict[str, Any]) -> None:
+    """Fold *journal* into *state*, keeping both sides: notices merged by key,
+    ledgers merged by message key."""
+    if "notices" in journal:
+        known = {notice.get("key") for notice in journal["notices"] if isinstance(notice, dict)}
+        others = [
+            notice for notice in state.get("notices") or []
+            if isinstance(notice, dict) and notice.get("key") not in known
+        ]
+        state["notices"] = sorted(
+            others + journal["notices"],
+            key=lambda notice: int(notice.get("at") or 0) if isinstance(notice, dict) else 0,
+        )
+    if "seenMessages" in journal:
+        merged = dict(state.get("seenMessages") or {})
+        merged.update(journal["seenMessages"])
+        state["seenMessages"] = merged
+
+
+def _adopt_journal(state: dict[str, Any], stored_core: str | None) -> None:
+    """Fold the journal into a freshly parsed vault document. Caller holds
+    ``_lock``. A vault entry written before the move still carries its own
+    notices and ledger; both halves are kept, merged by key, and the vault's
+    copy leaves it on the next save.
+
+    ``stored_core`` is the vault item as read, so the first save after a load
+    rewrites it only if it changed (R2-5): a flush that rewrote it anyway was
+    one Keychain write per restart, and one more way to fail."""
+    global _last_core, _last_journal
+    journal = _read_journal()
+    if journal:
+        _merge_journal(state, journal)
+    _last_core = stored_core
+    _last_journal = None
+
+
 def _write(state: dict[str, Any]) -> None:
-    # One line, always: `_keychain_write` refuses a multi-line payload outright,
+    global _last_core, _committed_core
+    # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
-    _vault().write_app_secret(
-        SECRET_NAME, json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
+    try:
+        if core != _last_core:
+            cloud_secrets.write(_vault(), SECRET_NAME, core)
+            _last_core = core
+        _committed_core = json.loads(core)
+    finally:
+        # The journal is written even when the vault half was refused (R2-5):
+        # the ledger and notices do not depend on it, and a refused Keychain
+        # write used to cost them as well.
+        _write_journal_locked(state)
+
+
+def _write_journal_locked(state: dict[str, Any]) -> None:
+    global _last_journal
+    if _journal_blocked:
+        # Try again rather than overwrite: a read that succeeds now brings back
+        # what was on disk, merged with what this process recorded meanwhile.
+        recovered = _read_journal()
+        if recovered is None:
+            return
+        _merge_journal(state, recovered)
+    journal = json.dumps(
+        {"v": STATE_VERSION, **{key: state.get(key) for key in _JOURNAL_KEYS}},
+        ensure_ascii=False,
+        separators=(",", ":"),
     )
+    if journal != _last_journal:
+        try:
+            _write_journal_bytes(_journal_path(), journal.encode("utf-8"))
+        except OSError as err:
+            # The vault half — the part that decides trust — is saved apart from this.
+            log.warning("the device trust journal could not be saved (%s)", err)
+            return
+        _last_journal = journal
 
 
 def _load_locked() -> dict[str, Any]:
@@ -311,7 +532,7 @@ def _load_locked() -> dict[str, Any]:
     pinned the process until it restarted — with the only exit on that screen
     being one that erases a record nothing was ever wrong with.
     """
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     if _state is not None:
         return _state
     if _locked_reason:
@@ -341,6 +562,39 @@ def _load_locked() -> dict[str, Any]:
     parsed = _parse(raw)
 
     if marker is not None:
+        if parsed is None and raw:
+            # Only a record that is not JSON at all is "cut off": a whole record
+            # of another version or shape may be perfectly good, and telling
+            # its owner to pair again would have them erase it.
+            try:
+                whole = json.loads(raw)
+            except ValueError:
+                whole = _NOT_JSON
+            if whole is _NOT_JSON:
+                _damaged = True
+                _locked_reason = (
+                    "the cross-device pairing record on this machine is damaged: it was "
+                    f"saved incomplete ({len(raw.encode('utf-8'))} bytes that do not parse), "
+                    "so none of it can be trusted. Pair your devices again — start over "
+                    "here, then pair each other device from both ends"
+                    + _provenance(marker)
+                )
+            elif isinstance(whole, dict) and whole.get("v") != STATE_VERSION:
+                _locked_reason = (
+                    "the cross-device trust record on this machine was written by a "
+                    f"different version of Navide (record version {whole.get('v')!r}, this "
+                    f"build reads {STATE_VERSION}). It is left as it is: run the version "
+                    "that wrote it rather than starting over"
+                    + _provenance(marker)
+                )
+            else:
+                _locked_reason = (
+                    "the cross-device trust record on this machine is complete but not in "
+                    "the shape this build expects. It is left as it is; do not start over "
+                    "until it is clear why"
+                    + _provenance(marker)
+                )
+            raise TrustStoreLocked(_locked_reason)
         if parsed is None:
             _locked_reason = (
                 "this machine has a cross-device trust record but its contents are "
@@ -348,6 +602,8 @@ def _load_locked() -> dict[str, Any]:
                 + _provenance(marker)
             )
             raise TrustStoreLocked(_locked_reason)
+        _adopt_journal(parsed, raw)
+        _remember_committed(parsed)
         _state = parsed
         return _state
 
@@ -361,6 +617,9 @@ def _load_locked() -> dict[str, Any]:
             "never marked initialised; starting a new one"
         )
     _state = parsed if parsed is not None else _blank()
+    # Read even for a blank start: the journal outlives the record, and writing
+    # the blank state without reading it first replaced it with nothing.
+    _adopt_journal(_state, raw if parsed is not None else None)
     _write(_state)
     database.kv_set(
         INITIALISED_KEY,
@@ -410,6 +669,14 @@ def transient_lock() -> bool:
         return bool(_transient_reason) and not _locked_reason
 
 
+_NOT_JSON = object()
+
+
+def damaged() -> bool:
+    """Whether the lock in force is a record that exists but is cut off."""
+    return bool(_locked_reason) and _damaged
+
+
 def locked_reason() -> str:
     """Why cross-device traffic must be refused, or "" when all is well.
 
@@ -429,7 +696,64 @@ def locked_reason() -> str:
 
 
 def _save_locked(state: dict[str, Any]) -> None:
-    _write(state)
+    """Save after a decision. Caller holds ``_lock``.
+
+    A save that fails takes the decision back out of memory too: every caller
+    changed the cached state first, and a change left there was acted on until
+    the next restart — a pairing reported as failed was still trusted, a block
+    held only until the restart, a policy sequence could go backwards. Only the
+    vault half is rolled back; notices and the ledger stay, as they would after
+    a record-only save that failed.
+    """
+    try:
+        # Checked before anything is written, so a change that cannot be stored
+        # is refused as what it is — the record is full — rather than as a
+        # Keychain error after the fact.
+        core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
+        if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
+            raise TrustStoreFull(_FULL_MESSAGE)
+        _write(state)
+    except Exception:
+        if _committed_core is not None:
+            for key in [key for key in state if key not in _JOURNAL_KEYS]:
+                del state[key]
+            state.update(copy.deepcopy(_committed_core))
+        raise
+
+
+def _fits_with_reserve_locked(state: dict[str, Any]) -> bool:
+    """Whether the vault half fits with room left for what every pinned device
+    may still add — an encrypted-peer entry, a long policy sequence and a block
+    — plus one more block (KC2R-1). Checked when a pin is taken, so a full
+    record refuses the next pairing rather than a later decision about a device
+    already paired. A block keeps the pin (main's behaviour, kept on purpose),
+    so its room is reserved here rather than freed by the block."""
+    worst = copy.deepcopy(_core_of(state))
+    peers = worst.setdefault("encryptedPeers", [])
+    seqs = worst.setdefault("policySeqs", {})
+    blocked = worst.setdefault("blocked", [])
+    for device_id, pin in list(worst.get("pins", {}).items()) + [(_OWN_DEVICE_PLACEHOLDER, {})]:
+        if device_id not in peers:
+            peers.append(device_id)
+        seqs[device_id] = max(int(seqs.get(device_id) or 0), _RESERVED_SEQ)
+        member_id = pin.get("memberId", "") if isinstance(pin, dict) else ""
+        blocked.append({"deviceId": device_id, "memberId": member_id or "m-" + "0" * 32})
+    core = json.dumps(worst, ensure_ascii=False, separators=(",", ":"))
+    return cloud_secrets.fits(_vault(), SECRET_NAME, core)
+
+
+def _save_record_locked(state: dict[str, Any], what: str) -> None:
+    """Save after a write that only *records* something. Caller holds ``_lock``.
+
+    Logged, never raised: these run on the delivery path, and a save that
+    failed used to fail the message it was recording — every relayed message
+    was acked failed once the record outgrew the Keychain. The change stays in
+    the in-memory state, so this process still acts on it.
+    """
+    try:
+        _write(state)
+    except Exception as err:  # noqa: BLE001
+        log.warning("the device trust record could not be saved after %s; kept in memory only (%s)", what, err)
 
 
 def _state_for_read() -> dict[str, Any]:
@@ -628,6 +952,9 @@ def pin_device(
             "approved": False,
         }
         pins[device_id] = pin
+        if not _fits_with_reserve_locked(state):
+            del pins[device_id]
+            raise TrustStoreFull(_FULL_MESSAGE)
         _record_locked(
             state,
             NOTICE_FIRST_SEEN,
@@ -855,6 +1182,12 @@ def pin_paired_device(
             # pin left unapproved here would be a state nobody asked for.
             "approved": True,
         }
+        if not _fits_with_reserve_locked(state):
+            del pins[device_id]
+            raise TrustStoreFull(_FULL_MESSAGE)
+        _save_locked(state)
+        # After the save, not before: a pairing that could not be stored is
+        # rolled back, and a "paired" notice recorded first outlived it (R2-3).
         _record_locked(
             state,
             NOTICE_FIRST_SEEN,
@@ -866,7 +1199,7 @@ def pin_paired_device(
                 "paired": True,
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a pairing")
         return True
 
 
@@ -1014,16 +1347,20 @@ def note_pairing(device_id: str, *, kind: str, device_name: str = "") -> None:
     the *other* machine did, which is exactly the class of event the old
     one-sided pairing had no way to report: it granted access without anybody
     at the far end being asked, and without telling them afterwards.
+    "full" is this machine's own: the digits matched but the pin did not fit in
+    the record, so the person is told why the device is not paired.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(
             state,
             NOTICE_PAIRING,
             device_id=device_id,
             detail={"pairing": kind, "deviceName": device_name},
         )
-        _save_locked(state)
+        _save_record_locked(state, "a pairing notice")
 
 
 def note_remote_command(device_id: str, *, device_name: str, workspace: str, pane_name: str) -> None:
@@ -1035,7 +1372,9 @@ def note_remote_command(device_id: str, *, device_name: str, workspace: str, pan
     driving my machines", which a log file nobody opens does not.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(
             state,
             NOTICE_REMOTE_COMMAND,
@@ -1046,7 +1385,7 @@ def note_remote_command(device_id: str, *, device_name: str, workspace: str, pan
                 "paneName": pane_name,
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a remote-command notice")
 
 
 def note_key_change(device_id: str, *, pinned_key: str, offered_key: str, member_id: str) -> None:
@@ -1074,7 +1413,7 @@ def note_key_change(device_id: str, *, pinned_key: str, offered_key: str, member
                 "offeredFingerprint": device_signing.fingerprint(offered_key),
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a key-change notice")
 
 
 # ---- the pane policy's sequence ----------------------------------------------
@@ -1140,7 +1479,7 @@ def note_policy_unverified(reason: str, *, device_id: str = "", seq: Any = None)
                 "expected": (state.get("policySeqs") or {}).get(device_id, 0),
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a policy-unverified notice")
 
 
 def clear_policy_notice() -> None:
@@ -1199,15 +1538,21 @@ def note_encrypted_peer(device_id: str) -> None:
 # ---- notices -----------------------------------------------------------------
 
 
+def _bounded(value: Any) -> Any:
+    return value[:MAX_NOTICE_TEXT] if isinstance(value, str) else value
+
+
 def _record_locked(state: dict[str, Any], kind: str, *, device_id: str, detail: dict) -> None:
     notices = state["notices"]
+    # Device ids and names here come from the other machine or the relay.
+    device_id = _bounded(device_id)
     notices.append(
         {
             "key": f"{kind}:{device_id}:{int(time.time() * 1000)}",
             "kind": kind,
             "deviceId": device_id,
             "at": int(time.time()),
-            **detail,
+            **{field: _bounded(value) for field, value in detail.items()},
         }
     )
     # Evict the oldest *dismissible* notice first, and only fall back to the
@@ -1237,10 +1582,12 @@ def note_plaintext_refused(device_id: str, *, msg_key: str) -> None:
     something asked them to accept cleartext, which is the part worth seeing.
     """
     with _lock:
-        state = _load_locked()
+        state = _try_load()
+        if state is None:
+            return
         _record_locked(state, NOTICE_PLAINTEXT_REFUSED,
                        device_id=device_id, detail={"msgKey": msg_key})
-        _save_locked(state)
+        _save_record_locked(state, "a plaintext-refused notice")
 
 
 # ---- messages already delivered ----------------------------------------------
@@ -1248,6 +1595,50 @@ def note_plaintext_refused(device_id: str, *, msg_key: str) -> None:
 #: Keys recorded but not yet written out. See SEEN_FLUSH_AFTER.
 _seen_pending: dict[str, int] = {}
 _seen_last_flush: float = 0.0
+#: Writes out a batch that no later message arrives to complete. Without it the
+#: keys sat in memory until the next delivery — or a restart, which lost them.
+_seen_timer: threading.Timer | None = None
+
+
+def _arm_seen_timer_locked() -> None:
+    """Arm the flush with the vault and data dir in force now. Read when it fired
+    instead, a timer outliving the test that armed it wrote through whatever was
+    in force by then — the import-time vault, with its real runner (R2-9)."""
+    global _seen_timer
+    if _seen_timer is None:
+        _seen_timer = threading.Timer(
+            SEEN_FLUSH_SECONDS, in_data_dir(app_data_dir(), _timed_seen_flush, _vault()))
+        _seen_timer.daemon = True
+        _seen_timer.start()
+
+
+def _disarm_seen_timer_locked() -> None:
+    global _seen_timer
+    if _seen_timer is not None:
+        _seen_timer.cancel()
+        _seen_timer = None
+
+
+def _timed_seen_flush(vault: Any) -> None:
+    global _seen_timer, _timer_vault
+    with _lock:
+        _seen_timer = None
+        if _seen_pending:
+            _timer_vault = vault
+            try:
+                _flush_seen_locked(time.time())
+            finally:
+                _timer_vault = None
+
+
+def _stop_seen_timer_for_test() -> None:
+    """Cancel a pending flush and wait for one already running, so nothing of
+    this test's is written after its patches are gone."""
+    with _lock:
+        timer = _seen_timer
+        _disarm_seen_timer_locked()
+    if timer is not None:
+        timer.join(timeout=10)
 
 
 def has_seen_message(msg_key: str) -> bool:
@@ -1287,6 +1678,8 @@ def note_seen_message(msg_key: str) -> None:
             or now - _seen_last_flush >= SEEN_FLUSH_SECONDS
         ):
             _flush_seen_locked(now)
+        else:
+            _arm_seen_timer_locked()
 
 
 def flush_seen_messages() -> None:
@@ -1299,6 +1692,7 @@ def flush_seen_messages() -> None:
 
 def _flush_seen_locked(now: float) -> None:
     global _seen_last_flush
+    _disarm_seen_timer_locked()
     state = _try_load()
     if state is None:
         # Keep the keys in memory rather than dropping them: this runs while a
@@ -1317,7 +1711,7 @@ def _flush_seen_locked(now: float) -> None:
     if len(seen) > MAX_SEEN_MESSAGES:
         for key in sorted(seen, key=lambda k: int(seen[k] or 0))[: len(seen) - MAX_SEEN_MESSAGES]:
             del seen[key]
-    _save_locked(state)
+    _save_record_locked(state, "the delivered-message ledger")
 
 
 def notices() -> list[dict[str, Any]]:
@@ -1366,7 +1760,7 @@ def rebuild_locked_store() -> dict[str, Any]:
     to pair again, which is the point. The caller is responsible for the
     confirmation that says a person asked for this; nothing here can tell.
     """
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     with _lock:
         if not _locked_reason:
             try:
@@ -1384,32 +1778,52 @@ def rebuild_locked_store() -> dict[str, Any]:
         cleared = _locked_reason
         _transient_reason = ""
         _transient_failures = 0
-        _vault().write_app_secret(SECRET_NAME, None)
+        cloud_secrets.write(_vault(), SECRET_NAME, None)
+        _journal_path().unlink(missing_ok=True)
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)
         _state = None
         _locked_reason = ""
+        _damaged = False
         _seen_pending.clear()
+        _forget_written()
         log.warning("device trust store rebuilt after a lock: %s", cleared)
         return {"rebuilt": True, "was": cleared}
+
+
+def _remember_committed(state: dict[str, Any]) -> None:
+    global _committed_core
+    _committed_core = copy.deepcopy(_core_of(state))
+
+
+def _forget_written() -> None:
+    global _last_core, _last_journal, _committed_core, _journal_blocked, _journal_problem
+    _last_core = None
+    _last_journal = None
+    _committed_core = None
+    _journal_blocked = False
+    _journal_problem = ""
 
 
 def _reset_for_test() -> None:
     """Forget the process cache and the marker. Tests run against a throwaway
     vault and a throwaway data dir, so this touches nothing real."""
-    global _state, _locked_reason, _transient_reason, _transient_failures
+    global _state, _locked_reason, _transient_reason, _transient_failures, _damaged
     global _seen_last_flush
     with _lock:
         _state = None
         _locked_reason = ""
         _transient_reason = ""
         _transient_failures = 0
+        _damaged = False
         # Module-level too, and just as much part of "this process has seen
         # nothing". Left behind, a batch recorded by one test is still pending
         # when the next starts and lands in its state document instead.
         _seen_pending.clear()
         _seen_last_flush = 0.0
+        _disarm_seen_timer_locked()
+        _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.
         _database().kv_set(INITIALISED_KEY, None, now=0)

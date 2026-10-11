@@ -2498,6 +2498,28 @@ async def test_a_message_whose_handling_raises_is_acked_as_failed(monkeypatch, b
         await link.stop()
 
 
+async def test_a_trust_record_that_will_not_save_does_not_fail_the_message(monkeypatch, broadcasts):
+    """2026-10-10: the record outgrew the Keychain, every save raised, and every
+    relayed message was acked failed/receiver-error instead of delivered."""
+    from agent_team_backend.credential_vault import CredentialVaultError
+
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+
+    def refuse(_state):
+        raise CredentialVaultError("keychain write failed for 'Navide secret navide-device-trust'")
+
+    monkeypatch.setattr(trust_store, "_write", refuse)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts))
+        assert not any(a.get("state") == "failed" for a in conn.acks)
+    finally:
+        await link.stop()
+
+
 async def test_a_resent_message_that_was_already_answered_is_answered_again(broadcasts):
     """The server re-pushes a key only when its sender sent it again, which a
     sender does when it never heard back: the first answer was lost."""

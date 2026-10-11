@@ -58,6 +58,7 @@ import websockets
 from . import (
     __version__,
     agent_messaging,
+    cloud_secrets,
     device_crypto,
     device_identity,
     device_pairing,
@@ -218,6 +219,10 @@ LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
 LINK_TRUST_UNAVAILABLE = "p2p-trust-unavailable"
+#: Refused because the trust record has no room for the change (a policy
+#: sequence). Said apart from LINK_TRUST_UNAVAILABLE, which reads as "this
+#: machine cannot open its record" and would send someone looking for a lock.
+TRUST_STORE_FULL = "p2p-trust-store-full"
 
 #: The one word every unauthenticated inbound message is refused with. Kept
 #: single on purpose, exactly as "policy-denied" covers both blocked and merely
@@ -356,7 +361,7 @@ def access_token() -> str:
 def set_access_token(token: str | None) -> None:
     """Store the Navide-Server access token, or erase it when None/empty."""
     value = (token or "").strip()
-    _vault().write_app_secret(ACCESS_TOKEN_SECRET, value or None)
+    cloud_secrets.write(_vault(), ACCESS_TOKEN_SECRET, value or None)
 
 
 def load_config() -> ServerLinkConfig:
@@ -433,7 +438,7 @@ def _workspace_salt() -> bytes:
         stored = _vault().read_app_secret(WORKSPACE_SALT_SECRET)
         if not stored:
             stored = secrets.token_hex(32)
-            _vault().write_app_secret(WORKSPACE_SALT_SECRET, stored)
+            cloud_secrets.write(_vault(), WORKSPACE_SALT_SECRET, stored)
     except Exception as err:  # noqa: BLE001
         log.warning("workspace digest salt is unavailable (%s); using a per-run one", err)
         stored = secrets.token_hex(32)
@@ -1871,6 +1876,9 @@ class ServerLink:
             return self._trust_refusal()
         try:
             signed = await asyncio.to_thread(self._signed_policy, policy)
+        except trust_store.TrustStoreFull as err:
+            log.warning("could not sign the pane policy: %s", err)
+            return {"ok": False, "error": {"code": TRUST_STORE_FULL, "message": str(err)}}
         except Exception as err:  # noqa: BLE001
             log.warning("could not sign the pane policy: %s", err)
             return self._trust_refusal()
@@ -2394,6 +2402,12 @@ class ServerLink:
             # erase everything, which has nothing to erase when the keychain was
             # merely locked for a moment.
             "trustLockedTransient": trust_store.transient_lock(),
+            # The record is there but cut off, so the card can say "damaged —
+            # pair again" instead of an unexplained lock.
+            "trustDamaged": trust_store.damaged(),
+            # The journal (notices, delivered-message ledger) is unreadable or
+            # was set aside. Pairing is unaffected; the card says so.
+            "trustJournalProblem": trust_store.journal_problem(),
             # This device first, then by label: the row a user recognises is
             # the one that should not move as other machines come and go.
             "devices": sorted(
@@ -3136,6 +3150,18 @@ class ServerLink:
                 member_id=member_id or member_id_for(device_id),
                 own_member_id=self._own_member,
             )
+        except trust_store.TrustStoreFull as err:
+            # Said where the person looks, not only in the log: the digits
+            # matched and nothing else explains why the device is not paired.
+            log.warning("could not pin %s after pairing: %s", device_id, err)
+            await asyncio.to_thread(
+                trust_store.note_pairing,
+                device_id,
+                kind="full",
+                device_name=pairing.device_name or self._device_name_for(device_id),
+            )
+            await self._announce_trust_notices()
+            return False
         except Exception as err:  # noqa: BLE001
             log.error("could not pin %s after pairing: %s", device_id, err)
             return False

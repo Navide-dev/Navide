@@ -257,6 +257,12 @@ interface NetworkSnapshot {
   /** True when that stop is a read that may succeed next time — the offer to
    *  erase everything waits on this being false. */
   trustLockedTransient?: boolean
+  /** The record is there but cut off — a damaged record is known to be
+   *  useless, so the card says so and that pairing again is the fix. */
+  trustDamaged?: boolean
+  /** The trust journal (notices, delivered-message ledger) is unreadable or
+   *  was set aside; the backend's sentence says which. Pairing is unaffected. */
+  trustJournalProblem?: string
 }
 
 /** The four the server defines; anything else is shown as the server spelled it. */
@@ -440,6 +446,8 @@ const readFailed = pairingState.readFailed
  *  to erase everything: a keychain locked for a moment has nothing wrong with
  *  it to erase, and that offer is the one act here nobody can undo. */
 const trustLockedTransient = computed(() => network.value?.trustLockedTransient === true)
+const trustDamaged = computed(() => network.value?.trustDamaged === true)
+const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')
 /** Two clicks, not one: the first only reveals what the second costs. A single
  *  button beside an explanation of a lock is a button people press to make the
  *  red text go away. */
@@ -1084,8 +1092,11 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
   if (deciding.value) return
   deciding.value = key
   try {
-    await props.backend.send(type, args)
+    const resp = await props.backend.send(type, args)
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    // KC3-1: a record that was already full has no room for a block.
+    if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1109,11 +1120,13 @@ async function blockPending(row: PendingDevice): Promise<void> {
   if (pending.value) return
   pending.value = row.deviceId
   try {
-    await props.backend.send(
+    const resp = await props.backend.send(
       'p2p.trust.block',
       await withConfirmation('p2p.trust.block', row.deviceId, { deviceId: row.deviceId }),
     )
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    if (resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1978,9 +1991,14 @@ onUnmounted(() => {
                say that, and would have to be worth interrupting somebody for.
                The backend still reports `policyEmpty`; it is a true fact with
                no honest use here yet. -->
+          <div v-if="trustJournalProblem" class="card journal-card">
+            <p class="req-what">{{ t('settings.p2p.trust.journal-problem') }}</p>
+            <p class="hint">{{ trustJournalProblem }}</p>
+          </div>
           <div v-if="trustLocked" class="card locked-card">
             <h2 class="net-title">{{ t('settings.p2p.trust.locked-title') }}</h2>
-            <p class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
+            <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
+            <p v-else class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
             <p class="hint">{{ trustLocked }}</p>
             <p v-if="trustLockedTransient" class="hint locked-warn">
               {{ t('settings.p2p.trust.locked-retrying') }}
@@ -1989,7 +2007,9 @@ onUnmounted(() => {
               {{ t('settings.p2p.trust.rebuild-done') }}
             </p>
             <template v-else-if="rebuildArmed">
-              <p class="hint locked-warn">{{ t('settings.p2p.trust.rebuild-warn') }}</p>
+              <p class="hint locked-warn">
+                {{ t(trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn') }}
+              </p>
               <div class="locked-acts">
                 <button
                   class="dev-review locked-go"
@@ -2688,6 +2708,7 @@ input:focus {
    warning has to be read from — so it needs the same gap the connection card
    carries. Restored: the rule was written when the card moved there and was
    lost to a parallel edit before it reached any commit. */
+.journal-card { margin-bottom: 10px; }
 .locked-card { border-color: var(--danger-fg); margin-bottom: 10px; }
 .req { padding: 8px 0; border-bottom: 1px solid var(--border-muted); }
 .req:last-child { border-bottom: none; }
