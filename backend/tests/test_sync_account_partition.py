@@ -207,3 +207,64 @@ async def test_the_link_hands_both_accounts_to_the_switch(monkeypatch) -> None:
     await server_link._note_account("ns-b")
     await server_link._note_account("ns-a")
     assert calls == [("adopt", "ns-a"), ("ns-a", "ns-b"), ("ns-b", "ns-a")]
+
+
+def _switch_fixture(tmp_path, monkeypatch):
+    A, B = "a" * 32, "b" * 32
+    store = sync_engine.SyncStore(Database(tmp_path / "s.db"))
+    store.adopt_account(A)
+    store.set_state("skills", "s", rev=2, synced_hash="h", deleted=False)
+    settings = _Settings({
+        sync_scopes.SCOPES_SETTING: {s: True for s in sync_engine.SCOPES},
+        sync_scopes.DETACHED_KEY: {"prompts": {"p": "d"}},
+    })
+    monkeypatch.setattr(sync_scopes, "_settings", lambda: settings)
+    monkeypatch.setattr(app, "sync_store", store)
+    monkeypatch.setattr(app, "app_data_dir", lambda: tmp_path)
+    sync_approvals.hold("skills", "s", {"name": "s", "files": {}}, local=None, kind="new", summary={})
+    return A, B, store, settings
+
+
+def test_a_retried_switch_keeps_what_the_first_attempt_parked(tmp_path, monkeypatch, account_key) -> None:
+    """Review D-M1 (R2): the link retries a switch that failed halfway. The
+    retry found the live approvals and detached marks already gone and parked
+    that emptiness over what the first attempt had parked."""
+    A, B, store, settings = _switch_fixture(tmp_path, monkeypatch)
+    calls = {"n": 0}
+
+    class Flaky:
+        def reset(self) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("transient")
+
+    monkeypatch.setattr(sync_scopes, "_skill_files", Flaky())
+    try:
+        sync_scopes.switch_account(A, B)
+    except sync_engine.SyncError:
+        pass
+    sync_scopes.switch_account(A, B)
+    sync_scopes.switch_account(B, A)
+    assert store.state("skills", "s").rev == 2
+    assert sync_approvals.entry("skills", "s") is not None
+    assert settings.values.get(sync_scopes.DETACHED_KEY) == {"prompts": {"p": "d"}}
+
+
+def test_a_park_that_fails_leaves_nothing_parked(tmp_path, monkeypatch, account_key) -> None:
+    """Any part that cannot be parked means none of it is: the account is read
+    afresh, never restored as state without its holds."""
+    A, B, store, settings = _switch_fixture(tmp_path, monkeypatch)
+
+    def broken(*_a, **_k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "park_value", broken)
+    sync_scopes.switch_account(A, B)
+    monkeypatch.undo()
+    monkeypatch.setattr(sync_scopes, "_settings", lambda: settings)
+    monkeypatch.setattr(app, "sync_store", store)
+    monkeypatch.setattr(app, "app_data_dir", lambda: tmp_path)
+    sync_scopes.switch_account(B, A)
+    assert store.states("skills") == {}
+    assert sync_approvals.entry("skills", "s") is None
+

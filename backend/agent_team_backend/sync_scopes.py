@@ -2631,20 +2631,36 @@ def switch_account(previous: str | None, namespace: str | None) -> None:
     store.new_generation()
     if previous:
         try:
-            parked_approvals = sync_approvals.park_approvals(previous)
-        except OSError as err:
-            log.warning("account change: could not park the pending approvals: %s", err)
-            parked_approvals = False
-        if parked_approvals:
-            try:
-                store.park_account(previous)
-                store.park_value(previous, DETACHED_KEY, _settings().get().get(DETACHED_KEY))
-            except Exception as err:  # noqa: BLE001 - fall back to letting go
-                log.warning("account change: could not park the sync state: %s", err)
-                sync_approvals.discard_parked_approvals(previous)
+            if not sync_approvals.park_approvals(previous):
+                raise OSError("the pending approvals have nowhere to be parked")
+            store.park_account(previous)
+            detached = _settings().get().get(DETACHED_KEY)
+            # None on a retried switch: the first attempt parked the marks,
+            # and parking "none" would overwrite them.
+            if detached is not None:
+                store.park_value(previous, DETACHED_KEY, detached)
+        except Exception as err:  # noqa: BLE001 - fall back to letting go
+            log.warning("account change: could not park the sync state; it will be read afresh: %s", err)
+            _discard_parked(store, previous)
     on_account_changed()
-    if not namespace:
-        return
+    if namespace:
+        _restore_parked(store, namespace)
+
+
+def _discard_parked(store: Any, account: str) -> None:
+    """Let go of everything parked for *account*, and of its live rows, so
+    the account is read afresh — never restored as state without its holds."""
+    try:
+        sync_approvals.discard_parked_approvals(account)
+        # Bringing the parked rows back live is what takes them out of the
+        # parking table; ``on_account_changed`` then forgets every live row.
+        store.restore_account(account)
+        store.take_parked_value(account, DETACHED_KEY)
+    except Exception as err:  # noqa: BLE001 - the forget that follows still runs
+        log.warning("account change: could not discard the parked sync state: %s", err)
+
+
+def _restore_parked(store: Any, namespace: str) -> None:
     try:
         store.restore_account(namespace)
         detached = store.take_parked_value(namespace, DETACHED_KEY)

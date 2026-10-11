@@ -771,6 +771,10 @@ def park_approvals(account: str) -> bool:
         return False
     with _lock:
         src = _stash_dir()
+        if not _index() and dest.exists():
+            # Nothing live to park: a retried switch whose first attempt
+            # already parked them. What it parked stays.
+            return True
         if dest.exists():
             shutil.rmtree(dest)
         if src.exists():
