@@ -68,6 +68,15 @@ class Sec:
         return any(re.search(rf" {re.escape(name)}(@|$)", service) for name in names)
 
 
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    """The record kept in its Keychain item, whose one `security -i` line is the
+    room these tests measure — the store before the sealed file, and still the
+    one used when the move cannot happen (test_trust_store_capacity does the
+    same). A sealed file has no such line, so nothing here can fill it."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
+
 @pytest.fixture
 def kc(tmp_path, monkeypatch):
     sec = Sec()

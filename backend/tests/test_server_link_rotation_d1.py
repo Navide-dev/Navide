@@ -8,7 +8,9 @@ import pytest
 
 from agent_team_backend import server_link, trust_store
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
-from tests.test_server_link_pin_bounds import CUR_S, NXT_S, kc, owners, real_link  # noqa: F401 - kc is a fixture
+from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc and _keychain_store are fixtures
+    CUR_S, NXT_S, _keychain_store, kc, owners, real_link,
+)
 
 
 class LongTokenServer(TokenServer):

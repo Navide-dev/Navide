@@ -15,7 +15,7 @@ import pytest
 from agent_team_backend import cloud_secrets, trust_store
 from agent_team_backend.server_link import ServerLink
 
-from .test_trust_store_capacity import KEY, _device, keychain  # noqa: F401 - keychain is a fixture
+from .test_trust_store_capacity import KEY, _device, _keychain_store, keychain  # noqa: F401 - fixtures
 
 URL = "wss://server.navide.dev/ws"
 MEMBER = "m-0123456789ab"  # the server's newId("m"): m- and 12 hex

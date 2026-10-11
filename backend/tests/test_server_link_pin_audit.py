@@ -15,7 +15,7 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store
 from agent_team_backend.server_link import ServerLink
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc is a fixture
-    URL, _call, core_cmd_len, kc, next_connection, owners, pair_max, real_link,
+    URL, _call, _keychain_store, core_cmd_len, kc, next_connection, owners, pair_max, real_link,
 )
 from tests.test_trust_store_capacity import KEY, _device
 
