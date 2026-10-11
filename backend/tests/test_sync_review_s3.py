@@ -533,3 +533,113 @@ async def test_an_unsupported_adoption_leaves_every_id_legacy(tmp_path, account_
     assert server.item_ids == "legacy"
     assert all(not HASHED.match(k[1]) for k in server.rows)
     assert all(not s.wire_id for s in a.store.states("prompts").values())
+
+
+# ── server re-review 2: converging after ITEM_IDS_CHANGED (s3 account) ───────
+async def _a2_on_a_stale_connection(tmp_path, s3):
+    """A and A2 agree on legacy ids; A2's connection negotiated "legacy" and
+    keeps it while A adopts hashed ids and migrates."""
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = _PickyServer(s3, adopt_ready=False)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    a2 = V3Device(tmp_path, server, "A2")
+    await a.sync(); await a2.sync()
+    assert a2.adapter.items == NAMES
+    server.adopt_ready = True
+    a.reconnect()
+    return server, a, a2
+
+
+def _converged(server, a, a2, expected) -> None:
+    assert a.adapter.items == expected and a2.adapter.items == expected
+    assert a.store.conflicts("prompts") == [] and a2.store.conflicts("prompts") == []
+    live = _live_ids(server)
+    assert all(HASHED.match(i) for i in live) and len(live) == len(expected)
+    for name in expected:
+        assert a.store.state("prompts", name).wire_id == a2.store.state("prompts", name).wire_id
+        assert HASHED.match(a.store.state("prompts", name).wire_id)
+
+
+@pytest.mark.parametrize("change", ["none", "edit", "delete"])
+async def test_a_device_that_meets_item_ids_changed_converges_within_two_rounds(
+    tmp_path, account_key, s3, change
+):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server, a, a2 = await _a2_on_a_stale_connection(tmp_path, s3)
+    assert (await a.sync())["ok"] is True  # A adopts and migrates
+    expected = dict(NAMES)
+    if change == "edit":
+        a2.adapter.items[ALPHA] = {"v": "a2-edit"}
+        expected[ALPHA] = {"v": "a2-edit"}
+    elif change == "delete":
+        del a2.adapter.items[ALPHA]
+        del expected[ALPHA]
+    first = await a2.sync()
+    assert first["ok"] is False and "ITEM_IDS_CHANGED" in first["error"]
+    for _ in range(2):
+        await a2.sync(); await a.sync()
+    _converged(server, a, a2, expected)
+
+
+@pytest.mark.parametrize("change", ["edit", "delete"])
+async def test_a_legacy_push_that_lands_after_the_migration_converges(tmp_path, account_key, s3, change):
+    """A2 read nothing new, then A migrated before A2's push arrived: an edit
+    is turned away (BAD_REQUEST), a delete meets the migration's tombstone."""
+    from tests.test_sync_hashed_ids import NAMES
+
+    server, a, a2 = await _a2_on_a_stale_connection(tmp_path, s3)
+    expected = dict(NAMES)
+    if change == "edit":
+        a2.adapter.items[ALPHA] = {"v": "a2-edit"}
+        expected[ALPHA] = {"v": "a2-edit"}
+    else:
+        del a2.adapter.items[ALPHA]
+        del expected[ALPHA]
+
+    async def a_migrates_first():
+        assert (await a.sync())["ok"] is True
+
+    server.before_push = a_migrates_first
+    await a2.sync()
+    if change == "delete":
+        # On the stale connection the clash is recorded exactly as on main;
+        # the hashed copy, once read, shows it was a rename and clears it.
+        (clash,) = a2.store.conflicts("prompts")
+        assert clash["local"] is None and clash["remote"] is None
+    else:
+        assert a2.store.conflicts("prompts") == []
+    for _ in range(3):
+        await a2.sync(); await a.sync()
+    _converged(server, a, a2, expected)
+
+
+# ── a legacy account behaves exactly as main ─────────────────────────────────
+async def test_on_a_legacy_account_a_delete_that_meets_a_delete_is_still_a_conflict(tmp_path, account_key):
+    """Modelled on test_sync_engine.py::test_a_delete_propagates (v1
+    FakeServer, Device): B's delete reaches the server after A's, and the
+    clash is recorded as main records it — both halves deleted."""
+    from tests.test_sync_engine import Device, FakeServer
+
+    server = FakeServer()
+    a = Device(tmp_path, server, "dev-a", {"p1": {"id": "p1", "prompt": "hello"}})
+    b = Device(tmp_path, server, "dev-b")
+    await a.sync()
+    await b.sync()
+    a.adapter.items.pop("p1")
+    b.adapter.items.pop("p1")
+    real = server.request
+    state = {"raced": False}
+
+    async def a_deletes_first(msg_type, payload):
+        if msg_type == "sync.push" and not state["raced"] and payload["items"][0].get("deviceId") == "dev-b":
+            state["raced"] = True
+            await a.sync()
+        return await real(msg_type, payload)
+
+    server.request = a_deletes_first
+    await b.sync()
+    assert state["raced"]
+    (clash,) = b.store.conflicts("prompts")
+    assert clash["itemId"] == "p1" and clash["local"] is None and clash["remote"] is None

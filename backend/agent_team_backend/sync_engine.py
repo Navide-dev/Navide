@@ -1491,6 +1491,14 @@ class SyncEngine:
                     # the migration's tombstone above all — is a rename,
                     # not a delete or an edit.
                     return False
+        if hashed_wire and item_id in blocked and self._stale_delete_clash(scope, item_id):
+            # A delete pushed under the legacy id on a connection that had not
+            # heard of the migration met the migration's own legacy tombstone.
+            # Now that the hashed copy is here, that clash was a rename: it is
+            # dropped, and this row is read as one (the delete still stands,
+            # and goes up under the hashed id).
+            self._store.clear_conflict(scope, item_id)
+            blocked.discard(item_id)
         if not item_id or item_id in blocked:
             return False
         rev = int(raw.get("rev") or 0)
@@ -1624,10 +1632,11 @@ class SyncEngine:
                 remote_kid="" if deleted else _kid_of(body),
                 remote_wire=hashed_wire,
             )
-            # Later rows of the same page about this item — the migration's
-            # legacy tombstone right behind its hashed copy — must not record
-            # a second conflict over this one.
-            blocked.add(item_id)
+            if hashed_wire:
+                # D3: later rows of the same page about this item — the
+                # migration's legacy tombstone right behind its hashed copy —
+                # must not record a second conflict over this one.
+                blocked.add(item_id)
             return False
         held = True
         if local_hash != remote_hash:
@@ -1676,6 +1685,22 @@ class SyncEngine:
             wire_id=hashed_wire,
         )
         return held
+
+    def _stale_delete_clash(self, scope: str, item_id: str) -> bool:
+        """D3: whether the open conflict on *item_id* is a local delete that met
+        a legacy tombstone — both halves deleted, the remote half under the
+        legacy id — on an item still agreed under that legacy id."""
+        state = self._store.state(scope, item_id)
+        if state is None or state.wire_id:
+            return False
+        try:
+            row = self._store.conflict_payloads(scope, item_id)
+        except sync_keyring.KeyringError:
+            return False
+        return bool(
+            row is not None and row.get("local") is None and row.get("remote") is None
+            and not row.get("remoteWire") and int(row.get("remoteRev") or 0) > 0
+        )
 
     # ── D3: hashed item ids on the way in ───────────────────────────────
     def _unwrap(self, scope: str, wire_id: str, text: str) -> tuple[str, Any]:
