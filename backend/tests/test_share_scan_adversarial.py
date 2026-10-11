@@ -451,3 +451,24 @@ def test_a_windows_path_value_is_masked_whole_and_json_stays_valid(text: str) ->
     out = _masked(wrapped)
     assert Z not in out
     assert json.loads(out)["d"] == "keep"
+
+
+# ---- review round 5/6 ---------------------------------------------------------------
+
+
+def test_a_doubly_escaped_quote_in_plan_meta_still_delimits_the_value(tmp_path, set_home, monkeypatch) -> None:
+    """B5-1: a todo `password=\\"S\\"` is `password=\\\\\\"S\\\\\\"` inside plan-meta's JSON."""
+    from agent_team_backend.plugins.builtin.navide_plans.plan_meta import parse_plan_meta
+    from agent_team_backend.plugins.builtin.navide_plans.plan_tools import _create_plan_sync
+
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "data"))
+    ws = set_home(tmp_path / "home") / "ws"
+    ws.mkdir(parents=True)
+    todo = 'password=\\"' + Z + '\\"'
+    created = _create_plan_sync(str(ws), "Escapes", "overview " + todo, [todo, "keep me intact"])
+    original = (ws / created["rel_path"]).read_text(encoding="utf-8")
+    assert original.count(Z) >= 3
+    out = share_scan.scan(original, kind="plan").text
+    assert Z not in out
+    meta = parse_plan_meta(out)
+    assert meta is not None and meta["todos"][1]["content"] == "keep me intact"

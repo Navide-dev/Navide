@@ -96,9 +96,14 @@ _JWT = (
 )
 _REDACTED = "[redacted]"
 #: Every way a plan file spells a quote: plain, JSON-escaped (plan-meta, also
-#: as ") and as an HTML entity (escaped visible markup, also after a
-#: backslash). Longest first.
-_QUOTE = r"""(?:\\u0022|\\&quot;|\\"|\\'|&quot;|&\#0*34;|&\#x0*22;|&\#0*39;|&\#x0*27;|&apos;|"|')"""
+#: as backslash-u0022, and escaped once more when the text itself held a
+#: backslashed quote), and as an HTML entity (escaped visible markup, also
+#: after backslashes). Longest first, so a value ends at the very spelling
+#: it began with.
+_QUOTE = (
+    r"""(?:(?:\\\\)+\\"|(?:\\\\)+\\&quot;|\\u0022|\\&quot;|\\"|\\'|&quot;|&\#0*34;|&\#x0*22;"""
+    r"""|&\#0*39;|&\#x0*27;|&apos;|"|')"""
+)
 #: Suffixes that make a credential word name something that is not a secret:
 #: tokens, tokenizer, passwordless, secretary, passwordHash, token_url,
 #: max_tokens… Any other suffix (tokenValue, password_hash_salt,
