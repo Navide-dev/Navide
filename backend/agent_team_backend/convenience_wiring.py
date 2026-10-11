@@ -209,6 +209,10 @@ def install_cli_hooks(port_file: str) -> dict[str, dict[str, Any]]:
             log.info("%s hooks install: %s", key, results[key])
         except Exception as err:  # noqa: BLE001
             log.warning("%s hooks install failed: %s", key, err)
+    try:
+        carry_codex_hook_trust(port_file)
+    except Exception as err:  # noqa: BLE001
+        log.warning("moving codex hook trust into the panes failed: %s", err)
     if _gate is not None:
         try:
             _gate.finish_startup_scan()
@@ -243,9 +247,13 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str =
     refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
     if not allowed and agent_key is not None:
         _CARRYING.discard(agent_key)
+    if not allowed and feature_id == "codex.hook-trust":
+        _CARRYING.discard("codex")
     g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
     if refusing:
         _clear_refused_skills(refusing)
+    if allowed and feature_id == "codex.hook-trust":
+        carry_codex_hook_trust(port_file)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:
@@ -484,6 +492,27 @@ def seed_hook_trust_gated(manager: Any, pane_home: Path) -> int:
         quiet_repairs=True, reset_folder=manager.real_home,
     )
     return 0 if outcome in ("off", "removed") else seeded[0]
+
+
+def carry_codex_hook_trust(port_file: str) -> bool:
+    """Phase 3: take the trust rows Navide seeded back out of the user's
+    config.toml and let each pane carry its own inline (``-c hooks.state=``,
+    `CodexHomeManager.hook_trust_override`). Runs at startup and on re-allow.
+    False when the feature is off, or a row could not be taken back: spawns
+    then keep seeding config.toml (Phase 2), never both.
+
+    A dev backend (its port file says ``-dev``, as in claude_hooks) never
+    takes rows back: ~/.codex-panes is shared with the installed Navide,
+    whose live panes' rows would go too. It stays on Phase 2. The installed
+    one does take back a dev backend's rows; that dev's next spawn re-seeds."""
+    g = _gate
+    _CARRYING.discard("codex")
+    if g is None or not g.allowed("codex.hook-trust") or "-dev" in port_file:
+        return False
+    if not g.retract("codex.hook-trust", _codex_hook_trust_takeback()):
+        return False
+    _CARRYING.add("codex")
+    return True
 
 
 def _drop_codex_hook_trust() -> None:

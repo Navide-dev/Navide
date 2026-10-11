@@ -1337,3 +1337,143 @@ async def test_cli_missing_still_carries_a_real_pane_id(
     missing = _events(session, "cli.missing")
     assert len(missing) == 1
     assert missing[0]["pane_id"] == "codex-pane"
+
+
+def _codex_sandbox(tmp_path: Path):
+    """A real CodexHomeManager over a sandbox ~/.codex: one user hooks.json
+    whose stop hook the user trusted in config.toml."""
+    from agent_team_backend.cli_vendors.codex import CodexHomeManager, _toml_escape
+
+    real = tmp_path / "home" / ".codex"
+    real.mkdir(parents=True)
+    (real / "hooks.json").write_text('{"hooks": {}}', encoding="utf-8")
+    key = _toml_escape(str(real / "hooks.json"))
+    (real / "config.toml").write_text(
+        f'model = "x"\n\n[hooks.state."{key}:stop:0:0"]\ntrusted_hash = "sha256:aaaa"\n', encoding="utf-8"
+    )
+
+    class SandboxHome(CodexHomeManager):
+        session_homes: dict[str, Path] = {}
+
+        def find_session_home(self, resume_id: str) -> Path | None:
+            return self.session_homes.get(resume_id)
+
+    manager = SandboxHome(
+        real_home=real, panes_root=tmp_path / "home" / ".codex-panes", managed_skills_root=tmp_path / "skills",
+    )
+    return manager, real
+
+
+def _tree(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def _overrides(command: Any) -> list[str]:
+    import shlex
+
+    words = shlex.split(command[-1] if isinstance(command, list) else command)
+    return [words[i + 1] for i, w in enumerate(words) if w == "-c"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("allowed", [True, False])
+async def test_terminal_create_codex_carries_hook_trust_inline_and_leaves_the_user_config_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, allowed: bool,
+) -> None:
+    """Phase 3: fresh and resume spawns carry the trust rows as an inline
+    ``-c hooks.state={...}`` beside Navide's own session hooks, and
+    ~/.codex stays byte-identical. Off: neither the override nor a write."""
+    import tomllib
+
+    from agent_team_backend import convenience, convenience_wiring
+    from agent_team_backend.db import Database
+
+    gate = convenience.ConvenienceGate(Database(tmp_path / "navide.db"), backup_root=tmp_path / "backups")
+    convenience_wiring.install(gate)
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    try:
+        manager, real = _codex_sandbox(tmp_path)
+        monkeypatch.setattr(app, "attribution", FakeAttribution())
+        monkeypatch.setattr(app, "codex_home_manager", manager)
+        monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+        port_file = str(tmp_path / "Agent-Team" / "backend-port")
+        if not allowed:
+            convenience_wiring.set_feature("codex.hook-trust", False, port_file=port_file)
+        convenience_wiring.carry_codex_hook_trust(port_file)
+        before = _tree(real)
+        session = _session()
+
+        await app.handle_message(session, {
+            "id": "m-fresh", "type": "terminal.create",
+            "payload": {
+                "pane_id": "pane-fresh", "agent_key": "codex", "command": ["/bin/zsh", "-ilc", "codex"],
+                "cwd": "/ws", "metadata": {"workspace_path": "/ws", "session_home_id": "home-fresh"},
+            },
+        })
+        resumed_home = manager.prepare("home-resume")
+        manager.session_homes["11111111-2222-4333-8444-555555555555"] = resumed_home
+        await app.handle_message(session, {
+            "id": "m-resume", "type": "terminal.create",
+            "payload": {
+                "pane_id": "pane-resume", "agent_key": "codex",
+                "command": ["/bin/zsh", "-ilc", "codex resume 11111111-2222-4333-8444-555555555555"],
+                "cwd": "/ws", "metadata": {"workspace_path": "/ws"},
+            },
+        })
+
+        assert _tree(real) == before
+        created = session.terminals.created  # type: ignore[attr-defined]
+        assert len(created) == 2
+        for spawn in created:
+            home = Path(spawn["env"]["CODEX_HOME"])
+            overrides = _overrides(spawn["command"])
+            # Navide's own session hooks are still wired.
+            assert any(o.startswith("hooks.SessionStart=") for o in overrides)
+            assert any(o.startswith("hooks.PreToolUse=") for o in overrides)
+            state = [o for o in overrides if o.startswith("hooks.state=")]
+            if not allowed:
+                assert state == []
+                continue
+            assert len(state) == 1
+            assert tomllib.loads(state[0]) == {"hooks": {"state": {
+                f"{home / 'hooks.json'}:stop:0:0": {"trusted_hash": "sha256:aaaa"},
+            }}}
+        assert Path(created[1]["env"]["CODEX_HOME"]) == resumed_home
+    finally:
+        convenience_wiring.install(None)
+
+
+@pytest.mark.asyncio
+async def test_terminal_create_codex_on_a_dev_backend_still_seeds_hook_trust(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A dev backend never carries hook trust inline: it seeds config.toml as
+    in Phase 2, so the installed build's rows are never retracted by it."""
+    from agent_team_backend import convenience, convenience_wiring
+    from agent_team_backend.db import Database
+
+    gate = convenience.ConvenienceGate(Database(tmp_path / "navide.db"), backup_root=tmp_path / "backups")
+    convenience_wiring.install(gate)
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    try:
+        manager, real = _codex_sandbox(tmp_path)
+        monkeypatch.setattr(app, "attribution", FakeAttribution())
+        monkeypatch.setattr(app, "codex_home_manager", manager)
+        monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
+        assert convenience_wiring.carry_codex_hook_trust(str(tmp_path / "Agent-Team-dev" / "backend-port")) is False
+        session = _session()
+
+        await app.handle_message(session, {
+            "id": "m-dev", "type": "terminal.create",
+            "payload": {
+                "pane_id": "pane-dev", "agent_key": "codex", "command": ["/bin/zsh", "-ilc", "codex"],
+                "cwd": "/ws", "metadata": {"workspace_path": "/ws", "session_home_id": "home-dev"},
+            },
+        })
+
+        spawn = session.terminals.created[0]  # type: ignore[attr-defined]
+        home = Path(spawn["env"]["CODEX_HOME"])
+        assert not any(o.startswith("hooks.state=") for o in _overrides(spawn["command"]))
+        assert f"{home / 'hooks.json'}:stop:0:0" in (real / "config.toml").read_text(encoding="utf-8")
+    finally:
+        convenience_wiring.install(None)
