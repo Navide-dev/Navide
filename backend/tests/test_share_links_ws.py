@@ -221,6 +221,15 @@ async def test_a_failed_announcement_still_hands_back_the_url(ring, home, server
     assert session.reply["ok"] and session.reply["payload"]["url"].startswith("https://share.navide.dev/s/")
 
 
+async def test_the_chosen_chat_goes_with_the_link(ring, home, server, broadcasts, chat) -> None:
+    """R6-F2: the dialog names one bound private chat; that id travels to Channels."""
+    session = FakeSession()
+    payload = {"path": str(_plan(home, "<p/>")), "sendToChat": True, "chatId": "tg:42"}
+    await ws_handlers.share_create(session, "1", "share.create", payload)
+    [link] = chat
+    assert link["chatId"] == "tg:42"
+
+
 @pytest.mark.parametrize(
     "payload",
     [

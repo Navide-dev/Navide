@@ -482,7 +482,7 @@ async def create_share(
     return Created(link_id, link_url(link_id, key), str(expires), prepared.findings, prepared.title, kind)
 
 
-async def announce_to_chat(created: Created, *, created_by: str, pane_id: str = "") -> None:
+async def announce_to_chat(created: Created, *, created_by: str, pane_id: str = "", chat_id: str = "") -> None:
     """Hand a new link to Channels, which posts it to the creator's chat
     (channels.share_cmds decides where). Only called when the creator asked
     for it; a failure is logged and never undoes the share."""
@@ -497,6 +497,7 @@ async def announce_to_chat(created: Created, *, created_by: str, pane_id: str = 
                 "kind": created.kind,
                 "expiresAt": created.expires_at,
                 "paneId": pane_id,
+                "chatId": chat_id,
                 "createdBy": created_by,
                 "maskedTotal": len(created.findings),
             }

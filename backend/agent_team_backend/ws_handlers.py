@@ -5684,7 +5684,8 @@ async def share_create(session: "Session", msg_id: str, msg_type: str, payload: 
         except Exception as err:  # noqa: BLE001 - the link exists; its creator must still get the URL
             log.warning("announcing a new share link failed: %s", err)
         if payload.get("sendToChat") is True:
-            await share_links.announce_to_chat(created, created_by="user")
+            chat_id = payload.get("chatId") if isinstance(payload.get("chatId"), str) else ""
+            await share_links.announce_to_chat(created, created_by="user", chat_id=chat_id)
         return result
 
     await _share_links_call(session, msg_id, msg_type, call)
