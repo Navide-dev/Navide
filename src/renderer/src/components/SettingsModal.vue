@@ -732,7 +732,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'cliExtensions',
     section: 'cli-extensions',
     title: t('settings.search.item.cliExtensions.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.integration'),
     summary: t('settings.search.item.cliExtensions.summary'),
     keywords: 'cli extension extensions plugin plugins mod mods hook hooks marketplace claude codex copilot droid muse opencode kilo pi cursor grok kimi qwen inventory capability CLI 擴充 外掛 插件 擴展 hook 能力 盤點 CLI 拡張 プラグイン フック',
   },
@@ -824,7 +824,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'credentials',
     section: 'credentials',
     title: t('settings.search.item.credentials.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.integration'),
     summary: t('settings.search.item.credentials.summary'),
     keywords: 'credentials keys secrets token ssh keychain keyring git helper scan risk reminder 憑證 金鑰 密鑰 鑰匙圈 掃描 風險 提醒',
   },
@@ -2541,11 +2541,6 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.3" y="5" width="9.4" height="7" rx="1.6"/><path d="M8 2.3V5"/><circle cx="8" cy="2.1" r="0.6"/><path d="M6 8.3v0.01M10 8.3v0.01"/></svg>
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.cliExtensions')" :active="activeTab === 'cliExtensions'" @select="activeTab = 'cliExtensions'">
-                <template #icon>
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="5.2" width="7.2" height="7.2" rx="1.4"/><path d="M9.8 7.4h1.6a1.2 1.2 0 0 0 0-2.4h-.2V3.6M12.6 8.8v2.4a1.2 1.2 0 0 1-1.2 1.2H9.8"/></svg>
-                </template>
-              </SettingsNavItem>
               <SettingsNavItem :label="$t('settings.nav.analyzer')" :active="activeTab === 'analyzer'" @select="activeTab = 'analyzer'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3.2C6.6 2.2 4.2 2.8 4.2 4.8 2.7 5.1 2.7 7.3 4.2 7.8c0 2 1.9 2.6 3.8 2.1"/><path d="M8 3.2c1.4-1 3.8-.4 3.8 1.6 1.5.3 1.5 2.5 0 3 0 2-1.9 2.6-3.8 2.1"/><path d="M8 3.2v9.6"/></svg>
@@ -2566,11 +2561,6 @@ watch(activeTab, (tab) => {
                   <!-- The same mark as the titlebar and the page header: this
                        row is how most people will first reach Navide Cloud. -->
                   <NavideCloudMark variant="solid" class="nvc-nav-mark" />
-                </template>
-              </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.credentials')" :active="activeTab === 'credentials'" :badge="credentialsHighCount" @select="activeTab = 'credentials'">
-                <template #icon>
-                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.2" cy="10.8" r="2.6"/><path d="M7.1 9 13 3.1M10.9 5.2l1.7 1.7M9 7.1l1.4 1.4"/></svg>
                 </template>
               </SettingsNavItem>
             </div>
@@ -2595,6 +2585,16 @@ watch(activeTab, (tab) => {
               <SettingsNavItem :label="$t('settings.nav.memory')" :active="activeTab === 'memory'" @select="activeTab = 'memory'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 2.6h6.1l3.5 3.5v7.3H3.2Z"/><path d="M9.1 2.7v3.5h3.5"/><path d="M5.4 8.4h5.2M5.4 10.7h3.4"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.credentials')" :active="activeTab === 'credentials'" :badge="credentialsHighCount" @select="activeTab = 'credentials'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.2" cy="10.8" r="2.6"/><path d="M7.1 9 13 3.1M10.9 5.2l1.7 1.7M9 7.1l1.4 1.4"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.cliExtensions')" :active="activeTab === 'cliExtensions'" @select="activeTab = 'cliExtensions'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="5.2" width="7.2" height="7.2" rx="1.4"/><path d="M9.8 7.4h1.6a1.2 1.2 0 0 0 0-2.4h-.2V3.6M12.6 8.8v2.4a1.2 1.2 0 0 1-1.2 1.2H9.8"/></svg>
                 </template>
               </SettingsNavItem>
             </div>
