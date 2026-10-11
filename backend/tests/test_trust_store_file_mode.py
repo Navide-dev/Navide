@@ -188,3 +188,32 @@ def test_notices_in_a_record_from_before_the_move_reach_the_journal():
     _restart()
     assert "remote-command:x:1" in [n["key"] for n in trust_store.notices()]
     assert trust_store.pin_for(_device(1)) is not None
+
+
+def test_what_an_earlier_build_wrote_after_a_downgrade_is_kept_on_the_way_back():
+    """B3: after a downgrade the earlier build keeps working on the Keychain
+    item. Coming back, that item is newer than the file, and is taken."""
+    trust_store.load()
+    _pin(1)
+    earlier = dict(_keychain_doc())
+    earlier["pins"] = dict(earlier["pins"])
+    earlier["pins"][_device(2)] = dict(earlier["pins"][_device(1)])
+    earlier["blocked"] = [{"deviceId": _device(1), "memberId": ""}]
+    app.credential_vault.write_app_secret(
+        trust_store.SECRET_NAME, json.dumps(earlier, separators=(",", ":")))
+    _restart()
+
+    assert trust_store.pin_for(_device(2)) is not None
+    assert trust_store.is_blocked_locally(device_id=_device(1), member_id="")
+    # And it is in the file now, not only read from the item.
+    app.credential_vault.write_app_secret(trust_store.SECRET_NAME, None)
+    _restart()
+    assert trust_store.pin_for(_device(2)) is not None
+
+
+def test_a_copy_that_stopped_because_it_no_longer_fit_is_not_taken_back():
+    trust_store.load()
+    for index in range(30):
+        _pin(index)
+    _restart()
+    assert all(trust_store.pin_for(_device(index)) for index in range(30))

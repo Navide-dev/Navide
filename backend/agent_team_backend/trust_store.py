@@ -56,6 +56,7 @@ treated here as an error.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import logging
 import sys
@@ -388,8 +389,15 @@ def _mirror_locked(core: str) -> None:
             return
         cloud_secrets.write(_vault(), SECRET_NAME, core)
         _last_mirror = core
+        marker = _database().kv_get(INITIALISED_KEY)
+        if isinstance(marker, dict):
+            _database().kv_set(INITIALISED_KEY, {**marker, "mirror": _digest(core)}, now=int(time.time()))
     except Exception as err:  # noqa: BLE001 - a downgrade copy, never a failure
         log.warning("the downgrade copy of the device trust record was not updated (%s)", err)
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _read_mirror() -> str | None:
@@ -416,9 +424,14 @@ def _enter_file_store_locked(marker: Any) -> bool:
     return True
 
 
-def _mark_file_store_locked(marker: Any) -> None:
+def _mark_file_store_locked(marker: Any, mirror: str | None) -> None:
+    """Record that the file is the record, and — as ``mirror`` — what the
+    Keychain item held when this build last wrote it. An item that no longer
+    matches was written by someone else: an earlier build, after a downgrade."""
     base = dict(marker) if isinstance(marker, dict) else {"at": int(time.time())}
     base["store"] = STORE_FILE
+    if mirror:
+        base["mirror"] = _digest(mirror)
     _database().kv_set(INITIALISED_KEY, base, now=int(time.time()))
 
 
@@ -672,7 +685,7 @@ def _load_locked() -> dict[str, Any]:
             core = json.dumps(_core_of(parsed), ensure_ascii=False, separators=(",", ":"))
             try:
                 _write_record_locked(core)
-                _mark_file_store_locked(marker)
+                _mark_file_store_locked(marker, raw)
             except Exception as err:  # noqa: BLE001 - stays in the Keychain, tries again
                 log.warning("the device trust record could not move into its file yet (%s)", err)
                 _store_mode = "keychain"
@@ -710,6 +723,8 @@ def _load_locked() -> dict[str, Any]:
     }
     if in_file:
         marker["store"] = STORE_FILE
+        if _last_mirror:
+            marker["mirror"] = _digest(_last_mirror)
     database.kv_set(INITIALISED_KEY, marker, now=int(time.time()))
     return _state
 
@@ -757,11 +772,22 @@ def _load_file_locked(marker: dict[str, Any]) -> dict[str, Any]:
     parsed = _parse(raw)
     if parsed is None:
         _refuse_unparsed_locked(raw, marker)
-    _adopt_journal(parsed, raw)
-    _remember_committed(parsed)
     _store_mode = "file"
     _record_key = key
-    _last_mirror = _read_mirror()
+    mirror = _read_mirror()
+    _last_mirror = mirror
+    returned = _parse(mirror) if mirror and marker.get("mirror") not in (None, _digest(mirror)) else None
+    if returned is not None:
+        # The Keychain item changed since this build last wrote it, so an
+        # earlier build has been running on it — a downgrade and back. What it
+        # decided there is newer than the file; the file takes it.
+        log.warning("the device trust record was changed by an earlier build; taking its copy")
+        core = json.dumps(_core_of(returned), ensure_ascii=False, separators=(",", ":"))
+        _write_record_locked(core)
+        _mark_file_store_locked(_database().kv_get(INITIALISED_KEY), mirror)
+        parsed, raw = returned, core
+    _adopt_journal(parsed, raw)
+    _remember_committed(parsed)
     _state = parsed
     return _state
 
