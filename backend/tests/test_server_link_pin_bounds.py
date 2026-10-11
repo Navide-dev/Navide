@@ -179,7 +179,10 @@ async def test_refused_confirm_does_not_grow_own_members(kc):
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
-        await asyncio.sleep(0.05)
+        # The last connection's refused confirm, through to .next cleared: the
+        # forget before it writes the record (a slow fsync on Windows).
+        await _until(lambda: any(m.get("type") == "auth.token.confirm" for m in server.opened[-1].sent)
+                     and server_link.next_access_token() == "", timeout=10)
         counts.append(len(owners()))
     finally:
         await link.stop()

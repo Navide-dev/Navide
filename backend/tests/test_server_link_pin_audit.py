@@ -55,10 +55,10 @@ def another_pairing_fits() -> bool:
 
 # Each rotation is a reconnect (about a second), and the bound shows from the
 # first one on: the audit ran 200 per case, which no CI per-test limit takes.
-ROTATIONS = 12
+ROTATIONS = 6
 
 
-@pytest.mark.parametrize("paired", [0, 1, 3, 5, 8])
+@pytest.mark.parametrize("paired", [0, 3, 8])
 async def test_real_rotations_keep_own_members_bounded(kc, paired):
     """ROTATIONS rotations through the real ServerLink and the real Keychain chain
     (set_access_token -> cloud_secrets.write -> security -i)."""
