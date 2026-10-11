@@ -2707,63 +2707,116 @@ async def test_a_message_the_server_no_longer_has_stops_being_asked_about():
 # ---- token lifecycle (C1) ----------------------------------------------------
 #
 # The server issues per-device tokens; this device rotates its own on connect
-# when it still holds the legacy shared token or its token is older than
-# ROTATE_AFTER_S, and confirms only after the new token is stored and read back.
+# when it still holds the legacy shared token or the server says its token is
+# older than ROTATE_AFTER_S. The new token goes to the .next slot, is read back,
+# confirmed, and only then becomes the current token, so no failure part-way
+# can leave this device without a token the server accepts.
+
+CUR = server_link.ACCESS_TOKEN_SECRET
+NXT = server_link.ACCESS_TOKEN_NEXT_SECRET
 
 
 class TokenStore:
-    """Stands in for the Keychain item, with switchable failures."""
+    """The two Keychain slots plus the sign-in generation, with switchable failures."""
 
     def __init__(self, token: str = CONFIG.token) -> None:
-        self.token = token
-        self.writes: list[str | None] = []
+        self.slots = {CUR: token, NXT: ""}
+        self.gen = 0
+        self.writes: list[tuple[str, str | None]] = []
         self.fail_write = False
         self.truncate = False
+        self.read_other = False
 
-    def write(self, value: str | None) -> None:
-        if self.fail_write:
+    # the ServerLink token_store interface
+    def generation(self) -> int:
+        return self.gen
+
+    def write(self, value: str | None, slot: str, expect_generation: int) -> None:
+        if expect_generation != self.gen:
+            raise server_link.StaleTokenWrite("generation moved")
+        if self.fail_write and value:
             raise RuntimeError("keychain write failed")
-        self.writes.append(value)
-        self.token = (value[:10] if (self.truncate and value) else value) or ""
+        self.writes.append((slot, value))
+        self.slots[slot] = (value[:10] if (self.truncate and value) else value) or ""
 
-    def read(self) -> str:
-        return self.token
+    def read(self, slot: str) -> str:
+        return "something-else" if (self.read_other and slot == NXT) else self.slots[slot]
+
+    # what a user-level sign-out does
+    def sign_out(self) -> None:
+        self.gen += 1
+        self.slots = {CUR: "", NXT: ""}
 
 
-def token_responder(*, legacy: bool = False, issued_at: str = "2026-10-01T00:00:00.000Z",
-                    rotate_code: str | None = None):
-    """default_responder plus the C1 verbs. `rotate_code` makes rotate fail with it."""
+class TokenServer:
+    """Server-side token state: which tokens are live, which are pending."""
 
-    def responder(conn: "FakeConnection", message: dict) -> dict | None:
+    def __init__(self, live=(CONFIG.token,), *, legacy=False, age_s=10 * 86400, rotate_code=None, confirm="ok"):
+        self.live = set(live)
+        self.pending: dict[str, str] = {}
+        self.legacy = legacy
+        self.age_s = age_s
+        self.rotate_code = rotate_code
+        self.confirm = confirm  # ok | refuse | lost-after-apply | never
+        self.on_rotate = None
+        self.seq = 0
+
+    def _apply(self, new: str) -> None:
+        old = self.pending.pop(new)
+        self.live.discard(old)
+        self.live.add(new)
+        self.legacy = False
+
+    def responder(self, conn: "FakeConnection", message: dict) -> dict | None:
         kind = message.get("type")
         if kind == "auth.hello":
+            cred = (message.get("payload") or {}).get("credential")
+            if cred in self.pending:
+                self._apply(cred)
+            if cred not in self.live:
+                conn.hellos.append(message.get("payload") or {})
+                return {"id": message["id"], "type": "auth.hello.result", "ok": False,
+                        "error": {"code": "AUTH_REJECTED", "message": "nope"}}
             reply = default_responder(conn, message)
-            reply["payload"].update(
-                tokenId="legacy" if legacy else "tok-1",
-                tokenIssuedAt=None if legacy else issued_at,
-                legacyToken=legacy,
-            )
+            reply["payload"].update(tokenId="legacy" if self.legacy else f"id-{cred}",
+                                    tokenAgeS=None if self.legacy else self.age_s, legacyToken=self.legacy)
             return reply
         if kind == "auth.token.rotate":
-            if rotate_code:
+            if self.on_rotate:
+                self.on_rotate()
+            if self.rotate_code:
                 return {"id": message["id"], "type": "auth.token.rotate.result", "ok": False,
-                        "error": {"code": rotate_code, "message": "nope"}}
-            return _ok(message, {"token": "nvd_rotated-token-value", "tokenId": "tok-2",
-                                 "pendingUntil": "2026-10-11T08:00:00.000Z"})
-        if kind in ("auth.token.confirm", "auth.logout"):
+                        "error": {"code": self.rotate_code, "message": "nope"}}
+            self.seq += 1
+            new = f"nvd_rotated-{self.seq}-0123456789"
+            old = (conn.hellos[-1] or {}).get("credential") if conn.hellos else CONFIG.token
+            self.pending[new] = old
+            return _ok(message, {"token": new, "tokenId": new, "pendingUntil": "later"})
+        if kind == "auth.token.confirm":
+            new = (message.get("payload") or {}).get("tokenId")
+            if self.confirm == "refuse" or new not in self.pending:
+                self.pending.pop(new, None)
+                return {"id": message["id"], "type": "auth.token.confirm.result", "ok": False,
+                        "error": {"code": "NOT_FOUND", "message": "nope"}}
+            if self.confirm == "ok":
+                self._apply(new)
+                return _ok(message, {"tokenId": new})
+            if self.confirm == "never":
+                return None  # no answer; the connection stays up until the App stops
+            self._apply(new)  # lost-after-apply: applied, then the connection drops
+            asyncio.get_running_loop().create_task(conn.close())
+            return None
+        if kind == "auth.logout":
             return _ok(message, {})
         return default_responder(conn, message)
-
-    return responder
 
 
 def token_link(server: FakeServer, store: TokenStore, cleared=None) -> ServerLink:
     return ServerLink(
         connect=server.connect,
-        config_loader=lambda: ServerLinkConfig(url=CONFIG.url, token=store.read()),
+        config_loader=lambda: ServerLinkConfig(url=CONFIG.url, token=store.slots[CUR], next_token=store.slots[NXT]),
         token_clearer=(lambda: cleared.append(True)) if cleared is not None else (lambda: None),
-        token_writer=store.write,
-        token_reader=store.read,
+        token_store=store,
         device_name="test-box",
     )
 
@@ -2772,108 +2825,165 @@ def _sent(conn: "FakeConnection", kind: str) -> list[dict]:
     return [m for m in conn.sent if m.get("type") == kind]
 
 
-@pytest.fixture
-def _old_token(monkeypatch):
-    """Anything issued before 'now - ROTATE_AFTER_S' is due; pin 'now' for the tests."""
-    monkeypatch.setattr(server_link, "_now_iso", lambda: "2026-11-15T00:00:00.000Z")
+def _authed(server: FakeServer) -> bool:
+    return any(c.syncs for c in server.opened)
 
 
-async def test_rotates_a_legacy_token_stores_reads_back_then_confirms():
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(legacy=True))
+async def _reconnect(server: FakeServer, link: ServerLink) -> None:
+    n = len(server.opened)
+    await server.opened[-1].close()
+    await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs))
+
+
+async def test_rotation_writes_next_reads_back_confirms_then_promotes():
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"))
         conn = server.opened[0]
-        assert store.token == "nvd_rotated-token-value"
-        assert _sent(conn, "auth.token.confirm")[0]["payload"] == {"tokenId": "tok-2"}
+        assert [w[0] for w in store.writes] == [NXT, CUR, NXT]  # next, promote, clear next
+        assert store.slots[NXT] == ""
         assert len(_sent(conn, "auth.token.rotate")) == 1
+        assert _sent(conn, "auth.token.confirm")[0]["payload"] == {"tokenId": store.slots[CUR]}
+        await _reconnect(server, link)
+        assert server.opened[-1].hellos[-1]["credential"] == store.slots[CUR]
     finally:
         await link.stop()
 
 
-async def test_rotates_a_token_older_than_thirty_days(_old_token):
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(issued_at="2026-10-01T00:00:00.000Z"))
+async def test_a_token_older_than_thirty_days_by_the_server_clock_is_rotated():
+    store, ts = TokenStore(), TokenServer(age_s=server_link.ROTATE_AFTER_S + 1)
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
-        assert store.token == "nvd_rotated-token-value"
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"))
     finally:
         await link.stop()
 
 
-async def test_a_recent_token_is_left_alone():
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
-    link = token_link(server, store)
-    assert await link.start() is True
-    try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
-        await asyncio.sleep(0.05)
-        assert _sent(server.opened[0], "auth.token.rotate") == []
-        assert store.writes == []
-    finally:
-        await link.stop()
+async def test_a_young_token_and_a_server_without_an_age_are_left_alone():
+    for age in (10 * 86400, None):
+        store, ts = TokenStore(), TokenServer(age_s=age)
+        server = FakeServer(responder=ts.responder)
+        link = token_link(server, store)
+        assert await link.start() is True
+        try:
+            await _until(lambda: _authed(server))
+            await asyncio.sleep(0.05)
+            assert _sent(server.opened[0], "auth.token.rotate") == []
+            assert store.writes == []
+        finally:
+            await link.stop()
 
 
-@pytest.mark.parametrize("failure", ["fail_write", "truncate"])
-async def test_no_confirm_unless_the_new_token_reads_back_intact(failure):
-    store = TokenStore()
+@pytest.mark.parametrize("failure", ["truncate", "read_other", "fail_write"])
+async def test_a_bad_next_write_never_costs_the_current_token(failure):
+    store, ts = TokenStore(), TokenServer(legacy=True)
     setattr(store, failure, True)
-    server = FakeServer(responder=token_responder(legacy=True))
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
     try:
         await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
         await asyncio.sleep(0.05)
         assert _sent(server.opened[0], "auth.token.confirm") == []
-        if failure == "fail_write":
-            assert store.token == CONFIG.token  # the old token is untouched
+        assert store.slots[CUR] == CONFIG.token  # untouched
+        store.truncate = store.read_other = store.fail_write = False
+        await _reconnect(server, link)  # and it still connects
     finally:
         await link.stop()
 
 
-async def test_an_old_server_without_rotate_is_not_asked_again(monkeypatch):
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(legacy=True, rotate_code="UNKNOWN_TYPE"))
-    link = token_link(server, store)
-    assert await link.start() is True
-    try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
-        # Drop the connection: the next one must not ask again inside the cooldown.
-        await server.opened[0].close()
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs))
-        await asyncio.sleep(0.05)
-        assert _sent(server.opened[1], "auth.token.rotate") == []
-        assert store.writes == []
-    finally:
-        await link.stop()
-
-
-async def test_after_a_confirm_the_next_connection_uses_the_new_token():
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(legacy=True))
+async def test_a_refused_confirm_drops_next_and_keeps_the_current_token():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="refuse")
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
     try:
         await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
-        await server.opened[0].close()
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos))
-        assert server.opened[1].hellos[0]["credential"] == "nvd_rotated-token-value"
+        await _until(lambda: store.slots[NXT] == "" and len(store.writes) == 2)
+        assert store.slots[CUR] == CONFIG.token
+        ts.rotate_code = "UNKNOWN_TYPE"
+        await _reconnect(server, link)
+        assert server.opened[-1].hellos[-1]["credential"] == CONFIG.token
+    finally:
+        await link.stop()
+
+
+async def test_a_confirm_applied_but_never_answered_is_settled_by_the_next_hello():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="lost-after-apply")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        # The server applied it, the answer was lost with the connection: the old
+        # token is now refused and only .next works.
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs))
+        assert store.slots[CUR].startswith("nvd_rotated")  # promoted
+        assert store.slots[NXT] == ""
+        assert [h["credential"] for h in server.opened[-1].hellos][-2:] == [CONFIG.token, store.slots[CUR]]
+    finally:
+        await link.stop()
+
+
+async def test_an_app_stopped_between_write_and_confirm_still_connects():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="never")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    await _until(lambda: store.slots[NXT].startswith("nvd_rotated"))
+    await link.stop()  # the App quits before any confirm answer
+    ts.confirm, ts.rotate_code = "ok", "UNKNOWN_TYPE"
+    link2 = token_link(server, store)
+    assert await link2.start() is True
+    try:
+        await _until(lambda: bool(server.opened[-1].syncs))
+        assert server.opened[-1].hellos[-1]["credential"] == CONFIG.token  # the current one still works
+        await _until(lambda: store.slots[NXT] == "")  # the unconfirmed one is dropped
+    finally:
+        await link2.stop()
+
+
+async def test_a_sign_out_during_rotation_writes_nothing_back():
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    ts.on_rotate = store.sign_out  # the user signs out while the rotate reply is in flight
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.05)
+        assert store.slots == {CUR: "", NXT: ""}
+        assert store.writes == []
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+    finally:
+        await link.stop()
+
+
+async def test_an_old_server_without_rotate_is_not_asked_again_by_this_link():
+    store, ts = TokenStore(), TokenServer(legacy=True, rotate_code="UNKNOWN_TYPE")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _reconnect(server, link)
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[-1], "auth.token.rotate") == []
     finally:
         await link.stop()
 
 
 async def test_logout_on_server_sends_auth_logout_when_connected():
-    store = TokenStore()
-    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
+    store, ts = TokenStore(), TokenServer()
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: _authed(server))
         assert await link.logout_on_server() is True
         assert len(_sent(server.opened[0], "auth.logout")) == 1
     finally:
@@ -2885,24 +2995,79 @@ async def test_logout_on_server_offline_is_a_quiet_false():
     assert await link.logout_on_server() is False
 
 
+def test_sign_out_waits_at_most_five_seconds_for_the_server():
+    assert server_link.LOGOUT_TIMEOUT_S == 5.0
+
+
 @pytest.mark.parametrize(
     "reason, words",
     [("password-changed", "password was changed"), ("logged-out", "signed out"),
      ("token-revoked", "revoked from another device"), ("device-removed", "removed")],
 )
 async def test_revocation_reasons_are_explained(reason, words):
-    store = TokenStore()
-    cleared: list = []
-    server = FakeServer(responder=token_responder(issued_at="2026-10-10T00:00:00.000Z"))
+    store, ts, cleared = TokenStore(), TokenServer(), []
+    server = FakeServer(responder=ts.responder)
     link = token_link(server, store, cleared=cleared)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: _authed(server))
         await server.opened[0].push({"type": "auth.revoked", "payload": {"deviceId": "x", "reason": reason}})
         await _until(lambda: bool(cleared))
         assert words in link.terminated_reason
     finally:
         await link.stop()
+
+
+# ---- compatibility: behaviour against a server from before C1, and signed out
+
+
+async def test_against_an_old_server_nothing_rotates_and_nothing_is_written():
+    """A pre-C1 server's hello reply has no tokenId / tokenAgeS / legacyToken:
+    this build then behaves exactly as before — no rotate, no Keychain write."""
+    store = TokenStore()
+    server = FakeServer()  # default_responder: the old hello reply shape
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        await asyncio.sleep(0.05)
+        kinds = {m.get("type") for m in server.opened[0].sent}
+        assert not any(k.startswith("auth.token") for k in kinds)
+        assert store.writes == []
+        assert server.opened[0].hellos[0]["credential"] == CONFIG.token
+    finally:
+        await link.stop()
+
+
+async def test_against_an_old_server_logout_is_a_quiet_false():
+    """auth.logout is unknown to an old server: sign-out still erases locally."""
+
+    def old_server(conn, message):
+        if message.get("type") == "auth.logout":
+            return {"id": message["id"], "type": "auth.logout.result", "ok": False,
+                    "error": {"code": "UNKNOWN_TYPE", "message": "未註冊的 type：auth.logout"}}
+        return default_responder(conn, message)
+
+    store = TokenStore()
+    server = FakeServer(responder=old_server)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        assert await link.logout_on_server() is False
+    finally:
+        await link.stop()
+
+
+def test_signed_out_config_never_reads_the_next_slot(monkeypatch):
+    """With no token stored, load_config makes the same Keychain reads as before."""
+    monkeypatch.setattr(server_link, "access_token", lambda: "")
+
+    def must_not_read():
+        raise AssertionError("read the .next slot while signed out")
+
+    monkeypatch.setattr(server_link, "next_access_token", must_not_read)
+    assert server_link.load_config().next_token == ""
 
 
 # ---- Cloud token writes never touch the CLI account writer (user ruling 10-11)
@@ -2916,6 +3081,7 @@ def _guard_vault(tmp_path):
 
 _NEEDS_CLOUD_SECRETS = pytest.mark.xfail(
     strict=True,
+    raises=AssertionError,
     reason="set_access_token goes through cloud_secrets.write only once fix/keychain-line-limit "
     "is merged; strict, so this XPASSes into a failure the day it lands and the marker must go",
 )
@@ -2938,8 +3104,10 @@ async def test_cloud_token_writes_never_call_the_cli_keychain_writer(path, tmp_p
         # ws_handlers' sign-in stores the issued token through this function.
         server_link.set_access_token("nvd_from-login")
     elif path == "rotate":
-        # A link built without a token_writer stores rotated tokens the same way.
-        link = ServerLink(connect=FakeServer().connect, config_loader=lambda: CONFIG, device_name="test-box")
-        link._token_writer("nvd_from-rotate")
+        # A link built without a token_store stores rotated tokens the same way,
+        # in both slots.
+        store = server_link.KeychainTokenStore()
+        store.write("nvd_from-rotate", NXT, store.generation())
+        store.write("nvd_from-rotate", CUR, store.generation())
     else:
         server_link.set_access_token(None)

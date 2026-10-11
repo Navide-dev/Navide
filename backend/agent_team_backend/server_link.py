@@ -48,6 +48,7 @@ import os
 import platform
 import secrets
 import ssl
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -55,6 +56,7 @@ from typing import Any, Callable
 import certifi
 import websockets
 
+from .credential_vault import vault_to_thread
 from . import (
     agent_messaging,
     device_crypto,
@@ -101,6 +103,15 @@ ACCOUNT_EMAIL_SETTING = "agentTeam.p2p.accountEmail"
 #: replacement; the old one stays valid until the new one is confirmed as
 #: stored (see ``ServerLink._maybe_rotate``).
 ACCESS_TOKEN_SECRET = "navide-server-token"
+
+#: Where a rotation writes the new token first. It becomes the current token
+#: only after the server confirmed it, so a write that goes wrong at any point
+#: of a rotation never touches the one token known to work.
+ACCESS_TOKEN_NEXT_SECRET = "navide-server-token.next"
+
+#: How long sign-out waits for the server to revoke this device's token
+#: before erasing it locally anyway.
+LOGOUT_TIMEOUT_S = 5.0
 
 #: Rotate on connect when the token is older than this, or is still the
 #: account-wide token a pre-C1 sign-in stored. Checked only when connecting.
@@ -308,6 +319,9 @@ class ServerLinkTerminated(RuntimeError):
 class ServerLinkConfig:
     url: str = ""
     token: str = ""
+    #: A rotated token written to the ``.next`` slot whose confirm may or may
+    #: not have reached the server; tried only when ``token`` is refused.
+    next_token: str = ""
 
     @property
     def configured(self) -> bool:
@@ -362,21 +376,73 @@ def access_token() -> str:
         return ""
 
 
-def _now_iso() -> str:
-    """The current time in the server's timestamp format (a seam for tests)."""
-    return time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())
+class StaleTokenWrite(RuntimeError):
+    """A rotation write refused because the user signed in, out or over since it began."""
 
 
-def _read_access_token_strict() -> str:
-    """The stored token, raising if the Keychain will not answer. Rotation's
-    read-back uses this: a read that fails must not count as a match."""
-    return (_vault().read_app_secret(ACCESS_TOKEN_SECRET) or "").strip()
+#: Bumped by every user-level change of the stored token (sign-in, sign-out,
+#: a revocation clearing it). A rotation carries the value it started under and
+#: every one of its writes is refused once it has moved, so a reply that lands
+#: after a sign-out can never write a token back.
+_token_generation = 0
+_token_lock = threading.Lock()
 
 
-def set_access_token(token: str | None) -> None:
-    """Store the Navide-Server access token, or erase it when None/empty."""
+def token_generation() -> int:
+    return _token_generation
+
+
+def set_access_token(
+    token: str | None,
+    *,
+    slot: str = ACCESS_TOKEN_SECRET,
+    expect_generation: int | None = None,
+) -> None:
+    """Store the Navide-Server access token, or erase it when None/empty.
+
+    The one writer for both slots. Without ``expect_generation`` this is a
+    user-level change (sign-in, sign-out): it moves the generation and drops
+    any half-finished rotation's ``.next`` token. With it, it is a rotation's
+    write, refused if the generation has moved since the rotation began.
+    """
+    global _token_generation
     value = (token or "").strip()
-    _vault().write_app_secret(ACCESS_TOKEN_SECRET, value or None)
+    with _token_lock:
+        if expect_generation is not None and expect_generation != _token_generation:
+            raise StaleTokenWrite("the stored navide-server token changed since this rotation began")
+        _vault().write_app_secret(slot, value or None)
+        if expect_generation is None:
+            _token_generation += 1
+            if slot == ACCESS_TOKEN_SECRET:
+                _vault().write_app_secret(ACCESS_TOKEN_NEXT_SECRET, None)
+
+
+def _read_token_slot_strict(slot: str) -> str:
+    """A slot's token, raising if the Keychain will not answer. Rotation's
+    read-back uses this: a read that fails must not count as a match."""
+    return (_vault().read_app_secret(slot) or "").strip()
+
+
+def next_access_token() -> str:
+    """A rotated token stored but not yet known to be confirmed; "" if none."""
+    try:
+        return _read_token_slot_strict(ACCESS_TOKEN_NEXT_SECRET)
+    except Exception as err:  # noqa: BLE001
+        log.warning("the rotated navide-server token could not be read (%s)", err)
+        return ""
+
+
+class KeychainTokenStore:
+    """The two token slots as ServerLink uses them; tests pass their own."""
+
+    def generation(self) -> int:
+        return token_generation()
+
+    def write(self, value: str | None, slot: str, expect_generation: int) -> None:
+        set_access_token(value, slot=slot, expect_generation=expect_generation)
+
+    def read(self, slot: str) -> str:
+        return _read_token_slot_strict(slot)
 
 
 def load_config() -> ServerLinkConfig:
@@ -387,7 +453,10 @@ def load_config() -> ServerLinkConfig:
     starting, and on-machine messaging does not depend on any of this.
     """
     try:
-        return ServerLinkConfig(url=server_url(), token=access_token())
+        token = access_token()
+        # The .next slot is only read for a signed-in machine: with no token
+        # this makes exactly the Keychain calls it made before rotation existed.
+        return ServerLinkConfig(url=server_url(), token=token, next_token=next_access_token() if token else "")
     except Exception as err:  # noqa: BLE001
         log.warning("navide-server link configuration is unreadable: %s", err)
         return ServerLinkConfig()
@@ -654,20 +723,19 @@ class ServerLink:
         connect: Callable[..., Any] | None = None,
         config_loader: Callable[[], ServerLinkConfig] | None = None,
         token_clearer: Callable[[], None] | None = None,
-        token_writer: Callable[[str], None] | None = None,
-        token_reader: Callable[[], str] | None = None,
+        token_store: Any = None,
         device_name: str | None = None,
     ) -> None:
         self._connect = connect or _dial
         self._load_config = config_loader or load_config
         self._clear_token = token_clearer or (lambda: set_access_token(None))
-        # Rotation stores through the same function as sign-in, so a write is
-        # a write wherever it comes from (and a test that swaps one swaps all).
-        self._token_writer = token_writer or set_access_token
-        self._token_reader = token_reader or _read_access_token_strict
+        # Rotation and the hello fallback store through set_access_token, the
+        # same writer sign-in uses (KeychainTokenStore), so a write is a write
+        # wherever it comes from.
+        self._tokens = token_store or KeychainTokenStore()
         # What the last accepted auth.hello said about the token it carried.
         self._token_id = ""
-        self._token_issued_at: str | None = None
+        self._token_age_s: float | None = None
         self._legacy_token = False
         self._rotate_retry_after = 0.0
         self._device_name = device_name or platform.node() or "unknown"
@@ -1343,30 +1411,27 @@ class ServerLink:
             return False
         if self._legacy_token:
             return True
-        if not self._token_issued_at:
-            return False
-        try:
-            issued = time.mktime(time.strptime(self._token_issued_at[:19], "%Y-%m-%dT%H:%M:%S"))
-            now = time.mktime(time.strptime(_now_iso()[:19], "%Y-%m-%dT%H:%M:%S"))
-        except ValueError:
-            return False
-        return now - issued > ROTATE_AFTER_S
+        # The age comes from the server's clock (tokenAgeS); this machine's
+        # clock is never compared with the server's timestamps.
+        return self._token_age_s is not None and self._token_age_s > ROTATE_AFTER_S
 
     async def _maybe_rotate(self) -> None:
         """Swap this device's token for a fresh one, without ever being left
         with none.
 
         The server keeps the old token valid until it hears the new one is
-        stored, so the order is: ask, store, read back, confirm. A failed write,
-        a read-back that differs (a truncated Keychain item, a locked keychain,
-        a dismissed dialog) or any error stops before the confirm: the old token
-        still works, the unconfirmed one expires on the server, and the next
-        connection tries again. A confirm lost with the connection is harmless
-        too — the next hello carries the new token, which the server counts as
-        the confirm.
+        stored. Here the new token goes to the ``.next`` slot, is read back,
+        and only then confirmed; after a confirmed confirm it becomes the
+        current token. Every way this can stop part-way leaves a token that
+        works: before the confirm the current one still does, and if the
+        confirm landed but its answer was lost, the next hello finds the
+        current one refused and promotes ``.next`` (``_settle_token_slots``).
+        A refused confirm drops ``.next``. A sign-out meanwhile moves the
+        generation and every write below is refused.
         """
         if not self._rotation_due():
             return
+        generation = self._tokens.generation()
         try:
             reply = await self._request("auth.token.rotate", {})
         except Exception as err:  # noqa: BLE001 - the connection went; next one retries
@@ -1383,11 +1448,12 @@ class ServerLink:
         token_id = str(payload.get("tokenId") or "")
         if not token or not token_id:
             return
+        if not await self._token_write(token, ACCESS_TOKEN_NEXT_SECRET, generation):
+            return
         try:
-            await asyncio.to_thread(self._token_writer, token)
-            stored = await asyncio.to_thread(self._token_reader)
+            stored = await vault_to_thread(self._tokens.read, ACCESS_TOKEN_NEXT_SECRET)
         except Exception as err:  # noqa: BLE001
-            log.warning("storing the rotated navide-server token failed; keeping the current one (%s)", err)
+            log.warning("reading back the rotated navide-server token failed; keeping the current one (%s)", err)
             return
         if stored != token:
             log.warning("the rotated navide-server token did not read back intact; keeping the current one")
@@ -1395,13 +1461,20 @@ class ServerLink:
         try:
             confirmed = await self._request("auth.token.confirm", {"tokenId": token_id})
         except Exception as err:  # noqa: BLE001
-            log.info("navide-server token confirm did not complete (%s); the next hello confirms it", err)
+            log.info("navide-server token confirm did not complete (%s); the next hello settles it", err)
             return
-        if confirmed.get("ok"):
-            self._token_id = token_id
-            self._legacy_token = False
-            self._token_issued_at = _now_iso()
-            log.info("navide-server token rotated")
+        if not confirmed.get("ok"):
+            log.info("navide-server refused the rotation confirm; keeping the current token")
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            return
+        self._token_id = token_id
+        self._legacy_token = False
+        self._token_age_s = 0.0
+        # Promote. If this write fails, .next still holds the token and the next
+        # hello promotes it after the current one is refused.
+        if await self._token_write(token, ACCESS_TOKEN_SECRET, generation):
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+        log.info("navide-server token rotated")
 
     async def logout_on_server(self) -> bool:
         """Tell the server this device signs out, so its token stops working
@@ -1410,7 +1483,7 @@ class ServerLink:
         if not self._authenticated or self._ws is None:
             return False
         try:
-            async with asyncio.timeout(DIAL_TIMEOUT_S):
+            async with asyncio.timeout(LOGOUT_TIMEOUT_S):
                 reply = await self._request("auth.logout", {})
         except Exception as err:  # noqa: BLE001
             log.info("navide-server auth.logout did not complete: %s", err)
@@ -1528,7 +1601,50 @@ class ServerLink:
         # Replacing what is recorded is only allowed when the server refused it,
         # which is exactly the case where more than one candidate was tried.
         self._replacing_node_id = len(candidates) > 1 and self._device_id != candidates[0]
+        config, reply = await self._settle_token_slots(config, reply)
         await self._finish_authenticate(config, reply)
+
+    async def _settle_token_slots(
+        self, config: ServerLinkConfig, reply: dict[str, Any]
+    ) -> tuple[ServerLinkConfig, dict[str, Any]]:
+        """Reconcile the two token slots with what the server just said.
+
+        A rotation leaves a token in ``.next`` when it could not finish: the
+        write or the confirm failed, or the App stopped in between. If the
+        current token was refused, the confirm reached the server after all —
+        say hello with ``.next`` and, if that works, make it current. If the
+        current token works, whatever is in ``.next`` was never confirmed, so it
+        is dropped. Writes carry the generation, so none of this outlives a
+        sign-out that happens meanwhile.
+        """
+        generation = self._tokens.generation()
+        if not config.next_token:
+            return config, reply
+        if reply.get("ok"):
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            return config, reply
+        if self._conflict_code(reply) != "AUTH_REJECTED":
+            return config, reply
+        promoted = ServerLinkConfig(url=config.url, token=config.next_token)
+        retry = await self._hello(promoted)
+        if not retry.get("ok"):
+            return config, reply
+        log.info("the current navide-server token was refused; the rotated one was accepted")
+        if await self._token_write(config.next_token, ACCESS_TOKEN_SECRET, generation):
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+        return promoted, retry
+
+    async def _token_write(self, value: str | None, slot: str, generation: int) -> bool:
+        """One rotation-side write, off the event loop; False if it did not happen."""
+        try:
+            await vault_to_thread(self._tokens.write, value, slot, generation)
+        except StaleTokenWrite:
+            log.info("dropped a navide-server token write: the account changed meanwhile")
+            return False
+        except Exception as err:  # noqa: BLE001
+            log.warning("writing the navide-server token (%s) failed: %s", slot, err)
+            return False
+        return True
 
     @staticmethod
     def _conflict_code(reply: dict[str, Any]) -> str:
@@ -1601,8 +1717,8 @@ class ServerLink:
         # Servers before per-device tokens send none of these, and nothing
         # below treats their absence as "rotate": an old server cannot.
         self._token_id = str(payload.get("tokenId") or "")
-        issued = payload.get("tokenIssuedAt")
-        self._token_issued_at = issued if isinstance(issued, str) else None
+        age = payload.get("tokenAgeS")
+        self._token_age_s = float(age) if isinstance(age, (int, float)) and not isinstance(age, bool) else None
         self._legacy_token = payload.get("legacyToken") is True
         self.email_verified = bool(payload.get("emailVerified"))
         # Per connection, not per process: the server this dialled may be a
