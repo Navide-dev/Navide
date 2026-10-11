@@ -308,6 +308,15 @@ describe('account modal — your network', () => {
     expect(MODAL).toMatch(/await props\.backend\.send\(type, args\)[\s\S]{0,60}await loadNetwork\(\)/)
   })
 
+  it('says why a trust decision was refused instead of dropping the answer', () => {
+    // A full pairing record refuses a block (KC2R-1): with the reply ignored,
+    // the row just stayed and nothing said why.
+    for (const fn of ['async function decide(', 'async function blockPending(']) {
+      const body = MODAL.slice(MODAL.indexOf(fn), MODAL.indexOf('\n}\n', MODAL.indexOf(fn)))
+      expect(body).toMatch(/if \(!resp\.ok\) error\.value = resp\.error\?\.message \?\? t\('account\.err-generic'\)/)
+    }
+  })
+
   it('reads the trust state from the snapshot it already polls', () => {
     // Not a second timer and not a subscription: one read, so the panel cannot
     // draw half of one moment and half of the next.

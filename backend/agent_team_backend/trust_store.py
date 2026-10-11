@@ -195,6 +195,17 @@ class TrustStoreFull(RuntimeError):
     """The device cap is reached, so a new pin cannot be taken."""
 
 
+_FULL_MESSAGE = (
+    "the pairing record is full: this build keeps it in one macOS Keychain "
+    "item, which has no room for this change. Update Navide to pair more devices"
+)
+#: A policy sequence as long as one is ever expected to get, for the reserve.
+_RESERVED_SEQ = 10**9
+#: Stands in for this machine's own device id in the reserve: its policy
+#: sequence lives in the same map and is not one of the pins.
+_OWN_DEVICE_PLACEHOLDER = "00000000-0000-4000-8000-000000000000"
+
+
 _lock = threading.RLock()
 _state: dict[str, Any] | None = None
 _locked_reason = ""
@@ -700,10 +711,7 @@ def _save_locked(state: dict[str, Any]) -> None:
         # Keychain error after the fact.
         core = json.dumps(_core_of(state), ensure_ascii=False, separators=(",", ":"))
         if not cloud_secrets.fits(_vault(), SECRET_NAME, core):
-            raise TrustStoreFull(
-                "the pairing record is full: this build keeps it in one macOS Keychain "
-                "item, which has no room for this change. Update Navide to pair more devices"
-            )
+            raise TrustStoreFull(_FULL_MESSAGE)
         _write(state)
     except Exception:
         if _committed_core is not None:
@@ -711,6 +719,26 @@ def _save_locked(state: dict[str, Any]) -> None:
                 del state[key]
             state.update(copy.deepcopy(_committed_core))
         raise
+
+
+def _fits_with_reserve_locked(state: dict[str, Any]) -> bool:
+    """Whether the vault half fits with room left for what every pinned device
+    may still add — an encrypted-peer entry and a long policy sequence — and for
+    one block (KC2R-1). Checked when a pin is taken, so a full record refuses
+    the next pairing rather than a later decision about a device already paired.
+    Blocking a paired device drops its pin, which frees more than the block
+    takes, so one block's room covers the rest."""
+    worst = copy.deepcopy(_core_of(state))
+    peers = worst.setdefault("encryptedPeers", [])
+    seqs = worst.setdefault("policySeqs", {})
+    for device_id in list(worst.get("pins", {})) + [_OWN_DEVICE_PLACEHOLDER]:
+        if device_id not in peers:
+            peers.append(device_id)
+        seqs[device_id] = max(int(seqs.get(device_id) or 0), _RESERVED_SEQ)
+    worst.setdefault("blocked", []).append(
+        {"deviceId": _OWN_DEVICE_PLACEHOLDER, "memberId": "m-" + "0" * 32})
+    core = json.dumps(worst, ensure_ascii=False, separators=(",", ":"))
+    return cloud_secrets.fits(_vault(), SECRET_NAME, core)
 
 
 def _save_record_locked(state: dict[str, Any], what: str) -> None:
@@ -923,6 +951,9 @@ def pin_device(
             "approved": False,
         }
         pins[device_id] = pin
+        if not _fits_with_reserve_locked(state):
+            del pins[device_id]
+            raise TrustStoreFull(_FULL_MESSAGE)
         _record_locked(
             state,
             NOTICE_FIRST_SEEN,
@@ -987,6 +1018,10 @@ def note_blocked(device_id: str, member_id: str) -> bool:
             if member_id and not device_id and entry.get("memberId") == member_id:
                 return False
         blocked.append({"deviceId": device_id, "memberId": member_id})
+        # A blocked device keeps no pin (KC2R-1): it frees the room the block
+        # takes, and lifting the block later means pairing again — comparing
+        # digits — rather than trusting a key nobody re-checked.
+        state["pins"].pop(device_id, None)
         _save_locked(state)
         return True
 
@@ -1150,6 +1185,9 @@ def pin_paired_device(
             # pin left unapproved here would be a state nobody asked for.
             "approved": True,
         }
+        if not _fits_with_reserve_locked(state):
+            del pins[device_id]
+            raise TrustStoreFull(_FULL_MESSAGE)
         _record_locked(
             state,
             NOTICE_FIRST_SEEN,

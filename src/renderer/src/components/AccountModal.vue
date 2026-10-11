@@ -1092,8 +1092,9 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
   if (deciding.value) return
   deciding.value = key
   try {
-    await props.backend.send(type, args)
+    const resp = await props.backend.send(type, args)
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1117,11 +1118,12 @@ async function blockPending(row: PendingDevice): Promise<void> {
   if (pending.value) return
   pending.value = row.deviceId
   try {
-    await props.backend.send(
+    const resp = await props.backend.send(
       'p2p.trust.block',
       await withConfirmation('p2p.trust.block', row.deviceId, { deviceId: row.deviceId }),
     )
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {

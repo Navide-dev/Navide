@@ -218,6 +218,10 @@ LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
 LINK_TRUST_UNAVAILABLE = "p2p-trust-unavailable"
+#: Refused because the trust record has no room for the change (a policy
+#: sequence). Said apart from LINK_TRUST_UNAVAILABLE, which reads as "this
+#: machine cannot open its record" and would send someone looking for a lock.
+TRUST_STORE_FULL = "p2p-trust-store-full"
 
 #: The one word every unauthenticated inbound message is refused with. Kept
 #: single on purpose, exactly as "policy-denied" covers both blocked and merely
@@ -1866,6 +1870,9 @@ class ServerLink:
             return self._trust_refusal()
         try:
             signed = await asyncio.to_thread(self._signed_policy, policy)
+        except trust_store.TrustStoreFull as err:
+            log.warning("could not sign the pane policy: %s", err)
+            return {"ok": False, "error": {"code": TRUST_STORE_FULL, "message": str(err)}}
         except Exception as err:  # noqa: BLE001
             log.warning("could not sign the pane policy: %s", err)
             return self._trust_refusal()

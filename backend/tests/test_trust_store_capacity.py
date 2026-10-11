@@ -67,7 +67,8 @@ def _fill() -> int:
 def test_a_pin_that_would_not_fit_is_refused_as_full_before_writing(keychain):
     refused_at = _fill()
 
-    assert refused_at > 10
+    # Ten with the room each pin reserves for later decisions (KC2R-1).
+    assert refused_at >= 10
     assert keychain.longest <= 4095
     assert trust_store.pin_for(_device(refused_at)) is None
     trust_store._state = None
