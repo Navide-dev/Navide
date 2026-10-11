@@ -69,3 +69,28 @@ def test_a_journal_path_that_is_a_link_is_neither_followed_nor_written_through(t
     trust_store.note_remote_command("dev-a", device_name="TKM5", workspace="w", pane_name="p")
     assert elsewhere.read_text(encoding="utf-8") == '{"notices": [], "seenMessages": {"planted": 1}}'
     assert not path.is_symlink()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="drives the Windows writer with DPAPI stubbed")
+def test_the_windows_journal_writer_fsyncs_too(monkeypatch, tmp_path):
+    """Review KC2R-8: on Windows the journal went through `_write_atomic`, one
+    write and no fsync. That writer is shared with CLI account slots and stays
+    as it is; the journal's own writer syncs before the rename."""
+    from agent_team_backend.osplat import _windows
+
+    monkeypatch.setattr(_windows, "_dpapi", lambda _fn, data: bytes(data))
+    synced: list[int] = []
+    real = os.fsync
+
+    def spy(fd):
+        synced.append(fd)
+        return real(fd)
+
+    monkeypatch.setattr(os, "fsync", spy)
+    path = tmp_path / "device-trust" / "journal.json"
+    _windows.durable_secret_files.write(path, b'{"v":1}')
+    # Put back by hand: monkeypatch.undo() would also undo conftest's isolation.
+    monkeypatch.setattr(os, "fsync", real)
+    assert synced
+    assert path.read_bytes() == _windows.DPAPI_MAGIC + b'{"v":1}'
+    assert _windows.durable_secret_files.read(path) == b'{"v":1}'
