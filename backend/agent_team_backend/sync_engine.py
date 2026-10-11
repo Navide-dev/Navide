@@ -1059,7 +1059,13 @@ class SyncEngine:
         recently seen device speaks v3; until then (HMAC_NOT_READY, or any
         other refusal) items keep their legacy ids for this connection.
         """
-        if not _is_v3(caps) or caps.get("itemIds") != "legacy" or self._adopt_tried:
+        if (
+            not _is_v3(caps) or caps.get("storage") != "s3" or caps.get("itemIds") != "legacy"
+            or self._adopt_tried
+        ):
+            # Only an object account on a v3 connection changes its item ids;
+            # the server refuses the rest (UNSUPPORTED), and a v1 connection
+            # (an older server, a caps answer that never came) never asks.
             return caps
         root = await asyncio.to_thread(sync_keyring.active_key_id)
         if not root:

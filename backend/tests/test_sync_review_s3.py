@@ -473,3 +473,63 @@ async def test_storage_unavailable_on_push_fails_the_round_and_the_next_one_land
     assert a.store.state("prompts", "p1") is None
     assert (await a.sync())["ok"] is True
     assert server.rows[("prompts", "p1")]["objectRef"]
+
+
+# ── server re-review 1: D3 only on a v3 object account ───────────────────────
+def _adopt_calls(server, device="A") -> int:
+    return server.types(device).count("sync.adoptHmacIds")
+
+
+async def test_an_inline_v3_account_never_asks_to_adopt_hashed_ids(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, storage="inline", adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    assert (await a.sync())["ok"] is True
+    a.reconnect()
+    assert (await a.sync())["ok"] is True
+    assert _adopt_calls(server) == 0 and server.item_ids == "legacy"
+    assert _live_ids(server) == sorted(NAMES)
+    assert all(not s.wire_id for s in a.store.states("prompts").values())
+
+
+@pytest.mark.parametrize("fallback", ["no-caps", "caps-timeout"])
+async def test_a_v1_connection_never_asks_to_adopt_hashed_ids(tmp_path, account_key, s3, fallback):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, caps=(fallback != "no-caps"), adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    if fallback == "caps-timeout":
+        real = a.engine._request
+
+        async def lossy(msg_type, payload):
+            if msg_type == "sync.caps":
+                raise TimeoutError("lost")
+            return await real(msg_type, payload)
+
+        a.engine._request = lossy
+    await a.sync()
+    assert _adopt_calls(server) == 0 and server.item_ids == "legacy"
+    assert all(not HASHED.match(k[1]) for k in server.rows)
+    assert all(not s.wire_id for s in a.store.states("prompts").values())
+
+
+async def test_an_unsupported_adoption_leaves_every_id_legacy(tmp_path, account_key, s3):
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    real = a.engine._request
+
+    async def unsupported(msg_type, payload):
+        if msg_type == "sync.adoptHmacIds":
+            return {"ok": False, "error": {"code": "UNSUPPORTED", "message": "", "details": None}}
+        return await real(msg_type, payload)
+
+    a.engine._request = unsupported
+    assert (await a.sync())["ok"] is True
+    a.adapter.items["gamma"] = {"v": "g"}
+    assert (await a.sync())["ok"] is True
+    assert server.item_ids == "legacy"
+    assert all(not HASHED.match(k[1]) for k in server.rows)
+    assert all(not s.wire_id for s in a.store.states("prompts").values())
