@@ -3992,10 +3992,10 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
     connected = link is not None and link._authenticated  # noqa: SLF001 - same module
     # A scope sync no longer offers (memory) is left out of the whole-account
     # listing, and answers "retired" when asked for by name.
-    wanted = [scope] if scope else [s for s in engine_mod.SCOPES if s not in sync_approvals.RETIRED_SCOPES]
+    wanted = [scope] if scope else [s for s in engine_mod.SCOPES if s not in sync_scopes.NEVER_SYNCED]
     scopes: dict[str, Any] = {}
     for name in wanted:
-        if name in sync_approvals.RETIRED_SCOPES:
+        if name in sync_scopes.NEVER_SYNCED:
             scopes[name] = {"scope": name, "status": sync_approvals.INVENTORY_RETIRED, "items": []}
         elif name not in engine_mod.SCOPES:
             scopes[name] = {
@@ -4091,9 +4091,9 @@ def _inventory_devices(
 
 async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Send the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4105,9 +4105,9 @@ async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
 
 async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Take the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4117,18 +4117,11 @@ async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     return await link.sync_engine().pull_items(scope, item_ids)
 
 
-#: Scopes with no version history to offer: memory is retired, and
-#: credentials never go through the object store.
-_NO_HISTORY_SCOPES = frozenset({"credentials"})
-
-
 async def _history_engine(scope: str) -> Any:
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
-    if scope in _NO_HISTORY_SCOPES:
-        raise ValueError(f"{scope} keeps no version history")
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
         raise ConnectionError("the navide-server link is not connected")

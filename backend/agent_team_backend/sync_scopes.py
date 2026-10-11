@@ -56,6 +56,13 @@ _RIDES_WITH = {"skill-files": "skills"}
 _EXEC_BITS = os.name != "nt"
 
 
+#: Scopes no sync round ever runs, whatever their stored switch says and on
+#: any protocol: memory (retired) and credentials (10-09: credentials never
+#: sync). The block is here, in the sync layer; CredentialsScope itself and
+#: the credential vault are left exactly as they are.
+NEVER_SYNCED = frozenset(sync_approvals.RETIRED_SCOPES | {"credentials"})
+
+
 def scope_enabled(scope: str) -> bool:
     """Whether a sync round runs *scope*. Never for a scope sync no longer
     offers (``sync_approvals.RETIRED_SCOPES``: memory), whatever its stored
@@ -63,7 +70,7 @@ def scope_enabled(scope: str) -> bool:
     round pulls nothing, pushes nothing and deletes nothing, here or on the
     server."""
     base = _RIDES_WITH.get(scope, scope)
-    if base in sync_approvals.RETIRED_SCOPES:
+    if base in NEVER_SYNCED:
         return False
     return enabled_scopes().get(base, False)
 
@@ -75,7 +82,7 @@ def set_scope_enabled(scope: str, enabled: bool) -> dict[str, bool]:
         blocker = credentials_enable_blocker()
         if blocker:
             raise sync_engine.SyncError(blocker)
-    if enabled and scope in sync_approvals.RETIRED_SCOPES:
+    if enabled and scope in NEVER_SYNCED:
         # Switching it off stays possible, to clear a switch an older build left on.
         raise sync_engine.SyncError(f"{scope} is not synced any more; it can only be switched off")
     current = enabled_scopes()
