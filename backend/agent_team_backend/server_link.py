@@ -56,6 +56,7 @@ import certifi
 import websockets
 
 from . import (
+    __version__,
     agent_messaging,
     device_crypto,
     device_identity,
@@ -1414,6 +1415,9 @@ class ServerLink:
             {
                 "credential": config.token,
                 "client": CLIENT_NAME,
+                # The server records the last version each device reported, so a
+                # protocol migration can tell whether older builds are still online.
+                "clientVersion": __version__,
                 "deviceId": self._device_id,
                 "deviceName": self._device_name,
                 # Published on every hello, not only the first: the server keeps
