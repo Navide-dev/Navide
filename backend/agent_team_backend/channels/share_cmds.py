@@ -1,5 +1,6 @@
 """``/shares`` and ``/revoke <prefix>`` in a bound chat: the account's live share links,
-and revoking one of them.
+and revoking one of them. Also the two share-link notices (``notify_link_created``,
+``notify_link_opened``) that the rest of the backend calls.
 
 Only what ``share_links.list_links`` returns is shown, which never holds a link's
 URL or key; ``copy_link`` is never called from a chat. A link is named by the first
@@ -12,6 +13,7 @@ button. Tokens are memory only and die after ``quick_menu.MENU_TTL_S``.
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 import time
@@ -19,7 +21,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable
 
-from . import quick_menu
+from . import quick_menu, report
+
+log = logging.getLogger(__name__)
 
 CALLBACK_PREFIX = "nv3:"
 SHORT_LEN = 6
@@ -136,3 +140,56 @@ class RevokeButtons:
             del self._tokens[token]
         while len(self._tokens) >= MAX_TOKENS:
             del self._tokens[next(iter(self._tokens))]
+
+
+# --- notices ---------------------------------------------------------------------------
+#
+# Where a notice goes: the chat bound to the pane that created the link, or, when
+# there is none, every bound direct chat; never another group. A group never sees a
+# link's URL or full id. Nothing is sent unless Navide Cloud is connected and chat
+# channels are on, so with no share links (or no Cloud) chat behaves as before.
+
+
+def created_text(lang: str, link: dict[str, Any], *, in_group: bool) -> str:
+    summary = quick_menu.text(lang, "share_created", kind=link.get("kind") or "",
+                              expires=_when(link.get("expiresAt")), short=short(link))
+    masked = int(link.get("maskedTotal") or 0)
+    if masked:
+        summary += " · " + quick_menu.text(lang, "share_masked", count=masked)
+    info = quick_menu.text(lang, "share_group_no_link") if in_group else str(link.get("url") or "")
+    return report.Caption(title(lang, link), summary, info).plain()
+
+
+def opened_text(lang: str, link: dict[str, Any], opens: int) -> str:
+    return quick_menu.text(lang, "share_opened", title=title(lang, link), short=short(link), opens=opens)
+
+
+def _running_manager() -> Any:
+    """The chat manager when a notice may go out at all, else None."""
+    from .. import server_link
+    from . import get_manager
+
+    if server_link.link_state() != server_link.STATE_CONNECTED:
+        return None
+    manager = get_manager()
+    return manager if manager is not None and manager.store.global_enabled() else None
+
+
+async def notify_link_created(link: dict[str, Any]) -> None:
+    """A link this machine just made, which its creator asked to have sent to chat."""
+    try:
+        manager = _running_manager()
+        if manager is not None:
+            await manager.notify_share_created(link)
+    except Exception as exc:  # noqa: BLE001 — a notice must not break creating the link
+        log.warning("channels: the share-link created notice failed: %s", exc)
+
+
+async def notify_link_opened(event: dict[str, Any]) -> None:
+    """``links.opened`` as the server pushed it: {linkId, openCount, openedAt, newViewer}."""
+    try:
+        manager = _running_manager()
+        if manager is not None:
+            await manager.notify_share_opened(event)
+    except Exception as exc:  # noqa: BLE001 — a notice must not break the link
+        log.warning("channels: the share-link opened notice failed: %s", exc)

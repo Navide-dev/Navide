@@ -1993,6 +1993,61 @@ class ChannelManager:
         link = next((row for row in links if row.get("linkId") == link_id), {"linkId": link_id})
         return await self._share_revoke(msg, lang, link)
 
+    def _chat_kind(self, b: Binding) -> str:
+        """"direct" or "group" as the chat was remembered; "" when never seen."""
+        adapter = self._adapters.get((b.platform, b.account))
+        if adapter is None:
+            return ""
+        return next((str(c["kind"]) for c in self.store.chats(b.platform, _bot_key(adapter))
+                     if c["chat_id"] == b.chat_id), "")
+
+    def _share_targets(self, pane_id: str) -> list[tuple[Location, bool]]:
+        """(chat, is direct) for a share notice: the creating pane's chat, else every
+        bound direct chat; one entry per chat."""
+        bindings = self.store.bindings()
+        own = [b for b in bindings if pane_id and b.pane_id == pane_id]
+        targets: dict[str, tuple[Location, bool]] = {}
+        for b in own or bindings:
+            direct = self._chat_kind(b) == "direct"
+            if own or direct:
+                targets.setdefault(b.location().key(), (b.location(), direct))
+        return list(targets.values())
+
+    async def _share_notice(self, loc: Location, text: str) -> None:
+        try:
+            await self.mirror.send(loc, text)
+        except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+            log.warning("channels: a share-link notice to %s failed: %s", loc.platform, exc)
+
+    async def notify_share_created(self, link: dict[str, Any]) -> None:
+        lang = prompt_skills.language(await self._ui_settings())
+        for loc, direct in self._share_targets(str(link.get("paneId") or "")):
+            await self._share_notice(loc, share_cmds.created_text(lang, link, in_group=not direct))
+
+    async def notify_share_opened(self, event: dict[str, Any]) -> None:
+        """Only for a new viewer, only with the switch on, and only on the device that
+        created the link, so an account with several machines hears it once."""
+        from .. import server_link, share_links, sync_keyring
+
+        if not event.get("newViewer") or not self.store.share_open_notify():
+            return
+        me = server_link.local_device_id()
+        if not me:
+            return
+        try:
+            links = await share_links.list_links(share_links.ServerLinksClient())
+        except (share_links.ShareError, sync_keyring.KeyringError) as exc:
+            log.info("channels: listing share links for an opened notice failed: %s", exc)
+            return
+        link = next((row for row in links if row.get("linkId") == event.get("linkId")), None)
+        if link is None or link.get("deviceId") != me:
+            return
+        opens = event.get("openCount")
+        opens = opens if isinstance(opens, int) else int(link.get("openCount") or 0)
+        lang = prompt_skills.language(await self._ui_settings())
+        for loc, _direct in self._share_targets(str(link.get("paneId") or "")):
+            await self._share_notice(loc, share_cmds.opened_text(lang, link, opens))
+
     async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
         started = self._clock()

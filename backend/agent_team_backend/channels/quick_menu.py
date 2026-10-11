@@ -96,6 +96,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_none": "找不到前幾碼為「{prefix}」的有效連結，沒有撤銷任何連結；傳 /shares 查看",
         "revoke_ambiguous": "有 {count} 筆有效連結的開頭是「{prefix}」，沒有撤銷任何連結；請多打幾碼",
         "revoke_usage": "用法：/revoke <連結代碼前 6 碼>；傳 /shares 查看代碼",
+        "share_created": "🔗 已建立分享連結 · {kind} · 到期 {expires} · {short}",
+        "share_masked": "已遮罩 {count} 處",
+        "share_group_no_link": "群組不顯示完整連結；請在私訊或 Navide 的分享分頁取得",
+        "share_opened": "👀「{title}」（{short}）被新的裝置開啟，累計開啟 {opens} 次",
     },
     "en-US": {
         "title": "⚡ Quick menu · pane \"{pane}\"",
@@ -123,6 +127,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_none": "No active link starts with \"{prefix}\", so nothing was revoked. Send /shares to see them",
         "revoke_ambiguous": "{count} active links start with \"{prefix}\", so nothing was revoked. Type more characters",
         "revoke_usage": "Usage: /revoke <first 6 characters of the link code>. Send /shares to see the codes",
+        "share_created": "🔗 Share link created · {kind} · expires {expires} · {short}",
+        "share_masked": "{count} masked",
+        "share_group_no_link": "Full links are not shown in groups. Get it in a direct chat or Navide's Share tab",
+        "share_opened": "👀 \"{title}\" ({short}) was opened on a new device, {opens} opens in all",
     },
     "ja-JP": {
         "title": "⚡ クイックメニュー · pane「{pane}」",
@@ -150,6 +158,10 @@ STRINGS: dict[str, dict[str, str]] = {
         "revoke_none": "「{prefix}」で始まる有効なリンクがないため、何も取り消していません。/shares で確認してください",
         "revoke_ambiguous": "「{prefix}」で始まる有効なリンクが {count} 件あるため、何も取り消していません。もう少し長く入力してください",
         "revoke_usage": "使い方：/revoke <リンクコードの先頭 6 文字>。/shares でコードを確認できます",
+        "share_created": "🔗 共有リンクを作成しました · {kind} · 期限 {expires} · {short}",
+        "share_masked": "{count} 件をマスク",
+        "share_group_no_link": "グループには完全なリンクを表示しません。ダイレクトチャットか Navide の共有タブで取得してください",
+        "share_opened": "👀「{title}」（{short}）が新しいデバイスで開かれました。累計 {opens} 回",
     },
 }
 DEFAULT_LANGUAGE = "zh-TW"
