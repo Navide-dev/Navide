@@ -3074,7 +3074,7 @@ def _pinned_signing_key(device_id: str, member_id: str | None = None) -> str:
 def _fetch_verified(urls: list[tuple[str, str]], sizes: dict[str, int]) -> dict[str, str]:
     """Download each object and check it is the one its id names. Blocking."""
     try:
-        fetched = sync_objects.get_all(urls)
+        fetched = sync_objects.get_all(urls, sizes)
     except sync_objects.ObjectError as err:
         raise SyncError(f"OBJECT_UNAVAILABLE: {err}") from err
     out: dict[str, str] = {}

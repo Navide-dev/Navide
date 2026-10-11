@@ -137,3 +137,95 @@ async def test_a_genuine_migration_conflict_converges_either_way(tmp_path, accou
     assert a.adapter.items[ALPHA] == winner and b.adapter.items[ALPHA] == winner
     assert a.store.conflicts("prompts") == [] and b.store.conflicts("prompts") == []
     assert all(HASHED.match(i) for i in _live_ids(server)) and len(_live_ids(server)) == 2
+
+
+# ── D-M3: object downloads are capped and presigned URLs must be https ───────
+class _BigObjects:
+    """Serves ``size`` bytes at any path, Content-Length and all."""
+
+    def __init__(self, size: int) -> None:
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        outer = self
+        self.sent = 0
+
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_GET(self):  # noqa: N802
+                self.send_response(200)
+                self.send_header("Content-Length", str(size))
+                self.end_headers()
+                chunk = b"x" * 65536
+                left = size
+                try:
+                    while left:
+                        n = min(left, len(chunk))
+                        self.wfile.write(chunk[:n])
+                        outer.sent += n
+                        left -= n
+                except OSError:
+                    pass
+
+            def log_message(self, *_args):
+                pass
+
+        self.http = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.base = f"http://127.0.0.1:{self.http.server_address[1]}"
+        threading.Thread(target=self.http.serve_forever, daemon=True).start()
+
+    def close(self) -> None:
+        self.http.shutdown()
+        self.http.server_close()
+
+
+def test_a_download_reads_no_more_than_the_size_it_was_promised():
+    from agent_team_backend import sync_objects
+
+    big = _BigObjects(4 * 1024 * 1024)
+    try:
+        got = sync_objects.get_all([("b1", f"{big.base}/o")], {"b1": 100})
+        assert len(got["b1"]) == 101
+        with pytest.raises(sync_engine.SyncError, match="OBJECT_INTEGRITY"):
+            sync_engine._fetch_verified([("b1", f"{big.base}/o")], {"b1": 100})
+    finally:
+        big.close()
+
+
+def test_a_download_never_reads_past_the_record_limit():
+    from agent_team_backend import sync_objects
+
+    cap = sync_engine.MAX_BODY_BYTES
+    big = _BigObjects(cap + 4096)
+    try:
+        got = sync_objects.get_all([("b1", f"{big.base}/o")], {"b1": cap + 4096})
+        assert len(got["b1"]) == cap + 1
+    finally:
+        big.close()
+
+
+@pytest.mark.parametrize("url", [
+    "http://bucket.example.com/o?sig=1", "ftp://bucket.example.com/o", "file:///etc/passwd", "//x/o",
+])
+def test_a_presigned_url_that_is_not_https_is_refused(url, monkeypatch):
+    from agent_team_backend import sync_objects
+
+    def no_network(*_a, **_k):
+        raise AssertionError("no request may be made")
+
+    monkeypatch.setattr(sync_objects._POOL, "request", no_network)
+    with pytest.raises(sync_objects.ObjectError, match="https"):
+        sync_objects.get_all([("b1", url)], {"b1": 10})
+    with pytest.raises(sync_objects.ObjectError, match="https"):
+        sync_objects.put_all([(url, b"sealed")])
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "[::1]"])
+def test_plain_http_is_allowed_on_loopback_only(host, monkeypatch):
+    from agent_team_backend import sync_objects
+
+    monkeypatch.setattr(sync_objects._POOL, "request", lambda *a, **k: (200, b"ok"))
+    assert sync_objects.get_all([("b1", f"http://{host}:9/o")], {"b1": 10}) == {"b1": b"ok"}
+    sync_objects.put_all([(f"http://{host}:9/o", b"sealed")])
+    assert sync_objects.get_all([("b1", "https://bucket.example.com/o")], {"b1": 10}) == {"b1": b"ok"}

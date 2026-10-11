@@ -66,10 +66,20 @@ class HttpPool:
         conn.close()
 
     def request(
-        self, method: str, url: str, body: bytes | None = None, headers: dict[str, str] | None = None
+        self,
+        method: str,
+        url: str,
+        body: bytes | None = None,
+        headers: dict[str, str] | None = None,
+        *,
+        limit: int | None = None,
     ) -> tuple[int, bytes]:
         """Send one request; returns ``(status, body)``. Raises ``OSError`` or
-        ``http.client.HTTPException`` when no response could be had at all."""
+        ``http.client.HTTPException`` when no response could be had at all.
+
+        With ``limit``, at most ``limit + 1`` bytes of the response are read:
+        a longer body comes back one byte over, for the caller to refuse, and
+        its connection is closed rather than reused with the rest unread."""
         parts = urlsplit(url)
         scheme = parts.scheme or "http"
         key = (scheme, parts.hostname or "", parts.port or (443 if scheme == "https" else 80))
@@ -87,13 +97,13 @@ class HttpPool:
             try:
                 conn.request(method, target, body=body, headers=hdrs)
                 res = conn.getresponse()
-                data = res.read()
+                data = res.read() if limit is None else res.read(limit + 1)
             except (OSError, http.client.HTTPException):
                 conn.close()
                 if reused and attempt == 0:
                     continue
                 raise
-            if res.will_close:
+            if res.will_close or not res.isclosed():
                 conn.close()
             else:
                 self._give(key, conn)
@@ -164,6 +174,22 @@ def object_matches(blob_id: str, data: bytes) -> bool:
     return hmac.compare_digest(hasher.hexdigest(), blob_id)
 
 
+#: Hosts a presigned URL may name over plain http: the loopback fakes the
+#: tests stand in for S3 with. Anything else must be https.
+_LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _require_safe_url(url: str) -> None:
+    """Refuse a presigned URL that is not https (plain http only to a loopback
+    host). The text never quotes the URL: it carries a signature."""
+    parts = urlsplit(url)
+    if parts.scheme == "https" and parts.hostname:
+        return
+    if parts.scheme == "http" and (parts.hostname or "") in _LOOPBACK:
+        return
+    raise ObjectError("an object URL is not https; refusing to use it")
+
+
 def _run_all(fn: Callable[[Any], Any], jobs: list[Any]) -> list[Any]:
     if not jobs:
         return []
@@ -177,6 +203,7 @@ def put_all(uploads: list[tuple[str, bytes]]) -> None:
 
     def one(job: tuple[str, bytes]) -> None:
         url, data = job
+        _require_safe_url(url)
         try:
             status, _ = _POOL.request("PUT", url, body=data)
         except (OSError, http.client.HTTPException) as err:
@@ -187,14 +214,22 @@ def put_all(uploads: list[tuple[str, bytes]]) -> None:
     _run_all(one, uploads)
 
 
-def get_all(downloads: list[tuple[str, str]]) -> dict[str, bytes]:
+def get_all(downloads: list[tuple[str, str]], limits: dict[str, int]) -> dict[str, bytes]:
     """GET each ``(blob id, url)``, PARALLEL at a time. Blocking; raises
-    ``ObjectError`` unless every one was answered 200."""
+    ``ObjectError`` unless every one was answered 200.
+
+    Each body is read up to its size in *limits* (the record limit when
+    larger or not given) plus one byte, so an object longer than promised
+    comes back one byte over and is refused by the caller's size check,
+    without the rest of it ever being read."""
+    from .sync_engine import MAX_BODY_BYTES
 
     def one(job: tuple[str, str]) -> tuple[str, bytes]:
         blob_id, url = job
+        _require_safe_url(url)
+        limit = min(max(int(limits.get(blob_id, MAX_BODY_BYTES)), 0), MAX_BODY_BYTES)
         try:
-            status, data = _POOL.request("GET", url)
+            status, data = _POOL.request("GET", url, limit=limit)
         except (OSError, http.client.HTTPException) as err:
             raise ObjectError(f"an object download failed ({type(err).__name__})") from err
         if status != 200:
