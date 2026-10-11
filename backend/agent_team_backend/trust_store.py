@@ -1534,6 +1534,25 @@ def note_signs_v2(device_id: str) -> bool:
         return True
 
 
+def note_sig2_missing(device_id: str) -> None:
+    """One notice per device that signs v2 and sent a message without it (plan
+    797ad7, B4): taken in 0.2.20, but something on the way dropped the time
+    signature — a server without sig2, or a relay removing it. Never raises."""
+    try:
+        with _lock:
+            state = _load_locked()
+            for notice in state.get("notices") or []:
+                if (
+                    isinstance(notice, dict) and notice.get("kind") == NOTICE_PAIRING
+                    and notice.get("pairing") == "sig2-missing" and notice.get("deviceId") == device_id
+                ):
+                    return
+            _record_locked(state, NOTICE_PAIRING, device_id=device_id, detail={"pairing": "sig2-missing"})
+            _save_record_locked(state, "a missing v2 signature")
+    except Exception as err:  # noqa: BLE001 - a notice, never a failed delivery
+        log.warning("could not record a missing v2 signature from %s (%s)", device_id, err)
+
+
 def pinned_encryption_key(device_id: str) -> str:
     """The X25519 key a completed pairing pinned for *device_id*, or "".
 

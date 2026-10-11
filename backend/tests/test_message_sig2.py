@@ -7,8 +7,10 @@ base64 and would refuse anything else there — and Navide-Server forwards it.
 
 Receiving: no sig2 is exactly the v1 path; a sig2 is checked against the pinned
 key and its send time against a window inside the ledger's TTL; the first one
-that verifies marks the pin, and from then on that device's messages without a
-sig2 are refused. Until it has proven it sends v2, nothing is locked.
+that verifies marks the pin. In 0.2.20 a marked device's message without a sig2
+is still taken (Q4: v1 is refused from 0.2.21 on) — a server rolled back to one
+without sig2, or a relay stripping it, must not cut a device off — and leaves a
+log line and one notice. The refusal is there behind REFUSE_V1_FROM_V2_PEERS.
 """
 
 from __future__ import annotations
@@ -86,7 +88,59 @@ async def test_a_message_without_sig2_is_the_v1_path_until_the_peer_proves_v2(br
     assert not trust_store.pin_for(PEER.device_id).get("sigV2")
 
 
-async def test_once_a_peer_signs_v2_a_message_without_it_is_refused(broadcasts):
+async def _two(first: dict, second: dict, broadcasts) -> tuple[list, list]:
+    """One message, then another on the same link."""
+    from agent_team_backend import agent_messaging
+
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        for payload in (first, second):
+            seen = len(broadcasts) + len(conn.acks)
+            await conn.push({"type": "messages.pending", "payload": payload})
+            await _until(lambda: len(broadcasts) + len(conn.acks) > seen)
+        return list(broadcasts), list(conn.acks)
+    finally:
+        await link.stop()
+
+
+def _sig2_missing_notices() -> list:
+    return [n for n in trust_store.notices()
+            if n["kind"] == trust_store.NOTICE_PAIRING and n.get("pairing") == "sig2-missing"]
+
+
+async def test_a_server_rolled_back_to_one_without_sig2_cuts_no_device_off(broadcasts):
+    """After a v2 message marked the pin, the server goes back to a release that
+    drops sig2: the next message arrives with v1 only, and is delivered."""
+    delivered, acks = await _two(_pending_v2("pa:mcp:before"), _pending("pa:mcp:after"), broadcasts)
+    assert trust_store.pin_for(PEER.device_id).get("sigV2") is True
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:before", "pa:mcp:after"]
+    assert acks == []
+    assert [n["deviceId"] for n in _sig2_missing_notices()] == [PEER.device_id]
+
+
+async def test_a_relay_stripping_sig2_does_not_stop_delivery(broadcasts):
+    trust_store.note_signs_v2(PEER.device_id)
+    stripped = _pending_v2("pa:mcp:stripped")
+    stripped.pop("sig2")
+    delivered, acks = await _receive(stripped, broadcasts)
+    assert [d["payload"]["msg_key"] for d in delivered] == ["pa:mcp:stripped"]
+    assert acks == []
+    assert len(_sig2_missing_notices()) == 1
+
+
+async def test_one_notice_per_device_not_one_per_message(broadcasts):
+    trust_store.note_signs_v2(PEER.device_id)
+    await _two(_pending("pa:mcp:one"), _pending("pa:mcp:two"), broadcasts)
+    assert len(_sig2_missing_notices()) == 1
+
+
+async def test_the_refusal_waits_behind_its_switch(broadcasts, monkeypatch):
+    """0.2.21 turns it on: then a marked device's message without sig2 is refused."""
+    assert server_link.REFUSE_V1_FROM_V2_PEERS is False
+    monkeypatch.setattr(server_link, "REFUSE_V1_FROM_V2_PEERS", True)
     trust_store.note_signs_v2(PEER.device_id)
     delivered, acks = await _receive(_pending("pa:mcp:stripped"), broadcasts)
     assert delivered == []

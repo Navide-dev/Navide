@@ -177,6 +177,11 @@ MESSAGE_MEMORY_TTL_S = 3600.0
 #: refused for its age.
 SIG2_MAX_AGE_S = 55 * 60
 SIG2_MAX_AHEAD_S = 5 * 60
+#: Whether a device that has signed v2 is refused when a message of its arrives
+#: without sig2. Off in 0.2.20 (plan 797ad7, Q4: v1 is refused from 0.2.21): a
+#: server rolled back to a release without sig2, or a relay stripping it, would
+#: otherwise cut that device off. Logged and noticed meanwhile.
+REFUSE_V1_FROM_V2_PEERS = False
 
 #: How long a message this device relayed may go unanswered before it asks the
 #: server what became of it, and how often it asks again after that. The
@@ -2792,7 +2797,7 @@ class ServerLink:
                     await asyncio.to_thread(trust_store.note_signs_v2, device_id)
                 except Exception as err:  # noqa: BLE001 - asked again with the next one
                     log.warning("could not record that %s signs v2 (%s)", device_id, err)
-        elif pin.get("sigV2"):
+        elif pin.get("sigV2") and REFUSE_V1_FROM_V2_PEERS:
             # This device has signed v2 before, so a message without it had it
             # removed on the way — or is older than the device's switch to it.
             log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
@@ -2808,6 +2813,12 @@ class ServerLink:
         ):
             log.warning("refusing message %s: its signature does not verify", msg_key)
             return None
+        elif pin.get("sigV2"):
+            # Taken in 0.2.20 (see REFUSE_V1_FROM_V2_PEERS): a v1 signature that
+            # verifies, from a device that signs v2 — a server without sig2, or
+            # a relay that removed it. Said once per device, not per message.
+            log.warning("message %s from %s carries no v2 signature; taken on v1", msg_key, device_id)
+            await asyncio.to_thread(trust_store.note_sig2_missing, device_id)
 
         # It reached us again. Whoever said "not now" was answering the attempts
         # they had already seen, so a fresh one puts the row back in front of

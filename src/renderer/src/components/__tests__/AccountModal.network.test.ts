@@ -645,6 +645,9 @@ describe('account modal — your network', () => {
         ),
       )
       expect(strings.settings.p2p.pair.salvaged, locale).toContain('{device}')
+      // Plan 797ad7 B4 / Q4: a message without its time signature from a device
+      // that signs v2 is taken in 0.2.20, and said once per device.
+      expect(strings.settings.p2p.pair['sig2-missing'], locale).toContain('{device}')
     }
   })
 

@@ -6722,6 +6722,7 @@
         "refused": "{device} refused the pairing",
         "revoked": "{device} unpaired from this device",
         "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
+        "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
         "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
