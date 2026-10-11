@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, quick_menu, redact, relay, report
+from . import media, pdf, quick_menu, redact, relay, report, share_cmds
 from .. import prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -293,6 +293,7 @@ class ChannelManager:
         self._managed: dict[str, _ManagedRequest] = {}  # request_id -> open t.me/newbot request
         self.relay = relay.RelayTable(clock=clock, on_expired=self._relay_expired)
         self.quick = quick_menu.QuickMenus(clock=clock)
+        self.share_buttons = share_cmds.RevokeButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
         # One serial worker per location: order kept within a chat, chats never block each other.
@@ -1374,10 +1375,15 @@ class ChannelManager:
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
             await self._quick_press(msg)
             return
+        if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
+            return
         if msg.callback_data and not msg.text:
             return  # a button press with the relay off, or not ours
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
             await self._quick_menu(msg)
+            return
+        share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
+        if share_cmd is not None and await self._share_command(msg, *share_cmd):
             return
         binding = self._binding_for(msg)
         if binding is None:
@@ -1890,6 +1896,102 @@ class ChannelManager:
                 log.warning("channels: sending the quick menu on %s failed: %s", msg.platform, exc2)
                 await self._reply(msg, quick_menu.text(menu.lang, "send_failed",
                                                        error=redact.redact_text(str(exc2))))
+
+    # --- share links -------------------------------------------------------------
+
+    def _shares_reachable(self, msg: InboundMessage) -> bool:
+        """Only a bound chat on a machine linked to Navide Cloud handles /shares and
+        /revoke; anywhere else they travel on exactly as they did before."""
+        from .. import server_link
+
+        return server_link.link_state() == server_link.STATE_CONNECTED and self._binding_for(msg) is not None
+
+    async def _share_call(self, msg: InboundMessage, lang: str, call: Callable[[Any], Awaitable[Any]]) -> tuple[str, Any]:
+        """``("ok", result)``; ``("unavailable", None)`` when the server does no share links;
+        ``("failed", None)`` once the chat has been told why."""
+        from .. import share_links, sync_keyring
+
+        try:
+            return "ok", await call(share_links.ServerLinksClient())
+        except share_links.ShareRemoteError as exc:
+            if exc.code in share_links.UNAVAILABLE_CODES:
+                return "unavailable", None
+            error: Exception = exc
+        except (share_links.ShareError, sync_keyring.KeyringError) as exc:
+            error = exc
+        log.info("channels: a share link call from %s failed: %s", msg.platform, error)
+        await self._reply(msg, quick_menu.text(lang, "shares_failed", error=redact.redact_text(str(error))))
+        return "failed", None
+
+    async def _share_command(self, msg: InboundMessage, command: str, arg: str) -> bool:
+        """``/shares`` or ``/revoke``; False leaves the message to the usual pipeline."""
+        from .. import share_links
+
+        if not self._shares_reachable(msg):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        outcome, links = await self._share_call(msg, lang, share_links.list_links)
+        if outcome != "ok":
+            return outcome == "failed"
+        live = share_cmds.active(links)
+        if command == "shares":
+            await self._share_list(msg, lang, live[:share_cmds.MAX_LISTED])
+            return True
+        if not share_cmds.valid_prefix(arg):
+            await self._reply(msg, quick_menu.text(lang, "revoke_usage"))
+            return True
+        matches = [link for link in live if str(link.get("linkId") or "").startswith(arg)]
+        if len(matches) != 1:
+            key = "revoke_none" if not matches else "revoke_ambiguous"
+            await self._reply(msg, quick_menu.text(lang, key, prefix=arg, count=len(matches)))
+            return True
+        return await self._share_revoke(msg, lang, matches[0])
+
+    async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
+        if not links:
+            await self._reply(msg, quick_menu.text(lang, "shares_empty"))
+            return
+        body = redact.redact_text(share_cmds.render_list(lang, links))
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
+            await self._reply(msg, body)  # /revoke still works without buttons
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        rows = self.share_buttons.rows(msg.platform, msg.location_key(), lang, links)
+        try:
+            await adapter.send_menu(loc, body, rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the share list on %s failed: %s", msg.platform, exc)
+            await self._reply(msg, body)
+
+    async def _share_revoke(self, msg: InboundMessage, lang: str, link: dict[str, Any]) -> bool:
+        from .. import share_links
+
+        link_id = str(link["linkId"])
+        outcome, _ = await self._share_call(msg, lang, lambda client: share_links.revoke(client, link_id))
+        if outcome == "ok":
+            await self._reply(msg, redact.redact_text(quick_menu.text(
+                lang, "revoked", title=share_cmds.title(lang, link), short=share_cmds.short(link))))
+        return outcome != "unavailable"
+
+    async def _share_press(self, msg: InboundMessage) -> bool:
+        """A revoke button; False leaves the press to be dropped as before."""
+        from .. import share_links
+
+        if not self._shares_reachable(msg):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        token = share_cmds.parse_callback(msg.callback_data)
+        link_id = self.share_buttons.press(token, msg.location_key()) if token else None
+        if link_id is None:
+            await self._reply(msg, quick_menu.text(lang, "shares_expired"))
+            return True
+        # Named from a fresh list: the title shown is the link's current one.
+        outcome, links = await self._share_call(msg, lang, share_links.list_links)
+        if outcome != "ok":
+            return outcome == "failed"
+        link = next((row for row in links if row.get("linkId") == link_id), {"linkId": link_id})
+        return await self._share_revoke(msg, lang, link)
 
     async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
