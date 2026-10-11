@@ -2322,6 +2322,11 @@ async def _start_log_watcher() -> None:
     # feature "<cli>.hooks": announced when it changes a file, skipped when the
     # user turned it off or deleted the hooks by hand.
     convenience_wiring.remember_loop(asyncio.get_running_loop())
+    # Claude's hooks ride on the panes Navide starts (--settings), not on the
+    # user's ~/.claude/settings.json; registered before the pass that moves them.
+    from . import claude_hooks
+
+    convenience_wiring.register_pane_carrier("claude", claude_hooks.prepare_pane_settings)
     convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.

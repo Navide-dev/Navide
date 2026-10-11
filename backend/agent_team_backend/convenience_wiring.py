@@ -115,12 +115,20 @@ def pane_carries_hooks(agent_key: str) -> bool:
     return agent_key in _CARRYING
 
 
-def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
-    """(file, present, remove) for one vendor's hook installation."""
+def _hook_target(agent_key: str, port_file: str = "") -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
+    """(file, present, remove) for one vendor's hook installation. For a dev
+    backend (``port_file`` in a ``-dev`` data dir) claude's are its own
+    entries only: the installed app's share the file and are never its to
+    take out."""
     if agent_key == "claude":
         from . import claude_hooks
 
         path = claude_hooks.settings_path()
+        if "-dev" in port_file:
+            return (
+                path, lambda: claude_hooks.hooks_present(path, dev_only=True),
+                lambda: claude_hooks.uninstall_hooks(dev_only=True),
+            )
         return path, lambda: claude_hooks.hooks_present(path), claude_hooks.uninstall_hooks
     if agent_key == "qwen":
         from . import claude_hooks, qwen_hooks
@@ -182,7 +190,7 @@ def _carry_in_panes(agent_key: str, feature_id: str, path: Path, port_file: str)
     _CARRYING.discard(agent_key)
     if not g.allowed(feature_id):
         return "off"
-    if not g.retract(feature_id, _hook_takeback(agent_key)):
+    if not g.retract(feature_id, _hook_takeback(agent_key, port_file)):
         return None
     skip = g.excluded(feature_id, path) if agent_key in _PER_HOOK else frozenset()
     try:
@@ -225,8 +233,8 @@ def remove_hooks(agent_key: str) -> Any:
     return _hook_target(agent_key)[2]()
 
 
-def _hook_takeback(agent_key: str) -> list[Takeback]:
-    path, present, remove = _hook_target(agent_key)
+def _hook_takeback(agent_key: str, port_file: str = "") -> list[Takeback]:
+    path, present, remove = _hook_target(agent_key, port_file)
     return [Takeback(str(path), remove, present, path)]
 
 
@@ -243,7 +251,7 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str =
     agent_key = next((k for k, f in HOOK_FEATURES.items() if f == feature_id), None)
     takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
-        takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
+        takeback = lambda: _hook_takeback(agent_key, port_file)  # noqa: E731
     refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
     if not allowed and agent_key is not None:
         _CARRYING.discard(agent_key)

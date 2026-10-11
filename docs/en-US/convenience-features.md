@@ -104,7 +104,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 
 | id | CLI | writes | toggle | turning it off costs |
 |---|---|---|---|---|
-| `claude.hooks` | claude | `~/.claude/settings.json` hooks (turn detection, Navide Guard, rewake) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
+| `claude.hooks` | claude | its panes' `--settings` file in Navide's data (turn detection, Navide Guard, rewake); `~/.claude/settings.json` only when that cannot be used (see below) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
 | `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
 | `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
@@ -150,6 +150,37 @@ row would strip the rows of the installed build's live panes. It keeps
 seeding `config.toml`. The installed Navide does take back the rows of a
 development backend's live panes when it starts; that backend re-seeds them
 on its next spawn. This is a known trade-off.
+
+### Claude: hooks carried by the panes
+
+Navide's Claude hooks are no longer written into `~/.claude/settings.json`.
+Each Claude pane Navide starts — fresh or resumed, an account-dir pane too —
+gets `--settings <data>/runtime/claude/settings.json`, a 0600 file of
+Navide's holding exactly the entries the shared file used to get: the same
+events, commands, timeouts, Navide Guard (the Windows exec form included),
+the rewake waiter per the push-channel switch, minus the hooks the user
+deleted by hand. Claude Code merges it with the user's own settings. A login
+subcommand gets nothing. A pane file gone missing is written again at spawn;
+when it cannot be, that pane starts without the hooks rather than failing.
+
+- At startup (and on re-allow) an entry an earlier version wrote into the
+  shared file is retracted: backed up, removed, logged as `retract`. The
+  user's own entries stay.
+- When it cannot be retracted (`retract-failed`), or the pane file cannot be
+  written, the shared hooks stay in use and no pane gets `--settings`: never
+  both, or every hook would run twice.
+- The push-channel switch and the Windows Claude Code version probe rewrite
+  the pane file, never the shared one; running panes keep the copy they
+  started with.
+- Off: no pane gets `--settings` and nothing is written.
+- A dev backend (data dir ending in `-dev`) retracts, and switches off, only
+  its own entries. The installed app's entries in the shared file are left
+  as they are, so starting a dev build never takes the installed Navide's
+  hooks away. A dev pane then fires both: the installed app's shared hooks
+  and its own `--settings` ones, each to its own backend.
+- Known limit: a command that already names a settings file (`--settings`)
+  is left alone, so that pane runs without Navide's hooks (logged as a
+  warning). Whether Claude Code would merge a second `--settings` is untested.
 
 ## Persistence (navide.db)
 
