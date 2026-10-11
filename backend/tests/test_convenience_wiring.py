@@ -1430,7 +1430,11 @@ def test_codex_login_link_read_back_as_a_windows_extended_path_still_counts(gate
     from agent_team_backend.codex_home import CodexHomeManager
 
     plain = os.readlink
-    monkeypatch.setattr(os, "readlink", lambda link: "\\\\?\\" + str(plain(link)))
+    # Windows already answers this way; elsewhere it is made to.
+    extended = "\\\\?\\"
+    monkeypatch.setattr(
+        os, "readlink", lambda link: raw if (raw := str(plain(link))).startswith(extended) else extended + raw
+    )
     real = tmp_path / "real-codex"
     real.mkdir()
     (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
