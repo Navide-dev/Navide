@@ -53,6 +53,14 @@ from .test_server_link import (  # noqa: F401 - broadcasts is a fixture
     make_link,
 )
 
+
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    """These pin down the record kept in its Keychain item — the store before
+    the sealed file, and still the one used when the move cannot happen. The
+    sealed file's own cases are in test_trust_store_file_mode."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
 DENY_ALL = {"version": 1, "default": "deny", "rules": []}
 
 #: A well-formed X25519 public key for pins these tests write by hand. The
