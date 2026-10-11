@@ -286,12 +286,14 @@ watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.va
 // action), react to the prop changing too.
 watch(() => props.initialTab, (tab) => {
   if (tab) activeTab.value = tab
+  if (tab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // A repeated request for the tab already named in initialTab does not change
 // the prop, so watch the counter too — otherwise pressing Cmd+K Cmd+S while
 // Settings sits on another tab does nothing at all.
 watch(() => props.tabRequest, () => {
   if (props.initialTab) activeTab.value = props.initialTab
+  if (props.initialTab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // Watching the prop is not enough on its own: re-issuing the same request (⌘K ⌘S
 // twice, with a manual tab switch in between) leaves initialTab unchanged, so the
@@ -1957,12 +1959,13 @@ function policyDeviceLabel(deviceId: string): string {
   return known?.deviceName || deviceId
 }
 
-watch(activeTab, (tab) => {
+watch([activeTab, cloudSubtab], ([tab, sub]) => {
   if (p2pTimer) { clearInterval(p2pTimer); p2pTimer = null }
   // Follows the cards, not the page they used to be on: polling the link while
   // General is open would keep asking for something nobody is looking at, and
   // stop the moment somebody actually opened it.
   if (tab !== 'cross-device') return
+  if (sub !== 'sync') return
   void loadP2pStatus()
   void loadP2pPolicy()
   p2pTimer = setInterval(() => {

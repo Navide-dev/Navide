@@ -7,7 +7,7 @@ import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
-import { useSyncInventory } from '../../composables/useSyncInventory'
+import { formatWhen as when, useSyncInventory } from '../../composables/useSyncInventory'
 import { deviceLabel } from '../../lib/sharing'
 import SettingsCard from '../settings/SettingsCard.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
@@ -20,7 +20,6 @@ onMounted(() => {
   if (!view.value) void refresh()
 })
 
-const when = (at: string): string => (at ? new Date(at).toLocaleString() : '—')
 const devices = computed(() => view.value?.devices ?? [])
 </script>
 

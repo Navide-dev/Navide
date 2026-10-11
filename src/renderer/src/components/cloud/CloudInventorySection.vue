@@ -7,8 +7,8 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
-import { scopeCounts, useSyncInventory } from '../../composables/useSyncInventory'
-import { CLOUD_SCOPES, deviceLabel } from '../../lib/sharing'
+import { formatWhen as when, scopeCounts, useSyncInventory } from '../../composables/useSyncInventory'
+import { CLOUD_SCOPES, deviceLabel, scopeNotice } from '../../lib/sharing'
 import SettingRow from '../settings/SettingRow.vue'
 import SettingsCard from '../settings/SettingsCard.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
@@ -20,8 +20,6 @@ const { view, error, loading, refresh } = useSyncInventory(props.backend)
 onMounted(() => {
   void refresh()
 })
-
-const when = (at: string): string => (at ? new Date(at).toLocaleString() : '—')
 
 /** One notice for the whole section when nothing per-scope can be said. */
 const notice = computed<'not-connected' | 'no-key' | 'error' | null>(() => {
@@ -36,11 +34,15 @@ const rows = computed(() =>
   CLOUD_SCOPES.map((scope) => {
     const scoped = view.value?.scopes[scope]
     const enabled = Boolean(view.value?.scopeEnabled[scope])
-    const counts = scoped?.status === 'ok' ? scopeCounts(scoped.items) : null
+    // A scope that did not load is not an empty scope: say which, not "0".
+    const status = scoped ? scopeNotice(scoped, enabled) : 'error'
+    const failed = status === 'no-key' || status === 'not-connected' || status === 'error' || status === 'unknown-scope'
+    const notice = failed ? (status === 'unknown-scope' ? 'error' : status) : null
+    const counts = !failed && scoped ? scopeCounts(scoped.items) : null
     const writer = counts?.lastWrite
       ? view.value?.devices.find((d) => d.deviceId === counts.lastWrite?.deviceId)
       : undefined
-    return { scope, enabled, counts, writer }
+    return { scope, enabled, notice, counts, writer }
   }),
 )
 </script>
@@ -57,7 +59,9 @@ const rows = computed(() =>
         :key="row.scope"
         :title="t('settings.sync.scope-' + row.scope)"
         :description="
-          !row.enabled
+          row.notice
+            ? t('settings.cloud.inventory.row-' + row.notice)
+            : !row.enabled
             ? t('settings.cloud.inventory.sync-off')
             : row.counts?.lastWrite
               ? t('settings.cloud.inventory.last-write', {
@@ -67,6 +71,7 @@ const rows = computed(() =>
               : t('settings.cloud.inventory.no-writes')
         "
         :data-inventory-scope="row.scope"
+        :data-scope-notice="row.notice ?? undefined"
       >
         <template #control>
           <span v-if="row.counts" class="inv-counts">

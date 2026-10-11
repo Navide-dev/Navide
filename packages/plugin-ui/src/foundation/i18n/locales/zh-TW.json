@@ -6431,6 +6431,9 @@
         "notice-no-key": "這台裝置還沒有帳號的同步金鑰，雲端記錄對它是打不開的。請與已經有金鑰的裝置配對，配對後這裡才會出現數字。",
         "notice-not-connected": "登入 Navide Cloud 後才能比對這台機器與雲端。",
         "notice-error": "讀不到雲端資料。",
+        "row-error": "讀不到這個區塊的雲端資料。",
+        "row-no-key": "這台裝置還沒有同步金鑰。",
+        "row-not-connected": "未連線。",
         "refresh": "重新整理"
       },
       "devices": {
@@ -6454,6 +6457,7 @@
         "creator-agent": "Agent · {pane}",
         "empty": "還沒有分享連結。",
         "unavailable": "這個版本還不能使用分享連結。",
+        "error": "無法載入分享連結。",
         "refresh": "重新整理"
       }
     },

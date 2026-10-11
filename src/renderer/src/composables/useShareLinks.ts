@@ -3,13 +3,16 @@
  *
  * The account's share links as the Share sub-tab lists them. Reads
  * `share.list`; a backend without that method (this build's, until the server
- * calls land) leaves the list in the `unavailable` state rather than showing
- * an error.
+ * calls land) answers UNKNOWN_TYPE, which leaves the list `unavailable`. Any
+ * other failure, a timeout or a dropped socket included, is an `error`.
  */
 import { ref } from 'vue'
 import type { useBackend } from './useBackend'
 
 type Backend = ReturnType<typeof useBackend>
+
+/** The list is a server round trip; the default 10 s is too short on a slow link. */
+const LIST_TIMEOUT_MS = 30_000
 
 export interface ShareLink {
   linkId: string
@@ -26,7 +29,7 @@ export interface ShareLink {
   lastOpenedAt: string
 }
 
-export type ShareLinksStatus = 'idle' | 'ok' | 'unavailable'
+export type ShareLinksStatus = 'idle' | 'ok' | 'unavailable' | 'error'
 
 const str = (value: unknown): string => (typeof value === 'string' ? value : '')
 
@@ -58,14 +61,17 @@ export function useShareLinks(backend: Backend) {
   async function refresh(): Promise<void> {
     loading.value = true
     try {
-      const resp = await backend.send('share.list', {})
+      const resp = await backend.send('share.list', {}, LIST_TIMEOUT_MS)
       if (!resp.ok) {
         links.value = []
-        status.value = 'unavailable'
+        status.value = resp.error?.code === 'UNKNOWN_TYPE' ? 'unavailable' : 'error'
         return
       }
       links.value = readShareLinks(resp.payload)
       status.value = 'ok'
+    } catch {
+      links.value = []
+      status.value = 'error'
     } finally {
       loading.value = false
     }

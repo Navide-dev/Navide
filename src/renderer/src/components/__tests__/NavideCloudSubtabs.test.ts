@@ -45,13 +45,21 @@ function mockBackend(overrides: Record<string, unknown> = {}) {
       },
     },
     'sync.conflicts': { ok: true, payload: { conflicts: [] } },
-    'sync.inventory': { ok: true, payload: inventory },
+    // The backend answers one scope per request, as sync.inventory {scope} does.
+    'sync.inventory': (payload: { scope?: string }) => ({
+      ok: true,
+      payload: {
+        ...inventory,
+        scopes: payload.scope ? { [payload.scope]: inventory.scopes[payload.scope as keyof typeof inventory.scopes] } : inventory.scopes,
+      },
+    }),
     ...overrides,
   }
-  const send = vi.fn(
-    async (type: string, _payload?: unknown) =>
-      responses[type] ?? { ok: false, error: { message: `Unsupported message type: '${type}'` } },
-  )
+  const send = vi.fn(async (type: string, payload?: unknown) => {
+    const answer = responses[type]
+    if (typeof answer === 'function') return answer(payload ?? {})
+    return answer ?? { ok: false, error: { code: 'UNKNOWN_TYPE', message: `Unsupported message type: '${type}'` } }
+  })
   const on = vi.fn(() => () => {})
   return { backend: { send, on } as never, send }
 }
@@ -144,7 +152,7 @@ describe('Navide Cloud sub-tabs', () => {
     expect(shown('share')).toBe(true)
     expect(shown('sync')).toBe(false)
     expect(panel('sync').findComponent(SyncSettings).exists()).toBe(true)
-    expect(send).toHaveBeenCalledWith('share.list', {})
+    expect(send).toHaveBeenCalledWith('share.list', {}, 30_000)
     // This build's backend has no share.list yet.
     expect(panel('share').find('[data-notice="unavailable"]').exists()).toBe(true)
   })
@@ -169,10 +177,12 @@ describe('Navide Cloud sub-tabs', () => {
 
   it('lists the devices that wrote to the cloud from the same inventory read', async () => {
     const { send } = await mountPage()
+    const reads = () => send.mock.calls.filter(([type]) => type === 'sync.inventory').length
+    const before = reads()
     await tab('devices').trigger('click')
     await flushPromises()
     expect(panel('devices').find('[data-device-id="dev-mac"]').text()).toContain('Studio Mac')
-    expect(send.mock.calls.filter(([type]) => type === 'sync.inventory')).toHaveLength(1)
+    expect(reads()).toBe(before)
   })
 })
 
@@ -198,5 +208,93 @@ describe('SettingsModal Navide Cloud page', () => {
   it('returns to the Sync sub-tab when a link points into the page', () => {
     expect(src).toMatch(/setSection: async[\s\S]{0,200}if \(tab === 'cross-device'\) cloudSubtab\.value = 'sync'/)
     expect(src).toMatch(/if \(item\.tab === 'cross-device'\) cloudSubtab\.value = 'sync'/)
+  })
+})
+
+describe('Navide Cloud sub-tabs, review round 1', () => {
+  let wrapper: VueWrapper | undefined
+
+  beforeEach(() => {
+    i18n.global.locale.value = 'en-US'
+    resetSyncInventoryForTest()
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+  })
+
+  async function mountPage(overrides: Record<string, unknown> = {}) {
+    const mock = mockBackend(overrides)
+    wrapper = mount(page(mock.backend), { global: { plugins: [i18n] } })
+    await flushPromises()
+    return mock
+  }
+
+  it('asks for each synced scope on its own, never for every scope at once', async () => {
+    const { send } = await mountPage()
+    const asked = send.mock.calls.filter(([type]) => type === 'sync.inventory').map(([, payload]) => payload)
+    expect(asked).toEqual([{ scope: 'prompts' }, { scope: 'mcp' }, { scope: 'skills' }])
+  })
+
+  it('says a scope could not be read instead of showing it empty', async () => {
+    await mountPage({
+      'sync.inventory': (payload: { scope?: string }) => ({
+        ok: true,
+        payload: {
+          ...inventory,
+          scopes: {
+            [payload.scope!]:
+              payload.scope === 'mcp' ? { scope: 'mcp', status: 'error', error: 'boom', items: [] } : inventory.scopes[payload.scope as 'prompts'],
+          },
+        },
+      }),
+    })
+    const mcp = wrapper!.find('[data-inventory-scope="mcp"]')
+    expect(mcp.attributes('data-scope-notice')).toBe('error')
+    expect(mcp.text()).not.toContain('Here 0')
+    expect(mcp.text()).not.toContain('Nothing written')
+  })
+
+  it('survives a request that rejects', async () => {
+    await mountPage({
+      'sync.inventory': () => Promise.reject(new Error('request sync.inventory timeout')),
+      'share.list': () => Promise.reject(new Error('ws not open')),
+    })
+    expect(wrapper!.find('[data-notice="error"]').exists()).toBe(true)
+    await wrapper!.find('[data-subtab="share"]').trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-subtab-panel="share"] [data-notice="error"]').exists()).toBe(true)
+  })
+
+  it('calls the list unavailable only when the backend does not know share.list', async () => {
+    await mountPage({ 'share.list': { ok: false, error: { code: 'SHARE_LIST_FAILED', message: 'server said no' } } })
+    await wrapper!.find('[data-subtab="share"]').trigger('click')
+    await flushPromises()
+    const pane = wrapper!.find('[data-subtab-panel="share"]')
+    expect(pane.find('[data-notice="unavailable"]').exists()).toBe(false)
+    expect(pane.find('[data-notice="error"]').exists()).toBe(true)
+  })
+
+  it('shows a dash, not Invalid Date, for a malformed time', async () => {
+    await mountPage({
+      'share.list': { ok: true, payload: { links: [{ linkId: 'cd'.repeat(16), kind: 'plan', title: 't', createdAt: 'yesterday' }] } },
+    })
+    await wrapper!.find('[data-subtab="share"]').trigger('click')
+    await flushPromises()
+    expect(wrapper!.find('[data-subtab-panel="share"]').text()).not.toContain('Invalid Date')
+  })
+})
+
+describe('SettingsModal Navide Cloud page, review round 1', () => {
+  const src = readFileSync(resolve(__dirname, '../SettingsModal.vue'), 'utf8')
+
+  it('polls the rules only while the Sync sub-tab is showing', () => {
+    expect(src).toMatch(/if \(tab !== 'cross-device'\) return\n\s*if \(sub !== 'sync'\) return/)
+  })
+
+  it('resets the sub-tab when the window is asked for the page', () => {
+    expect(src).toMatch(/watch\(\(\) => props\.initialTab[\s\S]{0,200}cloudSubtab\.value = 'sync'/)
+    expect(src).toMatch(/watch\(\(\) => props\.tabRequest[\s\S]{0,200}cloudSubtab\.value = 'sync'/)
   })
 })

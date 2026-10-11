@@ -8,6 +8,7 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../../composables/useBackend'
 import { useShareLinks } from '../../composables/useShareLinks'
+import { formatWhen as when } from '../../composables/useSyncInventory'
 import SettingsCard from '../settings/SettingsCard.vue'
 import SettingsSection from '../settings/SettingsSection.vue'
 
@@ -18,8 +19,6 @@ const { links, status, loading, refresh } = useShareLinks(props.backend)
 onMounted(() => {
   void refresh()
 })
-
-const when = (at: string): string => (at ? new Date(at).toLocaleString() : '—')
 </script>
 
 <template>
@@ -27,6 +26,9 @@ const when = (at: string): string => (at ? new Date(at).toLocaleString() : '—'
     <p class="sl-hint">{{ t('settings.cloud.share.hint') }}</p>
     <p v-if="status === 'unavailable'" class="sl-note" data-notice="unavailable">
       {{ t('settings.cloud.share.unavailable') }}
+    </p>
+    <p v-else-if="status === 'error'" class="sl-note" data-notice="error">
+      {{ t('settings.cloud.share.error') }}
     </p>
     <p v-else-if="status === 'ok' && !links.length" class="sl-note" data-notice="empty">
       {{ t('settings.cloud.share.empty') }}

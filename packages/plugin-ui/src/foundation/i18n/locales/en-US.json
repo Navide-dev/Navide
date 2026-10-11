@@ -6431,6 +6431,9 @@
         "notice-no-key": "This device does not hold the account's sync key yet, so the cloud is closed to it. Pair it with a device that holds the key and the numbers appear here.",
         "notice-not-connected": "Sign in to Navide Cloud to compare this machine with the cloud.",
         "notice-error": "The cloud could not be read.",
+        "row-error": "Could not read this section from the cloud.",
+        "row-no-key": "This device has no sync key yet.",
+        "row-not-connected": "Not connected.",
         "refresh": "Refresh"
       },
       "devices": {
@@ -6454,6 +6457,7 @@
         "creator-agent": "Agent · {pane}",
         "empty": "No share links yet.",
         "unavailable": "Share links are not available in this version yet.",
+        "error": "Share links could not be loaded.",
         "refresh": "Refresh"
       }
     },
