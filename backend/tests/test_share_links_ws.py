@@ -1,0 +1,139 @@
+"""share.* WebSocket handlers over a fake links.* server.
+
+What the UI is promised: the creator gets the URL once, broadcasts carry no
+URL, the list carries titles but no keys, and a server without share links
+answers with its own code (UNKNOWN_TYPE / NOT_CONFIGURED) so the UI can hide
+the feature.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from agent_team_backend import app, share_links, sync_keyring, ws_handlers
+
+from .test_share_links import FakeLinks, _plan
+
+GHP = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.sent: list[dict[str, Any]] = []
+
+    async def send_json(self, payload: dict[str, Any]) -> None:
+        self.sent.append(payload)
+
+    @property
+    def reply(self) -> dict[str, Any]:
+        assert len(self.sent) == 1, self.sent
+        return self.sent[0]
+
+
+@pytest.fixture
+def ring():
+    sync_keyring.ensure_account_key()
+    yield
+    sync_keyring.forget_account_key()
+
+
+@pytest.fixture
+def home(tmp_path: Path, set_home, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "home").mkdir()
+    return set_home(tmp_path / "home")
+
+
+@pytest.fixture
+def server(monkeypatch: pytest.MonkeyPatch) -> FakeLinks:
+    fake = FakeLinks()
+
+    async def links_request(verb: str, payload: dict) -> dict:
+        try:
+            return {"ok": True, "payload": await fake.request(verb, payload)}
+        except share_links.ShareRemoteError as err:
+            return {"ok": False, "error": {"code": err.code, "message": str(err)}}
+
+    monkeypatch.setattr(ws_handlers.server_link, "links_request", links_request)
+    monkeypatch.setattr(share_links, "_http_put", fake.put)
+    monkeypatch.setattr(share_links, "_http_get", fake.get)
+    return fake
+
+
+@pytest.fixture
+def broadcasts(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    sent: list[dict[str, Any]] = []
+
+    async def broadcast(event: dict[str, Any]) -> None:
+        sent.append(event)
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    return sent
+
+
+async def test_create_returns_the_url_once_and_announces_without_it(ring, home, server, broadcasts) -> None:
+    session = FakeSession()
+    path = _plan(home, f"<p>{GHP}</p>")
+    await ws_handlers.share_create(session, "1", "share.create", {"path": str(path)})
+
+    reply = session.reply
+    assert reply["ok"], reply
+    body = reply["payload"]
+    assert body["url"].startswith("https://share.navide.dev/s/" + body["linkId"] + "#k=")
+    assert body["masked"] == [{"line": 2, "category": "github-token", "action": "masked"}]
+    [event] = broadcasts
+    assert event["type"] == "share.created"
+    assert "#k=" not in json.dumps(event) and event["payload"]["linkId"] == body["linkId"]
+
+
+async def test_list_has_titles_and_no_keys(ring, home, server, broadcasts) -> None:
+    await ws_handlers.share_create(FakeSession(), "1", "share.create", {"path": str(_plan(home, "<p/>"))})
+    session = FakeSession()
+    await ws_handlers.share_list(session, "2", "share.list", {})
+    [row] = session.reply["payload"]["links"]
+    assert row["title"] == "Secret Roadmap"
+    assert "#k=" not in json.dumps(session.reply)
+
+
+async def test_copy_link_gives_back_the_creators_url(ring, home, server, broadcasts) -> None:
+    created = FakeSession()
+    await ws_handlers.share_create(created, "1", "share.create", {"path": str(_plan(home, "<p/>"))})
+    session = FakeSession()
+    link_id = created.reply["payload"]["linkId"]
+    await ws_handlers.share_copy_link(session, "2", "share.copy_link", {"linkId": link_id})
+    assert session.reply["payload"]["url"] == created.reply["payload"]["url"]
+
+
+async def test_a_refused_path_says_why(ring, home, server, broadcasts) -> None:
+    key_file = home / ".ssh" / "id_ed25519"
+    key_file.parent.mkdir()
+    key_file.write_text("x")
+    session = FakeSession()
+    await ws_handlers.share_create(session, "1", "share.create", {"path": str(key_file)})
+    error = session.reply["error"]
+    assert error["code"] == "SHARE_REFUSED" and error["details"]["reason"] == "denied_name"
+    assert server.calls == [] and broadcasts == []
+
+
+@pytest.mark.parametrize(
+    ("reply", "code"),
+    [(None, "NOT_CONFIGURED"), ({"ok": False, "error": {"code": "UNKNOWN_TYPE", "message": "x"}}, "UNKNOWN_TYPE")],
+)
+async def test_a_server_without_share_links_answers_with_its_code(monkeypatch, reply, code) -> None:
+    async def links_request(verb: str, payload: dict) -> dict | None:
+        return reply
+
+    monkeypatch.setattr(ws_handlers.server_link, "links_request", links_request)
+    session = FakeSession()
+    await ws_handlers.share_list(session, "1", "share.list", {})
+    assert session.reply["error"]["code"] == code
+
+
+async def test_extend_needs_seconds(server) -> None:
+    session = FakeSession()
+    await ws_handlers.share_extend(session, "1", "share.extend", {"linkId": "ab" * 16, "ttlSeconds": "7d"})
+    assert session.reply["error"]["code"] == "BAD_REQUEST"

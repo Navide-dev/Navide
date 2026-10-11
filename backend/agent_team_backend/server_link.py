@@ -1037,6 +1037,9 @@ class ServerLink:
             # covers the server that cannot send it.
             self._spawn(self._on_account_verified())
             return
+        if msg_type == "links.opened":
+            self._spawn(self._on_link_opened(message.get("payload")))
+            return
         log.debug("navide-server event %r is not wired yet; ignoring it", msg_type)
 
     def sync_engine(self) -> Any:
@@ -1987,6 +1990,38 @@ class ServerLink:
     async def list_devices(self) -> dict[str, Any]:
         """The account's devices as the server knows them, for the sharing view."""
         return await self._carry("devices.list", {})
+
+    # ---- share links ----
+    #
+    # One request each over the authenticated link, in the reply-frame shape
+    # of ``_carry``. The server holds ciphertext, a wrapped key and wrapped
+    # metadata only; encrypting, wrapping and opening are ``share_links``'.
+    # A server without links answers UNKNOWN_TYPE, one without storage
+    # UNSUPPORTED; both come through as they are.
+
+    async def links_request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """``links.<verb>`` with ``payload``, e.g. ``links_request("list", {})``."""
+        return await self._carry(f"links.{verb}", payload)
+
+    async def _on_link_opened(self, payload: Any) -> None:
+        """Somebody opened one of this account's share links."""
+        from . import app
+        from .ipc import make_event
+
+        data = payload if isinstance(payload, dict) else {}
+        link_id = data.get("linkId")
+        if not isinstance(link_id, str) or not link_id:
+            return
+        event = {
+            "linkId": link_id,
+            "openCount": data.get("openCount"),
+            "openedAt": data.get("openedAt"),
+            "newViewer": bool(data.get("newViewer")),
+        }
+        try:
+            await app.broadcast(make_event("share.opened", event))
+        except Exception as err:  # noqa: BLE001 - a notice must not break the link
+            log.warning("announcing a share-link open failed: %s", err)
 
     async def _on_account_verified(self) -> None:
         """The server says this account's address is confirmed."""
@@ -4415,6 +4450,14 @@ async def list_devices() -> dict[str, Any] | None:
     if _link is None:
         return None
     return await _link.list_devices()
+
+
+# Share links: ``links.<verb>`` on the account link. None with no server
+# configured, like everything above; otherwise a reply frame.
+async def links_request(verb: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    if _link is None:
+        return None
+    return await _link.links_request(verb, payload)
 
 
 def roster_changed() -> None:
