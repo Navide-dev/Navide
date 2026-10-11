@@ -6152,7 +6152,7 @@ export class FrontendPluginManager {
       return { opened }
     }
 
-    if (plan.address === 'ui.shareCaps' || plan.address === 'ui.shareCreate') {
+    if (plan.address === 'ui.shareCaps' || plan.address === 'ui.shareCreate' || plan.address === 'ui.shareChatTargets') {
       return this.executeShareCapability(plan, plugin, workspacePath)
     }
 
@@ -7033,8 +7033,10 @@ export class FrontendPluginManager {
         ...(typeof plan.args.ttlSeconds === 'number' ? { ttlSeconds: plan.args.ttlSeconds } : {}),
         ...(typeof plan.args.requireLogin === 'boolean' ? { requireLogin: plan.args.requireLogin } : {}),
         ...(typeof plan.args.sendToChat === 'boolean' ? { sendToChat: plan.args.sendToChat } : {}),
+        ...(typeof plan.args.chatId === 'string' ? { chatId: plan.args.chatId } : {}),
       }
     }
+    if (plan.address === 'ui.shareChatTargets') type = 'channels.share_targets'
     const client = this.ensureBackend()
     if (!client) return { ok: false, code: 'BACKEND_UNAVAILABLE', message: 'backend not connected' }
     const response = await client.send(type, payload, 60_000, {
@@ -7050,6 +7052,20 @@ export class FrontendPluginManager {
       }
     }
     if (type === 'share.caps') return { ok: true }
+    if (type === 'channels.share_targets') {
+      const chats = toPayload(response.payload).chats
+      return {
+        ok: true,
+        chats: Array.isArray(chats)
+          ? chats.flatMap((chat) => {
+              const { chatId, platform, name } = toPayload(chat)
+              return typeof chatId === 'string' && typeof platform === 'string' && typeof name === 'string'
+                ? [{ chatId, platform, name }]
+                : []
+            })
+          : [],
+      }
+    }
     const created = toPayload(response.payload)
     return {
       ok: true,

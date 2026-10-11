@@ -874,7 +874,8 @@ export interface PublicMethodParams extends EditorFilesystemParams, EditorAiPara
   'ui.openInEditor': { path: string; line?: number; column?: number }
   'ui.openPlansWindow': { path: string }
   'ui.shareCaps': Record<string, never>
-  'ui.shareCreate': { path: string; ttlSeconds?: number; requireLogin?: boolean; sendToChat?: boolean }
+  'ui.shareCreate': { path: string; ttlSeconds?: number; requireLogin?: boolean; sendToChat?: boolean; chatId?: string }
+  'ui.shareChatTargets': Record<string, never>
   'ui.openExternal': { url: string }
   'aiCli.listProfiles': { terminalView?: boolean }
   'aiCli.startSession': { profileId: string; requestId?: string; cols: number; rows: number; yolo?: boolean; persistView?: boolean }
@@ -924,6 +925,9 @@ export interface PublicMethodResults extends EditorFilesystemResults, EditorAiRe
   'ui.shareCreate':
     | { ok: true; link: { linkId: string; url: string; expiresAt: string; masked: Array<{ line: number; category: string; action: string }> } }
     | { ok: false; code: string; message: string; reason?: string }
+  'ui.shareChatTargets':
+    | { ok: true; chats: Array<{ chatId: string; platform: string; name: string }> }
+    | { ok: false; code: string; message: string }
   'ui.openExternal': { opened: boolean }
   'aiCli.listProfiles': { profiles: Array<{ id: string; label: string; fullScreenTui?: boolean; bracketedPaste?: boolean; shiftEnterSequence?: string }> }
   'aiCli.startSession': { sessionId: string }

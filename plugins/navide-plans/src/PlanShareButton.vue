@@ -3,12 +3,15 @@
 // parent mounts this only after `ui.shareCaps` answered `{ ok: true }`; the
 // Host resolves `path` inside the plans root and answers `ui.shareCreate`
 // with `{ ok: true, link }` or `{ ok: false, code, message, reason? }`.
-import { ref } from 'vue'
+// Sending to a chat is opt-in and names one bound direct-message chat that
+// `ui.shareChatTargets` listed; with none bound, nothing can be sent.
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { callCapability } from './backend'
 
 interface MaskedFinding { line: number; category: string; action: string }
+interface ChatTarget { chatId: string; platform: string; name: string }
 interface CreatedLink { linkId: string; url: string; expiresAt: string; masked: MaskedFinding[] }
 type CreateResult =
   | { ok: true; link: CreatedLink }
@@ -23,7 +26,9 @@ const TTL_DAYS = [1, 3, 7, 30] as const
 const open = ref(false)
 const ttlDays = ref('7')
 const requireLogin = ref(false)
-const sendToChat = ref(true)
+const sendToChat = ref(false)
+const chats = ref<ChatTarget[] | null>(null)
+const chatId = ref('')
 const creating = ref(false)
 const link = ref<CreatedLink | null>(null)
 const errorText = ref('')
@@ -31,7 +36,9 @@ const errorText = ref('')
 function openDialog(): void {
   ttlDays.value = '7'
   requireLogin.value = false
-  sendToChat.value = true
+  sendToChat.value = false
+  chats.value = null
+  chatId.value = ''
   link.value = null
   errorText.value = ''
   open.value = true
@@ -54,8 +61,36 @@ function describeFailure(result: { code: string; message?: string; reason?: stri
   return t('plans.share.failed', { code: result.code, message })
 }
 
+const canCreate = computed(() =>
+  !creating.value && (!sendToChat.value || (chats.value ?? []).some(chat => chat.chatId === chatId.value)))
+
+watch(sendToChat, (checked) => {
+  if (checked && chats.value === null) void loadChats()
+})
+
+async function loadChats(): Promise<void> {
+  try {
+    const result = await callCapability('ui', 'shareChatTargets', {}) as
+      | { ok: true; chats: ChatTarget[] }
+      | { ok: false; code: string; message?: string }
+      | null
+    if (result?.ok === true) {
+      chats.value = result.chats
+      return
+    }
+    chats.value = []
+    errorText.value = t('plans.share.chat-targets-failed', { code: result?.code ?? 'INTERNAL_ERROR', message: result?.message ?? '' })
+  } catch (cause) {
+    chats.value = []
+    errorText.value = t('plans.share.chat-targets-failed', {
+      code: 'INTERNAL_ERROR',
+      message: cause instanceof Error ? cause.message : String(cause),
+    })
+  }
+}
+
 async function create(): Promise<void> {
-  if (creating.value) return
+  if (!canCreate.value) return
   creating.value = true
   errorText.value = ''
   try {
@@ -64,6 +99,7 @@ async function create(): Promise<void> {
       ttlSeconds: Number(ttlDays.value) * 86400,
       requireLogin: requireLogin.value,
       sendToChat: sendToChat.value,
+      ...(sendToChat.value ? { chatId: chatId.value } : {}),
     }) as CreateResult | null
     if (result?.ok === true) link.value = result.link
     else errorText.value = describeFailure(result ?? { code: 'INTERNAL_ERROR' })
@@ -132,6 +168,17 @@ function expiryText(value: string): string {
               <span>{{ t('plans.share.send-to-chat') }}</span>
             </label>
             <p class="psb-muted psb-note" data-test="plan-share-chat-note">{{ t('plans.share.send-to-chat-note') }}</p>
+            <template v-if="sendToChat">
+              <p v-if="chats === null" class="psb-muted">{{ t('plans.share.chat-loading') }}</p>
+              <p v-else-if="!chats.length" class="psb-muted" data-test="plan-share-chat-empty">{{ t('plans.share.chat-none') }}</p>
+              <label v-else class="psb-row">
+                <span>{{ t('plans.share.chat-target') }}</span>
+                <select v-model="chatId" data-test="plan-share-chat-target" :disabled="creating">
+                  <option value="" disabled>{{ t('plans.share.chat-pick') }}</option>
+                  <option v-for="chat in chats" :key="chat.chatId" :value="chat.chatId">{{ chat.platform }} · {{ chat.name }}</option>
+                </select>
+              </label>
+            </template>
           </template>
           <template v-else>
             <div class="psb-row psb-link">
@@ -157,7 +204,7 @@ function expiryText(value: string): string {
             class="psb-primary"
             type="button"
             data-test="plan-share-create"
-            :disabled="creating"
+            :disabled="!canCreate"
             @click="void create()"
           >{{ creating ? t('plans.share.creating') : t('plans.share.create') }}</button>
         </footer>

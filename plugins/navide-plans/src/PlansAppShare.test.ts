@@ -12,6 +12,7 @@ type CapabilityResponse = { reqId: string; ok: boolean; result?: unknown; error?
 const state = vi.hoisted(() => ({
   shareCaps: null as null | (() => Promise<CapabilityResponse>),
   shareCreate: null as null | ((args: Record<string, unknown>) => Promise<CapabilityResponse>),
+  shareChatTargets: null as null | (() => Promise<CapabilityResponse>),
   capabilityCalls: [] as Array<{ address: string; args: Record<string, unknown> }>,
   loadTheme: vi.fn(),
   toast: vi.fn(),
@@ -74,6 +75,7 @@ beforeEach(() => {
   state.capabilityCalls.length = 0
   state.shareCaps = null
   state.shareCreate = null
+  state.shareChatTargets = null
 
   vi.stubGlobal('nav', {
     ready: vi.fn(),
@@ -84,6 +86,7 @@ beforeEach(() => {
       if (address === 'storage.get') return { reqId: 'storage', ok: true, result: { found: false } }
       if (address === 'ui.shareCaps' && state.shareCaps) return state.shareCaps()
       if (address === 'ui.shareCreate' && state.shareCreate) return state.shareCreate(args)
+      if (address === 'ui.shareChatTargets' && state.shareChatTargets) return state.shareChatTargets()
       return { reqId: 'capability', ok: true, result: { opened: true } }
     },
     on: vi.fn(() => vi.fn()),
@@ -197,7 +200,7 @@ describe('Plan view — share link', () => {
     await flushPromises()
 
     const create = state.capabilityCalls.find(call => call.address === 'ui.shareCreate')
-    expect(create?.args).toEqual({ path: planPath, ttlSeconds: 3 * 86400, requireLogin: true, sendToChat: true })
+    expect(create?.args).toEqual({ path: planPath, ttlSeconds: 3 * 86400, requireLogin: true, sendToChat: false })
     const url = document.querySelector('[data-test="plan-share-url"]') as HTMLInputElement
     expect(url.value).toBe('https://share.example/l/l1#k')
     expect(document.querySelector('[data-test="plan-share-copy"]')).not.toBeNull()
@@ -206,25 +209,68 @@ describe('Plan view — share link', () => {
     expect(masked).toContain('github-token')
   })
 
-  it('sends sendToChat true by default and false once unchecked', async () => {
+  it('leaves send-to-chat unchecked and needs an explicit chat before sending', async () => {
     capsOk()
+    state.shareChatTargets = async () => ({
+      reqId: 'targets',
+      ok: true,
+      result: { ok: true, chats: [
+        { chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' },
+        { chatId: 'dc:222', platform: 'discord', name: 'Ops DM' },
+      ] },
+    })
     state.shareCreate = async () => ({ reqId: 'create', ok: true, result: { ok: false, code: 'NO_SYNC_KEY', message: 'no key' } })
     const view = await mountPlans()
     await view.find('[data-test="plan-share-btn"]').trigger('click')
     await nextTick()
     const chat = document.querySelector('[data-test="plan-share-chat"]') as HTMLInputElement
-    expect(chat.checked).toBe(true)
-    expect(document.querySelector('[data-test="plan-share-chat-note"]')).not.toBeNull()
-    ;(document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement).click()
-    await flushPromises()
-    chat.checked = false
+    expect(chat.checked).toBe(false)
+    expect(document.querySelector('[data-test="plan-share-chat-target"]')).toBeNull()
+
+    chat.checked = true
     chat.dispatchEvent(new Event('change'))
+    await flushPromises()
+    const target = document.querySelector('[data-test="plan-share-chat-target"]') as HTMLSelectElement
+    expect(target).not.toBeNull()
+    const labels = Array.from(target.options).filter(option => option.value).map(option => option.textContent ?? '')
+    expect(labels).toHaveLength(2)
+    expect(labels[0]).toContain('telegram')
+    expect(labels[0]).toContain('Neil DM')
+    const create = document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement
+    expect(create.disabled).toBe(true)
+    create.click()
+    await flushPromises()
+    expect(state.capabilityCalls.some(call => call.address === 'ui.shareCreate')).toBe(false)
+
+    target.value = 'dc:222'
+    target.dispatchEvent(new Event('change'))
     await nextTick()
-    ;(document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement).click()
+    expect(create.disabled).toBe(false)
+    create.click()
+    await flushPromises()
+    const sent = state.capabilityCalls.filter(call => call.address === 'ui.shareCreate')
+    expect(sent).toHaveLength(1)
+    expect(sent[0].args).toMatchObject({ sendToChat: true, chatId: 'dc:222' })
+  })
+
+  it('cannot send to a chat when no direct-message chat is bound', async () => {
+    capsOk()
+    state.shareChatTargets = async () => ({ reqId: 'targets', ok: true, result: { ok: true, chats: [] } })
+    const view = await mountPlans()
+    await view.find('[data-test="plan-share-btn"]').trigger('click')
+    await nextTick()
+    const chat = document.querySelector('[data-test="plan-share-chat"]') as HTMLInputElement
+    chat.checked = true
+    chat.dispatchEvent(new Event('change'))
     await flushPromises()
 
-    const creates = state.capabilityCalls.filter(call => call.address === 'ui.shareCreate')
-    expect(creates.map(call => call.args.sendToChat)).toEqual([true, false])
+    expect(document.querySelector('[data-test="plan-share-chat-empty"]')).not.toBeNull()
+    expect(document.querySelector('[data-test="plan-share-chat-target"]')).toBeNull()
+    const create = document.querySelector('[data-test="plan-share-create"]') as HTMLButtonElement
+    expect(create.disabled).toBe(true)
+    create.click()
+    await flushPromises()
+    expect(state.capabilityCalls.some(call => call.address === 'ui.shareCreate')).toBe(false)
   })
 
   it('shows the refusal reason when the share is refused', async () => {

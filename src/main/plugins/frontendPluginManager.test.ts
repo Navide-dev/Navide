@@ -11814,7 +11814,7 @@ describe('first-party Git private bridge', () => {
       pane: '', agent: '', masked: [{ line: 132, category: 'github-token', action: 'masked' }],
     }
     reply = { ok: true, payload: link, error: null }
-    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html', ttlSeconds: 259200, requireLogin: true, sendToChat: false })).toEqual({
+    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html', ttlSeconds: 259200, requireLogin: true, sendToChat: true, chatId: 'tg:111' })).toEqual({
       reqId: 'shareCreate',
       ok: true,
       result: {
@@ -11827,7 +11827,7 @@ describe('first-party Git private bridge', () => {
       { type: 'share.caps', payload: {} },
       {
         type: 'share.create',
-        payload: { path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan', ttlSeconds: 259200, requireLogin: true, sendToChat: false },
+        payload: { path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan', ttlSeconds: 259200, requireLogin: true, sendToChat: true, chatId: 'tg:111' },
       },
     ])
 
@@ -11840,6 +11840,16 @@ describe('first-party Git private bridge', () => {
     const outside = await call('shareCreate', { path: '../secrets.html' }) as { ok: boolean }
     expect(outside.ok).toBe(false)
     expect(sent).toHaveLength(4)
+
+    reply = { ok: true, payload: { ok: true, chats: [{ chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' }] }, error: null }
+    expect(await call('shareChatTargets', {})).toEqual({
+      reqId: 'shareChatTargets', ok: true, result: { ok: true, chats: [{ chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' }] },
+    })
+    expect(sent[4]).toEqual({ type: 'channels.share_targets', payload: {} })
+    reply = { ok: false, payload: null, error: { code: 'UNKNOWN_TYPE', message: 'old backend' } }
+    expect(await call('shareChatTargets', {})).toEqual({
+      reqId: 'shareChatTargets', ok: true, result: { ok: false, code: 'UNKNOWN_TYPE', message: 'old backend' },
+    })
   })
 
   it('routes ui.openPlansWindow for nested repos strictly with .git directory and blocks .git file/symlink escape', async () => {

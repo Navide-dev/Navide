@@ -148,11 +148,12 @@ function validatePlansWindowRequest(value: unknown): value is Record<string, unk
 }
 
 function validateShareCreateRequest(value: unknown): value is Record<string, unknown> {
-  if (!requestWithString('path', value, ['ttlSeconds', 'requireLogin', 'sendToChat'])) return false
-  const { ttlSeconds, requireLogin, sendToChat } = value as Record<string, unknown>
+  if (!requestWithString('path', value, ['ttlSeconds', 'requireLogin', 'sendToChat', 'chatId'])) return false
+  const { ttlSeconds, requireLogin, sendToChat, chatId } = value as Record<string, unknown>
   return (ttlSeconds === undefined || (Number.isInteger(ttlSeconds) && (ttlSeconds as number) > 0)) &&
     (requireLogin === undefined || typeof requireLogin === 'boolean') &&
-    (sendToChat === undefined || typeof sendToChat === 'boolean')
+    (sendToChat === undefined || typeof sendToChat === 'boolean') &&
+    (chatId === undefined || nonEmptyString(chatId))
 }
 
 function validateExternalRequest(value: unknown): value is Record<string, unknown> {
@@ -359,6 +360,7 @@ export const PUBLIC_CAPABILITY_CATALOG: Readonly<Record<string, PublicCapability
   // Share links: the Plans view asks whether they work, then shares one plan.
   'ui.shareCaps': systemMethod('ui.shareCaps', 'ui', validateEmptyRequest, 'firstParty'),
   'ui.shareCreate': systemMethod('ui.shareCreate', 'ui', validateShareCreateRequest, 'firstParty'),
+  'ui.shareChatTargets': systemMethod('ui.shareChatTargets', 'ui', validateEmptyRequest, 'firstParty'),
   'ui.openExternal': {
     ...systemMethod('ui.openExternal', 'ui', validateExternalRequest),
     requiresUserGesture: true,
