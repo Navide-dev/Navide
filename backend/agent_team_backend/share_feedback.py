@@ -30,6 +30,7 @@ import base64
 import hashlib
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,8 @@ _SEEN_FILE = "share-feedback-seen.json"
 _SEEN_MAX = 2000
 _APPROVABLE = ("draft", "in-review")
 _MAX_TEXT = 4000
+#: The server's feedback ids: 16 random bytes in hex.
+_FEEDBACK_ID_RE = re.compile(r"[0-9a-f]{32}")
 #: Failures worth retrying on the next drain: the link is down (the local
 #: link-state codes), or this machine has no account ring yet. Anything else
 #: will fail the same way forever, so it is refused and acked rather than
@@ -191,7 +194,7 @@ async def handle_event(client: share_links.LinksClient, item: dict[str, Any]) ->
     machine yet) leaves it unacked so the next drain retries it; a link that
     is gone or an id that does not parse is refused and acked (B7-3)."""
     feedback_id = item.get("feedbackId")
-    if not isinstance(feedback_id, str) or not feedback_id:
+    if not isinstance(feedback_id, str) or not _FEEDBACK_ID_RE.fullmatch(feedback_id):
         return False
     if feedback_id not in _seen():
         try:

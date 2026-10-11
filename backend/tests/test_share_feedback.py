@@ -359,3 +359,15 @@ async def test_a_path_outside_the_plans_folder_is_refused_before_it_is_read(ring
     await share_feedback.drain(client)
     assert read == []
     assert broadcasts[-1]["payload"]["reason"] == "not-a-plan"
+
+
+@pytest.mark.parametrize("fid", ["Z" * 200_000, "F1" * 16, "f1" * 15, "", None])
+async def test_a_feedback_id_that_is_not_the_servers_shape_is_ignored(ring, home, broadcasts, fid) -> None:
+    """B7-5: a 200 000-character id was written into the seen file as is."""
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    item = _item(link, {"v": 1, "action": "note", "text": "x", "contentSha256": sha, "version": 1})
+    item["feedbackId"] = fid
+    assert await share_feedback.handle_event(client, item) is False
+    assert not share_feedback._seen_path().exists()
+    assert broadcasts == []
