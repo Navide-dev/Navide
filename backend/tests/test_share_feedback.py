@@ -361,7 +361,12 @@ async def test_a_path_outside_the_plans_folder_is_refused_before_it_is_read(ring
     assert broadcasts[-1]["payload"]["reason"] == "not-a-plan"
 
 
-@pytest.mark.parametrize("fid", ["Z" * 200_000, "F1" * 16, "f1" * 15, "", None])
+@pytest.mark.parametrize(
+    "fid",
+    ["Z" * 200_000, "F1" * 16, "f1" * 15, "", None],
+    # A 200 000-character test id is a path too long for Windows' tmp_path.
+    ids=["huge", "upper-hex", "short", "empty", "none"],
+)
 async def test_a_feedback_id_that_is_not_the_servers_shape_is_ignored(ring, home, broadcasts, fid) -> None:
     """B7-5: a 200 000-character id was written into the seen file as is."""
     client = FeedbackLinks()
