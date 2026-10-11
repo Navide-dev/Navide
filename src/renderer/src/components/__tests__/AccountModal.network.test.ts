@@ -317,14 +317,26 @@ describe('account modal — your network', () => {
     }
   })
 
-  it('tells someone whose pairing record is full to unpair before blocking', () => {
-    // KC3-1: a machine paired with many devices before the reserve existed
-    // cannot store a block; the way out is to unpair that device first.
-    expect(MODAL).toMatch(/code === 'p2p-trust-store-full'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-full'\)/)
-    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
-      const messages = i18n.global.getLocaleMessage(locale) as Record<string, any>
-      expect(messages?.settings?.p2p?.trust?.['block-full'], locale).toBeTruthy()
+  it('says a block whose local copy was not saved is still in force', () => {
+    // Fail closed: the server keeps the block and this machine refuses the
+    // device until it restarts; only the saved copy is missing. KC3-1: a full
+    // pairing record is the usual reason, and unpairing first makes room.
+    for (const fn of ['async function decide(', 'async function blockPending(']) {
+      const body = MODAL.slice(MODAL.indexOf(fn), MODAL.indexOf('\n}\n', MODAL.indexOf(fn)))
+      expect(body).toMatch(/code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-not-saved-full'\)/)
+      expect(body).toMatch(/code === 'P2P_BLOCK_NOT_SAVED_LOCALLY'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-not-saved'\)/)
+      // Review F2: a block refused before it reached the server (its policy
+      // sequence could not be reserved) keeps saying nothing was blocked.
+      expect(body).toMatch(/code === 'p2p-trust-store-full'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-full'\)/)
     }
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      const trust = (i18n.global.getLocaleMessage(locale) as Record<string, any>)?.settings?.p2p?.trust
+      for (const key of ['block-full', 'block-not-saved', 'block-not-saved-full']) expect(trust?.[key], `${locale} ${key}`).toBeTruthy()
+    }
+    const zh = (i18n.global.getLocaleMessage('zh-TW') as Record<string, any>).settings.p2p.trust
+    expect(zh['block-not-saved-full']).toContain('已在伺服器封鎖')
+    expect(zh['block-not-saved']).toContain('已在伺服器封鎖')
+    expect(zh['block-full']).not.toContain('已在伺服器封鎖')
   })
 
   it('reads the trust state from the snapshot it already polls', () => {
