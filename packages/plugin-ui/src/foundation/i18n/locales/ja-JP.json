@@ -986,6 +986,16 @@
     "file-history-blame": "ファイル履歴 + blame",
     "open-diff-in-editor": "差分をエディターで開く"
   },
+  "share": {
+    "notice": {
+      "created-user": "共有リンクを作成しました（{id}）",
+      "created-agent": "{pane} ペインが共有リンクを作成しました（{id}）",
+      "masked": "アップロード前に機密らしき値を {count} か所マスクしました",
+      "opened-first": "共有リンク（{id}）が開かれました",
+      "opened-new-viewer": "共有リンク（{id}）が新しい閲覧者に開かれました",
+      "open-count": "これまでに {count} 回開かれました"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin、Claude mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲を一覧にします。Navide は読み取るだけで、ここでインストール・有効化・変更を行うことはありません。Navide プラグインは専用のページにあります。",

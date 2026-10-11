@@ -22,7 +22,7 @@ import type { EvolveRun } from './useEvolve'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve'
+export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -455,6 +455,51 @@ function noteEvolveNotice(notice: EvolveNotice, at: number = Date.now()): void {
   evolveNotices.value = [{ notice, at }, ...evolveNotices.value].slice(0, MAX_EVOLVE_NOTICES)
 }
 
+/** A share-link event worth telling the user (see useShareNotices): a link
+ *  was created, or opened for the first time or by a new viewer. Never the
+ *  URL — the key in it belongs to whoever the creator gave it to. */
+export interface ShareNotice {
+  kind: 'created' | 'opened'
+  linkId: string
+  createdBy?: 'user' | 'agent'
+  pane?: string
+  agent?: string
+  maskedTotal?: number
+  openCount?: number
+  newViewer?: boolean
+}
+
+/** Share notices this window heard, newest first. Not persisted: the Share
+ *  tab in Settings is the record. */
+const shareNotices = ref<{ notice: ShareNotice; at: number }[]>([])
+const MAX_SHARE_NOTICES = 50
+
+function shareItems(): Announcement[] {
+  const t = i18n.global.t
+  return shareNotices.value.map(({ notice, at }) => {
+    const short = notice.linkId.slice(0, 6)
+    const highlights: string[] = []
+    let title: string
+    if (notice.kind === 'created') {
+      title =
+        notice.createdBy === 'agent'
+          ? t('share.notice.created-agent', { pane: notice.pane || '—', id: short })
+          : t('share.notice.created-user', { id: short })
+      if (notice.maskedTotal) highlights.push(t('share.notice.masked', { count: notice.maskedTotal }))
+    } else {
+      title = notice.newViewer ? t('share.notice.opened-new-viewer', { id: short }) : t('share.notice.opened-first', { id: short })
+      highlights.push(t('share.notice.open-count', { count: notice.openCount ?? 0 }))
+    }
+    return { id: `share:${notice.kind}:${notice.linkId}:${at}`, kind: 'share' as const, title, highlights, createdAt: at, read: false }
+  })
+}
+
+/** Record a share notice. */
+function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
+  if (!notice?.linkId) return
+  shareNotices.value = [{ notice, at }, ...shareNotices.value].slice(0, MAX_SHARE_NOTICES)
+}
+
 /** Live quota incidents by id, newest update first when listed. Not
  *  persisted: the backend owns the incidents and re-publishes them on
  *  connect, and a stale copy in ui_settings would offer buttons for an epoch
@@ -774,6 +819,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const locale = i18n.global.locale.value
   const seen = new Set(readIds.value)
   const merged = [
+    ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
     ...backendItems(),
@@ -844,6 +890,11 @@ export function __resetQuotaAnnouncementsForTest(): void {
   quotaReadMarks.value = new Map()
 }
 
+/** Test-only: forget every share notice (the module is a singleton). */
+export function __resetShareAnnouncementsForTest(): void {
+  shareNotices.value = []
+}
+
 /** Test-only: forget every evolve notice (the module is a singleton). */
 export function __resetEvolveAnnouncementsForTest(): void {
   evolveNotices.value = []
@@ -860,6 +911,7 @@ export function useAnnouncements() {
     noteBackendUpgrade,
     noteSchedulerDisabled,
     noteEvolveNotice,
+    noteShareNotice,
     noteQuotaIncident,
     invalidateQuotaActions,
     dismissQuotaIncident,

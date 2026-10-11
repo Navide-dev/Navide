@@ -986,6 +986,16 @@
       "file-history-blame": "檔案歷史與逐行歸屬",
       "open-diff-in-editor": "在編輯器開啟這個差異"
   },
+  "share": {
+    "notice": {
+      "created-user": "你建立了分享連結（{id}）",
+      "created-agent": "{pane} pane 建立了分享連結（{id}）",
+      "masked": "上傳前遮罩了 {count} 處疑似機密",
+      "opened-first": "你的分享連結（{id}）被開啟了",
+      "opened-new-viewer": "你的分享連結（{id}）被新的檢視者開啟",
+      "open-count": "目前共開啟 {count} 次"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "列出每個 AI CLI 自己安裝的 CLI 擴充（Claude plugin、Claude mod、Codex hook、Pi extension……），以及它們能碰到什麼。Navide 只讀取，這裡不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",

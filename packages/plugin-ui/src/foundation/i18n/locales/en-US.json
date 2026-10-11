@@ -986,6 +986,16 @@
       "file-history-blame": "File history + blame",
       "open-diff-in-editor": "Open diff in editor"
   },
+  "share": {
+    "notice": {
+      "created-user": "You shared a link ({id})",
+      "created-agent": "Pane {pane} shared a link ({id})",
+      "masked": "{count} possible secrets were masked before upload",
+      "opened-first": "Your share link ({id}) was opened",
+      "opened-new-viewer": "Your share link ({id}) was opened by a new viewer",
+      "open-count": "Opened {count} times so far"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "Each AI CLI's own CLI extensions — Claude plugins and mods, Codex hooks, Pi extensions and the rest — and what they can reach. Navide only reads them: nothing here installs, enables or changes anything. Navide plugins have their own page.",
