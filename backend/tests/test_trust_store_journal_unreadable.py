@@ -13,7 +13,6 @@ import errno
 import pytest
 
 from agent_team_backend import trust_store
-from agent_team_backend.osplat import secret_files
 
 
 def _restart() -> None:
@@ -38,7 +37,7 @@ def _seed() -> None:
 
 @pytest.fixture
 def first_read_fails(monkeypatch):
-    real = secret_files.read_private
+    real = trust_store._read_journal_bytes
     calls = {"n": 0}
 
     def flaky(path):
@@ -47,7 +46,7 @@ def first_read_fails(monkeypatch):
             raise PermissionError(errno.EACCES, "sharing violation")
         return real(path)
 
-    monkeypatch.setattr(secret_files, "read_private", flaky)
+    monkeypatch.setattr(trust_store, "_read_journal_bytes", flaky)
 
 
 def test_a_journal_that_could_not_be_read_is_not_overwritten(first_read_fails):
@@ -69,7 +68,7 @@ def test_a_journal_that_stays_unreadable_is_left_alone(monkeypatch):
     def refuse(_path):
         raise PermissionError(errno.EACCES, "denied")
 
-    monkeypatch.setattr(secret_files, "read_private", refuse)
+    monkeypatch.setattr(trust_store, "_read_journal_bytes", refuse)
     trust_store.load()
     trust_store.note_remote_command("d9", device_name="n", workspace="w", pane_name="p")
     trust_store.note_seen_message("new")

@@ -58,6 +58,8 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
+import tempfile
 import sys
 import threading
 import time
@@ -84,6 +86,9 @@ INITIALISED_KEY = "p2p.trust.initialised"
 #: the file costs the notices and, for one TTL, replay protection — the same
 #: price ``_parse`` already accepts for a document that predates the ledger.
 JOURNAL_FILENAME = "device-trust-journal.json"
+#: Its own owner-only directory, so the permission that guards it does not
+#: depend on how the rest of the data dir was created.
+JOURNAL_DIRNAME = "device-trust"
 _JOURNAL_KEYS = ("notices", "seenMessages")
 
 STATE_VERSION = 1
@@ -318,7 +323,57 @@ def _core_of(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def _journal_path() -> Path:
-    return app_data_dir() / JOURNAL_FILENAME
+    return app_data_dir() / JOURNAL_DIRNAME / JOURNAL_FILENAME
+
+
+def _read_journal_bytes(path: Path) -> bytes:
+    """The journal's bytes, never through a link. Raises FileNotFoundError when
+    there is none, OSError when it cannot be read."""
+    if os.name == "nt":
+        return secret_files.read_private(path)
+    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        chunks = []
+        while chunk := os.read(fd, 65536):
+            chunks.append(chunk)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def _write_journal_bytes(path: Path, data: bytes) -> None:
+    """Replace the journal durably: owner-only directory and file, every byte
+    written, file and directory fsynced, then an atomic rename — which replaces
+    a link at that path rather than writing through it.
+
+    Not ``secret_files.write_private``: that writer is shared with CLI account
+    slots and is left exactly as it was, and it writes once without fsync, so
+    a power cut could leave an empty journal behind.
+    """
+    if os.name == "nt":
+        secret_files.write_private(path, data)
+        return
+    directory = path.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chmod(directory, 0o700)
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    dir_fd = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
 
 
 #: Set while the journal exists but cannot be read. No journal is written until
@@ -346,7 +401,8 @@ def _read_journal() -> dict[str, Any] | None:
     global _journal_blocked, _journal_problem
     path = _journal_path()
     try:
-        raw = secret_files.read_private(path)
+        # A link is not a journal: set aside below like any other non-journal.
+        raw = b"" if path.is_symlink() else _read_journal_bytes(path)
     except FileNotFoundError:
         return {}
     except OSError as err:
@@ -452,7 +508,7 @@ def _write(state: dict[str, Any]) -> None:
     )
     if journal != _last_journal:
         try:
-            secret_files.write_private(_journal_path(), journal.encode("utf-8"))
+            _write_journal_bytes(_journal_path(), journal.encode("utf-8"))
         except OSError as err:
             # The vault half — the part that decides trust — is already saved.
             log.warning("the device trust journal could not be saved (%s)", err)
