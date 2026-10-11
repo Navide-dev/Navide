@@ -1232,6 +1232,7 @@ class ChannelManager:
         whole text when ``body`` is its summary. A reply past ``LONG_REPLY_MAX_CHUNKS``
         chunks, or a summary that left text out, goes as a preview with the whole text
         attached as a file, where the platform takes files."""
+        body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
@@ -1258,7 +1259,7 @@ class ChannelManager:
             try:
                 ids = await self.mirror.send(pending.loc, chunk)
             except Exception as exc:  # noqa: BLE001
-                log.warning("channels: reply to %s failed: %s", pending.loc.key(), exc)
+                log.warning("channels: reply to %s failed: %s", pending.loc.key(), share_cmds.mask_links(str(exc)))
                 return False
             if pending.owner:
                 self.mirror.owners.remember(pending.loc.key(), ids, pending.owner)
@@ -1730,8 +1731,8 @@ class ChannelManager:
                         fd = os.open(result.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
                         with os.fdopen(fd, "rb") as fh:
                             # The adapter reads the PDF before the context removes it.
-                            return await adapter.send_file(loc, fh, f"{path.stem}.pdf", caption=report.caption(
-                                card.sent_as("pdf", result.size, result.pages), lang)), card.title
+                            return await adapter.send_file(loc, fh, f"{path.stem}.pdf", caption=self._caption_for(
+                                loc, report.caption(card.sent_as("pdf", result.size, result.pages), lang))), card.title
             opened.fh.seek(0)
             card = card.sent_as(kind, opened.size, failure=failure)
         else:
@@ -1741,7 +1742,8 @@ class ChannelManager:
                                   limit=media.human_size(limit)))
             return [], card.title
         # The adapter reads the file already open: a swap after the check cannot change it.
-        return await adapter.send_file(loc, opened.fh, path.name, caption=report.caption(card, lang)), card.title
+        return await adapter.send_file(loc, opened.fh, path.name,
+                                       caption=self._caption_for(loc, report.caption(card, lang))), card.title
 
     def _quote_trusted(self, msg: InboundMessage) -> bool:
         """The replied-to message may be quoted into the pane (see ``_with_reply_quote``)."""
@@ -1994,12 +1996,26 @@ class ChannelManager:
         return await self._share_revoke(msg, lang, link)
 
     def _chat_kind(self, b: Binding) -> str:
+        return self._kind_at(b.location())
+
+    def _kind_at(self, loc: Location) -> str:
         """"direct" or "group" as the chat was remembered; "" when never seen."""
-        adapter = self._adapters.get((b.platform, b.account))
+        adapter = self._adapters.get((loc.platform, loc.account))
         if adapter is None:
             return ""
-        return next((str(c["kind"]) for c in self.store.chats(b.platform, _bot_key(adapter))
-                     if c["chat_id"] == b.chat_id), "")
+        return next((str(c["kind"]) for c in self.store.chats(loc.platform, _bot_key(adapter))
+                     if c["chat_id"] == loc.chat_id), "")
+
+    def _for_chat(self, loc: Location, text: str) -> str:
+        """``text`` as ``loc`` may see it: a share link whole only in a known direct chat,
+        cut to its first characters (key dropped) anywhere else, unknown chats included."""
+        if "/s/" not in text or self._kind_at(loc) == "direct":
+            return text
+        return share_cmds.mask_links(text)
+
+    def _caption_for(self, loc: Location, card: report.Caption) -> report.Caption:
+        return report.Caption(self._for_chat(loc, card.title), self._for_chat(loc, card.summary),
+                              self._for_chat(loc, card.info))
 
     def _share_targets(self, pane_id: str) -> list[tuple[Location, bool]]:
         """(chat, is direct) for a share notice: the creating pane's chat, else every
@@ -2017,7 +2033,8 @@ class ChannelManager:
         try:
             await self.mirror.send(loc, text)
         except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
-            log.warning("channels: a share-link notice to %s failed: %s", loc.platform, exc)
+            log.warning("channels: a share-link notice to %s failed: %s", loc.platform,
+                        share_cmds.mask_links(str(exc)))
 
     async def notify_share_created(self, link: dict[str, Any]) -> None:
         lang = prompt_skills.language(await self._ui_settings())
@@ -2286,7 +2303,7 @@ class ChannelManager:
             return
         text = f"{request.message_text}\n\n{note}" if request.message_text else note
         try:
-            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(text))
+            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(self._for_chat(request.loc, text)))
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
 

@@ -32,6 +32,12 @@ MAX_TOKENS = 2000
 
 _CALLBACK_RE = re.compile(
     rf"^nv3:r:([{quick_menu.TOKEN_ALPHABET}]{{{quick_menu.TOKEN_LENGTH}}})$")
+# A share link (share_links.link_url): any share.navide.dev/s/<id>, or another host's
+# /s/<id> when it carries the #k= key. Group 1 is everything up to the id, group 2
+# the id's first SHORT_LEN characters.
+_LINK_RE = re.compile(
+    r"(https?://share\.navide\.dev/s/|https?://[^\s/]+/s/(?=[A-Za-z0-9_-]{22,64}#k=))"
+    r"([A-Za-z0-9_-]{6})[A-Za-z0-9_-]{16,58}(?:#k=[A-Za-z0-9_-]*)?")
 
 
 def parse_command(body: str, identity: str = "") -> tuple[str, str] | None:
@@ -51,6 +57,12 @@ def parse_command(body: str, identity: str = "") -> tuple[str, str] | None:
     if head == "/revoke":
         return ("revoke", arg)
     return None
+
+
+def mask_links(text: str) -> str:
+    """``text`` with every share link cut to its first characters and its key dropped,
+    for anywhere but a known direct chat (and for logs)."""
+    return _LINK_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}…", text)
 
 
 def parse_callback(data: str) -> str | None:
@@ -182,7 +194,7 @@ async def notify_link_created(link: dict[str, Any]) -> None:
         if manager is not None:
             await manager.notify_share_created(link)
     except Exception as exc:  # noqa: BLE001 — a notice must not break creating the link
-        log.warning("channels: the share-link created notice failed: %s", exc)
+        log.warning("channels: the share-link created notice failed: %s", mask_links(str(exc)))
 
 
 async def notify_link_opened(event: dict[str, Any]) -> None:
@@ -192,4 +204,4 @@ async def notify_link_opened(event: dict[str, Any]) -> None:
         if manager is not None:
             await manager.notify_share_opened(event)
     except Exception as exc:  # noqa: BLE001 — a notice must not break the link
-        log.warning("channels: the share-link opened notice failed: %s", exc)
+        log.warning("channels: the share-link opened notice failed: %s", mask_links(str(exc)))
