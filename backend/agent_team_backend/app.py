@@ -2322,6 +2322,10 @@ async def _start_log_watcher() -> None:
     # feature "<cli>.hooks": announced when it changes a file, skipped when the
     # user turned it off or deleted the hooks by hand.
     convenience_wiring.remember_loop(asyncio.get_running_loop())
+    # Copilot's hooks ride on the panes Navide starts instead (copilot_hooks).
+    from . import copilot_hooks
+
+    convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
     convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.

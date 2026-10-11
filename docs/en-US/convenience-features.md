@@ -106,7 +106,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 |---|---|---|---|---|
 | `claude.hooks` | claude | `~/.claude/settings.json` hooks (turn detection, Navide Guard, rewake) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
-| `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
+| `copilot.hooks` | copilot | the pane's `hooks/` folder in `~/.navide-panes/copilot/<pane>/` (see [Copilot hooks ride on the panes](#copilot-hooks-ride-on-the-panes)); `~/.copilot/hooks/agent-team.json` only when that cannot be done | yes | same for Copilot |
 | `codex.hook-trust` | codex | `[hooks.state]` rows in `~/.codex/config.toml` | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
@@ -118,6 +118,36 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 
 Required features are listed for disclosure only. They have no switch because
 the panes they serve cannot run without them.
+
+### Copilot hooks ride on the panes
+
+Copilot reads every hook file in its hooks folder and runs them all, so
+Navide's hooks no longer go into `~/.copilot/hooks`. Each Copilot pane starts
+with `COPILOT_HOME` pointing at its shim (`~/.navide-panes/copilot/<pane>`,
+built by the skills wiring), and while `copilot.hooks` is allowed the shim's
+`hooks` entry is a real folder holding:
+
+- `agent-team.json`: a link to Navide's file in
+  `<app data>/runtime/copilot/hooks/agent-team.json` (0600, written
+  atomically at startup and on re-allow), the same document Phase 2 wrote
+  into `~/.copilot/hooks`. A link, not a copy, so no pane keeps a stale one.
+- a link to every entry of `~/.copilot/hooks`, rebuilt on each spawn (fresh
+  or `--resume`), so a hook file the user adds later is seen and both sets
+  fire. A file of the user's named `agent-team.json` is linked as
+  `agent-team.user.json` rather than hidden. Another backend's Navide file
+  there (the installed app's, seen from a dev backend beside it, or the
+  other way round) is left out: this pane reports to this backend only.
+
+Nothing is written under `~/.copilot`, and the shim's `hooks` folder is
+never moved into it. At startup a Phase 2 `~/.copilot/hooks/agent-team.json`
+is taken back (`retract`, backed up first); one another backend wrote is left
+alone. If it cannot be taken back (`retract-failed`), or Navide's file cannot
+be written, the shared file stays in use and panes keep today's link to
+`~/.copilot/hooks` with no file of Navide's in it: never both, or every hook
+would fire twice. With the feature off a pane's `hooks` is that same link.
+
+A pane started with a `COPILOT_HOME` of the user's own, or one whose skills
+wiring is not running, gets no shim and so no Navide hooks.
 
 ## Persistence (navide.db)
 

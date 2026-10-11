@@ -223,6 +223,13 @@ def remove_hooks(agent_key: str) -> Any:
 
 def _hook_takeback(agent_key: str) -> list[Takeback]:
     path, present, remove = _hook_target(agent_key)
+    if agent_key == "copilot":
+        from . import copilot_hooks
+
+        # Another backend's file (the installed app beside a dev one) is not
+        # this backend's to take back: its panes would lose their hooks.
+        mine = present
+        present = lambda: mine() and not copilot_hooks.another_backends(path)  # noqa: E731
     return [Takeback(str(path), remove, present, path)]
 
 
