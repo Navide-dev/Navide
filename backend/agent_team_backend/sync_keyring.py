@@ -82,7 +82,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from . import device_crypto
+from . import cloud_secrets, device_crypto
 
 log = logging.getLogger("agent_team_backend.sync_keyring")
 
@@ -305,7 +305,7 @@ def _load_ring() -> dict[str, Any] | None:
 
 def _store_ring(ring: dict[str, Any]) -> None:
     with _op_lock:
-        _vault().write_app_secret(_secret_name(), _serialise(ring))
+        cloud_secrets.write(_vault(), _secret_name(), _serialise(ring))
         _remember(ring)
 
 
@@ -346,7 +346,7 @@ def adopt_legacy_ring() -> bytes:
             raise KeyringError("there is no legacy sync key to adopt")
         ring = _parse_ring(stored, "the legacy sync key")
         _store_ring(ring)
-        _vault().write_app_secret(ACCOUNT_KEY_SECRET, None)
+        cloud_secrets.write(_vault(), ACCOUNT_KEY_SECRET, None)
     log.info("adopted the sync key from before accounts were bound")
     return ring["keys"][ring["active"]]
 
@@ -449,7 +449,7 @@ def forget_account_key() -> None:
     and for the same reason it is never reached from a routine path.
     """
     with _op_lock:
-        _vault().write_app_secret(_secret_name(), None)
+        cloud_secrets.write(_vault(), _secret_name(), None)
         _remember(None)
 
 

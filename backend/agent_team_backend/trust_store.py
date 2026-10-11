@@ -63,7 +63,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from agent_team_backend import device_signing
+from agent_team_backend import cloud_secrets, device_signing
 from agent_team_backend.applog import app_data_dir
 from agent_team_backend.osplat import secret_files
 
@@ -369,7 +369,7 @@ def _adopt_journal(state: dict[str, Any]) -> None:
 
 def _write(state: dict[str, Any]) -> None:
     global _last_core, _last_journal
-    # One line, always: `_keychain_write` refuses a multi-line payload outright,
+    # One line, always: `cloud_secrets.write` refuses a multi-line payload outright,
     # and a payload that got past it truncated at the first newline would leave
     # a state document that parses as far as "{" and locks this machine out.
     core = json.dumps(
@@ -378,7 +378,7 @@ def _write(state: dict[str, Any]) -> None:
         separators=(",", ":"),
     )
     if core != _last_core:
-        _vault().write_app_secret(SECRET_NAME, core)
+        cloud_secrets.write(_vault(), SECRET_NAME, core)
         _last_core = core
     journal = json.dumps(
         {"v": STATE_VERSION, **{key: state.get(key) for key in _JOURNAL_KEYS}},
@@ -1522,7 +1522,7 @@ def rebuild_locked_store() -> dict[str, Any]:
         cleared = _locked_reason
         _transient_reason = ""
         _transient_failures = 0
-        _vault().write_app_secret(SECRET_NAME, None)
+        cloud_secrets.write(_vault(), SECRET_NAME, None)
         _journal_path().unlink(missing_ok=True)
         # A JSON null reads back as "no marker" (kv_get's default), which is
         # what the marker's absence means; the kv store has no delete.

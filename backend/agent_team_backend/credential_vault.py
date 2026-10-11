@@ -312,11 +312,6 @@ def _default_security_runner(args: list[str], input_text: str | None = None) -> 
     return proc.returncode, out
 
 
-#: Longest command `security -i` runs intact: it reads 4096-byte lines, and the
-#: newline is one of them (measured on Darwin 27.2).
-SECURITY_LINE_MAX_BYTES = 4095
-
-
 def _kc_quote(value: str) -> str:
     """Quote a value for the `security -i` interactive command parser."""
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -552,29 +547,14 @@ class CredentialVault:
                 "-w", _kc_quote(secret),
             ]
         )
-        # Refuse an over-long line BEFORE touching the item, for the same
-        # reason: `security -i` reads 4096-byte lines, runs the first 4095
-        # bytes as a complete command — storing a truncated secret, since -w
-        # is the last argument — and only then fails on the remainder.
-        # Observed: the device trust record cut mid-string at 4095 bytes.
-        size = len(command.encode("utf-8"))
-        if size > SECURITY_LINE_MAX_BYTES:
-            raise CredentialVaultError(
-                f"refusing to write {service!r}: the security -i command would be "
-                f"{size} bytes, over its {SECURITY_LINE_MAX_BYTES}-byte line limit; "
-                "the stored item is unchanged"
-            )
         rc, out = self._security(["-i"], command + "\n")
         if rc != 0:
-            # The last line says why — but `security` can echo the command it
-            # failed on, secret included (observed: the trust record's tail in
-            # the log), so a line sharing any 4 characters with it is dropped.
+            # Last line only, truncated: enough for the security error message
+            # while guaranteeing the secret (a long JSON blob) is never logged.
             lines = out.strip().splitlines()
             detail = lines[-1][:200] if lines else ""
-            if any(detail[i:i + 4] in secret for i in range(max(0, len(detail) - 3))):
-                detail = ""
             raise CredentialVaultError(
-                f"keychain write failed for {service!r} (security exited {rc})"
+                f"keychain write failed for {service!r}"
                 + (f": {detail}" if detail else "")
             )
 

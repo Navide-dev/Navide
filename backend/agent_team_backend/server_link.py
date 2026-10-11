@@ -57,6 +57,7 @@ import websockets
 
 from . import (
     agent_messaging,
+    cloud_secrets,
     device_crypto,
     device_identity,
     device_pairing,
@@ -355,7 +356,7 @@ def access_token() -> str:
 def set_access_token(token: str | None) -> None:
     """Store the Navide-Server access token, or erase it when None/empty."""
     value = (token or "").strip()
-    _vault().write_app_secret(ACCESS_TOKEN_SECRET, value or None)
+    cloud_secrets.write(_vault(), ACCESS_TOKEN_SECRET, value or None)
 
 
 def load_config() -> ServerLinkConfig:
@@ -432,7 +433,7 @@ def _workspace_salt() -> bytes:
         stored = _vault().read_app_secret(WORKSPACE_SALT_SECRET)
         if not stored:
             stored = secrets.token_hex(32)
-            _vault().write_app_secret(WORKSPACE_SALT_SECRET, stored)
+            cloud_secrets.write(_vault(), WORKSPACE_SALT_SECRET, stored)
     except Exception as err:  # noqa: BLE001
         log.warning("workspace digest salt is unavailable (%s); using a per-run one", err)
         stored = secrets.token_hex(32)

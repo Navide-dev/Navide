@@ -6,6 +6,10 @@ the last argument — and the remainder runs as a bogus command, so the call
 returns 1 *after* the damage is done. The device trust record outgrew this and
 locked cross-device traffic on the next restart (2026-10-11).
 
+The guards live in `cloud_secrets.write`, the writer for Navide Cloud's own
+items. The CLI account path (`CredentialVault._keychain_write`) is deliberately
+left as it was — see test_cli_keychain_path_guard.py.
+
 Every Keychain here is the fake below: nothing in this file runs `security`.
 """
 
@@ -18,7 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_team_backend import credential_vault
+from agent_team_backend import cloud_secrets
+from agent_team_backend.cloud_secrets import CloudSecretError
 from agent_team_backend.credential_vault import CredentialVault, CredentialVaultError
 from tests.keychain_fake import security_g_output
 
@@ -86,7 +91,7 @@ def _doc(pad: int) -> str:
 
 def _command_bytes(vault: CredentialVault, name: str, secret: str) -> int:
     import getpass
-    q = credential_vault._kc_quote
+    q = cloud_secrets._quote
     command = " ".join(["add-generic-password", "-U", "-a", q(getpass.getuser()),
                         "-s", q(vault.app_secret_service(name)), "-w", q(secret)])
     return len(command.encode())
@@ -96,11 +101,11 @@ def test_an_oversized_write_is_refused_before_security_runs(tmp_path, monkeypatc
     monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
     vault, sec = _vault(tmp_path)
     good = _doc(100)
-    vault.write_app_secret("navide-device-trust", good)
+    cloud_secrets.write(vault, "navide-device-trust", good)
     sent = len(sec.interactive_lines)
 
-    with pytest.raises(CredentialVaultError):
-        vault.write_app_secret("navide-device-trust", _doc(5000))
+    with pytest.raises(CloudSecretError):
+        cloud_secrets.write(vault, "navide-device-trust", _doc(5000))
 
     assert len(sec.interactive_lines) == sent, "the oversized command reached security -i"
     assert vault.read_app_secret("navide-device-trust") == good
@@ -113,11 +118,11 @@ def test_the_longest_line_security_accepts_still_writes(tmp_path, monkeypatch):
     secret += "a" * (LINE_LIMIT - _command_bytes(vault, "edge", secret))
     assert _command_bytes(vault, "edge", secret) == LINE_LIMIT
 
-    vault.write_app_secret("edge", secret)
+    cloud_secrets.write(vault, "edge", secret)
     assert vault.read_app_secret("edge") == secret
 
-    with pytest.raises(CredentialVaultError):
-        vault.write_app_secret("edge", secret + "a")
+    with pytest.raises(CloudSecretError):
+        cloud_secrets.write(vault, "edge", secret + "a")
     assert vault.read_app_secret("edge") == secret
 
 
@@ -126,8 +131,8 @@ def test_a_refused_write_names_no_part_of_the_value(tmp_path, monkeypatch, caplo
     vault, _ = _vault(tmp_path)
     caplog.set_level(logging.DEBUG)
 
-    with pytest.raises(CredentialVaultError) as refused:
-        vault.write_app_secret("navide-device-trust", _doc(5000))
+    with pytest.raises(CloudSecretError) as refused:
+        cloud_secrets.write(vault, "navide-device-trust", _doc(5000))
 
     for text in (str(refused.value), caplog.text):
         assert MARKER not in text and "yyyy" not in text and "IDA" not in text
@@ -147,24 +152,30 @@ def test_a_failed_write_does_not_echo_security_output(tmp_path, monkeypatch, cap
                             security_runner=echoing, platform="darwin")
     caplog.set_level(logging.DEBUG)
 
-    with pytest.raises(CredentialVaultError) as failed:
-        vault.write_app_secret("navide-server-token", f"tok-{MARKER}")
+    with pytest.raises(CloudSecretError) as failed:
+        cloud_secrets.write(vault, "navide-server-token", f"tok-{MARKER}")
 
     for text in (str(failed.value), caplog.text):
         assert MARKER not in text
 
 
-def test_every_keychain_write_path_is_bounded(tmp_path, monkeypatch):
-    """Slot restores and the live Claude item go through the same
-    `_keychain_write`, so the bound holds for them too."""
+def test_the_bound_is_not_applied_to_cli_account_credentials(tmp_path, monkeypatch):
+    """User ruling: the CLI account path is not changed by this fix. Its write
+    reaches `security` exactly as it did at v0.2.19, whatever its length."""
     monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
     vault, sec = _vault(tmp_path)
+    # It reaches `security` and fails there, as it always did (the fake cuts
+    # the line the way the real one does) — no bound refuses it first.
     with pytest.raises(CredentialVaultError):
         vault._keychain_write("Claude Code-credentials", _doc(5000), account="me")
-    assert sec.interactive_lines == []
+    assert len(sec.interactive_lines) == 1
 
 
-def test_tests_cannot_reach_the_real_security_binary(tmp_path):
+@pytest.mark.parametrize("write", [
+    lambda vault: vault.write_app_secret("must-not-land", "x"),
+    lambda vault: cloud_secrets.write(vault, "must-not-land", "x"),
+])
+def test_tests_cannot_reach_the_real_security_binary(tmp_path, write):
     vault = CredentialVault(root=tmp_path / "r", real_home=tmp_path / "h", platform="darwin")
     with pytest.raises(AssertionError, match="real Keychain"):
-        vault.write_app_secret("must-not-land", "x")
+        write(vault)
