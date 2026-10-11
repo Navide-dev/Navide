@@ -6,6 +6,13 @@ import { describe, expect, it } from 'vitest'
 // modal for it is not worth it, so the groups are read off the template.
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/SettingsModal.vue'), 'utf8')
 
+const helpSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/components/SettingsSystemHelp.vue'), 'utf8')
+
+function navLabelKeys(): string[] {
+  const nav = source.slice(source.indexOf('<nav class="s-nav"'), source.indexOf('</nav>', source.indexOf('<nav class="s-nav"')))
+  return [...nav.matchAll(/<SettingsNavItem :label="\$t\('([\w.-]+)'\)"/g)].map((m) => m[1])
+}
+
 function navGroups(): { title: string; tabs: string[] }[] {
   const nav = source.slice(source.indexOf('<div class="s-nav-group">'), source.indexOf('</nav>', source.indexOf('<div class="s-nav-group">')))
   return nav.split('<div class="s-nav-group">').slice(1).map((block) => ({
@@ -35,5 +42,13 @@ describe('SettingsModal nav groups', () => {
       expect(entries.length).toBeGreaterThan(0)
       for (const entry of entries) expect(entry[1]).toBe('navidePlugins')
     }
+  })
+
+  it('is mirrored page for page by the settings help topic', () => {
+    const start = helpSource.indexOf('const tabs: TabRow[] = [')
+    const table = helpSource.slice(start, helpSource.indexOf('\n]', start))
+    const helpKeys = [...table.matchAll(/navKey: '([\w.-]+)'/g)].map((m) => m[1])
+    expect(navLabelKeys()).toHaveLength(24)
+    expect(helpKeys).toEqual(navLabelKeys())
   })
 })

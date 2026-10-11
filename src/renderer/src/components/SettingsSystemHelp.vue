@@ -42,7 +42,7 @@ interface StageRow {
   stageSpan?: number
 }
 
-// ── 1 · The twenty-three tabs ──────────────────────────────────────────────
+// ── 1 · The twenty-four tabs ───────────────────────────────────────────────
 const tabs: TabRow[] = [
   { key: 'general', groupKey: 'settings.nav.group.general', groupSpan: 7, navKey: 'settings.nav.general' },
   { key: 'appearance', navKey: 'settings.nav.appearance' },
@@ -51,13 +51,14 @@ const tabs: TabRow[] = [
   { key: 'layout', navKey: 'settings.nav.layout' },
   { key: 'notifications', navKey: 'settings.nav.notifications' },
   { key: 'voice', navKey: 'settings.nav.voice' },
-  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 7, navKey: 'settings.nav.accounts' },
+  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 8, navKey: 'settings.nav.accounts' },
   { key: 'cliAgents', navKey: 'settings.nav.cliAgents' },
   { key: 'cliExtensions', navKey: 'settings.nav.cliExtensions' },
   { key: 'analyzer', navKey: 'settings.nav.analyzer' },
   { key: 'security', navKey: 'guard.nav' },
   { key: 'channels', navKey: 'channels.nav' },
   { key: 'cloud', navKey: 'settings.nav.crossDevice' },
+  { key: 'credentials', navKey: 'settings.nav.credentials' },
   { key: 'mcp', groupKey: 'settings.nav.group.integration', groupSpan: 4, navKey: 'settings.nav.mcp' },
   { key: 'skills', navKey: 'settings.nav.skills' },
   { key: 'prompts', navKey: 'settings.nav.prompts' },
@@ -294,7 +295,7 @@ const navLegend = computed(() => mockLegend('nav', ['search', 'groups', 'active'
 const resourceLegend = computed(() => mockLegend('resource', ['totals', 'rows', 'actions']))
 
 // The nav exactly as SettingsModal.vue renders it: five groups,
-// twenty-three pages, in this order. Labels come from the same `settings.nav.*`
+// twenty-four pages, in this order. Labels come from the same `settings.nav.*`
 // keys the real nav reads, so renaming a page renames it here.
 //
 // Drawing this is what caught the prose claiming four groups and sixteen
@@ -323,6 +324,7 @@ const settingsGroups = computed(() => [
       { label: t('guard.nav') },
       { label: t('channels.nav') },
       { label: t('settings.nav.crossDevice') },
+      { label: t('settings.nav.credentials') },
     ],
   },
   {
