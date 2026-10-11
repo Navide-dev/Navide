@@ -35,8 +35,8 @@ afterEach(() => {
 
 const TOGGLE = '[data-testid="channels-share-open-notify-toggle"]'
 
-function notifySetting(enabled: boolean, cloudConnected: boolean): void {
-  respond('channels.get_share_open_notify', { ok: true, enabled, cloudConnected })
+function notifySetting(enabled: boolean, cloudConnected: boolean, shareSupported = cloudConnected): void {
+  respond('channels.get_share_open_notify', { ok: true, enabled, cloudConnected, shareSupported })
 }
 
 /** The pane as a backend without the feature renders it. */
@@ -69,6 +69,20 @@ describe('ChannelsPane share-link opened notices switch', () => {
     expect(w.html()).toBe(before)
   })
 
+  it('with Cloud connected to a server without share links the pane is exactly what it was', async () => {
+    const before = await baselineHtml()
+    notifySetting(true, true, false)
+    const w = await render()
+    expect(w.find(TOGGLE).exists()).toBe(false)
+    expect(w.html()).toBe(before)
+  })
+
+  it('is hidden when an older backend does not say whether share links work', async () => {
+    respond('channels.get_share_open_notify', { ok: true, enabled: true, cloudConnected: true })
+    const w = await render()
+    expect(w.find(TOGGLE).exists()).toBe(false)
+  })
+
   it('is hidden when the setting cannot be read', async () => {
     mock.setRejection('channels.get_share_open_notify')
     const w = await render()
@@ -77,7 +91,7 @@ describe('ChannelsPane share-link opened notices switch', () => {
 
   it('shows the stored value with Cloud connected and writes a change', async () => {
     notifySetting(true, true)
-    respond('channels.set_share_open_notify', { ok: true, enabled: false, cloudConnected: true })
+    respond('channels.set_share_open_notify', { ok: true, enabled: false, cloudConnected: true, shareSupported: true })
     const w = await render()
     const toggle = () => w.get(TOGGLE)
     expect(toggle().attributes('aria-checked')).toBe('true')

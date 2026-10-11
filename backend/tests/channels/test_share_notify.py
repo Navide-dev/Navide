@@ -211,30 +211,55 @@ async def test_the_users_language_is_used(env: Env, links: FakeLinks) -> None:
 # --- the switch over ws ----------------------------------------------------------------
 
 
+def _server_does_links(monkeypatch, answer: bool | Exception) -> list[int]:
+    """``share_links.ensure_supported`` answering ``answer``; the list counts the calls."""
+    calls: list[int] = []
+
+    async def ensure_supported(client: Any) -> bool:
+        calls.append(1)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(share_links, "ensure_supported", ensure_supported)
+    return calls
+
+
 async def test_the_switch_over_ws(env: Env, monkeypatch) -> None:
     assert "channels.get_share_open_notify" in ws_api.MESSAGE_TYPES
     assert "channels.set_share_open_notify" in ws_api.MESSAGE_TYPES
     monkeypatch.setattr(server_link, "link_state", lambda: server_link.STATE_CONNECTED)
-    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
-        "ok": True, "enabled": True, "cloudConnected": True}
+    _server_does_links(monkeypatch, True)
+    on = {"ok": True, "cloudConnected": True, "shareSupported": True}
+    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {**on, "enabled": True}
     assert await ws_api._dispatch(env.m, "channels.set_share_open_notify", {"enabled": False}) == {
-        "ok": True, "enabled": False, "cloudConnected": True}
+        **on, "enabled": False}
     assert env.store.share_open_notify() is False
+    assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {**on, "enabled": False}
+
+
+@pytest.mark.parametrize("answer", [False, share_links.ShareRemoteError("NOT_FOUND", "odd"),
+                                    share_links.ShareError("link dropped")])
+async def test_a_connected_server_without_share_links_says_so(env: Env, monkeypatch, answer) -> None:
+    monkeypatch.setattr(server_link, "link_state", lambda: server_link.STATE_CONNECTED)
+    _server_does_links(monkeypatch, answer)
     assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
-        "ok": True, "enabled": False, "cloudConnected": True}
+        "ok": True, "enabled": True, "cloudConnected": True, "shareSupported": False}
 
 
 @pytest.mark.parametrize("state", [server_link.STATE_UNCONFIGURED, server_link.STATE_CONNECTING,
                                    server_link.STATE_UNREACHABLE, server_link.STATE_UNAUTHORIZED])
 async def test_the_switch_says_when_cloud_is_not_connected(env: Env, monkeypatch, state: str) -> None:
     monkeypatch.setattr(server_link, "link_state", lambda: state)
+    calls = _server_does_links(monkeypatch, True)
 
     def no_device() -> str:
         raise AssertionError("must not reach for the device identity without Cloud")
 
     monkeypatch.setattr(server_link, "local_device_id", no_device)
     assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {
-        "ok": True, "enabled": True, "cloudConnected": False}
+        "ok": True, "enabled": True, "cloudConnected": False, "shareSupported": False}
+    assert calls == []  # nothing asked of the server without Cloud
 
 
 # --- the chats a creator can pick ----------------------------------------------------

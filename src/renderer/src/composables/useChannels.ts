@@ -378,13 +378,17 @@ function createChannelsStore(backend: Backend) {
     return res
   }
 
-  /** The backend says whether Navide Cloud is connected along with the switch. */
-  function takeShareOpenNotify(res: ChannelResult<{ enabled: boolean; cloudConnected?: boolean }>): void {
-    shareOpenNotify.value = res.ok && res.data?.cloudConnected === true ? res.data.enabled !== false : null
+  type ShareOpenNotifyReply = { enabled: boolean; cloudConnected?: boolean; shareSupported?: boolean }
+
+  /** The backend says along with the switch whether Navide Cloud is connected and whether
+   *  its server does share links; the switch shows only when both are true. */
+  function takeShareOpenNotify(res: ChannelResult<ShareOpenNotifyReply>): void {
+    const usable = res.ok && res.data?.cloudConnected === true && res.data.shareSupported === true
+    shareOpenNotify.value = usable && res.data ? res.data.enabled !== false : null
   }
 
   async function fetchShareOpenNotify(): Promise<void> {
-    takeShareOpenNotify(await call<{ enabled: boolean; cloudConnected?: boolean }>('channels.get_share_open_notify'))
+    takeShareOpenNotify(await call<ShareOpenNotifyReply>('channels.get_share_open_notify'))
   }
 
   backend.on('p2p.link.changed', () => {
@@ -517,7 +521,7 @@ function createChannelsStore(backend: Backend) {
       return fetchShareOpenNotify()
     },
     setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
-      const res = await call<{ enabled: boolean; cloudConnected?: boolean }>('channels.set_share_open_notify', { enabled: on })
+      const res = await call<ShareOpenNotifyReply>('channels.set_share_open_notify', { enabled: on })
       if (res.ok) takeShareOpenNotify(res)
       return res
     },
