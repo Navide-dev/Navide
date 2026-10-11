@@ -11,6 +11,9 @@ import logging
 import base64
 import os
 import json
+import sys
+import threading
+import traceback
 
 import pytest
 
@@ -888,10 +891,35 @@ def broadcasts(monkeypatch):
     return events
 
 
+#: How long a test waits for its link to come up, before the link is anything
+#: the test asserts about. Not `_until`'s 3s: the hello waits on the trust
+#: record, which on Windows is read and written through DPAPI
+#: (CryptProtectData, crypt32), and that service's latency spikes on the
+#: runner. Run 38180394147 measured this wait at 3.1s and 7.1s, against a
+#: median of 0.1s for the file, in a window where loading the system root
+#: store took 2.6s (0.4s otherwise) while tests touching no crypto kept their
+#: usual times and the CPU sat at 5%. What a test asserts keeps the 3s.
+CONNECT_TIMEOUT_S = 20.0
+
+
+def _thread_stacks() -> str:
+    """Every thread's stack, so a link that never came up says where it waited."""
+    names = {thread.ident: thread.name for thread in threading.enumerate()}
+    return "\n".join(
+        f"--- {names.get(ident, ident)}\n" + "".join(traceback.format_stack(frame))
+        for ident, frame in sys._current_frames().items()
+    )
+
+
 async def _connected(server: FakeServer, **kwargs) -> ServerLink:
     link = make_link(server, **kwargs)
     await link.start()
-    await _until(lambda: bool(server.opened and server.opened[0].syncs))
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
+    except AssertionError:
+        raise AssertionError(
+            f"the link did not come up within {CONNECT_TIMEOUT_S}s:\n{_thread_stacks()}"
+        ) from None
     return link
 
 
