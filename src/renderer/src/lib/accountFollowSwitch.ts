@@ -1,4 +1,5 @@
-import { settingsGet } from '@navide/plugin-ui/shared'
+import { readonly, ref, type Ref } from 'vue'
+import { onSettingsChanged, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 
 /** Settings key: when a claude account switch succeeds, offer to move the
  *  panes running on another account's own config dir along with it, and offer
@@ -8,6 +9,23 @@ export const ACCOUNT_FOLLOW_SWITCH_SETTING_KEY = 'agentTeam.accounts.followSwitc
 
 export function accountFollowSwitchEnabled(): boolean {
   return settingsGet<boolean>(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, false) === true
+}
+
+// Reactive copy for templates. The settings store notifies only changes from
+// elsewhere (other windows, reconcile), so this window's own toggle goes
+// through setAccountFollowSwitch to update it as well.
+const flag = ref(accountFollowSwitchEnabled())
+onSettingsChanged((keys) => {
+  if (keys.includes(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY)) flag.value = accountFollowSwitchEnabled()
+})
+
+export function useAccountFollowSwitchFlag(): Readonly<Ref<boolean>> {
+  return readonly(flag)
+}
+
+export function setAccountFollowSwitch(on: boolean): void {
+  settingsSet(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, on)
+  flag.value = on
 }
 
 /** The built-in Default slot (the real home). Mirrors the backend's id. */

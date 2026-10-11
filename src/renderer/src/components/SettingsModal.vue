@@ -95,7 +95,7 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
-import { ACCOUNT_FOLLOW_SWITCH_SETTING_KEY } from '../lib/accountFollowSwitch'
+import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -1326,9 +1326,9 @@ function onLoopFailoverResumeChange(): void {
 }
 // Opt-in: a claude switch offers to move the panes pinned to another account's
 // own config dir, and an out-of-quota pane offers "switch account and resume".
-const accountFollowSwitchModel = ref(settingsGet<boolean>(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, false) === true)
+const accountFollowSwitchModel = ref(useAccountFollowSwitchFlag().value)
 function onAccountFollowSwitchChange(): void {
-  settingsSet(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, accountFollowSwitchModel.value)
+  setAccountFollowSwitch(accountFollowSwitchModel.value)
 }
 interface FailoverCapabilityRow {
   agentKey: string

@@ -1,8 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const store = vi.hoisted(() => new Map<string, unknown>())
+const listeners = vi.hoisted(() => new Set<(keys: string[]) => void>())
 vi.mock('@navide/plugin-ui/shared', () => ({
   settingsGet: (key: string, fallback: unknown) => (store.has(key) ? store.get(key) : fallback),
+  settingsSet: (key: string, value: unknown) => {
+    store.set(key, value)
+  },
+  onSettingsChanged: (cb: (keys: string[]) => void) => {
+    listeners.add(cb)
+    return () => listeners.delete(cb)
+  },
 }))
 
 import {
@@ -14,6 +22,8 @@ import {
   quotaPeerRows,
   quotaSwitchTargets,
   runFollowSwitchBatch,
+  setAccountFollowSwitch,
+  useAccountFollowSwitchFlag,
   withFollowSwitch,
   type FollowPaneInput,
 } from '../accountFollowSwitch'
@@ -46,6 +56,16 @@ describe('accountFollowSwitch flag', () => {
     expect(accountFollowSwitchEnabled()).toBe(false)
     store.set(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, true)
     expect(accountFollowSwitchEnabled()).toBe(true)
+  })
+
+  it('keeps the reactive copy in step with this window and with other windows', () => {
+    const flag = useAccountFollowSwitchFlag()
+    setAccountFollowSwitch(true)
+    expect(flag.value).toBe(true)
+    expect(store.get(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY)).toBe(true)
+    store.set(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, false)
+    for (const cb of listeners) cb([ACCOUNT_FOLLOW_SWITCH_SETTING_KEY])
+    expect(flag.value).toBe(false)
   })
 })
 

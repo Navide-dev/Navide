@@ -126,9 +126,9 @@ describe('Settings ▸ follow-switch flag', { timeout: 15000 }, () => {
 
   it('is off by default and writes the flag when turned on', async () => {
     const mock = await mountGeneral(failoverState())
-    const toggle = wrapper!.findComponent('[data-testid="account-follow-switch"]')
+    const toggle = wrapper!.findComponent('[data-testid="account-follow-switch"]') as VueWrapper
     expect(toggle.exists()).toBe(true)
-    expect(toggle.props('modelValue')).toBe(false)
+    expect((toggle.props() as { modelValue?: boolean }).modelValue).toBe(false)
     toggle.vm.$emit('update:modelValue', true)
     await flushPromises()
     expect(settingsGet(ACCOUNT_FOLLOW_SWITCH_SETTING_KEY, false)).toBe(true)
