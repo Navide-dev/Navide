@@ -44,22 +44,63 @@ def _plan(home: Path, body: str, name: str = "Secret Roadmap") -> Path:
 
 
 class FakeLinks:
-    """The server half of links.create/commit, in memory."""
+    """The links.* verbs as the server answers them (contract of 2026-10-11),
+    in memory, with an object store behind the presigned URLs."""
 
-    def __init__(self) -> None:
-        self.created: list[dict[str, Any]] = []
-        self.committed: list[dict[str, Any]] = []
+    def __init__(self, link_id: str = "ab" * 16) -> None:
+        self.next_ids = [link_id, "cd" * 16, "ef" * 16]
+        self.rows: dict[str, dict[str, Any]] = {}
+        self.objects: dict[str, bytes] = {}
+        self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def create(self, *, kind: str, size_bytes: int, ttl_days: int, require_login: bool, created_by: str) -> dict:
-        self.created.append(
-            {"kind": kind, "sizeBytes": size_bytes, "ttlDays": ttl_days, "requireLogin": require_login,
-             "createdBy": created_by}
-        )
-        return {"linkId": "ab" * 16, "uploadUrl": "https://s3.example/put", "expiresAt": "2026-10-18T00:00:00Z"}
+    def put(self, url: str, data: bytes) -> None:
+        self.objects[url] = data
 
-    def commit(self, *, link_id: str, wrapped_key: str, kid: str, meta_enc: str) -> dict:
-        self.committed.append({"linkId": link_id, "wrappedKey": wrapped_key, "kid": kid, "metaEnc": meta_enc})
-        return {"ok": True}
+    def get(self, url: str) -> bytes:
+        return self.objects[url.replace("/get/", "/put/")]
+
+    async def request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append((verb, payload))
+        if verb in ("create", "rekey"):
+            link_id = self.next_ids.pop(0)
+            self.rows[link_id] = {
+                "linkId": link_id, "kind": payload.get("kind") or self.rows[payload["linkId"]]["kind"],
+                "version": 1, "state": "uploading", "active": False, "createdBy": payload.get("createdBy", "user"),
+                "expiresAt": "2026-10-18T00:00:00Z", "replaces": payload.get("linkId") if verb == "rekey" else None,
+            }
+            return {"linkId": link_id, "version": 1, "uploadUrl": f"https://s3.example/put/{link_id}/1",
+                    "expiresAt": "2026-10-18T00:00:00Z"}
+        row = self.rows.get(payload.get("linkId", ""))
+        if verb == "update":
+            return {"linkId": row["linkId"], "version": row["version"] + 1,
+                    "uploadUrl": f"https://s3.example/put/{row['linkId']}/{row['version'] + 1}"}
+        if verb == "commit":
+            row.update(version=payload["version"], wrappedKey=payload["wrappedKey"], kid=payload["kid"],
+                       metaEnc=payload["metaEnc"], state="live", active=True)
+            revoked = []
+            if row.get("replaces"):
+                self.rows[row["replaces"]].update(active=False, revokedAt="now")
+                revoked.append(row["replaces"])
+            return {"linkId": row["linkId"], "version": row["version"], "state": "live",
+                    "expiresAt": row["expiresAt"], "revoked": revoked}
+        if verb == "list":
+            return {"links": [dict(r) for r in self.rows.values()], "next": None}
+        if verb == "unwrap":
+            return {**{k: row[k] for k in ("linkId", "kind", "version", "kid", "wrappedKey", "metaEnc", "expiresAt")},
+                    "downloadUrl": f"https://s3.example/get/{row['linkId']}/{row['version']}"}
+        if verb == "rewrap":
+            row.update({k: v for k, v in payload.items() if k in ("wrappedKey", "kid", "metaEnc")})
+            return {"linkId": row["linkId"], "version": row["version"], "kid": row["kid"]}
+        if verb == "revoke":
+            row.update(active=False, revokedAt="now")
+            return {"linkId": row["linkId"], "revokedAt": "now"}
+        raise share_links.ShareRemoteError("UNKNOWN_TYPE", verb)
+
+    def created(self) -> list[dict[str, Any]]:
+        return [p for v, p in self.calls if v == "create"]
+
+    def committed(self) -> list[dict[str, Any]]:
+        return [p for v, p in self.calls if v == "commit"]
 
 
 # ---- object format ----------------------------------------------------------------
@@ -155,9 +196,11 @@ def test_unknown_kind_is_refused(home: Path) -> None:
     assert err.value.code == "unknown_kind"
 
 
-def test_ttl_outside_the_range_is_refused(ring, home: Path) -> None:
+async def test_ttl_outside_the_range_is_refused(ring, home: Path) -> None:
     with pytest.raises(share_links.ShareRefused) as err:
-        share_links.create_share(FakeLinks(), str(_plan(home, "<p/>")), "plan", ttl_days=31, put=lambda *_: None)
+        await share_links.create_share(
+            FakeLinks(), str(_plan(home, "<p/>")), "plan", ttl_seconds=31 * 86400, put=lambda *_: None
+        )
     assert err.value.code == "ttl"
 
 
@@ -168,21 +211,22 @@ def test_oversized_file_is_refused(home: Path, monkeypatch: pytest.MonkeyPatch) 
     assert err.value.code == "too_large"
 
 
-def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Path) -> None:
+async def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Path) -> None:
     path = _plan(home, f"<p>token {GHP}</p>")
     client = FakeLinks()
     uploads: list[tuple[str, bytes]] = []
 
-    created = share_links.create_share(
+    created = await share_links.create_share(
         client, str(path), "plan", created_by="agent", pane="release", agent="claude",
         put=lambda url, data: uploads.append((url, data)),
     )
 
-    assert client.created == [
-        {"kind": "plan", "sizeBytes": len(uploads[0][1]), "ttlDays": 7, "requireLogin": False, "createdBy": "agent"}
+    assert client.created() == [
+        {"kind": "plan", "sizeBytes": len(uploads[0][1]), "ttlSeconds": 7 * 86400, "requireLogin": False,
+         "createdBy": "agent"}
     ]
     [(url, blob)] = uploads
-    assert url == "https://s3.example/put"
+    assert url == "https://s3.example/put/" + "ab" * 16 + "/1"
     assert b"Secret Roadmap" not in blob and GHP.encode() not in blob
 
     key = base64.urlsafe_b64decode(created.url.partition("#k=")[2] + "=")
@@ -191,8 +235,9 @@ def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Pa
     assert GHP not in plaintext.decode() and "[redacted]" in plaintext.decode()
     assert [(f.line, f.category, f.action) for f in created.findings] == [(2, "github-token", "masked")]
 
-    [commit] = client.committed
+    [commit] = client.committed()
     assert commit["linkId"] == created.link_id == "ab" * 16
+    assert commit["version"] == 1
     assert commit["kid"] == sync_keyring.active_key_id()
     assert sync_keyring.unwrap_aux(f"link:{created.link_id}:v1", commit["wrappedKey"]) == key
     assert "Secret Roadmap" not in commit["metaEnc"]
@@ -200,14 +245,15 @@ def test_create_share_uploads_masked_ciphertext_and_wraps_the_key(ring, home: Pa
     assert meta["title"] == "Secret Roadmap"
     assert meta["createdBy"] == "agent" and meta["pane"] == "release" and meta["agent"] == "claude"
     assert meta["masked"] == [{"line": 2, "category": "github-token", "action": "masked"}]
+    assert meta["maskedTotal"] == 1
     assert GHP not in json.dumps(meta)
 
 
-def test_create_share_without_a_ring_fails_before_anything_is_sent(home: Path) -> None:
+async def test_create_share_without_a_ring_fails_before_anything_is_sent(home: Path) -> None:
     client = FakeLinks()
     with pytest.raises(sync_keyring.KeyringError):
-        share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
-    assert client.created == []
+        await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
+    assert client.calls == []
 
 
 # ---- review round 1 ---------------------------------------------------------------
@@ -260,13 +306,14 @@ def test_uppercase_suffix_is_accepted(home: Path) -> None:
 
 
 @pytest.mark.parametrize("bad", ["x/../../evil", "x?q=1", "x#k=ATTACKER", "a:v1", "short"])
-def test_a_malformed_link_id_from_the_server_is_refused_before_upload(ring, home: Path, bad: str) -> None:
-    client = FakeLinks()
-    client.create = lambda **_: {"linkId": bad, "uploadUrl": "https://s3.example/put"}  # type: ignore[method-assign]
+async def test_a_malformed_link_id_from_the_server_is_refused_before_upload(ring, home: Path, bad: str) -> None:
+    client = FakeLinks(link_id=bad)
     uploads: list[str] = []
     with pytest.raises(share_links.ShareError):
-        share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda url, _d: uploads.append(url))
-    assert uploads == [] and client.committed == []
+        await share_links.create_share(
+            client, str(_plan(home, "<p/>")), "plan", put=lambda url, _d: uploads.append(url)
+        )
+    assert uploads == [] and client.committed() == []
 
 
 def test_upload_url_must_be_https() -> None:
@@ -293,10 +340,10 @@ def test_an_older_version_is_refused_when_a_newer_one_is_expected() -> None:
         share_links.decrypt_object(v1, key, expected_version=2)
 
 
-def test_metadata_label_names_the_version(ring, home: Path) -> None:
+async def test_metadata_label_names_the_version(ring, home: Path) -> None:
     client = FakeLinks()
-    created = share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
-    meta_enc = client.committed[0]["metaEnc"]
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=lambda *_: None)
+    meta_enc = client.committed()[0]["metaEnc"]
     assert json.loads(sync_keyring.unwrap_aux(f"link-meta:{created.link_id}:v1", meta_enc))["title"]
     with pytest.raises(sync_keyring.KeyringError):
         sync_keyring.unwrap_aux(f"link-meta:{created.link_id}", meta_enc)
@@ -307,3 +354,98 @@ def test_kind_codes_are_the_shared_table() -> None:
         "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "transcript": 6, "bundle": 7,
     }
     assert all(share_links.KINDS[k].code == share_links.KIND_CODES[k] for k in share_links.KINDS)
+
+
+# ---- managing links (contract of 2026-10-11) ---------------------------------------
+
+
+def _key_of(url: str) -> bytes:
+    return base64.urlsafe_b64decode(url.partition("#k=")[2] + "=")
+
+
+async def test_the_list_shows_titles_but_never_a_key_or_url(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=client.put)
+    [row] = await share_links.list_links(client)
+    assert row["title"] == "Secret Roadmap" and row["linkId"] == created.link_id and row["readable"]
+    flat = json.dumps(row)
+    assert "#k=" not in flat and created.url.partition("#k=")[2] not in flat and "wrappedKey" not in flat
+
+
+async def test_copy_link_rebuilds_the_same_url(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=client.put)
+    assert await share_links.copy_link(client, created.link_id) == created.url
+
+
+async def test_updating_content_keeps_the_key_and_bumps_the_version(ring, home: Path) -> None:
+    client = FakeLinks()
+    path = _plan(home, "<p>first</p>")
+    created = await share_links.create_share(client, str(path), "plan", put=client.put)
+    path.write_text(path.read_text().replace("first", "second"))
+
+    await share_links.update_content(client, created.link_id, put=client.put)
+
+    blob = client.objects["https://s3.example/put/" + created.link_id + "/2"]
+    kind, version, text = share_links.decrypt_object(blob, _key_of(created.url), expected_version=2)
+    assert (kind, version) == ("plan", 2) and b"second" in text
+    commit = client.committed()[-1]
+    assert sync_keyring.unwrap_aux(f"link:{created.link_id}:v2", commit["wrappedKey"]) == _key_of(created.url)
+
+
+async def test_rekey_moves_the_content_to_a_new_id_and_key(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p>body</p>")), "plan", put=client.put)
+
+    moved = await share_links.rekey(client, created.link_id, put=client.put, get=client.get)
+
+    assert moved.link_id != created.link_id and _key_of(moved.url) != _key_of(created.url)
+    blob = client.objects["https://s3.example/put/" + moved.link_id + "/1"]
+    assert b"body" in share_links.decrypt_object(blob, _key_of(moved.url))[2]
+    with pytest.raises(share_links.ShareError):
+        share_links.decrypt_object(blob, _key_of(created.url))
+    assert client.rows[created.link_id]["active"] is False
+    [row] = [r for r in await share_links.list_links(client) if r["linkId"] == moved.link_id]
+    assert row["title"] == "Secret Roadmap"
+
+
+async def test_listing_rewraps_links_left_under_a_rotated_key(ring, home: Path) -> None:
+    client = FakeLinks()
+    created = await share_links.create_share(client, str(_plan(home, "<p/>")), "plan", put=client.put)
+    sync_keyring.rotate_account_key()
+
+    await share_links.list_links(client)
+
+    rewraps = [p for v, p in client.calls if v == "rewrap"]
+    assert len(rewraps) == 1 and rewraps[0]["kid"] == sync_keyring.active_key_id()
+    assert await share_links.copy_link(client, created.link_id) == created.url
+
+
+async def test_metadata_is_cut_to_the_servers_limit(ring, home: Path) -> None:
+    client = FakeLinks()
+    body = "\n".join(f"token=Abcdefgh{i:04d}" for i in range(2000))
+    await share_links.create_share(client, str(_plan(home, body)), "plan", put=client.put)
+    commit = client.committed()[0]
+    assert len(commit["metaEnc"]) <= share_links.MAX_META_CHARS
+    meta = json.loads(sync_keyring.unwrap_aux(f"link-meta:{commit['linkId']}:v1", commit["metaEnc"]))
+    assert meta["maskedTotal"] == 2000 and len(meta["masked"]) < 2000
+
+
+@pytest.mark.parametrize(
+    ("reply", "code"),
+    [
+        (None, "NOT_CONFIGURED"),
+        ({"ok": False, "error": {"code": "UNKNOWN_TYPE", "message": "x"}}, "UNKNOWN_TYPE"),
+        ({"ok": False, "error": {"code": "NOT_CREATOR", "message": "x"}}, "NOT_CREATOR"),
+    ],
+)
+async def test_the_server_client_passes_the_servers_error_code_through(monkeypatch, reply, code) -> None:
+    from agent_team_backend import server_link
+
+    async def fake(verb: str, payload: dict) -> dict | None:
+        return reply
+
+    monkeypatch.setattr(server_link, "links_request", fake)
+    with pytest.raises(share_links.ShareRemoteError) as err:
+        await share_links.ServerLinksClient().request("list", {})
+    assert err.value.code == code

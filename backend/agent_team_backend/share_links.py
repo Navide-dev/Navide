@@ -32,9 +32,11 @@ the Navide-Server calls.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import struct
@@ -48,6 +50,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from . import share_scan, sync_keyring
 
+log = logging.getLogger("agent_team_backend.share_links")
+
 SHARE_BASE = "https://share.navide.dev"
 
 MAGIC = b"NVL1"
@@ -59,7 +63,10 @@ SEGMENT_OVERHEAD = _NONCE_LEN + 16
 KEY_LEN = 32
 #: Largest file shared as one object; one presigned PUT, no multipart.
 MAX_PLAINTEXT = 32 * 1024 * 1024
-MAX_TTL_DAYS = 30
+#: The server's range for a link's lifetime (links.caps), in seconds.
+MAX_TTL_SECONDS = 30 * 86400
+#: The server's cap on the wrapped metadata, so a page of links.list fits a frame.
+MAX_META_CHARS = 8 * 1024
 
 _HTTP_TIMEOUT_S = 60
 #: What a server-assigned link id may look like before it goes into a URL or a label.
@@ -104,16 +111,42 @@ class ShareRefused(ShareError):
         self.code = code
 
 
+class ShareRemoteError(ShareError):
+    """The server refused a ``links.*`` call; ``code`` is its own error code
+    (NOT_FOUND, LINK_INACTIVE, UNSUPPORTED, UNKNOWN_TYPE …) or a local one
+    naming the link state (NOT_CONFIGURED, LINK_OFFLINE …)."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+#: Codes meaning "this server does not do share links": an old server, or a
+#: new one with links switched off (UNKNOWN_TYPE), or without storage.
+UNAVAILABLE_CODES = frozenset({"UNKNOWN_TYPE", "UNSUPPORTED", "NOT_CONFIGURED"})
+
+
 class LinksClient(Protocol):
-    """The Navide-Server ``links.*`` calls this module needs."""
+    """The Navide-Server ``links.*`` verbs: the reply's payload, or
+    ``ShareRemoteError``. See ``ServerLinksClient``."""
 
-    def create(self, *, kind: str, size_bytes: int, ttl_days: int, require_login: bool, created_by: str) -> dict:
-        """A new row in state ``uploading``: ``{linkId, uploadUrl, expiresAt}``."""
-        ...
+    async def request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]: ...
 
-    def commit(self, *, link_id: str, wrapped_key: str, kid: str, meta_enc: str) -> dict:
-        """Mark the uploaded object live, storing the wrapped key and metadata."""
-        ...
+
+class ServerLinksClient:
+    """``LinksClient`` over this machine's account link (``server_link``)."""
+
+    async def request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        from . import server_link
+
+        reply = await server_link.links_request(verb, payload)
+        if reply is None:
+            raise ShareRemoteError("NOT_CONFIGURED", "Navide Cloud is not set up on this machine.")
+        if not reply.get("ok"):
+            error = reply.get("error") if isinstance(reply.get("error"), dict) else {}
+            raise ShareRemoteError(str(error.get("code") or "SHARE_FAILED"), str(error.get("message") or verb))
+        body = reply.get("payload")
+        return body if isinstance(body, dict) else {}
 
 
 # ---- object format ----------------------------------------------------------------
@@ -251,7 +284,7 @@ def prepare(raw_path: str, kind: str) -> Prepared:
     )
 
 
-# ---- creating -------------------------------------------------------------------------
+# ---- talking to the server ----------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -263,6 +296,8 @@ class Created:
 
 
 def _http_put(url: str, data: bytes) -> None:
+    """PUT ``data`` to a presigned URL. The server signed Content-Length, which
+    urllib sets from ``data``."""
     if not url.startswith("https://"):
         raise ShareError("refusing to upload over a non-https URL")
     req = Request(url, data=data, method="PUT", headers={"Content-Type": "application/octet-stream"})
@@ -276,44 +311,124 @@ def _http_put(url: str, data: bytes) -> None:
         raise ShareError(f"upload failed: {err.reason}") from err
 
 
+def _http_get(url: str) -> bytes:
+    """GET a presigned object, refusing anything past the size a link may have."""
+    if not url.startswith("https://"):
+        raise ShareError("refusing to download over a non-https URL")
+    limit = MAX_PLAINTEXT + HEADER_LEN + SEGMENT_OVERHEAD * (MAX_PLAINTEXT // SEGMENT_SIZE + 1)
+    try:
+        with urlopen(Request(url, method="GET"), timeout=_HTTP_TIMEOUT_S) as resp:  # noqa: S310 - presigned https
+            if not 200 <= resp.status < 300:
+                raise ShareError(f"download failed with HTTP {resp.status}")
+            body = resp.read(limit + 1)
+    except HTTPError as err:
+        raise ShareError(f"download failed with HTTP {err.code}") from err
+    except URLError as err:
+        raise ShareError(f"download failed: {err.reason}") from err
+    if len(body) > limit:
+        raise ShareError("the stored object is larger than any share link can be")
+    return body
+
+
 def _kid_of(wrapped: str) -> str:
     """The key id inside a ``wrap_aux`` envelope (bytes 1–8)."""
     return base64.b64decode(wrapped)[1:9].hex()
 
 
-def create_share(
+def _check_link_id(link_id: Any) -> str:
+    if not isinstance(link_id, str) or not _LINK_ID_RE.fullmatch(link_id):
+        raise ShareError("the server returned a malformed link id")
+    return link_id
+
+
+def _seal_meta(link_id: str, version: int, meta: dict[str, Any]) -> str:
+    """``meta`` wrapped for this link and version, under the server's size cap:
+    the masking summary is cut first (its total is kept), then long strings."""
+    meta = dict(meta)
+    masked = list(meta.get("masked") or [])
+    meta["maskedTotal"] = len(masked)
+    keep = len(masked)
+    while True:
+        meta["masked"] = masked[:keep]
+        sealed = sync_keyring.wrap_aux(meta_label(link_id, version), json.dumps(meta).encode("utf-8"))
+        if len(sealed) <= MAX_META_CHARS:
+            return sealed
+        if keep:
+            keep //= 2
+            continue
+        for field in ("path", "title", "pane", "agent"):
+            if isinstance(meta.get(field), str) and len(meta[field]) > 200:
+                meta[field] = meta[field][:200] + "…"
+        sealed = sync_keyring.wrap_aux(meta_label(link_id, version), json.dumps(meta).encode("utf-8"))
+        if len(sealed) <= MAX_META_CHARS:
+            return sealed
+        raise ShareError("the link's description does not fit the server's limit")
+
+
+def _open_meta(link_id: str, version: int, meta_enc: Any) -> dict[str, Any] | None:
+    if not isinstance(meta_enc, str) or not meta_enc:
+        return None
+    try:
+        meta = json.loads(sync_keyring.unwrap_aux(meta_label(link_id, version), meta_enc))
+    except (sync_keyring.KeyringError, ValueError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def _ttl(kind: str, ttl_seconds: int | None) -> int:
+    ttl = KINDS[kind].ttl_days * 86400 if ttl_seconds is None else ttl_seconds
+    if not 1 <= ttl <= MAX_TTL_SECONDS:
+        raise ShareRefused("ttl", f"A link lasts between 1 second and {MAX_TTL_SECONDS // 86400} days.")
+    return ttl
+
+
+def _require_ring() -> None:
+    if sync_keyring.account_key() is None:
+        raise sync_keyring.KeyringError("this machine has no sync key yet")
+
+
+async def _upload(put: Callable[[str, bytes], None] | None, url: Any, blob: bytes) -> None:
+    if not isinstance(url, str):
+        raise ShareError("the server returned no upload URL")
+    await asyncio.to_thread(put or _http_put, url, blob)
+
+
+async def caps(client: LinksClient) -> dict[str, Any]:
+    return await client.request("caps", {})
+
+
+async def create_share(
     client: LinksClient,
     raw_path: str,
     kind: str,
     *,
-    ttl_days: int | None = None,
+    ttl_seconds: int | None = None,
     require_login: bool | None = None,
     created_by: str = "user",
     pane: str = "",
     agent: str = "",
-    put: Callable[[str, bytes], None] = _http_put,
+    put: Callable[[str, bytes], None] | None = None,
 ) -> Created:
-    prepared = prepare(raw_path, kind)
-    spec = KINDS[kind]
-    ttl = spec.ttl_days if ttl_days is None else ttl_days
-    if not 1 <= ttl <= MAX_TTL_DAYS:
-        raise ShareRefused("ttl", f"A link lasts between 1 and {MAX_TTL_DAYS} days.")
-    if sync_keyring.account_key() is None:
-        raise sync_keyring.KeyringError("this machine has no sync key yet")
+    """Mask, encrypt and publish ``raw_path``; the URL carries the only copy of K
+    outside the account ring."""
+    prepared = await asyncio.to_thread(prepare, raw_path, kind)
+    ttl = _ttl(kind, ttl_seconds)
+    _require_ring()
 
     key = new_key()
     blob = encrypt_object(prepared.text.encode("utf-8"), key, kind=kind, version=1)
-    row = client.create(
-        kind=kind,
-        size_bytes=len(blob),
-        ttl_days=ttl,
-        require_login=spec.require_login if require_login is None else require_login,
-        created_by=created_by,
+    row = await client.request(
+        "create",
+        {
+            "kind": kind,
+            "sizeBytes": len(blob),
+            "ttlSeconds": ttl,
+            "requireLogin": KINDS[kind].require_login if require_login is None else require_login,
+            "createdBy": "agent" if created_by == "agent" else "user",
+        },
     )
-    link_id = row.get("linkId")
-    if not isinstance(link_id, str) or not _LINK_ID_RE.fullmatch(link_id):
-        raise ShareError("the server returned a malformed link id")
-    put(row["uploadUrl"], blob)
+    link_id = _check_link_id(row.get("linkId"))
+    await _upload(put, row.get("uploadUrl"), blob)
     meta: dict[str, Any] = {
         "title": prepared.title,
         "path": str(prepared.path),
@@ -324,10 +439,196 @@ def create_share(
         "masked": [{"line": f.line, "category": f.category, "action": f.action} for f in prepared.findings],
     }
     wrapped = sync_keyring.wrap_aux(key_label(link_id, 1), key)
-    client.commit(
-        link_id=link_id,
-        wrapped_key=wrapped,
-        kid=_kid_of(wrapped),
-        meta_enc=sync_keyring.wrap_aux(meta_label(link_id, 1), json.dumps(meta).encode("utf-8")),
+    done = await client.request(
+        "commit",
+        {
+            "linkId": link_id,
+            "version": 1,
+            "wrappedKey": wrapped,
+            "kid": _kid_of(wrapped),
+            "metaEnc": _seal_meta(link_id, 1, meta),
+        },
     )
-    return Created(link_id, link_url(link_id, key), row.get("expiresAt", ""), prepared.findings)
+    expires = done.get("expiresAt") or row.get("expiresAt") or ""
+    return Created(link_id, link_url(link_id, key), str(expires), prepared.findings)
+
+
+def _row_view(row: dict[str, Any]) -> dict[str, Any]:
+    """One links.list row as the Share list shows it. The metadata is opened
+    here; the key and the URL never leave this module (``copy_link`` does)."""
+    link_id = str(row.get("linkId") or "")
+    version = row.get("version") if isinstance(row.get("version"), int) else 1
+    meta = _open_meta(link_id, version, row.get("metaEnc")) or {}
+    return {
+        "linkId": link_id,
+        "kind": row.get("kind") or "",
+        "title": meta.get("title") or "",
+        "path": meta.get("path") or "",
+        "createdBy": "agent" if row.get("createdBy") == "agent" else "user",
+        "pane": meta.get("pane") or "",
+        "agent": meta.get("agent") or "",
+        "maskedTotal": meta.get("maskedTotal", len(meta.get("masked") or [])),
+        "deviceId": row.get("deviceId") or "",
+        "deviceName": row.get("deviceName") or "",
+        "version": version,
+        "state": row.get("state") or "",
+        "active": bool(row.get("active")),
+        "requireLogin": bool(row.get("requireLogin")),
+        "sizeBytes": row.get("sizeBytes") or 0,
+        "createdAt": row.get("createdAt") or "",
+        "expiresAt": row.get("expiresAt") or "",
+        "revokedAt": row.get("revokedAt") or "",
+        "openCount": row.get("openCount") or 0,
+        "firstOpenedAt": row.get("firstOpenedAt") or "",
+        "lastOpenedAt": row.get("lastOpenedAt") or "",
+        "readable": bool(meta),
+    }
+
+
+async def _rewrap_if_stale(client: LinksClient, row: dict[str, Any]) -> None:
+    """After a ring rotation, re-wrap K and the metadata under the active key
+    (links.rewrap). Best effort: a row this machine cannot open is left alone."""
+    wrapped = row.get("wrappedKey")
+    active = sync_keyring.active_key_id()
+    if not isinstance(wrapped, str) or not row.get("active") or active is None:
+        return
+    try:
+        if _kid_of(wrapped) == active:
+            return
+        link_id = str(row["linkId"])
+        version = int(row.get("version") or 1)
+        key = sync_keyring.unwrap_aux(key_label(link_id, version), wrapped)
+        meta = _open_meta(link_id, version, row.get("metaEnc"))
+        rewrapped = sync_keyring.wrap_aux(key_label(link_id, version), key)
+        payload: dict[str, Any] = {
+            "linkId": link_id,
+            "version": version,
+            "wrappedKey": rewrapped,
+            "kid": _kid_of(rewrapped),
+        }
+        if meta is not None:
+            payload["metaEnc"] = _seal_meta(link_id, version, meta)
+        await client.request("rewrap", payload)
+    except (sync_keyring.KeyringError, ShareError, ValueError, KeyError) as err:
+        log.info("re-wrapping a share link after rotation skipped: %s", err)
+
+
+async def list_links(client: LinksClient) -> list[dict[str, Any]]:
+    """Every link of the account, all pages, metadata opened on this machine."""
+    rows: list[dict[str, Any]] = []
+    cursor: Any = None
+    for _ in range(100):  # 50 a page: a 200-link account is four pages
+        page = await client.request("list", {} if cursor is None else {"cursor": cursor})
+        rows.extend(r for r in page.get("links") or [] if isinstance(r, dict))
+        cursor = page.get("next")
+        if not cursor:
+            break
+    for row in rows:
+        await _rewrap_if_stale(client, row)
+    return [_row_view(row) for row in rows]
+
+
+async def _unwrap(client: LinksClient, link_id: str) -> tuple[dict[str, Any], bytes]:
+    link_id = _check_link_id(link_id)
+    row = await client.request("unwrap", {"linkId": link_id})
+    version = int(row.get("version") or 1)
+    key = sync_keyring.unwrap_aux(key_label(link_id, version), str(row.get("wrappedKey") or ""))
+    return row, key
+
+
+async def copy_link(client: LinksClient, link_id: str) -> str:
+    """The URL of an existing link, rebuilt from its wrapped key."""
+    _row, key = await _unwrap(client, link_id)
+    return link_url(link_id, key)
+
+
+async def revoke(client: LinksClient, link_id: str) -> dict[str, Any]:
+    return await client.request("revoke", {"linkId": _check_link_id(link_id)})
+
+
+async def revoke_all(client: LinksClient, device_id: str = "") -> dict[str, Any]:
+    return await client.request("revokeAll", {"deviceId": device_id} if device_id else {})
+
+
+async def extend(client: LinksClient, link_id: str, ttl_seconds: int) -> dict[str, Any]:
+    if not 1 <= ttl_seconds <= MAX_TTL_SECONDS:
+        raise ShareRefused("ttl", f"A link lasts between 1 second and {MAX_TTL_SECONDS // 86400} days.")
+    return await client.request("extend", {"linkId": _check_link_id(link_id), "ttlSeconds": ttl_seconds})
+
+
+async def update_content(
+    client: LinksClient,
+    link_id: str,
+    raw_path: str = "",
+    *,
+    put: Callable[[str, bytes], None] | None = None,
+) -> dict[str, Any]:
+    """Publish the file's current content under the same link and key (only
+    the device that created the link may; the server says NOT_CREATOR)."""
+    row, key = await _unwrap(client, link_id)
+    kind = str(row.get("kind") or "")
+    old_meta = _open_meta(link_id, int(row.get("version") or 1), row.get("metaEnc")) or {}
+    path = raw_path or str(old_meta.get("path") or "")
+    if not path:
+        raise ShareRefused("missing", "This link does not say which file it was made from.")
+    prepared = await asyncio.to_thread(prepare, path, kind)
+    blob_len = len(encrypt_object(prepared.text.encode("utf-8"), key, kind=kind, version=1))
+    started = await client.request("update", {"linkId": link_id, "sizeBytes": blob_len})
+    version = int(started.get("version") or 0)
+    if version < 2:
+        raise ShareError("the server returned no new version for the update")
+    blob = encrypt_object(prepared.text.encode("utf-8"), key, kind=kind, version=version)
+    await _upload(put, started.get("uploadUrl"), blob)
+    meta = {
+        **old_meta,
+        "title": prepared.title,
+        "path": str(prepared.path),
+        "sha256": prepared.sha256,
+        "masked": [{"line": f.line, "category": f.category, "action": f.action} for f in prepared.findings],
+    }
+    wrapped = sync_keyring.wrap_aux(key_label(link_id, version), key)
+    return await client.request(
+        "commit",
+        {
+            "linkId": link_id,
+            "version": version,
+            "wrappedKey": wrapped,
+            "kid": _kid_of(wrapped),
+            "metaEnc": _seal_meta(link_id, version, meta),
+        },
+    )
+
+
+async def rekey(
+    client: LinksClient,
+    link_id: str,
+    *,
+    put: Callable[[str, bytes], None] | None = None,
+    get: Callable[[str], bytes] | None = None,
+) -> Created:
+    """Re-publish a link's current content under a new id and key; the old URL
+    stops working once the new one is committed. Any device of the account
+    holding the ring can do this."""
+    row, old_key = await _unwrap(client, link_id)
+    version = int(row.get("version") or 1)
+    blob = await asyncio.to_thread(get or _http_get, str(row.get("downloadUrl") or ""))
+    kind, _v, plaintext = decrypt_object(blob, old_key, expected_version=version)
+    meta = _open_meta(link_id, version, row.get("metaEnc")) or {}
+    key = new_key()
+    sealed = encrypt_object(plaintext, key, kind=kind, version=1)
+    started = await client.request("rekey", {"linkId": link_id, "sizeBytes": len(sealed)})
+    new_id = _check_link_id(started.get("linkId"))
+    await _upload(put, started.get("uploadUrl"), sealed)
+    wrapped = sync_keyring.wrap_aux(key_label(new_id, 1), key)
+    done = await client.request(
+        "commit",
+        {
+            "linkId": new_id,
+            "version": 1,
+            "wrappedKey": wrapped,
+            "kid": _kid_of(wrapped),
+            "metaEnc": _seal_meta(new_id, 1, meta),
+        },
+    )
+    expires = done.get("expiresAt") or started.get("expiresAt") or ""
+    return Created(new_id, link_url(new_id, key), str(expires), [])
