@@ -33,6 +33,7 @@ data) plus the CLIs' memory files, which never leave the machine.
 
 from __future__ import annotations
 
+import bisect
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -71,80 +72,122 @@ def _share_form(pattern: re.Pattern[str]) -> re.Pattern[str]:
     return re.compile(_B + src[2:] if src.startswith(r"\b") else src, pattern.flags)
 
 
+# Every pattern below is bounded: no unbounded run is followed by something
+# that can fail, so a long adversarial line costs time proportional to its
+# length (a run that scans to the end of a line and then fails, once per
+# possible start, is quadratic). Keys are at most 64+64 characters around the
+# keyword, values at most 4096, URL passwords 256, private-key bodies 16 KiB.
 _PRIVATE_KEY_RE = re.compile(
-    r"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----"
-    r"(?:.*?-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|[A-Za-z0-9+/=\s\\]*)",  # or cut short
+    r"-----BEGIN (?:[A-Z0-9]{1,16} ){0,4}PRIVATE KEY(?: BLOCK)?-----"
+    # the body up to its END line, never across another BEGIN; or cut short
+    r"(?:(?:(?!-----BEGIN ).){0,16384}?-----END (?:[A-Z0-9]{1,16} ){0,4}PRIVATE KEY(?: BLOCK)?-----"
+    r"|[A-Za-z0-9+/=\s\\]{0,16384})",
     re.DOTALL,
 )
 # The guard's "/bot<anything>/" is right for a command line and wrong for a
 # document, where it rewrites /bottles/ and /both; a share wants the token shape.
-_BOT_URL = (re.compile(r"/bot(\d{5,}:[A-Za-z0-9_-]{30,})(?=/|\b)"), "/bot[redacted]", "bot-token")
-_REDACTED = "[redacted]"
-#: Every way a plan file spells a quote: plain, JSON-escaped (plan-meta) and
-#: as an HTML entity (escaped visible markup). Longest first.
-_QUOTE = r"""(?:\\"|\\'|&quot;|&\#0*34;|&\#x0*22;|&\#0*39;|&\#x0*27;|&apos;|"|')"""
-#: A credential-looking key. Any prefix (client_secret, auth_token,
-#: refreshToken), but only key/base/id as suffixes (SECRET_KEY_BASE, secretKey,
-#: accessKeyId): tokenizer, max_tokens and passwordHash are not credentials.
-#: "auth" and "pwd" are left out on purpose: author, authority, oauth_url and
-#: the shell's working directory are far more common in a plan than secrets.
-_CRED_KEY = (
-    r"\w*?(?:secret|passw(?:or)?d|passphrase|token|api[_-]?key|apikey|private[_-]?key"
-    r"|signing[_-]?key|encryption[_-]?key|access[_-]?key)(?:[_-]?(?:key|base|id))*(?!\w)"
+_BOT_URL = (re.compile(r"/bot(\d{5,}:[A-Za-z0-9_-]{30,256})(?=/|\b)"), "/bot[redacted]", "bot-token")
+#: The guard's JWT shape with bounded segments, and no start inside a
+#: base64url run ("-ey-ey-ey…" is not three tokens).
+_JWT = (
+    re.compile(r"(?<![A-Za-z0-9_-])ey[A-Za-z0-9_-]{10,4096}+\.[A-Za-z0-9_-]{10,4096}+\.[A-Za-z0-9_-]{10,4096}+"),
+    "[redacted]",
+    "jwt",
 )
-_CRED_PREFIX = rf"(?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s*[:=]\s*"
+_REDACTED = "[redacted]"
+#: Every way a plan file spells a quote: plain, JSON-escaped (plan-meta, also
+#: as ") and as an HTML entity (escaped visible markup, also after a
+#: backslash). Longest first.
+_QUOTE = r"""(?:\\u0022|\\&quot;|\\"|\\'|&quot;|&\#0*34;|&\#x0*22;|&\#0*39;|&\#x0*27;|&apos;|"|')"""
+#: Suffixes that make a credential word name something that is not a secret:
+#: tokens, tokenizer, passwordless, secretary, passwordHash, token_url,
+#: max_tokens… Any other suffix (tokenValue, password_hash_salt,
+#: OPENAI_API_KEY_PROD, token2) is still a credential key. Longer
+#: alternatives first: the repetition is possessive and does not retry.
+_SAFE_SUFFIX = (
+    r"(?:izer|ize|less|ary|hash|policy|name|endpoint|url|uri|type|ttl|count|length|len|used"
+    r"|reset|ref|manager|min|max|rules|rule|field|label|prompt|hint|header|path|file|s)"
+)
+#: A credential-looking key: any prefix (client_secret, auth_token,
+#: refreshToken, MYSQL_PWD), any suffix but the ones above. "auth" is left
+#: out on purpose: author, authority and oauth_url are far more common in a
+#: plan than auth secrets. "pwd" is captured, because a pwd whose value is a
+#: path is the working directory, not a password.
+_CRED_KEY = (
+    r"\w{0,64}?(?:secret|passw(?:or)?d|passphrase|token|api[_-]?key|apikey|private[_-]?key"
+    r"|signing[_-]?key|encryption[_-]?key|access[_-]?key|(?P<pwd>pwd))"
+    rf"(?!(?:[_-]?{_SAFE_SUFFIX})++(?!\w))\w{{0,64}}(?!\w)"
+)
+_CRED_PREFIX = rf"(?<!\w){_QUOTE}?{_CRED_KEY}{_QUOTE}?\s{{0,64}}[:=]\s{{0,64}}"
+#: A pwd value that starts like a path is a directory.
+_PWD_PATH = r"(?(pwd)(?![/~]))"
+#: A backslash pair inside an unquoted value (C:\\Users\\x, or the doubled
+#: backslashes of the same path inside JSON) — but never a backslashed quote,
+#: which is the end of a surrounding JSON string. The pair and the single
+#: character below never match the same text, so this cannot backtrack.
+_ESCAPE_PAIR = r"""\\(?![\"'&]|u0022)\S"""
 #: A credential key with a quoted value: the whole value goes, spaces
 #: included, and an escaped quote inside it does not end it. The two value
 #: branches never match the same character (a backslash starts an escape,
 #: anything else is one character), so a long run of backslashes with no
 #: closing quote cannot backtrack exponentially.
 _QUOTED_CREDENTIAL = (
-    re.compile(rf"(?i)({_CRED_PREFIX}(?P<q>{_QUOTE}))(?:(?!(?P=q))(?:\\.|[^\\\n]))+(?=(?P=q))"),
+    re.compile(
+        rf"(?i)({_CRED_PREFIX}(?P<q>{_QUOTE})){_PWD_PATH}(?:(?!(?P=q))(?:\\.|[^\\\n])){{1,4096}}(?=(?P=q))"
+    ),
     r"\1" + _REDACTED,
     "credential-assignment",
 )
 #: The same, with the closing quote missing: mask up to the next space,
 #: quote, backslash or markup, as an unquoted value would be.
 _UNCLOSED_CREDENTIAL = (
-    re.compile(rf"(?i)({_CRED_PREFIX}{_QUOTE})[^\s\"'\\&<>]+"),
+    re.compile(rf"(?i)({_CRED_PREFIX}{_QUOTE}){_PWD_PATH}(?:{_ESCAPE_PAIR}|[^\s\"'\\&<>]){{1,4096}}"),
     r"\1" + _REDACTED,
     "credential-assignment",
 )
-#: Values that are settings or type names, not secrets: literals, a bare
-#: number, and the words a schema or a code sample puts after a key.
+#: Values that are settings or type names, not secrets: literals, a number
+#: of at most 5 digits (a port, a size, a count — 12345678 is a PIN), and the
+#: words a schema or a code sample puts after a key.
 _NOT_A_SECRET = (
     r"(?!(?:true|false|null|none|undefined|string|number|boolean|required|optional)(?![\w-]))"
-    r"(?![0-9]+(?![^\s'\"&<>,;\\]))"
+    r"(?![0-9]{1,5}(?![^\s'\"&<>,;\\]))"
 )
 #: The same keys with a bare value (.env, YAML). The value stops at a
 #: backslash, so the \" that closes a surrounding JSON string survives.
 _BARE_CREDENTIAL = (
-    re.compile(rf"(?i)((?<!\w){_CRED_KEY}\s*[:=]\s*)(?!{_QUOTE}){_NOT_A_SECRET}[^\s'\"&<>,;\\]{{4,}}"),
+    re.compile(
+        rf"(?i)((?<!\w){_CRED_KEY}\s{{0,64}}[:=]\s{{0,64}})(?!{_QUOTE}){_PWD_PATH}{_NOT_A_SECRET}"
+        rf"(?:{_ESCAPE_PAIR}|[^\s'\"&<>,;\\]){{4,4096}}"
+    ),
     r"\1" + _REDACTED,
     "credential-assignment",
 )
 #: user:password@ in a URL, also with no user (redis://:pw@host), a "/" in
 #: the password, or an "@" in it (up to the last "@" before the host). A port
 #: followed by a path (localhost:5173/@vite) is not a password, and neither is
-#: anything whose "@" directly follows a "/".
+#: anything whose "@" directly follows a "/". The password is at most 256
+#: characters and never crosses a quote, "<", ">" or ",".
 _URL_CREDENTIALS = (
-    re.compile(r"(://[^/\s:@]*:)(?!\d+/)(?:[^\s@]|@(?=[^\s/@]*@))+(?<!/)@(?=[\w.\[-])"),
+    re.compile(
+        r"(://[^/\s:@\"'<>,]{0,256}:)(?!\d+/)"
+        r"(?:[^\s@\"'<>,]|@(?=[^\s/@\"'<>,]{0,256}@)){1,256}(?<!/)@(?=[\w.\[-])"
+    ),
     r"\1" + _REDACTED + "@",
     "url-credentials",
 )
 #: Provider token shapes the guard list does not cover.
 _PROVIDERS = (
     (r"AIza[\w-]{35}", "google-api-key"),
-    (r"glpat-[\w-]{20,}", "gitlab-token"),
-    (r"[sr]k_(?:live|test)_[0-9A-Za-z]{24,}", "stripe-key"),
+    (r"glpat-[\w-]{20,256}", "gitlab-token"),
+    (r"[sr]k_(?:live|test)_[0-9A-Za-z]{24,256}", "stripe-key"),
     (r"npm_[A-Za-z0-9]{36}", "npm-token"),
-    (r"hf_[A-Za-z0-9]{30,}", "huggingface-token"),
+    (r"hf_[A-Za-z0-9]{30,256}", "huggingface-token"),
     (r"(?:AKIA|ASIA|AGPA|AIDA|AROA)[0-9A-Z]{16}", "aws-access-key"),
-    (r"xapp-\d-[\w-]+", "slack-app-token"),
+    (r"xapp-\d-[\w-]{1,256}", "slack-app-token"),
     (r"SG\.[\w-]{22}\.[\w-]{43}", "sendgrid-key"),
-    (r"pypi-AgE[\w-]{50,}", "pypi-token"),
+    (r"pypi-AgE[\w-]{50,512}", "pypi-token"),
     (r"\d{8,10}:AA[\w-]{33}", "telegram-bot-token"),
-    (r"[MNO][\w-]{23,25}\.[\w-]{6}\.[\w-]{27,}", "discord-bot-token"),
+    (r"[MNO][\w-]{23,25}\.[\w-]{6}\.[\w-]{27,128}", "discord-bot-token"),
 )
 
 #: (pattern, replacement template, category), checked in this order.
@@ -155,12 +198,13 @@ HIGH_CONFIDENCE: tuple[tuple[re.Pattern[str], str, str], ...] = (
     _BARE_CREDENTIAL,
     _URL_CREDENTIALS,
     _BOT_URL,
+    _JWT,
     *(
         (_share_form(pattern), repl.replace("<redacted>", _REDACTED), category)
         for (pattern, repl), category in zip(_SECRET_PATTERNS, _GUARD_CATEGORIES)
-        # Replaced share-side: _BOT_URL needs the token shape, and the
-        # credential keys are _QUOTED/_BARE_CREDENTIAL's wider list.
-        if category not in ("bot-token", "credential-assignment")
+        # Replaced share-side: _BOT_URL needs the token shape, _JWT is
+        # bounded, and the credential keys are _QUOTED/_BARE_CREDENTIAL's list.
+        if category not in ("bot-token", "credential-assignment", "jwt")
     ),
     *((re.compile(_B + src), _REDACTED, category) for src, category in _PROVIDERS),
 )
@@ -198,8 +242,26 @@ class ScanResult:
     findings: list[Finding]
 
 
-def _overlaps(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
-    return any(start < s_end and s_start < end for s_start, s_end in spans)
+class _Spans:
+    """Sorted, non-overlapping spans, asked "does [start, end) touch one?"
+    in O(log n) — a linear walk per hit made a text with many findings
+    quadratic."""
+
+    def __init__(self, spans: list[tuple[int, int]]) -> None:
+        self._starts = [s for s, _ in spans]
+        self._ends = [e for _, e in spans]
+
+    def overlaps(self, start: int, end: int) -> bool:
+        i = bisect.bisect_left(self._starts, end) - 1  # the last span starting before end
+        return i >= 0 and self._ends[i] > start
+
+
+def _line_of(newlines: list[int], pos: int) -> int:
+    return bisect.bisect_left(newlines, pos) + 1
+
+
+def _newlines(text: str) -> list[int]:
+    return [i for i, ch in enumerate(text) if ch == "\n"]
 
 
 def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
@@ -221,21 +283,23 @@ def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
 def scan(text: str, *, kind: str) -> ScanResult:
     """``text`` with its secrets masked, and where each finding was."""
     masked = _high_confidence(text)
+    high = _Spans([(s, e) for s, e, _, _ in masked])
     skip: list[tuple[int, int]] = []
     for m in _DATA_URI_RE.finditer(text):
         glued = _GLUED_RUN.match(text, m.end()).end()
         if glued > m.end():
-            if not _overlaps(m.start(1), glued, [(s, e) for s, e, _, _ in masked]):
+            if not high.overlaps(m.start(1), glued):
                 masked.append((m.start(1), glued, _REDACTED, "possible-secret"))
         else:
             skip.append(m.span())
     masked.sort()
-    taken = [(s, e) for s, e, _, _ in masked]
+    exempt = _Spans(skip)
+    taken = _Spans([(s, e) for s, e, _, _ in masked])
 
     warned: list[tuple[int, str]] = []
     for m in _SECRET_HINT_RE.finditer(text):
         start, end = m.span()
-        if _overlaps(start, end, skip) or _overlaps(start, end, taken):
+        if exempt.overlaps(start, end) or taken.overlaps(start, end):
             continue
         if _SHA1_RE.fullmatch(m.group(0)):
             continue
@@ -245,21 +309,20 @@ def scan(text: str, *, kind: str) -> ScanResult:
             warned.append((start, "possible-secret"))
     masked.sort()
 
+    newlines = _newlines(text)
+    findings = [Finding(_line_of(newlines, s), category, MASKED) for s, _, _, category in masked]
+    findings += [Finding(_line_of(newlines, pos), category, WARNED) for pos, category in warned]
+
     # A token split by zero-width or written in full-width characters reads
     # the same to a person; check a normalised copy and warn about what only
     # it shows. Removing zero-width characters and NFKC keep line breaks.
     folded = unicodedata.normalize("NFKC", _ZERO_WIDTH_RE.sub("", text))
     if folded != text:
         plain = {text[s:e] for s, e, _, _ in masked}
+        folded_newlines = _newlines(folded)
         for start, end, _, category in _high_confidence(folded):
             if folded[start:end] not in plain:
-                warned.append((folded.count("\n", 0, start) + 1, f"obfuscated-{category}"))
-
-    findings = [Finding(text.count("\n", 0, s) + 1, category, MASKED) for s, _, _, category in masked]
-    findings += [
-        Finding(pos if category.startswith("obfuscated-") else text.count("\n", 0, pos) + 1, category, WARNED)
-        for pos, category in warned
-    ]
+                findings.append(Finding(_line_of(folded_newlines, start), f"obfuscated-{category}", WARNED))
     findings.sort(key=lambda f: f.line)
 
     out: list[str] = []

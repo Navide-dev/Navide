@@ -314,3 +314,139 @@ def test_a_real_plan_with_a_bare_credential_in_quotes_stays_a_valid_plan(tmp_pat
     meta = parse_plan_meta(out)
     assert meta is not None, "plan-meta no longer parses"
     assert [t["content"] for t in meta["todos"]][2] == "keep me intact"
+
+
+# ---- review round 4 ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "password_hash_salt=%s",
+        "tokenValue=%s",
+        "OPENAI_API_KEY_PROD=%s",
+        "client_secret_value=%s",
+        "secretValue: %s",
+        "access_token_value=%s",
+        "api_key_v2=%s",
+        "password1=%s",
+        "token2=%s",
+        "secret_access_key_id=%s",
+        "apiKeySecret=%s",
+        "token_secret=%s",
+        "DJANGO_SECRET_KEY=%s",
+    ],
+)
+def test_a_credential_key_with_any_other_suffix_is_masked(template: str) -> None:
+    """B-F4: suffixes are masked by default; only known non-secret ones are not."""
+    assert Z not in _masked(template % Z)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "passwordless: enabled",
+        "secretary: Alice",
+        "secretsManager: aws",
+        "token_type: bearer",
+        "tokenTtl: 3600",
+        "passwordReset: /reset",
+        "secret_ref: vault://kv/app",
+        "x_token_count: 12",
+        "token_url: https://h/x",
+        "password_min_length: 12",
+        "tokenize = function(x)",
+        "PWD=/Users/neil/repo",
+        "pwd: ~/project",
+        "api_key: 4096",
+    ],
+)
+def test_known_non_secret_suffixes_and_values_are_left_alone(text: str) -> None:
+    assert _masked(text) == text
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ("password: 12345678", "12345678"),
+        ('"password": "12345678"', "12345678"),
+        ("pin_password=00491234", "00491234"),
+        ("token: 1234567890123456789012", "1234567890123456789012"),
+        ("MYSQL_PWD=hunter2xyz", "hunter2xyz"),
+        ("pwd=hunter2", "hunter2"),
+        ("db_pwd: " + Z, Z),
+        ("password: stringZ9q", "stringZ9q"),
+    ],
+)
+def test_long_numbers_and_pwd_values_are_masked(text: str, secret: str) -> None:
+    """B-F5: only numbers of up to 5 digits are settings. B-F6: pwd is a key
+    again, except when its value is a path."""
+    assert secret not in _masked(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{\\u0022api_key\\u0022: \\u0022' + Z + '\\u0022}',
+        "api_key=\\u0022" + Z + "\\u0022",
+        "api_key=\\&quot;" + Z + "\\&quot;",
+    ],
+)
+def test_unicode_and_backslashed_entity_quotes_delimit_a_value(text: str) -> None:
+    """B-F8."""
+    assert Z not in _masked(text)
+
+
+def test_url_password_stops_at_quotes_and_markup() -> None:
+    """B-F1: the password part is bounded and never crosses " ' < > ,"""
+    text = '<a href="https://u:' + Z + '@host/x">link</a>, "mailto:x@y.z"'
+    out = _masked(text)
+    assert Z not in out
+    assert out.endswith('@host/x">link</a>, "mailto:x@y.z"')
+
+
+_GENERATORS = {
+    "many escaped keys": lambda n: 'token=\\"a\\\\' * n,
+    "many entity keys": lambda n: "token=&quot;a " * n,
+    "many bare keys": lambda n: "token=abcd " * n,
+    "scheme repeats": lambda n: "://a:" * n,
+    "BEGIN repeats": lambda n: "-----BEGIN PRIVATE KEY-----" * n,
+    "ey repeats": lambda n: "-ey" * n,
+    "long unclosed value": lambda n: 'password: "' + "a" * (n * 10),
+    "repeated key words": lambda n: "secret" * n + "z=abcd",
+    "repeated suffixes": lambda n: "token" + "_key" * n + "z=abcd",
+    "url at repeats": lambda n: "http://u:" + "a@" * n + "/",
+    "unclosed keys": lambda n: 'password: "abc ' * n,
+}
+
+
+@pytest.mark.parametrize("name", sorted(_GENERATORS))
+def test_scan_time_stays_near_linear(name: str) -> None:
+    """B-F2/B-F3 and the round-4 ReDoS sweep: patterns are bounded, so a long
+    adversarial line costs time proportional to its length. 20 000 repeats
+    used to take seconds to minutes for several of these."""
+    import time
+
+    text = _GENERATORS[name](20_000)
+    started = time.perf_counter()
+    share_scan.scan(text, kind="plan")
+    assert time.perf_counter() - started < 2.0, name
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "secret: C:\\Users\\neil\\" + Z,
+        'password: "C:\\d0\\d1\\d2' + Z,
+    ],
+)
+def test_a_windows_path_value_is_masked_whole_and_json_stays_valid(text: str) -> None:
+    """A value stops at a quote, not at every backslash: an escape pair is part
+    of it, a backslashed quote is not."""
+    import json
+
+    assert Z not in _masked(text)
+    wrapped = json.dumps({"c": text, "d": "keep"})
+    out = _masked(wrapped)
+    assert Z not in out
+    assert json.loads(out)["d"] == "keep"
