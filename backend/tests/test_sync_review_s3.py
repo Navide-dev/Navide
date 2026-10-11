@@ -686,3 +686,36 @@ async def test_an_hmac_account_taken_off_s3_keeps_v3_and_its_hashed_ids(tmp_path
     assert (await b.sync())["ok"] is True
     assert b.adapter.items == {**NAMES, "gamma": {"v": "g"}}
     assert all(HASHED.match(i) for i in _live_ids(server))
+
+
+async def test_an_account_the_server_keeps_on_legacy_ids_is_asked_once_per_connection(tmp_path, account_key, s3):
+    """D3 is off by default on the server (NAVIDE_SYNC_HMAC_ACCOUNTS empty):
+    an s3 account outside that list answers adoptHmacIds with UNSUPPORTED.
+    The device keeps its legacy ids and asks again only on a new connection,
+    never round after round."""
+    from tests.test_sync_hashed_ids import NAMES
+
+    server = V3Server(s3, adopt_ready=True)
+    a = V3Device(tmp_path, server, "A", dict(NAMES))
+    real = a.engine._request
+    asked: list[str] = []
+
+    async def legacy_only(msg_type, payload):
+        if msg_type == "sync.adoptHmacIds":
+            asked.append(msg_type)
+            return {"ok": False, "error": {"code": "UNSUPPORTED", "message": "", "details": None}}
+        return await real(msg_type, payload)
+
+    a.engine._request = legacy_only
+    for n in range(4):
+        a.adapter.items[f"extra-{n}"] = {"v": n}
+        assert (await a.sync())["ok"] is True
+    assert len(asked) == 1
+    a.reconnect()
+    for _ in range(3):
+        assert (await a.sync())["ok"] is True
+    assert len(asked) == 2
+    assert server.item_ids == "legacy"
+    assert all(not HASHED.match(k[1]) for k in server.rows)
+    assert all(not s.wire_id for s in a.store.states("prompts").values())
+    assert server.rows[("prompts", "extra-3")]["objectRef"]
