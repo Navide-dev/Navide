@@ -82,7 +82,7 @@
         "name": "Claude hook：回合偵測、Navide Guard 與喚醒",
         "benefit": "Claude 會回報每一回合何時結束、Navide Guard 會檢查 Claude 的工具呼叫，推播頻道也能喚醒閒置的 Claude。",
         "purpose": "讓 Navide 知道 Claude 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
-        "writes": "~/.claude/settings.json 裡的 hooks（回合偵測、Navide Guard、喚醒）",
+        "writes": "只在 Navide 開的 Claude pane 生效：啟動時帶上 hooks（回合偵測、Navide Guard、喚醒），不改你的 ~/.claude/settings.json。舊版寫進該檔的項目會在啟動時收回並留備份；收不回時沿用該檔裡的 hooks",
         "cost": "回合結束改由輸出推測，不再由 Claude 回報；Navide Guard 不會檢查 Claude 的工具呼叫；推播頻道無法喚醒閒置的 Claude。"
       },
       "qwen_hooks": {
@@ -96,14 +96,14 @@
         "name": "Copilot hook：回合偵測與 Navide Guard",
         "benefit": "Copilot 會回報每一回合何時結束，Navide Guard 會檢查 Copilot 的工具呼叫。",
         "purpose": "讓 Navide 知道 Copilot 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
-        "writes": "~/.copilot/hooks/agent-team.json",
+        "writes": "只在 Navide 開的 Copilot pane 生效：pane 自己的 hooks 資料夾帶上 Navide 的 hook 檔，不改你的 ~/.copilot。舊版寫進 ~/.copilot/hooks/agent-team.json 的檔案會在啟動時收回並留備份；收不回時沿用該檔",
         "cost": "回合結束改由輸出推測，不再由 Copilot 回報；Navide Guard 不會檢查 Copilot 的工具呼叫。"
       },
       "codex_hook-trust": {
         "name": "Codex hook 信任沿用",
         "benefit": "Codex pane 會沿用你已經給過自己 hooks 的信任，不必每個 pane 再問一次。",
         "purpose": "讓 Codex pane 不必再要你重新信任自己的 hooks",
-        "writes": "~/.codex/config.toml 裡的 [hooks.state] 列",
+        "writes": "只在 Navide 開的 Codex pane 生效：啟動時在指令列帶上你已信任的 hook，不改你的 ~/.codex/config.toml。舊版寫進該檔的 [hooks.state] 列會在啟動時收回並留備份；收不回時（或開發版 Navide）沿用寫入該檔的做法",
         "cost": "每個 Codex pane 都會再要你信任一次自己的 hooks。"
       },
       "codex_login-promote": {

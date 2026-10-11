@@ -82,7 +82,7 @@
         "name": "Claude hook：ターン検出、Navide Guard、起動",
         "benefit": "Claude がターンの終了を報告し、Navide Guard が Claude のツール呼び出しを確認し、プッシュチャネルがアイドル中の Claude を起こせます。",
         "purpose": "Navide が Claude のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
-        "writes": "~/.claude/settings.json の hooks（ターン検出、Navide Guard、起動）",
+        "writes": "Navide が開く Claude ペインだけで有効：起動時に hooks（ターン検出、Navide Guard、起動）を渡し、~/.claude/settings.json は変更しません。以前のバージョンがそこに書いた項目は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルの hooks を使い続けます",
         "cost": "ターン終了は報告ではなく出力から推測されます。Navide Guard は Claude のツール呼び出しを確認せず、プッシュチャネルはアイドル中の Claude を起こせません。"
       },
       "qwen_hooks": {
@@ -96,14 +96,14 @@
         "name": "Copilot hook：ターン検出と Navide Guard",
         "benefit": "Copilot がターンの終了を報告し、Navide Guard が Copilot のツール呼び出しを確認します。",
         "purpose": "Navide が Copilot のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
-        "writes": "~/.copilot/hooks/agent-team.json",
+        "writes": "Navide が開く Copilot ペインだけで有効：各ペイン自身の hooks フォルダに Navide の hook ファイルを置き、~/.copilot は変更しません。以前のバージョンが書いた ~/.copilot/hooks/agent-team.json は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルを使い続けます",
         "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Copilot のツール呼び出しを確認しません。"
       },
       "codex_hook-trust": {
         "name": "Codex hook の信頼を引き継ぐ",
         "benefit": "Codex pane は、自分の hooks にすでに与えた信頼を引き継ぎ、再確認しません。",
         "purpose": "Codex pane で自分の hooks を再度信頼する必要がなくなる",
-        "writes": "~/.codex/config.toml の [hooks.state] 行",
+        "writes": "Navide が開く Codex ペインだけで有効：信頼済みの hook をコマンドラインで渡し、~/.codex/config.toml は変更しません。以前のバージョンがそこに書いた [hooks.state] 行は起動時にバックアップを取って引き上げます。引き上げられない場合（または開発版の Navide）は従来どおりそのファイルに書きます",
         "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
       },
       "codex_login-promote": {
