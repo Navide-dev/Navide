@@ -308,6 +308,25 @@ describe('account modal — your network', () => {
     expect(MODAL).toMatch(/await props\.backend\.send\(type, args\)[\s\S]{0,60}await loadNetwork\(\)/)
   })
 
+  it('says why a trust decision was refused instead of dropping the answer', () => {
+    // A full pairing record refuses a block (KC2R-1): with the reply ignored,
+    // the row just stayed and nothing said why.
+    for (const fn of ['async function decide(', 'async function blockPending(']) {
+      const body = MODAL.slice(MODAL.indexOf(fn), MODAL.indexOf('\n}\n', MODAL.indexOf(fn)))
+      expect(body).toMatch(/if \(!resp\.ok\) error\.value = resp\.error\?\.message \?\? t\('account\.err-generic'\)/)
+    }
+  })
+
+  it('tells someone whose pairing record is full to unpair before blocking', () => {
+    // KC3-1: a machine paired with many devices before the reserve existed
+    // cannot store a block; the way out is to unpair that device first.
+    expect(MODAL).toMatch(/code === 'p2p-trust-store-full'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-full'\)/)
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      const messages = i18n.global.getLocaleMessage(locale) as Record<string, any>
+      expect(messages?.settings?.p2p?.trust?.['block-full'], locale).toBeTruthy()
+    }
+  })
+
   it('reads the trust state from the snapshot it already polls', () => {
     // Not a second timer and not a subscription: one read, so the panel cannot
     // draw half of one moment and half of the next.
@@ -602,6 +621,46 @@ describe('account modal — your network', () => {
     expect(end).toBeGreaterThan(start)
     return MODAL.slice(start, end)
   }
+
+  it('names the pairing limit in every language when a pin does not fit', () => {
+    // Review KC-2: the backend records a device-pairing notice with pairing
+    // "full", and the row renders t('settings.p2p.pair.' + n.pairing).
+    expect(MODAL).toContain("t('settings.p2p.pair.' + n.pairing")
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.full).toContain('{device}')
+    }
+  })
+
+  it('says when the trust journal cannot be used, without calling pairing broken', () => {
+    // Review KC-3: an unreadable journal is kept, not overwritten, and the
+    // person is told — pairing itself is unaffected, so this is not the lock card.
+    const start = MODAL.indexOf('v-if="trustJournalProblem"')
+    expect(start).toBeGreaterThan(-1)
+    expect(start).toBeLessThan(MODAL.indexOf('class="card locked-card"'))
+    const card = MODAL.slice(start, MODAL.indexOf('</div>', start))
+    expect(card).toContain("t('settings.p2p.trust.journal-problem')")
+    expect(card).toContain('{{ trustJournalProblem }}')
+    expect(card).not.toMatch(/<button/)
+    expect(MODAL).toContain("const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')")
+  })
+
+  it('says a damaged record is damaged and that pairing again is the fix', () => {
+    // 2026-10-11: a record cut off by a Keychain write read as "had trust state
+    // and no longer does", which points at an attack, not at the one fix.
+    const locked = lockedMarkup()
+    expect(locked).toMatch(
+      /v-if="trustDamaged"[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.damaged-body'\) \}\}[\s\S]*v-else[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.locked-body'\) \}\}/,
+    )
+    const armed = locked.slice(locked.indexOf('v-else-if="rebuildArmed"'), locked.indexOf('rebuildTrust()'))
+    expect(armed).toContain("trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn'")
+    expect(MODAL).toContain("const trustDamaged = computed(() => network.value?.trustDamaged === true)")
+  })
 
   it('offers no way out at all while the read is still being retried', () => {
     // The dangerous state, and the one that used to be indistinguishable from a

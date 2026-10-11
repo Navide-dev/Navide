@@ -58,7 +58,9 @@ import websockets
 
 from .credential_vault import vault_to_thread
 from . import (
+    __version__,
     agent_messaging,
+    cloud_secrets,
     device_crypto,
     device_identity,
     device_pairing,
@@ -238,6 +240,10 @@ LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
 LINK_TRUST_UNAVAILABLE = "p2p-trust-unavailable"
+#: Refused because the trust record has no room for the change (a policy
+#: sequence). Said apart from LINK_TRUST_UNAVAILABLE, which reads as "this
+#: machine cannot open its record" and would send someone looking for a lock.
+TRUST_STORE_FULL = "p2p-trust-store-full"
 
 #: The one word every unauthenticated inbound message is refused with. Kept
 #: single on purpose, exactly as "policy-denied" covers both blocked and merely
@@ -410,11 +416,11 @@ def set_access_token(
     with _token_lock:
         if expect_generation is not None and expect_generation != _token_generation:
             raise StaleTokenWrite("the stored navide-server token changed since this rotation began")
-        _vault().write_app_secret(slot, value or None)
+        cloud_secrets.write(_vault(), slot, value or None)
         if expect_generation is None:
             _token_generation += 1
             if slot == ACCESS_TOKEN_SECRET:
-                _vault().write_app_secret(ACCESS_TOKEN_NEXT_SECRET, None)
+                cloud_secrets.write(_vault(), ACCESS_TOKEN_NEXT_SECRET, None)
 
 
 def _read_token_slot_strict(slot: str) -> str:
@@ -522,7 +528,7 @@ def _workspace_salt() -> bytes:
         stored = _vault().read_app_secret(WORKSPACE_SALT_SECRET)
         if not stored:
             stored = secrets.token_hex(32)
-            _vault().write_app_secret(WORKSPACE_SALT_SECRET, stored)
+            cloud_secrets.write(_vault(), WORKSPACE_SALT_SECRET, stored)
     except Exception as err:  # noqa: BLE001
         log.warning("workspace digest salt is unavailable (%s); using a per-run one", err)
         stored = secrets.token_hex(32)
@@ -1065,6 +1071,8 @@ class ServerLink:
                 # re-sent for it. One catch-up round per connection; deliberately
                 # spawned rather than awaited, because a large first sync must
                 # not hold the session open before its reader starts.
+                if self._sync_engine is not None:
+                    self._sync_engine.reset_connection()  # sync.caps is per connection
                 self._spawn(self._sync_all())
                 # Messages in both directions whose answer the dropped
                 # connection may have swallowed: acks this device could not send,
@@ -1709,6 +1717,9 @@ class ServerLink:
             {
                 "credential": config.token,
                 "client": CLIENT_NAME,
+                # The server records the last version each device reported, so a
+                # protocol migration can tell whether older builds are still online.
+                "clientVersion": __version__,
                 "deviceId": self._device_id,
                 "deviceName": self._device_name,
                 # Published on every hello, not only the first: the server keeps
@@ -2168,6 +2179,9 @@ class ServerLink:
             return self._trust_refusal()
         try:
             signed = await asyncio.to_thread(self._signed_policy, policy)
+        except trust_store.TrustStoreFull as err:
+            log.warning("could not sign the pane policy: %s", err)
+            return {"ok": False, "error": {"code": TRUST_STORE_FULL, "message": str(err)}}
         except Exception as err:  # noqa: BLE001
             log.warning("could not sign the pane policy: %s", err)
             return self._trust_refusal()
@@ -2691,6 +2705,12 @@ class ServerLink:
             # erase everything, which has nothing to erase when the keychain was
             # merely locked for a moment.
             "trustLockedTransient": trust_store.transient_lock(),
+            # The record is there but cut off, so the card can say "damaged —
+            # pair again" instead of an unexplained lock.
+            "trustDamaged": trust_store.damaged(),
+            # The journal (notices, delivered-message ledger) is unreadable or
+            # was set aside. Pairing is unaffected; the card says so.
+            "trustJournalProblem": trust_store.journal_problem(),
             # This device first, then by label: the row a user recognises is
             # the one that should not move as other machines come and go.
             "devices": sorted(
@@ -3433,6 +3453,18 @@ class ServerLink:
                 member_id=member_id or member_id_for(device_id),
                 own_member_id=self._own_member,
             )
+        except trust_store.TrustStoreFull as err:
+            # Said where the person looks, not only in the log: the digits
+            # matched and nothing else explains why the device is not paired.
+            log.warning("could not pin %s after pairing: %s", device_id, err)
+            await asyncio.to_thread(
+                trust_store.note_pairing,
+                device_id,
+                kind="full",
+                device_name=pairing.device_name or self._device_name_for(device_id),
+            )
+            await self._announce_trust_notices()
+            return False
         except Exception as err:  # noqa: BLE001
             log.error("could not pin %s after pairing: %s", device_id, err)
             return False
@@ -4101,6 +4133,12 @@ async def _note_account(namespace: str | None) -> None:
     if previous is None or previous == namespace:
         _settled_account = namespace
         await _record_account(namespace)
+        try:
+            from . import sync_scopes
+
+            await asyncio.to_thread(sync_scopes.adopt_account, namespace)
+        except Exception as err:  # noqa: BLE001 - rows stay unclaimed until the next settle
+            log.warning("could not mark the sync state as this account's: %s", err)
         # Back on the account a failed switch was leaving: whatever that
         # switch did let go of belonged to this account, so sync reopens
         # rather than staying shut for a switch that is no longer happening.
@@ -4113,7 +4151,7 @@ async def _note_account(namespace: str | None) -> None:
     try:
         from . import sync_scopes
 
-        await asyncio.to_thread(sync_scopes.on_account_changed)
+        await asyncio.to_thread(sync_scopes.switch_account, previous, namespace)
     except Exception as err:  # noqa: BLE001 - retried on the next call
         log.warning("could not let go of the previous account's sync state; will retry: %s", err)
         _settled_account = previous
@@ -4311,6 +4349,11 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
                 "status": engine_mod.INVENTORY_NOT_CONNECTED,
                 "items": [],
             }
+        elif name in sync_scopes.NEVER_SYNCED:
+            # Credentials never sync, so the cloud's copy is never listed (that
+            # takes credential traffic): answered as offline, which the CLI
+            # accounts page shows as "not connected", nothing to act on.
+            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_NOT_CONNECTED, "items": []}
         else:
             try:
                 scopes[name] = await link.sync_engine().inventory(name)
@@ -4393,9 +4436,9 @@ def _inventory_devices(
 
 async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Send the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4407,9 +4450,9 @@ async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
 
 async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Take the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4417,6 +4460,31 @@ async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     if not await link.ensure_sync_key():
         raise ConnectionError("this machine does not hold the account sync key")
     return await link.sync_engine().pull_items(scope, item_ids)
+
+
+async def _history_engine(scope: str) -> Any:
+    from . import sync_approvals, sync_scopes
+
+    if scope in sync_scopes.NEVER_SYNCED:
+        raise sync_approvals.RetiredScopeError(scope)
+    link = _link
+    if link is None or not link._authenticated:  # noqa: SLF001 - same module
+        raise ConnectionError("the navide-server link is not connected")
+    # Looking at history never mints a key (ensure_sync_key would, on a
+    # machine paired with nobody): no key here means nothing to read.
+    if not await asyncio.to_thread(sync_keyring.has_account_key):
+        raise ConnectionError("this machine does not hold the account sync key")
+    return link.sync_engine()
+
+
+async def sync_versions(scope: str, item_id: str) -> list[dict[str, Any]]:
+    """The earlier versions the server keeps of one item, newest first."""
+    return await (await _history_engine(scope)).versions(scope, item_id)
+
+
+async def sync_restore_version(scope: str, item_id: str, rev: int) -> dict[str, Any]:
+    """Bring version *rev* of one item back here; ``held`` says it waits for approval."""
+    return await (await _history_engine(scope)).restore(scope, item_id, rev)
 
 
 def sync_conflicts(scope: str = "") -> list[dict[str, Any]]:
