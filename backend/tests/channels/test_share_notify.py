@@ -219,3 +219,32 @@ async def test_the_switch_over_ws(env: Env) -> None:
         "ok": True, "enabled": False}
     assert env.store.share_open_notify() is False
     assert await ws_api._dispatch(env.m, "channels.get_share_open_notify", {}) == {"ok": True, "enabled": False}
+
+
+# --- the chats a creator can pick ----------------------------------------------------
+
+
+async def test_share_targets_lists_only_bound_direct_chats_once(env: Env, links: FakeLinks) -> None:
+    assert "channels.share_targets" in ws_api.MESSAGE_TYPES
+    env.store.bind("pane-dm2", DM)  # a second pane in the same direct chat
+    env.store.bind("pane-x", Location("telegram", "default", "-777", "", "never seen"))
+    env.store.remember_chat("telegram", mgr_mod._bot_key(env.tg), "999", "nobody", "direct", False, 1)  # unbound
+    got = await ws_api._dispatch(env.m, "channels.share_targets", {})
+    assert got == {"ok": True, "chats": [{"chatId": DM.key(), "platform": "telegram", "name": "alice"}]}
+
+
+async def test_a_picked_share_target_is_where_the_link_goes(env: Env, links: FakeLinks) -> None:
+    got = await ws_api._dispatch(env.m, "channels.share_targets", {})
+    await share_cmds.notify_link_created({**_created(""), "chatId": got["chats"][0]["chatId"]})
+    assert len(_sent_to(env, DM)) == 1 and URL in _sent_to(env, DM)[0]
+
+
+@pytest.mark.parametrize("state", [server_link.STATE_UNCONFIGURED, server_link.STATE_UNREACHABLE])
+async def test_share_targets_is_empty_without_cloud(env: Env, links: FakeLinks, monkeypatch, state: str) -> None:
+    monkeypatch.setattr(server_link, "link_state", lambda: state)
+
+    def no_device() -> str:
+        raise AssertionError("must not reach for the device identity without Cloud")
+
+    monkeypatch.setattr(server_link, "local_device_id", no_device)
+    assert await ws_api._dispatch(env.m, "channels.share_targets", {}) == {"ok": True, "chats": []}

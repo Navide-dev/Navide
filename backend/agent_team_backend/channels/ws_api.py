@@ -91,6 +91,8 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
         return m.focus_pane(_s(p, "pane_id"))
     if msg_type == "channels.get_share_open_notify":
         return {"ok": True, "enabled": m.store.share_open_notify()}
+    if msg_type == "channels.share_targets":
+        return m.share_targets()
     if msg_type == "channels.set_share_open_notify":
         m.store.set_share_open_notify(bool(p.get("enabled")))
         return {"ok": True, "enabled": m.store.share_open_notify()}
@@ -104,7 +106,7 @@ MESSAGE_TYPES = (
     "channels.link.create", "channels.allow.list", "channels.allow.remove", "channels.locations", "channels.bind",
     "channels.unbind", "channels.rebind", "channels.bindings", "channels.set_binding_options",
     "channels.overview", "channels.unbind_many", "channels.focus_pane",
-    "channels.get_share_open_notify", "channels.set_share_open_notify",
+    "channels.get_share_open_notify", "channels.set_share_open_notify", "channels.share_targets",
 )
 
 

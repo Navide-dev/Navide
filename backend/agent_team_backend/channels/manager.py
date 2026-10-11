@@ -2029,6 +2029,21 @@ class ChannelManager:
                 targets.setdefault(key, b.location())
         return list(targets.values())
 
+    def share_targets(self) -> dict[str, Any]:
+        """The chats a new link can be sent to (``channels.share_targets``): every bound
+        direct chat once, ``chatId`` being what ``notify_link_created`` takes back. Empty
+        without Navide Cloud, read from the link state alone."""
+        from .. import server_link
+
+        if server_link.link_state() != server_link.STATE_CONNECTED:
+            return {"ok": True, "chats": []}
+        chats: dict[str, dict[str, str]] = {}
+        for b in self.store.bindings():
+            if b.location().key() not in chats and self._chat_kind(b) == "direct":
+                chats[b.location().key()] = {"chatId": b.location().key(), "platform": b.platform,
+                                             "name": b.title or b.chat_id}
+        return {"ok": True, "chats": list(chats.values())}
+
     async def _share_notice(self, loc: Location, text: str) -> None:
         try:
             await self.mirror.send(loc, text)
