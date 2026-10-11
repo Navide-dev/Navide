@@ -3155,6 +3155,56 @@ async def test_a_sign_out_during_hello_fences_the_settle(monkeypatch):
         await link.stop()
 
 
+# ---- N1b: the member pin of a retired token is forgotten (the trust record stays bounded)
+
+
+def _own_members() -> dict:
+    with trust_store._lock:
+        return dict(trust_store._load_locked()["ownMembers"])
+
+
+async def test_rotations_do_not_grow_the_member_pins(monkeypatch):
+    """Each confirmed rotation pins the new token and then forgets the old one,
+    so ownMembers keeps one entry however often the token rotates."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(age_s=server_link.ROTATE_AFTER_S + 1)   # every connection rotates
+    server = FakeServer(responder=ts.responder, count=8)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        seen = []
+        for _ in range(3):
+            await _until(lambda: server_link.access_token() not in seen and server_link.access_token().startswith("nvd_rotated"))
+            seen.append(server_link.access_token())
+            await _until(lambda: len(_own_members()) == 1)
+            await server.opened[-1].close()
+            await _until(lambda: bool(server.opened[-1].syncs) and server_link.access_token() not in seen, timeout=5)
+        owners = _own_members()
+        assert len(owners) == 1 and list(owners.values()) == ["m1"]
+        assert trust_store.member_for_credential(CONFIG.url, server_link.access_token()) == "m1"
+        assert trust_store.only_credential_ever(CONFIG.url, server_link.access_token()) is True
+    finally:
+        await link.stop()
+
+
+async def test_a_settled_promotion_forgets_the_old_pin(monkeypatch):
+    """Promoting .next in the hello settle forgets the refused current token's pin."""
+    server_link.set_access_token("tok-old-revoked")
+    trust_store.adopt_own_member(CONFIG.url, "tok-old-revoked", "m1")
+    app.credential_vault.write_app_secret(server_link.ACCESS_TOKEN_NEXT_SECRET, "nvd_next-live")
+    ts = TokenServer(live=("nvd_next-live",), age_s=10)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: server_link.access_token() == "nvd_next-live")
+        await _until(lambda: trust_store.member_for_credential(CONFIG.url, "tok-old-revoked") == "")
+        assert trust_store.member_for_credential(CONFIG.url, "nvd_next-live") == "m1"
+        assert len(_own_members()) == 1
+    finally:
+        await link.stop()
+
+
 # ---- compatibility: behaviour against a server from before C1, and signed out
 
 

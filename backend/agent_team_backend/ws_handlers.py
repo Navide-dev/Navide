@@ -4459,6 +4459,14 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
     # Revoke the token on the server first, while the link can still carry the
     # request; offline that is skipped and the local token is erased anyway.
     revoked = await server_link.logout_on_server()
+    # N1b: this token is never used again here, so its member pin goes too;
+    # otherwise every sign-out and sign-in adds an entry to the trust record.
+    try:
+        signed_out = await vault_to_thread(server_link.access_token)
+        if signed_out:
+            await asyncio.to_thread(trust_store.forget_own_member, server_link.server_url(), signed_out)
+    except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not the sign-out
+        log.warning("could not forget the signed-out token's member pin: %s", err)
     try:
         await vault_to_thread(server_link.set_access_token, None)
     except Exception as err:  # noqa: BLE001

@@ -1490,6 +1490,9 @@ class ServerLink:
         self._token_id = token_id
         self._legacy_token = False
         self._token_age_s = 0.0
+        # N1b: the old token is gone for good; drop its member pin now that the
+        # new one is pinned (it was, before the confirm) so the record stays bounded.
+        await self._forget_retired_pin(config.url, config.token, token)
         # Promote. If this write fails, .next still holds the token and the next
         # hello promotes it after the current one is refused.
         if await self._token_write(token, ACCESS_TOKEN_SECRET, generation):
@@ -1661,7 +1664,19 @@ class ServerLink:
         log.info("the current navide-server token was refused; the rotated one was accepted")
         if await self._token_write(config.next_token, ACCESS_TOKEN_SECRET, generation):
             await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            # N1b: the refused current token is retired; forget its pin.
+            await self._forget_retired_pin(config.url, config.token, config.next_token)
         return promoted, retry
+
+    @staticmethod
+    async def _forget_retired_pin(url: str, old_token: str, new_token: str) -> None:
+        """Forget *old_token*'s member pin, but only once *new_token* carries one,
+        so the credential in use is never left without a pin. Best effort."""
+        try:
+            if await asyncio.to_thread(trust_store.member_for_credential, url, new_token):
+                await asyncio.to_thread(trust_store.forget_own_member, url, old_token)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not safety
+            log.warning("could not forget the retired navide-server token's member pin: %s", err)
 
     @staticmethod
     def _carry_member_pin(url: str, old_token: str, new_token: str) -> None:
