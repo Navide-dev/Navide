@@ -304,7 +304,17 @@ def _load_ring() -> dict[str, Any] | None:
 
 
 def _store_ring(ring: dict[str, Any]) -> None:
+    """Write *ring* as the bound account's. A ring only ever gains keys: one
+    that lacks a key held now is refused, because records, blob names and
+    hashed item ids (``hashed_item_id``, whose key the account fixed once
+    and for good) were all made under keys that must keep opening. Only
+    ``forget_account_key`` lets a ring go, and it lets all of it go."""
     with _op_lock:
+        held = _load_ring()
+        if held is not None:
+            lost = set(held["keys"]) - set(ring["keys"])
+            if lost:
+                raise KeyringError(f"refusing to drop sync keys {sorted(lost)} from the ring")
         _vault().write_app_secret(_secret_name(), _serialise(ring))
         _remember(ring)
 
@@ -613,6 +623,37 @@ def blob_hasher(kid: str | None = None) -> tuple[str, hmac.HMAC]:
         _held_key(kid)
     )
     return kid, hmac.new(derived, digestmod=hashlib.sha256)
+
+
+#: D3: hashed item ids. See ``hashed_item_id``.
+_ITEM_ID_CONTEXT = b"navide/item-id/v1"
+HASHED_ITEM_ID_PREFIX = "h1."
+
+
+def hashed_item_id(scope: str, name: str, kid: str) -> str:
+    """The id the server knows item *name* of *scope* by, once the account
+    has adopted hashed ids: ``h1.`` + HMAC-SHA256(K, scope ‖ 0 ‖ name) with
+    K = HKDF-SHA256(ring key *kid*, info="navide/item-id/v1").
+
+    *kid* is the account's ``itemIdKid``, fixed once on the server — never
+    the active key, which a rotation changes. Raises ``UnknownKeyId`` when
+    this ring lacks it; a caller must stop then rather than name items
+    under any other key.
+    """
+    derived = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=_ITEM_ID_CONTEXT).derive(
+        _held_key(kid)
+    )
+    mac = hmac.new(derived, scope.encode("utf-8") + b"\x00" + name.encode("utf-8"), hashlib.sha256)
+    return HASHED_ITEM_ID_PREFIX + mac.hexdigest()
+
+
+def is_hashed_item_id(item_id: str) -> bool:
+    rest = item_id[len(HASHED_ITEM_ID_PREFIX):]
+    return (
+        item_id.startswith(HASHED_ITEM_ID_PREFIX)
+        and len(rest) == 64
+        and all(c in "0123456789abcdef" for c in rest)
+    )
 
 
 def _blob_aad(kid: str, blob_id: str, index: int, count: int) -> bytes:
