@@ -76,3 +76,22 @@ def test_a_failed_decision_keeps_the_in_memory_ledger(saves_fail):
     with pytest.raises(CloudSecretError):
         trust_store.note_blocked("dev-known", "m1")
     assert trust_store.has_seen_message("k-1")
+
+
+def test_a_pairing_that_could_not_be_saved_leaves_no_paired_notice(monkeypatch):
+    """Review R2-3: the first-sighting notice — "paired: True" — was recorded
+    before the save and outlived its rollback, so the account view showed the
+    device as paired and the pairing as failed at once."""
+    from agent_team_backend import cloud_secrets
+    from agent_team_backend.credential_vault import CredentialVaultError
+
+    trust_store.load()
+
+    def refuse(*_a, **_k):
+        raise CredentialVaultError("keychain write failed")
+
+    monkeypatch.setattr(cloud_secrets, "write", refuse)
+    with pytest.raises(CredentialVaultError):
+        trust_store.pin_paired_device("dev-r23", sign_key="A" * 43 + "=", enc_key="b" * 64,
+                                      member_id="m-r23")
+    assert not [n for n in trust_store.notices() if n.get("deviceId") == "dev-r23"]

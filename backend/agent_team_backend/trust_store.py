@@ -1188,6 +1188,9 @@ def pin_paired_device(
         if not _fits_with_reserve_locked(state):
             del pins[device_id]
             raise TrustStoreFull(_FULL_MESSAGE)
+        _save_locked(state)
+        # After the save, not before: a pairing that could not be stored is
+        # rolled back, and a "paired" notice recorded first outlived it (R2-3).
         _record_locked(
             state,
             NOTICE_FIRST_SEEN,
@@ -1199,7 +1202,7 @@ def pin_paired_device(
                 "paired": True,
             },
         )
-        _save_locked(state)
+        _save_record_locked(state, "a pairing")
         return True
 
 
