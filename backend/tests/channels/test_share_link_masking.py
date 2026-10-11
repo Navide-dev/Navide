@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import urllib.parse
 
 import pytest
 
@@ -100,3 +101,83 @@ async def test_logs_never_carry_a_link(env: Env, monkeypatch, caplog) -> None:
     await share_cmds.notify_link_created(_created("pane-dm"))
     logged = "\n".join(r.getMessage() for r in caplog.records)
     assert "#k=" not in logged and LINK_ID not in logged
+
+
+# --- R7: whatever shape the link takes ----------------------------------------------------
+
+# A key this process built, assembled at run time (never a literal in the source).
+R7_KEY = bytes(range(32))
+R7_ID = "Ab3dEf" + "GhIjKlMnOpQrStUv"
+R7_URL = share_links.link_url(R7_ID, R7_KEY)
+R7_K = R7_URL.partition("#k=")[2]
+R7_TAIL = R7_ID[6:]
+
+R7_CHAT_VARIANTS = {
+    "no-scheme": "Done: " + R7_URL.replace("https://", ""),
+    "upper": "Done: " + R7_URL.replace("https://share.navide.dev", "HTTPS://SHARE.NAVIDE.DEV"),
+    "wrapped-mid-id": "Done: " + R7_URL[:32] + "\n" + R7_URL[32:],
+    "pct": "Done: " + R7_URL.replace("#k=", "%23k%3D"),
+    "key-separately": "Done: " + R7_URL.split("#")[0] + " — key " + R7_K,
+}
+
+R7_UNIT_VARIANTS = {
+    **R7_CHAT_VARIANTS,
+    "upper-scheme": R7_URL.replace("https", "HTTPS"),
+    "mixed-case-host": R7_URL.replace("share.navide.dev", "Share.Navide.dev"),
+    "pct-all": urllib.parse.quote(R7_URL, safe=""),
+    "newline-before-k": R7_URL.replace("#k=", "\n#k="),
+    "newline-mid-key": R7_URL[:-20] + "\n" + R7_URL[-20:],
+    "markdown": f"[link]({R7_URL})",
+    "angle": f"<{R7_URL}>",
+    "slack": f"<{R7_URL}|link>",
+    "code": f"```\n{R7_URL}\n```",
+    "two": f"{R7_URL} and {share_links.link_url('Q' * 22, R7_KEY)}",
+    "http": R7_URL.replace("https", "http"),
+    "custom-host": share_links.link_url(R7_ID, R7_KEY, base="https://share.example.com"),
+    "custom-host-pct": share_links.link_url(R7_ID, R7_KEY, base="https://share.example.com").replace("#k=", "%23k%3D"),
+    "key-other-param": R7_URL.replace("#k=", "#x=1&k="),
+    "zero-width": R7_URL.replace("/s/", "/s/​"),
+    "json-escaped": R7_URL.replace("/", "\\/"),
+    "fullwidth-colon": R7_URL.replace("://", "：//"),
+    "key-only": f"the key is {R7_K}",
+}
+
+
+def _leaks(text: str) -> bool:
+    flat = "".join(text.split()).replace("​", "")
+    return R7_K[:20] in flat or R7_K[-20:] in flat or R7_TAIL in flat
+
+
+@pytest.mark.parametrize("name", list(R7_UNIT_VARIANTS))
+def test_mask_links_whatever_the_shape(name: str) -> None:
+    masked = share_cmds.mask_links(R7_UNIT_VARIANTS[name])
+    assert not _leaks(masked), masked
+
+
+def test_an_unknown_key_after_a_marker_is_masked_too() -> None:
+    other = "".join(chr(ord("A") + i % 26) for i in range(43))
+    assert other not in share_cmds.mask_links(f"open it with #k={other} please")
+    assert other not in share_cmds.mask_links(f"open it with %23K%3D{other} please")
+
+
+def test_ordinary_text_is_left_alone() -> None:
+    for text in ("https://example.com/s/abc and https://example.com/s/ABCDEFGHIJKLMNOPQRSTUVWX",
+                 "see /s/ in the docs", "a #k= marker with nothing after it", "plain words only"):
+        assert share_cmds.mask_links(text) == text
+
+
+@pytest.mark.parametrize("name", list(R7_CHAT_VARIANTS))
+async def test_a_group_reply_never_carries_the_key_or_id_whatever_the_shape(env: Env, name: str) -> None:
+    env.store.add_allow("telegram", "8", "carol", 1)
+    env.store.bind("pane-g", GROUP)
+    await _reply_from(env, "pane-g", R7_CHAT_VARIANTS[name], chat="-200", thread="", sender="8")
+    sent = "\n".join(_texts_in(env, "-200"))
+    assert not _leaks(sent), sent
+
+
+@pytest.mark.parametrize("name", list(R7_CHAT_VARIANTS))
+async def test_a_direct_chat_still_gets_every_shape_whole(env: Env, name: str) -> None:
+    env.store.bind("pane-dm", DM)
+    await _reply_from(env, "pane-dm", R7_CHAT_VARIANTS[name], chat="555", thread="", direct=True)
+    sent = "\n".join(_texts_in(env, "555"))
+    assert R7_CHAT_VARIANTS[name].split("\n")[-1] in sent

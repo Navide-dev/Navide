@@ -13,6 +13,7 @@ button. Tokens are memory only and die after ``quick_menu.MENU_TTL_S``.
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import secrets
@@ -32,12 +33,25 @@ MAX_TOKENS = 2000
 
 _CALLBACK_RE = re.compile(
     rf"^nv3:r:([{quick_menu.TOKEN_ALPHABET}]{{{quick_menu.TOKEN_LENGTH}}})$")
-# A share link (share_links.link_url): any share.navide.dev/s/<id>, or another host's
-# /s/<id> when it carries the #k= key. Group 1 is everything up to the id, group 2
-# the id's first SHORT_LEN characters.
+# A share link (share_links.link_url) in whatever shape a reply gives it: any case, with
+# or without a scheme, percent-encoded or JSON-escaped, a full-width colon, and a line
+# break or zero-width character anywhere inside the id or the key. Linear: the classes
+# a quantifier repeats never overlap with what may follow them.
+_BRK = "[\\r\\n\u200b\u200c\u200d\u2060\ufeff]"
+_SL = r"(?:/|\\/|%2f)"
+_HASH, _AMP, _EQ = r"(?:#|%23)", r"(?:&|%26)", r"(?:=|%3d)"
+_SCHEME = rf"(?:https?(?::|\uff1a|%3a){_SL}{_SL})?"
+# The id runs until something that cannot be part of it: a break followed by more id
+# characters still counts, so an id cut by a line break is caught whole.
+_ID = (rf"(?:{_BRK}*[A-Za-z0-9_-]){{22,64}}?"
+       rf"(?={_BRK}*(?:[^A-Za-z0-9_\-\r\n\u200b\u200c\u200d\u2060\ufeff]|\Z))")
+_KEY = rf"{_HASH}(?:[^\s#]*?{_AMP})?k{_EQ}(?:{_BRK}*[A-Za-z0-9_-]){{0,43}}"
+# share.navide.dev links always; another host's /s/<id> only with the key after it.
 _LINK_RE = re.compile(
-    r"(https?://share\.navide\.dev/s/|https?://[^\s/]+/s/(?=[A-Za-z0-9_-]{22,64}#k=))"
-    r"([A-Za-z0-9_-]{6})[A-Za-z0-9_-]{16,58}(?:#k=[A-Za-z0-9_-]*)?")
+    rf"({_SCHEME}share\.navide\.dev{_SL}s{_SL})({_ID})(?:{_BRK}*{_KEY})?"
+    rf"|({_SCHEME}[a-z0-9.-]{{1,253}}{_SL}s{_SL})({_ID}){_BRK}*{_KEY}", re.IGNORECASE)
+# A key on its own after a #k= / &k= marker, wherever it stands.
+_KEY_RE = re.compile(rf"(?:{_HASH}|{_AMP})k{_EQ}(?:{_BRK}*[A-Za-z0-9_-]){{43}}", re.IGNORECASE)
 
 
 def parse_command(body: str, identity: str = "") -> tuple[str, str] | None:
@@ -59,10 +73,29 @@ def parse_command(body: str, identity: str = "") -> tuple[str, str] | None:
     return None
 
 
+def _cut_link(m: re.Match[str]) -> str:
+    prefix, link_id = (m.group(1), m.group(2)) if m.group(1) is not None else (m.group(3), m.group(4))
+    return prefix + re.sub(_BRK, "", link_id)[:SHORT_LEN] + "…"
+
+
+@functools.lru_cache(maxsize=4)
+def _known_keys_re(keys: tuple[str, ...]) -> re.Pattern[str] | None:
+    """The keys this process built, each allowed a break between any two characters."""
+    if not keys:
+        return None
+    return re.compile("|".join(f"{_BRK}*".join(map(re.escape, key)) for key in keys))
+
+
 def mask_links(text: str) -> str:
-    """``text`` with every share link cut to its first characters and its key dropped,
-    for anywhere but a known direct chat (and for logs)."""
-    return _LINK_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}…", text)
+    """``text`` with every share link cut to its first characters and every key dropped,
+    for anywhere but a known direct chat (and for logs): a link in any shape, a key after a
+    ``#k=`` marker anywhere, and any key this process built, even written on its own."""
+    from .. import share_links
+
+    text = _LINK_RE.sub(_cut_link, text)
+    text = _KEY_RE.sub("…", text)
+    known = _known_keys_re(share_links.known_key_fragments())
+    return known.sub("…", text) if known is not None else text
 
 
 def parse_callback(data: str) -> str | None:

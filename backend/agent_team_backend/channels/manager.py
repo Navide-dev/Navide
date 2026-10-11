@@ -2010,9 +2010,10 @@ class ChannelManager:
     def _for_chat(self, loc: Location, text: str) -> str:
         """``text`` as ``loc`` may see it: a share link whole only in a known direct chat,
         cut to its first characters (key dropped) anywhere else, unknown chats included."""
-        if "/s/" not in text or self._kind_at(loc) == "direct":
+        masked = share_cmds.mask_links(text)
+        if masked == text or self._kind_at(loc) == "direct":
             return text
-        return share_cmds.mask_links(text)
+        return masked
 
     def _caption_for(self, loc: Location, card: report.Caption) -> report.Caption:
         return report.Caption(self._for_chat(loc, card.title), self._for_chat(loc, card.summary),
