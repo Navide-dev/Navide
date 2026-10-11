@@ -738,6 +738,10 @@ class ServerLink:
         self._token_age_s: float | None = None
         self._legacy_token = False
         self._rotate_retry_after = 0.0
+        # The token generation as of the last configuration read, i.e. before
+        # the hello (N2): a sign-out or sign-in that lands while the hello is
+        # in flight has moved it, and every rotation-side write refuses.
+        self._config_generation = 0
         self._device_name = device_name or platform.node() or "unknown"
         self._task: asyncio.Task | None = None
         self._stopped = False
@@ -929,6 +933,7 @@ class ServerLink:
     async def _run(self) -> None:
         delay = RECONNECT_BASE_S
         while not self._stopped:
+            self._config_generation = self._tokens.generation()
             config = await self._read_config()
             if not config.configured:
                 log.info(
@@ -1435,7 +1440,7 @@ class ServerLink:
         # with no settled pin there is nothing to carry over, so no rotation.
         if not self._own_member:
             return
-        generation = self._tokens.generation()
+        generation = self._config_generation
         try:
             reply = await self._request("auth.token.rotate", {})
         except Exception as err:  # noqa: BLE001 - the connection went; next one retries
@@ -1629,10 +1634,11 @@ class ServerLink:
         current token was refused, the confirm reached the server after all —
         say hello with ``.next`` and, if that works, make it current. If the
         current token works, whatever is in ``.next`` was never confirmed, so it
-        is dropped. Writes carry the generation, so none of this outlives a
-        sign-out that happens meanwhile.
+        is dropped. Writes carry the generation taken when the configuration
+        was read (N2), so none of this outlives a sign-out or sign-in that
+        lands meanwhile, even one finishing during the hello.
         """
-        generation = self._tokens.generation()
+        generation = self._config_generation
         if not config.next_token:
             return config, reply
         if reply.get("ok"):

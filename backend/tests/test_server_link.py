@@ -3120,6 +3120,41 @@ async def test_a_confirm_error_after_the_server_applied_keeps_next(monkeypatch):
         await link2.stop()
 
 
+@pytest.mark.parametrize("kind", ["logout", "switch"])
+async def test_a_sign_change_during_hello_fences_the_rotation(kind, monkeypatch):
+    """N2: the generation is taken when the config is read, before the hello, so
+    a sign-out / sign-in finishing while the hello is in flight fences the rotation."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    act = (lambda: server_link.set_access_token(None)) if kind == "logout" else (lambda: server_link.set_access_token("tok-B"))
+    server = FakeServer(responder=_on_first_hello(ts, act))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.1)
+        assert server_link.access_token() == ("" if kind == "logout" else "tok-B")
+        assert server_link.next_access_token() == ""
+    finally:
+        await link.stop()
+
+
+async def test_a_sign_out_during_hello_fences_the_settle(monkeypatch):
+    """N2: same for promoting .next when the current token is refused."""
+    server_link.set_access_token("tok-old-revoked")
+    app.credential_vault.write_app_secret(server_link.ACCESS_TOKEN_NEXT_SECRET, "nvd_next-live")
+    ts = TokenServer(live=("nvd_next-live",))
+    server = FakeServer(responder=_on_first_hello(ts, lambda: server_link.set_access_token(None)))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: len(server.opened[0].hellos) >= 2 if server.opened else False)
+        await asyncio.sleep(0.1)
+        assert server_link.access_token() == ""
+    finally:
+        await link.stop()
+
+
 # ---- compatibility: behaviour against a server from before C1, and signed out
 
 
