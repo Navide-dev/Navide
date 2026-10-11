@@ -207,3 +207,19 @@ def test_an_unsaved_block_that_still_does_not_fit_stays_in_memory(monkeypatch):
         trust_store._state = None
         trust_store._forget_written()
     assert trust_store.policy_seq("dev-self") == 1
+
+
+def test_a_block_whose_store_could_not_be_read_still_holds(monkeypatch):
+    """Review F1: the load at the top of note_blocked sat outside the guard, so
+    a Keychain read that failed for a moment raised before the block was held,
+    and the reply's "this machine still refuses it" was not true."""
+    trust_store.load()
+    trust_store._state = None
+
+    def unreadable():
+        raise trust_store.TrustStoreLocked("the keychain is locked for a moment")
+
+    monkeypatch.setattr(trust_store, "_load_locked", unreadable)
+    with pytest.raises(trust_store.TrustStoreLocked):
+        trust_store.note_blocked("dev-f1", "m-f1")
+    assert [e["deviceId"] for e in trust_store._unsaved_blocks] == ["dev-f1"]

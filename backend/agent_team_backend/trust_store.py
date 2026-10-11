@@ -1037,23 +1037,24 @@ def note_blocked(device_id: str, member_id: str) -> bool:
         member_id = str(member_id or "")
         if not device_id and not member_id:
             return False
-        state = _load_locked()
-        blocked = state.setdefault("blocked", [])
-        for entry in blocked:
-            if not isinstance(entry, dict):
-                continue
-            if device_id and entry.get("deviceId") == device_id:
-                return False
-            if member_id and not device_id and entry.get("memberId") == member_id:
-                return False
-        blocked.append({"deviceId": device_id, "memberId": member_id})
         try:
+            state = _load_locked()
+            blocked = state.setdefault("blocked", [])
+            for entry in blocked:
+                if not isinstance(entry, dict):
+                    continue
+                if device_id and entry.get("deviceId") == device_id:
+                    return False
+                if member_id and not device_id and entry.get("memberId") == member_id:
+                    return False
+            blocked.append({"deviceId": device_id, "memberId": member_id})
             _save_locked(state)
         except Exception:
-            # Fail closed: a block that could not be saved still holds until
-            # the restart. _save_locked took it back out of the state, as it
-            # does every decision it could not store, and for a block that is
-            # the unsafe direction — the device would be trusted again.
+            # Fail closed: a block that could not be saved — or whose record
+            # could not even be read (review F1) — still holds until the
+            # restart, and the next save that succeeds writes it. _save_locked
+            # took it back out of the state, as it does every decision it could
+            # not store, and for a block that is the unsafe direction.
             _unsaved_blocks.append({"deviceId": device_id, "memberId": member_id})
             raise
         return True
