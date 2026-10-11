@@ -1067,7 +1067,7 @@ class ServerLink:
                 self._spawn(self._resend_unsent_acks())
                 # At most once per connection, and never on a server that does
                 # not describe its tokens.
-                self._spawn(self._maybe_rotate())
+                self._spawn(self._maybe_rotate(config))
                 reconciler = asyncio.create_task(self._reconcile_loop())
                 reporter = asyncio.create_task(self._report_loop())
                 # Deliberately *not* in the wait below. That set means "the
@@ -1415,7 +1415,7 @@ class ServerLink:
         # clock is never compared with the server's timestamps.
         return self._token_age_s is not None and self._token_age_s > ROTATE_AFTER_S
 
-    async def _maybe_rotate(self) -> None:
+    async def _maybe_rotate(self, config: ServerLinkConfig) -> None:
         """Swap this device's token for a fresh one, without ever being left
         with none.
 
@@ -1430,6 +1430,10 @@ class ServerLink:
         generation and every write below is refused.
         """
         if not self._rotation_due():
+            return
+        # N1: the new token is pinned to this member before it is confirmed;
+        # with no settled pin there is nothing to carry over, so no rotation.
+        if not self._own_member:
             return
         generation = self._tokens.generation()
         try:
@@ -1457,6 +1461,11 @@ class ServerLink:
             return
         if stored != token:
             log.warning("the rotated navide-server token did not read back intact; keeping the current one")
+            return
+        try:
+            await asyncio.to_thread(trust_store.adopt_own_member, config.url, token, self._own_member)
+        except Exception as err:  # noqa: BLE001 - unpinned, the new token could name any member
+            log.warning("not confirming the rotated navide-server token: it could not be pinned to this member (%s)", err)
             return
         try:
             confirmed = await self._request("auth.token.confirm", {"tokenId": token_id})
@@ -1625,6 +1634,14 @@ class ServerLink:
             return config, reply
         if self._conflict_code(reply) != "AUTH_REJECTED":
             return config, reply
+        # N1: the rotated token must mean the member the current one meant.
+        # A rotation pins it before its confirm; pin it here too if that pin is
+        # missing, so the hello below is held to the same member like any other.
+        try:
+            await asyncio.to_thread(self._carry_member_pin, config.url, config.token, config.next_token)
+        except Exception as err:  # noqa: BLE001 - a pin that cannot be carried over is no promotion
+            log.warning("not promoting the rotated navide-server token: the member pin could not be carried over (%s)", err)
+            return config, reply
         promoted = ServerLinkConfig(url=config.url, token=config.next_token)
         retry = await self._hello(promoted)
         if not retry.get("ok"):
@@ -1633,6 +1650,14 @@ class ServerLink:
         if await self._token_write(config.next_token, ACCESS_TOKEN_SECRET, generation):
             await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
         return promoted, retry
+
+    @staticmethod
+    def _carry_member_pin(url: str, old_token: str, new_token: str) -> None:
+        """Pin *new_token* to the member *old_token* is pinned to, if it is not
+        pinned yet. Blocking (trust store)."""
+        member = trust_store.member_for_credential(url, old_token)
+        if member and not trust_store.member_for_credential(url, new_token):
+            trust_store.adopt_own_member(url, new_token, member)
 
     async def _token_write(self, value: str | None, slot: str, generation: int) -> bool:
         """One rotation-side write, off the event loop; False if it did not happen."""

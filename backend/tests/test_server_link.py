@@ -3018,6 +3018,76 @@ async def test_revocation_reasons_are_explained(reason, words):
         await link.stop()
 
 
+# ---- C1 desktop re-review: N1 (member pin), N2 (generation at config time), N3 (confirm errors)
+
+
+def _real_token_link(server: FakeServer, monkeypatch) -> ServerLink:
+    """A link on the real KeychainTokenStore and trust store (the conftest vault is a fake)."""
+    monkeypatch.setattr(server_link, "server_url", lambda: CONFIG.url)
+    return ServerLink(connect=server.connect, device_name="test-box")
+
+
+def _member_responder(ts: TokenServer, member_for):
+    def responder(conn, message):
+        reply = ts.responder(conn, message)
+        if message.get("type") == "auth.hello" and reply and reply.get("ok"):
+            reply["payload"]["memberId"] = member_for((message.get("payload") or {}).get("credential"))
+        return reply
+    return responder
+
+
+def _on_first_hello(ts: TokenServer, action):
+    fired: list = []
+
+    def responder(conn, message):
+        if message.get("type") == "auth.hello" and not fired:
+            fired.append(True)
+            action()  # a sign-out / sign-in completes while the hello is in flight
+        return ts.responder(conn, message)
+    return responder
+
+
+async def test_rotation_carries_the_member_pin_to_the_new_token(monkeypatch):
+    """N1: the rotated token is pinned to the member the old one was, before the
+    confirm, so a server naming another member for it is refused like any other."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=_member_responder(ts, lambda c: "m1" if c == CONFIG.token else "m-evil"))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: server_link.access_token().startswith("nvd_rotated"))
+        new = server_link.access_token()
+        assert trust_store.member_for_credential(CONFIG.url, new) == "m1"  # pinned before confirm (N1b: node hint kept)
+        ts.rotate_code = "UNKNOWN_TYPE"
+        await server.opened[0].close()
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos))
+        await _until(lambda: bool(link._trust_locked))
+        assert link._own_member == ""  # the renamed member is not trusted
+    finally:
+        await link.stop()
+
+
+async def test_no_rotation_without_a_pinned_member(monkeypatch):
+    """N1: with no settled member pin there is nothing to carry over, so no rotation."""
+    def locked(*_a, **_k):
+        raise trust_store.TrustStoreLocked("store locked for the test")
+
+    monkeypatch.setattr(trust_store, "adopt_own_member", locked)
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[0], "auth.token.rotate") == []
+        assert server_link.access_token() == CONFIG.token
+    finally:
+        await link.stop()
+
+
 # ---- compatibility: behaviour against a server from before C1, and signed out
 
 
