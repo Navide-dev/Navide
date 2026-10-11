@@ -8569,6 +8569,7 @@ def review_plan(rel_path: str) -> str:
 # registered last so every existing tool keeps its place in the list.
 
 _SHARE_NEEDS_CLOUD = "Navide Cloud is not connected on this machine, so share links are not available; nothing was shared."
+_SHARE_UNSUPPORTED = "The Navide Cloud server this machine is connected to does not offer share links; nothing was shared."
 
 
 def _share_cloud_ready() -> bool:
@@ -8588,7 +8589,7 @@ async def _share_run(call: Callable[[Any], Awaitable[dict]]) -> dict:
         return {"ok": False, "error": str(err), "reason": err.code}
     except share_links.ShareRemoteError as err:
         if err.code in share_links.UNAVAILABLE_CODES:
-            return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+            return {"ok": False, "error": _SHARE_UNSUPPORTED, "code": "UNSUPPORTED"}
         return {"ok": False, "error": str(err), "code": err.code}
     except sync_keyring.KeyringError as err:
         return {"ok": False, "error": f"this machine cannot open the account key: {err}", "code": "NO_SYNC_KEY"}
@@ -8613,8 +8614,9 @@ async def share_create(
     refused with the reason. Secrets in the content are masked before upload
     and the answer lists where (line and kind, never the value). The link is
     marked as created by your pane and the user is told it exists.
-    send_to_chat=true also posts the link to the chat bound to your pane (or
-    the user's private chat); only set it when the user asked for that. Returns
+    send_to_chat=true also posts the link to the direct-message chat bound to
+    your pane, and to nothing else (no group, no other chat); only set it when
+    the user asked for that. Returns
     {ok, linkId, url, expiresAt, masked} — the url carries the only key, so
     hand it only to the user — or {ok: false, error, reason?}.
     """

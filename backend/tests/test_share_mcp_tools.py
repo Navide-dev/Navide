@@ -107,15 +107,30 @@ async def test_without_navide_cloud_a_call_does_nothing_at_all(
     assert [r for r in caplog.records if r.name.startswith("agent_team_backend")] == []
 
 
-async def test_a_server_without_share_links_is_answered_like_no_cloud(monkeypatch, pane_caller, broadcasts) -> None:
+@pytest.mark.parametrize("tool", ["share_list", "share_create", "share_revoke"])
+async def test_a_server_without_share_links_says_so_with_a_code(monkeypatch, pane_caller, broadcasts, tool) -> None:
+    """F7-4: connected to a server without links is not 'not connected'."""
     monkeypatch.setattr(server_link, "link_state", lambda: server_link.STATE_CONNECTED)
+    sent: list[str] = []
 
     async def old_server(verb: str, payload: dict) -> dict:
+        sent.append(verb)
         return {"ok": False, "error": {"code": "UNKNOWN_TYPE", "message": "links." + verb}}
 
     monkeypatch.setattr(server_link, "links_request", old_server)
-    result = await mcp.share_list(ctx=None)
-    assert result["ok"] is False and "Navide Cloud" in result["error"] and broadcasts == []
+    args = {"share_create": {"path": "/nowhere/.agent-team/plans/x_abc123.html"}, "share_revoke": {"link_id": "ab" * 16}}
+    result = await getattr(mcp, tool)(ctx=None, **args.get(tool, {}))
+    assert result["ok"] is False and result["code"] == "UNSUPPORTED"
+    assert "not connected" not in result["error"] and broadcasts == []
+    if tool == "share_create":
+        assert sent == ["caps"]
+
+
+def test_send_to_chat_promises_only_the_bound_direct_chat() -> None:
+    """B7-6/F7-3: the private-chat fallback is gone (R6-F2)."""
+    [tool] = [t for t in _tools() if t["name"] == "share_create"]
+    assert "private chat" not in tool["description"]
+    assert "direct" in tool["description"]
 
 
 @pytest.fixture
