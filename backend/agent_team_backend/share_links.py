@@ -76,9 +76,10 @@ _LINK_ID_RE = re.compile(r"[A-Za-z0-9_-]{22,64}")
 
 #: The kind byte of every kind the format knows, shipped or not. Shared with
 #: the viewer page (Navide-Server share-web/), which must decode the same
-#: table; a code is never reused for another kind.
+#: table; a code is never reused for another kind, so 6 (a kind that was
+#: dropped before it shipped) stays unassigned.
 KIND_CODES: dict[str, int] = {
-    "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "transcript": 6, "bundle": 7,
+    "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "bundle": 7,
 }
 
 

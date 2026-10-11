@@ -71,11 +71,12 @@ def test_long_hex_that_is_not_a_sha_still_warns() -> None:
     assert [(f.line, f.category, f.action) for f in result.findings] == [(1, "possible-secret", "warned")]
 
 
-def test_transcript_masks_heuristic_hits_too() -> None:
+@pytest.mark.parametrize("kind", ["plan", "report"])
+def test_no_shared_kind_masks_a_heuristic_hit(kind: str) -> None:
     hex64 = "cd" * 32
-    result = share_scan.scan(f"$ env\nSESSION={hex64}\n", kind="transcript")
-    assert hex64 not in result.text
-    assert [(f.line, f.action) for f in result.findings] == [(2, "masked")]
+    result = share_scan.scan(f"$ env\nSESSION={hex64}\n", kind=kind)
+    assert hex64 in result.text
+    assert [(f.line, f.action) for f in result.findings] == [(2, "warned")]
 
 
 def test_every_guard_pattern_has_a_category() -> None:

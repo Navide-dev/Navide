@@ -9,9 +9,7 @@ cannot be taken back, so the content is scanned before it is encrypted:
   what makes rewriting the user's document acceptable.
 * **Heuristic hits only warn.** ``settings_bundle._SECRET_HINT_RE`` matches
   every long hex or base64 run, so on its own it would flag each commit SHA
-  and each inline screenshot; 40-character SHAs are skipped. A ``transcript``
-  is command output nobody reviewed line by line, so there the long runs are
-  masked as well.
+  and each inline screenshot; 40-character SHAs are skipped.
 * **Inline media is exempt from the heuristic only.** A base64
   ``data:image|font|audio|video`` payload is not flagged as a "long run";
   high-confidence formats are masked wherever they sit, and a payload with
@@ -246,10 +244,9 @@ _SHA1_RE = re.compile(r"[0-9a-fA-F]{40}")
 _RUN_MIN = 32
 _ZERO_WIDTH_RE = re.compile("[​‌‍⁠﻿­]")
 
-#: Kinds whose heuristic hits are masked rather than only warned about.
-#: TODO(Phase 3, transcript kind): the length rule masks long file paths in
-#: command output; judge runs by entropy before any transcript can be shared.
-_MASK_HEURISTICS = frozenset({"transcript"})
+#: Kinds whose heuristic hits are masked rather than only warned about: none
+#: of the kinds that can be shared.
+_MASK_HEURISTICS: frozenset[str] = frozenset()
 
 MASKED = "masked"
 WARNED = "warned"

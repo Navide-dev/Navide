@@ -195,7 +195,7 @@ def test_a_file_that_is_not_a_plan_is_refused_for_the_plan_kind(home: Path) -> N
 
 def test_unknown_kind_is_refused(home: Path) -> None:
     with pytest.raises(share_links.ShareRefused) as err:
-        share_links.prepare(str(_plan(home, "<p/>")), "transcript")
+        share_links.prepare(str(_plan(home, "<p/>")), "nonsense")
     assert err.value.code == "unknown_kind"
 
 
@@ -367,8 +367,9 @@ async def test_metadata_label_names_the_version(ring, home: Path) -> None:
 
 def test_kind_codes_are_the_shared_table() -> None:
     assert share_links.KIND_CODES == {
-        "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "transcript": 6, "bundle": 7,
+        "plan": 1, "report": 2, "pdf": 3, "preview": 4, "image": 5, "bundle": 7,
     }
+    assert 6 not in share_links.KIND_CODES.values()  # dropped before it shipped; never reused
     assert all(share_links.KINDS[k].code == share_links.KIND_CODES[k] for k in share_links.KINDS)
 
 
