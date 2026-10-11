@@ -43,6 +43,7 @@ def carried(monkeypatch: pytest.MonkeyPatch) -> None:
     """claude registered as a pane carrier, as the backend's startup does."""
     monkeypatch.setattr(convenience_wiring, "_PANE_CARRIERS", {"claude": claude_hooks.prepare_pane_settings})
     monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    monkeypatch.setattr(claude_hooks, "_prepared_with", None)
 
 
 def _tree(root: Path) -> dict[str, bytes]:
@@ -321,3 +322,46 @@ async def test_a_shared_entry_that_cannot_be_retracted_keeps_the_shared_hooks_an
     assert claude_hooks.hooks_present(shared)
     assert not convenience_wiring.pane_carries_hooks("claude")
     assert "--settings" not in await _spawn("claude")
+
+
+@pytest.mark.asyncio
+async def test_a_pane_file_gone_while_carrying_is_written_again_at_spawn(
+    homes, carried, spawnable, tmp_path
+) -> None:
+    port = str(homes["port"])
+    skip = frozenset({"Notification:notification"})
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+        shared = homes["config"] / "settings.json"
+        data = json.loads(shared.read_text(encoding="utf-8"))
+        del data["hooks"]["Notification"]
+        shared.write_text(json.dumps(data), encoding="utf-8")
+        convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, port)
+    pane = claude_hooks.pane_settings_path()
+    pane.unlink()
+
+    spawned = await _spawn("claude")
+
+    assert _settings_flag() in spawned
+    assert json.loads(pane.read_text(encoding="utf-8")) == _phase2_hooks(tmp_path, port, skip)
+
+
+@pytest.mark.asyncio
+async def test_a_pane_file_that_cannot_be_written_again_starts_the_pane_without_settings(
+    homes, carried, spawnable, monkeypatch, caplog
+) -> None:
+    convenience_wiring.install_hooks_gated("claude", claude_hooks.install_hooks, str(homes["port"]))
+    claude_hooks.pane_settings_path().unlink()
+
+    def broken(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {"installed": False, "error": "disk full"}
+
+    monkeypatch.setattr(claude_hooks, "install_hooks", broken)
+
+    spawned = await _spawn("claude --dangerously-skip-permissions")
+
+    assert spawned.startswith("claude --dangerously-skip-permissions")
+    assert "--settings" not in spawned
+    assert "pane settings" in caplog.text

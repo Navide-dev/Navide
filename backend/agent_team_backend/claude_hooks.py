@@ -579,6 +579,10 @@ def _start_version_probe(port_file: str) -> None:
 #: hooks with the user's own settings rather than replacing them.
 SETTINGS_FLAG = "--settings"
 
+#: The (port_file, skip) the pane file was last prepared with, so a file that
+#: went missing while the panes carry the hooks can be written again at spawn.
+_prepared_with: tuple[str, frozenset[str]] | None = None
+
 
 def pane_settings_path() -> Path:
     """The settings file a carried pane gets through ``--settings``: Navide's
@@ -607,6 +611,8 @@ def prepare_pane_settings(port_file: str, skip: frozenset[str]) -> Path:
         staging.unlink(missing_ok=True)
         raise OSError(f"could not write {staging}: {result}")
     os.replace(staging, target)
+    global _prepared_with
+    _prepared_with = (port_file, skip)
     # What the probe decides (the exec-form guard) is in this file now.
     _start_version_probe(port_file)
     return target
@@ -615,13 +621,23 @@ def prepare_pane_settings(port_file: str, skip: frozenset[str]) -> Path:
 def wire_spawn(command: Any) -> Any:
     """``command`` with ``--settings <pane file>`` appended, once. A command
     that already names a settings file is left alone: whoever wrote it chose
-    that file, and Claude Code reads only one."""
+    that file, and Claude Code reads only one. A pane file gone missing is
+    written again first; when it cannot be, the pane starts without it rather
+    than not at all."""
     from .push_delivery import _append_to_command, _command_text, _has_flag
 
     if _has_flag(_command_text(command), SETTINGS_FLAG):
         if str(pane_settings_path()) not in _command_text(command):
             log.warning("claude pane names its own %s; Navide's hooks are not added", SETTINGS_FLAG)
         return command
+    if not pane_settings_path().is_file():
+        try:
+            if _prepared_with is None:
+                raise FileNotFoundError(pane_settings_path())
+            prepare_pane_settings(*_prepared_with)
+        except Exception as err:  # noqa: BLE001 — a spawn is never broken over this
+            log.warning("claude pane settings missing and not written again; pane starts without hooks: %s", err)
+            return command
     return _append_to_command(command, f"{SETTINGS_FLAG} {osplat.paths.quote_arg(str(pane_settings_path()))}")
 
 

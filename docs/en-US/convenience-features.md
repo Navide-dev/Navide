@@ -128,8 +128,8 @@ Navide's holding exactly the entries the shared file used to get: the same
 events, commands, timeouts, Navide Guard (the Windows exec form included),
 the rewake waiter per the push-channel switch, minus the hooks the user
 deleted by hand. Claude Code merges it with the user's own settings. A login
-subcommand gets nothing, and a command that already names a settings file is
-left alone.
+subcommand gets nothing. A pane file gone missing is written again at spawn;
+when it cannot be, that pane starts without the hooks rather than failing.
 
 - At startup (and on re-allow) an entry an earlier version wrote into the
   shared file is retracted: backed up, removed, logged as `retract`. The
@@ -144,7 +144,11 @@ left alone.
 - A dev backend (data dir ending in `-dev`) retracts, and switches off, only
   its own entries. The installed app's entries in the shared file are left
   as they are, so starting a dev build never takes the installed Navide's
-  hooks away.
+  hooks away. A dev pane then fires both: the installed app's shared hooks
+  and its own `--settings` ones, each to its own backend.
+- Known limit: a command that already names a settings file (`--settings`)
+  is left alone, so that pane runs without Navide's hooks (logged as a
+  warning). Whether Claude Code would merge a second `--settings` is untested.
 
 ## Persistence (navide.db)
 
