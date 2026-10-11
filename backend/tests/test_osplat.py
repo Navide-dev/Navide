@@ -1198,3 +1198,22 @@ class TestScripts:
 
         script = _windows.scripts.confirm_then_run("Remove o'brien's cli", "npm x")
         assert "Write-Host 'Remove o''brien''s cli'" in script
+
+
+def test_a_folder_created_again_has_another_birth_time(tmp_path: Path) -> None:
+    """The convenience gate tells a reset config folder from the user's
+    removal by the folder's identity. Linux hands a recreated folder the same
+    inode back, so only its birth time can say it is another one."""
+    import time
+
+    folder = tmp_path / "cfg"
+    folder.mkdir()
+    first = osplat.folder_birth_time(folder)
+    assert first is not None
+    folder.rmdir()
+    time.sleep(0.02)
+    folder.mkdir()
+
+    again = osplat.folder_birth_time(folder)
+    assert again is not None and again != first
+    assert osplat.folder_birth_time(tmp_path / "missing") is None

@@ -1332,11 +1332,17 @@ def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes
     manager, real = _codex(tmp_path)
     monkeypatch.setattr(app, "codex_home_manager", manager)
     convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
-    real.chmod(0o555)  # the rewrite cannot land
+    # The rewrite cannot land: POSIX refuses the temp file in a read-only
+    # folder; Windows ignores folder modes but refuses to replace a
+    # read-only file.
+    config = real / "config.toml"
+    real.chmod(0o555)
+    config.chmod(0o444)
     try:
         with pytest.raises(CleanupIncomplete):
             convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
     finally:
+        config.chmod(0o644)
         real.chmod(0o755)
 
     assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
@@ -1397,6 +1403,32 @@ def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tm
 def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, tmp_path) -> None:
     from agent_team_backend.codex_home import CodexHomeManager
 
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
+
+
+def test_codex_login_link_read_back_as_a_windows_extended_path_still_counts(gate, tmp_path, monkeypatch) -> None:
+    """Windows' os.readlink answers with an extended-length path (\\\\?\\...),
+    which never equals the plain path the link was made from: the user's own
+    login, signed out outside Navide, must still never be replaced."""
+    import os
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    plain = os.readlink
+    monkeypatch.setattr(os, "readlink", lambda link: "\\\\?\\" + str(plain(link)))
     real = tmp_path / "real-codex"
     real.mkdir()
     (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")

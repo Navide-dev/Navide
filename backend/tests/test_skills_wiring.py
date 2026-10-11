@@ -1029,7 +1029,16 @@ def test_taking_links_back_never_follows_a_manifest_name_outside_the_directory(t
     assert not (target / "ok").exists()
 
 
-@pytest.mark.parametrize("name", ["x:y", "#hash", " lead", "trail "])
+_NO_SUCH_FOLDER_ON_WINDOWS = pytest.mark.skipif(
+    osplat.platform_id == "win32",
+    reason="Windows cannot create a folder of this name, so no skill can carry it",
+)
+
+
+@pytest.mark.parametrize("name", [
+    pytest.param("x:y", marks=_NO_SUCH_FOLDER_ON_WINDOWS), "#hash", " lead",
+    pytest.param("trail ", marks=_NO_SUCH_FOLDER_ON_WINDOWS),
+])
 def test_a_name_the_manifest_cannot_carry_is_never_planted(tmp_path: Path, name: str) -> None:
     """C5: the manifest drops a name with ``:``, reads a leading ``#`` as a
     comment and strips spaces, so a link planted under such a name would be
