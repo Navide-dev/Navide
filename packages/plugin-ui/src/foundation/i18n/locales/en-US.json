@@ -6898,6 +6898,7 @@
         "policy-signed-default": "There were no rules to re-sign, so the default was signed: nothing is allowed yet.",
         "locked-title": "Navide Cloud is stopped",
         "locked-body": "This device had trust state and no longer does. Nothing is sent or accepted until that is clear.",
+        "full-body": "The trust record is full. Unpair a device below to make room; Navide Cloud reconnects on its own once there is.",
         "damaged-body": "The pairing record is damaged — pair again. The record on this machine was saved incomplete (a Keychain write was cut off), so nothing in it can be trusted.",
         "journal-problem": "The pairing notice record cannot be used right now. Pairing itself is unaffected, but notices and the record of messages already received may be incomplete for now. Reason:",
         "damaged-rebuild-warn": "This erases the damaged pairing record on this machine. Each of your other devices must then be paired again, from both ends. The record is already damaged, so starting over is the fix.",

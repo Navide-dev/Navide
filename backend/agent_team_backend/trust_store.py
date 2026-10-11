@@ -1204,6 +1204,29 @@ def member_for_credential(url: str, token: str) -> str:
         return ""
 
 
+def forget_own_member(url: str, token: str) -> bool:
+    """Drop the member pin of a credential that is gone for good, and say
+    whether there was one.
+
+    The pins live in the Keychain record, whose size is bounded; a token that
+    was rotated away or signed out of never comes back, so keeping its pin
+    only grows the record (one entry per rotation, one per sign-in). Callers
+    forget the old token only after its successor is pinned, so there is no
+    moment without a pin for the credential in use.
+    """
+    if not url or not token:
+        return False
+    with _lock:
+        state = _load_locked()
+        owners = state["ownMembers"]
+        fingerprint = _token_fingerprint(url, token)
+        if fingerprint not in owners:
+            return False
+        del owners[fingerprint]
+        _save_locked(state)
+        return True
+
+
 def only_credential_ever(url: str, token: str) -> bool:
     """Whether this credential is the only one this machine has ever pinned a
     member for — so anything on this machine that predates accounts being
@@ -1258,6 +1281,12 @@ def adopt_own_member(url: str, token: str, member_id: str) -> str:
                 )
             return pinned
         owners[fingerprint] = member_id
+        # KC2R-1, as for a device pin: a new member pin must leave the room
+        # reserved for deciding about every paired device, or it is refused as
+        # full before anything is written. An existing pin (above) still answers.
+        if not _fits_with_reserve_locked(state):
+            del owners[fingerprint]
+            raise TrustStoreFull(_FULL_MESSAGE)
         _save_locked(state)
         return member_id
 

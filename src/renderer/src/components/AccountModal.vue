@@ -250,6 +250,9 @@ interface NetworkSnapshot {
    * an attacker who deleted that state wants next.
    */
   trustLocked?: string
+  /** "full" when that stop is a trust record with no room left: intact, and
+   *  unpairing a device is the way back, so there is no start-over to offer. */
+  trustLockedCode?: string
   /** No rules written under this identity yet, so nothing inbound is accepted.
    *  Reachable by recovering — a machine that heals a device conflict lands on
    *  a new identity with an empty policy. */
@@ -439,6 +442,7 @@ async function refresh(): Promise<void> {
 const trustNotices = computed<TrustNotice[]>(() => network.value?.trustNotices ?? [])
 const trustPending = computed<PendingDevice[]>(() => network.value?.trustPending ?? [])
 const trustLocked = computed(() => network.value?.trustLocked ?? '')
+const trustFull = computed(() => network.value?.trustLockedCode === 'full')
 /** The last read did not come back. Says only that, because a failed read says
  *  nothing about the socket — see usePairingState. */
 const readFailed = pairingState.readFailed
@@ -2002,41 +2006,44 @@ onUnmounted(() => {
           </div>
           <div v-if="trustLocked" class="card locked-card">
             <h2 class="net-title">{{ t('settings.p2p.trust.locked-title') }}</h2>
-            <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
-            <p v-else class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
-            <p class="hint">{{ trustLocked }}</p>
-            <p v-if="trustLockedTransient" class="hint locked-warn">
-              {{ t('settings.p2p.trust.locked-retrying') }}
-            </p>
-            <p v-else-if="rebuildDone" class="hint ok-text">
-              {{ t('settings.p2p.trust.rebuild-done') }}
-            </p>
-            <template v-else-if="rebuildArmed">
-              <p class="hint locked-warn">
-                {{ t(trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn') }}
+            <p v-if="trustFull" class="req-what">{{ t('settings.p2p.trust.full-body') }}</p>
+            <template v-else>
+              <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
+              <p v-else class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
+              <p class="hint">{{ trustLocked }}</p>
+              <p v-if="trustLockedTransient" class="hint locked-warn">
+                {{ t('settings.p2p.trust.locked-retrying') }}
               </p>
-              <div class="locked-acts">
+              <p v-else-if="rebuildDone" class="hint ok-text">
+                {{ t('settings.p2p.trust.rebuild-done') }}
+              </p>
+              <template v-else-if="rebuildArmed">
+                <p class="hint locked-warn">
+                  {{ t(trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn') }}
+                </p>
+                <div class="locked-acts">
+                  <button
+                    class="dev-review locked-go"
+                    :disabled="!!pending"
+                    @click="rebuildTrust()"
+                  >
+                    {{ t('settings.p2p.trust.rebuild-confirm') }}
+                  </button>
+                  <button class="dev-review" :disabled="!!pending" @click="rebuildArmed = false">
+                    {{ t('settings.p2p.trust.rebuild-cancel') }}
+                  </button>
+                </div>
+              </template>
+              <div v-else class="locked-acts">
                 <button
-                  class="dev-review locked-go"
-                  :disabled="!!pending"
-                  @click="rebuildTrust()"
+                  class="dev-review"
+                  :title="t('settings.p2p.trust.rebuild-title')"
+                  @click="rebuildArmed = true"
                 >
-                  {{ t('settings.p2p.trust.rebuild-confirm') }}
-                </button>
-                <button class="dev-review" :disabled="!!pending" @click="rebuildArmed = false">
-                  {{ t('settings.p2p.trust.rebuild-cancel') }}
+                  {{ t('settings.p2p.trust.rebuild') }}
                 </button>
               </div>
             </template>
-            <div v-else class="locked-acts">
-              <button
-                class="dev-review"
-                :title="t('settings.p2p.trust.rebuild-title')"
-                @click="rebuildArmed = true"
-              >
-                {{ t('settings.p2p.trust.rebuild') }}
-              </button>
-            </div>
           </div>
 
           <div class="card net-card">
