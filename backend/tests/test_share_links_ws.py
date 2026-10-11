@@ -137,3 +137,46 @@ async def test_extend_needs_seconds(server) -> None:
     session = FakeSession()
     await ws_handlers.share_extend(session, "1", "share.extend", {"linkId": "ab" * 16, "ttlSeconds": "7d"})
     assert session.reply["error"]["code"] == "BAD_REQUEST"
+
+
+@pytest.fixture
+def chat(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    from agent_team_backend.channels import share_cmds
+
+    sent: list[dict[str, Any]] = []
+
+    async def notify_link_created(link: dict[str, Any]) -> None:
+        sent.append(link)
+
+    monkeypatch.setattr(share_cmds, "notify_link_created", notify_link_created, raising=False)
+    return sent
+
+
+@pytest.mark.parametrize("send_to_chat", [True, False])
+async def test_the_link_goes_to_chat_only_when_asked(ring, home, server, broadcasts, chat, send_to_chat) -> None:
+    session = FakeSession()
+    payload = {"path": str(_plan(home, "<p/>")), "sendToChat": send_to_chat}
+    await ws_handlers.share_create(session, "1", "share.create", payload)
+    assert session.reply["ok"]
+    if send_to_chat:
+        [link] = chat
+        assert link["url"] == session.reply["payload"]["url"] and link["paneId"] == ""
+        assert link["title"] == "Secret Roadmap"
+    else:
+        assert chat == []
+
+
+async def test_an_open_notice_is_handed_to_channels(monkeypatch, broadcasts) -> None:
+    from agent_team_backend import server_link
+    from agent_team_backend.channels import share_cmds
+
+    opened: list[dict[str, Any]] = []
+
+    async def notify_link_opened(event: dict[str, Any]) -> None:
+        opened.append(event)
+
+    monkeypatch.setattr(share_cmds, "notify_link_opened", notify_link_opened, raising=False)
+    event = {"linkId": "ab" * 16, "openCount": 2, "openedAt": "2026-10-11T10:00:00Z", "newViewer": True}
+    await server_link.ServerLink._on_link_opened(None, event)  # type: ignore[arg-type]
+    assert opened == [event]
+    assert broadcasts[0]["type"] == "share.opened"

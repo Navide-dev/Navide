@@ -2022,6 +2022,13 @@ class ServerLink:
             await app.broadcast(make_event("share.opened", event))
         except Exception as err:  # noqa: BLE001 - a notice must not break the link
             log.warning("announcing a share-link open failed: %s", err)
+        try:
+            from .channels import share_cmds
+
+            # Channels decides whether and where (new viewer, this device made it, chat routing).
+            await share_cmds.notify_link_opened(event)
+        except Exception as err:  # noqa: BLE001 - same
+            log.warning("sending a share-link open notice to chat failed: %s", err)
 
     async def _on_account_verified(self) -> None:
         """The server says this account's address is confirmed."""

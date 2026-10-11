@@ -5652,7 +5652,8 @@ async def share_caps(session: "Session", msg_id: str, msg_type: str, payload: di
 
 @handler("share.create")
 async def share_create(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
-    """Share one file the user picked: {path, kind?, ttlSeconds?, requireLogin?}."""
+    """Share one file the user picked: {path, kind?, ttlSeconds?, requireLogin?,
+    sendToChat?} — sendToChat posts the link to the user's chat (Channels)."""
     from . import app, share_links
 
     path = payload.get("path")
@@ -5673,6 +5674,8 @@ async def share_create(session: "Session", msg_id: str, msg_type: str, payload: 
         )
         result = share_created_payload(created, created_by="user")
         await app.broadcast(make_event("share.created", {k: v for k, v in result.items() if k != "url"}))
+        if payload.get("sendToChat") is True:
+            await share_links.announce_to_chat(created, created_by="user")
         return result
 
     await _share_links_call(session, msg_id, msg_type, call)

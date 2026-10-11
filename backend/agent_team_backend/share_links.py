@@ -293,6 +293,8 @@ class Created:
     url: str
     expires_at: str
     findings: list[share_scan.Finding]
+    title: str = ""
+    kind: str = ""
 
 
 def _http_put(url: str, data: bytes) -> None:
@@ -407,10 +409,12 @@ async def create_share(
     created_by: str = "user",
     pane: str = "",
     agent: str = "",
+    pane_id: str = "",
     put: Callable[[str, bytes], None] | None = None,
 ) -> Created:
     """Mask, encrypt and publish ``raw_path``; the URL carries the only copy of K
-    outside the account ring."""
+    outside the account ring. ``pane_id`` (the creating pane, when an agent
+    shares) is kept in the metadata so a chat notice can find its binding."""
     prepared = await asyncio.to_thread(prepare, raw_path, kind)
     ttl = _ttl(kind, ttl_seconds)
     _require_ring()
@@ -435,6 +439,7 @@ async def create_share(
         "sha256": prepared.sha256,
         "createdBy": created_by,
         "pane": pane,
+        "paneId": pane_id,
         "agent": agent,
         "masked": [{"line": f.line, "category": f.category, "action": f.action} for f in prepared.findings],
     }
@@ -450,7 +455,30 @@ async def create_share(
         },
     )
     expires = done.get("expiresAt") or row.get("expiresAt") or ""
-    return Created(link_id, link_url(link_id, key), str(expires), prepared.findings)
+    return Created(link_id, link_url(link_id, key), str(expires), prepared.findings, prepared.title, kind)
+
+
+async def announce_to_chat(created: Created, *, created_by: str, pane_id: str = "") -> None:
+    """Hand a new link to Channels, which posts it to the creator's chat
+    (channels.share_cmds decides where). Only called when the creator asked
+    for it; a failure is logged and never undoes the share."""
+    try:
+        from .channels import share_cmds
+
+        await share_cmds.notify_link_created(
+            {
+                "linkId": created.link_id,
+                "url": created.url,
+                "title": created.title,
+                "kind": created.kind,
+                "expiresAt": created.expires_at,
+                "paneId": pane_id,
+                "createdBy": created_by,
+                "maskedTotal": len(created.findings),
+            }
+        )
+    except Exception as err:  # noqa: BLE001 - a chat notice must not fail the share
+        log.warning("sending a new share link to chat failed: %s", err)
 
 
 def _row_view(row: dict[str, Any]) -> dict[str, Any]:
@@ -466,6 +494,7 @@ def _row_view(row: dict[str, Any]) -> dict[str, Any]:
         "path": meta.get("path") or "",
         "createdBy": "agent" if row.get("createdBy") == "agent" else "user",
         "pane": meta.get("pane") or "",
+        "paneId": meta.get("paneId") or "",
         "agent": meta.get("agent") or "",
         "maskedTotal": meta.get("maskedTotal", len(meta.get("masked") or [])),
         "deviceId": row.get("deviceId") or "",

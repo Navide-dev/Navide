@@ -449,3 +449,16 @@ async def test_the_server_client_passes_the_servers_error_code_through(monkeypat
     with pytest.raises(share_links.ShareRemoteError) as err:
         await share_links.ServerLinksClient().request("list", {})
     assert err.value.code == code
+
+
+async def test_the_creating_pane_id_is_kept_for_routing_notices(ring, home: Path) -> None:
+    client = FakeLinks()
+    await share_links.create_share(
+        client, str(_plan(home, "<p/>")), "plan", created_by="agent", pane="release", pane_id="pane-7",
+        put=client.put,
+    )
+    commit = client.committed()[0]
+    meta = json.loads(sync_keyring.unwrap_aux(f"link-meta:{commit['linkId']}:v1", commit["metaEnc"]))
+    assert meta["paneId"] == "pane-7"
+    [row] = await share_links.list_links(client)
+    assert row["paneId"] == "pane-7"
