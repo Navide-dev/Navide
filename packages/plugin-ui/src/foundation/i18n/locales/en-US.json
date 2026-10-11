@@ -6324,7 +6324,7 @@
     },
     "skills": {
       "title": "Managed Skills",
-      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. Nothing here moves or edits the skills your CLIs keep in their own folders.",
+      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. A skill in a CLI's own folder moves only when you choose “Move into shared library”, which leaves a link in its old place; “Restore” moves it back.",
       "new": "New skill",
       "search": "Search skills",
       "empty-title": "No managed skills yet",

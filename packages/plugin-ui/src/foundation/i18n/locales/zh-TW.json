@@ -6324,7 +6324,7 @@
     },
     "skills": {
       "title": "受管 Skills",
-      "intro": "在同一處看見所有 CLI 的 skill、決定誰收到哪一個，並在 ~/.agents/skills 建立新的。這裡不會搬動或修改各 CLI 自己資料夾裡的 skill。",
+      "intro": "在同一處看見所有 CLI 的 skill、決定誰收到哪一個，並在 ~/.agents/skills 建立新的。各 CLI 自己資料夾裡的 skill 只有在你按「移入共用庫」時才會被搬進共用庫，原位留下捷徑；按「還原」就會搬回去。",
       "new": "新增 skill",
       "search": "搜尋 skills",
       "empty-title": "尚無受管 skills",
