@@ -131,3 +131,16 @@ describe('backend:changed recipients', () => {
     expect(loop).not.toMatch(/for \(const win of BrowserWindow\.getAllWindows\(\)\)/)
   })
 })
+
+describe('backend:restart', () => {
+  it('answers through backendInfoFor, like backend:info', () => {
+    // The restart answer is the same payload as backend:info, wsUrl and all;
+    // a plugin frame or any other window must get only the status from it too.
+    const source = readFileSync(resolve(__dirname, 'index.ts'), 'utf8')
+    const start = source.indexOf("ipcMain.handle('backend:restart'")
+    expect(start).toBeGreaterThan(-1)
+    const handler = source.slice(start, source.indexOf('\n)', start) + 2)
+    expect(handler).toContain('backendInfoFor(event, [mainWindows, navideAuxWindows], await restartBackendNow())')
+  })
+})
+

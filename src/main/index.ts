@@ -2147,7 +2147,10 @@ async function autoRestartBackend(): Promise<void> {
   }
 }
 
-ipcMain.handle('backend:restart', () => restartBackendNow())
+// Same payload as backend:info, so the same scoping: full only for Navide windows.
+ipcMain.handle('backend:restart', async (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], await restartBackendNow())
+)
 
 /** A deliberate restart: the Settings button, and a quit cancelled after its
  *  teardown stopped the backend. */
