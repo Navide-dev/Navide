@@ -349,9 +349,11 @@ def _signed_out_outside_navide(tmp_path: Path) -> tuple[CodexHomeManager, Path, 
     return manager, real, home_a
 
 
-def test_resuming_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
-    from agent_team_backend import convenience_wiring
-
+def test_resuming_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Path) -> None:
+    # User decision (2026-10-11): after a sign-out outside Navide, the login
+    # copies Navide holds behave as on main. A resume reuses the pane home
+    # as it is: its own login copy stays, and nothing signs the shared one
+    # back in.
     manager, real, home_a = _signed_out_outside_navide(tmp_path)
     sid = "0199aaaa-bbbb-7ccc-8ddd-eeeeeeeeeeee"
     day = home_a / "sessions" / "2026" / "10" / "10"
@@ -361,19 +363,16 @@ def test_resuming_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path
     home = manager.find_session_home(sid)
 
     assert home == home_a
-    assert not (home / "auth.json").exists()
+    assert "old-account" in (home / "auth.json").read_text(encoding="utf-8")
     assert not (real / "auth.json").exists()
-    # The user is told, as for any spawn after an outside logout.
-    latest = convenience_wiring.gate().history("codex.login-promote", limit=1)
-    assert latest[0]["action"] == "prompt"
 
 
-def test_respawning_the_same_home_after_an_outside_logout_never_runs_as_the_stale_login(tmp_path: Path) -> None:
+def test_respawning_the_same_home_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Path) -> None:
     manager, real, home_a = _signed_out_outside_navide(tmp_path)
 
     home = manager.prepare("pane-a")
 
-    assert not (home / "auth.json").exists()
+    assert "old-account" in (home / "auth.json").read_text(encoding="utf-8")
     assert not (real / "auth.json").exists()
 
 
