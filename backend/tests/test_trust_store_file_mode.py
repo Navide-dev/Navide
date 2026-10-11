@@ -259,3 +259,46 @@ def test_a_record_cut_off_before_any_whole_pin_still_locks():
     _cut_after_pins(0)
     assert trust_store.locked_reason()
     assert trust_store.damaged()
+
+
+def test_the_journal_is_sealed_with_the_record_key():
+    """Q3: the ledger decides which messages are replays, so it is sealed too —
+    a journal edited on disk is set aside, not believed."""
+    trust_store.load()
+    trust_store.note_remote_command(_device(1), device_name="TKM5", workspace="w", pane_name="p")
+    trust_store.note_seen_message("k-sealed")
+    trust_store.flush_seen_messages()
+    blob = trust_store._journal_path().read_bytes()
+    assert blob.startswith(trust_file.MAGIC)
+    assert b"k-sealed" not in blob and b"TKM5" not in blob
+    _restart()
+    assert trust_store.has_seen_message("k-sealed")
+
+
+def test_a_plaintext_journal_from_before_is_read_and_sealed_on_the_next_save():
+    trust_store.load()
+    _pin(1)
+    trust_store._journal_path().write_text(
+        '{"v":1,"notices":[],"seenMessages":{"old-key":%d}}' % int(__import__("time").time()),
+        encoding="utf-8")
+    _restart()
+    assert trust_store.has_seen_message("old-key")
+    trust_store.note_seen_message("new-key")
+    trust_store.flush_seen_messages()
+    assert trust_store._journal_path().read_bytes().startswith(trust_file.MAGIC)
+    _restart()
+    assert trust_store.has_seen_message("old-key") and trust_store.has_seen_message("new-key")
+
+
+def test_a_sealed_journal_that_does_not_open_is_set_aside():
+    trust_store.load()
+    trust_store.note_seen_message("k-1")
+    trust_store.flush_seen_messages()
+    path = trust_store._journal_path()
+    blob = bytearray(path.read_bytes())
+    blob[-1] ^= 1
+    path.write_bytes(bytes(blob))
+    _restart()
+    assert not trust_store.has_seen_message("k-1")
+    assert "set aside" in trust_store.journal_problem()
+    assert trust_store.locked_reason() == ""

@@ -11,6 +11,17 @@ from agent_team_backend import cloud_secrets, trust_store
 from agent_team_backend.credential_vault import CredentialVaultError
 
 
+
+def _journal_text(path) -> str:
+    """The journal as text, through the store's reader — DPAPI-wrapped on
+    Windows, and sealed with the record key once the record is in its file."""
+    from agent_team_backend import trust_file
+
+    blob = trust_store._read_journal_bytes(path)
+    if blob.startswith(trust_file.MAGIC):
+        blob = trust_file.unseal(trust_store._record_key, blob, trust_file.AAD_JOURNAL)
+    return blob.decode("utf-8")
+
 def _restart() -> None:
     with trust_store._lock:
         trust_store._state = None
@@ -50,5 +61,4 @@ def test_a_refused_keychain_write_still_saves_the_journal(monkeypatch):
     trust_store.note_seen_message("k-2")
     trust_store.flush_seen_messages()
     # Through the store's reader: on Windows the journal is DPAPI-wrapped.
-    journal = trust_store._read_journal_bytes(trust_store._journal_path())
-    assert "k-2" in journal.decode("utf-8")
+    assert "k-2" in _journal_text(trust_store._journal_path())

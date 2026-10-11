@@ -492,6 +492,23 @@ def _read_journal() -> dict[str, Any] | None:
             "ledger are kept in memory meanwhile"
         )
         return None
+    if raw.startswith(trust_file.MAGIC):
+        try:
+            key = _record_key if _record_key is not None else trust_file.key(create=False)
+        except Exception:  # noqa: BLE001 - read as "cannot be read right now"
+            key = None
+        if key is None:
+            # Not damaged: sealed, and the key is not to hand. Left as it is.
+            _journal_blocked = True
+            _journal_problem = (
+                "the device trust journal is sealed and its key could not be read; it is "
+                "left untouched and not written until it can be"
+            )
+            return None
+        try:
+            raw = trust_file.unseal(key, raw, trust_file.AAD_JOURNAL)
+        except trust_file.SealError:
+            raw = b""  # does not open: set aside below, like any non-journal
     doc: Any = None
     try:
         doc = json.loads(raw.decode("utf-8"))
@@ -626,8 +643,13 @@ def _write_journal_locked(state: dict[str, Any]) -> None:
         separators=(",", ":"),
     )
     if journal != _last_journal:
+        data = journal.encode("utf-8")
+        if _store_mode == "file" and _record_key is not None:
+            # Sealed with the record's key (plan 797ad7, Q3): the ledger decides
+            # which messages are replays, so an edit on disk must not pass.
+            data = trust_file.seal(_record_key, data, trust_file.AAD_JOURNAL)
         try:
-            _write_journal_bytes(_journal_path(), journal.encode("utf-8"))
+            _write_journal_bytes(_journal_path(), data)
         except OSError as err:
             # The vault half — the part that decides trust — is saved apart from this.
             log.warning("the device trust journal could not be saved (%s)", err)
