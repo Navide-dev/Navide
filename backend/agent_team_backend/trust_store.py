@@ -58,8 +58,6 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
-import tempfile
 import sys
 import threading
 import time
@@ -68,7 +66,7 @@ from typing import Any
 
 from agent_team_backend import cloud_secrets, device_signing
 from agent_team_backend.applog import app_data_dir
-from agent_team_backend.osplat import secret_files
+from agent_team_backend.osplat import durable_secret_files
 
 log = logging.getLogger(__name__)
 
@@ -332,16 +330,7 @@ def _journal_path() -> Path:
 def _read_journal_bytes(path: Path) -> bytes:
     """The journal's bytes, never through a link. Raises FileNotFoundError when
     there is none, OSError when it cannot be read."""
-    if os.name == "nt":
-        return secret_files.read_private(path)
-    fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        chunks = []
-        while chunk := os.read(fd, 65536):
-            chunks.append(chunk)
-        return b"".join(chunks)
-    finally:
-        os.close(fd)
+    return durable_secret_files.read(path)
 
 
 def _write_journal_bytes(path: Path, data: bytes) -> None:
@@ -353,30 +342,7 @@ def _write_journal_bytes(path: Path, data: bytes) -> None:
     slots and is left exactly as it was, and it writes once without fsync, so
     a power cut could leave an empty journal behind.
     """
-    if os.name == "nt":
-        secret_files.write_private(path, data)
-        return
-    directory = path.parent
-    directory.mkdir(parents=True, exist_ok=True)
-    os.chmod(directory, 0o700)
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        try:
-            view = memoryview(data)
-            while view:
-                view = view[os.write(fd, view):]
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    dir_fd = os.open(directory, os.O_RDONLY)
-    try:
-        os.fsync(dir_fd)
-    finally:
-        os.close(dir_fd)
+    durable_secret_files.write(path, data)
 
 
 #: Set while the journal exists but cannot be read. No journal is written until

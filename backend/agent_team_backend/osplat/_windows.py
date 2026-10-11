@@ -1650,3 +1650,16 @@ class WindowsScripts:
 
 
 scripts = WindowsScripts()
+
+
+class WindowsDurableSecretFiles:
+    """`DurableSecretFiles` through DPAPI — the same files `secret_files` writes."""
+
+    def read(self, path: Path) -> bytes:
+        return secret_files.read_private(path)
+
+    def write(self, path: Path, data: bytes) -> None:
+        secret_files.write_private(path, data)
+
+
+durable_secret_files = WindowsDurableSecretFiles()
