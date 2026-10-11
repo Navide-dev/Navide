@@ -1073,7 +1073,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'extensions',
     section: 'execution-policy',
     title: t('settings.search.item.execution-policy.title'),
-    group: t('settings.nav.group.system'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.execution-policy.summary'),
     keywords: 'execution policy permission permissions allowlist denylist full shell executable system namespace source repository recommendation untrusted recovery rebuild security 執行政策 權限 允許清單 拒絕清單 完整模式 shell 可執行檔 系統命名空間 來源 repository 建議 不受信任 修復 重建 安全性 extension extensions plugin plugins 擴充 擴充功能 外掛 Navide 外掛 拡張機能 プラグイン',
   },
@@ -1082,7 +1082,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'marketplace',
     section: 'marketplace',
     title: t('settings.search.item.marketplace.title'),
-    group: t('settings.nav.group.system'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.marketplace.summary'),
     keywords: 'marketplace extension extensions plugin plugins registry search browse install publisher signed unsigned trust 市集 擴充 擴充功能 外掛 搜尋 瀏覽 安裝 發佈者 簽章 信任 Navide 市集 拡張機能 プラグイン マーケットプレイス',
   },
@@ -2600,7 +2600,7 @@ watch(activeTab, (tab) => {
             </div>
 
             <div class="s-nav-group">
-              <div class="s-nav-group-title">{{ $t('settings.nav.group.system') }}</div>
+              <div class="s-nav-group-title">{{ $t('settings.nav.group.navidePlugins') }}</div>
               <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
@@ -2611,6 +2611,10 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 5.4h10.8l-.8 7.1a1.2 1.2 0 0 1-1.2 1.1H4.6a1.2 1.2 0 0 1-1.2-1.1L2.6 5.4Z"/><path d="M5.8 7.2V4.6a2.2 2.2 0 0 1 4.4 0v2.6"/></svg>
                 </template>
               </SettingsNavItem>
+            </div>
+
+            <div class="s-nav-group">
+              <div class="s-nav-group-title">{{ $t('settings.nav.group.system') }}</div>
               <SettingsNavItem :label="$t('settings.nav.keybindings')" :active="activeTab === 'keybindings'" @select="activeTab = 'keybindings'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.3" y="3.8" width="13.4" height="8.4" rx="1.4"/><path d="M4 6.4h0.01M6.4 6.4h0.01M8.8 6.4h0.01M11.2 6.4h0.01M4 8.8h0.01M11.2 8.8h0.01M6 10.6h4"/></svg>
