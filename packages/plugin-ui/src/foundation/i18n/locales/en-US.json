@@ -996,6 +996,28 @@
       "open-count": "Opened {count} times so far"
     }
   },
+  "plans": {
+    "share": {
+      "button": "Share link",
+      "title": "Share a read-only link",
+      "expiry": "Expires after",
+      "days": "{count} day | {count} days",
+      "require-login": "Require sign-in to open",
+      "send-to-chat": "Send to the chat",
+      "send-to-chat-note": "The link contains its decryption key and is sent through that chat platform (for example Telegram).",
+      "create": "Create link",
+      "creating": "Creating…",
+      "copy": "Copy",
+      "copied": "Link copied",
+      "close": "Close",
+      "expires-at": "Expires {date}",
+      "masked-title": "Masked before sharing",
+      "masked-line": "Line {line}: possible {category}, masked",
+      "warned-line": "Line {line}: possible {category}, not masked, check it",
+      "refused": "This plan cannot be shared: {reason}",
+      "failed": "Could not create the link ({code}): {message}"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "Each AI CLI's own CLI extensions — Claude plugins and mods, Codex hooks, Pi extensions and the rest — and what they can reach. Navide only reads them: nothing here installs, enables or changes anything. Navide plugins have their own page.",
@@ -9639,6 +9661,10 @@
     "token-linked": "Linked with a token"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "Share link opened notices",
+      "desc": "When a new device opens a share link made on this computer, tell the bound chats (the link's URL is never sent). Requires Navide Cloud."
+    },
     "nav": "Channels",
     "platform": {
       "telegram": "Telegram",

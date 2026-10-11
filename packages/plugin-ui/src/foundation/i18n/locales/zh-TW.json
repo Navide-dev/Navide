@@ -996,6 +996,28 @@
       "open-count": "目前共開啟 {count} 次"
     }
   },
+  "plans": {
+    "share": {
+      "button": "分享連結",
+      "title": "分享唯讀連結",
+      "expiry": "有效期限",
+      "days": "{count} 天",
+      "require-login": "開啟時需要登入",
+      "send-to-chat": "傳到聊天室",
+      "send-to-chat-note": "連結含解密金鑰，會經過該聊天平台（例如 Telegram）傳送。",
+      "create": "建立連結",
+      "creating": "建立中…",
+      "copy": "複製",
+      "copied": "已複製連結",
+      "close": "關閉",
+      "expires-at": "到期：{date}",
+      "masked-title": "分享前已遮罩",
+      "masked-line": "第 {line} 行：疑似 {category}，已遮罩",
+      "warned-line": "第 {line} 行：疑似 {category}，未遮罩，請確認",
+      "refused": "無法分享這份計畫：{reason}",
+      "failed": "無法建立連結（{code}）：{message}"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "列出每個 AI CLI 自己安裝的 CLI 擴充（Claude plugin、Claude mod、Codex hook、Pi extension……），以及它們能碰到什麼。Navide 只讀取，這裡不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
@@ -9639,6 +9661,10 @@
     "token-linked": "已用權杖連結"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "分享連結開啟通知",
+      "desc": "新的裝置開啟這台電腦建立的分享連結時，通知已綁定的聊天室（不含連結網址）。需要 Navide Cloud。"
+    },
     "nav": "聊天室",
     "platform": {
       "telegram": "Telegram",

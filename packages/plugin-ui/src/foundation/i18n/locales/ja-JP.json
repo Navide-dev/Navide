@@ -996,6 +996,28 @@
       "open-count": "これまでに {count} 回開かれました"
     }
   },
+  "plans": {
+    "share": {
+      "button": "共有リンク",
+      "title": "読み取り専用リンクを共有",
+      "expiry": "有効期限",
+      "days": "{count} 日",
+      "require-login": "開くときにサインインを必須にする",
+      "send-to-chat": "チャットに送信",
+      "send-to-chat-note": "リンクには復号キーが含まれ、そのチャットサービス（例：Telegram）を経由して送信されます。",
+      "create": "リンクを作成",
+      "creating": "作成中…",
+      "copy": "コピー",
+      "copied": "リンクをコピーしました",
+      "close": "閉じる",
+      "expires-at": "有効期限：{date}",
+      "masked-title": "共有前にマスクしました",
+      "masked-line": "{line} 行目：{category} の疑い、マスク済み",
+      "warned-line": "{line} 行目：{category} の疑い、マスクなし、確認してください",
+      "refused": "この計画は共有できません：{reason}",
+      "failed": "リンクを作成できませんでした（{code}）：{message}"
+    }
+  },
   "settings": {
     "cliExtensions": {
       "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin、Claude mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲を一覧にします。Navide は読み取るだけで、ここでインストール・有効化・変更を行うことはありません。Navide プラグインは専用のページにあります。",
@@ -9639,6 +9661,10 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "共有リンクの開封通知",
+      "desc": "このコンピューターで作成した共有リンクが新しいデバイスで開かれたとき、バインド済みのチャットに通知します（リンクの URL は送信しません）。Navide Cloud が必要です。"
+    },
     "nav": "チャット連携",
     "platform": {
       "telegram": "Telegram",
