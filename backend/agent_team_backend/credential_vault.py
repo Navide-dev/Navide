@@ -1644,10 +1644,40 @@ class CredentialVault:
         """Make sure a shared symlink can be written through: the target dir
         itself for a directory link, or the target's parent for a file link
         (the file is created by the CLI on first write, through the symlink)."""
+        base = target if is_dir else target.parent
+        created = self._new_in_claude_home(base)
         try:
-            (target if is_dir else target.parent).mkdir(parents=True, exist_ok=True)
+            base.mkdir(parents=True, exist_ok=True)
         except OSError as err:
             log.warning("cannot ensure shared target base %s: %s", target, err)
+            return
+        if created:
+            self._announce_claude_home("note", base, "created for signed-in accounts")
+
+    def _new_in_claude_home(self, path: Path) -> bool:
+        """Whether ``path`` is under the real ``~/.claude`` and not there yet.
+        The path test comes first, so a link elsewhere (grok's, made while
+        its ``switch_lock`` is held) costs no I/O. Never raises."""
+        try:
+            return path.is_relative_to(self._real_home / ".claude") and not path.is_dir()
+        except Exception:  # noqa: BLE001 — a disclosure check never fails a link
+            return False
+
+    def _announce_claude_home(self, kind: str, target: Path, detail: str) -> None:
+        """Disclose a change in the real ``~/.claude`` (the required
+        convenience feature claude.account-homes): only a log row and a
+        notice. Never raises into the vault operation that made the change."""
+        try:
+            if not target.is_relative_to(self._real_home / ".claude"):
+                return
+            from . import convenience_wiring
+
+            if kind == "note":
+                convenience_wiring.note("claude.account-homes", target, detail=detail)
+            else:
+                convenience_wiring.changed("claude.account-homes", target, detail=detail)
+        except Exception as err:  # noqa: BLE001
+            log.warning("announcing %s failed: %s", target, err)
 
     def _migrate_file(self, src: Path, target: Path) -> bool:
         """Move a real file that shadows a shared link into the real home.
@@ -1667,6 +1697,7 @@ class CredentialVault:
                 return True
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(os.fspath(src), os.fspath(target))
+            self._announce_claude_home("changed", target, f"moved from {src}")
             return True
         except OSError as err:
             log.warning("migrating %s -> %s failed: %s", src, target, err)
@@ -1708,6 +1739,7 @@ class CredentialVault:
                 log.warning("kept %s unshared: could not fully merge into %s", src, target)
                 return False
             shutil.rmtree(src, ignore_errors=True)
+            self._announce_claude_home("changed", target, f"merged from {src}")
             return True
         except OSError as err:
             log.warning("migrating dir %s -> %s failed: %s", src, target, err)

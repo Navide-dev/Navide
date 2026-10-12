@@ -9,6 +9,7 @@ import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import type {
   Announcement,
   AnnouncementActionSpec,
+  ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
   QuotaAnnouncementAction,
 } from '../composables/useAnnouncements'
@@ -29,6 +30,9 @@ const emit = defineEmits<{
   /** A workspace self-evolution row's button, for App.vue to map onto the
    *  existing pane actions or the evolve panel. */
   'evolve-action': [action: EvolveAnnouncementAction]
+  /** A convenience-feature row's button, for App.vue to map onto the
+   *  overview or the convenience.* RPCs. */
+  'convenience-action': [action: ConvenienceAnnouncementAction]
 }>()
 
 /** Buttons of a row: the typed list, else the single update action. */
@@ -42,6 +46,7 @@ function onAction(action: AnnouncementActionSpec): void {
   else if (action.kind === 'install') emit('install')
   else if (action.kind === 'tour') emit('tour', action.version)
   else if (action.kind.startsWith('evolve-')) emit('evolve-action', action as EvolveAnnouncementAction)
+  else if (action.kind.startsWith('convenience-')) emit('convenience-action', action as ConvenienceAnnouncementAction)
   else emit('quota-action', action as QuotaAnnouncementAction)
 }
 
@@ -78,6 +83,11 @@ function actionLabel(action: AnnouncementActionSpec): string {
     case 'evolve-panel':
     case 'evolve-result':
       return i18n.global.t(`evolve.notice.action.${action.kind.slice('evolve-'.length)}`)
+    case 'convenience-overview':
+    case 'convenience-reallow':
+    case 'convenience-dismiss':
+    case 'convenience-upgrade-ack':
+      return i18n.global.t(`convenience.notice.button.${action.kind.slice('convenience-'.length)}`)
   }
 }
 
@@ -91,6 +101,7 @@ function iconOf(item: Announcement): string {
   if (item.kind === 'quota') return '◔'
   if (item.kind === 'scheduler') return '⏲'
   if (item.kind === 'evolve') return '✦'
+  if (item.kind === 'convenience') return '⚙'
   return '⬆'
 }
 

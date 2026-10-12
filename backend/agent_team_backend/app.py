@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import functools
+import hashlib
+import hmac
 import json
 import logging
 import mimetypes
@@ -102,9 +104,13 @@ from .tokens_store import TokensStore
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
-# registration. Keep it in this process, not in os.environ: backend-launched
-# shells, PTYs, Git hooks, and CLI helpers must not inherit a Host credential.
-_HOST_SESSION_TOKEN = os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", "")
+# registration. It arrives on stdin, on the confirm key's line after a space (see
+# __main__ and set_host_session_token) -- never in the environment: on macOS a
+# same-uid process reads the spawn env block with `ps -E` even after a pop.
+# The variable is still scrubbed, never adopted, so a stale launcher that sets
+# it cannot leak it into backend-launched shells, PTYs, Git hooks or helpers.
+os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", None)
+_HOST_SESSION_TOKEN = ""
 from .ui_settings import UiSettingsStore
 from .cli_risk import CliRiskService
 from .cli_risk_store import CliRiskStore
@@ -185,6 +191,17 @@ async def reject_foreign_host(request: Request, call_next: Any) -> Response:
     return await call_next(request)
 
 database = Database(app_data_dir() / DB_FILENAME)
+# Every write outside Navide's own data goes through this gate
+# (docs/en-US/convenience-features.md).
+from . import convenience_wiring  # noqa: E402
+from .convenience import ConvenienceGate  # noqa: E402
+
+convenience_gate = ConvenienceGate(
+    database,
+    backup_root=app_data_dir() / "convenience-backups",
+    notify=convenience_wiring.broadcast_change,
+)
+convenience_wiring.install(convenience_gate)
 workspace_databases = WorkspaceDatabases()
 project_store = ProjectStore(databases=workspace_databases)
 spawn_history_store = SpawnHistoryStore(databases=workspace_databases)
@@ -435,13 +452,38 @@ def host_supports_plans_backend() -> bool:
     )
 
 
+def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
+    """Whether `proof` answers this connection's window challenge: main
+    returns HMAC-SHA256(host token, "navide-window/v2\\0" + challenge) to its
+    main windows (backend:proveWindow) and to nothing else. The token file is
+    readable by every pane process, so it cannot say this; the host token
+    never leaves main and this process. The challenge is per connection, so a
+    proof seen once is worth nothing on any other."""
+    expected = _HOST_SESSION_TOKEN
+    if not isinstance(proof, str) or not expected or not challenge:
+        return False
+    digest = hmac.new(
+        expected.encode(), b"navide-window/v2\0" + challenge.encode(), hashlib.sha256
+    ).hexdigest()
+    # Bytes, not str: compare_digest raises on a str with non-ASCII in it.
+    return secrets.compare_digest(proof.encode(), digest.encode())
+
+
+def set_host_session_token(token: str) -> bool:
+    """Adopt the host token main handed over on stdin. Returns whether there
+    was one; without it host.register refuses and no session is a window."""
+    global _HOST_SESSION_TOKEN
+    _HOST_SESSION_TOKEN = token if isinstance(token, str) else ""
+    return bool(_HOST_SESSION_TOKEN)
+
+
 def host_session_token_matches(token: Any) -> bool:
     """Validate the per-backend token used by Electron's Host session."""
     expected = _HOST_SESSION_TOKEN
     return (
         isinstance(token, str)
         and bool(expected)
-        and secrets.compare_digest(token, expected)
+        and secrets.compare_digest(token.encode(), expected.encode())
     )
 
 
@@ -502,6 +544,13 @@ class Session:
         # most recently focused first.
         self.ui_bus_ready = False
         self.ui_focused_at = 0.0
+        # Set by `window.prove` answering this connection's challenge (see
+        # navide_window_proof_matches): a Navide window, as opposed to any
+        # other client holding the token. ui_bus_ready is self-declared.
+        self.navide_window = False
+        # The nonce sent in `ws.welcome`; cleared by the first right
+        # `window.prove`, so a connection is proved at most once.
+        self.window_challenge = secrets.token_hex(32)
         # Throttle state for the slow-send probe (see _note_send_timing).
         # None rather than 0.0: the first slow send must always report, which a
         # zero baseline would swallow whenever the clock starts near zero.
@@ -2269,15 +2318,11 @@ async def _start_log_watcher() -> None:
     # backend for reliable "agent active / turn complete / parked on a prompt"
     # signals that buffer scanning cannot give. Each installer no-ops when its
     # CLI's config root is absent, and failure is non-fatal — the orchestrator
-    # falls back to log-tail + sentinel detection.
-    for _key, _spec in _CLI_VENDORS.items():
-        if _spec.install_hooks is None:
-            continue
-        try:
-            result = _spec.install_hooks(str(backend_port_file()))
-            log.info("%s hooks install: %s", _key, result)
-        except Exception as err:  # noqa: BLE001
-            log.warning("%s hooks install failed: %s", _key, err)
+    # falls back to log-tail + sentinel detection. Each is the convenience
+    # feature "<cli>.hooks": announced when it changes a file, skipped when the
+    # user turned it off or deleted the hooks by hand.
+    convenience_wiring.remember_loop(asyncio.get_running_loop())
+    convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.
     # The Host-bound Manifest v2 activation catalog is validated by the wiring
@@ -3005,6 +3050,13 @@ async def ws(websocket: WebSocket) -> None:
     log.info("ws client connected")
     session = Session(websocket)
     _SESSIONS.add(session)
+    # First thing on every connection: the challenge a Navide main window
+    # answers through main (window.prove) to be told apart from any other
+    # client holding the token. Fresh per connection, so a reconnect proves
+    # again and a proof seen once cannot be replayed.
+    await session.send_json(
+        make_event("ws.welcome", {"windowChallenge": session.window_challenge})
+    )
     # An MCP client reads this backend's tool list once, when it connects, so a
     # CLI that was already talking to the previous backend keeps the tools it
     # saw then. Told to the window rather than logged: only the window can put

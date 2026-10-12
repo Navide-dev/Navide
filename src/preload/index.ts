@@ -352,6 +352,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
     },
   },
   getBackendInfo: (): Promise<BackendInfo> => ipcRenderer.invoke('backend:info'),
+  /** Answer a ws connection's window challenge; null outside a main window. */
+  proveWindow: (nonce: string): Promise<string | null> => ipcRenderer.invoke('backend:proveWindow', nonce),
   restartBackend: (): Promise<BackendInfo> => ipcRenderer.invoke('backend:restart'),
   stopBackend: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('backend:stop'),
   onBackendChanged: (cb: (info: BackendInfo) => void): void => {

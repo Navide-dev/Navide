@@ -293,3 +293,26 @@ describe('AnnouncementsPanel — release tours', () => {
     }
   })
 })
+
+describe('AnnouncementsPanel convenience rows', () => {
+  it('labels convenience buttons and emits the typed action without running it', async () => {
+    i18n.global.locale.value = 'zh-TW'
+    try {
+      const actions = [
+        { kind: 'convenience-dismiss', rowId: 'convenience:11' },
+        { kind: 'convenience-reallow', featureId: 'claude.hooks' },
+        { kind: 'convenience-overview' },
+      ] as const
+      const wrapper = mountPanel([
+        { id: 'convenience:11', kind: 'convenience', title: '你在 Navide 外登出了 Codex', highlights: [], read: false, actions: [...actions] },
+      ])
+      expect(wrapper.findAll('.an-acts button').map((b) => b.text())).toEqual(['知道了', '重新允許', '查看總覽'])
+      await wrapper.get('[data-act="convenience-reallow"]').trigger('click')
+      expect(wrapper.emitted('convenience-action')).toEqual([[actions[1]]])
+      expect(wrapper.emitted('quota-action')).toBeUndefined()
+      wrapper.unmount()
+    } finally {
+      i18n.global.locale.value = 'en-US'
+    }
+  })
+})

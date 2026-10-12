@@ -244,14 +244,43 @@ def project_config_path(agent_key: str, cwd: str | Path) -> Path | None:
     return Path(cwd).joinpath(*wiring.project_config)
 
 
+def project_config_inside(path: Path, root: Path) -> bool:
+    """Whether ``path``, a project MCP config of the workspace ``root``, is
+    really the workspace's own.
+
+    The repository decides what its ``.cursor`` holds, so a folder level that
+    is a link, or a config that is a link resolving outside the workspace (to
+    ``~/.claude.json``, or to a path that does not exist yet), is never
+    written, created or cleaned through. A link that stays inside is fine.
+    """
+    from agent_team_backend.plugins.builtin.navide_skills.skills_wiring import project_target_safe
+
+    if not project_target_safe(path.parent, root):
+        return False
+    try:
+        path.resolve().relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _project_root(agent_key: str, path: Path) -> Path:
+    """The workspace a project MCP config path belongs to."""
+    wiring = mcp_wiring(agent_key)
+    depth = len(wiring.project_config) if wiring is not None and wiring.project_config else 1
+    return path.parents[depth - 1]
+
+
 def _write_atomic(path: Path, content: str) -> None:
     """Replace ``path`` in one step, with a temp name no other pane can share.
 
     A fixed ``.tmp`` neighbour would collide when two panes on the same
     workspace spawn at once: one os.replace wins, the other raises on a temp
     file that is already gone, and worse, a CLI starting in between could read
-    a half-written config.
+    a half-written config. A link (a dotfiles-managed config) is written
+    through: replacing it would turn it into a plain file.
     """
+    path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         mode: int | None = path.stat().st_mode & 0o777
@@ -352,6 +381,9 @@ def ensure_project_config(agent_key: str, cwd: str | Path) -> bool:
         # that cannot connect.
         log.warning("workspace is the home directory — not wiring %s globally", agent_key)
         return False
+    if not project_config_inside(path, root):
+        log.warning("%s reaches outside %s through a link — leaving %s unwired", path, root, agent_key)
+        return False
     existed = path.exists()
     document: dict[str, Any] = {}
     if existed:
@@ -399,6 +431,84 @@ def ensure_project_config(agent_key: str, cwd: str | Path) -> bool:
     if not existed:
         _exclude_from_git(path, root)
     return True
+
+
+def project_config_has_entry(agent_key: str, path: Path) -> bool:
+    """Whether a project MCP config still carries our server.
+
+    Raises when the file exists but is not a JSON object: an unreadable file
+    says nothing about whether the user removed our entry.
+    """
+    wiring = mcp_wiring(agent_key)
+    if wiring is None or wiring.config is None or not path.is_file():
+        return False
+    if not project_config_inside(path, _project_root(agent_key, path)):
+        return False  # not the workspace's file: nothing of Navide's is there
+    raw = path.read_text(encoding="utf-8").strip()
+    document = json.loads(raw) if raw else {}
+    if not isinstance(document, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    servers = document.get(wiring.config.section[-1])
+    return isinstance(servers, dict) and SERVER_NAME in servers
+
+
+def remove_project_config(agent_key: str, path: Path) -> bool:
+    """Take our server back out of a project MCP config; True when it was there.
+
+    The user's servers stay. A file left holding nothing but an empty server
+    map was Navide's alone: it is deleted, along with the git exclude line
+    ``ensure_project_config`` added for it. A file that does not parse is left
+    exactly as it is.
+    """
+    wiring = mcp_wiring(agent_key)
+    if wiring is None or wiring.config is None or not path.is_file():
+        return False
+    if not project_config_inside(path, _project_root(agent_key, path)):
+        log.warning("%s reaches outside its workspace through a link — leaving it alone", path)
+        return False
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+        document = json.loads(raw) if raw else {}
+    except (OSError, json.JSONDecodeError) as err:
+        log.warning("%s unreadable (%s) — leaving it alone", path, err)
+        return False
+    section = wiring.config.section[-1]
+    servers = document.get(section) if isinstance(document, dict) else None
+    if not isinstance(servers, dict):
+        return False
+    ours = [name for name in (SERVER_NAME, *LEGACY_SERVER_NAMES) if name in servers]
+    if not ours:
+        return False
+    kept = {key: value for key, value in servers.items() if key not in ours}
+    if not kept and set(document) == {section}:
+        path.unlink(missing_ok=True)
+        _unexclude_from_git(path, path.parent)
+        return True
+    document[section] = kept
+    _write_atomic(path, json.dumps(document, indent=2) + "\n")
+    return True
+
+
+def _unexclude_from_git(config_path: Path, start: Path) -> None:
+    """Drop the exclude line ``_exclude_from_git`` added for a file we removed."""
+    repo = _git_repo_root(start)
+    if repo is None:
+        return
+    try:
+        relpath = config_path.relative_to(repo).as_posix()
+    except ValueError:
+        return
+    exclude = repo / ".git" / "info" / "exclude"
+    try:
+        lines = exclude.read_text(encoding="utf-8").splitlines(keepends=True)
+    except OSError:
+        return
+    kept = [line for line in lines if line.strip() != relpath]
+    if kept != lines:
+        try:
+            exclude.write_text("".join(kept), encoding="utf-8")
+        except OSError as err:
+            log.warning("could not update %s: %s", exclude, err)
 
 
 def wire_command(
@@ -465,7 +575,9 @@ def wire_command(
     if wiring.project_config:
         # env first: with nowhere to put the URL there is no point writing a
         # config file into the user's repo.
-        if cwd and env is not None and ensure_project_config(agent_key, cwd):
+        from ..convenience_wiring import ensure_project_config_gated
+
+        if cwd and env is not None and ensure_project_config_gated(agent_key, cwd):
             env.setdefault(PROJECT_URL_ENV, plan_mcp_url(port, pane_id))
         return command
     if wiring.config_file:

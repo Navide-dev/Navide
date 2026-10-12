@@ -14,6 +14,7 @@ import {
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
+import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
@@ -353,6 +354,9 @@ const mainWindowWorkspaces = new Map<BrowserWindow, string>()
 const detachedGroups = new Map<string, BrowserWindow>()          // groupId → child window
 const detachedGroupWorkspace = new Map<string, string>()         // groupId → workspace_path
 const detachedWindowIds = new Set<number>()                      // child window ids
+// Navide windows main created that are not main windows (Plans, Token
+// Monitor): they get the full backend:info, but never a window proof.
+const navideAuxWindows = new Set<BrowserWindow>()
 // Workspaces a window has taken on from its sidebar, beyond the one it was
 // opened with. Kept apart from mainWindowWorkspaces so everything that means
 // "this window's own workspace" — the registry, run-group hand-offs, the
@@ -788,6 +792,8 @@ const requestTokenMonitor = createTokenMonitorWindowOpener({
   // Machine-wide: no workspace_path, so the restore filter reopens it without
   // asking which workspace came back.
   onWindowCreated: (win) => {
+    navideAuxWindows.add(win)
+    win.once('closed', () => navideAuxWindows.delete(win))
     watchRendererCrashes(win, { kind: 'token-monitor', log: warnMain })
     trackAuxWindow(win, { kind: 'token-monitor' })
   },
@@ -824,8 +830,15 @@ function backendInfoPayload() {
     // one change here reaches every /ws client at once. A page in a browser
     // can guess the port but cannot read the file this came from, which is
     // the whole of the defence; see backend/agent_team_backend/ws_auth.py.
-    wsUrl: `ws://${backend.host}:${backend.port}/ws?t=${encodeURIComponent(readWsToken(backend))}`
+    // Nothing here marks a Navide window: a main window answers the
+    // connection's challenge through backend:proveWindow instead, so the URL
+    // carries no replayable proof and the plugin broker uses the same one.
+    wsUrl: brokerWsUrl(backend)
   }
+}
+
+function brokerWsUrl(handle: BackendHandle): string {
+  return `ws://${handle.host}:${handle.port}/ws?t=${encodeURIComponent(readWsToken(handle))}`
 }
 
 // Push the current backend info to every window so each renderer's useBackend
@@ -841,13 +854,14 @@ function broadcastBackendChanged(): void {
   // Point the main-process transport at the new backend before changing its
   // bearer. This prevents a reconnect from registering the new token on the
   // old socket while that socket's registration task is still in flight.
-  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' ? payload.wsUrl : null)
+  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' && backend ? brokerWsUrl(backend) : null)
   frontendPluginManager.setBackendHostToken(
     payload.status === 'ready' && backend ? backend.hostSessionToken : null
   )
   // A terminal error bypasses the focus gate — see BackendBroadcastTracker.
   const urgent = payload.status === 'error'
-  for (const win of BrowserWindow.getAllWindows()) {
+  // Navide windows only, like backend:info: the payload carries the ws token.
+  for (const win of backendChangedTargets(BrowserWindow.getAllWindows(), [mainWindows, navideAuxWindows])) {
     if (win.isDestroyed()) continue
     const { immediate } = backendBroadcastTracker.dispatch(win.id, win.isFocused(), payload, urgent)
     if (immediate) win.webContents.send('backend:changed', payload)
@@ -855,8 +869,8 @@ function broadcastBackendChanged(): void {
 }
 
 // Flush a queued backend info snapshot to a window as soon as it regains
-// focus, and stop tracking it once closed. Registered on every BrowserWindow
-// (not just main windows) so Roles/Stages/Editor windows behave the same way.
+// focus, and stop tracking it once closed. Registered on every BrowserWindow,
+// but only a window broadcastBackendChanged pushed to has anything queued.
 app.on('browser-window-created', (_event, win) => {
   win.on('focus', () => {
     const payload = backendBroadcastTracker.takePending(win.id)
@@ -1994,7 +2008,15 @@ ipcMain.handle('plans:retryV2', (event) => {
   return retryPlansV2AfterRecovery()
 })
 
-ipcMain.handle('backend:info', () => backendInfoPayload())
+// Full info (wsUrl carries the ws token) for Navide windows only; a plugin
+// frame or view, a webview or any other window learns just the status.
+ipcMain.handle('backend:info', (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], backendInfoPayload())
+)
+// Signs one ws connection's window challenge, for a main window only.
+ipcMain.handle('backend:proveWindow', (event, nonce: unknown) =>
+  answerWindowChallenge(event, nonce, mainWindows, backend?.hostSessionToken ?? null)
+)
 
 // A backend that dies after a successful start must not keep reporting
 // 'ready' with a dead port: watch its exit and, if it is still the active
@@ -2125,7 +2147,10 @@ async function autoRestartBackend(): Promise<void> {
   }
 }
 
-ipcMain.handle('backend:restart', () => restartBackendNow())
+// Same payload as backend:info, so the same scoping: full only for Navide windows.
+ipcMain.handle('backend:restart', async (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], await restartBackendNow())
+)
 
 /** A deliberate restart: the Settings button, and a quit cancelled after its
  *  teardown stopped the backend. */
@@ -4049,6 +4074,8 @@ async function openLegacyPlanWindow(workspacePath: string, relPath?: string): Pr
     }
   })
   planWindows.set(workspacePath, win)
+  navideAuxWindows.add(win)
+  win.once('closed', () => navideAuxWindows.delete(win))
   watchRendererCrashes(win, { kind: 'plans', log: warnMain })
   // Restored as a plain Plans window: which of the two implementations serves
   // it next launch is decided then, by the router, exactly as it is here.
