@@ -2237,3 +2237,22 @@ def test_the_first_promotion_still_publishes_the_active_account(
 
     assert vault.read_live("claude").secret == _REPAIR_SEC_A
     assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]
+
+
+def test_the_first_promotion_with_auto_repair_off_writes_no_live_login(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """D7, the one difference from main while the switch is off: an empty
+    live login is not filled from the active slot (main restores it)."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    (tmp_path / "root" / "claude" / ".live-unified").touch()
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    before = len(_isolated_convenience_gate.history())
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert vault.read_live("claude").secret is None
+    assert vault.read_slot("claude", "pA").secret == _REPAIR_SEC_A
+    assert len(_isolated_convenience_gate.history()) == before
