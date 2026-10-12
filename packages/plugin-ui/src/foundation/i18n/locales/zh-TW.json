@@ -10807,6 +10807,7 @@
     "quota-confirm": "換帳號並接回 {count} 個 pane",
     "cancel": "取消",
     "needs-dir-sign-in": "需先在帳號資料夾登入",
+    "default-needs-switch": "需先用「切換帳號」切到它",
     "exhausted": "額度用完",
     "state-idle": "閒置，立即重開",
     "state-running": "忙碌中（執行、等待回應或輸入中），空下來後重開",

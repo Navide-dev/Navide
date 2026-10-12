@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import type { FollowSwitchRow, QuotaTarget } from '../lib/accountFollowSwitch'
+import { DEFAULT_SLOT_ID, type FollowSwitchRow, type QuotaTarget } from '../lib/accountFollowSwitch'
 
 /** One pane row as shown: the pure row plus its account's display label. */
 export interface FollowDialogRow extends FollowSwitchRow {
@@ -93,8 +93,10 @@ function confirm(): void {
             >
               <input v-model="target" type="radio" :value="t.id" :disabled="!t.eligible" />
               <span v-truncate class="name">{{ t.label }}</span>
-              <span v-if="!t.eligible" class="hint">{{ $t('account-follow.needs-dir-sign-in') }}</span>
-              <span v-else-if="t.exhausted" class="hint crit">{{ $t('account-follow.exhausted') }}</span>
+              <span v-if="!t.eligible" class="hint">{{ t.id === DEFAULT_SLOT_ID
+                ? $t('account-follow.default-needs-switch')
+                : $t('account-follow.needs-dir-sign-in') }}</span>
+              <span v-else-if="t.exhausted" class="hint">{{ $t('account-follow.exhausted') }}</span>
               <span v-else-if="t.remaining" class="hint">{{ t.remaining }}</span>
             </label>
           </div>
@@ -158,7 +160,7 @@ h2 { margin: 0 0 8px; font-size: 17px; }
 p { margin: 0 0 12px; color: var(--text-secondary); }
 p.sub { margin-top: 12px; }
 .note { font-size: 12px; }
-.rows, .targets { display: grid; gap: 4px; margin: 0 0 12px; padding: 0; list-style: none; }
+.rows, .targets { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin: 0 0 12px; padding: 0; list-style: none; }
 .rows label, .target {
   display: flex;
   align-items: center;
@@ -171,7 +173,8 @@ p.sub { margin-top: 12px; }
 .target.disabled { cursor: default; opacity: 0.6; }
 .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acct, .hint, .state { color: var(--text-secondary); font-size: 12px; white-space: nowrap; }
-.hint.crit, .state.quota { color: var(--danger-fg); }
+.state { max-width: 14em; white-space: normal; text-align: right; }
+.state.quota { color: var(--danger-fg); }
 .actions { display: flex; justify-content: flex-end; gap: 8px; }
 button {
   min-height: 34px;

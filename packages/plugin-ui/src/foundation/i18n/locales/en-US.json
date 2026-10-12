@@ -10807,6 +10807,7 @@
     "quota-confirm": "Switch and resume {count} pane(s)",
     "cancel": "Cancel",
     "needs-dir-sign-in": "Sign in inside its own folder first",
+    "default-needs-switch": "Switch to it first",
     "exhausted": "Out of quota",
     "state-idle": "Idle — reopens now",
     "state-running": "Busy — reopens once it is free",
