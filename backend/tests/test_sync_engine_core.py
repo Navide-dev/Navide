@@ -111,6 +111,39 @@ async def test_a_live_record_from_an_unknown_device_is_still_taken(tmp_path, acc
     assert b.adapter.items == {"x": {"v": 1}}
 
 
+async def test_a_record_from_a_blocked_device_is_refused(tmp_path, account_key):
+    """A blocked device of this account still holds the account key, so its
+    records open — and with the pin ignored, or with none, they read as
+    "unknown origin" and were taken. A stolen machine is the case a block is
+    for; what it writes into sync must not land here."""
+    from agent_team_backend import trust_store
+
+    server = FakeServer()
+    a = Device(tmp_path, server, "dev-a", {"x": {"v": 1}})
+    await a.sync()
+    trust_store.load()
+    trust_store.note_blocked("dev-a", "")
+    b = Device(tmp_path, server, "dev-b")
+    b.engine._signing_key_for = lambda _d: ""
+    await b.sync()
+    assert b.adapter.items == {}
+
+
+async def test_a_tombstone_from_a_blocked_device_deletes_nothing(tmp_path, account_key):
+    from agent_team_backend import trust_store
+
+    server = FakeServer()
+    b = Device(tmp_path, server, "dev-b", {"x": {"v": 1}})
+    await b.sync()
+    trust_store.load()
+    trust_store.note_blocked("dev-stolen", "")
+    b.engine._signing_key_for = lambda _d: ""
+    _forged(server, "x", device="dev-stolen", deleted=True)
+    await b.sync()
+    assert b.adapter.items == {"x": {"v": 1}}
+    assert b.store.conflicts("prompts") == []
+
+
 async def test_a_tombstone_from_an_unknown_device_for_an_item_we_lack_is_taken(tmp_path, account_key):
     server = FakeServer()
     b = Device(tmp_path, server, "dev-b")

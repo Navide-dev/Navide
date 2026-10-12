@@ -302,7 +302,7 @@ describe('the three actions on a row are one size', () => {
 // makes a deliberate one safe: two clicks, the cost stated before the control,
 // and a confirmation token so nothing but a window can ask for it.
 
-async function mountLocked(reason = 'the record was created by __main__.py') {
+async function mountLocked(reason = 'the record was created by __main__.py', extra: object = {}) {
   ;(window as unknown as Record<string, unknown>).agentTeam = {
     trustConfirm: vi.fn().mockResolvedValue({ token: 't', issuedAt: 1 }),
   }
@@ -311,7 +311,7 @@ async function mountLocked(reason = 'the record was created by __main__.py') {
     status: { state: 'connected', accountEmail: 'a@b.c', serverUrl: 'wss://x', emailVerified: true },
   })
   mock.setResponse('p2p.network.snapshot', {
-    state: 'connected', deviceId: 'me', devices: [], trustLocked: reason,
+    state: 'connected', deviceId: 'me', devices: [], trustLocked: reason, ...extra,
   })
   wrapper = mount(AccountModal, {
     props: { open: true, backend: mock.backend as never },
@@ -407,6 +407,45 @@ describe('recovering from a locked trust store', () => {
     await flushPromises()
 
     expect(lockedCard().text()).toContain(t('settings.p2p.trust.rebuild-done'))
+  })
+})
+
+// R4-3: a record with no room left is not a lost one. It is intact, and
+// unpairing a device is the way back; starting over would cost every pairing
+// to fix something a single unpair fixes.
+describe('a trust record with no room left', () => {
+  const FULL_REASON = 'the pairing record is full: Update Navide to pair more devices'
+
+  for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+    it(`says it is full and to unpair a device, with no start over (${locale})`, async () => {
+      i18n.global.locale.value = locale
+      await mountLocked(FULL_REASON, { trustLockedCode: 'full' })
+
+      expect(lockedCard().exists()).toBe(true)
+      expect(lockedCard().text()).toContain(t('settings.p2p.trust.full-body'))
+      expect(lockedCard().text()).not.toContain(t('settings.p2p.trust.locked-body'))
+      expect(lockedCard().text()).not.toContain('Update Navide')
+      expect(lockedCard().findAll('button')).toHaveLength(0)
+    })
+  }
+
+  it('keeps the start over offer for every other lock', async () => {
+    i18n.global.locale.value = 'en-US'
+    await mountLocked('unreadable', { trustLockedCode: '' })
+    expect(lockedCard().text()).not.toContain(t('settings.p2p.trust.full-body'))
+    expect(lockedCard().findAll('button').map((b) => b.text())).toEqual([t('settings.p2p.trust.rebuild')])
+  })
+
+  it('has the full-record wording in all three languages', () => {
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.trust['full-body']).toBeTruthy()
+    }
   })
 })
 

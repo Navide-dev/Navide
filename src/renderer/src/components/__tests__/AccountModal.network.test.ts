@@ -308,6 +308,37 @@ describe('account modal — your network', () => {
     expect(MODAL).toMatch(/await props\.backend\.send\(type, args\)[\s\S]{0,60}await loadNetwork\(\)/)
   })
 
+  it('says why a trust decision was refused instead of dropping the answer', () => {
+    // A full pairing record refuses a block (KC2R-1): with the reply ignored,
+    // the row just stayed and nothing said why.
+    for (const fn of ['async function decide(', 'async function blockPending(']) {
+      const body = MODAL.slice(MODAL.indexOf(fn), MODAL.indexOf('\n}\n', MODAL.indexOf(fn)))
+      expect(body).toMatch(/if \(!resp\.ok\) error\.value = resp\.error\?\.message \?\? t\('account\.err-generic'\)/)
+    }
+  })
+
+  it('says a block whose local copy was not saved is still in force', () => {
+    // Fail closed: the server keeps the block and this machine refuses the
+    // device until it restarts; only the saved copy is missing. KC3-1: a full
+    // pairing record is the usual reason, and unpairing first makes room.
+    for (const fn of ['async function decide(', 'async function blockPending(']) {
+      const body = MODAL.slice(MODAL.indexOf(fn), MODAL.indexOf('\n}\n', MODAL.indexOf(fn)))
+      expect(body).toMatch(/code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-not-saved-full'\)/)
+      expect(body).toMatch(/code === 'P2P_BLOCK_NOT_SAVED_LOCALLY'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-not-saved'\)/)
+      // Review F2: a block refused before it reached the server (its policy
+      // sequence could not be reserved) keeps saying nothing was blocked.
+      expect(body).toMatch(/code === 'p2p-trust-store-full'[\s\S]{0,120}t\('settings\.p2p\.trust\.block-full'\)/)
+    }
+    for (const locale of ['en-US', 'zh-TW', 'ja-JP'] as const) {
+      const trust = (i18n.global.getLocaleMessage(locale) as Record<string, any>)?.settings?.p2p?.trust
+      for (const key of ['block-full', 'block-not-saved', 'block-not-saved-full']) expect(trust?.[key], `${locale} ${key}`).toBeTruthy()
+    }
+    const zh = (i18n.global.getLocaleMessage('zh-TW') as Record<string, any>).settings.p2p.trust
+    expect(zh['block-not-saved-full']).toContain('已在伺服器封鎖')
+    expect(zh['block-not-saved']).toContain('已在伺服器封鎖')
+    expect(zh['block-full']).not.toContain('已在伺服器封鎖')
+  })
+
   it('reads the trust state from the snapshot it already polls', () => {
     // Not a second timer and not a subscription: one read, so the panel cannot
     // draw half of one moment and half of the next.
@@ -602,6 +633,66 @@ describe('account modal — your network', () => {
     expect(end).toBeGreaterThan(start)
     return MODAL.slice(start, end)
   }
+
+  it('names a pairing salvaged from a cut-off record in every language', () => {
+    // Plan 797ad7 Q2: whole pins in a record security -i cut off are kept,
+    // unapproved, and each gets a device-pairing notice with pairing "salvaged".
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.salvaged, locale).toContain('{device}')
+      // Plan 797ad7 B4 / Q4: a message without its time signature from a device
+      // that signs v2 is taken in 0.2.20, and said once per device.
+      expect(strings.settings.p2p.pair['sig2-missing'], locale).toContain('{device}')
+      // Review B4-1: a time signature that does not verify or is outside the
+      // window (usually a clock that is off) is decided on v1, and said once.
+      expect(strings.settings.p2p.pair['sig2-unusable'], locale).toContain('{device}')
+    }
+  })
+
+  it('names the pairing limit in every language when a pin does not fit', () => {
+    // Review KC-2: the backend records a device-pairing notice with pairing
+    // "full", and the row renders t('settings.p2p.pair.' + n.pairing).
+    expect(MODAL).toContain("t('settings.p2p.pair.' + n.pairing")
+    for (const locale of ['zh-TW', 'en-US', 'ja-JP']) {
+      const strings = JSON.parse(
+        readFileSync(
+          resolve(process.cwd(), `packages/plugin-ui/src/foundation/i18n/locales/${locale}.json`),
+          'utf8',
+        ),
+      )
+      expect(strings.settings.p2p.pair.full).toContain('{device}')
+    }
+  })
+
+  it('says when the trust journal cannot be used, without calling pairing broken', () => {
+    // Review KC-3: an unreadable journal is kept, not overwritten, and the
+    // person is told — pairing itself is unaffected, so this is not the lock card.
+    const start = MODAL.indexOf('v-if="trustJournalProblem"')
+    expect(start).toBeGreaterThan(-1)
+    expect(start).toBeLessThan(MODAL.indexOf('class="card locked-card"'))
+    const card = MODAL.slice(start, MODAL.indexOf('</div>', start))
+    expect(card).toContain("t('settings.p2p.trust.journal-problem')")
+    expect(card).toContain('{{ trustJournalProblem }}')
+    expect(card).not.toMatch(/<button/)
+    expect(MODAL).toContain("const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')")
+  })
+
+  it('says a damaged record is damaged and that pairing again is the fix', () => {
+    // 2026-10-11: a record cut off by a Keychain write read as "had trust state
+    // and no longer does", which points at an attack, not at the one fix.
+    const locked = lockedMarkup()
+    expect(locked).toMatch(
+      /v-if="trustDamaged"[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.damaged-body'\) \}\}[\s\S]*v-else[^>]*>\s*\{\{ t\('settings\.p2p\.trust\.locked-body'\) \}\}/,
+    )
+    const armed = locked.slice(locked.indexOf('v-else-if="rebuildArmed"'), locked.indexOf('rebuildTrust()'))
+    expect(armed).toContain("trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn'")
+    expect(MODAL).toContain("const trustDamaged = computed(() => network.value?.trustDamaged === true)")
+  })
 
   it('offers no way out at all while the read is still being retried', () => {
     // The dangerous state, and the one that used to be indistinguishable from a

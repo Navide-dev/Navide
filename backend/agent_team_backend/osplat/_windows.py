@@ -1650,3 +1650,34 @@ class WindowsScripts:
 
 
 scripts = WindowsScripts()
+
+
+class WindowsDurableSecretFiles:
+    """`DurableSecretFiles` through DPAPI — the same files `secret_files` writes,
+    synced before the rename. Not `_write_atomic`: that writer is shared with
+    CLI account slots and is left exactly as it was (KC2R-8)."""
+
+    def read(self, path: Path) -> bytes:
+        return secret_files.read_private(path)
+
+    def write(self, path: Path, data: bytes) -> None:
+        # Wrap first, as write_private does: a DPAPI failure leaves no file.
+        wrapped = DPAPI_MAGIC + _dpapi("CryptProtectData", data)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".")
+        tmp = Path(tmp_name)
+        try:
+            try:
+                view = memoryview(wrapped)
+                while view:
+                    view = view[os.write(handle, view):]
+                os.fsync(handle)
+            finally:
+                os.close(handle)
+            os.replace(tmp, path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+
+durable_secret_files = WindowsDurableSecretFiles()

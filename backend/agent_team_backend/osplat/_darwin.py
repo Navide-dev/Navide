@@ -118,7 +118,7 @@ __all__ = ["paths", "process_tree", "resource_probe", "terminal_backend"]
 # A subclass rather than edits to `DarwinPaths` above, so this lands as a pure
 # append; `paths` is rebound below to the complete implementation.
 
-from . import _posix_paths, _posix_secrets  # noqa: E402
+from . import _posix_durable, _posix_paths, _posix_secrets  # noqa: E402
 
 
 class DarwinLayout(DarwinPaths):
@@ -230,6 +230,7 @@ class DarwinLayout(DarwinPaths):
 
 paths = DarwinLayout()
 secret_files = _posix_secrets.secret_files
+durable_secret_files = _posix_durable.durable_secret_files
 scripts = _posix_paths.scripts
 
 from . import _posix_scheduler  # noqa: E402

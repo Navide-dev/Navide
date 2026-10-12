@@ -1190,7 +1190,7 @@
       "placeholder": "Search settings…",
       "item": {
         "cliExtensions": {
-          "title": "CLI Extensions",
+          "title": "Extensions",
           "summary": "Each AI CLI's own CLI extensions and hooks, with execution tier and capabilities (read-only)."
         },
         "cli-agents-list": {
@@ -1316,6 +1316,10 @@
         "general-quota-failover-loop": {
           "title": "Resume a loop right after switching when quota runs out",
           "summary": "Looping panes switch account and continue without waiting for the reset"
+        },
+        "general-account-follow-switch": {
+          "title": "Move pinned panes along when switching Claude accounts",
+          "summary": "Offer to resume panes on another account's own folder after a switch or when quota runs out"
         },
         "accounts": {
           "title": "Git Accounts",
@@ -2020,7 +2024,7 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Accounts",
       "cliAgents": "CLI Agents",
-      "cliExtensions": "CLI Extensions",
+      "cliExtensions": "Extensions",
       "roles": "Roles",
       "pipelines": "Pipelines",
       "mcp": "MCP",
@@ -4839,7 +4843,7 @@
             "workspace_switch": "Switch my own window to another project it already holds; panes of the project being left keep running. Refused while a pipeline is running in that window, because switching would abort it",
             "prompt_list": "The prompt skills the user keeps in Settings → Prompts; read-only, since creating and editing them is the user's job",
             "mcp_list": "Which MCP servers Navide connects to and which each CLI keeps in its own config, with live state and tool counts; read-only, and the same list Settings → MCP shows",
-            "cli_extensions_list": "Each AI CLI's own CLI extensions and hooks: type, execution tier, capabilities and who installed them. Names and metadata only; read-only, the same inventory Settings → CLI Extensions shows",
+            "cli_extensions_list": "Each AI CLI's own CLI extensions and hooks: type, execution tier, capabilities and who installed them. Names and metadata only; read-only, the same inventory Settings → Extensions shows",
             "credentials_list": "Credentials the scan inventoried, with kind and label only; never a value",
             "credentials_findings": "Credential risk findings with severity and reminder state; read-only"
           },
@@ -6640,7 +6644,21 @@
       "secret-same": "same",
       "secret-differs": "differs",
       "secret-local-only": "only on this device",
-      "secret-remote-only": "only on the other device"
+      "secret-remote-only": "only on the other device",
+      "history-title": "Version history",
+      "history-hint": "The cloud keeps each synced item's last 10 versions or 30 days of them, whichever ends first.",
+      "history-scope": "Section",
+      "history-item": "Item",
+      "history-show": "Show versions",
+      "history-no-items": "Nothing in this section is synced yet.",
+      "history-empty": "No earlier versions of this item.",
+      "history-restore-previous": "Restore previous version",
+      "history-restore": "Restore this version",
+      "history-device": "from {device}",
+      "history-restored": "Restored here. It reaches your other devices on the next sync.",
+      "history-held": "The restored version is waiting for your approval above.",
+      "history-error": "Version history could not be loaded.",
+      "history-not-applied": "Nothing changed here: this version was not applied (it may have been declined before)."
     },
     "sharing": {
       "intro": "Two ways to move these four sections between machines: a file you hand over, and the account they already share.",
@@ -6844,6 +6862,10 @@
         "paired": "Paired with {device}",
         "refused": "{device} refused the pairing",
         "revoked": "{device} unpaired from this device",
+        "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
+        "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
+        "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
+        "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
         "start-title": "Ask to pair with this device. Both screens show six digits to compare, and nothing changes until both sides confirm.",
@@ -6973,6 +6995,9 @@
         "block": "Block",
         "blocked-title": "Blocked",
         "blocked-hint": "A block is refused ahead of every rule, including your own other devices.",
+        "block-full": "This machine's pairing record is full, so the block could not be saved. Unpair this device first, then block it.",
+        "block-not-saved-full": "Blocked on the server, but this machine's pairing record is full, so it did not save its own copy. This machine still refuses the device until it restarts. To save the copy, unpair this device, then block it again.",
+        "block-not-saved": "Blocked on the server, but this machine did not save its own copy. This machine still refuses the device until it restarts. Block it again later so this machine keeps a copy.",
         "unblock": "Unblock",
         "unpair": "Unpair",
         "unpair-title": "Forget this device. It is not blocked.",
@@ -7010,6 +7035,10 @@
         "policy-signed-default": "There were no rules to re-sign, so the default was signed: nothing is allowed yet.",
         "locked-title": "Navide Cloud is stopped",
         "locked-body": "This device had trust state and no longer does. Nothing is sent or accepted until that is clear.",
+        "full-body": "The trust record is full. Unpair a device below to make room; Navide Cloud reconnects on its own once there is.",
+        "damaged-body": "The pairing record is damaged — pair again. The record on this machine was saved incomplete (a Keychain write was cut off), so nothing in it can be trusted.",
+        "journal-problem": "The pairing notice record cannot be used right now. Pairing itself is unaffected, but notices and the record of messages already received may be incomplete for now. Reason:",
+        "damaged-rebuild-warn": "This erases the damaged pairing record on this machine. Each of your other devices must then be paired again, from both ends. The record is already damaged, so starting over is the fix.",
         "plaintext-refused": "Refused an unencrypted message from {device}",
         "plaintext-refused-body": "This device has always sent encrypted messages; this one arrived in the clear, so it was refused.",
         "plaintext-refused-what-to-do": "Nothing to do — it was refused. If that device is legitimate, unpair it and pair again.",
@@ -9005,6 +9034,8 @@
     "failover-hint": "What Navide does when a CLI account hits its quota: do nothing, list the accounts it could switch to (default), or switch automatically — at most 3 automatic switches per 5 hours per CLI, never back to the exhausted account on its own. The table shows what each CLI can do; the switch itself is decided by the backend.",
     "failover-loop-title": "Resume a loop right after switching when quota runs out",
     "failover-loop-hint": "When a pane running a loop runs out of quota, switch to an account that still has quota and send continue right away instead of waiting for the reset. Requires \"Switch automatically\" above.",
+    "follow-switch-title": "Move pinned panes along when switching Claude accounts",
+    "follow-switch-hint": "Claude panes running on an account's own sign-in folder do not follow an account switch. With this on, a switch lists them so you can move them along, and an out-of-quota pane gets a \"Switch account\" button. Each pane reopens on the new account and resumes its conversation. Off by default.",
     "failover-mode-off": "Off",
     "failover-mode-notify": "Notify me",
     "failover-mode-auto": "Switch automatically",
@@ -10587,5 +10618,25 @@
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
     "limit-off": "No limit",
     "limit-on": "Keep up to"
+  },
+  "account-follow": {
+    "switch-title": "Switched to {account} — move these panes too?",
+    "switch-body": "These Claude panes run on another account's own folder, so the switch did not reach them. Ticked panes reopen on the new account and resume their conversation.",
+    "switch-skip": "Leave them",
+    "switch-confirm": "Move {count} pane(s)",
+    "quota-title": "{pane} is out of quota — resume on another account",
+    "quota-pick": "Reopen this pane on:",
+    "quota-peers": "Also move these panes that ran out on the same account:",
+    "quota-confirm": "Switch and resume {count} pane(s)",
+    "cancel": "Cancel",
+    "needs-dir-sign-in": "Sign in inside its own folder first",
+    "exhausted": "Out of quota",
+    "state-idle": "Idle — reopens now",
+    "state-running": "Busy — reopens once it is free",
+    "state-quota": "Out of quota — reopens now",
+    "note-window": "Only panes in this window are listed.",
+    "quota-button": "Switch account ›",
+    "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
+    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details."
   }
 }

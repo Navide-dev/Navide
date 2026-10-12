@@ -70,6 +70,10 @@ secret_files: spec.SecretFiles = _impl.secret_files
 
 __all__ += ["secret_files"]
 
+durable_secret_files: spec.DurableSecretFiles = _impl.durable_secret_files
+
+__all__ += ["durable_secret_files"]
+
 scheduler: spec.Scheduler = _impl.scheduler
 
 __all__ += ["scheduler"]

@@ -85,6 +85,9 @@ interface Props {
    *  time it does not know). Not clickable: nothing here can grant quota. */
   usageLimitHit?: boolean
   usageLimitUntil?: number | null
+  /** Offer "switch account and resume" beside the quota badge. App.vue sets
+   *  it only with the follow-switch flag on, for a pane that can move. */
+  quotaSwitchOffered?: boolean
   /** Runtime-only continue affordance — lit when this pane came back from a
    *  restore with `--resume`: the CLI reloaded its transcript but is parked at
    *  the prompt, so whatever it was doing is never picked up on its own. */
@@ -139,6 +142,8 @@ const emit = defineEmits<{
   /** Quota badge clicked and the confirm accepted — App.vue clears the pane's
    *  quota flag and resumes a loop that was parked on that limit. */
   (e: 'usage-limit-dismiss'): void
+  /** Quota switch button clicked — App.vue asks which account to resume on. */
+  (e: 'quota-switch-account'): void
   /** Continue button clicked on a resumed pane — App.vue injects the resume
    *  prompt once so the interrupted work carries on. */
   (e: 'continue-resume'): void
@@ -690,6 +695,14 @@ onMounted(() => {
         >{{ usageLimitUntil != null
           ? $t('pane.terminal.usage-limit-badge', { time: formatLoopTime(usageLimitUntil) })
           : $t('pane.terminal.usage-limit-badge-unknown') }}</span>
+        <span
+          v-if="usageLimitHit && quotaSwitchOffered"
+          class="usage-limit-switch"
+          role="button"
+          data-testid="usage-limit-switch"
+          :title="$t('account-follow.quota-button-tooltip')"
+          @click.stop="emit('quota-switch-account')"
+        >{{ $t('account-follow.quota-button') }}</span>
         <CliRiskPill
           v-if="cliRisk && cliRiskState?.signals.length && !restoring && onScreen !== false"
           :pane-id="cliRiskPaneId"
@@ -1017,6 +1030,19 @@ onMounted(() => {
   border-radius: var(--radius-xs);
   padding: 1px 6px;
   letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+/* Beside the quota badge, with the follow-switch flag on: reopen the pane
+   on another account. Quieter than the badge it sits next to. */
+.usage-limit-switch {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;
