@@ -1917,6 +1917,17 @@ def test_codex_hook_trust_off_stops_the_panes_carrying_it_and_re_allow_brings_it
     assert convenience_wiring.pane_carries_hooks("codex")
 
 
+def test_codex_with_no_hook_trust_of_its_own_gets_no_override(gate, codex_app) -> None:
+    """M2: the -c hooks.state value is built only from [hooks.state] rows the
+    user's own codex wrote. A codex that never wrote any (one too old for
+    hook trust) gets no -c at all."""
+    manager, real = codex_app
+    config = real / "config.toml"
+    config.write_text('model = "o3"\n', encoding="utf-8")
+
+    assert manager.hook_trust_override(manager.prepare(PANE_B)) == ""
+
+
 def test_codex_hook_trust_override_skips_rows_the_user_already_trusts_for_the_pane(gate, codex_app) -> None:
     import tomllib
 

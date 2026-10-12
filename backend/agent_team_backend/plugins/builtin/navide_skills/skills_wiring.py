@@ -316,6 +316,9 @@ def sync_project_dir(
         if not manifest_safe(target):
             log.warning("%s is not a regular file — not syncing skills there", target / MANIFEST_FILE)
             return False
+        if _manifest_unreadable(target):
+            log.warning("%s cannot be read — not syncing skills there", target / MANIFEST_FILE)
+            return False
         sources = _managed_sources(agent_key, store, native_root)
         planted = _read_manifest(target)
         refused = _read_refused(target)
@@ -419,6 +422,8 @@ def refuse_missing_links(target: Path) -> list[str]:
     refused ones and is never linked here again, while every other skill
     keeps working. Returns the names refused now.
     """
+    if _manifest_unreadable(target):
+        return []
     planted = _read_manifest(target)
     missing = sorted(name for name in planted if not (target / name).is_symlink())
     if missing:
@@ -431,7 +436,11 @@ def refuse_missing_links(target: Path) -> list[str]:
 
 def clear_refused(target: Path, *, root: Path | None = None) -> None:
     """Forget the names refused in a workspace: re-allowing starts fresh."""
-    if not project_target_safe(target, root or target.parent) or not _read_refused(target):
+    if (
+        not project_target_safe(target, root or target.parent)
+        or _manifest_unreadable(target)
+        or not _read_refused(target)
+    ):
         return
     _write_manifest(target, _read_manifest(target), created=_manifest_created(target))
 
@@ -451,6 +460,9 @@ def remove_project_dir(target: Path, *, root: Path | None = None) -> int:
         return 0
     if not manifest_safe(target):
         log.warning("%s is not a regular file — leaving it alone", target / MANIFEST_FILE)
+        return 0
+    if _manifest_unreadable(target):
+        log.warning("%s cannot be read — leaving it alone", target / MANIFEST_FILE)
         return 0
     removed = 0
     names = _read_manifest(target)
@@ -494,6 +506,17 @@ def manifest_safe(target: Path) -> bool:
     name. Such a manifest is never read, written or deleted.
     """
     return _regular_or_absent(target / MANIFEST_FILE)
+
+
+def _manifest_unreadable(target: Path) -> bool:
+    """Whether a manifest is there but cannot be read (no permission, not
+    UTF-8). That is not an empty manifest: the names it refuses are unknown,
+    so nothing is planted, taken back or rewritten (fail closed)."""
+    try:
+        _read_regular(target / MANIFEST_FILE)
+    except (OSError, UnicodeDecodeError):
+        return True
+    return False
 
 
 def has_manifest(target: Path) -> bool:
@@ -616,6 +639,8 @@ def _write_manifest(
     manifest = target / MANIFEST_FILE
     if not _regular_or_absent(manifest):
         raise OSError(f"{manifest} is not a regular file")
+    if _manifest_unreadable(target):
+        raise OSError(f"{manifest} cannot be read")
     if not planted and not refused:
         manifest.unlink(missing_ok=True)
         return

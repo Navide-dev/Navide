@@ -1108,6 +1108,35 @@ def test_a_manifest_linked_outside_is_never_read_cleaned_or_removed(tmp_path: Pa
     assert (target / skills_wiring.MANIFEST_FILE).is_symlink()
 
 
+@pytest.mark.parametrize("kind", ["unreadable", "undecodable"])
+def test_a_manifest_navide_cannot_read_is_never_reseeded_or_rewritten(tmp_path: Path, kind: str) -> None:
+    """An unreadable manifest is not an empty one: the link the user refused
+    stays out, nothing is planted or taken back, and the manifest is left as
+    it is (fail closed)."""
+    if kind == "unreadable" and not osplat.paths.enforces_posix_modes():
+        pytest.skip("mode 000 does not stop reading here")
+    _skill(tmp_path / "managed", "alpha")
+    cwd = tmp_path / "repo"
+    target = cwd / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    manifest = target / skills_wiring.MANIFEST_FILE
+    body = f"# links planted by Navide\n{skills_wiring._REFUSED_PREFIX}alpha\n".encode()
+    if kind == "undecodable":
+        body += b"\xff\xfe\n"
+    manifest.write_bytes(body)
+    if kind == "unreadable":
+        manifest.chmod(0)
+    try:
+        assert _sync(tmp_path, cwd) is False
+        assert skills_wiring.refuse_missing_links(target) == []
+        skills_wiring.clear_refused(target, root=cwd)
+        assert not (target / "alpha").exists()
+    finally:
+        manifest.chmod(0o644)
+
+    assert manifest.read_bytes() == body
+
+
 def test_a_git_exclude_linked_outside_the_workspace_is_never_written(tmp_path: Path) -> None:
     """R3-H1: the ``.git/info/exclude`` append never follows a link either."""
     _skill(tmp_path / "managed", "alpha")
