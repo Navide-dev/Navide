@@ -19,6 +19,8 @@
         "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again",
         "refused-unsafe": "The .cursor folder holding {target} leads outside the project folder, so for safety Navide did not set up the convenience feature \"{feature}\" here. To use it, make .cursor a plain folder inside the project",
         "refused-name": "The skill \"{name}\" has the same name as Navide's list file .navide-links, so Navide did not link it in {target}. Rename it and it will appear",
+        "retract": "Navide moved its entry for the convenience feature \"{feature}\" out of {target}: the panes Navide starts now carry it themselves, and your file no longer holds it (a backup was kept)",
+        "retract-failed": "Could not take Navide's entry for the convenience feature \"{feature}\" out of {target}, so panes keep using the one in that file. Fix the file by hand (it may not be valid JSON) and restart Navide",
         "refused-exclude": "The .git folder or .git/info/exclude of the repository holding {target} is a link or a second name for another file, so for safety Navide did not write the git exclude; the links the convenience feature \"{feature}\" made will show in git status"
       },
       "button": {
@@ -41,6 +43,8 @@
       "prompt": "Sign-in changed outside Navide",
       "refused-unsafe": "Not set up, for safety",
       "refused-name": "Not linked, because of its name",
+      "retract": "Moved into Navide's panes",
+      "retract-failed": "Could not move into Navide's panes",
       "refused-exclude": "git exclude not written, for safety"
     },
     "overview": {
@@ -74,7 +78,7 @@
         "name": "Claude hooks: turn detection, Navide Guard and wake-up",
         "benefit": "Claude reports when each turn ends, Navide Guard checks Claude's tool calls, and the push channel can wake an idle Claude.",
         "purpose": "Navide knows when Claude finishes a turn and Navide Guard can check its tool calls",
-        "writes": "Hooks in ~/.claude/settings.json (turn detection, Navide Guard, wake-up)",
+        "writes": "Only in the Claude panes Navide starts: they start with the hooks (turn detection, Navide Guard, wake-up); your ~/.claude/settings.json is not changed. Entries earlier versions wrote there are taken back at startup, with a backup; if they cannot be, the hooks in that file stay in use",
         "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Claude's tool calls; the push channel cannot wake an idle Claude."
       },
       "qwen_hooks": {
@@ -88,14 +92,14 @@
         "name": "Copilot hooks: turn detection and Navide Guard",
         "benefit": "Copilot reports when each turn ends and Navide Guard checks Copilot's tool calls.",
         "purpose": "Navide knows when Copilot finishes a turn and Navide Guard can check its tool calls",
-        "writes": "~/.copilot/hooks/agent-team.json",
+        "writes": "Only in the Copilot panes Navide starts: each pane's own hooks folder carries Navide's hook file; your ~/.copilot is not changed. The ~/.copilot/hooks/agent-team.json earlier versions wrote is taken back at startup, with a backup; if it cannot be, that file stays in use",
         "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Copilot's tool calls."
       },
       "codex_hook-trust": {
         "name": "Codex hook trust carried over",
         "benefit": "Codex panes keep the trust you already gave your own hooks instead of asking again.",
         "purpose": "Codex panes do not ask you to trust your own hooks again",
-        "writes": "[hooks.state] rows in ~/.codex/config.toml",
+        "writes": "Only in the Codex panes Navide starts: the hooks you already trust are passed on the command line; your ~/.codex/config.toml is not changed. The [hooks.state] rows earlier versions wrote there are taken back at startup, with a backup; if they cannot be (or in a development build of Navide), rows are written there as before",
         "cost": "Every Codex pane asks you to trust your own hooks again."
       },
       "codex_login-promote": {

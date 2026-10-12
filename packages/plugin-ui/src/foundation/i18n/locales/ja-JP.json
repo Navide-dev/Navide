@@ -19,6 +19,8 @@
         "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください",
         "refused-unsafe": "{target} がある .cursor はプロジェクトフォルダーの外を指しているため、安全のため Navide はここで便利機能「{feature}」を設定していません。使うには、.cursor をプロジェクト内の通常のフォルダーにしてください",
         "refused-name": "Skill「{name}」は Navide のリストファイル .navide-links と同じ名前のため、Navide は {target} にリンクを作成していません。名前を変えると表示されます",
+        "retract": "Navide は便利機能「{feature}」の項目を {target} から引き上げました。Navide が開くペインが自分で持つようになり、このファイルにはもう含まれません（バックアップを保存しました）",
+        "retract-failed": "便利機能「{feature}」の項目を {target} から引き上げられなかったため、ペインは引き続きこのファイルの項目を使います。ファイルを手動で修正してから（有効な JSON でない可能性があります）、Navide を再起動してください",
         "refused-exclude": "{target} があるリポジトリの .git または .git/info/exclude がリンク、または別ファイルの別名のため、安全のため Navide は git exclude に書き込んでいません。便利機能「{feature}」が作成したリンクは git status に表示されます"
       },
       "button": {
@@ -41,6 +43,8 @@
       "prompt": "Navide の外でログインが変更",
       "refused-unsafe": "安全のため未設定",
       "refused-name": "名前のためリンク未作成",
+      "retract": "Navide のペインへ移動",
+      "retract-failed": "Navide のペインへ移動できず",
       "refused-exclude": "安全のため git exclude 未書き込み"
     },
     "overview": {
@@ -74,7 +78,7 @@
         "name": "Claude hook：ターン検出、Navide Guard、起動",
         "benefit": "Claude がターンの終了を報告し、Navide Guard が Claude のツール呼び出しを確認し、プッシュチャネルがアイドル中の Claude を起こせます。",
         "purpose": "Navide が Claude のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
-        "writes": "~/.claude/settings.json の hooks（ターン検出、Navide Guard、起動）",
+        "writes": "Navide が開く Claude ペインだけで有効：起動時に hooks（ターン検出、Navide Guard、起動）を渡し、~/.claude/settings.json は変更しません。以前のバージョンがそこに書いた項目は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルの hooks を使い続けます",
         "cost": "ターン終了は報告ではなく出力から推測されます。Navide Guard は Claude のツール呼び出しを確認せず、プッシュチャネルはアイドル中の Claude を起こせません。"
       },
       "qwen_hooks": {
@@ -88,14 +92,14 @@
         "name": "Copilot hook：ターン検出と Navide Guard",
         "benefit": "Copilot がターンの終了を報告し、Navide Guard が Copilot のツール呼び出しを確認します。",
         "purpose": "Navide が Copilot のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
-        "writes": "~/.copilot/hooks/agent-team.json",
+        "writes": "Navide が開く Copilot ペインだけで有効：各ペイン自身の hooks フォルダに Navide の hook ファイルを置き、~/.copilot は変更しません。以前のバージョンが書いた ~/.copilot/hooks/agent-team.json は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルを使い続けます",
         "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Copilot のツール呼び出しを確認しません。"
       },
       "codex_hook-trust": {
         "name": "Codex hook の信頼を引き継ぐ",
         "benefit": "Codex pane は、自分の hooks にすでに与えた信頼を引き継ぎ、再確認しません。",
         "purpose": "Codex pane で自分の hooks を再度信頼する必要がなくなる",
-        "writes": "~/.codex/config.toml の [hooks.state] 行",
+        "writes": "Navide が開く Codex ペインだけで有効：信頼済みの hook をコマンドラインで渡し、~/.codex/config.toml は変更しません。以前のバージョンがそこに書いた [hooks.state] 行は起動時にバックアップを取って引き上げます。引き上げられない場合（または開発版の Navide）は従来どおりそのファイルに書きます",
         "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
       },
       "codex_login-promote": {

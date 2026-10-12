@@ -383,6 +383,86 @@ def test_an_offline_mount_in_the_ledger_never_holds_up_the_gate(gate, tmp_path, 
 
 
 
+# ── retract: per-pane injection replaces a shared-file entry (Phase 3) ────────
+
+def _strip(target: _File):
+    def remove() -> None:
+        target.path.write_text(target.path.read_text(encoding="utf-8").replace("# navide\n", ""), encoding="utf-8")
+    return remove
+
+
+def test_retract_takes_navides_entry_back_backed_up_announced_and_forgotten(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    assert _apply(gate, target) == "first"
+
+    ok = gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ])
+
+    assert ok is True
+    assert target.path.read_text(encoding="utf-8") == "user: 1\n"
+    assert gate.allowed("claude.hooks")
+    entry = gate.history("claude.hooks", limit=1)[0]
+    assert (entry["action"], entry["target"], entry["notify"]) == ("retract", str(target.path), True)
+    assert Path(entry["backup"]).read_text(encoding="utf-8") == "user: 1\n# navide\n"
+    # Navide took it back itself: its absence is no removal by the user.
+    assert gate.listing_feature("claude.hooks")["targets"] == []
+    assert gate.sent[-1]["entry"]["id"] == entry["id"]
+
+
+def test_retract_with_nothing_there_is_silent(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ]) is True
+
+    assert gate.history("claude.hooks") == []
+    assert target.path.read_text(encoding="utf-8") == "user: 1\n"
+
+
+def test_a_retract_that_cannot_take_the_entry_back_says_so_and_keeps_it(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    assert _apply(gate, target) == "first"
+
+    def stuck() -> None:
+        raise OSError("read-only")
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), stuck, target.present, target.path),
+    ]) is False
+
+    assert target.present()
+    assert gate.allowed("claude.hooks")
+    entry = gate.history("claude.hooks", limit=1)[0]
+    assert (entry["action"], entry["target"]) == ("retract-failed", str(target.path))
+    assert "read-only" in entry["detail"]
+    # Still Navide's own, still known: nothing reads its later absence as the user's.
+    assert [t["path"] for t in gate.listing_feature("claude.hooks")["targets"]] == [str(target.path)]
+
+
+def test_retract_keeps_the_hooks_the_user_removed_out(gate, tmp_path) -> None:
+    target = _File(tmp_path / "settings.json", "user: 1\n")
+    parts = {"Stop:stop", "PreToolUse:guard"}
+    assert gate.apply(
+        "claude.hooks", target.path, write=target.write, present=target.present,
+        file=target.path, parts=lambda: set(parts),
+    ) == "first"
+    parts.discard("PreToolUse:guard")  # the user deletes one hook by hand
+    gate.apply(
+        "claude.hooks", target.path, write=target.write, present=target.present,
+        file=target.path, parts=lambda: set(parts),
+    )
+    assert gate.excluded("claude.hooks", target.path) == {"PreToolUse:guard"}
+
+    assert gate.retract("claude.hooks", [
+        convenience.Takeback(str(target.path), _strip(target), target.present, target.path),
+    ]) is True
+
+    # The panes carry the hooks now, still without the one the user removed.
+    assert gate.excluded("claude.hooks", target.path) == {"PreToolUse:guard"}
+
+
 @pytest.mark.parametrize(("seen", "now"), [("7:42:", "7:42:1700000000.5"), ("7:42:1700000000.5", "7:42:")])
 def test_a_folder_whose_birth_time_came_or_went_is_the_same_folder(tmp_path, monkeypatch, seen, now) -> None:
     """One identity with a birth time and one without (statx newly

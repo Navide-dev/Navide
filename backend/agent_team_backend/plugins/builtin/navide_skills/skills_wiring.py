@@ -155,6 +155,30 @@ def config_document(wiring: SkillsWiring, existing: str, view: Path) -> str:
     return json.dumps(document)
 
 
+#: Whether this plugin is running, i.e. whether pane spawns get shims.
+_active = False
+
+
+def active() -> bool:
+    return _active
+
+
+def set_active(running: bool) -> None:
+    """The plugin started or stopped: Copilot's hooks ride on the shims."""
+    global _active
+    _active = running
+    from agent_team_backend.convenience_wiring import pane_carrier_changed
+
+    pane_carrier_changed("copilot", running)
+
+
+def _warn_uncarried(agent_key: str, pane_id: str, why: str) -> None:
+    from agent_team_backend.convenience_wiring import pane_carries_hooks
+
+    if agent_key == "copilot" and pane_carries_hooks(agent_key):
+        log.warning("copilot pane %s starts without Navide's hooks: %s", pane_id, why)
+
+
 def real_home() -> Path:
     """The user's home, read the way pane_home reads it.
 
@@ -205,11 +229,13 @@ def prepare_root(
     be wired.
     """
     if not _SAFE_PANE_ID.match(pane_id or ""):
+        _warn_uncarried(agent_key, pane_id, "no pane shim for this pane id")
         return None
     try:
         home = home or real_home()
         existing = env.get(wiring.root_env)
         if existing:
+            _warn_uncarried(agent_key, pane_id, f"it runs with its own {wiring.root_env}")
             root = Path(existing)
             # Someone else's shim: it does its own reconciliation, and a
             # directory *it* built (its MCP config dir) is not ours to move
@@ -239,13 +265,22 @@ def prepare_root(
         # A root that stands in for the whole $HOME is never adopted from, as
         # in pane_home._mirror: what a tool writes to ``~`` there (a cloned
         # repo, a shell rc file) is not ours to promote into the real home.
+        # copilot's ``hooks`` is rebuilt on its own (copilot_hooks), and a
+        # real folder there must never be adopted into the user's tree.
+        own_hooks = agent_key == "copilot" and ours and bool(wiring.root_home)
         _materialise(
             root, real_root, wiring.skills_rel, sources, suppressed,
             adopt=ours and bool(wiring.root_home), mirror_home=not isolated,
+            own=frozenset({"hooks"}) if own_hooks else frozenset(),
         )
+        if own_hooks:
+            from agent_team_backend import copilot_hooks
+
+            copilot_hooks.wire_pane_hooks(root, real_root / "hooks")
         return str(root)
     except Exception as err:  # noqa: BLE001 - optional wiring must never block spawn
         log.warning("Managed-skills root for %s failed: %s", agent_key, err)
+        _warn_uncarried(agent_key, pane_id, "its shim could not be built")
         return None
 
 
@@ -728,11 +763,14 @@ def _materialise(
     *,
     adopt: bool = True,
     mirror_home: bool = True,
+    own: frozenset[str] = frozenset(),
 ) -> None:
     """Rebuild the skills directory; optionally mirror its ancestor directories.
 
     When mirroring, every ancestor's other entries link back to the user's
     root. A vendor-owned isolated root leaves those entries to its owner.
+    ``own`` are entries of the root someone else rebuilds: neither linked
+    nor adopted here.
 
     ``suppressed`` are roots the CLI scans only while the variable is unset —
     relocating it would silently cost the user those skills, so their contents
@@ -747,7 +785,7 @@ def _materialise(
         # trapped in one pane. The leaf below is ours and is never adopted —
         # that would copy managed links into the user's own skills directory.
         if mirror_home:
-            _mirror_into(dst, src, skip={name}, adopt=adopt)
+            _mirror_into(dst, src, skip={name, *own}, adopt=adopt)
         src, dst = src / name, dst / name
         # Only the leaf may be ours, and every level above it must be a real
         # directory of our own. A link here — left by an MCP shim that mirrored

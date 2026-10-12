@@ -101,10 +101,10 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 
 | id | CLI | writes | toggle | turning it off costs |
 |---|---|---|---|---|
-| `claude.hooks` | claude | `~/.claude/settings.json` hooks (turn detection, Navide Guard, rewake) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
+| `claude.hooks` | claude | its panes' `--settings` file in Navide's data (turn detection, Navide Guard, rewake); `~/.claude/settings.json` only when that cannot be used (see below) | yes | turn end is inferred from output instead of reported; Guard does not check Claude's tool calls; push channel cannot wake an idle Claude |
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
-| `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
-| `codex.hook-trust` | codex | `[hooks.state]` rows in `~/.codex/config.toml` | yes | every Codex pane asks you to trust your own hooks again |
+| `copilot.hooks` | copilot | the pane's `hooks/` folder in `~/.navide-panes/copilot/<pane>/` (see [Copilot hooks ride on the panes](#copilot-hooks-ride-on-the-panes)); `~/.copilot/hooks/agent-team.json` only when that cannot be done | yes | same for Copilot |
+| `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
@@ -114,6 +114,112 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 
 Required features are listed for disclosure only. They have no switch because
 the panes they serve cannot run without them.
+
+### Codex hook trust carried by the panes
+
+Codex keys hook trust by the path of the `hooks.json` that defines a hook, so
+a pane's own `CODEX_HOME` (whose `hooks.json` links to `~/.codex/hooks.json`)
+would ask you to trust your own hooks again. Navide copies your trusted hash
+for each hook under the pane home's key — the hash is content-only — but no
+longer writes it into `~/.codex/config.toml`: every spawn and resume passes
+the rows on the command line instead, as one shell-quoted inline table,
+`-c hooks.state={'<pane home>/hooks.json:<event>:<i>:<j>'={trusted_hash='<hash>'},...}`
+(TOML literal strings, so cmd.exe on Windows meets no `"`).
+Codex merges it with the rows in `config.toml` (verified on 0.160; the dotted
+form `-c hooks.state."<key>".trusted_hash=` is ignored). It comes after
+Navide's own `-c hooks.SessionStart` / `-c hooks.PreToolUse`, which are left
+out when the command already holds any `-c hooks…`. The hashes are read from
+your own rows in `config.toml`, as before; no Codex process is asked.
+
+At startup (and when the switch is turned back on) the rows earlier versions
+seeded into `config.toml` — every row keyed on a pane home — are taken back
+out, backed up and logged as `retract`. Only once that succeeded do panes get
+the inline table. If a row cannot be taken back (`retract-failed`), spawns
+keep seeding `config.toml` as before and carry nothing inline: never both.
+With the switch off, neither happens. A session that lives in `~/.codex`
+itself (no pane home) gets nothing, as before.
+
+A development backend (`pnpm dev`, whose port file is under a `-dev` data
+folder) never takes rows back and never carries the table: it shares
+`~/.codex-panes` with the installed Navide, and taking back every pane-home
+row would strip the rows of the installed build's live panes. It keeps
+seeding `config.toml`. The installed Navide does take back the rows of a
+development backend's live panes when it starts; that backend re-seeds them
+on its next spawn. This is a known trade-off.
+
+### Claude: hooks carried by the panes
+
+Navide's Claude hooks are no longer written into `~/.claude/settings.json`.
+Each Claude pane Navide starts — fresh or resumed, an account-dir pane too —
+gets `--settings <data>/runtime/claude/settings.json`, a 0600 file of
+Navide's holding exactly the entries the shared file used to get: the same
+events, commands, timeouts, Navide Guard (the Windows exec form included),
+the rewake waiter per the push-channel switch, minus the hooks the user
+deleted by hand. Claude Code merges it with the user's own settings. A login
+subcommand gets nothing. A pane file gone missing is written again at spawn;
+when it cannot be, that pane starts without the hooks rather than failing.
+
+- At startup (and on re-allow) an entry an earlier version wrote into the
+  shared file is retracted: backed up, removed, logged as `retract`. The
+  user's own entries stay.
+- When it cannot be retracted (`retract-failed`), or the pane file cannot be
+  written, the shared hooks stay in use and no pane gets `--settings`: never
+  both, or every hook would run twice.
+- The push-channel switch and the Windows Claude Code version probe rewrite
+  the pane file, never the shared one; running panes keep the copy they
+  started with.
+- Off: no pane gets `--settings` and nothing is written.
+- A dev backend (data dir ending in `-dev`) retracts, and switches off, only
+  its own entries. The installed app's entries in the shared file are left
+  as they are, so starting a dev build never takes the installed Navide's
+  hooks away. A dev pane then fires both: the installed app's shared hooks
+  and its own `--settings` ones, each to its own backend.
+- Known limit: a command that already names a settings file (`--settings`)
+  is left alone, so that pane runs without Navide's hooks (logged as a
+  warning). Whether Claude Code would merge a second `--settings` is untested.
+
+### Copilot hooks ride on the panes
+
+Copilot reads every hook file in its hooks folder and runs them all, so
+Navide's hooks no longer go into `~/.copilot/hooks`. Each Copilot pane starts
+with `COPILOT_HOME` pointing at its shim (`~/.navide-panes/copilot/<pane>`,
+built by the skills wiring), and while `copilot.hooks` is allowed the shim's
+`hooks` entry is a real folder holding:
+
+- `agent-team.json`: a link to Navide's file in
+  `<app data>/runtime/copilot/hooks/agent-team.json` (0600, written
+  atomically at startup and on re-allow), the same document Phase 2 wrote
+  into `~/.copilot/hooks`. A link, not a copy, so no pane keeps a stale one.
+- a link to every entry of `~/.copilot/hooks`, rebuilt on each spawn (fresh
+  or `--resume`), so a hook file the user adds later is seen and both sets
+  fire. A file of the user's named `agent-team.json` is linked as
+  `agent-team.user.json` rather than hidden. Another backend's Navide file
+  there (the installed app's, seen from a dev backend beside it, or the
+  other way round) is left out: this pane reports to this backend only.
+  Links Navide did not make there (the CLI's own) are kept, and anything
+  else in Navide's place is moved aside to that same `.user` name, so it can
+  never hide Navide's hooks (Navide Guard included).
+
+Nothing is written under `~/.copilot`, and the shim's `hooks` folder is
+never moved into it. At startup a Phase 2 `~/.copilot/hooks/agent-team.json`
+is taken back (`retract`, backed up first); one another backend wrote is left
+alone. If it cannot be taken back (`retract-failed`), or Navide's file cannot
+be written, the shared file stays in use and panes keep today's link to
+`~/.copilot/hooks` with no file of Navide's in it: never both, or every hook
+would fire twice. With the feature off a pane's `hooks` is that same link.
+
+The panes carry the hooks only where every pane gets a shim: the skills
+plugin (`navide.skills`) must be running, and the backend's `COPILOT_HOME`,
+if set, must be the `~/.copilot` the shims mirror. Otherwise the shared file
+stays in use, as in Phase 2. The CLI hooks pass therefore runs after the
+plugins start, and a plugin starting later re-runs it. A plugin stops only at
+quit; that only stops the panes carrying the hooks, without writing the
+shared file back.
+
+Known limit: a single pane whose shim is not built — a `COPILOT_HOME` set in
+the window's own env settings for Copilot, or a shim that fails to build —
+starts without Navide's hooks. It is logged as a warning ("copilot pane …
+starts without Navide's hooks").
 
 ## Persistence (navide.db)
 
@@ -127,7 +233,7 @@ the panes they serve cannot run without them.
 - `convenience_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER, feature TEXT, action TEXT, target TEXT, detail TEXT, backup TEXT, notify INTEGER, source TEXT)`
   — append-only. `action` is one of `first`, `repair`, `reset`, `removed`, `off`,
   `allowed`, `cleanup`, `cleanup-failed`, `removed-entry`, `prompt`,
-  `refused-unsafe`, `refused-name`, `refused-exclude`.
+  `refused-unsafe`, `refused-name`, `refused-exclude`, `retract`, `retract-failed`.
 - `convenience_parts(feature TEXT, target TEXT, part TEXT, state TEXT, PRIMARY KEY(feature, target, part))`
   — the entries of a target with several: `state` is `written` (Navide's
   last write left it there) or `removed` (the user deleted it; never written
@@ -151,7 +257,7 @@ interface LogEntry {
   id: number
   at: number                 // epoch seconds
   feature: string
-  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude'
+  action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude' | 'retract' | 'retract-failed'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
                              // For action 'prompt' (codex.login-promote) it is the JSON
