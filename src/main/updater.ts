@@ -12,6 +12,7 @@ import { readUpdaterSettings, writeUpdaterSettings } from './updater-settings'
 import { readUpdaterState, writeUpdaterState } from './updater-state-store'
 import type { UpdateSettingsResult, UpdaterSettings, UpdateState, UpdateStatus } from '../shared/updater'
 import { isLinux, isMac, isWindows } from '../shared/osplat'
+import { warnMain } from './main-log'
 
 /**
  * Whether this platform's install shape can update itself in place.
@@ -203,6 +204,7 @@ export function initUpdater(options: {
       installTimeoutMs: () => (settings?.installTimeoutSeconds ?? 20) * 1000,
       downloadRetryDelaysMs: () => retryDelaysFor(settings),
       restored,
+      warn: warnMain,
     },
   )
 

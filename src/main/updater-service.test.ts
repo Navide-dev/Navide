@@ -424,6 +424,22 @@ describe('createUpdaterService', () => {
     }
   })
 
+  it('reports a stuck install through the warn option', async () => {
+    vi.useFakeTimers()
+    try {
+      const { client, emit } = fakeClient()
+      const warn = vi.fn()
+      const service = createUpdaterService(client, '1.0.0', true, vi.fn(), { installTimeoutMs: 50, warn })
+      emit('update-downloaded', { version: '1.1.0' })
+      service.install()
+
+      await vi.advanceTimersByTimeAsync(50)
+      expect(warn).toHaveBeenCalledWith('[updater] install did not start within 50 ms; returning to downloaded')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stops blocking checks once a stuck install times out', async () => {
     vi.useFakeTimers()
     try {

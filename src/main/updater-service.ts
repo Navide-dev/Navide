@@ -73,6 +73,8 @@ export interface UpdaterServiceOptions {
   installTimeoutMs?: number | (() => number)
   downloadRetryDelaysMs?: readonly number[] | (() => readonly number[])
   restored?: RestoredUpdateState
+  /** Where the service reports what went wrong; console.warn when absent. */
+  warn?: (line: string) => void
 }
 
 function errorMessage(error: unknown): string {
@@ -151,6 +153,7 @@ export function createUpdaterService(
   onStateChanged: (state: UpdateState) => void,
   options: UpdaterServiceOptions = {},
 ): UpdaterService {
+  const warn = options.warn ?? ((line: string) => console.warn(line))
   const resolveInstallTimeoutMs = (): number => {
     const value = options.installTimeoutMs
     if (typeof value === 'function') return value()
@@ -495,7 +498,7 @@ export function createUpdaterService(
       installTimer = setTimeout(() => {
         installTimer = null
         if (state.status !== 'installing') return
-        console.warn('[updater] install did not start within', installTimeoutMs, 'ms; returning to downloaded')
+        warn(`[updater] install did not start within ${installTimeoutMs} ms; returning to downloaded`)
         setState({ ...readyState, message: 'The update did not start installing. Try restarting again.' })
       }, installTimeoutMs)
       return success()
