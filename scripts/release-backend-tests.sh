@@ -18,6 +18,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UV="$(command -v uv)"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/navide-release-pytest.XXXXXX")"
 mkdir -p "$SCRATCH/home" "$SCRATCH/tmp" "$SCRATCH/bin"
+trap 'rm -rf "$SCRATCH"' EXIT
 FAKE_LOG="$SCRATCH/fake-security.log"
 cat > "$SCRATCH/bin/security" <<'EOF'
 #!/bin/sh
@@ -47,14 +48,18 @@ cd "$ROOT"
 if [[ "$(uname)" == "Darwin" ]]; then
   SB="$SCRATCH/deny-security.sb"
   printf '(version 1)\n(allow default)\n(deny process-exec (literal "/usr/bin/security"))\n' > "$SB"
-  ignores=()
-  for f in "${NO_SANDBOX_FILES[@]}"; do ignores+=("--ignore=$f"); done
-  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${ignores[@]}"
+  deselects=()
+  # --deselect, not --ignore: the CLI regression inventory checks a full
+  # collection, so these files must still be collected in this pass. Node ids
+  # are relative to backend/, pytest's rootdir.
+  for f in "${NO_SANDBOX_FILES[@]}"; do deselects+=("--deselect=${f#backend/}"); done
+  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${deselects[@]}"
   isolated "$UV" --project backend run --no-sync pytest "${NO_SANDBOX_FILES[@]}"
 else
   isolated "$UV" --project backend run --no-sync pytest backend/tests
 fi
 
 if [[ -s "$FAKE_LOG" ]]; then
-  echo "release-backend-tests: tests called \`security\` $(wc -l < "$FAKE_LOG") time(s); the fake answered (see $FAKE_LOG)" >&2
+  echo "release-backend-tests: tests called \`security\` $(wc -l < "$FAKE_LOG") time(s); the fake answered:" >&2
+  cat "$FAKE_LOG" >&2
 fi
