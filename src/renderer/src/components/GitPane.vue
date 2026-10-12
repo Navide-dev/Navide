@@ -23,6 +23,7 @@ import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { computeGraph, laneColor } from '../lib/git-graph'
 import { guardedDiscard } from '../lib/discardConfirm'
 import { closeGitPaneMenusOnEscape } from '../lib/gitMenuEscape'
+import { placeSubmenu } from '../lib/submenuPlacement'
 import GitCredentialModal from './GitCredentialModal.vue'
 
 const props = defineProps<{
@@ -2691,14 +2692,14 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div class="menu-sep" />
         <button class="menu-item" @click="ctxStageToggle">{{ ctxMenu.staged ? $t('action.unstage-changes') : $t('action.stage-changes') }}</button>
         <button v-if="!ctxMenu.staged" class="menu-item danger" @click="ctxDiscard">{{ $t('action.discard-changes') }}</button>
-        <div v-if="gitBranches.some(x=>!x.is_current)" class="menu-item has-sub danger">
+        <div v-if="gitBranches.some(x=>!x.is_current)" class="menu-item has-sub danger" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
           <span>{{ $t('action.restore-from-branch') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
             <button v-for="b in gitBranches.filter(x=>!x.is_current)" :key="b.name" class="menu-item" @click="ctxRestoreFromBranch(b.name)">{{ b.name }}</button>
           </div>
         </div>
         <div class="menu-sep" />
-        <div class="menu-item has-sub">
+        <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
           <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
             <button class="menu-item" @click="ctxAddToGitignore('project')">.gitignore (project root)</button>
@@ -2721,7 +2722,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <button class="menu-item" @click="ctxFolderStage">{{ $t('action.stage-changes') }}</button>
           <button class="menu-item danger" @click="ctxFolderDiscard">{{ $t('action.discard-changes') }}</button>
           <div class="menu-sep" />
-          <div class="menu-item has-sub">
+          <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
             <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
             <div class="ctx-submenu">
               <button class="menu-item" @click="ctxFolderAddIgnore('project')">.gitignore (project root)</button>
@@ -3631,6 +3632,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
   padding: 4px; box-shadow: 0 8px 24px var(--shadow-scrim);
 }
 .ctx-menu .menu-item.has-sub:hover .ctx-submenu { display: block; }
+.ctx-menu .menu-item.has-sub[data-sub-place="left"] .ctx-submenu { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+.ctx-menu .menu-item.has-sub[data-sub-place="below"] .ctx-submenu { top: 100%; left: 0; margin-left: 0; }
 
 /* Ignored file rows — dimmed */
 .file-row.ignored-row { opacity: 0.55; }
