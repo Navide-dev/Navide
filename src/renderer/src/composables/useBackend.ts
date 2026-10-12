@@ -89,6 +89,24 @@ export function useBackend() {
   const send = client.send
   const on = client.on
 
+  // Every connection opens with a challenge (ws.welcome). Main signs it for a
+  // main window only; the answer marks this connection as a Navide window, as
+  // opposed to any other client holding the token. A reconnect brings a fresh
+  // nonce and proves again. Anything else main refuses stays a ws client.
+  on('ws.welcome', (payload) => {
+    const nonce = (payload as { windowChallenge?: unknown } | null)?.windowChallenge
+    if (typeof nonce !== 'string') return
+    void (async () => {
+      let proof: string | null | undefined
+      try {
+        proof = await window.agentTeam?.proveWindow?.(nonce)
+      } catch {
+        return
+      }
+      if (typeof proof === 'string' && proof) send('window.prove', { proof }).catch(() => {})
+    })()
+  })
+
   // Applied when the main process restarts/stops the backend: the port changes
   // on restart, so tear down the old socket and reconnect to the new wsUrl (or
   // settle on 'disconnected' when the backend was stopped).

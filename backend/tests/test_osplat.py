@@ -1198,3 +1198,72 @@ class TestScripts:
 
         script = _windows.scripts.confirm_then_run("Remove o'brien's cli", "npm x")
         assert "Write-Host 'Remove o''brien''s cli'" in script
+
+
+def test_a_folder_created_again_has_another_birth_time(tmp_path: Path) -> None:
+    """The convenience gate tells a reset config folder from the user's
+    removal by the folder's identity. Linux hands a recreated folder the same
+    inode back, so only its birth time can say it is another one."""
+    import time
+
+    folder = tmp_path / "cfg"
+    folder.mkdir()
+    first = osplat.folder_birth_time(folder)
+    assert first is not None
+    folder.rmdir()
+    time.sleep(0.02)
+    folder.mkdir()
+
+    again = osplat.folder_birth_time(folder)
+    assert again is not None and again != first
+    assert osplat.folder_birth_time(tmp_path / "missing") is None
+
+
+def test_folder_birth_time_on_linux_falls_back_to_none_never_raising(tmp_path: Path, monkeypatch) -> None:
+    """No statx (old glibc, musl), a kernel without it (ENOSYS), a filesystem
+    without birth times (no STATX_BTIME in the mask) or a call ctypes cannot
+    make: the folder identity then stands on device and inode, as before."""
+    from agent_team_backend.osplat import folder_birth
+
+    monkeypatch.setattr(folder_birth, "_statx", None)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    monkeypatch.setattr(folder_birth, "_statx", lambda *_args: -1)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def no_btime(_dirfd, _path, _flags, _mask, buf) -> int:
+        buf._obj.stx_mask = 0x7FF  # STATX_BASIC_STATS, no STATX_BTIME
+        return 0
+
+    monkeypatch.setattr(folder_birth, "_statx", no_btime)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def unconvertible(*_args) -> int:
+        raise ctypes.ArgumentError("argument 2: wrong type")
+
+    import ctypes
+
+    monkeypatch.setattr(folder_birth, "_statx", unconvertible)
+    assert folder_birth.from_statx(tmp_path) is None
+
+
+def test_folder_birth_never_loads_libc_at_import() -> None:
+    """ctypes.CDLL(None) raises TypeError on Windows: loading libc when the
+    module is imported took the whole backend down there. It is loaded on
+    the first Linux lookup only, and a failure to load is no birth time."""
+    import ctypes
+    import importlib
+
+    from agent_team_backend.osplat import folder_birth
+
+    def windows_cdll(name, *_args, **_kwargs):
+        raise TypeError("argument of type 'NoneType' is not iterable")
+
+    # Its own MonkeyPatch: undoing the test's own would undo conftest's too.
+    try:
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(ctypes, "CDLL", windows_cdll)
+            importlib.reload(folder_birth)  # must not raise
+            assert folder_birth.from_statx(Path.cwd()) is None
+    finally:
+        importlib.reload(folder_birth)

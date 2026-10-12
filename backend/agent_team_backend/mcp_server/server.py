@@ -6719,14 +6719,23 @@ async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
     it), owner (navide when Navide installed it), evidence (inferred when
     capabilities were read off source text)}.
 
+    Items of kind `navide-change` are what Navide itself wrote into a CLI's
+    world for a convenience feature (name = the feature id, enabled = the
+    feature is allowed); their id ends with a hash of the file Navide changed
+    — the file itself is named on Settings → CLI Extensions, where the user
+    can see exactly what was touched.
+
     Names and metadata only: no paths and no hook command lines, which can
     name scripts, hosts and tokens. A global inventory: it does not vary by
     workspace.
     """
+    from agent_team_backend import app as _app
     from agent_team_backend import cli_extensions
 
     _resolve_caller(ctx)
     inventory = await asyncio.to_thread(cli_extensions.scan)
+    listing = await asyncio.to_thread(_app.convenience_gate.listing)
+    inventory.items.extend(cli_extensions.navide_changes(listing["features"]))
     return inventory.public_dict()
 
 

@@ -26,6 +26,7 @@ import {
   capLines,
   filterLogLines,
   logLineLevel,
+  maskWsUrlToken,
   splitLogChunk,
   type LogLevel,
 } from '../lib/debugLog'
@@ -615,7 +616,7 @@ onUnmounted(() => stopTail())
               <dt>Started</dt>
               <dd>{{ health?.started_at ?? '—' }}</dd>
               <dt>WebSocket</dt>
-              <dd>{{ backend.wsUrl.value || '—' }}</dd>
+              <dd>{{ maskWsUrlToken(backend.wsUrl.value) || '—' }}</dd>
               <dt>HTTP</dt>
               <dd>{{ backend.httpUrl.value || '—' }}</dd>
               <dt>PID</dt>

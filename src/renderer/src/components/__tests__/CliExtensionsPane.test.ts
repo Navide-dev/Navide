@@ -94,7 +94,8 @@ describe('CliExtensionsPane', () => {
   it('has no button that changes anything: the only one rescans', async () => {
     render()
     await flushPromises()
-    const buttons = wrapper.findAll('button')
+    // The tab strip only switches views; the inventory tab is what is checked.
+    const buttons = wrapper.findAll('.cli-ext button')
     expect(buttons.map((button) => button.classes())).toEqual([['cli-ext-rescan']])
     expect(wrapper.findAll('input, select, textarea')).toHaveLength(0)
     await buttons[0].trigger('click')

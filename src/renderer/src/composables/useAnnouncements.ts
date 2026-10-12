@@ -5,6 +5,8 @@ import { WHATS_NEW, cmpSemver, pickText } from '../lib/whatsNew'
 import type { CandidateTier, ExclusionReason, FailureCause } from '../lib/quotaFailover'
 import type { UpdateState } from '../../../shared/updater'
 import type { EvolveRun } from './useEvolve'
+import type { ConvenienceSnapshot } from './useConvenience'
+import { convenienceText } from '../lib/convenienceText'
 
 /**
  * Announcements centre — the status-bar feed of version news.
@@ -22,7 +24,7 @@ import type { EvolveRun } from './useEvolve'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share'
+export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -50,11 +52,21 @@ export type EvolveAnnouncementAction = {
   paneId?: string
 }
 
+/** A convenience-feature row's button (docs/en-US/convenience-features.md).
+ *  App.vue maps them onto the overview and `convenience.*` RPCs. */
+export type ConvenienceAnnouncementAction =
+  | { kind: 'convenience-overview' }
+  | { kind: 'convenience-reallow'; featureId: string }
+  /** Acknowledges a notice that offers nothing else (an outside sign-out). */
+  | { kind: 'convenience-dismiss'; rowId: string }
+  | { kind: 'convenience-upgrade-ack' }
+
 export type AnnouncementActionSpec =
   | { kind: AnnouncementAction }
   | QuotaAnnouncementAction
   | ReleaseTourAction
   | EvolveAnnouncementAction
+  | ConvenienceAnnouncementAction
 
 export interface Announcement {
   /** Stable across renders: `release:<version>`, `update:<version>`,
@@ -515,6 +527,122 @@ function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
   shareNotices.value = [{ notice, at }, ...shareNotices.value].slice(0, MAX_SHARE_NOTICES)
 }
 
+// ── Convenience features ────────────────────────────────────────────────────
+
+/** The last `convenience.list` useConvenience read. Not persisted: the
+ *  backend's log is the record, and it is re-read on every connect. */
+const convenienceState = shallowRef<ConvenienceSnapshot | null>(null)
+const convenienceAgentLabel = shallowRef<(agentKey: string) => string>((key) => key)
+
+export const CONVENIENCE_UPGRADE_ID = 'convenience:upgrade'
+
+/** `detail` of a prompt entry (a JSON string). */
+interface ConveniencePromptDetail {
+  agentKey?: string
+  /** "logout": the user signed out outside Navide. */
+  reason?: string
+}
+
+function parsePromptDetail(detail: string): ConveniencePromptDetail {
+  try {
+    const parsed = JSON.parse(detail) as unknown
+    return parsed && typeof parsed === 'object' ? (parsed as ConveniencePromptDetail) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function convenienceAnnouncementId(entryId: number): string {
+  return `convenience:${entryId}`
+}
+
+function convenienceItems(seen: Set<string>): Announcement[] {
+  const state = convenienceState.value
+  if (!state) return []
+  const t = i18n.global.t
+  const overview: ConvenienceAnnouncementAction = { kind: 'convenience-overview' }
+  const items: Announcement[] = []
+  if (state.upgrade && state.upgrade.features.length > 0) {
+    items.push({
+      id: CONVENIENCE_UPGRADE_ID,
+      kind: 'convenience',
+      title: t('convenience.notice.upgrade'),
+      highlights: state.upgrade.features.map((id) => convenienceText(id, 'name')),
+      note: t('convenience.notice.upgrade-note'),
+      read: false,
+      actions: [{ kind: 'convenience-upgrade-ack' }, overview],
+    })
+  }
+  const entries = state.notices.filter((entry) => entry.notify).slice().sort((a, b) => b.at - a.at || b.id - a.id)
+  for (const entry of entries) {
+    const id = convenienceAnnouncementId(entry.id)
+    const feature = convenienceText(entry.feature, 'name')
+    const actions: ConvenienceAnnouncementAction[] = []
+    let title: string
+    let note: string | undefined
+    const highlights: string[] = []
+    switch (entry.action) {
+      case 'first':
+      case 'repair':
+        title = t('convenience.notice.wrote', { feature, target: entry.target, purpose: convenienceText(entry.feature, 'purpose') })
+        if (entry.action === 'repair') note = t('convenience.notice.repair-note')
+        break
+      case 'reset':
+        title = t('convenience.notice.reset', { feature, target: entry.target, purpose: convenienceText(entry.feature, 'purpose') })
+        note = t('convenience.notice.reset-note')
+        break
+      case 'removed': {
+        title = t('convenience.notice.removed', { feature, target: entry.target })
+        const current = state.features.find((f) => f.id === entry.feature)
+        // Offered only while the removal is still what keeps it off.
+        if (current?.state === 'off' && current.reason === 'removed') {
+          actions.push({ kind: 'convenience-reallow', featureId: entry.feature })
+        }
+        break
+      }
+      case 'prompt': {
+        const detail = parsePromptDetail(entry.detail)
+        const agentKey = detail.agentKey || entry.target
+        if (detail.reason === 'logout') {
+          // Navide did not sign the user back in; there is nothing to choose.
+          const agent = convenienceAgentLabel.value(agentKey)
+          title = t('convenience.notice.prompt-logout', { agent })
+          note = t('convenience.notice.prompt-logout-note', { agent })
+          if (!seen.has(id)) actions.push({ kind: 'convenience-dismiss', rowId: id })
+          break
+        }
+        title = t('convenience.notice.prompt', { agent: convenienceAgentLabel.value(agentKey) })
+        break
+      }
+      case 'refused-name': {
+        // The target is the link Navide did not create: its folder, then its name.
+        const cut = Math.max(entry.target.lastIndexOf('/'), entry.target.lastIndexOf('\\'))
+        title = t('convenience.notice.action.refused-name', {
+          feature, name: entry.target.slice(cut + 1), target: entry.target.slice(0, Math.max(cut, 0)),
+        })
+        break
+      }
+      // 'refused-unsafe' among them: a workspace left alone for safety; and
+      // 'refused-exclude': a git exclude behind a link, left unwritten.
+      default:
+        title = t(`convenience.notice.action.${entry.action}`, { feature, target: entry.target })
+    }
+    actions.push(overview)
+    items.push({ id, kind: 'convenience', title, highlights, note, createdAt: entry.at * 1000, read: false, actions })
+  }
+  return items
+}
+
+/** Hand in the latest `convenience.list` (useConvenience does, on every read). */
+function noteConvenience(snapshot: ConvenienceSnapshot): void {
+  convenienceState.value = snapshot
+}
+
+/** How the account prompt names a CLI (App.vue passes the agent specs' labels). */
+function setConvenienceAgentLabel(label: (agentKey: string) => string): void {
+  convenienceAgentLabel.value = label
+}
+
 /** Live quota incidents by id, newest update first when listed. Not
  *  persisted: the backend owns the incidents and re-publishes them on
  *  connect, and a stale copy in ui_settings would offer buttons for an epoch
@@ -834,6 +962,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const locale = i18n.global.locale.value
   const seen = new Set(readIds.value)
   const merged = [
+    ...convenienceItems(seen),
     ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
@@ -910,6 +1039,12 @@ export function __resetShareAnnouncementsForTest(): void {
   shareNotices.value = []
 }
 
+/** Test-only: forget the convenience snapshot (the module is a singleton). */
+export function __resetConvenienceAnnouncementsForTest(): void {
+  convenienceState.value = null
+  convenienceAgentLabel.value = (key) => key
+}
+
 /** Test-only: forget every evolve notice (the module is a singleton). */
 export function __resetEvolveAnnouncementsForTest(): void {
   evolveNotices.value = []
@@ -927,6 +1062,8 @@ export function useAnnouncements() {
     noteSchedulerDisabled,
     noteEvolveNotice,
     noteShareNotice,
+    noteConvenience,
+    setConvenienceAgentLabel,
     noteQuotaIncident,
     invalidateQuotaActions,
     dismissQuotaIncident,

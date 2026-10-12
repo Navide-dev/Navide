@@ -78,6 +78,7 @@ declare global {
         onMaximizeChanged: (cb: (maximized: boolean) => void) => () => void
       }
       getBackendInfo: () => Promise<BackendInfo>
+      proveWindow?: (nonce: string) => Promise<string | null>
       restartBackend: () => Promise<BackendInfo>
       stopBackend: () => Promise<{ ok: boolean }>
       onBackendChanged: (cb: (info: BackendInfo) => void) => void

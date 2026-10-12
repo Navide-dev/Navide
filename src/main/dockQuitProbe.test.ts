@@ -26,6 +26,13 @@ vi.mock('../shared/osplat', async (importOriginal) => {
 const appState = vi.hoisted(() => ({ quits: 0 }))
 // index.ts runs the Linux keyring preflight at import; never spawn dbus-send here.
 vi.mock('./linuxKeyring', () => ({ applyLinuxKeyringPreflight: () => false }))
+// The fake window below is never registered as a Navide window (whenReady never
+// resolves), so pass every window through: this file checks that a restart is
+// broadcast, backendIpc.test.ts checks who it goes to.
+vi.mock('./backendIpc', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./backendIpc')>()),
+  backendChangedTargets: (windows: unknown[]) => windows,
+}))
 // A cancelled quit after the teardown restarts the backend; record it in place
 // of spawning one.
 const backendState = vi.hoisted(() => ({ events: [] as string[] }))
