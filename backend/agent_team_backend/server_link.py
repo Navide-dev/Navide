@@ -1122,6 +1122,9 @@ class ServerLink:
                 # connection may have swallowed: acks this device could not send,
                 # and acks for its own sends that were pushed while it was away.
                 self._spawn(self._resend_unsent_acks())
+                # Approvals and notes left on this device's share links while
+                # it was away (links.feedback.list); a no-op without links.
+                self._spawn(self._drain_link_feedback())
                 # At most once per connection, and never on a server that does
                 # not describe its tokens.
                 self._spawn(self._maybe_rotate(config))
@@ -1207,6 +1210,14 @@ class ServerLink:
             # this push is the only thing that connects the two. Polling below
             # covers the server that cannot send it.
             self._spawn(self._on_account_verified())
+            return
+        if msg_type == "links.opened":
+            self._spawn(self._on_link_opened(message.get("payload")))
+            return
+        if msg_type == "links.feedback":
+            from . import share_feedback
+
+            self._spawn(share_feedback.on_pushed(message.get("payload")))
             return
         log.debug("navide-server event %r is not wired yet; ignoring it", msg_type)
 
@@ -2384,6 +2395,57 @@ class ServerLink:
     async def list_devices(self) -> dict[str, Any]:
         """The account's devices as the server knows them, for the sharing view."""
         return await self._carry("devices.list", {})
+
+    # ---- share links ----
+    #
+    # One request each over the authenticated link, in the reply-frame shape
+    # of ``_carry``. The server holds ciphertext, a wrapped key and wrapped
+    # metadata only; encrypting, wrapping and opening are ``share_links``'.
+    # A server without links answers UNKNOWN_TYPE, one without storage
+    # UNSUPPORTED; both come through as they are.
+
+    async def links_request(self, verb: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """``links.<verb>`` with ``payload``, e.g. ``links_request("list", {})``."""
+        return await self._carry(f"links.{verb}", payload)
+
+    async def _drain_link_feedback(self) -> None:
+        from . import share_feedback
+
+        try:
+            await share_feedback.drain_if_connected()
+        except Exception as err:  # noqa: BLE001 - a catch-up round must not break the link
+            log.warning("catching up on share-link feedback failed: %s", err)
+
+    async def _on_link_opened(self, payload: Any) -> None:
+        """Somebody opened one of this account's share links."""
+        from . import app
+        from .ipc import make_event
+
+        from .share_links import _LINK_ID_RE
+
+        data = payload if isinstance(payload, dict) else {}
+        link_id = data.get("linkId")
+        if not isinstance(link_id, str) or not _LINK_ID_RE.fullmatch(link_id):
+            return
+        count = data.get("openCount")
+        opened_at = data.get("openedAt")
+        event = {
+            "linkId": link_id,
+            "openCount": count if isinstance(count, int) and not isinstance(count, bool) else None,
+            "openedAt": opened_at if isinstance(opened_at, str) else None,
+            "newViewer": data.get("newViewer") is True,
+        }
+        try:
+            await app.broadcast(make_event("share.opened", event))
+        except Exception as err:  # noqa: BLE001 - a notice must not break the link
+            log.warning("announcing a share-link open failed: %s", err)
+        try:
+            from .channels import share_cmds
+
+            # Channels decides whether and where (new viewer, this device made it, chat routing).
+            await share_cmds.notify_link_opened(event)
+        except Exception as err:  # noqa: BLE001 - same
+            log.warning("sending a share-link open notice to chat failed: %s", err)
 
     async def _on_account_verified(self) -> None:
         """The server says this account's address is confirmed."""
@@ -4843,6 +4905,13 @@ def link_state() -> str:
     return _link.state() if _link is not None else STATE_UNCONFIGURED
 
 
+def connection_token() -> object | None:
+    """An object that stays the same for as long as one server connection lasts
+    and changes on every reconnect (None without one) — for caching what the
+    server on the other end supports."""
+    return getattr(_link, "_ws", None) if _link is not None else None
+
+
 def local_device_id() -> str:
     """This machine's device id, or "" before a link has one."""
     return _link._device_id if _link is not None else ""
@@ -4955,6 +5024,14 @@ async def list_devices() -> dict[str, Any] | None:
     if _link is None:
         return None
     return await _link.list_devices()
+
+
+# Share links: ``links.<verb>`` on the account link. None with no server
+# configured, like everything above; otherwise a reply frame.
+async def links_request(verb: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+    if _link is None:
+        return None
+    return await _link.links_request(verb, payload)
 
 
 def roster_changed() -> None:

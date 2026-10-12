@@ -1144,6 +1144,92 @@
       "file-history-blame": "File history + blame",
       "open-diff-in-editor": "Open diff in editor"
   },
+  "share": {
+    "notice": {
+      "created-user": "You shared a link ({id})",
+      "created-agent": "Pane {pane} shared a link ({id})",
+      "masked": "{count} possible secrets were masked before upload",
+      "opened-first": "Your share link ({id}) was opened",
+      "opened-new-viewer": "Your share link ({id}) was opened by a new viewer",
+      "open-count": "Opened {count} times so far",
+      "feedback-approved": "Approved from a phone: {title}",
+      "feedback-noted": "Review note from a phone: {title}",
+      "feedback-already": "Approval from a phone noted, stage unchanged: {title}",
+      "feedback-rejected": "Phone feedback not applied: {title}",
+      "reason-content-changed": "The plan changed since it was shared; open the link again and resend.",
+      "reason-other": "Reason: {reason}"
+    }
+  },
+  "plans": {
+    "share": {
+      "button": "Share link",
+      "title": "Share a read-only link",
+      "expiry": "Expires after",
+      "days": "{count} day | {count} days",
+      "require-login": "Require sign-in to open",
+      "send-to-chat": "Send to the chat",
+      "send-to-chat-note": "The link contains its decryption key and is sent through that chat platform (for example Telegram).",
+    "send-to-chat-direct-only": "It is sent only to a direct-message chat you have bound.",
+      "create": "Create link",
+      "creating": "Creating…",
+      "copy": "Copy",
+      "copied": "Link copied",
+      "close": "Close",
+      "expires-at": "Expires {date}",
+      "masked-title": "Masked before sharing",
+      "masked-line": "Line {line}: possible {category}, masked",
+      "warned-line": "Line {line}: possible {category}, not masked, check it",
+      "refused": "This plan cannot be shared: {reason}",
+      "failed": "Could not create the link ({code}): {message}",
+    "chat-target": "Chat",
+    "chat-pick": "Choose a chat",
+    "chat-none": "No direct-message chat is bound.",
+    "chat-loading": "Loading chats…",
+    "chat-targets-failed": "Could not load chats ({code}): {message}",
+    "reason": {
+      "memory": "Agent memory files (CLAUDE.md, AGENTS.md and the like) are never shared.",
+      "denied_name": "This file name looks like a key, credential or token file, which is never shared.",
+      "system": "Files in system, credential or Navide data folders are never shared.",
+      "hard_link": "A file with more than one name (a hard link) is never shared.",
+      "missing": "The file does not exist.",
+      "not_file": "Only a single file can be shared.",
+      "not_absolute": "Only an absolute path can be shared.",
+      "parent_ref": "A path with '..' cannot be shared.",
+      "changed": "The file changed or became unreadable while it was checked.",
+      "whitespace": "The path starts or ends with a space; name the file exactly.",
+      "unknown_kind": "This kind of file cannot be shared.",
+      "kind_source": "Only files in .agent-team/plans/ can be shared as a plan.",
+      "too_large": "Files over 32 MiB cannot be shared.",
+      "unreadable": "The file could not be read as UTF-8 text.",
+      "ttl": "A link lasts between 15 minutes and 30 days."
+    },
+    "category": {
+      "api-key": "API key",
+      "github-token": "GitHub token",
+      "slack-token": "Slack token",
+      "slack-app-token": "Slack app token",
+      "aws-access-key": "AWS access key",
+      "jwt": "JWT",
+      "bot-token": "bot token",
+      "telegram-bot-token": "Telegram bot token",
+      "discord-bot-token": "Discord bot token",
+      "authorization-header": "Authorization header",
+      "bearer-token": "bearer token",
+      "credential-assignment": "credential",
+      "credential-flag": "credential flag",
+      "url-credentials": "credentials in a URL",
+      "google-api-key": "Google API key",
+      "gitlab-token": "GitLab token",
+      "stripe-key": "Stripe key",
+      "npm-token": "npm token",
+      "huggingface-token": "Hugging Face token",
+      "sendgrid-key": "SendGrid key",
+      "pypi-token": "PyPI token",
+      "private-key": "private key",
+      "possible-secret": "secret"
+    }
+    }
+  },
   "settings": {
     "cliExtensions": {
       "tabInstalled": "Installed CLI extensions",
@@ -6582,6 +6668,70 @@
       "enabled-hint": "Off means Navide delivers it nowhere; CLIs that read it on their own still see it.",
       "native-conflict-hint": "A CLI's own skill has this name and wins for that CLI."
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud sections",
+        "sync": "Sync",
+        "share": "Share",
+        "devices": "Devices"
+      },
+      "inventory": {
+        "title": "This machine and the cloud",
+        "hint": "How many items each synced section holds here and in the cloud.",
+        "counts": "Here {local} · Cloud {cloud} · Matching {inSync} · Conflicts {conflict}",
+        "last-write": "Last written by {device} · {when}",
+        "no-writes": "Nothing written to the cloud yet",
+        "sync-off": "Sync off",
+        "notice-no-key": "This device does not hold the account's sync key yet, so the cloud is closed to it. Pair it with a device that holds the key and the numbers appear here.",
+        "notice-not-connected": "Sign in to Navide Cloud to compare this machine with the cloud.",
+        "notice-error": "The cloud could not be read.",
+        "row-error": "Could not read this section from the cloud.",
+        "row-no-key": "This device has no sync key yet.",
+        "row-not-connected": "Not connected.",
+        "refresh": "Refresh"
+      },
+      "devices": {
+        "title": "Devices that wrote to the cloud",
+        "hint": "Every device that has written a record to this account.",
+        "none": "No device has written to the cloud yet.",
+        "partial": "Some sections could not be read, so this list may be incomplete.",
+        "last-write": "Last write {when}",
+        "last-seen": "Last online {when}",
+        "refresh": "Refresh"
+      },
+      "share": {
+        "title": "Share links",
+        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link; the server stores ciphertext it cannot open.",
+        "col-item": "Item",
+        "col-creator": "Created by",
+        "col-created": "Created",
+        "col-expires": "Expires",
+        "col-opens": "Opens",
+        "col-last-open": "Last opened",
+        "creator-user": "You",
+        "creator-agent": "Agent · {pane}",
+        "empty": "No share links yet.",
+        "unavailable": "Share links are not available in this version yet.",
+        "error": "Share links could not be loaded.",
+        "copy": "Copy link",
+        "extend": "+7 days",
+        "rekey": "New link",
+        "revoke": "Revoke",
+        "revoke-confirm": "Revoke now",
+        "cancel": "Cancel",
+        "revoke-all": "Revoke all",
+        "revoke-all-confirm": "Revoke every link",
+        "copied": "Link copied.",
+        "extended": "Extended by 7 days.",
+        "rekeyed": "New link copied; the old one no longer opens.",
+        "revoked": "Link revoked.",
+        "revoked-all": "All links revoked.",
+        "action-failed": "That did not work ({code}).",
+        "rekey-confirm": "Replace the link now",
+        "rekeyed-old-alive": "New link copied. The server did not confirm the old link stopped; revoke it if it must not open.",
+        "refresh": "Refresh"
+      }
+    },
     "sync": {
       "title": "Sync",
       "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine; the server stores ciphertext it has no key for.",
@@ -9758,6 +9908,10 @@
     "token-linked": "Linked with a token"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "Share link opened notices",
+      "desc": "When a new device opens a share link made on this computer, tell the bound chats (the link's URL is never sent). Requires Navide Cloud."
+    },
     "nav": "Channels",
     "platform": {
       "telegram": "Telegram",

@@ -5822,6 +5822,187 @@ async def share_revoke_published(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "shareId": share_id}))
 
 
+# ── Share links (share.* → links.* on Navide-Server) ─────────────────────────
+# Encrypted, read-only links to a plan or report (share_links). A server
+# without links answers UNKNOWN_TYPE or UNSUPPORTED, passed through as the
+# error code so the UI can hide the feature rather than show a failure.
+
+
+async def _share_links_call(
+    session: "Session", msg_id: str, msg_type: str, call: Callable[[Any], Awaitable[dict]]
+) -> None:
+    from . import share_links, sync_keyring
+
+    # The link first: without it nothing may reach the account key or the server.
+    state = server_link.link_state()
+    if state != server_link.STATE_CONNECTED:
+        code = "NOT_CONFIGURED" if state == server_link.STATE_UNCONFIGURED else "LINK_OFFLINE"
+        await session.send_json(make_error(msg_id, msg_type, code, f"Navide Cloud is {state}"))
+        return
+    try:
+        result = await call(share_links.ServerLinksClient())
+    except share_links.ShareRefused as err:
+        await session.send_json(make_error(msg_id, msg_type, "SHARE_REFUSED", str(err), {"reason": err.code}))
+        return
+    except share_links.ShareRemoteError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err)))
+        return
+    except sync_keyring.KeyringError as err:
+        await session.send_json(make_error(msg_id, msg_type, "NO_SYNC_KEY", str(err)))
+        return
+    except share_links.ShareError as err:
+        await session.send_json(make_error(msg_id, msg_type, "SHARE_FAILED", str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
+def _link_id_of(payload: dict) -> str:
+    raw = payload.get("linkId")
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+def _ttl_of(payload: dict) -> int | None:
+    raw = payload.get("ttlSeconds")
+    return raw if isinstance(raw, int) and not isinstance(raw, bool) else None
+
+
+@handler("share.caps")
+async def share_caps(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    await _share_links_call(session, msg_id, msg_type, share_links.caps)
+
+
+@handler("share.create")
+async def share_create(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Share one file the user picked: {path, kind?, ttlSeconds?, requireLogin?,
+    sendToChat?} — sendToChat posts the link to the user's chat (Channels)."""
+    from . import app, share_links
+
+    path = payload.get("path")
+    kind = payload.get("kind") or "plan"
+    if not isinstance(path, str) or not path or not isinstance(kind, str):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "path must be a non-empty string"))
+        return
+    require_login = payload.get("requireLogin")
+
+    async def call(client: Any) -> dict:
+        created = await share_links.create_share(
+            client,
+            path,
+            kind,
+            ttl_seconds=_ttl_of(payload),
+            require_login=require_login if isinstance(require_login, bool) else None,
+            created_by="user",
+        )
+        result = share_created_payload(created, created_by="user")
+        try:
+            await app.broadcast(make_event("share.created", {k: v for k, v in result.items() if k != "url"}))
+        except Exception as err:  # noqa: BLE001 - the link exists; its creator must still get the URL
+            log.warning("announcing a new share link failed: %s", err)
+        if payload.get("sendToChat") is True:
+            chat_id = payload.get("chatId") if isinstance(payload.get("chatId"), str) else ""
+            await share_links.announce_to_chat(created, created_by="user", chat_id=chat_id)
+        return result
+
+    await _share_links_call(session, msg_id, msg_type, call)
+
+
+def share_created_payload(created: Any, *, created_by: str, pane: str = "", agent: str = "") -> dict:
+    """What a new link's creator is told: the URL (the only copy of its key the
+    creator gets) and where the content was masked, never the masked values."""
+    return {
+        "linkId": created.link_id,
+        "url": created.url,
+        "expiresAt": created.expires_at,
+        "createdBy": created_by,
+        "pane": pane,
+        "agent": agent,
+        "masked": [{"line": f.line, "category": f.category, "action": f.action} for f in created.findings],
+    }
+
+
+@handler("share.list")
+async def share_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    async def call(client: Any) -> dict:
+        return {"links": await share_links.list_links(client)}
+
+    await _share_links_call(session, msg_id, msg_type, call)
+
+
+@handler("share.copy_link")
+async def share_copy_link(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    link_id = _link_id_of(payload)
+
+    async def call(client: Any) -> dict:
+        return {"linkId": link_id, "url": await share_links.copy_link(client, link_id)}
+
+    await _share_links_call(session, msg_id, msg_type, call)
+
+
+@handler("share.revoke")
+async def share_revoke(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    link_id = _link_id_of(payload)
+    await _share_links_call(session, msg_id, msg_type, lambda client: share_links.revoke(client, link_id))
+
+
+@handler("share.revoke_all")
+async def share_revoke_all(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    device_id = payload.get("deviceId") if isinstance(payload.get("deviceId"), str) else ""
+    await _share_links_call(session, msg_id, msg_type, lambda client: share_links.revoke_all(client, device_id))
+
+
+@handler("share.extend")
+async def share_extend(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    link_id = _link_id_of(payload)
+    ttl = _ttl_of(payload)
+    if ttl is None:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "ttlSeconds must be an integer"))
+        return
+    await _share_links_call(session, msg_id, msg_type, lambda client: share_links.extend(client, link_id, ttl))
+
+
+@handler("share.rekey")
+async def share_rekey(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import share_links
+
+    link_id = _link_id_of(payload)
+
+    async def call(client: Any) -> dict:
+        moved = await share_links.rekey(client, link_id)
+        return {
+            "linkId": moved.link_id,
+            "url": moved.url,
+            "expiresAt": moved.expires_at,
+            "replaces": link_id,
+            "oldRevoked": moved.replaced,
+        }
+
+    await _share_links_call(session, msg_id, msg_type, call)
+
+
+@handler("share.update")
+async def share_update(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Publish the source file's current content under the same link."""
+    from . import share_links
+
+    link_id = _link_id_of(payload)
+    path = payload.get("path") if isinstance(payload.get("path"), str) else ""
+    await _share_links_call(
+        session, msg_id, msg_type, lambda client: share_links.update_content(client, link_id, path)
+    )
+
+
 # ── Roles registry (roles.*) ────────────────────────────────────────────────
 async def _broadcast_stage_role_changes(pipeline_ids: list[str], reason: str) -> None:
     """Publish the rewritten stages of every pipeline a role edit touched.

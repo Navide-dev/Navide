@@ -276,6 +276,11 @@ function emptyStatus(): ChannelStatus {
 
 function createChannelsStore(backend: Backend) {
   const enabled = ref(true)
+  // Tell bound chats when a new device opens a share link. Null (no switch shown) unless
+  // Navide Cloud is connected and the backend has the setting.
+  const shareOpenNotify = ref<boolean | null>(null)
+  // Listening for link changes only while Settings → Channels shows the switch.
+  let shareOpenNotifyOff: (() => void) | null = null
   const platforms = ref<ChannelPlatformState[]>([])
   const bindings = ref<ChannelBinding[]>([])
   const pairing = ref<ChannelPairingRequest[]>([])
@@ -374,6 +379,19 @@ function createChannelsStore(backend: Backend) {
     return res
   }
 
+  type ShareOpenNotifyReply = { enabled: boolean; cloudConnected?: boolean; shareSupported?: boolean }
+
+  /** The backend says along with the switch whether Navide Cloud is connected and whether
+   *  its server does share links; the switch shows only when both are true. */
+  function takeShareOpenNotify(res: ChannelResult<ShareOpenNotifyReply>): void {
+    const usable = res.ok && res.data?.cloudConnected === true && res.data.shareSupported === true
+    shareOpenNotify.value = usable && res.data ? res.data.enabled !== false : null
+  }
+
+  async function fetchShareOpenNotify(): Promise<void> {
+    takeShareOpenNotify(await call<ShareOpenNotifyReply>('channels.get_share_open_notify'))
+  }
+
   backend.on('channels.changed', () => {
     void refresh()
   })
@@ -421,6 +439,7 @@ function createChannelsStore(backend: Backend) {
 
   return {
     enabled,
+    shareOpenNotify,
     platforms,
     bindings,
     pairing,
@@ -494,6 +513,21 @@ function createChannelsStore(backend: Backend) {
     renameAccount: (platform: ChannelPlatform, account: string, name: string) =>
       mutate('channels.rename_account', { platform, account, name }),
     setGlobalEnabled: (on: boolean) => mutate('channels.set_global_enabled', { enabled: on }),
+    /** Start keeping the switch (Settings → Channels shows it) and fetch it now. */
+    loadShareOpenNotify: (): Promise<void> => {
+      shareOpenNotifyOff ??= backend.on('p2p.link.changed', () => void fetchShareOpenNotify())
+      return fetchShareOpenNotify()
+    },
+    /** The page is gone: stop following link changes for the switch. */
+    releaseShareOpenNotify: (): void => {
+      shareOpenNotifyOff?.()
+      shareOpenNotifyOff = null
+    },
+    setShareOpenNotify: async (on: boolean): Promise<ChannelResult> => {
+      const res = await call<ShareOpenNotifyReply>('channels.set_share_open_notify', { enabled: on })
+      if (res.ok) takeShareOpenNotify(res)
+      return res
+    },
     /** One bot when `account` is given (always sent, even "default"); without it
      *  the whole platform: every bot, its allowlist and pairing requests. */
     remove: (platform: ChannelPlatform, account?: string) =>

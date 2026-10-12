@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { canonicalJson } from '../../../shared/canonicalJson'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { disabledReasonKey } from '../lib/linkStatus'
 import type { LegalRoute } from '../../../shared/legalLinks'
@@ -131,6 +131,12 @@ import SkillsPane from './SkillsPane.vue'
 import CredentialsPane from './CredentialsPane.vue'
 import PromptSkillsPane from './PromptSkillsPane.vue'
 import SyncSettings from './SyncSettings.vue'
+import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
+import CloudInventorySection from './cloud/CloudInventorySection.vue'
+import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
+import ShareLinksPane from './cloud/ShareLinksPane.vue'
+import { useShareLinks } from '../composables/useShareLinks'
+import { forgetSyncInventory } from '../composables/useSyncInventory'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
@@ -249,6 +255,8 @@ type HelpTopic =
   | 'crossPlatform'
   | 'icons'
 const helpTopic = ref<HelpTopic>('workspace')
+// Navide Cloud page sub-tab; every deep link into the page targets Sync.
+const cloudSubtab = ref<CloudSubtab>('sync')
 // Topic order is the reading order: what the main window is made of, then the
 // agents in it, then how they talk, then the code surfaces, then settings.
 const helpTopicComponents: Record<HelpTopic, Component> = {
@@ -281,12 +289,14 @@ watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.va
 // action), react to the prop changing too.
 watch(() => props.initialTab, (tab) => {
   if (tab) activeTab.value = tab
+  if (tab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // A repeated request for the tab already named in initialTab does not change
 // the prop, so watch the counter too — otherwise pressing Cmd+K Cmd+S while
 // Settings sits on another tab does nothing at all.
 watch(() => props.tabRequest, () => {
   if (props.initialTab) activeTab.value = props.initialTab
+  if (props.initialTab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // Watching the prop is not enough on its own: re-issuing the same request (⌘K ⌘S
 // twice, with a manual tab switch in between) leaves initialTab unchanged, so the
@@ -301,6 +311,7 @@ defineExpose({
   // for one, which it used to do in prose and with nowhere to click.
   setSection: async (tab: Tab, section: string): Promise<void> => {
     activeTab.value = tab
+    if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'cliAgents') await openCliSection(section)
     await nextTick()
     requestAnimationFrame(() => {
@@ -1204,6 +1215,7 @@ async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void>
   if (item.tab === 'cliAgents') await openCliSection(item.section, settingsSearchQuery.value)
   if (item.tab === 'mcp' && item.mcpView) mView.value = item.mcpView
   if (item.tab === 'help' && item.helpTopic) helpTopic.value = item.helpTopic
+  if (item.tab === 'cross-device') cloudSubtab.value = 'sync'
   settingsSearchQuery.value = ''
   await nextTick()
   requestAnimationFrame(() => {
@@ -1759,6 +1771,9 @@ interface P2pLinkStatus {
  *  on screen rather than freezing on whatever the save call answered. */
 const P2P_POLL_MS = 3000
 const p2pStatus = ref<P2pLinkStatus | null>(null)
+// False from leaving the Navide Cloud page until the next status reply, so a
+// status read before the link dropped elsewhere never opens the cloud views.
+const p2pStatusFresh = ref(false)
 let p2pTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadP2pStatus(): Promise<void> {
@@ -1766,6 +1781,7 @@ async function loadP2pStatus(): Promise<void> {
     const resp = await props.backend.send<{ status: P2pLinkStatus }>('p2p.link.status', {})
     if (!resp.ok || !resp.payload?.status) return
     p2pStatus.value = resp.payload.status
+    p2pStatusFresh.value = true
   } catch { /* non-fatal — the status line keeps its last value */ }
 }
 
@@ -1813,6 +1829,26 @@ const policyDevices = computed<P2pPolicyDevice[]>(() => p2pPolicy.value?.devices
  * broken rather than unavailable.
  */
 const p2pLinkReady = computed(() => p2pState.value === 'connected')
+// The Navide Cloud page grows sub-tabs only while the Cloud link is up and
+// its server does share links. Otherwise — not connected, or connected to a
+// server without them — it is exactly the page it was before them: no bar,
+// no inventory, no share list; an old server is asked share.caps once (F7-2).
+const cloudLinkUp = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
+const shareProbe = useShareLinks(props.backend)
+const cloudSubtabsShown = computed(() => cloudLinkUp.value && shareProbe.supported.value)
+const cloudTabs = computed<CloudSubtab[]>(() =>
+  shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
+)
+watch(cloudLinkUp, (up) => {
+  if (up) {
+    void shareProbe.probe()
+  } else {
+    forgetSyncInventory()
+    shareProbe.reset()
+  }
+})
+// The inventory is module-wide; the next Settings window must not open on this one's.
+onBeforeUnmount(forgetSyncInventory)
 /** The socket's own words. "Not connected" is the half already on screen;
  *  which kind it is decides whether waiting is the right thing to do. */
 const p2pLinkError = computed(() =>
@@ -1965,17 +2001,21 @@ function policyDeviceLabel(deviceId: string): string {
   return known?.deviceName || deviceId
 }
 
-watch(activeTab, (tab) => {
+watch([activeTab, cloudSubtab], ([tab, sub]) => {
   if (p2pTimer) { clearInterval(p2pTimer); p2pTimer = null }
   // Follows the cards, not the page they used to be on: polling the link while
   // General is open would keep asking for something nobody is looking at, and
   // stop the moment somebody actually opened it.
+  if (tab !== 'cross-device') p2pStatusFresh.value = false
   if (tab !== 'cross-device') return
+  // The link is watched on every sub-tab, since it decides whether there are
+  // sub-tabs at all; the rules only on Sync, the one sub-tab that shows them.
+  const rules = sub === 'sync'
   void loadP2pStatus()
-  void loadP2pPolicy()
+  if (rules) void loadP2pPolicy()
   p2pTimer = setInterval(() => {
     void loadP2pStatus()
-    void loadP2pPolicy()
+    if (rules) void loadP2pPolicy()
   }, P2P_POLL_MS)
 }, { immediate: true })
 
@@ -3851,8 +3891,15 @@ watch(activeTab, (tab) => {
             <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
             {{ $t('settings.nav.crossDevice') }}
           </h1>
-          <SyncSettings :backend="props.backend" />
-          <SettingsSection :label="$t('settings.p2p.title')">
+          <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
+          <template #sync>
+          <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
+          <CloudInventorySection
+            v-if="activeTab === 'cross-device' && cloudSubtabsShown"
+            v-show="cloudSubtab === 'sync'"
+            :backend="props.backend"
+          />
+          <SettingsSection v-show="cloudSubtab === 'sync'" :label="$t('settings.p2p.title')">
             <SettingsCard>
               <div class="s-fullrow" data-settings-section="general-p2p">
                 <p class="ap-hint">{{ $t('settings.p2p.hint') }}</p>
@@ -4024,6 +4071,14 @@ watch(activeTab, (tab) => {
               </div>
             </SettingsCard>
           </SettingsSection>
+          </template>
+          <template #share>
+            <ShareLinksPane :backend="props.backend" :source="shareProbe" />
+          </template>
+          <template #devices>
+            <CloudDevicesSection :backend="props.backend" />
+          </template>
+          </CloudSubtabs>
         </div>
 
         <!-- ══ UPDATES TAB ══ -->

@@ -38,7 +38,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape as html_escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -8569,6 +8569,155 @@ def review_plan(rel_path: str) -> str:
         f"telling me here. Then summarise for me what you left on it, and say "
         f"whether the plan is ready to approve as it stands."
     )
+
+
+# ── Share links (requires Navide Cloud) ────────────────────────────────────
+# Registered for everyone — the server has no conditional tools — so each one
+# first checks the link and, without Navide Cloud, answers one sentence and
+# does nothing: no request, no vault, no log line, no announcement. These are
+# registered last so every existing tool keeps its place in the list.
+
+_SHARE_NEEDS_CLOUD = "Navide Cloud is not connected on this machine, so share links are not available; nothing was shared."
+_SHARE_UNSUPPORTED = "The Navide Cloud server this machine is connected to does not offer share links; nothing was shared."
+
+
+def _share_cloud_ready() -> bool:
+    from agent_team_backend import server_link
+
+    return server_link.link_state() == server_link.STATE_CONNECTED
+
+
+async def _share_run(call: Callable[[Any], Awaitable[dict]]) -> dict:
+    from agent_team_backend import share_links, sync_keyring
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        return {"ok": True, **await call(share_links.ServerLinksClient())}
+    except share_links.ShareRefused as err:
+        return {"ok": False, "error": str(err), "reason": err.code}
+    except share_links.ShareRemoteError as err:
+        if err.code in share_links.UNAVAILABLE_CODES:
+            return {"ok": False, "error": _SHARE_UNSUPPORTED, "code": "UNSUPPORTED"}
+        return {"ok": False, "error": str(err), "code": err.code}
+    except sync_keyring.KeyringError as err:
+        return {"ok": False, "error": f"this machine cannot open the account key: {err}", "code": "NO_SYNC_KEY"}
+    except share_links.ShareError as err:
+        return {"ok": False, "error": str(err), "code": "SHARE_FAILED"}
+
+
+@server.tool()
+async def share_create(
+    path: str,
+    ctx: Context,
+    kind: str = "plan",
+    ttl_days: int = 7,
+    require_login: bool = False,
+    send_to_chat: bool = False,
+) -> dict:
+    """Publish a plan or report as an encrypted, read-only share link (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected on this machine; otherwise it
+    answers that and does nothing. `path` is the absolute path of a plan
+    (.agent-team/plans/*.html) or report; key, credential and memory files are
+    refused with the reason. Secrets in the content are masked before upload
+    and the answer lists where (line and kind, never the value). The link is
+    marked as created by your pane and the user is told it exists.
+    send_to_chat=true also posts the link to the direct-message chat bound to
+    your pane, and to nothing else (no group, no other chat); only set it when
+    the user asked for that. Returns
+    {ok, linkId, url, expiresAt, masked} — the url carries the only key, so
+    hand it only to the user — or {ok: false, error, reason?}.
+    """
+    from agent_team_backend import agent_messaging, app, share_links
+    from agent_team_backend.ipc import make_event
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    me = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    pane = getattr(me, "name", "") or ""
+    agent = getattr(me, "agent_key", "") or ""
+
+    async def call(client: Any) -> dict:
+        created = await share_links.create_share(
+            client,
+            path,
+            kind,
+            ttl_seconds=ttl_days * 86400,
+            require_login=require_login,
+            created_by="agent",
+            pane=pane,
+            agent=agent,
+            pane_id=caller.pane_id,
+        )
+        masked = [{"line": f.line, "category": f.category, "action": f.action} for f in created.findings]
+        await app.broadcast(
+            make_event(
+                "share.created",
+                {
+                    "linkId": created.link_id,
+                    "expiresAt": created.expires_at,
+                    "createdBy": "agent",
+                    "pane": pane,
+                    "agent": agent,
+                    "masked": masked,
+                },
+            )
+        )
+        if send_to_chat:
+            await share_links.announce_to_chat(created, created_by="agent", pane_id=caller.pane_id)
+        return {"linkId": created.link_id, "url": created.url, "expiresAt": created.expires_at, "masked": masked}
+
+    return await _share_run(call)
+
+
+@server.tool()
+async def share_list(ctx: Context) -> dict:
+    """List this account's share links (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected; otherwise it answers that and
+    does nothing. Each link: {linkId, kind, title, createdBy, pane, active,
+    expiresAt, openCount, lastOpenedAt, ...}. No URL or key is listed.
+    """
+    from agent_team_backend import share_links
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+
+    async def call(client: Any) -> dict:
+        return {"links": await share_links.list_links(client)}
+
+    return await _share_run(call)
+
+
+@server.tool()
+async def share_revoke(link_id: str, ctx: Context) -> dict:
+    """Revoke one share link of this account (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected; otherwise it answers that and
+    does nothing. The link stops opening at once and its stored copy is deleted.
+    """
+    from agent_team_backend import share_links
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+
+    async def call(client: Any) -> dict:
+        return await share_links.revoke(client, link_id)
+
+    return await _share_run(call)
 
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────

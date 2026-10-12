@@ -21,6 +21,7 @@ import { workspaceDisplayName } from './workspaceAlias'
 import PlanReviewToolbar from './retained/PlanReviewToolbar.vue'
 import PlanMarkdownBody from './retained/PlanMarkdownBody.vue'
 import HtmlFilePreview from './HtmlFilePreview.vue'
+import PlanShareButton from './PlanShareButton.vue'
 import NotificationHost from './retained/NotificationHost.vue'
 import { resolvePlanStore, type SectionBody } from './retained/planStore'
 import { htmlPlanAwaitingUser, parseHtmlPlanMeta } from './retained/usePlanHtml'
@@ -147,6 +148,37 @@ const contextMenu = ref<{ x: number; y: number; relPath: string } | null>(null)
 const renameInput = ref<HTMLInputElement | null>(null)
 const renameTarget = ref<string | null>(null)
 const renameValue = ref('')
+// The share entry exists only after the Host confirmed share links work for
+// this plan (Cloud linked, server supports links); any failure keeps the
+// toolbar exactly as it is without the feature.
+const shareAvailable = ref(false)
+let shareCapsToken = 0
+watch(() => selected.value?.rel_path, (relPath) => {
+  shareAvailable.value = false
+  void refreshShareCaps(relPath)
+})
+/** Ask the Host again whether share links work; the answer for a plan that
+ *  is no longer open is dropped. The Cloud link has no event a plugin can
+ *  follow, so this also runs when the window regains focus (back from
+ *  linking in the account window) and before the share dialog opens. */
+async function refreshShareCaps(relPath = selected.value?.rel_path): Promise<boolean> {
+  const token = ++shareCapsToken
+  if (!relPath || isLeftContribution()) return false
+  let available = false
+  try {
+    const caps = await callCapability('ui', 'shareCaps', {}) as { ok?: unknown } | null
+    available = caps?.ok === true
+  } catch {
+    // Unavailable: leave the toolbar unchanged.
+  }
+  if (token === shareCapsToken) shareAvailable.value = available
+  return token === shareCapsToken && available
+}
+function onShareWindowFocus(): void {
+  void refreshShareCaps()
+}
+window.addEventListener('focus', onShareWindowFocus)
+onUnmounted(() => window.removeEventListener('focus', onShareWindowFocus))
 let stopTarget: (() => void) | null = null
 let plansSubscription: ReturnType<typeof plansBackend.subscribe> | null = null
 /** One saved document produces several plans.changed events and a file storm
@@ -1635,7 +1667,11 @@ onUnmounted(() => {
             @scroll-to-anchor="scrollToAnchor"
             @preview-snapshot="void previewSnapshot($event)"
             @deleted="void onToolbarDeleted($event)"
-          />
+          >
+            <template v-if="shareAvailable" #actions>
+              <PlanShareButton :rel-path="selected.rel_path" :before-open="refreshShareCaps" />
+            </template>
+          </PlanReviewToolbar>
           <div v-if="snapshotPreview" class="plan-snapshot-banner">
             <span class="plan-snapshot-label">{{ snapshotPreview.label }}</span>
             <span class="plan-snapshot-note">{{ t('pane.plans.snapshot-readonly') }}</span>

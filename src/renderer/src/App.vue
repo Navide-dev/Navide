@@ -334,6 +334,7 @@ import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
 import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
+import { useShareNotices } from './composables/useShareNotices'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
@@ -14338,6 +14339,8 @@ backend.on('scheduler.job_disabled', (raw) => {
 // evolve.notice announcements. The buttons on those announcements reuse the
 // existing pane actions.
 const evolve = useEvolve(backend)
+// Share-link created/opened events become announcements (none without Navide Cloud).
+useShareNotices(backend)
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId

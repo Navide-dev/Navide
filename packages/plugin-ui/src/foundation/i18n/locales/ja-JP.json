@@ -1144,6 +1144,92 @@
     "file-history-blame": "ファイル履歴 + blame",
     "open-diff-in-editor": "差分をエディターで開く"
   },
+  "share": {
+    "notice": {
+      "created-user": "共有リンクを作成しました（{id}）",
+      "created-agent": "{pane} ペインが共有リンクを作成しました（{id}）",
+      "masked": "アップロード前に機密らしき値を {count} か所マスクしました",
+      "opened-first": "共有リンク（{id}）が開かれました",
+      "opened-new-viewer": "共有リンク（{id}）が新しい閲覧者に開かれました",
+      "open-count": "これまでに {count} 回開かれました",
+      "feedback-approved": "スマートフォンから承認：{title}",
+      "feedback-noted": "スマートフォンからレビューメモ：{title}",
+      "feedback-already": "スマートフォンからの承認を記録（段階は変更なし）：{title}",
+      "feedback-rejected": "スマートフォンからのフィードバックは適用されませんでした：{title}",
+      "reason-content-changed": "共有後に内容が変更されました。リンクを開き直して再送信してください。",
+      "reason-other": "理由：{reason}"
+    }
+  },
+  "plans": {
+    "share": {
+      "button": "共有リンク",
+      "title": "読み取り専用リンクを共有",
+      "expiry": "有効期限",
+      "days": "{count} 日",
+      "require-login": "開くときにサインインを必須にする",
+      "send-to-chat": "チャットに送信",
+      "send-to-chat-note": "リンクには復号キーが含まれ、そのチャットサービス（例：Telegram）を経由して送信されます。",
+    "send-to-chat-direct-only": "連携済みのダイレクトメッセージのチャットにのみ送信されます。",
+      "create": "リンクを作成",
+      "creating": "作成中…",
+      "copy": "コピー",
+      "copied": "リンクをコピーしました",
+      "close": "閉じる",
+      "expires-at": "有効期限：{date}",
+      "masked-title": "共有前にマスクしました",
+      "masked-line": "{line} 行目：{category} の疑い、マスク済み",
+      "warned-line": "{line} 行目：{category} の疑い、マスクなし、確認してください",
+      "refused": "この計画は共有できません：{reason}",
+      "failed": "リンクを作成できませんでした（{code}）：{message}",
+    "chat-target": "チャット",
+    "chat-pick": "チャットを選択",
+    "chat-none": "連携済みのダイレクトメッセージのチャットがありません。",
+    "chat-loading": "チャットを読み込み中…",
+    "chat-targets-failed": "チャットを読み込めませんでした（{code}）：{message}",
+    "reason": {
+      "memory": "エージェントのメモリファイル（CLAUDE.md、AGENTS.md など）は共有されません。",
+      "denied_name": "鍵・認証情報・トークンのファイル名に見えるため共有されません。",
+      "system": "システム、認証情報、Navide のデータフォルダ内のファイルは共有されません。",
+      "hard_link": "複数の名前を持つファイル（ハードリンク）は共有されません。",
+      "missing": "ファイルが存在しません。",
+      "not_file": "共有できるのは単一のファイルだけです。",
+      "not_absolute": "共有できるのは絶対パスだけです。",
+      "parent_ref": "「..」を含むパスは共有できません。",
+      "changed": "確認中にファイルが変更されたか、読めなくなりました。",
+      "whitespace": "パスの前後に空白があります。ファイルを正確に指定してください。",
+      "unknown_kind": "この種類のファイルは共有できません。",
+      "kind_source": "計画として共有できるのは .agent-team/plans/ 内のファイルだけです。",
+      "too_large": "32 MiB を超えるファイルは共有できません。",
+      "unreadable": "ファイルを UTF-8 テキストとして読めませんでした。",
+      "ttl": "リンクの有効期限は 15 分から 30 日です。"
+    },
+    "category": {
+      "api-key": "API キー",
+      "github-token": "GitHub トークン",
+      "slack-token": "Slack トークン",
+      "slack-app-token": "Slack アプリトークン",
+      "aws-access-key": "AWS アクセスキー",
+      "jwt": "JWT",
+      "bot-token": "ボットトークン",
+      "telegram-bot-token": "Telegram ボットトークン",
+      "discord-bot-token": "Discord ボットトークン",
+      "authorization-header": "Authorization ヘッダー",
+      "bearer-token": "Bearer トークン",
+      "credential-assignment": "認証情報",
+      "credential-flag": "認証情報フラグ",
+      "url-credentials": "URL 内の認証情報",
+      "google-api-key": "Google API キー",
+      "gitlab-token": "GitLab トークン",
+      "stripe-key": "Stripe キー",
+      "npm-token": "npm トークン",
+      "huggingface-token": "Hugging Face トークン",
+      "sendgrid-key": "SendGrid キー",
+      "pypi-token": "PyPI トークン",
+      "private-key": "秘密鍵",
+      "possible-secret": "機密情報"
+    }
+    }
+  },
   "settings": {
     "cliExtensions": {
       "tabInstalled": "インストール済みの CLI 拡張",
@@ -6582,6 +6668,70 @@
       "enabled-hint": "無効にすると、Navide はどこにも配布しません。直接読み込む CLI からは引き続き利用できます。",
       "native-conflict-hint": "同じ名前の CLI 固有のスキルがあり、その CLI ではそちらが優先されます。"
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud のセクション",
+        "sync": "同期",
+        "share": "共有",
+        "devices": "デバイス"
+      },
+      "inventory": {
+        "title": "このマシンとクラウド",
+        "hint": "同期する各項目が、このマシンとクラウドにそれぞれ何件あるか。",
+        "counts": "このマシン {local} · クラウド {cloud} · 一致 {inSync} · 競合 {conflict}",
+        "last-write": "最終書き込み：{device} · {when}",
+        "no-writes": "まだクラウドに書き込まれていません",
+        "sync-off": "同期オフ",
+        "notice-no-key": "このデバイスはアカウントの同期キーをまだ持っていないため、クラウドのデータを開けません。キーを持つデバイスとペアリングすると、ここに件数が表示されます。",
+        "notice-not-connected": "Navide Cloud にサインインすると、このマシンとクラウドを比較できます。",
+        "notice-error": "クラウドを読み込めませんでした。",
+        "row-error": "この項目のクラウドデータを読み込めませんでした。",
+        "row-no-key": "このデバイスにはまだ同期キーがありません。",
+        "row-not-connected": "未接続です。",
+        "refresh": "更新"
+      },
+      "devices": {
+        "title": "クラウドに書き込んだデバイス",
+        "hint": "このアカウントにレコードを書き込んだことのあるすべてのデバイス。",
+        "none": "まだどのデバイスもクラウドに書き込んでいません。",
+        "partial": "一部の項目を読み込めなかったため、この一覧は不完全な可能性があります。",
+        "last-write": "最終書き込み {when}",
+        "last-seen": "最終オンライン {when}",
+        "refresh": "更新"
+      },
+      "share": {
+        "title": "共有リンク",
+        "hint": "このマシンで暗号化した、プランやレポートの読み取り専用リンク。鍵はリンクの中にだけあり、サーバーは開けない暗号文だけを保存します。",
+        "col-item": "項目",
+        "col-creator": "作成者",
+        "col-created": "作成日時",
+        "col-expires": "有効期限",
+        "col-opens": "開封回数",
+        "col-last-open": "最終開封",
+        "creator-user": "あなた",
+        "creator-agent": "エージェント · {pane}",
+        "empty": "共有リンクはまだありません。",
+        "unavailable": "このバージョンではまだ共有リンクを使えません。",
+        "error": "共有リンクを読み込めませんでした。",
+        "copy": "リンクをコピー",
+        "extend": "7 日延長",
+        "rekey": "新しいリンク",
+        "revoke": "取り消す",
+        "revoke-confirm": "今すぐ取り消す",
+        "cancel": "キャンセル",
+        "revoke-all": "すべて取り消す",
+        "revoke-all-confirm": "すべてのリンクを取り消す",
+        "copied": "リンクをコピーしました。",
+        "extended": "7 日延長しました。",
+        "rekeyed": "新しいリンクをコピーしました。古いリンクは開けなくなりました。",
+        "revoked": "リンクを取り消しました。",
+        "revoked-all": "すべてのリンクを取り消しました。",
+        "action-failed": "操作できませんでした（{code}）。",
+        "rekey-confirm": "今すぐリンクを置き換える",
+        "rekeyed-old-alive": "新しいリンクをコピーしました。古いリンクの無効化はサーバーで確認できませんでした。開かれては困る場合は取り消してください。",
+        "refresh": "更新"
+      }
+    },
     "sync": {
       "title": "同期",
       "hint": "項目を有効にすると、このアカウントでログインしているすべてのデバイスで同じ設定を保てます。データはこのマシンで暗号化され、サーバーには復号鍵のない暗号文が保存されます。",
@@ -9758,6 +9908,10 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "共有リンクの開封通知",
+      "desc": "このコンピューターで作成した共有リンクが新しいデバイスで開かれたとき、バインド済みのチャットに通知します（リンクの URL は送信しません）。Navide Cloud が必要です。"
+    },
     "nav": "チャット連携",
     "platform": {
       "telegram": "Telegram",

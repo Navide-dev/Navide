@@ -485,6 +485,7 @@ class Mirror:
         box = self._outbox(loc)
         if box is None or not text.strip():
             return
+        text = self.m._for_chat(loc, text)
         box.post("", owner, chunks=chunk_for(loc.platform, redact.redact_text(text)))
 
     async def send(self, loc: Location, text: str, *, owner: str = "",
@@ -494,7 +495,7 @@ class Mirror:
         box = self._outbox(loc)
         if box is None:
             raise RuntimeError(f"{loc.platform} is not connected")
-        return await box.submit(redact.redact_text(text), owner, buttons)
+        return await box.submit(redact.redact_text(self.m._for_chat(loc, text)), owner, buttons)
 
     def label(self, route: Route, text: str) -> str:
         return f"{child_tag(route.child)} {text}" if route.child else text

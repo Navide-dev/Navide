@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, quick_menu, redact, relay, report
+from . import media, pdf, quick_menu, redact, relay, report, share_cmds
 from .. import prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -293,6 +293,7 @@ class ChannelManager:
         self._managed: dict[str, _ManagedRequest] = {}  # request_id -> open t.me/newbot request
         self.relay = relay.RelayTable(clock=clock, on_expired=self._relay_expired)
         self.quick = quick_menu.QuickMenus(clock=clock)
+        self.share_buttons = share_cmds.RevokeButtons(clock=clock)
         self._debounce: dict[tuple[str, str], _Debounce] = {}
         self._media_pruned_at: float | None = None
         # One serial worker per location: order kept within a chat, chats never block each other.
@@ -1231,6 +1232,7 @@ class ChannelManager:
         whole text when ``body`` is its summary. A reply past ``LONG_REPLY_MAX_CHUNKS``
         chunks, or a summary that left text out, goes as a preview with the whole text
         attached as a file, where the platform takes files."""
+        body, full = self._for_chat(pending.loc, body), self._for_chat(pending.loc, full)
         raw = body
         body = result_text(pending.source, body or MSG_EMPTY_REPLY, pending.child) if pending.source else body
         chunks = chunk_for(pending.loc.platform, redact.redact_text(body)) or [MSG_EMPTY_REPLY]
@@ -1257,7 +1259,7 @@ class ChannelManager:
             try:
                 ids = await self.mirror.send(pending.loc, chunk)
             except Exception as exc:  # noqa: BLE001
-                log.warning("channels: reply to %s failed: %s", pending.loc.key(), exc)
+                log.warning("channels: reply to %s failed: %s", pending.loc.key(), share_cmds.mask_links(str(exc)))
                 return False
             if pending.owner:
                 self.mirror.owners.remember(pending.loc.key(), ids, pending.owner)
@@ -1374,10 +1376,15 @@ class ChannelManager:
         if msg.callback_data.startswith(quick_menu.CALLBACK_PREFIX):
             await self._quick_press(msg)
             return
+        if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
+            return
         if msg.callback_data and not msg.text:
             return  # a button press with the relay off, or not ours
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
             await self._quick_menu(msg)
+            return
+        share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
+        if share_cmd is not None and await self._share_command(msg, *share_cmd):
             return
         binding = self._binding_for(msg)
         if binding is None:
@@ -1724,8 +1731,8 @@ class ChannelManager:
                         fd = os.open(result.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0))
                         with os.fdopen(fd, "rb") as fh:
                             # The adapter reads the PDF before the context removes it.
-                            return await adapter.send_file(loc, fh, f"{path.stem}.pdf", caption=report.caption(
-                                card.sent_as("pdf", result.size, result.pages), lang)), card.title
+                            return await adapter.send_file(loc, fh, f"{path.stem}.pdf", caption=self._caption_for(
+                                loc, report.caption(card.sent_as("pdf", result.size, result.pages), lang))), card.title
             opened.fh.seek(0)
             card = card.sent_as(kind, opened.size, failure=failure)
         else:
@@ -1735,7 +1742,8 @@ class ChannelManager:
                                   limit=media.human_size(limit)))
             return [], card.title
         # The adapter reads the file already open: a swap after the check cannot change it.
-        return await adapter.send_file(loc, opened.fh, path.name, caption=report.caption(card, lang)), card.title
+        return await adapter.send_file(loc, opened.fh, path.name,
+                                       caption=self._caption_for(loc, report.caption(card, lang))), card.title
 
     def _quote_trusted(self, msg: InboundMessage) -> bool:
         """The replied-to message may be quoted into the pane (see ``_with_reply_quote``)."""
@@ -1890,6 +1898,194 @@ class ChannelManager:
                 log.warning("channels: sending the quick menu on %s failed: %s", msg.platform, exc2)
                 await self._reply(msg, quick_menu.text(menu.lang, "send_failed",
                                                        error=redact.redact_text(str(exc2))))
+
+    # --- share links -------------------------------------------------------------
+
+    def _shares_reachable(self, msg: InboundMessage) -> bool:
+        """Only a bound chat on a machine linked to Navide Cloud handles /shares and
+        /revoke; anywhere else they travel on exactly as they did before."""
+        from .. import server_link
+
+        return server_link.link_state() == server_link.STATE_CONNECTED and self._binding_for(msg) is not None
+
+    async def _share_call(self, msg: InboundMessage, lang: str, call: Callable[[Any], Awaitable[Any]]) -> tuple[str, Any]:
+        """``("ok", result)``; ``("unavailable", None)`` when the server does no share links;
+        ``("failed", None)`` once the chat has been told why."""
+        from .. import share_links, sync_keyring
+
+        try:
+            return "ok", await call(share_links.ServerLinksClient())
+        except share_links.ShareRemoteError as exc:
+            if exc.code in share_links.UNAVAILABLE_CODES:
+                return "unavailable", None
+            error: Exception = exc
+        except (share_links.ShareError, sync_keyring.KeyringError) as exc:
+            error = exc
+        log.info("channels: a share link call from %s failed: %s", msg.platform, error)
+        await self._reply(msg, quick_menu.text(lang, "shares_failed", error=redact.redact_text(str(error))))
+        return "failed", None
+
+    async def _share_command(self, msg: InboundMessage, command: str, arg: str) -> bool:
+        """``/shares`` or ``/revoke``; False leaves the message to the usual pipeline."""
+        from .. import share_links
+
+        if not self._shares_reachable(msg):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        outcome, links = await self._share_call(msg, lang, share_links.list_links)
+        if outcome != "ok":
+            return outcome == "failed"
+        live = share_cmds.active(links)
+        if command == "shares":
+            await self._share_list(msg, lang, live[:share_cmds.MAX_LISTED])
+            return True
+        if not share_cmds.valid_prefix(arg):
+            await self._reply(msg, quick_menu.text(lang, "revoke_usage"))
+            return True
+        matches = [link for link in live if str(link.get("linkId") or "").startswith(arg)]
+        if len(matches) != 1:
+            key = "revoke_none" if not matches else "revoke_ambiguous"
+            # Echo no more of the id than a link is ever named by: the full id may be typed in a group.
+            await self._reply(msg, quick_menu.text(lang, key, prefix=arg[:share_cmds.SHORT_LEN], count=len(matches)))
+            return True
+        return await self._share_revoke(msg, lang, matches[0])
+
+    async def _share_list(self, msg: InboundMessage, lang: str, links: list[dict[str, Any]]) -> None:
+        if not links:
+            await self._reply(msg, quick_menu.text(lang, "shares_empty"))
+            return
+        body = redact.redact_text(share_cmds.render_list(lang, links))
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None or not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
+            await self._reply(msg, body)  # /revoke still works without buttons
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        rows = self.share_buttons.rows(msg.platform, msg.location_key(), lang, links)
+        try:
+            await adapter.send_menu(loc, body, rows)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: sending the share list on %s failed: %s", msg.platform, exc)
+            await self._reply(msg, body)
+
+    async def _share_revoke(self, msg: InboundMessage, lang: str, link: dict[str, Any]) -> bool:
+        from .. import share_links
+
+        link_id = str(link["linkId"])
+        outcome, _ = await self._share_call(msg, lang, lambda client: share_links.revoke(client, link_id))
+        if outcome == "ok":
+            await self._reply(msg, redact.redact_text(quick_menu.text(
+                lang, "revoked", title=share_cmds.title(lang, link), short=share_cmds.short(link))))
+        return outcome != "unavailable"
+
+    async def _share_press(self, msg: InboundMessage) -> bool:
+        """A revoke button; False leaves the press to be dropped as before."""
+        from .. import share_links
+
+        if not self._shares_reachable(msg):
+            return False
+        lang = prompt_skills.language(await self._ui_settings())
+        token = share_cmds.parse_callback(msg.callback_data)
+        link_id = self.share_buttons.press(token, msg.location_key()) if token else None
+        if link_id is None:
+            await self._reply(msg, quick_menu.text(lang, "shares_expired"))
+            return True
+        # Named from a fresh list: the title shown is the link's current one.
+        outcome, links = await self._share_call(msg, lang, share_links.list_links)
+        if outcome != "ok":
+            return outcome == "failed"
+        link = next((row for row in links if row.get("linkId") == link_id), {"linkId": link_id})
+        return await self._share_revoke(msg, lang, link)
+
+    def _chat_kind(self, b: Binding) -> str:
+        return self._kind_at(b.location())
+
+    def _kind_at(self, loc: Location) -> str:
+        """"direct" or "group" as the chat was remembered; "" when never seen."""
+        adapter = self._adapters.get((loc.platform, loc.account))
+        if adapter is None:
+            return ""
+        return next((str(c["kind"]) for c in self.store.chats(loc.platform, _bot_key(adapter))
+                     if c["chat_id"] == loc.chat_id), "")
+
+    def _for_chat(self, loc: Location, text: str) -> str:
+        """``text`` as ``loc`` may see it: a share link whole only in a known direct chat,
+        cut to its first characters (key dropped) anywhere else, unknown chats included."""
+        masked = share_cmds.mask_links(text)
+        if masked == text or self._kind_at(loc) == "direct":
+            return text
+        return masked
+
+    def _caption_for(self, loc: Location, card: report.Caption) -> report.Caption:
+        return report.Caption(self._for_chat(loc, card.title), self._for_chat(loc, card.summary),
+                              self._for_chat(loc, card.info))
+
+    def _share_targets(self, pane_id: str, chat_id: str = "") -> list[Location]:
+        """Where a share notice goes: only ever a bound direct chat. The one the creator
+        picked (``chat_id``, a ``Location.key()``) when given, else the creating pane's;
+        nothing when that chat is not a bound direct chat or there is no pane."""
+        targets: dict[str, Location] = {}
+        for b in self.store.bindings():
+            key = b.location().key()
+            if (key == chat_id if chat_id else bool(pane_id) and b.pane_id == pane_id) \
+                    and self._chat_kind(b) == "direct":
+                targets.setdefault(key, b.location())
+        return list(targets.values())
+
+    def share_targets(self) -> dict[str, Any]:
+        """The chats a new link can be sent to (``channels.share_targets``): every bound
+        direct chat once, ``chatId`` being what ``notify_link_created`` takes back. Empty
+        without Navide Cloud, read from the link state alone."""
+        from .. import server_link
+
+        if server_link.link_state() != server_link.STATE_CONNECTED:
+            return {"ok": True, "chats": []}
+        chats: dict[str, dict[str, str]] = {}
+        for b in self.store.bindings():
+            if b.location().key() not in chats and self._chat_kind(b) == "direct":
+                chats[b.location().key()] = {"chatId": b.location().key(), "platform": b.platform,
+                                             "name": b.title or b.chat_id}
+        return {"ok": True, "chats": list(chats.values())}
+
+    async def _share_notice(self, loc: Location, text: str) -> None:
+        try:
+            await self.mirror.send(loc, text)
+        except Exception as exc:  # noqa: BLE001 — one chat failing must not stop the others
+            log.warning("channels: a share-link notice to %s failed: %s", loc.platform,
+                        share_cmds.mask_links(str(exc)))
+
+    async def notify_share_created(self, link: dict[str, Any]) -> None:
+        chat_id = str(link.get("chatId") or "")
+        targets = self._share_targets(str(link.get("paneId") or ""), chat_id)
+        if chat_id and not targets:
+            log.info("channels: the chat picked for share link %s is not a bound direct chat; not sent",
+                     share_cmds.short(link))
+        lang = prompt_skills.language(await self._ui_settings())
+        for loc in targets:
+            await self._share_notice(loc, share_cmds.created_text(lang, link))
+
+    async def notify_share_opened(self, event: dict[str, Any]) -> None:
+        """Only for a new viewer, only with the switch on, and only on the device that
+        created the link, so an account with several machines hears it once."""
+        from .. import server_link, share_links, sync_keyring
+
+        if not event.get("newViewer") or not self.store.share_open_notify():
+            return
+        me = server_link.local_device_id()
+        if not me:
+            return
+        try:
+            links = await share_links.list_links(share_links.ServerLinksClient())
+        except (share_links.ShareError, sync_keyring.KeyringError) as exc:
+            log.info("channels: listing share links for an opened notice failed: %s", exc)
+            return
+        link = next((row for row in links if row.get("linkId") == event.get("linkId")), None)
+        if link is None or link.get("deviceId") != me:
+            return
+        opens = event.get("openCount")
+        opens = opens if isinstance(opens, int) else int(link.get("openCount") or 0)
+        lang = prompt_skills.language(await self._ui_settings())
+        for loc in self._share_targets(str(link.get("paneId") or "")):
+            await self._share_notice(loc, share_cmds.opened_text(lang, link, opens))
 
     async def _watch_delivery(self, pane_id: str, msg_key: str, pending: _Pending) -> None:
         adapter = self._adapters.get((pending.loc.platform, pending.loc.account))
@@ -2129,7 +2325,7 @@ class ChannelManager:
             return
         text = f"{request.message_text}\n\n{note}" if request.message_text else note
         try:
-            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(text))
+            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(self._for_chat(request.loc, text)))
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
 

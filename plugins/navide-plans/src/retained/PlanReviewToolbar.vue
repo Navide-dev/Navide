@@ -1021,6 +1021,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
         :aria-label="t('pane.plans.review-approve')"
         @click="approve"
       >✓</button>
+      <slot name="actions" />
       <button
         class="prt-icon-btn prt-overflow-btn" data-test="review-notes-overflow"
         :class="{ 'prt-icon-btn--on': overflowOpen }"

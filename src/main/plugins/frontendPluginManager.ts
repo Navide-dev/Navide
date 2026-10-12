@@ -6152,6 +6152,10 @@ export class FrontendPluginManager {
       return { opened }
     }
 
+    if (plan.address === 'ui.shareCaps' || plan.address === 'ui.shareCreate' || plan.address === 'ui.shareChatTargets') {
+      return this.executeShareCapability(plan, plugin, workspacePath)
+    }
+
     if (plan.address === 'ui.openInEditor') {
       if (!workspacePath) throw new Error('editor capability requires a workspace')
       const path = typeof plan.args.path === 'string' ? plan.args.path : ''
@@ -6999,6 +7003,83 @@ export class FrontendPluginManager {
     this.aiSessions.delete(sessionId)
     this.setAiBindings(plugin, sessions, plugin.capabilityContext?.pendingStartBindings ?? new Map())
     if (clean && entry) this.clearAiTerminalPersistence(plugin, entry)
+  }
+
+  /** Share links for the Plans view. The backend's share.* error codes
+   *  (SHARE_REFUSED with a reason, NO_SYNC_KEY, NOT_CONFIGURED, server codes)
+   *  come back as values: a thrown error reaches the plugin collapsed into a
+   *  generic capability code. The plugin names a plan by its relative path;
+   *  the Host resolves it inside the plans root, as for ui.openPlansWindow. */
+  private async executeShareCapability(
+    plan: PublicCapabilityExecutionPlan,
+    plugin: RunningPlugin,
+    workspacePath: string | null | undefined
+  ): Promise<Record<string, unknown>> {
+    let type = 'share.caps'
+    let payload: Record<string, unknown> = {}
+    if (plan.address === 'ui.shareCreate') {
+      if (!workspacePath) throw new Error('share capability requires a workspace')
+      const path = typeof plan.args.path === 'string' ? plan.args.path : ''
+      if (!path || isAbsolute(path)) throw new Error('share path must be relative')
+      const root = resolve(resolvePlansRootPath(workspacePath))
+      const relativePath = relative(root, resolve(root, path))
+      if (!isAllowedPlanDocumentPath(relativePath, root)) {
+        throw new Error('share path is outside the plans directory')
+      }
+      // The document the check accepted, symlinks resolved: the backend
+      // must open that file, not re-resolve the string it was checked by.
+      const canonicalDoc = resolveWorkspaceRelativePath(root, relativePath.replace(/\\/g, '/'), false)
+      if (!canonicalDoc) throw new Error('share path is outside the plans directory')
+      type = 'share.create'
+      payload = {
+        path: canonicalDoc,
+        kind: 'plan',
+        ...(typeof plan.args.ttlSeconds === 'number' ? { ttlSeconds: plan.args.ttlSeconds } : {}),
+        ...(typeof plan.args.requireLogin === 'boolean' ? { requireLogin: plan.args.requireLogin } : {}),
+        ...(typeof plan.args.sendToChat === 'boolean' ? { sendToChat: plan.args.sendToChat } : {}),
+        ...(typeof plan.args.chatId === 'string' ? { chatId: plan.args.chatId } : {}),
+      }
+    }
+    if (plan.address === 'ui.shareChatTargets') type = 'channels.share_targets'
+    const client = this.ensureBackend()
+    if (!client) return { ok: false, code: 'BACKEND_UNAVAILABLE', message: 'backend not connected' }
+    const response = await client.send(type, payload, 60_000, {
+      beforeDispatch: () => this.publicPlanCanDispatch(plan, plugin),
+    })
+    if (!response.ok) {
+      const reason = response.error?.details?.reason
+      return {
+        ok: false,
+        code: response.error?.code ?? 'BACKEND_ERROR',
+        message: response.error?.message ?? '',
+        ...(typeof reason === 'string' ? { reason } : {}),
+      }
+    }
+    if (type === 'share.caps') return { ok: true }
+    if (type === 'channels.share_targets') {
+      const chats = toPayload(response.payload).chats
+      return {
+        ok: true,
+        chats: Array.isArray(chats)
+          ? chats.flatMap((chat) => {
+              const { chatId, platform, name } = toPayload(chat)
+              return typeof chatId === 'string' && typeof platform === 'string' && typeof name === 'string'
+                ? [{ chatId, platform, name }]
+                : []
+            })
+          : [],
+      }
+    }
+    const created = toPayload(response.payload)
+    return {
+      ok: true,
+      link: {
+        linkId: created.linkId,
+        url: created.url,
+        expiresAt: created.expiresAt,
+        masked: Array.isArray(created.masked) ? created.masked : [],
+      },
+    }
   }
 
   private async executeAiCliCapability(

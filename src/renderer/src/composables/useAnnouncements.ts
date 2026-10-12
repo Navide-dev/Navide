@@ -24,7 +24,7 @@ import { convenienceText } from '../lib/convenienceText'
  * popover read the same feed without prop drilling.
  */
 
-export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'convenience'
+export type AnnouncementKind = 'release' | 'update' | 'quota' | 'scheduler' | 'evolve' | 'share' | 'convenience'
 /** The button an update row offers, when its status affords one. */
 export type AnnouncementAction = 'download' | 'install'
 
@@ -469,6 +469,66 @@ function noteEvolveNotice(notice: EvolveNotice, at: number = Date.now()): void {
   const id = evolveAnnouncementId(notice, at)
   if (evolveNotices.value.some((n) => evolveAnnouncementId(n.notice, n.at) === id)) return
   evolveNotices.value = [{ notice, at }, ...evolveNotices.value].slice(0, MAX_EVOLVE_NOTICES)
+}
+
+/** A share-link event worth telling the user (see useShareNotices): a link
+ *  was created, or opened for the first time or by a new viewer. Never the
+ *  URL — the key in it belongs to whoever the creator gave it to. */
+export interface ShareNotice {
+  kind: 'created' | 'opened' | 'feedback'
+  linkId: string
+  createdBy?: 'user' | 'agent'
+  pane?: string
+  agent?: string
+  maskedTotal?: number
+  openCount?: number
+  newViewer?: boolean
+  /** Phone feedback: approved | noted | already | rejected, and why. */
+  title?: string
+  result?: string
+  reason?: string
+}
+
+/** Share notices this window heard, newest first. Not persisted: the Share
+ *  tab in Settings is the record. */
+const shareNotices = ref<{ notice: ShareNotice; at: number }[]>([])
+const MAX_SHARE_NOTICES = 50
+
+function shareItems(): Announcement[] {
+  const t = i18n.global.t
+  return shareNotices.value.map(({ notice, at }) => {
+    const short = notice.linkId.slice(0, 6)
+    const highlights: string[] = []
+    let title: string
+    if (notice.kind === 'created') {
+      title =
+        notice.createdBy === 'agent'
+          ? t('share.notice.created-agent', { pane: notice.pane || '—', id: short })
+          : t('share.notice.created-user', { id: short })
+      if (notice.maskedTotal) highlights.push(t('share.notice.masked', { count: notice.maskedTotal }))
+    } else if (notice.kind === 'feedback') {
+      const name = notice.title || short
+      const result = ['approved', 'noted', 'already', 'rejected'].includes(notice.result ?? '') ? notice.result : 'rejected'
+      title = t(`share.notice.feedback-${result}`, { title: name })
+      if (result === 'rejected') {
+        highlights.push(
+          notice.reason === 'content-changed'
+            ? t('share.notice.reason-content-changed')
+            : t('share.notice.reason-other', { reason: notice.reason || '—' })
+        )
+      }
+    } else {
+      title = notice.newViewer ? t('share.notice.opened-new-viewer', { id: short }) : t('share.notice.opened-first', { id: short })
+      highlights.push(t('share.notice.open-count', { count: notice.openCount ?? 0 }))
+    }
+    return { id: `share:${notice.kind}:${notice.linkId}:${at}`, kind: 'share' as const, title, highlights, createdAt: at, read: false }
+  })
+}
+
+/** Record a share notice. */
+function noteShareNotice(notice: ShareNotice, at: number = Date.now()): void {
+  if (!notice?.linkId) return
+  shareNotices.value = [{ notice, at }, ...shareNotices.value].slice(0, MAX_SHARE_NOTICES)
 }
 
 // ── Convenience features ────────────────────────────────────────────────────
@@ -933,6 +993,7 @@ const items: ComputedRef<Announcement[]> = computed(() => {
   const seen = new Set(readIds.value)
   const merged = [
     ...convenienceItems(seen),
+    ...shareItems(),
     ...evolveItems(),
     ...schedulerItems(),
     ...backendItems(),
@@ -1003,6 +1064,11 @@ export function __resetQuotaAnnouncementsForTest(): void {
   quotaReadMarks.value = new Map()
 }
 
+/** Test-only: forget every share notice (the module is a singleton). */
+export function __resetShareAnnouncementsForTest(): void {
+  shareNotices.value = []
+}
+
 /** Test-only: forget the convenience snapshot (the module is a singleton). */
 export function __resetConvenienceAnnouncementsForTest(): void {
   convenienceState.value = null
@@ -1025,6 +1091,7 @@ export function useAnnouncements() {
     noteBackendUpgrade,
     noteSchedulerDisabled,
     noteEvolveNotice,
+    noteShareNotice,
     noteConvenience,
     setConvenienceAgentLabel,
     noteQuotaIncident,

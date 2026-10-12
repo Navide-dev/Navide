@@ -341,6 +341,27 @@ describe('Issue 03/04 public Host planner', () => {
   })
 
   it.each([
+    ['shareCaps', {}],
+    ['shareCreate', { path: '.agent-team/plans/example.html' }],
+    ['shareChatTargets', {}],
+  ])('requires first-party eligibility for share links: ui.%s', (method, args) => {
+    const plansBinding = { ...binding, pluginId: 'navide.plans' }
+    const plansPolicy = manifestV2CapabilityPolicy({ system: ['ui'] })
+    const shareCall = call({ pluginId: 'navide.plans', ns: 'ui', method, args })
+
+    expect(planPublicCapabilityCall(shareCall, plansPolicy, context({
+      runtimeBinding: plansBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+      publisherEligible: true,
+    }))).toMatchObject({ kind: 'allow', plan: { address: `ui.${method}` } })
+    expect(planPublicCapabilityCall(shareCall, plansPolicy, context({
+      runtimeBinding: plansBinding,
+      userGrant: { packageVersion: '1.0.0', system: ['ui'] },
+      publisherEligible: false,
+    }))).toMatchObject({ kind: 'deny', response: { error: { code: 'CAPABILITY_DENIED' } } })
+  })
+
+  it.each([
     ['openPath', { path: 'run.command' }],
     ['openTempFile', { name: 'x.bat', content: 'calc' }],
     ['writeKeybindings', { content: '[]' }],

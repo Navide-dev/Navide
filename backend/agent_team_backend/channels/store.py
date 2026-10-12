@@ -17,6 +17,7 @@ from .base import Location
 
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
+KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -189,6 +190,13 @@ class ChannelStore:
 
     def set_global_enabled(self, enabled: bool) -> None:
         self._db.kv_set(KV_ENABLED, bool(enabled), now=int(time.time()))
+
+    def share_open_notify(self) -> bool:
+        """Tell the chat when a new device opens one of this machine's share links."""
+        return bool(self._db.kv_get(KV_SHARE_OPEN_NOTIFY, True))
+
+    def set_share_open_notify(self, enabled: bool) -> None:
+        self._db.kv_set(KV_SHARE_OPEN_NOTIFY, bool(enabled), now=int(time.time()))
 
     # --- accounts -------------------------------------------------------------
 
