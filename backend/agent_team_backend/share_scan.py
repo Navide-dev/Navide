@@ -305,13 +305,19 @@ def _json_islands(text: str) -> list[tuple[int, int]]:
 def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
     edits: list[tuple[int, int, str, str]] = []  # start, end, replacement, category
     islands = _json_islands(text)
+    starts = [a for a, _ in islands]
+
+    def in_island(i: int) -> bool:
+        k = bisect.bisect_right(starts, i) - 1
+        return k >= 0 and i < islands[k][1]
+
     for pattern, repl, category in HIGH_CONFIDENCE:
         json_form = _IN_JSON.get(id(pattern))
         if json_form is None or not islands:
             matches = list(pattern.finditer(text))
         else:
             # Outside the island the text form; inside it the JSON form.
-            matches = [m for m in pattern.finditer(text) if not any(a <= m.start() < b for a, b in islands)]
+            matches = [m for m in pattern.finditer(text) if not in_island(m.start())]
             for a, b in islands:
                 matches += json_form.finditer(text, a, b)
         for m in matches:

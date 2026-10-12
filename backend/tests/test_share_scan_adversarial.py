@@ -482,14 +482,16 @@ def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
 
 _ISLAND_RUNS = {
     "unclosed plan-meta openers": lambda n: '<script id="plan-meta">' * n,
+    "closed islands between hits": lambda n: '<script id="plan-meta">{}</script> password=hunter2x\n' * n,
 }
 
 
 @pytest.mark.parametrize("name", sorted(_ISLAND_RUNS))
 def test_many_plan_meta_islands_scan_in_linear_time(name: str) -> None:
-    """B8-1: finding the plan-meta islands rescanned to the end of the text
-    from every opener that never closes. Ten times the input must cost about
-    ten times the time."""
+    """B8-1/B8-2: finding the plan-meta islands rescanned to the end of the
+    text from every opener that never closes, and every hit outside an island
+    was checked against every island. Ten times the input must cost about ten
+    times the time."""
     make = _ISLAND_RUNS[name]
     small = _best_of(3, make(10_000))
     large = _best_of(3, make(100_000))
