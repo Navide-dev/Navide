@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch, type Ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import ViewPanel, { type LayoutMode } from './components/ViewPanel.vue'
 import TerminalPane from './components/TerminalPane.vue'
 import WindowControls from './components/WindowControls.vue'
@@ -292,7 +292,7 @@ import {
   type WelcomeFacts,
   type WelcomeTourDecision,
 } from './lib/welcomeTour'
-import { accountUsageFor, initUsage, readingIsCurrent, refreshUsage } from './composables/useUsage'
+import { accountUsageFor, formatRemaining, initUsage, isExhausted, readingIsCurrent, refreshUsage, remainingPercent } from './composables/useUsage'
 import { judgeReading, quotaSemanticsFor } from './lib/quotaFailover'
 import {
   LOOP_RESUME_SETTING_KEY,
@@ -345,6 +345,22 @@ import {
   type RestartOutcome,
 } from './composables/useQuotaFailover'
 import { accountLabel } from './lib/accountLabel'
+import {
+  DEFAULT_SLOT_ID,
+  FOLLOW_SWITCH_AGENT,
+  accountFollowSwitchEnabled,
+  effectiveAccount,
+  followSwitchRows,
+  quotaPeerRows,
+  quotaSwitchTargets,
+  runFollowSwitchBatch,
+  useAccountFollowSwitchFlag,
+  withFollowSwitch,
+  type FollowPaneInput,
+  type QuotaTarget,
+  type QuotaTargetInput,
+} from './lib/accountFollowSwitch'
+import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
@@ -378,6 +394,7 @@ const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInst
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
+const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
 const PipelineManagerModal = defineAsyncComponent(() => import('./components/PipelineManagerModal.vue'))
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
@@ -8171,6 +8188,9 @@ provide(cliAccountDirActionsKey, {
   },
 })
 
+// The account prompt's "switch back" calls the handler itself: its third
+// argument (restoreLive, the guard on the login the prompt named) would not
+// survive withFollowSwitch, which passes (agentKey, profileId) only.
 const cliAccountSwitch = createCliAccountSwitchHandler(cliProfilesApi, {
   confirm: (message, opts) => notifyRestore.confirm(message, opts),
   agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
@@ -8191,7 +8211,17 @@ const cliAccountSwitch = createCliAccountSwitchHandler(cliProfilesApi, {
     void onCliLoginSpawn(agentKey)
   }
 })
-provide(cliAccountSwitchKey, cliAccountSwitch)
+provide(
+  cliAccountSwitchKey,
+  // withFollowSwitch passes every call straight through while the follow
+  // flag is off; with it on, a successful claude switch then offers the
+  // pinned panes it left behind (offerFollowSwitch below).
+  withFollowSwitch(cliAccountSwitch, {
+    enabled: accountFollowSwitchEnabled,
+    outgoing: (agentKey) => cliProfilesApi.defaultProfileId(agentKey),
+    afterSwitch: (_agentKey, outgoingId, targetId) => offerFollowSwitch(outgoingId, targetId),
+  })
+)
 
 /** Restart this window's live panes of one agent after a forced account
  *  switch, so they pick up the new credentials. Login panes and dead
@@ -8230,6 +8260,167 @@ async function restartAgentPanes(agentKey: string): Promise<void> {
         { type: 'error' }
       )
   )
+}
+
+// ── Follow switch (agentTeam.accounts.followSwitch, default off) ────────────
+// A claude pane on an account's own config dir is out of an account switch's
+// reach: the switch swaps only the live credential. With the flag on, a
+// successful switch offers to reopen such panes on the new account, and an
+// out-of-quota pane offers to reopen on another one. Both go through the
+// ordinary resume rebuild with a different pin — the backend then runs the
+// pane in that account's dir, or on the live credential — so nothing here
+// reads, copies or writes a credential.
+const followSwitchFlag = useAccountFollowSwitchFlag()
+
+interface FollowDialogState {
+  mode: 'switch' | 'quota'
+  subject: string
+  rows: FollowDialogRow[]
+  targets?: QuotaTarget[]
+  settle: (choice: { paneIds: string[]; targetId: string | null } | null) => void
+}
+const followDialog = shallowRef<FollowDialogState | null>(null)
+
+function askFollowDialog(
+  state: Omit<FollowDialogState, 'settle'>,
+): Promise<{ paneIds: string[]; targetId: string | null } | null> {
+  // A new question replaces an open one; the open one ends unanswered.
+  followDialog.value?.settle(null)
+  return new Promise((resolve) => {
+    followDialog.value = {
+      ...state,
+      settle: (choice) => {
+        followDialog.value = null
+        resolve(choice)
+      },
+    }
+  })
+}
+
+/** Not free to be stopped and reopened: mid-turn or starting, parked on a
+ *  permission box or a question, or holding input someone is typing — the
+ *  same reading the quota-failover restart waits on (quotaPaneReadiness). A
+ *  pane that is gone, exited or errored is not "busy": its rebuild settles it. */
+function followPaneBusy(paneId: string): boolean {
+  const paneRef = paneRefs[paneId]
+  const status = paneRef?.displayStatus as string | undefined
+  if (paneBusyForRebuild(
+    status,
+    paneRef?.status as string | undefined,
+    paneRef?.startingAgeMs as number | null | undefined,
+  ) !== false) return true
+  if (status === 'awaiting') return true
+  const hold = messagingHoldKey(paneId)
+  if (hold === null || hold === 'gone') return false
+  if (hold === 'not-ready') return status === 'starting'
+  return true
+}
+
+function followPaneInput(p: ActivePane): FollowPaneInput {
+  return {
+    id: p.id,
+    name: p.messagingName || p.customName || p.autoName || p.agentLabel,
+    agentKey: p.agentKey,
+    realized: p.realized,
+    profileId: p.profileId,
+    usageLimited: p.usageLimitAt != null,
+    busy: followPaneBusy(p.id),
+    canRebuild: paneCanRebuild(p),
+  }
+}
+
+function followDirSignedIn(profileId: string): boolean {
+  return cliProfilesApi.accountDirFor(FOLLOW_SWITCH_AGENT, profileId)?.signedIn === true
+}
+
+function followAccountLabel(profileId: string): string {
+  return accountLabel(cliProfilesApi, FOLLOW_SWITCH_AGENT, profileId === DEFAULT_SLOT_ID ? null : profileId, i18n.global.t)
+}
+
+function followDialogRows(rows: ReturnType<typeof followSwitchRows>): FollowDialogRow[] {
+  return rows.map((r) => ({ ...r, accountLabel: followAccountLabel(r.profileId) }))
+}
+
+/** Reopen the chosen panes on `profileId`, resuming each conversation. Idle
+ *  panes go first; a pane mid-turn is waited for, never interrupted. */
+async function moveFollowPanes(ids: string[], profileId: string): Promise<void> {
+  pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
+  // A rebuild elsewhere (a restart batch, the user's Rebuild) replaces a pane
+  // id while this batch waits; the conversation is what stays, so a chosen
+  // pane is found again by its session.
+  const sessions = new Map<string, string>()
+  for (const id of ids) {
+    const pane = panes.value.find((p) => p.id === id)
+    const session = pane ? paneResumeSessionId(pane) : ''
+    if (session) sessions.set(id, session)
+  }
+  const failures = await runFollowSwitchBatch(ids, {
+    resolve: (id) => {
+      if (panes.value.some((p) => p.id === id)) return id
+      const session = sessions.get(id)
+      return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
+    },
+    isBusy: followPaneBusy,
+    rebuild: (id) => rebuildPaneViaResume(id, { profileId, suppressBusyToast: true }),
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  })
+  for (const f of failures) {
+    pipelineLog(`⚠ account-follow rebuild pane ${f.id.slice(0, 8)} failed: ${f.reason}`)
+  }
+  if (failures.length > 0) {
+    notifyRestore.toast(
+      i18n.global.t('account-follow.done-partial', { failed: failures.length, total: ids.length }),
+      { type: 'error' }
+    )
+  }
+}
+
+/** After a successful claude switch: list the pinned panes it did not reach
+ *  and move the ones the user ticks. Nothing to list, nothing shown. */
+async function offerFollowSwitch(outgoingId: string | null, targetId: string | null): Promise<void> {
+  const rows = followSwitchRows(panes.value.map(followPaneInput), {
+    targetId,
+    outgoingId,
+    dirSignedIn: followDirSignedIn,
+  })
+  if (rows.length === 0) return
+  const target = targetId ?? DEFAULT_SLOT_ID
+  const choice = await askFollowDialog({ mode: 'switch', subject: followAccountLabel(target), rows: followDialogRows(rows) })
+  if (!choice || choice.paneIds.length === 0) return
+  await moveFollowPanes(choice.paneIds, target)
+}
+
+/** The quota badge's "Switch account": pick an account this pane can land
+ *  on, optionally taking the other panes that ran out on the same account. */
+async function onQuotaSwitchAccount(paneId: string): Promise<void> {
+  if (!followSwitchFlag.value) return
+  const inputs = panes.value.map(followPaneInput)
+  const self = inputs.find((p) => p.id === paneId)
+  if (!self) return
+  const liveId = cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT)
+  const effective = (p: FollowPaneInput): string => effectiveAccount(p.profileId, liveId, followDirSignedIn)
+  const current = effective(self)
+  const accounts: QuotaTargetInput[] = [
+    null,
+    ...cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).map((p) => p.id),
+  ].map((id) => {
+    const snap = accountUsageFor(FOLLOW_SWITCH_AGENT, id)
+    const remaining = remainingPercent(snap)
+    return {
+      id,
+      label: followAccountLabel(id ?? DEFAULT_SLOT_ID),
+      remaining: remaining === null ? '' : formatRemaining(remaining),
+      exhausted: isExhausted(snap),
+    }
+  })
+  const choice = await askFollowDialog({
+    mode: 'quota',
+    subject: self.name,
+    rows: followDialogRows(quotaPeerRows(inputs, paneId, current, effective)),
+    targets: quotaSwitchTargets(accounts, { current, liveId, dirSignedIn: followDirSignedIn }),
+  })
+  if (!choice?.targetId) return
+  await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)
 }
 
 async function rebuildPanesViaResume(
@@ -20307,6 +20498,16 @@ function paneIsCommander(p: ActivePane): boolean {
     @fresh="settleRestoreScope('fresh')"
     @cancel="settleRestoreScope(null)"
   />
+  <AccountFollowSwitchDialog
+    v-if="followDialog"
+    :open="followDialog !== null"
+    :mode="followDialog.mode"
+    :subject="followDialog.subject"
+    :rows="followDialog.rows"
+    :targets="followDialog.targets"
+    @confirm="(ids: string[], target: string | null) => followDialog?.settle({ paneIds: ids, targetId: target })"
+    @cancel="followDialog?.settle(null)"
+  />
   <!-- First-boot loading overlay: covers the shell until the backend settles,
        then fades out. Brand mark only, so no i18n keys are needed. -->
   <Transition name="boot-fade">
@@ -20985,6 +21186,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :muted="isPaneMuted(p.id)"
           :usage-limit-until="p.usageLimitUntil"
           :usage-limit-hit="p.usageLimitAt != null"
+          :quota-switch-offered="followSwitchFlag && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p)"
           :continue-available="p.resumeContinueAvailable"
           :restoring="p.restoring"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
@@ -21001,6 +21203,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @loop-resume-now="resumeLoopNow(p.id)"
           @fix-login="fixPaneLogin(p.id)"
           @usage-limit-dismiss="dismissPaneUsageLimit(p.id)"
+          @quota-switch-account="onQuotaSwitchAccount(p.id)"
           @toggle-mute="togglePaneMuted(p.id)"
           @continue-resume="continueRestoredPane(p.id)"
           @user-resume="persistPaneStopped(p.id, false)"

@@ -56,6 +56,13 @@ _RIDES_WITH = {"skill-files": "skills"}
 _EXEC_BITS = os.name != "nt"
 
 
+#: Scopes no sync round ever runs, whatever their stored switch says and on
+#: any protocol: memory (retired) and credentials (10-09: credentials never
+#: sync). The block is here, in the sync layer; CredentialsScope itself and
+#: the credential vault are left exactly as they are.
+NEVER_SYNCED = frozenset(sync_approvals.RETIRED_SCOPES | {"credentials"})
+
+
 def scope_enabled(scope: str) -> bool:
     """Whether a sync round runs *scope*. Never for a scope sync no longer
     offers (``sync_approvals.RETIRED_SCOPES``: memory), whatever its stored
@@ -63,7 +70,7 @@ def scope_enabled(scope: str) -> bool:
     round pulls nothing, pushes nothing and deletes nothing, here or on the
     server."""
     base = _RIDES_WITH.get(scope, scope)
-    if base in sync_approvals.RETIRED_SCOPES:
+    if base in NEVER_SYNCED:
         return False
     return enabled_scopes().get(base, False)
 
@@ -75,7 +82,7 @@ def set_scope_enabled(scope: str, enabled: bool) -> dict[str, bool]:
         blocker = credentials_enable_blocker()
         if blocker:
             raise sync_engine.SyncError(blocker)
-    if enabled and scope in sync_approvals.RETIRED_SCOPES:
+    if enabled and scope in NEVER_SYNCED:
         # Switching it off stays possible, to clear a switch an older build left on.
         raise sync_engine.SyncError(f"{scope} is not synced any more; it can only be switched off")
     current = enabled_scopes()
@@ -2609,6 +2616,91 @@ def on_account_changed() -> None:
         attempt("reset the skill files transfers", reset)
     if failures:
         raise sync_engine.SyncError("; ".join(failures))
+
+
+def switch_account(previous: str | None, namespace: str | None) -> None:
+    """An account change that keeps each account's sync bookkeeping (D4).
+
+    *previous*'s agreed state, cursors, conflicts, pending approvals and
+    detached marks are parked under it, ``on_account_changed`` lets go of
+    everything else exactly as before (every scope switched off), and
+    *namespace*'s parked bookkeeping comes back, so switching back resumes
+    rather than reading the account again from the start.
+
+    The parts move together or not at all: a held approval whose agreed
+    state came back without it would let the older local copy be pushed over
+    the record waiting for approval. Whatever cannot be parked or restored
+    is let go of instead — the pre-v4 behaviour, a fresh read, never a wrong one.
+    """
+    from . import app
+
+    store = app.sync_store
+    store.new_generation()
+    if previous:
+        try:
+            if not sync_approvals.park_approvals(previous):
+                raise OSError("the pending approvals have nowhere to be parked")
+            store.park_account(previous)
+            detached = _settings().get().get(DETACHED_KEY)
+            # None on a retried switch: the first attempt parked the marks,
+            # and parking "none" would overwrite them.
+            if detached is not None:
+                store.park_value(previous, DETACHED_KEY, detached)
+        except Exception as err:  # noqa: BLE001 - fall back to letting go
+            log.warning("account change: could not park the sync state; it will be read afresh: %s", err)
+            _discard_parked(store, previous)
+    on_account_changed()
+    if namespace:
+        _restore_parked(store, namespace)
+
+
+def _discard_parked(store: Any, account: str) -> None:
+    """Let go of everything parked for *account*, and of its live rows, so
+    the account is read afresh — never restored as state without its holds."""
+    try:
+        sync_approvals.discard_parked_approvals(account)
+        # Bringing the parked rows back live is what takes them out of the
+        # parking table; ``on_account_changed`` then forgets every live row.
+        store.restore_account(account)
+        store.take_parked_value(account, DETACHED_KEY)
+    except Exception as err:  # noqa: BLE001 - the forget that follows still runs
+        log.warning("account change: could not discard the parked sync state: %s", err)
+
+
+def _restore_parked(store: Any, namespace: str) -> None:
+    try:
+        store.restore_account(namespace)
+        detached = store.take_parked_value(namespace, DETACHED_KEY)
+        if detached:
+            _settings().set({DETACHED_KEY: detached})
+        sync_approvals.restore_approvals(namespace)
+    except Exception as err:  # noqa: BLE001 - fall back to a fresh read
+        log.warning("account change: could not restore the sync state; reading afresh: %s", err)
+        for scope in sync_engine.SCOPES + sync_engine.INTERNAL_SCOPES:
+            store.forget(scope)
+        forget_detached()
+        forget_approvals()
+
+
+def _live_is_empty(store: Any) -> bool:
+    scopes = sync_engine.SCOPES + sync_engine.INTERNAL_SCOPES
+    return not store.conflicts(None) and not any(store.states(s) or store.cursor(s) for s in scopes)
+
+
+def adopt_account(namespace: str | None) -> None:
+    """The link settled on *namespace* without a switch it could see.
+
+    Usually the live rows are already that account's and are only claimed.
+    After a sign-out, though, nothing was settled, and the next sign-in looks
+    like a first one: if nothing is live, whatever was parked for this
+    account when it signed out comes back."""
+    from . import app
+
+    store = app.sync_store
+    if namespace and _live_is_empty(store):
+        _restore_parked(store, namespace)
+        return
+    store.adopt_account(namespace)
 
 
 def forget_detached(scope: str | None = None) -> None:

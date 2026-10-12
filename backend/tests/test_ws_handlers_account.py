@@ -248,6 +248,38 @@ async def test_logout_clears_credential_and_email(env) -> None:
     assert server_link.ACCOUNT_EMAIL_SETTING not in env["settings"].get()
 
 
+async def test_logout_revokes_on_the_server_before_erasing(env, monkeypatch) -> None:
+    """The server is asked to revoke this device's token while the link can
+    still carry it; the local token is erased afterwards, and also when the
+    server could not be reached."""
+    order: list[str] = []
+
+    async def fake_logout_on_server() -> bool:
+        order.append("server")
+        return False  # offline: the local erase must still happen
+
+    monkeypatch.setattr(server_link, "logout_on_server", fake_logout_on_server)
+    await _call("p2p.account.login", dict(LOGIN))
+    env["tokens"].clear()
+    resp = await _call("p2p.account.logout", {})
+    assert resp["ok"] is True
+    assert order == ["server"]
+    assert env["tokens"] == [None]
+
+
+async def test_logout_forgets_the_member_pin_of_the_token(env, monkeypatch) -> None:
+    """N1b: a sign-out drops the trust store's member pin for this token, so
+    signing out and in again does not add an entry to the Keychain record."""
+    from agent_team_backend import trust_store
+
+    monkeypatch.setattr(server_link, "access_token", lambda: "tok-signed-in")
+    trust_store.load()
+    trust_store.adopt_own_member("ws://s/ws", "tok-signed-in", "m1")
+    resp = await _call("p2p.account.logout", {})
+    assert resp["ok"] is True
+    assert trust_store.member_for_credential("ws://s/ws", "tok-signed-in") == ""
+
+
 async def test_logout_leaves_the_address_reachable(env) -> None:
     """Signing out is "not right now", not "never again": the next sign-in must
     not need an address from the user. It is built in, so it always resolves."""

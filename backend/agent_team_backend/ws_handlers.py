@@ -3698,6 +3698,8 @@ async def sync_status(session: "Session", msg_id: str, msg_type: str, payload: d
             {
                 "available": list(sync_engine.SCOPES),
                 "scopes": scopes,
+                # Scopes no round ever syncs, whatever their switch above says.
+                "neverSynced": sorted(sync_scopes.NEVER_SYNCED),
                 "hasKey": has_key,
                 # The active key's id (never the key) so a person can see a
                 # rotation took, and whether a ring from before accounts were
@@ -3981,6 +3983,41 @@ async def sync_pull_items(session: "Session", msg_id: str, msg_type: str, payloa
         await session.send_json(make_error(msg_id, msg_type, "SYNC_PULL_FAILED", str(err)))
         return
     await session.send_json(make_response(msg_id, msg_type, {"scope": scope, "results": results}))
+
+
+@handler("sync.versions")
+async def sync_versions(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    scope = str(payload.get("scope") or "")
+    item_id = str(payload.get("itemId") or "")
+    if not scope or not item_id:
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_BAD_CHOICE", "scope and itemId are required"))
+        return
+    try:
+        versions = await server_link.sync_versions(scope, item_id)
+    except Exception as err:  # noqa: BLE001 - a link that went down is not a crash
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_VERSIONS_FAILED", str(err)))
+        return
+    await session.send_json(
+        make_response(msg_id, msg_type, {"scope": scope, "itemId": item_id, "versions": versions})
+    )
+
+
+@handler("sync.restore_version")
+async def sync_restore_version(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    scope = str(payload.get("scope") or "")
+    item_id = str(payload.get("itemId") or "")
+    rev = payload.get("rev")
+    if not scope or not item_id or not isinstance(rev, int) or isinstance(rev, bool) or rev < 1:
+        await session.send_json(
+            make_error(msg_id, msg_type, "SYNC_BAD_CHOICE", "scope, itemId and a positive rev are required")
+        )
+        return
+    try:
+        result = await server_link.sync_restore_version(scope, item_id, rev)
+    except Exception as err:  # noqa: BLE001 - same reason as the listing above
+        await session.send_json(make_error(msg_id, msg_type, "SYNC_RESTORE_FAILED", str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
 
 
 def _sync_item_ids(payload: dict) -> list[str]:
@@ -4356,7 +4393,7 @@ async def p2p_link_configure(session: "Session", msg_id: str, msg_type: str, pay
     delta = app.ui_settings_store.set({server_link.SERVER_URL_SETTING: None})
     if token is not None:
         try:
-            await vault_to_thread(server_link.set_access_token, token)
+            await vault_to_thread(server_link.replace_access_token, token)
         except Exception as err:  # noqa: BLE001
             await session.send_json(
                 make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
@@ -4439,7 +4476,7 @@ async def _account_call(
         }
     )
     try:
-        await vault_to_thread(server_link.set_access_token, token)
+        await vault_to_thread(server_link.replace_access_token, token)
     except Exception as err:  # noqa: BLE001
         await session.send_json(
             make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
@@ -4591,13 +4628,26 @@ async def p2p_account_logout(session: "Session", msg_id: str, msg_type: str, pay
     """
     from . import app
 
+    # Revoke the token on the server first, while the link can still carry the
+    # request; offline that is skipped and the local token is erased anyway.
+    revoked = await server_link.logout_on_server()
+    # N1b: this token is never used again here, so its member pin goes too;
+    # otherwise every sign-out and sign-in adds an entry to the trust record.
+    # R4-4: only once the token reads back erased — a delete that failed
+    # quietly leaves it stored, and a stored token keeps its pin.
     try:
-        await vault_to_thread(server_link.set_access_token, None)
+        await vault_to_thread(server_link.replace_access_token, None)
     except Exception as err:  # noqa: BLE001
         await session.send_json(
             make_error(msg_id, msg_type, "P2P_TOKEN_WRITE_FAILED", str(err))
         )
         return
+    if not revoked:
+        log.info(
+            "signed out locally only: the navide-server did not confirm the sign-out "
+            "(offline, or a server without auth.logout), so this device's token may "
+            "stay valid there until it is revoked from another device"
+        )
     delta = app.ui_settings_store.set({server_link.ACCOUNT_EMAIL_SETTING: None})
     await server_link.reconfigure()
     await session.send_json(
@@ -4988,6 +5038,10 @@ async def p2p_trust_device_unpair(
     # paired is a state where one silently refuses everything the other sends,
     # and the sender's only symptom is silence.
     await server_link.revoke_pairing(device_id)
+    if removed.get("found") and server_link.trust_full():
+        # R4-3: the room this made is what a full record was waiting for, and
+        # only a hello re-adopts the pin (see p2p.trust.rebuild).
+        await server_link.reconfigure()
     if removed.get("found"):
         # The pin and its notices both feed this event, so the panel that was
         # showing the device empties in the same tick it is forgotten.
@@ -5097,10 +5151,38 @@ async def p2p_trust_block(session: "Session", msg_id: str, msg_type: str, payloa
     # succeeded so the two cannot disagree about a block that was never made.
     # The local copy is what still refuses this device when the policy document
     # cannot be verified — see device_trust.is_blocked.
-    await asyncio.to_thread(trust_store.note_blocked, device_id, member_id)
+    problem: Exception | None = None
+    try:
+        await asyncio.to_thread(trust_store.note_blocked, device_id, member_id)
+    except Exception as err:  # noqa: BLE001
+        problem = err
     if device_id and server_link.forget_access_requests_for_device(device_id):
         await _announce_requests()
+    if problem is not None:
+        # Fail closed. The server's block stands, and note_blocked holds the
+        # local one in memory until the restart; only the saved copy is missing.
+        # Taking the server's block back instead left the device trusted.
+        await session.send_json(_block_not_kept(problem, msg_id, msg_type))
+        return
     await session.send_json(make_response(msg_id, msg_type, await _policy_payload()))
+
+
+def _block_not_kept(err: Exception, msg_id: str, msg_type: str) -> dict:
+    # Its own code even for a full record (review F2): p2p-trust-store-full is
+    # also what a block refused before it reached the server answers, and the
+    # two must not read alike — this one is in force.
+    code = (
+        "P2P_BLOCK_NOT_SAVED_LOCALLY_FULL"
+        if isinstance(err, trust_store.TrustStoreFull)
+        else "P2P_BLOCK_NOT_SAVED_LOCALLY"
+    )
+    return make_error(
+        msg_id,
+        msg_type,
+        code,
+        "the block is in force on the server, and on this machine until it restarts, "
+        f"but this machine could not save its own copy ({err})",
+    )
 
 
 @handler("p2p.trust.unblock")

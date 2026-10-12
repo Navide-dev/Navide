@@ -2384,51 +2384,63 @@ async def _start_log_watcher() -> None:
 @app.on_event("shutdown")
 async def _stop_log_watcher() -> None:
     global _log_watcher, _git_watcher, _credential_watcher
-    await cli_risk_service.close()
-    if _ownerless_sweeper_task is not None:
-        _ownerless_sweeper_task.cancel()
-    if _mem_probe_task is not None:
-        _mem_probe_task.cancel()
-    if _dev_time_sweeper_task is not None:
-        _dev_time_sweeper_task.cancel()
-    from . import scheduler
+    try:
+        await cli_risk_service.close()
+        if _ownerless_sweeper_task is not None:
+            _ownerless_sweeper_task.cancel()
+        if _mem_probe_task is not None:
+            _mem_probe_task.cancel()
+        if _dev_time_sweeper_task is not None:
+            _dev_time_sweeper_task.cancel()
+        from . import scheduler
 
-    await scheduler.shutdown()
-    from . import evolve_service
+        await scheduler.shutdown()
+        from . import evolve_service
 
-    await evolve_service.shutdown()
-    from . import voice_handlers
+        await evolve_service.shutdown()
+        from . import voice_handlers
 
-    await voice_handlers.shutdown()
-    await loop_watchdog.stop()
-    # PTY children are detached process groups (start_new_session=True); they
-    # must be killed here or they outlive the app as CPU-spinning orphans.
-    # Guarded so a sweep failure never skips the watcher/MCP teardown below.
-    if _TERMINALS is not None:
+        await voice_handlers.shutdown()
+        await loop_watchdog.stop()
+        # PTY children are detached process groups (start_new_session=True); they
+        # must be killed here or they outlive the app as CPU-spinning orphans.
+        # Guarded so a sweep failure never skips the watcher/MCP teardown below.
+        if _TERMINALS is not None:
+            try:
+                await _TERMINALS.kill_all()
+            except Exception as err:  # noqa: BLE001
+                log.warning("pty shutdown sweep failed: %s", err)
+        if _log_watcher is not None:
+            # Settle what the drain has read but not yet counted, BEFORE stop()
+            # cancels the flush task that would have done it. See
+            # LogWatcher.drain_pending_tokens.
+            await _log_watcher.drain_pending_tokens()
+            _log_watcher.stop()
         try:
-            await _TERMINALS.kill_all()
+            tokens_store.flush()
         except Exception as err:  # noqa: BLE001
-            log.warning("pty shutdown sweep failed: %s", err)
-    if _log_watcher is not None:
-        # Settle what the drain has read but not yet counted, BEFORE stop()
-        # cancels the flush task that would have done it. See
-        # LogWatcher.drain_pending_tokens.
-        await _log_watcher.drain_pending_tokens()
-        _log_watcher.stop()
-    try:
-        tokens_store.flush()
-    except Exception as err:  # noqa: BLE001
-        log.warning("token store shutdown flush failed: %s", err)
-    try:
-        dev_time_store.shutdown()
-    except Exception as err:  # noqa: BLE001
-        log.warning("dev time store shutdown failed: %s", err)
-    if _git_watcher is not None:
-        _git_watcher.stop()
-    if _credential_watcher is not None:
-        _credential_watcher.stop()
-    await channels.stop()
-    await server_link.stop()
+            log.warning("token store shutdown flush failed: %s", err)
+        try:
+            dev_time_store.shutdown()
+        except Exception as err:  # noqa: BLE001
+            log.warning("dev time store shutdown failed: %s", err)
+        if _git_watcher is not None:
+            _git_watcher.stop()
+        if _credential_watcher is not None:
+            _credential_watcher.stop()
+        await channels.stop()
+        await server_link.stop()
+    finally:
+        # Delivered message keys still in the batch: written now, or a message
+        # received just before a normal restart could be replayed after it.
+        # After channels and the link stop, since they record keys until then,
+        # and in a finally so no earlier step that raises can skip it (R2-1).
+        try:
+            from . import trust_store
+
+            trust_store.flush_seen_messages()
+        except Exception as err:  # noqa: BLE001
+            log.warning("delivered-message ledger shutdown flush failed: %s", err)
     await mcp_manager.shutdown()
     try:
         await plugin_wiring.run_shutdown_hooks(plugin_host)
