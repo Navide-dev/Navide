@@ -269,7 +269,7 @@ jobs:
           retention-days: 7
 
   # macOS exercises native PTY/zsh behavior; Linux and Windows retain their
-  # complete suites. Only Windows is split across two collection-based shards.
+  # complete suites. Only Windows is split across three collection-based shards.
   backend:
     name: Backend tests (${{ matrix.platform }}, ${{ matrix.shard }})
     strategy:
@@ -288,13 +288,18 @@ jobs:
             timeout: 15
           - platform: Windows
             runner: windows-latest
-            shard: 1/2
+            shard: 1/3
             artifact: windows-1
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 2/2
+            shard: 2/3
             artifact: windows-2
+            timeout: 45
+          - platform: Windows
+            runner: windows-latest
+            shard: 3/3
+            artifact: windows-3
             timeout: 45
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
@@ -327,7 +332,7 @@ jobs:
       - name: Backend imports on Windows
         if: runner.os == 'Windows'
         run: uv --project backend run --locked python -c "import agent_team_backend.app"
-      # Full Windows runs took 1109–1880 seconds on 2026-09-25; two shards
+      # Full Windows runs took 1109–1880 seconds on 2026-09-25; shards
       # retain coverage while bounding runner time. The runner uses a Job Object
       # to clean up descendants when pytest exits.
       # Preserve detached supervision: watchdog threads attached to the Actions
