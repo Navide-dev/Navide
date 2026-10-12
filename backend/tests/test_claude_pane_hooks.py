@@ -18,7 +18,7 @@ import pytest
 from agent_team_backend import app, claude_hooks, convenience_wiring, osplat, push_delivery, ws_handlers
 from agent_team_backend.osplat import paths
 
-from .test_app_terminal_create import FakeAttribution, _session
+from .test_app_terminal_create import FakeAttribution, _session, _stub_agent_cli_probe  # noqa: F401
 
 _SHELL = "/bin/zsh"
 
