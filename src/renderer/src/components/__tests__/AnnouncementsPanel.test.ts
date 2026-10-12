@@ -299,15 +299,15 @@ describe('AnnouncementsPanel convenience rows', () => {
     i18n.global.locale.value = 'zh-TW'
     try {
       const actions = [
-        { kind: 'convenience-dismiss', rowId: 'convenience:11' },
-        { kind: 'convenience-reallow', featureId: 'claude.hooks' },
+        { kind: 'convenience-keep-login', rowId: 'convenience:11' },
+        { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work', liveFingerprint: 'fp-b' },
         { kind: 'convenience-overview' },
       ] as const
       const wrapper = mountPanel([
-        { id: 'convenience:11', kind: 'convenience', title: '你在 Navide 外登出了 Codex', highlights: [], read: false, actions: [...actions] },
+        { id: 'convenience:11', kind: 'convenience', title: 'Claude Code 的登入在 Navide 外被換過', highlights: [], read: false, actions: [...actions] },
       ])
-      expect(wrapper.findAll('.an-acts button').map((b) => b.text())).toEqual(['知道了', '重新允許', '查看總覽'])
-      await wrapper.get('[data-act="convenience-reallow"]').trigger('click')
+      expect(wrapper.findAll('.an-acts button').map((b) => b.text())).toEqual(['保留目前的登入', '切回 Work', '查看總覽'])
+      await wrapper.get('[data-act="convenience-switch-back"]').trigger('click')
       expect(wrapper.emitted('convenience-action')).toEqual([[actions[1]]])
       expect(wrapper.emitted('quota-action')).toBeUndefined()
       wrapper.unmount()

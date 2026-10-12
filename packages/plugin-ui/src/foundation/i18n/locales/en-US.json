@@ -7,6 +7,8 @@
       "reset-note": "Its folder was deleted or created again, which is a reset, not you removing it. To stop this, turn the feature off on the overview.",
       "removed": "You removed {target}, so the convenience feature \"{feature}\" is now off; Navide will not add it back",
       "prompt": "{agent}'s sign-in was changed outside Navide",
+      "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
+      "prompt-note": "Navide did not overwrite it. Keep the current sign-in, or switch back to the account Navide would restore.",
       "prompt-logout": "You signed out of {agent} outside Navide. Navide did not sign you back in.",
       "prompt-logout-note": "To use {agent} again, sign in again or switch accounts in Settings → Accounts.",
       "upgrade": "These convenience features stay on, as before",
@@ -26,7 +28,9 @@
       "button": {
         "overview": "Open overview",
         "reallow": "Allow again",
+        "keep-login": "Keep the current sign-in",
         "dismiss": "Got it",
+        "switch-back": "Switch back to {label}",
         "upgrade-ack": "Got it"
       }
     },
@@ -122,6 +126,13 @@
         "purpose": "Cursor panes can use the skills you routed to them",
         "writes": "Links in the workspace's .cursor/skills/ and a line in .git/info/exclude",
         "cost": "Cursor panes get no delivered skills."
+      },
+      "credentials_auto-repair": {
+        "name": "Account sign-in auto-repair",
+        "benefit": "When a CLI's live sign-in goes missing after an account switch, Navide restores the account you chose so panes do not start signed out.",
+        "purpose": "panes do not start signed out after an account switch",
+        "writes": "The CLI's live sign-in: Keychain, ~/.claude.json and the vendor's credential files",
+        "cost": "A pane can start signed out after an account switch went wrong."
       },
       "codex_pane-homes": {
         "name": "Codex pane folders",
@@ -8733,6 +8744,7 @@
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
     "panes-running": "{count} running CLI pane(s) are using this account — close them before switching.",
+    "live-changed": "The signed-in {agent} account changed after this notice, so nothing was switched. Check Settings → Accounts.",
     "switch-rate-limited": "Too many account switches — try again in {seconds}s.",
     "switch-restart-confirm-title": "Restart running panes",
     "switch-restart-confirm-body": "Switching accounts will restart {count} running {agent} pane(s). Continue?",

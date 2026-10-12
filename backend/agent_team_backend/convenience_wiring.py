@@ -9,6 +9,8 @@ no app, tooling) every writer runs exactly as it did before the gate existed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any, Callable
@@ -553,6 +555,89 @@ def _drop_codex_hook_trust() -> None:
     manager = getattr(app, "codex_home_manager", None)
     if manager is not None:
         manager.drop_all_hook_trust()
+
+
+# ── Account auto-repair (D7) ───────────────────────────────────────────────
+
+
+def login_fingerprint(secret: str | None) -> str:
+    """The account prompt's handle on one live login: a hash, never the
+    secret ('' when nobody is signed in). Its "switch back" sends it back,
+    so the switch applies to the login the user was told about."""
+    if secret is None:
+        return ""
+    digest = hashlib.sha256(b"navide-account-prompt\0" + secret.encode("utf-8"))
+    return digest.hexdigest()[:24]
+
+
+def repair_live_login(
+    agent_key: str,
+    slot_id: str,
+    restore: Callable[[], Any],
+    *,
+    reason: str,
+    live_email: str | None = None,
+    slot_email: str | None = None,
+    slot_label: str = "",
+    other_account: bool = False,
+    live_fingerprint: str = "",
+    requested: bool = False,
+) -> bool:
+    """Write the active account back into the CLI's live login, as the
+    feature credentials.auto-repair. Returns whether it was written.
+    ``requested``: the user asked for it (a sign-in through Navide), so it
+    applies whatever the auto-repair switch says.
+
+    D7: when the live login is a *different* signed-in account than the one
+    Navide would restore, the user changed it outside Navide. That is never
+    overridden: the user gets a prompt (keep it, or switch back) instead.
+    ``other_account`` says so when no pair of emails can (an unidentified
+    login whose secret is not the slot's own). ``live_fingerprint``
+    (``login_fingerprint``) names that login in the prompt.
+    """
+    g = _gate
+    if g is None:
+        restore()
+        return True
+    if not requested and not g.allowed("credentials.auto-repair"):
+        return False
+    target = f"{agent_key} live login"
+    if other_account or (
+        live_email and slot_email and live_email.casefold() != slot_email.casefold()
+    ):
+        g.record(
+            "credentials.auto-repair", "prompt", target,
+            detail=json.dumps({
+                "agentKey": agent_key, "slotId": slot_id, "slotLabel": slot_label,
+                "liveEmail": live_email, "slotEmail": slot_email,
+                "liveFingerprint": live_fingerprint,
+            }),
+        )
+        return False
+    log.info("restoring the %s live login from slot %s (%s)", agent_key, slot_id, reason)
+    try:
+        restore()
+    except Exception as err:
+        # The write may have landed before it failed (Keychain first, then
+        # ~/.claude.json): a failure still leaves its row.
+        g.record("credentials.auto-repair", "repair", target, detail=f"{reason}; failed: {err}")
+        raise
+    g.record("credentials.auto-repair", "repair", target, detail=reason)
+    return True
+
+
+def prompt_live_logout(agent_key: str) -> bool:
+    """The live login went empty after Navide had it signed in: the user
+    signed out outside Navide. Never signed back in; the user is told.
+    Returns whether the user was told (False while the feature is off)."""
+    g = _gate
+    if g is None or not g.allowed("credentials.auto-repair"):
+        return False
+    g.record(
+        "credentials.auto-repair", "prompt", f"{agent_key} live login",
+        detail=json.dumps({"agentKey": agent_key, "reason": "logout"}),
+    )
+    return True
 
 
 def _codex_hook_trust_takeback() -> list[Takeback]:

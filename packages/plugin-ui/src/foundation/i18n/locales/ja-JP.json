@@ -7,6 +7,8 @@
       "reset-note": "保存先のフォルダーが削除または作り直されたため、削除ではなくリセットとして扱いました。止めるには、概要ページでこの機能をオフにしてください。",
       "removed": "{target} が削除されたため、便利機能「{feature}」をオフにしました。自動で戻すことはありません",
       "prompt": "{agent} のログインが Navide の外で変更されました",
+      "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
+      "prompt-note": "Navide は上書きしていません。現在のログインを維持するか、Navide が復元するアカウントに戻せます。",
       "prompt-logout": "Navide の外で {agent} からログアウトしました。Navide は自動で再ログインしていません。",
       "prompt-logout-note": "{agent} を再び使うには、もう一度ログインするか、設定のアカウントでアカウントを切り替えてください。",
       "upgrade": "以下の便利機能はこれまでどおりオンのままです",
@@ -26,7 +28,9 @@
       "button": {
         "overview": "概要を開く",
         "reallow": "再度許可",
+        "keep-login": "現在のログインを維持",
         "dismiss": "了解",
+        "switch-back": "{label} に戻す",
         "upgrade-ack": "了解"
       }
     },
@@ -122,6 +126,13 @@
         "purpose": "Cursor pane が割り当てた skills を使える",
         "writes": "ワークスペースの .cursor/skills/ 内のリンクと .git/info/exclude の 1 行",
         "cost": "Cursor pane に skills が配信されません。"
+      },
+      "credentials_auto-repair": {
+        "name": "アカウントのログイン自動修復",
+        "benefit": "アカウント切り替え後に CLI の現在のログインが失われた場合、選んだアカウントを Navide が復元し、pane が未ログインで起動しないようにします。",
+        "purpose": "アカウント切り替え後に pane が未ログインで起動しない",
+        "writes": "CLI の現在のログイン：キーチェーン、~/.claude.json、各ベンダーの認証情報ファイル",
+        "cost": "アカウント切り替えに失敗した後、pane が未ログインで起動することがあります。"
       },
       "codex_pane-homes": {
         "name": "Codex pane 専用フォルダー",
@@ -8733,6 +8744,7 @@
     "switch-title": "アカウントを切り替え",
     "swap-failed": "アカウントの切り替えに失敗しました。以前のアカウントが引き続き有効です。",
     "panes-running": "実行中の CLI ペイン {count} 個がこのアカウントを使用しています。切り替える前に閉じてください。",
+    "live-changed": "この通知のあとでサインイン中の {agent} アカウントが変わったため、何も切り替えていません。設定 → アカウントで確認してください。",
     "switch-rate-limited": "アカウントの切り替え回数が多すぎます。{seconds} 秒後に再試行してください。",
     "switch-restart-confirm-title": "実行中のペインを再起動",
     "switch-restart-confirm-body": "アカウントを切り替えると、実行中の {agent} ペイン {count} 個が再起動されます。続行しますか？",

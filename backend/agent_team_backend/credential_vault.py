@@ -40,6 +40,7 @@ import getpass
 import hashlib
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -269,6 +270,25 @@ def _claude_home_secret_is_fresher(home_secret: str | None, slot_secret: str) ->
     home_exp = _claude_oauth_expires_at(home_secret)
     slot_exp = _claude_oauth_expires_at(slot_secret)
     return home_exp is not None and slot_exp is not None and home_exp >= slot_exp
+
+
+def _is_older_login_of_same_account(live: "LiveCredentials", stored: "LiveCredentials") -> bool:
+    """True when ``live`` is the same claude account as ``stored`` (both
+    emails known and equal) with a strictly older token expiry. A non-finite
+    expiry (Infinity/NaN) proves nothing."""
+    live_exp = _claude_oauth_expires_at(live.secret)
+    stored_exp = _claude_oauth_expires_at(stored.secret)
+    if (
+        live_exp is None or stored_exp is None
+        or not (math.isfinite(live_exp) and math.isfinite(stored_exp))
+        or live_exp >= stored_exp
+    ):
+        return False
+    emails = [
+        creds.account.get("emailAddress") if isinstance(creds.account, dict) else None
+        for creds in (live, stored)
+    ]
+    return all(isinstance(e, str) and e for e in emails) and emails[0].casefold() == emails[1].casefold()
 
 
 def _claude_credential_is_wiped(secret: str | None) -> bool:
@@ -1069,7 +1089,21 @@ class CredentialVault:
         state so callers can roll it back."""
         self.require_store_mutation(agent_key)
         creds = self.read_live(agent_key, strict=True, scope=scope)
+        pending = self._sign_in_pending_live_marker(agent_key, slot_id)
+        if (
+            agent_key == "claude"
+            and pending.exists()
+            and _is_older_login_of_same_account(
+                creds, self.read_slot(agent_key, slot_id, scope=scope)
+            )
+        ):
+            # The slot holds a sign-in through Navide that never reached live
+            # (e.g. its restore failed), and live still runs on this account's
+            # older token: keep the newer one. Only in that window — outside
+            # it live is the account's current token, whatever its expiry.
+            return creds
         self.write_slot(agent_key, slot_id, creds, scope=scope)
+        pending.unlink(missing_ok=True)
         return creds
 
     def restore(self, agent_key: str, slot_id: str, *, scope: str | None = None) -> None:
@@ -1077,6 +1111,24 @@ class CredentialVault:
         live credentials, and an empty slot clears them (the CLI then prompts
         a fresh login)."""
         self.write_live(agent_key, self.read_slot(agent_key, slot_id, scope=scope), scope=scope)
+        self._sign_in_pending_live_marker(agent_key, slot_id).unlink(missing_ok=True)
+
+    def _sign_in_pending_live_marker(self, agent_key: str, slot_id: str) -> Path:
+        """Set while a claude sign-in harvested into the slot has not been
+        restored to live; ``capture`` keeps it over an older live token of the
+        same account until then."""
+        return self.slot_dir(agent_key, slot_id) / ".sign-in-pending-live"
+
+    def move_sign_in_pending_live(self, agent_key: str, from_slot_id: str, to_slot_id: str) -> None:
+        """Carry a pending-live sign-in marker along with the sign-in when it
+        is folded into another slot; the source keeps none."""
+        source = self._sign_in_pending_live_marker(agent_key, from_slot_id)
+        if not source.exists():
+            return
+        target = self._sign_in_pending_live_marker(agent_key, to_slot_id)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+        source.unlink(missing_ok=True)
 
     def switch(
         self,
@@ -1447,6 +1499,7 @@ class CredentialVault:
             # the home's own .claude.json for the display-only oauthAccount.
             if not self.harvest_legacy_claude_home(slot_id, home):
                 return False
+            self._sign_in_pending_live_marker("claude", slot_id).touch()
             # The user just re-logged this account, so the login must win. The
             # legacy profile-home promotion (promote_profile_home_secrets)
             # keeps a home copy whose expiry is not older than the slot's — an
@@ -1823,6 +1876,11 @@ class CredentialVault:
     def _homes_promoted_marker(self, agent_key: str) -> Path:
         return self._root / agent_key / ".homes-promoted"
 
+    def _logout_announced_marker(self, agent_key: str) -> Path:
+        """Set while the user's sign-out outside Navide has been told; a
+        startup that finds a login again clears it."""
+        return self._root / agent_key / ".logout-announced"
+
     def _unify_claude_live(self, active_id: str | None) -> None:
         """One-shot (marker-guarded) alignment of claude's live location with
         the active account. Under the pre-unification model a managed claude
@@ -1880,7 +1938,10 @@ class CredentialVault:
         # The marker is written only after every profile promoted cleanly —
         # a failed profile leaves it unwritten so the next startup retries.
         promoted_marker = self._homes_promoted_marker(agent_key)
-        if not promoted_marker.exists():
+        # Set on an earlier startup: the live login was published then, so an
+        # empty one now is the user signing out outside Navide.
+        promoted_before = promoted_marker.exists()
+        if not promoted_before:
             all_promoted = True
             for profile_id in profile_ids:
                 try:
@@ -1911,11 +1972,31 @@ class CredentialVault:
         # publish the freshly promoted slot so panes are signed in.
         try:
             active_scope = scopes.get(active_id)
+            # Strict: a transient Keychain failure is no empty live login.
+            live_empty = self.read_live(agent_key, strict=True, scope=active_scope).secret is None
+            announced = self._logout_announced_marker(agent_key)
+            if not live_empty:
+                announced.unlink(missing_ok=True)
             if (
-                self.read_live(agent_key, scope=active_scope).secret is None
+                live_empty
                 and self.read_slot(agent_key, active_id, scope=active_scope).secret is not None
             ):
-                self.restore(agent_key, active_id, scope=active_scope)
+                # The convenience feature credentials.auto-repair: announced,
+                # skipped when off. A sign-out made outside Navide is never
+                # undone; the user is told instead.
+                from .convenience_wiring import prompt_live_logout, repair_live_login
+
+                if promoted_before:
+                    # One sign-out, one prompt: not again on every startup.
+                    if not announced.exists() and prompt_live_logout(agent_key):
+                        announced.parent.mkdir(parents=True, exist_ok=True)
+                        announced.touch()
+                    return
+                repair_live_login(
+                    agent_key, active_id,
+                    lambda: self.restore(agent_key, active_id, scope=active_scope),
+                    reason="the live login was empty",
+                )
         except Exception as err:  # noqa: BLE001
             log.warning(
                 "restoring active %s account after promotion failed: %s",

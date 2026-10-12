@@ -1453,6 +1453,60 @@ def test_codex_login_link_read_back_as_a_windows_extended_path_still_counts(gate
     assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
 
 
+# ── Account auto-repair (D7) ─────────────────────────────────────────────────
+
+
+def test_an_allowed_repair_restores_and_is_announced(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("slot-a"), reason="live login was empty"
+    ) is True
+
+    assert restored == ["slot-a"]
+    [entry] = gate.history()
+    assert (entry["feature"], entry["action"], entry["notify"]) == ("credentials.auto-repair", "repair", True)
+
+
+def test_a_repair_that_is_off_writes_nothing(gate) -> None:
+    gate.set_allowed("credentials.auto-repair", False)
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login("claude", "slot-a", lambda: restored.append("x"), reason="r") is False
+
+    assert restored == []
+
+
+def test_an_account_changed_outside_navide_is_never_overridden(gate) -> None:
+    """D7: a different signed-in account becomes a prompt, not a restore."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="Other@Example.com", slot_email="me@example.com", slot_label="Work",
+        live_fingerprint="f00d",
+    ) is False
+
+    assert restored == []
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("prompt", True)
+    assert json.loads(entry["detail"]) == {
+        "agentKey": "claude", "slotId": "slot-a", "slotLabel": "Work",
+        "liveEmail": "Other@Example.com", "slotEmail": "me@example.com",
+        "liveFingerprint": "f00d",
+    }
+
+
+def test_the_same_account_in_another_case_is_a_repair_not_a_prompt(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="ME@example.com", slot_email="me@example.com",
+    ) is True
+    assert restored == ["x"]
+
+
 # ── Required features: disclosed, never switched ─────────────────────────────
 
 
@@ -1655,13 +1709,40 @@ async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, mon
     assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}
 
 
-def test_a_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
-    """A11: the audit row carries the emails a prompt shows; the log does not."""
+def test_a_repair_that_fails_after_writing_still_leaves_a_log_row(gate) -> None:
+    """D2: a restore that raises (possibly after the Keychain write) is logged."""
+    def restore() -> None:
+        raise RuntimeError("~/.claude.json write failed")
+
+    with pytest.raises(RuntimeError):
+        convenience_wiring.repair_live_login("claude", "slot-a", restore, reason="r")
+
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("repair", True)
+    assert "failed" in entry["detail"]
+
+
+def test_an_unidentified_other_account_is_a_prompt(gate) -> None:
+    """D1: no emails to compare, but the caller knows it is not the slot's own."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "kimi", "slot-a", lambda: restored.append("x"), reason="r", other_account=True,
+    ) is False
+
+    assert restored == []
+    assert [e["action"] for e in gate.history()] == ["prompt"]
+
+
+def test_the_account_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
+    """A11: the audit row carries the emails the prompt shows; the log does not."""
     import logging
 
     with caplog.at_level(logging.INFO, logger="agent_team_backend.convenience"):
-        gate.record("codex.login-promote", "prompt", "codex login",
-                    detail='{"liveEmail": "other@example.com"}')
+        convenience_wiring.repair_live_login(
+            "claude", "slot-a", lambda: None, reason="r",
+            live_email="other@example.com", slot_email="me@example.com",
+        )
 
     assert "other@example.com" in gate.history()[0]["detail"]
     assert "@example.com" not in caplog.text

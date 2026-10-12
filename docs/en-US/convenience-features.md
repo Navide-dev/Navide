@@ -11,6 +11,9 @@ announced, is logged, and can be turned off with one click. Decided on
   upgrade notice says so.
 - Turning a feature off, or deleting its entry by hand, means "not allowed".
   Navide never re-adds it; the overview offers one-click re-allow.
+- Account auto-repair is allowed with a notice and a log entry. An account the
+  user changed outside Navide is never silently overridden; that case becomes a
+  non-blocking prompt.
 
 ## The write gate
 
@@ -108,6 +111,7 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
+| `credentials.auto-repair` | all | live CLI login (Keychain, `~/.claude.json`, vendor credential files) | yes | a pane can start signed out after an account switch went wrong |
 | `codex.pane-homes` | codex | `~/.codex-panes/` | no (required) | — |
 | `pane-shims` | kimi, grok, antigravity, muse, copilot, qwen | `~/.navide-panes/`; entries a pane creates are moved into the vendor's own directory (`~/.kimi-code`, `~/.grok`, `~/.gemini`, `~/.agents`, `~/.copilot`, `~/.qwen`) and empty seed entries are created there, each logged as `repair` with its real path (announced the first time a path changes) | no (required) | — |
 | `claude.account-homes` | claude | links and moved files in `~/.claude` for signed-in accounts | no (required) | — |
@@ -260,9 +264,16 @@ interface LogEntry {
   action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude' | 'retract' | 'retract-failed'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
-                             // For action 'prompt' (codex.login-promote) it is the JSON
-                             // object { agentKey, reason: 'logout' }: the user signed
-                             // out outside Navide; there is nothing to choose
+                             // For action 'prompt' (credentials.auto-repair) it is a JSON object,
+                             // one of:
+                             //   { agentKey, slotId, slotLabel, liveEmail, slotEmail, liveFingerprint }
+                             //     the live login is another account than the slot
+                             //     (emails may be null when the CLI stores none;
+                             //     liveFingerprint is a hash of that live login,
+                             //     never the secret)
+                             //   { agentKey, reason: 'logout' }
+                             //     the user signed out outside Navide (Claude, Codex);
+                             //     no slotId, nothing to switch back to
   backup: string             // '' when none
   notify: boolean
   source: string             // who triggered it: 'settings' (a Navide main window
@@ -306,6 +317,39 @@ with its `source`.
 the notice named: it stays allowed with the user's say-so. Each row is
 announced and carries its `source`, like a switch moved, so a client other
 than a Navide window dismissing the notice is seen.
+
+### Account prompts (`credentials.auto-repair`)
+
+- The live login is read strictly: a failed read (a transient Keychain error)
+  is not an empty login, so nothing is written and only the backend log says so.
+- It is another account when both emails are known and differ, or, with only
+  one email known, when its secret is not the slot's own (the slot's secret now,
+  before the sign-in, or the pre-login copy a live-store sign-in put back). With
+  no email on either side (kimi, the per-provider stores) nothing tells accounts
+  apart: the login is restored, as before prompts existed. Identities, live and
+  slot reads use the profile's provider scope. A prompt is never a write. Navide's active account then follows the login that stays live (the
+  profile holding it, else a new one registered for it), so a later switch can
+  never capture that login into the prompt's slot.
+- "Switch back" is `cli_profiles.set_default { …, restore_live: true,
+  restore_live_fingerprint }`, carrying the prompt's `liveFingerprint`. It is
+  refused (`LIVE_CHANGED`) once another login is live, and is a normal switch
+  with all its guards. When the slot is still the active account, the live
+  login is first kept in the profile holding it (or one registered for it,
+  never a second one for the same login), which is then switched away from;
+  with nobody signed in the slot is just written back. Logged as a `repair`.
+- An empty live login after Navide had published it on an earlier startup is
+  the user signing out outside Navide: a `logout` prompt with only an
+  acknowledgement, once per sign-out (not on every startup). The one-time promotion of legacy profile homes still
+  publishes the active account.
+- Every restore leaves an audit row, including one that failed part-way.
+- Signing the active account in again through Navide is the user's own
+  request, so its login goes live even with the switch off (still logged as a
+  `repair`, and still a prompt when another account is live). A switch never
+  captures live's older claude token over a newer one of the same account in
+  the slot.
+- The prompt detail keeps the two emails because the prompt shows them; they go
+  to the audit log and the `convenience.changed` broadcast only, never the
+  backend log.
 
 Event `convenience.changed` `{ feature?: string, entry?: LogEntry }` — a write was
 gated, a notice was added, or a state changed. The renderer re-reads

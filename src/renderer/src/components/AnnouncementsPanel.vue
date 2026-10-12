@@ -31,7 +31,7 @@ const emit = defineEmits<{
    *  existing pane actions or the evolve panel. */
   'evolve-action': [action: EvolveAnnouncementAction]
   /** A convenience-feature row's button, for App.vue to map onto the
-   *  overview or the convenience.* RPCs. */
+   *  overview, the convenience.* RPCs or the account switch. */
   'convenience-action': [action: ConvenienceAnnouncementAction]
 }>()
 
@@ -83,8 +83,11 @@ function actionLabel(action: AnnouncementActionSpec): string {
     case 'evolve-panel':
     case 'evolve-result':
       return i18n.global.t(`evolve.notice.action.${action.kind.slice('evolve-'.length)}`)
+    case 'convenience-switch-back':
+      return i18n.global.t('convenience.notice.button.switch-back', { label: action.label })
     case 'convenience-overview':
     case 'convenience-reallow':
+    case 'convenience-keep-login':
     case 'convenience-dismiss':
     case 'convenience-upgrade-ack':
       return i18n.global.t(`convenience.notice.button.${action.kind.slice('convenience-'.length)}`)

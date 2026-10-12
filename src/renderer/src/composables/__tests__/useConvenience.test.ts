@@ -284,17 +284,45 @@ describe('convenience announcement rows', () => {
     expect(rows()[0].actions).toEqual([{ kind: 'convenience-overview' }])
   })
 
-  it('shows any other prompt with no account buttons', () => {
+  it('turns an account prompt into keep / switch-back buttons until it is read', () => {
     const announcements = useAnnouncements()
-    announcements.setConvenienceAgentLabel((key) => (key === 'codex' ? 'Codex' : key))
+    announcements.setConvenienceAgentLabel((key) => (key === 'claude' ? 'Claude Code' : key))
     announcements.noteConvenience({
       features: [],
-      notices: [entry({ id: 12, feature: 'codex.login-promote', action: 'prompt', target: 'codex', detail: 'not JSON' })],
+      notices: [entry({
+        id: 11, feature: 'credentials.auto-repair', action: 'prompt', target: 'claude',
+        detail: JSON.stringify({ agentKey: 'claude', slotId: 'slot-a', slotLabel: 'Work', liveEmail: 'me@home.dev', slotEmail: 'me@work.dev', liveFingerprint: 'fp-b' }),
+      })],
       upgrade: null,
     })
     const [row] = rows()
-    expect(row.title).toBe('Codex 的登入在 Navide 外被換過')
-    expect(row.actions).toEqual([{ kind: 'convenience-overview' }])
+    expect(row.title).toBe('Claude Code 的登入在 Navide 外被換過')
+    expect(row.highlights).toEqual(['目前登入：me@home.dev · Navide 原本會還原成：Work'])
+    expect(row.actions).toEqual([
+      { kind: 'convenience-keep-login', rowId: 'convenience:11' },
+      { kind: 'convenience-switch-back', rowId: 'convenience:11', agentKey: 'claude', slotId: 'slot-a', label: 'Work', liveFingerprint: 'fp-b' },
+      { kind: 'convenience-overview' },
+    ])
+    announcements.markRead('convenience:11')
+    expect(rows()[0].actions).toEqual([{ kind: 'convenience-overview' }])
+  })
+
+  it.each([
+    ['not JSON', 'live account differs'],
+    ['JSON without a slotId', JSON.stringify({ agentKey: 'codex', liveEmail: 'me@home.dev' })],
+    ['a null slotId', JSON.stringify({ agentKey: 'codex', slotId: null, slotLabel: 'Default' })],
+    ['JSON without the live login fingerprint', JSON.stringify({ agentKey: 'codex', slotId: 'slot-a', slotLabel: 'Work' })],
+  ])('never offers a switch back when the detail is %s', (_, detail) => {
+    useAnnouncements().noteConvenience({
+      features: [],
+      notices: [entry({ id: 12, feature: 'credentials.auto-repair', action: 'prompt', target: 'codex', detail })],
+      upgrade: null,
+    })
+    // A missing slot must never turn into a switch to Default.
+    expect(rows()[0].actions).toEqual([
+      { kind: 'convenience-keep-login', rowId: 'convenience:12' },
+      { kind: 'convenience-overview' },
+    ])
   })
 
   it('tells an outside sign-out as such, with only an acknowledgement', () => {
@@ -303,7 +331,7 @@ describe('convenience announcement rows', () => {
     announcements.noteConvenience({
       features: [],
       notices: [entry({
-        id: 13, feature: 'codex.login-promote', action: 'prompt', target: '/Users/me/.codex/auth.json',
+        id: 13, feature: 'credentials.auto-repair', action: 'prompt', target: 'codex live login',
         detail: JSON.stringify({ agentKey: 'codex', reason: 'logout' }),
       })],
       upgrade: null,

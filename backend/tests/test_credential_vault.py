@@ -319,6 +319,101 @@ def test_capture_keeps_slot_when_live_claude_tokens_are_wiped(tmp_path: Path) ->
     assert captured.secret == _WIPED
 
 
+def test_capture_never_replaces_a_newer_login_of_the_same_account_with_an_older_one(tmp_path: Path) -> None:
+    """P4: the slot holds a fresh sign-in of the account while live still
+    runs on the account's older token; mirroring live back would lose it."""
+    vault = _file_vault(tmp_path)
+    older = json.dumps({"claudeAiOauth": {"accessToken": "a1", "refreshToken": "r1", "expiresAt": 1000}})
+    newer = json.dumps({"claudeAiOauth": {"accessToken": "a2", "refreshToken": "r2", "expiresAt": 2000}})
+    vault.write_live("claude", LiveCredentials(secret=older, account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", newer, "a@x.com")
+
+    captured = vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == newer
+    assert captured.secret == older  # switch() can still roll live back
+
+
+def _harvest_claude_sign_in(vault: CredentialVault, slot_id: str, secret: str, email: str) -> None:
+    """A sign-in through Navide: the login pane's home is harvested into the
+    slot; live is left as it was (the restore did not happen)."""
+    home = vault.login_home_path("claude", slot_id)
+    _write(home / ".credentials.json", secret)
+    _write(home / ".claude.json", json.dumps({"oauthAccount": {"emailAddress": email}}))
+    assert vault.harvest_login_home("claude", slot_id)
+
+
+def _claude_oauth(token: str, expires_at: object) -> str:
+    return json.dumps({"claudeAiOauth": {"accessToken": token, "refreshToken": "r" + token, "expiresAt": expires_at}})
+
+
+def test_capture_mirrors_a_refreshed_live_token_that_expires_before_the_slot_copy(tmp_path: Path) -> None:
+    """R3-L7: outside a pending sign-in, live is the account's current token
+    even when it expires earlier (the server shortened the lifetime): the
+    slot's older copy holds a refresh token that was already used."""
+    vault = _file_vault(tmp_path)
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=_claude_oauth("parent", 2000), account={"emailAddress": "a@x.com"}))
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("child", 1999), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("child", 1999)
+
+
+@pytest.mark.parametrize("slot_expiry", [float("inf"), float("nan"), 9e18])
+def test_capture_mirrors_live_over_a_slot_with_an_unusable_or_far_future_expiry(
+    tmp_path: Path, slot_expiry: float
+) -> None:
+    """R3-L7: a far-future, infinite or NaN slot expiry must not keep the
+    slot forever."""
+    vault = _file_vault(tmp_path)
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=_claude_oauth("old", slot_expiry), account={"emailAddress": "a@x.com"}))
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("live", 1000), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("live", 1000)
+
+
+@pytest.mark.parametrize("slot_expiry", [float("inf"), float("nan")])
+def test_a_pending_sign_in_with_a_non_finite_expiry_is_no_proof_it_is_newer(
+    tmp_path: Path, slot_expiry: float
+) -> None:
+    vault = _file_vault(tmp_path)
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("live", 1000), account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", _claude_oauth("new", slot_expiry), "a@x.com")
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("live", 1000)
+
+
+def test_a_sign_in_once_live_no_longer_shields_the_slot(tmp_path: Path) -> None:
+    """R3-L7: the shield lasts only until live carries the sign-in; a later
+    refresh with an earlier expiry is captured as usual."""
+    vault = _file_vault(tmp_path)
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("old", 1000), account={"emailAddress": "a@x.com"}))
+    _harvest_claude_sign_in(vault, "slot1", _claude_oauth("new", 2000), "a@x.com")
+    vault.restore("claude", "slot1")
+    vault.write_live("claude", LiveCredentials(secret=_claude_oauth("child", 1500), account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == _claude_oauth("child", 1500)
+
+
+def test_capture_still_mirrors_an_older_token_of_a_different_account(tmp_path: Path) -> None:
+    vault = _file_vault(tmp_path)
+    older = json.dumps({"claudeAiOauth": {"accessToken": "b1", "refreshToken": "r1", "expiresAt": 1000}})
+    newer = json.dumps({"claudeAiOauth": {"accessToken": "a2", "refreshToken": "r2", "expiresAt": 2000}})
+    vault.write_live("claude", LiveCredentials(secret=older, account={"emailAddress": "b@x.com"}))
+    vault.write_slot("claude", "slot1", LiveCredentials(secret=newer, account={"emailAddress": "a@x.com"}))
+
+    vault.capture("claude", "slot1")
+
+    assert vault.read_slot("claude", "slot1").secret == older
+
+
 def test_capture_stores_claude_credential_that_still_has_a_token(tmp_path: Path) -> None:
     """Only a fully wiped blob is refused: an expired-but-refreshable
     credential still carries the refresh token and must be backed up."""
@@ -2018,3 +2113,127 @@ def test_an_app_secret_with_a_backslash_or_quote_is_read_back_exactly(tmp_path, 
     for token in ('{"a":"b\\"}', 'x"y', "tab\there"):
         vault.write_app_secret("navide-server-token", token)
         assert vault.read_app_secret("navide-server-token") == token
+
+
+# ── Startup repair of the live login (security review D2/D2b) ────────────────
+
+_REPAIR_SEC_A = '{"claudeAiOauth":{"accessToken":"tokA","refreshToken":"rA","expiresAt":9999999999999}}'
+_REPAIR_SEC_B = '{"claudeAiOauth":{"accessToken":"tokB","refreshToken":"rB","expiresAt":9999999999999}}'
+
+
+def _promoted(root: Path) -> None:
+    for marker in (".live-unified", ".homes-promoted"):
+        path = root / "claude" / marker
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+
+def test_a_failed_keychain_read_at_startup_never_overwrites_the_live_login(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """D2: rc 36 from security is not an empty live login."""
+    from agent_team_backend.credential_vault import CLAUDE_LIVE_KEYCHAIN_SERVICE
+
+    items: dict[str, str] = {}
+
+    def security(args, input_text=None):
+        tokens = shlex.split((input_text or "").rstrip("\n")) if args == ["-i"] else list(args)
+        service = tokens[tokens.index("-s") + 1]
+        if tokens[0] == "find-generic-password":
+            if service == CLAUDE_LIVE_KEYCHAIN_SERVICE:
+                return 36, "User interaction is not allowed."
+            return (0, security_g_output(items[service])) if service in items else (44, "")
+        if tokens[0] == "add-generic-password":
+            items[service] = tokens[tokens.index("-w") + 1]
+            return 0, ""
+        if tokens[0] == "delete-generic-password":
+            return (0, "") if items.pop(service, None) is not None else (44, "")
+        return 1, ""
+
+    (tmp_path / "home").mkdir()
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=security, platform="darwin")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    items[CLAUDE_LIVE_KEYCHAIN_SERVICE] = _REPAIR_SEC_B
+    _promoted(tmp_path / "root")
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert items[CLAUDE_LIVE_KEYCHAIN_SERVICE] == _REPAIR_SEC_B
+    assert _isolated_convenience_gate.history() == []
+
+
+def test_a_sign_out_outside_navide_is_a_prompt_not_a_sign_back_in(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """D2b: once the live login was published, an empty one at startup is the
+    user's `claude /logout` — told, never undone."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert vault.read_live("claude").secret is None
+    [entry] = _isolated_convenience_gate.history()
+    assert entry["action"] == "prompt"
+    assert json.loads(entry["detail"]) == {"agentKey": "claude", "reason": "logout"}
+
+
+def test_one_sign_out_outside_navide_is_one_prompt_however_many_startups(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """AC-N3: the user stays signed out across startups: told once. Signing
+    in and out again is a new sign-out, told again."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    for _ in range(3):
+        vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["prompt"]
+
+    vault.write_live("claude", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    vault.write_live("claude", LiveCredentials(secret=None))
+    for _ in range(2):
+        vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["prompt", "prompt"]
+    assert vault.read_live("claude").secret is None
+
+
+def test_a_sign_out_seen_while_auto_repair_is_off_is_told_once_it_is_on(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """R3-L6: with auto-repair off nothing is told, so nothing may be marked
+    as told either — turning the feature back on tells the sign-out."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    _promoted(tmp_path / "root")
+
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", True)
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert [e["action"] for e in _isolated_convenience_gate.history() if e["action"] == "prompt"] == ["prompt"]
+    assert vault.read_live("claude").secret is None
+
+
+def test_the_first_promotion_still_publishes_the_active_account(
+    tmp_path, _isolated_convenience_gate
+) -> None:
+    """The migration case the repair exists for keeps working."""
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    vault.write_slot("claude", "pA", LiveCredentials(secret=_REPAIR_SEC_A, account={"emailAddress": "a@x.com"}))
+    (tmp_path / "root" / "claude" / ".live-unified").touch()
+
+    vault._promote_agent_profile_homes("claude", ["pA"], "pA")
+
+    assert vault.read_live("claude").secret == _REPAIR_SEC_A
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]

@@ -8171,29 +8171,27 @@ provide(cliAccountDirActionsKey, {
   },
 })
 
-provide(
-  cliAccountSwitchKey,
-  createCliAccountSwitchHandler(cliProfilesApi, {
-    confirm: (message, opts) => notifyRestore.confirm(message, opts),
-    agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
-    accountLabel: (agentKey, profileId) => accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
-    // The account we just switched to cannot authenticate. It is the active
-    // account now, so this is a live login — the poller harvests it back into
-    // the slot. The toast says why a login pane appeared on its own, and an
-    // aged-out token is told apart from a lost login: the first is what
-    // parking an account normally does to it, and calling that "signed out"
-    // reads as the switch having broken something.
-    startLogin: (agentKey, reason) => {
-      notifyRestore.toast(
-        i18n.global.t(
-          reason === 'expired' ? 'cli-account.needs-login-expired' : 'cli-account.needs-login'
-        ),
-        { type: 'info' }
-      )
-      void onCliLoginSpawn(agentKey)
-    }
-  })
-)
+const cliAccountSwitch = createCliAccountSwitchHandler(cliProfilesApi, {
+  confirm: (message, opts) => notifyRestore.confirm(message, opts),
+  agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
+  accountLabel: (agentKey, profileId) => accountLabel(cliProfilesApi, agentKey, profileId, i18n.global.t),
+  // The account we just switched to cannot authenticate. It is the active
+  // account now, so this is a live login — the poller harvests it back into
+  // the slot. The toast says why a login pane appeared on its own, and an
+  // aged-out token is told apart from a lost login: the first is what
+  // parking an account normally does to it, and calling that "signed out"
+  // reads as the switch having broken something.
+  startLogin: (agentKey, reason) => {
+    notifyRestore.toast(
+      i18n.global.t(
+        reason === 'expired' ? 'cli-account.needs-login-expired' : 'cli-account.needs-login'
+      ),
+      { type: 'info' }
+    )
+    void onCliLoginSpawn(agentKey)
+  }
+})
+provide(cliAccountSwitchKey, cliAccountSwitch)
 
 /** Restart this window's live panes of one agent after a forced account
  *  switch, so they pick up the new credentials. Login panes and dead
@@ -14186,9 +14184,20 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
     case 'convenience-upgrade-ack':
       await convenience.ackUpgrade()
       break
+    case 'convenience-keep-login':
     case 'convenience-dismiss':
       announcements.markRead(action.rowId)
       break
+    case 'convenience-switch-back': {
+      // Back to the account Navide would have restored, through the same
+      // switch flow as Settings → Accounts.
+      const res = await cliAccountSwitch(action.agentKey, action.slotId, {
+        restoreLive: { liveFingerprint: action.liveFingerprint },
+      })
+      if (res.ok) announcements.markRead(action.rowId)
+      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      break
+    }
   }
 }
 
