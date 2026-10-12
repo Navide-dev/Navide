@@ -35,6 +35,16 @@ from .test_server_link import (  # noqa: F401 - fixtures
     broadcasts,
 )
 
+#: How long a test waits for the pushed message to reach an outcome, delivered
+#: or acked. The wait asserts nothing about time: whichever outcome comes first
+#: is what the test then checks. Not `_until`'s 3s: before either outcome the
+#: receive path reads and writes the trust record several times (the seen
+#: ledger, the pin, a notice), and on Windows that record goes through DPAPI,
+#: the latency #171 widened the connect wait for. Run 38257798883 failed here
+#: twice with the right delivery already in `broadcasts` by the time pytest
+#: reported it — late, not wrong.
+RECEIVE_TIMEOUT_S = 20.0
+
 
 def _sig2(msg_key: str, *, kind: str, body: str, sent_at: int) -> str:
     payload = {**device_signing.message_payload(
@@ -65,7 +75,7 @@ async def _receive(payload: dict, broadcasts) -> tuple[list, list]:
     try:
         conn = server.opened[0]
         await conn.push({"type": "messages.pending", "payload": payload})
-        await _until(lambda: bool(broadcasts) or bool(conn.acks))
+        await _until(lambda: bool(broadcasts) or bool(conn.acks), timeout=RECEIVE_TIMEOUT_S)
         return list(broadcasts), list(conn.acks)
     finally:
         await link.stop()
@@ -102,7 +112,7 @@ async def _two(first: dict, second: dict, broadcasts) -> tuple[list, list]:
         for payload in (first, second):
             seen = len(broadcasts) + len(conn.acks)
             await conn.push({"type": "messages.pending", "payload": payload})
-            await _until(lambda: len(broadcasts) + len(conn.acks) > seen)
+            await _until(lambda: len(broadcasts) + len(conn.acks) > seen, timeout=RECEIVE_TIMEOUT_S)
         return list(broadcasts), list(conn.acks)
     finally:
         await link.stop()
