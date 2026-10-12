@@ -87,7 +87,7 @@ describe('required CI gate', () => {
     const backend = workflow.jobs.backend
     expect(backend['timeout-minutes']).toBe('${{ matrix.timeout }}')
     expect(backend.strategy?.matrix.include.map(({ platform, timeout }) => [platform, timeout]))
-      .toEqual([['macOS', 15], ['Linux', 15], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
+      .toEqual([['macOS', 25], ['Linux', 25], ['Windows', 45], ['Windows', 45], ['Windows', 45]])
     const diagnostic = backend.steps.find((step) => step.name === 'Report the backend test log')!
     expect(diagnostic.if).toContain('always()')
     expect(diagnostic.if).toContain("runner.os == 'Windows'")
