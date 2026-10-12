@@ -221,7 +221,6 @@ def scan(home: Path | None = None, runner: Runner | None = None) -> Inventory:
 #: account repair, which writes logins, not anything a CLI loads.
 _CHANGE_CLIS: dict[str, tuple[str, ...]] = {
     "codex.hook-trust": ("codex",),
-    "codex.login-promote": ("codex",),
     "codex.pane-homes": ("codex",),
     "cursor.project-mcp": ("cursor",),
     "cursor.project-skills": ("cursor",),

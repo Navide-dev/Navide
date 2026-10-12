@@ -105,7 +105,6 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
 | `copilot.hooks` | copilot | the pane's `hooks/` folder in `~/.navide-panes/copilot/<pane>/` (see [Copilot hooks ride on the panes](#copilot-hooks-ride-on-the-panes)); `~/.copilot/hooks/agent-team.json` only when that cannot be done | yes | same for Copilot |
 | `codex.hook-trust` | codex | nothing: each pane carries its rows inline (see below); `[hooks.state]` rows in `~/.codex/config.toml` only while earlier rows cannot be taken back | yes | every Codex pane asks you to trust your own hooks again |
-| `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
 | `codex.pane-homes` | codex | `~/.codex-panes/` | no (required) | — |
@@ -260,9 +259,6 @@ interface LogEntry {
   action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude' | 'retract' | 'retract-failed'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
-                             // For action 'prompt' (codex.login-promote) it is the JSON
-                             // object { agentKey, reason: 'logout' }: the user signed
-                             // out outside Navide; there is nothing to choose
   backup: string             // '' when none
   notify: boolean
   source: string             // who triggered it: 'settings' (a Navide main window

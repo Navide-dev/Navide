@@ -102,13 +102,6 @@
         "writes": "只在 Navide 開的 Codex pane 生效：啟動時在指令列帶上你已信任的 hook，不改你的 ~/.codex/config.toml。舊版寫進該檔的 [hooks.state] 列會在啟動時收回並留備份；收不回時（或開發版 Navide）沿用寫入該檔的做法",
         "cost": "每個 Codex pane 都會再要你信任一次自己的 hooks。"
       },
-      "codex_login-promote": {
-        "name": "Codex pane 內登入全機沿用",
-        "benefit": "你在 pane 內完成的 Codex 登入，會成為整台機器 Codex 的登入。",
-        "purpose": "讓在 pane 內完成的登入在其他地方也能用",
-        "writes": "~/.codex/auth.json（指向 pane 登入的硬連結）",
-        "cost": "在 pane 內完成的登入只留在那個 pane。"
-      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor pane 可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",

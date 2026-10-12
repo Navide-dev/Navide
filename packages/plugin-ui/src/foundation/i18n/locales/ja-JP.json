@@ -102,13 +102,6 @@
         "writes": "Navide が開く Codex ペインだけで有効：信頼済みの hook をコマンドラインで渡し、~/.codex/config.toml は変更しません。以前のバージョンがそこに書いた [hooks.state] 行は起動時にバックアップを取って引き上げます。引き上げられない場合（または開発版の Navide）は従来どおりそのファイルに書きます",
         "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
       },
-      "codex_login-promote": {
-        "name": "pane 内の Codex ログインを共有",
-        "benefit": "pane 内で行った Codex のログインが、このコンピューター全体の Codex のログインになります。",
-        "purpose": "pane 内のログインを他の場所でも使える",
-        "writes": "~/.codex/auth.json（pane のログインへのハードリンク）",
-        "cost": "pane 内のログインはその pane の中だけに残ります。"
-      },
       "cursor_project-mcp": {
         "name": "Cursor 用 Navide MCP ツール",
         "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",
