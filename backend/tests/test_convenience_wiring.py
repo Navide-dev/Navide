@@ -1489,7 +1489,7 @@ def _claude_home_after_prepare(
     every resulting path. ``seeded``: its shared entries are a real file and a
     real folder, moved and merged into ~/.claude; otherwise ~/.claude/projects
     is created for the link."""
-    from agent_team_backend.credential_vault import CredentialVault
+    from agent_team_backend.credential_vault import CredentialVault, _link_target
 
     monkeypatch.setattr(convenience_wiring, "note", hook)
     monkeypatch.setattr(convenience_wiring, "changed", hook)
@@ -1507,7 +1507,7 @@ def _claude_home_after_prepare(
     for path in sorted(root.rglob("*")):
         rel = str(path.relative_to(root))
         if path.is_symlink():
-            tree[rel] = "-> " + str(Path(os.readlink(path)).relative_to(root))
+            tree[rel] = "-> " + str(Path(_link_target(os.readlink(path))).relative_to(root))
         elif path.is_file():
             tree[rel] = path.read_text(encoding="utf-8")
         else:
