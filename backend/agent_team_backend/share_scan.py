@@ -185,7 +185,7 @@ _IN_JSON = {
     id(_UNCLOSED_CREDENTIAL[0]): _unclosed_credential(_JSON_ESCAPE_PAIR)[0],
     id(_BARE_CREDENTIAL[0]): _bare_credential(_JSON_ESCAPE_PAIR)[0],
 }
-_JSON_ISLAND_RE = re.compile(r'<script\b[^>]{0,256}\bid="plan-meta"[^>]{0,256}>(.*?)</script>', re.DOTALL)
+_JSON_ISLAND_OPEN_RE = re.compile(r'<script\b[^>]{0,256}\bid="plan-meta"[^>]{0,256}>')
 #: user:password@ in a URL, also with no user (redis://:pw@host), a "/" in
 #: the password, or an "@" in it (up to the last "@" before the host). A port
 #: followed by a path (localhost:5173/@vite) is not a password, and neither is
@@ -287,9 +287,24 @@ def _newlines(text: str) -> list[int]:
     return [i for i, ch in enumerate(text) if ch == "\n"]
 
 
+def _json_islands(text: str) -> list[tuple[int, int]]:
+    """The plan-meta island bodies, in order. An opener with no "</script>"
+    after it closes nothing, and neither can any opener after it, so the
+    search stops there instead of rescanning the rest from every opener."""
+    islands: list[tuple[int, int]] = []
+    pos = 0
+    while (m := _JSON_ISLAND_OPEN_RE.search(text, pos)) is not None:
+        end = text.find("</script>", m.end())
+        if end < 0:
+            break
+        islands.append((m.end(), end))
+        pos = end + len("</script>")
+    return islands
+
+
 def _high_confidence(text: str) -> list[tuple[int, int, str, str]]:
     edits: list[tuple[int, int, str, str]] = []  # start, end, replacement, category
-    islands = [m.span(1) for m in _JSON_ISLAND_RE.finditer(text)]
+    islands = _json_islands(text)
     for pattern, repl, category in HIGH_CONFIDENCE:
         json_form = _IN_JSON.get(id(pattern))
         if json_form is None or not islands:

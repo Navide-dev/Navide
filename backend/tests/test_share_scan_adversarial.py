@@ -480,6 +480,22 @@ def test_a_run_of_backslashes_scans_in_linear_time(name: str) -> None:
     assert large / max(small, 1e-4) < 30, (name, small, large)
 
 
+_ISLAND_RUNS = {
+    "unclosed plan-meta openers": lambda n: '<script id="plan-meta">' * n,
+}
+
+
+@pytest.mark.parametrize("name", sorted(_ISLAND_RUNS))
+def test_many_plan_meta_islands_scan_in_linear_time(name: str) -> None:
+    """B8-1: finding the plan-meta islands rescanned to the end of the text
+    from every opener that never closes. Ten times the input must cost about
+    ten times the time."""
+    make = _ISLAND_RUNS[name]
+    small = _best_of(3, make(10_000))
+    large = _best_of(3, make(100_000))
+    assert large / max(small, 1e-4) < 30, (name, small, large)
+
+
 @pytest.mark.parametrize(
     "text",
     [
