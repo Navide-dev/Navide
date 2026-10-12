@@ -120,7 +120,8 @@ echo "=== Release gates ==="
 uv --project backend run ruff check backend
 pnpm typecheck
 pnpm test:run
-uv --project backend run pytest backend/tests
+# Backend tests run with a throwaway HOME and no reach to the real keychain.
+scripts/release-backend-tests.sh
 
 echo ""
 echo "=== Provisioning Antigravity usage secrets (untracked) ==="
