@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerMonitor, protocol, safeStorage, session, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron'
 import { devUserDataPath } from './devUserData'
 import { createGuestAttachHooks, type MutableWebPreferences } from './plugins/pluginGuestAttach'
 import { guardLastWindowClose } from './last-window-close'
@@ -99,7 +99,7 @@ import { clampUiScale, UI_SCALE_SETTING_KEY } from '../shared/uiScale'
 import { installContextMenu, registerTerminalContextMenu } from './context-menu'
 import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
-import { MAX_RESTORE_ATTEMPTS, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
+import { MAX_RESTORE_ATTEMPTS, onScreenBounds, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
 import { registeredGitLeftWorkspace, trustedGitLeftWindow } from './gitLeftIpc'
 import { setWindowDockTileBadge } from './dock-tile-badge'
 import { writeTempTextArtifact } from './temp-text-artifact'
@@ -280,7 +280,10 @@ const resetCancelledQuit = createQuitCancelReset({
     dockQuitInProgress = false
     quittingWindowsPrepared = false
   },
-  clearCleanExit: () => windowRegistry.clearCleanExit(),
+  clearCleanExit: () => {
+    infoMain('[main] quit cancelled; the app keeps running and the restore snapshot is kept')
+    windowRegistry.clearCleanExit()
+  },
   takeTeardownRan: () => {
     const ran = quitTeardownRan
     quitTeardownRan = false
@@ -300,6 +303,7 @@ const quitCancelWatch = createQuitCancelWatch({
     .map((window) => window.getTitle()),
   onCancelled: (titles) => {
     const windows = titles.length > 0 ? titles.join(', ') : quitConfirm.cancelledUnknownWindow
+    warnMain(`[main] quit did not finish; still open: ${windows}`)
     void (async () => {
       // Bring the app back before saying why it stayed.
       await resetCancelledQuit()
@@ -581,16 +585,22 @@ async function createWindow(
   params: Record<string, string> = {},
   opts?: { bounds?: WindowBounds }
 ): Promise<BrowserWindow> {
+  // Saved bounds may point at a display that is no longer attached.
+  const bounds = opts?.bounds && onScreenBounds(
+    opts.bounds,
+    screen.getAllDisplays().map((display) => display.workArea),
+    screen.getPrimaryDisplay().workArea,
+  )
   const win = new BrowserWindow({
-    width: opts?.bounds?.width ?? 1280,
-    height: opts?.bounds?.height ?? 800,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 800,
     // Second line of defence for the shell layout. The side panels can be
     // dragged to 560 + 520 px between them; below this the stage would be down
     // to its floor with the panels squeezed, which is usable but not pleasant,
     // and there is no reason to let the window go narrower than that.
     minWidth: 640,
     minHeight: 420,
-    ...(opts?.bounds ? { x: opts.bounds.x, y: opts.bounds.y } : {}),
+    ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     title: 'Navide',
     titleBarStyle: 'hidden',
     // `titleBarStyle: 'hidden'` means something different on each platform:
@@ -5394,7 +5404,7 @@ app.whenReady().then(async () => {
     // running, so this run is not a clean exit after all.
     // quitAndInstall's before-quit marked the windows prepared; the app is
     // still running, so un-mark that too or windows stop ending their panels.
-    onInstallAbandoned: () => { quitConfirmed = false; dockQuitInProgress = false; quittingWindowsPrepared = false; windowRegistry.clearCleanExit() },
+    onInstallAbandoned: () => { warnMain('[main] update install abandoned; the app keeps running'); quitConfirmed = false; dockQuitInProgress = false; quittingWindowsPrepared = false; windowRegistry.clearCleanExit() },
   })
   // Detect an unclean previous exit and stash its windows for the restore
   // banner. Always reset the file (start tracking this run) — but only OFFER
@@ -5404,7 +5414,7 @@ app.whenReady().then(async () => {
     const pending = windowRegistry.readPendingAndReset()
     const restoreEnabled = app.isPackaged || process.env['AGENT_TEAM_FORCE_RESTORE'] === '1'
     pendingRestore = restoreEnabled ? pending : null
-    if (pendingRestore) console.log('[main] unclean exit detected;', pendingRestore.length, 'workspace(s) restorable')
+    if (pendingRestore) infoMain(`[main] unclean exit detected; ${pendingRestore.length} workspace(s) restorable`)
   }
   // In dev mode, inject the per-session random token into every renderer →
   // dev-server request so browsers without the token get 403.
@@ -5484,10 +5494,10 @@ app.whenReady().then(async () => {
       const plan = windowRegistry.beginRestore(autoRestore)
       skippedRestores = plan.skipped.map((w) => w.workspace_path)
       for (const path of skippedRestores) {
-        console.warn(`[main] restore skipped: ${path} failed to restore ${MAX_RESTORE_ATTEMPTS} times in a row`)
+        warnMain(`[main] restore skipped: ${path} failed to restore ${MAX_RESTORE_ATTEMPTS} times in a row`)
       }
       if (plan.restore.length) {
-        console.log('[main] clean-exit restore;', plan.restore.length, 'workspace window(s)')
+        infoMain(`[main] clean-exit restore; ${plan.restore.length} workspace window(s)`)
       }
       // Main windows first: a detached child broadcasts to its origin window,
       // which has to exist by then for the hand-off bookkeeping to land.
