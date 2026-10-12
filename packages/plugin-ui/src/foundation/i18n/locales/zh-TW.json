@@ -19,6 +19,8 @@
         "cleanup-failed": "無法移除 {target}，便利功能「{feature}」仍維持開啟。請先手動修好這個檔案（它可能不是有效的 JSON），再關閉一次",
         "refused-unsafe": "{target} 所在的 .cursor 指向專案資料夾外，為了安全，Navide 沒有在這裡設定便利功能「{feature}」。要使用，請把 .cursor 改成專案內的一般資料夾",
         "refused-name": "Skill「{name}」和 Navide 的清單檔 .navide-links 同名，Navide 沒有在 {target} 為它建立連結；改名後就會出現",
+        "retract": "Navide 已把便利功能「{feature}」在 {target} 的項目收回：改由 Navide 開的 pane 自己帶上，你的檔案不再包含它（已留備份）",
+        "retract-failed": "無法從 {target} 收回便利功能「{feature}」的項目，pane 會繼續使用檔案裡的這一項。請先手動修好這個檔案（它可能不是有效的 JSON），再重新啟動 Navide",
         "refused-exclude": "{target} 所在儲存庫的 .git 或 .git/info/exclude 是連結，或是另一個檔案的別名，為了安全，Navide 沒有寫入 git exclude；便利功能「{feature}」建立的連結會出現在 git status 裡"
       },
       "button": {
@@ -41,6 +43,8 @@
       "prompt": "登入在 Navide 外被換過",
       "refused-unsafe": "為了安全未設定",
       "refused-name": "因名稱未建立連結",
+      "retract": "已收回到 Navide 的 pane",
+      "retract-failed": "無法收回到 Navide 的 pane",
       "refused-exclude": "為了安全未寫入 git exclude"
     },
     "overview": {
@@ -74,7 +78,7 @@
         "name": "Claude hook：回合偵測、Navide Guard 與喚醒",
         "benefit": "Claude 會回報每一回合何時結束、Navide Guard 會檢查 Claude 的工具呼叫，推播頻道也能喚醒閒置的 Claude。",
         "purpose": "讓 Navide 知道 Claude 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
-        "writes": "~/.claude/settings.json 裡的 hooks（回合偵測、Navide Guard、喚醒）",
+        "writes": "只在 Navide 開的 Claude pane 生效：啟動時帶上 hooks（回合偵測、Navide Guard、喚醒），不改你的 ~/.claude/settings.json。舊版寫進該檔的項目會在啟動時收回並留備份；收不回時沿用該檔裡的 hooks",
         "cost": "回合結束改由輸出推測，不再由 Claude 回報；Navide Guard 不會檢查 Claude 的工具呼叫；推播頻道無法喚醒閒置的 Claude。"
       },
       "qwen_hooks": {
@@ -88,14 +92,14 @@
         "name": "Copilot hook：回合偵測與 Navide Guard",
         "benefit": "Copilot 會回報每一回合何時結束，Navide Guard 會檢查 Copilot 的工具呼叫。",
         "purpose": "讓 Navide 知道 Copilot 何時完成回合，並讓 Navide Guard 檢查它的工具呼叫",
-        "writes": "~/.copilot/hooks/agent-team.json",
+        "writes": "只在 Navide 開的 Copilot pane 生效：pane 自己的 hooks 資料夾帶上 Navide 的 hook 檔，不改你的 ~/.copilot。舊版寫進 ~/.copilot/hooks/agent-team.json 的檔案會在啟動時收回並留備份；收不回時沿用該檔",
         "cost": "回合結束改由輸出推測，不再由 Copilot 回報；Navide Guard 不會檢查 Copilot 的工具呼叫。"
       },
       "codex_hook-trust": {
         "name": "Codex hook 信任沿用",
         "benefit": "Codex pane 會沿用你已經給過自己 hooks 的信任，不必每個 pane 再問一次。",
         "purpose": "讓 Codex pane 不必再要你重新信任自己的 hooks",
-        "writes": "~/.codex/config.toml 裡的 [hooks.state] 列",
+        "writes": "只在 Navide 開的 Codex pane 生效：啟動時在指令列帶上你已信任的 hook，不改你的 ~/.codex/config.toml。舊版寫進該檔的 [hooks.state] 列會在啟動時收回並留備份；收不回時（或開發版 Navide）沿用寫入該檔的做法",
         "cost": "每個 Codex pane 都會再要你信任一次自己的 hooks。"
       },
       "cursor_project-mcp": {

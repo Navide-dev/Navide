@@ -67,9 +67,11 @@ _BY_ID = {feature.id: feature for feature in REGISTRY}
 #: several entries in a target, which stays out while the rest keep working;
 #: ``prompt``: a decision is waiting on the user; ``refused-unsafe``: a
 #: workspace target leads outside the workspace, so Navide set nothing up there.
+#: ``retract``: Navide moved its entry out of a shared file into the panes it
+#: starts; ``retract-failed``: it could not, so the shared entry stays in use.
 ACTIONS = (
     "first", "repair", "reset", "removed", "removed-entry", "off", "allowed", "cleanup", "cleanup-failed", "prompt",
-    "refused-unsafe", "refused-name", "refused-exclude",
+    "refused-unsafe", "refused-name", "refused-exclude", "retract", "retract-failed",
 )
 
 UPGRADE_KEY = "convenience.upgrade_notice"
@@ -251,6 +253,55 @@ class ConvenienceGate:
             for target in done:
                 self.forget(feature_id, target)
             raise CleanupIncomplete(feature_id, stuck)
+
+    def retract(self, feature_id: str, items: list[Takeback]) -> bool:
+        """Take Navide's entries back out of shared files now that the panes
+        Navide starts carry them themselves; the feature stays allowed.
+
+        Each target still holding the entry is backed up, cleared and
+        announced as ``retract``, then forgotten, so its absence is never read
+        as the user's removal; the entries the user deleted by hand stay
+        excluded. One that cannot be cleared is announced as
+        ``retract-failed`` and kept. Returns whether none is left behind.
+        """
+        clear = True
+        with self._lock:
+            for item in items:
+                if item.present is not None and _probe(item.present) is False:
+                    continue
+                before = _read(item.file)
+                backup = self._backup(feature_id, item.target, before)
+                error = ""
+                try:
+                    item.remove()
+                except Exception as err:  # noqa: BLE001 — reported below, never swallowed
+                    error = str(err) or type(err).__name__
+                still = _probe(item.present) if item.present is not None else False
+                if error or still is not False:
+                    clear = False
+                    reason = error or ("the file cannot be read" if still is None else "the entry is still there")
+                    self.record(
+                        feature_id, "retract-failed", item.target,
+                        detail=f"could not take Navide's entry back: {reason}", backup=backup,
+                    )
+                    continue
+                if item.file is None or before != _read(item.file):
+                    self.record(
+                        feature_id, "retract", item.target,
+                        detail="moved into the panes Navide starts", backup=backup,
+                    )
+                # Forgotten, except the entries the user deleted by hand: the
+                # panes carry the hooks from now on, still without those.
+                with self.db.transaction() as cur:
+                    cur.execute(
+                        "DELETE FROM convenience_targets WHERE feature = ? AND target = ?",
+                        (feature_id, item.target),
+                    )
+                    cur.execute(
+                        "DELETE FROM convenience_parts WHERE feature = ? AND target = ? AND state != 'removed'",
+                        (feature_id, item.target),
+                    )
+        return clear
 
     def _set_state(self, feature_id: str, state: str, reason: str) -> None:
         with self.db.transaction() as cur:

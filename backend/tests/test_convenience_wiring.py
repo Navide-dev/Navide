@@ -1204,6 +1204,7 @@ def test_a_workspace_refused_for_safety_is_announced_once_for_every_spelling(gat
 
 PANE_A = "0a1b2c3d-1111-4222-8333-444455556666"
 PANE_B = "0a1b2c3d-7777-4888-8999-aaaabbbbcccc"
+PROD_PORT = "/data/Agent-Team/backend-port"
 
 
 def _codex(tmp_path: Path):
@@ -1567,3 +1568,222 @@ def test_a_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
 
     assert "other@example.com" in gate.history()[0]["detail"]
     assert "@example.com" not in caplog.text
+
+
+# ── Phase 3: hooks carried by the panes instead of the shared file ───────────
+
+@pytest.fixture
+def carrier(monkeypatch: pytest.MonkeyPatch):
+    """A fake claude pane carrier: records what it was asked to prepare."""
+    prepared: list[tuple[str, frozenset[str]]] = []
+    monkeypatch.setattr(convenience_wiring, "_PANE_CARRIERS", {"claude": lambda port, skip: prepared.append((port, skip))})
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    return prepared
+
+
+def test_a_carried_vendor_retracts_its_shared_entry_and_the_panes_take_over(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    port = str(homes["port"])
+    # Phase 2 wrote the shared entry (no carrier yet).
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+    assert claude_hooks.hooks_present(settings)
+
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    assert result["convenience"] == "pane"
+    # The user's own settings stay; uninstall_hooks leaves an empty "hooks"
+    # behind, as the off switch always has.
+    assert json.loads(settings.read_text(encoding="utf-8")) == {"theme": "dark", "hooks": {}}
+    assert not claude_hooks.hooks_present(settings)
+    assert carrier == [(port, frozenset())]
+    assert convenience_wiring.pane_carries_hooks("claude")
+    assert gate.history("claude.hooks", limit=1)[0]["action"] == "retract"
+
+
+def test_a_carried_vendor_never_writes_the_shared_file(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text(json.dumps({"theme": "dark"}), encoding="utf-8")
+    before = settings.read_bytes()
+
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    assert settings.read_bytes() == before
+    assert convenience_wiring.pane_carries_hooks("claude")
+
+
+def test_a_carried_vendor_that_is_off_carries_nothing(gate, homes, carrier) -> None:
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    assert result["convenience"] == "off"
+    assert carrier == []
+    assert not convenience_wiring.pane_carries_hooks("claude")
+
+
+def test_switching_a_carried_vendor_off_stops_the_panes_carrying_it(gate, homes, carrier) -> None:
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("claude")
+
+    convenience_wiring.set_feature("claude.hooks", False, port_file=str(homes["port"]))
+
+    assert not convenience_wiring.pane_carries_hooks("claude")
+    convenience_wiring.set_feature("claude.hooks", True, port_file=str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("claude")
+    assert not claude_hooks.hooks_present(_target("claude"))
+
+
+def test_a_shared_entry_that_cannot_be_retracted_keeps_the_shared_hooks(gate, homes, carrier, monkeypatch) -> None:
+    settings = _target("claude")
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    def stuck() -> None:
+        raise OSError("read-only")
+
+    monkeypatch.setattr(claude_hooks, "uninstall_hooks", stuck)
+    result = convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], str(homes["port"]))
+
+    # Never both at once: the panes would run every hook twice.
+    assert not convenience_wiring.pane_carries_hooks("claude")
+    assert carrier == []
+    assert claude_hooks.hooks_present(settings)
+    assert result["convenience"] in {"unchanged", "repair"}
+
+
+def test_a_carried_vendor_keeps_the_hooks_the_user_removed_out(gate, homes, carrier) -> None:
+    settings = _target("claude")
+    settings.write_text("{}", encoding="utf-8")
+    port = str(homes["port"])
+    with pytest.MonkeyPatch.context() as m:
+        m.setattr(convenience_wiring, "_PANE_CARRIERS", {})
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        del data["hooks"]["Notification"]
+        settings.write_text(json.dumps(data), encoding="utf-8")
+        convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    convenience_wiring.install_hooks_gated("claude", INSTALLERS["claude"], port)
+
+    assert carrier and "Notification:notification" in carrier[-1][1]
+
+
+# ── Phase 3: codex hook trust carried inline by the panes ────────────────────
+
+@pytest.fixture
+def codex_app(gate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    from agent_team_backend import app
+
+    manager, real = _codex(tmp_path)
+    monkeypatch.setattr(app, "codex_home_manager", manager)
+    monkeypatch.setattr(convenience_wiring, "_CARRYING", set())
+    return manager, real
+
+
+def test_codex_startup_retracts_seeded_trust_rows_and_the_panes_carry_them_inline(gate, codex_app) -> None:
+    import tomllib
+
+    manager, real = codex_app
+    before = (real / "config.toml").read_text(encoding="utf-8")
+    # Phase 2 seeded a row for pane A into the user's config.toml.
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+
+    assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is True
+
+    assert (real / "config.toml").read_text(encoding="utf-8").rstrip("\n") == before.rstrip("\n")
+    assert convenience_wiring.pane_carries_hooks("codex")
+    assert gate.history("codex.hook-trust", limit=1)[0]["action"] == "retract"
+    assert gate.state("codex.hook-trust") == ("allowed", "default")
+    home_b = manager.prepare(PANE_B)
+    override = manager.hook_trust_override(home_b)
+    assert tomllib.loads(override) == {"hooks": {"state": {
+        f"{home_b / 'hooks.json'}:stop:0:0": {"trusted_hash": "sha256:aaaa"},
+    }}}
+
+
+def test_codex_hook_trust_that_cannot_be_retracted_keeps_seeding_and_no_pane_carries_it(
+    gate, codex_app
+) -> None:
+    manager, real = codex_app
+    convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A))
+    # The rewrite cannot land (see test_codex_hook_trust_off_that_cannot_write_is_not_reported_done).
+    config = real / "config.toml"
+    real.chmod(0o555)
+    config.chmod(0o444)
+    try:
+        assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is False
+    finally:
+        config.chmod(0o644)
+        real.chmod(0o755)
+
+    assert not convenience_wiring.pane_carries_hooks("codex")
+    assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 2
+    assert gate.history("codex.hook-trust", limit=1)[0]["action"] == "retract-failed"
+
+
+def test_codex_hook_trust_off_stops_the_panes_carrying_it_and_re_allow_brings_it_back(
+    gate, homes, codex_app
+) -> None:
+    manager, real = codex_app
+    assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is True
+
+    convenience_wiring.set_feature("codex.hook-trust", False, port_file=str(homes["port"]))
+    assert not convenience_wiring.pane_carries_hooks("codex")
+    assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is False
+
+    convenience_wiring.set_feature("codex.hook-trust", True, port_file=str(homes["port"]))
+    assert convenience_wiring.pane_carries_hooks("codex")
+
+
+def test_codex_with_no_hook_trust_of_its_own_gets_no_override(gate, codex_app) -> None:
+    """M2: the -c hooks.state value is built only from [hooks.state] rows the
+    user's own codex wrote. A codex that never wrote any (one too old for
+    hook trust) gets no -c at all."""
+    manager, real = codex_app
+    config = real / "config.toml"
+    config.write_text('model = "o3"\n', encoding="utf-8")
+
+    assert manager.hook_trust_override(manager.prepare(PANE_B)) == ""
+
+
+def test_codex_hook_trust_override_skips_rows_the_user_already_trusts_for_the_pane(gate, codex_app) -> None:
+    import tomllib
+
+    manager, real = codex_app
+    home = manager.prepare(PANE_A)
+    assert manager.seed_hook_trust(home) == 1
+
+    assert manager.hook_trust_override(home) == ""
+    assert manager.hook_trust_override(manager.prepare(PANE_B)) != ""
+    assert tomllib.loads(manager.hook_trust_override(manager.prepare(PANE_B)))
+
+
+def test_reclaiming_a_pane_home_nothing_was_seeded_for_leaves_config_toml_unwritten(gate, codex_app) -> None:
+    manager, real = codex_app
+    assert convenience_wiring.carry_codex_hook_trust(PROD_PORT) is True
+    manager.prepare(PANE_A)
+    config = real / "config.toml"
+    before = (config.read_bytes(), config.stat().st_ino, config.stat().st_mtime_ns)
+
+    assert manager.reclaim(PANE_A)
+
+    assert (config.read_bytes(), config.stat().st_ino, config.stat().st_mtime_ns) == before
+
+
+def test_a_dev_backend_never_retracts_codex_hook_trust_and_keeps_seeding(gate, codex_app) -> None:
+    """A dev backend shares ~/.codex-panes with the installed Navide: taking
+    every pane-home row back would strip the rows of the installed build's
+    live panes. It stays on Phase 2."""
+    manager, real = codex_app
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_A)) == 1
+    before = (real / "config.toml").read_bytes()
+
+    assert convenience_wiring.carry_codex_hook_trust("/data/Agent-Team-dev/backend-port") is False
+
+    assert (real / "config.toml").read_bytes() == before
+    assert not convenience_wiring.pane_carries_hooks("codex")
+    assert convenience_wiring.seed_hook_trust_gated(manager, manager.prepare(PANE_B)) == 1
