@@ -1377,6 +1377,47 @@ def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -
     assert not (real / "auth.json").exists()
 
 
+class _LockedLedger:
+    """A convenience gate whose ledger answers ``broken`` with a locked database."""
+
+    def __init__(self, broken: str) -> None:
+        self.broken = broken
+
+    def __getattr__(self, name: str):
+        import sqlite3
+
+        def call(*_a, **_k):
+            if name == self.broken:
+                raise sqlite3.OperationalError("database is locked")
+            if name == "allowed":
+                return True
+            if name == "listing_feature":
+                return {"targets": []}
+            return []
+
+        return call
+
+
+@pytest.mark.parametrize(("broken", "promoted"), [
+    ("allowed", False), ("listing_feature", False), ("note", True),
+])
+def test_a_codex_login_promotion_never_fails_on_the_ledger(tmp_path, monkeypatch, broken, promoted) -> None:
+    """The ledger (a locked database) never fails a pane spawn or the quota
+    poll. Before the promotion it fails closed: nothing is promoted. After
+    it, only the notice is lost."""
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    monkeypatch.setattr(convenience_wiring, "gate", lambda: _LockedLedger(broken))
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home = manager.prepare(PANE_A)
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+
+    assert manager.promote_stranded_auth() is promoted
+    assert (real / "auth.json").exists() is promoted
+    manager.prepare(PANE_B)
+
+
 def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tmp_path) -> None:
     import os
     import time

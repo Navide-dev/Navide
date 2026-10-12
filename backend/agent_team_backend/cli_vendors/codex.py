@@ -895,20 +895,18 @@ class CodexHomeManager:
         from ..convenience_wiring import gate
 
         convenience = gate()
-        if convenience is not None and not convenience.allowed("codex.login-promote"):
+        try:
+            if convenience is not None and not convenience.allowed("codex.login-promote"):
+                return False
+        except Exception as err:  # noqa: BLE001 — an unread ledger never promotes
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
             return False
         try:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
             if not self.panes_root.is_dir():
                 return False
-            if convenience is not None and self._shared_login_existed(convenience, real_auth):
-                latest = convenience.history("codex.login-promote", limit=1)
-                if not latest or latest[0]["action"] != "prompt":
-                    convenience.record(
-                        "codex.login-promote", "prompt", str(real_auth),
-                        detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
-                    )
+            if convenience is not None and self._prompted_for_outside_logout(convenience, real_auth):
                 return False
             stranded = [
                 p for p in self.panes_root.glob("*/auth.json")
@@ -936,7 +934,28 @@ class CodexHomeManager:
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
         if convenience is not None:
-            convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
+            try:
+                convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
+            except Exception as err:  # noqa: BLE001 — the promotion stands
+                log.warning("announcing the codex login promotion failed: %s", err)
+        return True
+
+    def _prompted_for_outside_logout(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the shared login was signed out outside Navide, which is
+        told (once) instead of promoting a pane login. True as well when the
+        ledger cannot be read: no promotion then, a spawn or a quota poll
+        never fails on it."""
+        try:
+            if not self._shared_login_existed(convenience, real_auth):
+                return False
+            latest = convenience.history("codex.login-promote", limit=1)
+            if not latest or latest[0]["action"] != "prompt":
+                convenience.record(
+                    "codex.login-promote", "prompt", str(real_auth),
+                    detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
+                )
+        except Exception as err:  # noqa: BLE001
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
         return True
 
     def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
