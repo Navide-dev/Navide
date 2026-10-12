@@ -885,12 +885,28 @@ class CodexHomeManager:
         concurrent writer beating us simply wins) and swap the pane's copy
         for the standard symlink so codex token refreshes write through to
         the shared file. Returns True when the real home gained the
-        credential."""
+        credential.
+
+        Through the convenience gate this happens once. A shared login that
+        existed and is gone was signed out outside Navide: the user gets a
+        prompt, and no pane login — least of all an older or different
+        account — takes its place."""
         real_auth = self.real_home / "auth.json"
+        from ..convenience_wiring import gate
+
+        convenience = gate()
+        try:
+            if convenience is not None and not convenience.allowed("codex.login-promote"):
+                return False
+        except Exception as err:  # noqa: BLE001 — an unread ledger never promotes
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
+            return False
         try:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
             if not self.panes_root.is_dir():
+                return False
+            if convenience is not None and self._prompted_for_outside_logout(convenience, real_auth):
                 return False
             stranded = [
                 p for p in self.panes_root.glob("*/auth.json")
@@ -917,7 +933,46 @@ class CodexHomeManager:
             # will diverge on refresh until its next prepare() re-links it.
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
+        if convenience is not None:
+            try:
+                convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
+            except Exception as err:  # noqa: BLE001 — the promotion stands
+                log.warning("announcing the codex login promotion failed: %s", err)
         return True
+
+    def _prompted_for_outside_logout(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the shared login was signed out outside Navide, which is
+        told (once) instead of promoting a pane login. True as well when the
+        ledger cannot be read: no promotion then, a spawn or a quota poll
+        never fails on it."""
+        try:
+            if not self._shared_login_existed(convenience, real_auth):
+                return False
+            latest = convenience.history("codex.login-promote", limit=1)
+            if not latest or latest[0]["action"] != "prompt":
+                convenience.record(
+                    "codex.login-promote", "prompt", str(real_auth),
+                    detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
+                )
+        except Exception as err:  # noqa: BLE001
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
+        return True
+
+    def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the real auth.json was there before: Navide promoted it (the
+        ledger), or a pane home still links to it."""
+        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+            return True
+        from ..credential_vault import _link_target
+
+        for link in self.panes_root.glob("*/auth.json"):
+            try:
+                # Windows reads a link back as an extended-length path.
+                if link.is_symlink() and Path(_link_target(os.readlink(link))) == real_auth:
+                    return True
+            except OSError:
+                continue
+        return False
 
     @staticmethod
     def _remove_generated_path(path: Path) -> None:

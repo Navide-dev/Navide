@@ -26,8 +26,21 @@ describe('follow switch wiring: off means unchanged', () => {
     const start = appSource.indexOf('  cliAccountSwitchKey,\n  // withFollowSwitch')
     expect(start).toBeGreaterThan(-1)
     const block = appSource.slice(start, appSource.indexOf('\n)\n', start))
-    expect(block).toContain('withFollowSwitch(createCliAccountSwitchHandler(cliProfilesApi, {')
+    // The handler is built once as cliAccountSwitch (the account prompt's
+    // switch-back calls it unwrapped, below); what is provided wraps it.
+    expect(appSource).toContain('const cliAccountSwitch = createCliAccountSwitchHandler(cliProfilesApi, {')
+    expect(block).toContain('withFollowSwitch(cliAccountSwitch, {')
     expect(block).toContain('enabled: accountFollowSwitchEnabled,')
+  })
+
+  it("keeps the account prompt's switch-back on the unwrapped handler, with its restoreLive guard", () => {
+    // withFollowSwitch passes (agentKey, profileId) only: through it the
+    // switch-back would lose restoreLive and switch whatever login is live.
+    const start = appSource.indexOf("case 'convenience-switch-back': {")
+    expect(start).toBeGreaterThan(-1)
+    const body = appSource.slice(start, appSource.indexOf('break', start))
+    expect(body).toContain('await cliAccountSwitch(action.agentKey, action.slotId, {')
+    expect(body).toContain('restoreLive: { liveFingerprint: action.liveFingerprint },')
   })
 
   it('offers the quota button only with the flag on, for a claude pane that can be rebuilt', () => {

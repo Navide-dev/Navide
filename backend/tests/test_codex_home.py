@@ -369,6 +369,15 @@ def test_resuming_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Pa
     assert not (real / "auth.json").exists()
 
 
+def test_respawning_the_same_home_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Path) -> None:
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+
+    home = manager.prepare("pane-a")
+
+    assert "old-account" in (home / "auth.json").read_text(encoding="utf-8")
+    assert not (real / "auth.json").exists()
+
+
 # ── sub-agent pin repair ────────────────────────────────────────────────────
 
 def _meta(sid: str, *, parent: str = "", ancestors: tuple[str, ...] = ()) -> str:

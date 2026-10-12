@@ -53,12 +53,16 @@ export type EvolveAnnouncementAction = {
 }
 
 /** A convenience-feature row's button (docs/en-US/convenience-features.md).
- *  App.vue maps them onto the overview and `convenience.*` RPCs. */
+ *  App.vue maps them onto the overview, `convenience.*` RPCs and, for the
+ *  account prompt, the existing cli_profiles default-account switch. */
 export type ConvenienceAnnouncementAction =
   | { kind: 'convenience-overview' }
   | { kind: 'convenience-reallow'; featureId: string }
+  | { kind: 'convenience-keep-login'; rowId: string }
   /** Acknowledges a notice that offers nothing else (an outside sign-out). */
   | { kind: 'convenience-dismiss'; rowId: string }
+  /** Back to the account Navide would restore, named by the prompt's slotId. */
+  | { kind: 'convenience-switch-back'; rowId: string; agentKey: string; slotId: string; label: string; liveFingerprint: string }
   | { kind: 'convenience-upgrade-ack' }
 
 export type AnnouncementActionSpec =
@@ -476,10 +480,17 @@ const convenienceAgentLabel = shallowRef<(agentKey: string) => string>((key) => 
 
 export const CONVENIENCE_UPGRADE_ID = 'convenience:upgrade'
 
-/** `detail` of a prompt entry (a JSON string). */
+/** `detail` of a credentials.auto-repair prompt entry (a JSON string). */
 interface ConveniencePromptDetail {
   agentKey?: string
-  /** "logout": the user signed out outside Navide. */
+  slotId?: string | null
+  slotLabel?: string
+  liveEmail?: string
+  slotEmail?: string
+  /** Hash of the live login the prompt is about; the switch-back sends it
+   *  back and the backend refuses it once another login is live. */
+  liveFingerprint?: string
+  /** "logout": the user signed out outside Navide; no slot to switch back to. */
   reason?: string
 }
 
@@ -551,7 +562,26 @@ function convenienceItems(seen: Set<string>): Announcement[] {
           if (!seen.has(id)) actions.push({ kind: 'convenience-dismiss', rowId: id })
           break
         }
+        const label = detail.slotLabel || detail.slotEmail || ''
         title = t('convenience.notice.prompt', { agent: convenienceAgentLabel.value(agentKey) })
+        if (detail.liveEmail || label) {
+          highlights.push(t('convenience.notice.prompt-accounts', { live: detail.liveEmail || '?', slot: label || '?' }))
+        }
+        note = t('convenience.notice.prompt-note')
+        // A prompt is answered once: reading the row is the answer "keep"
+        // (Navide already follows the live account). Switching back needs the
+        // slot the prompt names; a missing one must never become a switch to
+        // Default, so then only "keep" is offered. The same goes for the live
+        // login's fingerprint, without which the backend refuses the switch.
+        if (!seen.has(id)) {
+          actions.push({ kind: 'convenience-keep-login', rowId: id })
+          if (typeof detail.slotId === 'string' && detail.slotId && typeof detail.liveFingerprint === 'string') {
+            actions.push({
+              kind: 'convenience-switch-back', rowId: id, agentKey, slotId: detail.slotId, label,
+              liveFingerprint: detail.liveFingerprint,
+            })
+          }
+        }
         break
       }
       case 'refused-name': {

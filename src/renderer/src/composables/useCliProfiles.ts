@@ -86,6 +86,7 @@ export const LOGIN_I18N_FALLBACK: Readonly<Record<string, string>> = Object.free
   'cli-account.live-drift-confirm-body': "{agent}'s live credential changed since it was last saved, and this CLI stores no identity Navide could check it against. Continue only if you are certain it is still {current} (a normal token refresh, not another sign-in). If you continue, Navide keeps the live credential as {current} and switches to {target}.",
   'cli-account.live-drift-confirm-confirm': 'It is still {current} — continue',
   'cli-account.live-drift-confirm-cancel': 'Cancel',
+  'cli-account.live-changed': 'The signed-in {agent} account changed after this notice, so nothing was switched. Check Settings → Accounts.',
 })
 
 export function tLogin(key: string, params: Record<string, string | number> = {}): string {
@@ -458,6 +459,11 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
        *  the state the first refusal reported, which the backend checks
        *  under its lock before honouring the assumption. */
       assumeLiveIsCurrent?: { expectedCurrentSlotId: string; expectedEpoch: number; liveFingerprint: string }
+      /** The account prompt's "switch back": when the account is already the
+       *  active one, write its slot back to live instead of a no-op. Carries
+       *  the prompt's live-login fingerprint; the backend refuses the switch
+       *  (LIVE_CHANGED) once another login is live. */
+      restoreLive?: { liveFingerprint: string }
     },
   ): Promise<SetDefaultResult> {
     try {
@@ -466,6 +472,10 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
         profile_id: profileId,
       }
       if (opts?.force) payload.force = true
+      if (opts?.restoreLive) {
+        payload.restore_live = true
+        payload.restore_live_fingerprint = opts.restoreLive.liveFingerprint
+      }
       if (opts?.assumeLiveIsCurrent) {
         payload.assume_live_is_current = true
         payload.expected_current_slot_id = opts.assumeLiveIsCurrent.expectedCurrentSlotId
@@ -507,7 +517,9 @@ export function useCliProfiles(backend: ReturnType<typeof useBackend>) {
           preflightMessage(code, resp.error?.details, agentLabelOf(agentKey), resp.error?.message) ??
           (code === 'PROFILE_SWAP_FAILED'
             ? i18n.global.t('cli-account.swap-failed')
-            : code === 'LOGIN_IN_PROGRESS'
+            : code === 'LIVE_CHANGED'
+              ? tLogin('cli-account.live-changed', { agent: agentLabelOf(agentKey) })
+              : code === 'LOGIN_IN_PROGRESS'
               ? (resp.error?.details?.state
                   ? tLogin('cli-account.login-in-progress', { agent: agentLabelOf(agentKey), state: String(resp.error.details.state) })
                   : i18n.global.t('settings.accounts.cli.login-in-progress-error'))
@@ -1001,6 +1013,7 @@ function groupCloudItems(items: unknown[]): CliCloudCredentials {
 export type CliAccountSwitchHandler = (
   agentKey: string,
   profileId: string | null,
+  opts?: { restoreLive?: { liveFingerprint: string } },
 ) => Promise<SetDefaultResult>
 
 export const cliAccountSwitchKey: InjectionKey<CliAccountSwitchHandler> =
@@ -1058,8 +1071,11 @@ export function createCliAccountSwitchHandler(
     return res
   }
 
-  return async (agentKey, profileId) => {
-    const first = await api.setDefault(agentKey, profileId)
+  return async (agentKey, profileId, opts) => {
+    const restoreLive = opts?.restoreLive
+    const first = restoreLive
+      ? await api.setDefault(agentKey, profileId, { restoreLive })
+      : await api.setDefault(agentKey, profileId)
     if (!first.ok && first.code === 'LIVE_DRIFT' && first.liveDrift?.verified === false) {
       // The live credential changed and the vendor stores no identity to
       // check it against: only the user can say whether it is still the
@@ -1113,7 +1129,7 @@ export function createCliAccountSwitchHandler(
       },
     )
     if (!confirmed) return { ok: false, code: 'PANES_RUNNING' }
-    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, { force: true }))
+    return afterSwitch(agentKey, await api.setDefault(agentKey, profileId, { force: true, ...(restoreLive ? { restoreLive } : {}) }))
   }
 }
 

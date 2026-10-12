@@ -1356,6 +1356,198 @@ def test_codex_hook_trust_off_that_cannot_write_is_not_reported_done(gate, homes
     assert (real / "config.toml").read_text(encoding="utf-8").count("trusted_hash") == 1
 
 
+def test_codex_login_promotion_is_announced_and_stops_when_off(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home = manager.prepare(PANE_A)
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+
+    assert manager.promote_stranded_auth() is True
+    assert gate.history()[0]["feature"] == "codex.login-promote"
+    assert gate.history()[0]["notify"] is True
+
+    (real / "auth.json").unlink()
+    (home / "auth.json").unlink()
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+    gate.set_allowed("codex.login-promote", False)
+
+    assert manager.promote_stranded_auth() is False
+    assert not (real / "auth.json").exists()
+
+
+class _LockedLedger:
+    """A convenience gate whose ledger answers ``broken`` with a locked database."""
+
+    def __init__(self, broken: str) -> None:
+        self.broken = broken
+
+    def __getattr__(self, name: str):
+        import sqlite3
+
+        def call(*_a, **_k):
+            if name == self.broken:
+                raise sqlite3.OperationalError("database is locked")
+            if name == "allowed":
+                return True
+            if name == "listing_feature":
+                return {"targets": []}
+            return []
+
+        return call
+
+
+@pytest.mark.parametrize(("broken", "promoted"), [
+    ("allowed", False), ("listing_feature", False), ("note", True),
+])
+def test_a_codex_login_promotion_never_fails_on_the_ledger(tmp_path, monkeypatch, broken, promoted) -> None:
+    """The ledger (a locked database) never fails a pane spawn or the quota
+    poll. Before the promotion it fails closed: nothing is promoted. After
+    it, only the notice is lost."""
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    monkeypatch.setattr(convenience_wiring, "gate", lambda: _LockedLedger(broken))
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home = manager.prepare(PANE_A)
+    (home / "auth.json").write_text("{}", encoding="utf-8")
+
+    assert manager.promote_stranded_auth() is promoted
+    assert (real / "auth.json").exists() is promoted
+    manager.prepare(PANE_B)
+
+
+def test_codex_logout_outside_navide_prompts_instead_of_promoting_again(gate, tmp_path) -> None:
+    import os
+    import time
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare(PANE_A), manager.prepare(PANE_B)
+    (home_a / "auth.json").write_text('{"who": "old-account"}', encoding="utf-8")
+    (home_b / "auth.json").write_text('{"who": "new-account"}', encoding="utf-8")
+    os.utime(home_a / "auth.json", (time.time() - 100, time.time() - 100))
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert (home_a / "auth.json").read_text(encoding="utf-8") == '{"who": "old-account"}'
+    actions = [e["action"] for e in gate.history("codex.login-promote")]
+    assert actions == ["prompt", "first"]
+    prompt = gate.history("codex.login-promote")[0]
+    assert prompt["notify"] is True
+    assert json.loads(prompt["detail"]) == {"agentKey": "codex", "reason": "logout"}
+
+
+def test_codex_login_of_the_users_own_that_disappeared_is_never_replaced(gate, tmp_path) -> None:
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
+
+
+def test_codex_login_link_read_back_as_a_windows_extended_path_still_counts(gate, tmp_path, monkeypatch) -> None:
+    """Windows' os.readlink answers with an extended-length path (\\\\?\\...),
+    which never equals the plain path the link was made from: the user's own
+    login, signed out outside Navide, must still never be replaced."""
+    import os
+
+    from agent_team_backend.codex_home import CodexHomeManager
+
+    plain = os.readlink
+    # Windows already answers this way; elsewhere it is made to.
+    extended = "\\\\?\\"
+    monkeypatch.setattr(
+        os, "readlink", lambda link: raw if (raw := str(plain(link))).startswith(extended) else extended + raw
+    )
+    real = tmp_path / "real-codex"
+    real.mkdir()
+    (real / "auth.json").write_text('{"who": "own"}', encoding="utf-8")
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    manager.prepare(PANE_A)  # links the user's own login
+    home_b = manager.prepare(PANE_B)
+    (home_b / "auth.json").unlink()
+    (home_b / "auth.json").write_text('{"who": "other"}', encoding="utf-8")
+    (real / "auth.json").unlink()  # `codex logout` outside Navide
+
+    assert manager.promote_stranded_auth() is False
+
+    assert not (real / "auth.json").exists()
+    assert [e["action"] for e in gate.history("codex.login-promote")] == ["prompt"]
+
+
+# ── Account auto-repair (D7) ─────────────────────────────────────────────────
+
+
+def test_an_allowed_repair_restores_and_is_announced(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("slot-a"), reason="live login was empty"
+    ) is True
+
+    assert restored == ["slot-a"]
+    [entry] = gate.history()
+    assert (entry["feature"], entry["action"], entry["notify"]) == ("credentials.auto-repair", "repair", True)
+
+
+def test_a_repair_that_is_off_writes_nothing(gate) -> None:
+    gate.set_allowed("credentials.auto-repair", False)
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login("claude", "slot-a", lambda: restored.append("x"), reason="r") is False
+
+    assert restored == []
+
+
+def test_an_account_changed_outside_navide_is_never_overridden(gate) -> None:
+    """D7: a different signed-in account becomes a prompt, not a restore."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="Other@Example.com", slot_email="me@example.com", slot_label="Work",
+        live_fingerprint="f00d",
+    ) is False
+
+    assert restored == []
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("prompt", True)
+    assert json.loads(entry["detail"]) == {
+        "agentKey": "claude", "slotId": "slot-a", "slotLabel": "Work",
+        "liveEmail": "Other@Example.com", "slotEmail": "me@example.com",
+        "liveFingerprint": "f00d",
+    }
+
+
+def test_the_same_account_in_another_case_is_a_repair_not_a_prompt(gate) -> None:
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "claude", "slot-a", lambda: restored.append("x"), reason="r",
+        live_email="ME@example.com", slot_email="me@example.com",
+    ) is True
+    assert restored == ["x"]
+
+
 # ── Required features: disclosed, never switched ─────────────────────────────
 
 
@@ -1558,13 +1750,40 @@ async def test_cli_extensions_also_lists_what_navide_changed(gate, tmp_path, mon
     assert {r["path"] for r in rows if r["cli"] == "codex"} == {str(tmp_path / ".codex-panes")}
 
 
-def test_a_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
-    """A11: the audit row carries the emails a prompt shows; the log does not."""
+def test_a_repair_that_fails_after_writing_still_leaves_a_log_row(gate) -> None:
+    """D2: a restore that raises (possibly after the Keychain write) is logged."""
+    def restore() -> None:
+        raise RuntimeError("~/.claude.json write failed")
+
+    with pytest.raises(RuntimeError):
+        convenience_wiring.repair_live_login("claude", "slot-a", restore, reason="r")
+
+    [entry] = gate.history()
+    assert (entry["action"], entry["notify"]) == ("repair", True)
+    assert "failed" in entry["detail"]
+
+
+def test_an_unidentified_other_account_is_a_prompt(gate) -> None:
+    """D1: no emails to compare, but the caller knows it is not the slot's own."""
+    restored: list[str] = []
+
+    assert convenience_wiring.repair_live_login(
+        "kimi", "slot-a", lambda: restored.append("x"), reason="r", other_account=True,
+    ) is False
+
+    assert restored == []
+    assert [e["action"] for e in gate.history()] == ["prompt"]
+
+
+def test_the_account_prompt_keeps_emails_out_of_the_backend_log(gate, caplog) -> None:
+    """A11: the audit row carries the emails the prompt shows; the log does not."""
     import logging
 
     with caplog.at_level(logging.INFO, logger="agent_team_backend.convenience"):
-        gate.record("cursor.project-mcp", "prompt", "workspace",
-                    detail='{"liveEmail": "other@example.com"}')
+        convenience_wiring.repair_live_login(
+            "claude", "slot-a", lambda: None, reason="r",
+            live_email="other@example.com", slot_email="me@example.com",
+        )
 
     assert "other@example.com" in gate.history()[0]["detail"]
     assert "@example.com" not in caplog.text

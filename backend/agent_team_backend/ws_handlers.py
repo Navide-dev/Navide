@@ -2507,6 +2507,17 @@ async def cli_profiles_set_pane_default(
     await _broadcast_profiles_changed("set_pane_default")
 
 
+def _record_switch_back(agent_key: str, failure: str) -> None:
+    """The audit row of an account prompt's "switch back" (credentials.auto-repair)."""
+    from .convenience_wiring import gate as convenience_gate
+
+    g = convenience_gate()
+    if g is not None:
+        detail = "switched back from the account prompt"
+        g.record("credentials.auto-repair", "repair", f"{agent_key} live login",
+                 detail=f"{detail}; {failure}" if failure else detail)
+
+
 @handler("cli_profiles.set_default")
 async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Switch the agent's active account: capture the live credentials into the
@@ -2639,7 +2650,65 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
                     )
                 )
                 return
-        if current_id == profile_id:
+        # The account prompt's "switch back" (restore_live) answers one prompt
+        # about one live login. It carries that login's fingerprint and is
+        # refused once another login is live, so a stale prompt never
+        # overwrites, or captures into a slot, a login it did not name.
+        restore_live = bool(payload.get("restore_live"))
+        prompt_live: str | None = None
+        prompt_kw: dict[str, Any] = {}
+        if restore_live:
+            from .convenience_wiring import login_fingerprint
+
+            expected_fingerprint = payload.get("restore_live_fingerprint")
+            if not isinstance(expected_fingerprint, str):
+                await session.send_json(
+                    make_error(
+                        msg_id, msg_type, "BAD_REQUEST",
+                        "restore_live requires the prompt's restore_live_fingerprint",
+                    )
+                )
+                return
+            prompt_scope = quota_failover.profile_scope(
+                agent_key, app.cli_profiles_store.get(profile_id) if profile_id else None
+            )
+            prompt_kw = {"scope": prompt_scope} if prompt_scope else {}
+            try:
+                prompt_live = await vault_to_thread(
+                    lambda: app.credential_vault.read_live(agent_key, strict=True, **prompt_kw).secret
+                )
+            except Exception as err:  # noqa: BLE001 — unread is not signed out
+                await session.send_json(
+                    make_error(msg_id, msg_type, "PROFILE_SWAP_FAILED", _profile_error(err))
+                )
+                return
+            if login_fingerprint(prompt_live) != expected_fingerprint:
+                await session.send_json(
+                    make_error(
+                        msg_id, msg_type, "LIVE_CHANGED",
+                        f"another {agent_key} login is live since this prompt; nothing was switched",
+                    )
+                )
+                return
+        # The switch-back while its account is still the active one: the live
+        # login is someone else's (or nobody's), so "already active" would be
+        # a false ok. It runs as the normal switch below, guards and all, from
+        # the profile that keeps the live login (see restore_over_live).
+        restore_over_live = restore_live and current_id == profile_id
+        if restore_over_live:
+            try:
+                own = await vault_to_thread(
+                    lambda: app.credential_vault.read_slot(
+                        agent_key, profile_id or DEFAULT_SLOT_ID, **prompt_kw
+                    ).secret
+                )
+            except Exception as err:  # noqa: BLE001
+                await session.send_json(
+                    make_error(msg_id, msg_type, "PROFILE_SWAP_FAILED", _profile_error(err))
+                )
+                return
+            restore_over_live = prompt_live != own
+        if current_id == profile_id and not restore_over_live:
             # Already active — nothing to swap, nothing changed.
             await session.send_json(
                 make_response(
@@ -2736,6 +2805,38 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
                 )
                 return
 
+        if restore_over_live and prompt_live is not None:
+            # Keep the live login before it is replaced: the profile holding
+            # it becomes the outgoing account (one registered for it when
+            # none does), so the switch below captures it there.
+            from .usage_service import _follow_live_account
+
+            try:
+                live_email = await vault_to_thread(
+                    lambda: app.credential_vault.identity(agent_key, strict=True, **prompt_kw).get("email")
+                )
+            except Exception as err:  # noqa: BLE001 — nothing moved; refuse cleanly
+                await session.send_json(
+                    make_error(msg_id, msg_type, "PROFILE_SWAP_FAILED", _profile_error(err))
+                )
+                return
+            followed = await vault_to_thread(
+                _follow_live_account, agent_key, profile_id or DEFAULT_SLOT_ID,
+                live_email or None, switch_scope,
+            )
+            if followed is None:
+                await session.send_json(
+                    make_error(
+                        msg_id, msg_type, "PROFILE_SWAP_FAILED",
+                        f"the live {agent_key} login could not be kept in a profile; nothing was switched",
+                    )
+                )
+                return
+            current_id = None if followed == DEFAULT_SLOT_ID else followed
+        # Nobody is signed in: there is nothing to capture, only the slot to
+        # bring back.
+        restore_only = restore_over_live and prompt_live is None
+
         # Judged BEFORE the swap, while the slot still holds what will become
         # live: an empty or dead-token slot signs the CLI out, and the caller
         # opens a sign-in instead of leaving the user at a "not logged in"
@@ -2754,7 +2855,7 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
         # pick wins: a manual switch is never refused for drift (the
         # reconcile gate belongs to the quota failover transaction alone),
         # so the risk is logged and reported as ``warning``.
-        drift = await vault_to_thread(
+        drift = "none" if restore_only else await vault_to_thread(
             quota_failover.live_drift, app.credential_vault, agent_key,
             current_id or DEFAULT_SLOT_ID, scope_from,
         )
@@ -2794,20 +2895,30 @@ async def cli_profiles_set_default(session: "Session", msg_id: str, msg_type: st
             login_reason = None
         else:
             try:
-                await vault_to_thread(
-                    functools.partial(
-                        app.credential_vault.switch,
-                        agent_key,
-                        current_id or DEFAULT_SLOT_ID,
-                        profile_id or DEFAULT_SLOT_ID,
-                        scope=switch_scope,
+                if restore_only:
+                    await vault_to_thread(functools.partial(
+                        app.credential_vault.restore, agent_key,
+                        profile_id or DEFAULT_SLOT_ID, **prompt_kw,
+                    ))
+                else:
+                    await vault_to_thread(
+                        functools.partial(
+                            app.credential_vault.switch,
+                            agent_key,
+                            current_id or DEFAULT_SLOT_ID,
+                            profile_id or DEFAULT_SLOT_ID,
+                            scope=switch_scope,
+                        )
                     )
-                )
             except Exception as err:  # noqa: BLE001 — switch() already rolled the live state back
+                if restore_live:
+                    _record_switch_back(agent_key, f"failed: {err}")
                 await session.send_json(
                     make_error(msg_id, msg_type, "PROFILE_SWAP_FAILED", _profile_error(err))
                 )
                 return
+        if restore_live:
+            _record_switch_back(agent_key, "")
 
         # The credentials moved — count it, whatever happens to the bookkeeping
         # below (a persisted-default failure still leaves the new account live).
