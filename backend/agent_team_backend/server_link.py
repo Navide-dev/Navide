@@ -3709,7 +3709,6 @@ class ServerLink:
                     )
         except device_pairing.PairingError as err:
             log.info("refusing a %s from %s: %s", kind, device_id, err)
-            await self._ack(msg_key, "rejected", reason="pairing-refused")
             # The answer this round was waiting on, refused: no other is coming,
             # so the round ends now rather than at its deadline.
             if (
@@ -3720,6 +3719,7 @@ class ServerLink:
                 self._end_refused_pairing(
                     device_id, existing, reason="pairing-refused", side="local"
                 )
+            await self._ack(msg_key, "rejected", reason="pairing-refused")
             return
 
         await self._announce_trust_notices()
@@ -3926,7 +3926,6 @@ class ServerLink:
             # are unreadable, and "deliver it anyway" is the one answer that
             # would make losing them costless.
             log.error("refusing message %s: %s", msg_key, self._trust_locked)
-            await self._ack(msg_key, "rejected", reason="trust-unavailable")
             # A pairing frame from a device this machine has a round with: that
             # round cannot go on — every frame of it would be refused here just
             # like this one — so it ends now, with the reason on the card.
@@ -3945,6 +3944,9 @@ class ServerLink:
                     reason="trust-unavailable",
                     side="local",
                 )
+            # After the round is ended, not before: once the ack is out the
+            # refusal is public, and the card here must already agree with it.
+            await self._ack(msg_key, "rejected", reason="trust-unavailable")
             return
 
         source = data.get("from") if isinstance(data.get("from"), dict) else {}

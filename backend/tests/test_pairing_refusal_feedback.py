@@ -124,6 +124,42 @@ async def test_a_response_refused_for_an_unreadable_trust_record_ends_the_round(
         await link.stop()
 
 
+@pytest.mark.parametrize("case", ["trust-unavailable", "pairing-refused"])
+async def test_the_round_is_already_over_when_the_refusal_is_acked(case):
+    """Ordering, pinned. The ack is the moment the refusal becomes visible to
+    anything else, so the round must have ended by then — the other way round
+    raced on slow Windows runners, which read the state in between."""
+    server = FakeServer(policy=ALLOW_ALL_POLICY)
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await _started(link, conn)
+        seen: list[object] = []
+        original = link._ack
+
+        async def recording_ack(msg_key, state, **kwargs):
+            seen.append(device_pairing.get(PEER.device_id))
+            await original(msg_key, state, **kwargs)
+
+        link._ack = recording_ack
+        if case == "trust-unavailable":
+            link._trust_locked = "the device trust store could not be opened (test)"
+            frame = _response()
+        else:
+            frame = _pair_frame(
+                PEER, device_pairing.PAIR_RESPONSE, msg_key="pair-resp-y",
+                nonce="bm9uY2U=", signKey=PEER.sign_key,
+            )
+
+        await conn.push({"type": "messages.pending", "payload": frame})
+        await _until(lambda: bool(conn.acks))
+
+        assert conn.acks[0]["reason"] == case
+        assert seen == [None]
+    finally:
+        await link.stop()
+
+
 async def test_after_that_refusal_pairing_again_is_not_refused_as_busy():
     """The second half of the report: pressing Pair again said a pairing was
     already in progress. With the round ended, the next press is a new round
