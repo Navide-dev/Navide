@@ -111,3 +111,14 @@ resolve_loopback_listeners = {
 }[platform_id]
 
 __all__ += ["collect_cli_connections", "resolve_loopback_listeners"]
+
+from . import folder_birth  # noqa: E402
+
+#: When a folder was created (None where it cannot be known): how the
+#: convenience gate tells a CLI config folder made again from the same one.
+folder_birth_time = {
+    "darwin": folder_birth.from_stat,
+    "linux": folder_birth.from_statx,
+    "win32": folder_birth.from_stat,
+}[platform_id]
+__all__ += ["folder_birth_time"]

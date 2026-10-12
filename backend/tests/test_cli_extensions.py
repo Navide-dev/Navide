@@ -299,6 +299,31 @@ async def test_cli_extensions_list_tool_answers_with_metadata_only(
     agent_messaging._reset_for_test()
 
 
+@pytest.mark.asyncio
+async def test_cli_extensions_list_tool_also_names_what_navide_changed(
+    _isolated_convenience_gate, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """C6: the agent reads the same inventory as Settings → CLI Extensions,
+    so it must see Navide's own changes too, or it cannot tell the user."""
+    from agent_team_backend import app
+
+    gate = _isolated_convenience_gate
+    monkeypatch.setattr(app, "convenience_gate", gate)
+    agent_messaging._reset_for_test()
+    agent_messaging.register("pa", "caller", "/ws")
+    monkeypatch.setattr(cli_extensions, "scan", lambda home=None, runner=None: cli_extensions.Inventory(vendors=[], items=[]))
+    gate.apply("cursor.project-mcp", tmp_path / "mcp.json", write=lambda: None, present=lambda: True)
+
+    result = await plan_mcp.cli_extensions_list(_ctx())
+
+    [row] = [item for item in result["items"] if item["kind"] == "navide-change"]
+    assert (row["cli"], row["name"], row["owner"]) == ("cursor", "cursor.project-mcp", "navide")
+    # OF-N2: every pane reads this; another workspace's path must not leak
+    # through the id.
+    assert str(tmp_path) not in json.dumps(result)
+    agent_messaging._reset_for_test()
+
+
 def test_a_nested_plugin_cache_is_walked_down_to_the_manifest(tmp_path: Path) -> None:
     """cursor keeps cache/<marketplace>/<name>/<commit>/; the walk names the
     plugin, not the commit, and the marketplace rides along in the id."""

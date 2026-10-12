@@ -27,6 +27,7 @@ import shutil
 import sqlite3
 import threading
 import time
+import tomllib
 
 import psutil
 
@@ -739,6 +740,11 @@ _HOME_RUNTIME_DATABASE = re.compile(
 )
 
 
+#: Per pane home: the config.toml trust rows Navide seeded for it, so a
+#: removal check never counts a row Navide did not write.
+_SEEDED_TRUST_FILE = ".navide-hook-trust.json"
+
+
 class CodexHomeManager:
     """Create isolated CODEX_HOME dirs while sharing stable user config."""
 
@@ -766,6 +772,9 @@ class CodexHomeManager:
         safe_id = self._safe_home_id(home_id)
         pane_home = self.panes_root / safe_id
         pane_home.mkdir(parents=True, exist_ok=True)
+        from ..convenience_wiring import note
+
+        note("codex.pane-homes", self.panes_root, detail="per-pane CODEX_HOME directories")
         self._share_config_entries(pane_home, source)
         self._prepare_skills_view(pane_home, source / "skills")
         return pane_home
@@ -939,38 +948,49 @@ class CodexHomeManager:
                 return 0
             if pane_hooks.read_bytes() != real_hooks.read_bytes():
                 return 0
-            text = config.read_text(encoding="utf-8")
-        except OSError:
+            rows = _hook_state_rows(config.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             return 0
         real_prefix = f"{real_hooks}:"
         pane_prefix = f"{pane_hooks}:"
-        keys = re.findall(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE)
-        # Header → the trusted_hash line that follows it.
-        blocks = re.findall(
-            r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")',
-            text, flags=re.MULTILINE,
-        )
-        existing = {_toml_unescape(k) for k in keys}
         additions = []
-        for key, hashed in blocks:
-            key = _toml_unescape(key)
-            if not key.startswith(real_prefix):
+        seeded = []
+        for key, hashed in rows.items():
+            if hashed is None or not key.startswith(real_prefix):
                 continue
             new_key = pane_prefix + key[len(real_prefix):]
-            if new_key in existing:
+            if new_key in rows:
                 continue
-            existing.add(new_key)
-            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = {hashed}\n')
+            seeded.append(new_key)
+            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n')
         if not additions:
             return 0
-        lead = "" if text.endswith("\n") else "\n"
         try:
+            lead = "" if config.read_text(encoding="utf-8").endswith("\n") else "\n"
             with config.open("a", encoding="utf-8") as f:
                 f.write(lead + "\n" + "\n".join(additions))
         except OSError as err:
             log.warning("seeding codex hook trust for %s failed: %s", pane_home, err)
             return 0
+        self._remember_seeded_trust(pane_home, seeded)
         return len(additions)
+
+    @staticmethod
+    def _seeded_trust(pane_home: Path) -> list[str]:
+        """The trust rows `seed_hook_trust` wrote for this home; [] if unknown."""
+        try:
+            keys = json.loads((pane_home / _SEEDED_TRUST_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+    def _remember_seeded_trust(self, pane_home: Path, keys: list[str]) -> None:
+        known = self._seeded_trust(pane_home)
+        merged = known + [k for k in keys if k not in known]
+        try:
+            (pane_home / _SEEDED_TRUST_FILE).write_text(json.dumps(merged), encoding="utf-8")
+        except OSError as err:
+            log.warning("recording seeded codex hook trust for %s failed: %s", pane_home, err)
 
     def find_session_home(self, resume_id: str) -> Path | None:
         """Locate the CODEX_HOME that physically holds this session, if any.
@@ -1209,36 +1229,86 @@ class CodexHomeManager:
         They are keyed on that home's path, so once it is gone they can never
         match again and would only pile up in the user's config.toml.
         """
+        self._drop_trust_rows(f"{pane_home / 'hooks.json'}:")
+
+    def drop_all_hook_trust(self) -> None:
+        """Remove every ``hooks.state`` row seeded for any pane home."""
+        if not self._drop_trust_rows(f"{self.panes_root}{os.sep}"):
+            return
+        for record in self.panes_root.glob(f"*/{_SEEDED_TRUST_FILE}"):
+            record.unlink(missing_ok=True)
+
+    def any_pane_hook_trust(self) -> bool:
+        """Whether config.toml still holds a ``hooks.state`` row keyed on any
+        pane home — what `drop_all_hook_trust` takes out."""
+        try:
+            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        prefix = f"{self.panes_root}{os.sep}"
+        return any(key.startswith(prefix) for key in _hook_state_rows(text))
+
+    def hook_trust_intact(self, exclude: Path | None = None) -> bool:
+        """Whether every live pane home still has the trust rows it was seeded.
+
+        Only the rows `seed_hook_trust` recorded writing are checked: a hook
+        the user trusted later, in plain Codex or behind a pane's symlinked
+        hooks.json, was never seeded and is not missing. False means a seeded
+        row was deleted outside Navide. ``exclude`` is the home about to be
+        seeded.
+        """
+        try:
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
+            homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
+        except (OSError, ValueError):
+            # Unreadable or not TOML: nothing says a row was deleted.
+            return True
+        for home in homes:
+            if exclude is not None and home == exclude:
+                continue
+            if any(key not in rows for key in self._seeded_trust(home)):
+                return False
+        return True
+
+    def _drop_trust_rows(self, prefix: str) -> bool:
+        """Returns False when the rewrite failed and the rows are still there."""
         config = self.real_home / "config.toml"
-        prefix = f"{pane_home / 'hooks.json'}:"
         try:
             text = config.read_text(encoding="utf-8")
         except OSError:
-            return
+            return True
+        # Textual, to leave the rest of the file byte-identical, but any
+        # spelling TOML allows for the header and value matches.
         block = re.compile(
-            r'\n*^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*"[^"\n]*"[ \t]*\n?',
+            r'\n*^\[[ \t]*hooks[ \t]*\.[ \t]*state[ \t]*\.[ \t]*(' + _TOML_KEY + r')[ \t]*\][ \t]*(?:#[^\n]*)?\n'
+            r'\s*trusted_hash[ \t]*=[ \t]*(?:' + _TOML_KEY + r')[ \t]*(?:#[^\n]*)?(?:\n|\Z)',
             flags=re.MULTILINE,
         )
         kept = block.sub(
-            lambda m: "\n" if _toml_unescape(m.group(1)).startswith(prefix) else m.group(0),
+            lambda m: "\n" if (_toml_key(m.group(1)) or "").startswith(prefix) else m.group(0),
             text,
         )
         if kept == text:
-            return
+            return True
         # Through the resolved path: a dotfiles symlink stays a symlink.
         target = config.resolve()
         tmp = target.with_name(target.name + ".navide-tmp")
         try:
             # Private from the first byte, then the original's mode: the file
             # can carry secrets, and a default-umask rewrite would widen it.
-            tmp.unlink(missing_ok=True)
+            _discard_temp(tmp)
             with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
                 f.write(kept)
             shutil.copymode(target, tmp)
             os.replace(tmp, target)
         except OSError as err:
-            tmp.unlink(missing_ok=True)
-            log.warning("dropping codex hook trust for %s failed: %s", pane_home, err)
+            try:
+                _discard_temp(tmp)
+            except OSError as cleanup:
+                log.warning("removing %s failed: %s", tmp, cleanup)
+            log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
+            return False
+        return True
 
     def sweep_orphans(self) -> list[str]:
         """Reclaim every pane home no pane needs. Runs once at backend start.
@@ -1319,6 +1389,52 @@ class CodexHomeManager:
 # ---- attribution/watch hooks ----------------------------------------------
 
 _CODEX_PANES_ROOT_NAME = ".codex-panes"
+
+
+def _discard_temp(path: Path) -> None:
+    """Remove a temp file of ours. Windows refuses to delete a read-only
+    file, and the temp file takes the original's mode before the replace.
+    Only there, and never through a link: chmod follows one, onto a file
+    that is not ours."""
+    from .. import osplat
+
+    try:
+        path.unlink(missing_ok=True)
+    except PermissionError:
+        if osplat.paths.enforces_posix_modes() or path.is_symlink():
+            raise
+        os.chmod(path, 0o600)
+        path.unlink(missing_ok=True)
+
+
+def _hook_state_rows(text: str) -> dict[str, str | None]:
+    """Every ``hooks.state`` table in config.toml, by key, to its
+    ``trusted_hash`` — the only value seeding copies — else None. Read as
+    TOML, so any legal spelling of a header counts. Seeding and its presence
+    checks all read the file through this one parser; a file that is not
+    TOML raises ``ValueError``."""
+    state = tomllib.loads(text).get("hooks", {})
+    state = state.get("state", {}) if isinstance(state, dict) else {}
+    if not isinstance(state, dict):
+        return {}
+    rows: dict[str, str | None] = {}
+    for key, table in state.items():
+        trusted = table.get("trusted_hash") if isinstance(table, dict) else None
+        rows[key] = trusted if isinstance(trusted, str) else None
+    return rows
+
+
+#: A quoted TOML key or string: basic ("...", with escapes) or literal ('...').
+_TOML_KEY = r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\''
+
+
+def _toml_key(quoted: str) -> str | None:
+    """The value of one quoted TOML key, or None when it does not parse."""
+    try:
+        value = tomllib.loads(f"k = {quoted}")["k"]
+    except ValueError:
+        return None
+    return value if isinstance(value, str) else None
 
 
 def _toml_escape(value: str) -> str:

@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import {
   capLines,
   filterLogLines,
   logLineLevel,
+  maskWsUrlToken,
   splitLogChunk,
 } from '../debugLog'
 
@@ -118,5 +121,23 @@ describe('filterLogLines', () => {
   it('applies both gates together', () => {
     expect(filterLogLines(lines, { minLevel: 'ERROR', text: 'read failed' })).toEqual([])
     expect(filterLogLines(lines, { minLevel: 'WARNING', text: 'read failed' })).toEqual([WARN])
+  })
+})
+
+describe('maskWsUrlToken (R3-M2)', () => {
+  it('masks the token value and keeps everything else', () => {
+    expect(maskWsUrlToken('ws://127.0.0.1:8765/ws?t=abc%2Bdef')).toBe('ws://127.0.0.1:8765/ws?t=••••')
+    expect(maskWsUrlToken('ws://127.0.0.1:1/ws?x=1&t=secret&y=2')).toBe('ws://127.0.0.1:1/ws?x=1&t=••••&y=2')
+  })
+
+  it('leaves a URL without a token, and an empty one, alone', () => {
+    expect(maskWsUrlToken('ws://127.0.0.1:1/ws')).toBe('ws://127.0.0.1:1/ws')
+    expect(maskWsUrlToken('')).toBe('')
+  })
+
+  it('is what the Debug window shows', () => {
+    const source = readFileSync(resolve(__dirname, '../../components/DebugModal.vue'), 'utf8')
+    expect(source).toContain('maskWsUrlToken(backend.wsUrl.value)')
+    expect(source).not.toMatch(/\{\{\s*backend\.wsUrl\.value/)
   })
 })

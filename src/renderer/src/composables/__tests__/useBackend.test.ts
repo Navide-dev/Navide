@@ -345,3 +345,84 @@ describe('useBackend init() deadline', () => {
     }
   })
 })
+
+
+describe('useBackend window challenge (R3-M2)', () => {
+  let scope: EffectScope
+  const proveWindow = vi.fn()
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    FakeWebSocket.instances = []
+    proveWindow.mockReset()
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.stubGlobal('agentTeam', {
+      getBackendInfo: vi.fn().mockResolvedValue(READY_INFO),
+      proveWindow,
+      onBackendChanged: () => {},
+      onSystemResumed: () => () => {},
+    })
+  })
+
+  afterEach(() => {
+    scope?.stop()
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  function welcome(socket: FakeWebSocket, nonce: string): void {
+    socket.fire('message', {
+      data: JSON.stringify({ id: 'w', type: 'ws.welcome', payload: { windowChallenge: nonce } }),
+    })
+  }
+
+  function proves(socket: FakeWebSocket): unknown[] {
+    return socket.sent.map((raw) => JSON.parse(raw)).filter((m) => m.type === 'window.prove').map((m) => m.payload)
+  }
+
+  async function connected(): Promise<FakeWebSocket> {
+    scope = effectScope()
+    scope.run(() => {
+      useBackend()
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    return socket
+  }
+
+  it('answers the welcome challenge with the proof main computes for it', async () => {
+    proveWindow.mockResolvedValue('proof-for-n1')
+    const socket = await connected()
+    // Nothing in the URL any more: the proof is per connection.
+    expect(socket.url).not.toContain('&w=')
+    welcome(socket, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proveWindow).toHaveBeenCalledWith('n1')
+    expect(proves(socket)).toEqual([{ proof: 'proof-for-n1' }])
+  })
+
+  it('proves again with the fresh nonce after a reconnect', async () => {
+    proveWindow.mockImplementation(async (nonce: string) => `proof-for-${nonce}`)
+    const first = await connected()
+    welcome(first, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    first.close()
+    await vi.advanceTimersByTimeAsync(30_000)
+    const second = FakeWebSocket.instances.at(-1)!
+    expect(second).not.toBe(first)
+    second.open()
+    welcome(second, 'n2')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proves(second)).toEqual([{ proof: 'proof-for-n2' }])
+  })
+
+  it('sends nothing when main refuses to prove this window', async () => {
+    proveWindow.mockResolvedValue(null)
+    const socket = await connected()
+    welcome(socket, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proves(socket)).toEqual([])
+  })
+})

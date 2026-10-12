@@ -191,6 +191,26 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
 
 
+@handler("window.prove")
+async def window_prove(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """Answer this connection's `ws.welcome` challenge. Accepted once per
+    connection: a right proof spends the challenge. A wrong one does not -- a
+    proof meant for the previous socket can arrive on a fresh one during a
+    reconnect, and must not lock that window out."""
+    from . import app
+
+    challenge = getattr(session, "window_challenge", "")
+    proof = payload.get("proof") if isinstance(payload, dict) else None
+    if not app.navide_window_proof_matches(challenge, proof):
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "window proof refused")
+        )
+        return
+    session.window_challenge = ""
+    session.navide_window = True
+    await session.send_json(make_response(msg_id, msg_type, {"proved": True}))
+
+
 @handler("agent.capability.result")
 async def agent_capability_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -4110,8 +4130,12 @@ async def _reinstall_claude_hooks() -> None:
     spec = CLI_VENDORS.get("claude")
     if spec is None or spec.install_hooks is None:
         return
+    from . import convenience_wiring
+
     try:
-        result = await asyncio.to_thread(spec.install_hooks, str(backend_port_file()))
+        result = await asyncio.to_thread(
+            convenience_wiring.install_hooks_gated, "claude", spec.install_hooks, str(backend_port_file())
+        )
         app.log.info("claude hooks reinstalled after a push-channel switch: %s", result)
     except Exception as err:  # noqa: BLE001
         app.log.warning("claude hooks reinstall failed: %s", err)
@@ -7843,7 +7867,11 @@ async def _terminal_create_impl(
     # at "Hooks need review". CODEX_HOME is final only after all wiring above.
     seeder = getattr(app.codex_home_manager, "seed_hook_trust", None)
     if agent_key == "codex" and not login_profile_id and env.get("CODEX_HOME") and callable(seeder):
-        seeded = await asyncio.to_thread(seeder, Path(env["CODEX_HOME"]))
+        from . import convenience_wiring
+
+        seeded = await asyncio.to_thread(
+            convenience_wiring.seed_hook_trust_gated, app.codex_home_manager, Path(env["CODEX_HOME"])
+        )
         if seeded:
             app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
     if transaction["cancelled"]:
@@ -11867,7 +11895,90 @@ async def cli_extensions_list(session: "Session", msg_id: str, msg_type: str, pa
     from . import cli_extensions
 
     inventory = await asyncio.to_thread(cli_extensions.scan)
+    from . import app
+
+    listing = await asyncio.to_thread(app.convenience_gate.listing)
+    inventory.items.extend(cli_extensions.navide_changes(listing["features"]))
     await session.send_json(make_response(msg_id, msg_type, inventory.as_dict()))
+
+
+# ── Convenience features (convenience.*) ───────────────────────────────────
+# What Navide changes outside its own data; docs/en-US/convenience-features.md.
+
+
+def _convenience_source(session: "Session") -> str:
+    """Who moved a switch, for the audit log: a main window (it runs the UI
+    action bus, where the overview lives) or some other client holding the
+    backend token — a script, or an agent that read the token file. Pane
+    agents have no MCP tool for convenience.*, so this is how one would show.
+    ui.invoke.ready is the client's own word, so the window proof checked at
+    connect is what makes it "settings"."""
+    window = getattr(session, "navide_window", False) and getattr(session, "ui_bus_ready", False)
+    return "settings" if window else "ws-client"
+
+
+@handler("convenience.list")
+async def convenience_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    listing = await asyncio.to_thread(app.convenience_gate.listing)
+    await session.send_json(make_response(msg_id, msg_type, listing))
+
+
+@handler("convenience.history")
+async def convenience_history(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    feature_id = str(payload.get("feature") or "") or None
+    try:
+        limit = int(payload.get("limit") or 200)
+        entries = await asyncio.to_thread(app.convenience_gate.history, feature_id, limit)
+    except (KeyError, ValueError) as err:
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", str(err)))
+        return
+    await session.send_json(make_response(msg_id, msg_type, {"entries": entries}))
+
+
+@handler("convenience.set")
+async def convenience_set(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app, convenience_wiring
+    from .applog import backend_port_file
+    from .convenience import CleanupIncomplete
+
+    feature_id = str(payload.get("id") or "")
+    allowed = payload.get("allowed")
+    if not isinstance(allowed, bool):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "allowed must be a boolean"))
+        return
+    try:
+        await asyncio.to_thread(
+            convenience_wiring.set_feature, feature_id, allowed,
+            port_file=str(backend_port_file()), source=_convenience_source(session),
+        )
+    except KeyError:
+        await session.send_json(make_error(msg_id, msg_type, "UNKNOWN_FEATURE", feature_id))
+        return
+    except CleanupIncomplete as err:
+        # The switch did not move: Navide's entry is still in those files and
+        # still works. The cleanup rows already announced which and why.
+        await session.send_json(make_error(msg_id, msg_type, "CLEANUP_INCOMPLETE", str(err)))
+        await app.broadcast(make_event("convenience.changed", {"feature": feature_id}))
+        return
+    except ValueError as err:
+        await session.send_json(make_error(msg_id, msg_type, "REQUIRED_FEATURE", str(err)))
+        return
+    feature = await asyncio.to_thread(app.convenience_gate.listing_feature, feature_id)
+    await session.send_json(make_response(msg_id, msg_type, {"feature": feature}))
+    await app.broadcast(make_event("convenience.changed", {"feature": feature_id}))
+
+
+@handler("convenience.upgrade_ack")
+async def convenience_upgrade_ack(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    from . import app
+
+    await asyncio.to_thread(app.convenience_gate.acknowledge_upgrade, source=_convenience_source(session))
+    await session.send_json(make_response(msg_id, msg_type, {}))
+    await app.broadcast(make_event("convenience.changed", {}))
 
 
 # ── Voice input (voice.*) ───────────────────────────────────────────────────
