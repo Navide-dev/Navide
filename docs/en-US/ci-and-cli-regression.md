@@ -12,7 +12,7 @@ the existing Python correctness lint run once. Frontend tests run separately
 from application builds and artifact integration checks, so a slow build does
 not hold ordinary test feedback behind it. Backend tests include both existing
 regressions and the CLI contracts. Windows retains the detached pytest runner,
-two shards and Job Object supervision that avoid the Actions console hang.
+four shards and Job Object supervision that avoid the Actions console hang.
 
 Vitest projects distinguish ordinary tests, CLI contracts and tests consuming
 built packages. Only artifact tests prepare package tarballs. Shared artifacts
@@ -39,7 +39,7 @@ publishing and mirror workflows are outside this change.
 | Static checks and test inventory | Linux | All application/plugin type checks, backend Ruff, collection ownership and aggregate-gate tests |
 | Frontend tests | macOS, Linux, Windows | Complete unit and CLI Vitest projects, including the real TypeScript WebSocket client |
 | Build and artifact contracts | macOS, Linux, Windows | One application/plugin build, packed-package boundaries; macOS also exercises packaged Plans fixtures and production backend |
-| Backend tests | macOS, Linux, Windows | Complete pytest suite; Windows uses two deterministic shards and detached supervision |
+| Backend tests | macOS, Linux, Windows | Complete pytest suite; Windows uses four deterministic shards and detached supervision |
 | Marketplace registry | Linux | Registry lint/tests and plugin contract fixtures |
 | Speech sidecar | macOS | Deterministic Rust tests; model-backed transcription remains explicit manual smoke |
 | Dependency audit | Linux | Existing dependency policy, including its visible Windows ARM advisory exception |
@@ -253,7 +253,7 @@ backend event/output logs. Windows also retains the detached runner log and
 completion verdict. CLI diagnostics exclude authentication endpoints, token
 files and credential stores. Artifact retention is seven days. Pytest's
 `--collection-report` records the full and selected node IDs so shard ownership
-can be reproduced with `--shard 1/2` or `--shard 2/2`.
+can be reproduced with `--shard K/4` (for example `--shard 1/4`).
 
 Windows also prints a final process snapshot, result count and log tail. These
 diagnostics and all artifact uploads are best effort: an upload outage or
