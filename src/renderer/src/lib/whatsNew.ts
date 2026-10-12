@@ -111,6 +111,51 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.20',
+    title: {
+      'zh-TW': '看得見的便利功能、帳號登入自動修復、更可靠的跨裝置配對',
+      'en-US': 'Convenience Features You Can See, Sign-in Auto-Repair, and Sturdier Cross-Device Pairing',
+      'ja-JP': '見える便利機能、ログイン自動修復、より確かなデバイス間ペアリング',
+    },
+    highlights: [
+      {
+        'zh-TW': '新增「便利功能與 Navide 對你電腦的修改」（設定 → Agent 資產 → 擴充）：Navide 只在你允許的便利功能需要時，才會寫入自己資料夾以外的地方，例如 ~/.claude 或 ~/.codex。每次寫入都會在公告面板通知你，並在總覽留下紀錄與備份位置。每一項都能個別關閉，關閉時會先備份、再移除 Navide 加上去的內容；你自己刪掉的項目，Navide 不會再自動加回去，想要時按「重新允許」即可。升級前已經在用的功能維持開啟。',
+        'en-US': 'New “Convenience features and what Navide changes on your computer” (Settings → Agent Assets → Extensions): Navide writes outside its own folder, such as ~/.claude or ~/.codex, only when a convenience feature you allowed needs it. Every write is announced in the Announcements panel and logged in the overview with where its backup is. Each feature can be turned off on its own; turning one off backs up first, then removes what Navide added. Anything you delete yourself is not added back — choose “Allow again” when you want it. Features you were already using stay on after the update.',
+        'ja-JP': '「便利機能と Navide があなたのコンピューターに加えた変更」を追加しました（設定 → エージェント資産 → 拡張機能）。Navide は、許可された便利機能が必要とするときにだけ、~/.claude や ~/.codex など Navide のフォルダー外に書き込みます。書き込みは毎回お知らせパネルで通知され、一覧に記録とバックアップの場所が残ります。機能ごとにオフにでき、オフにするとバックアップを取ってから Navide が追加した内容を取り除きます。自分で削除したものは再び自動で追加されません。必要になったら「再度許可」を選んでください。アップデート前から使っていた機能はオンのままです。',
+      },
+      {
+        'zh-TW': 'Navide 的 hook 改由 pane 自己帶著：Claude、Codex、Copilot pane 啟動時各自帶入 Navide 的 hook，不再寫進 ~/.claude/settings.json、~/.codex/config.toml 這類共用設定檔。舊版寫進去的項目，會在啟動時備份後收回並通知你，不會跑兩次。也因此，在 Navide 外直接開的 Claude 不再帶有 Navide 的 hook（包含 Navide Guard）。',
+        'en-US': 'Navide’s hooks now travel with each pane: Claude, Codex and Copilot panes bring Navide’s hooks along when they start, instead of Navide writing them into shared files such as ~/.claude/settings.json or ~/.codex/config.toml. Entries an older version wrote there are backed up and taken back at startup, with a notice, so nothing runs twice. As a result, Claude started outside Navide no longer carries Navide’s hooks, Navide Guard included.',
+        'ja-JP': 'Navide の hook はペインが持ち運ぶようになりました。Claude、Codex、Copilot のペインは起動時にそれぞれ Navide の hook を読み込み、~/.claude/settings.json や ~/.codex/config.toml などの共有設定ファイルには書き込みません。旧バージョンが書き込んだ項目は、起動時にバックアップしてから取り除き、お知らせで伝えるので、二重に動くことはありません。そのため、Navide の外で起動した Claude には Navide の hook（Navide Guard を含む）は付きません。',
+      },
+      {
+        'zh-TW': '「帳號登入自動修復」預設開啟：切換帳號後如果 CLI 目前的登入不見了，Navide 會還原你選的帳號，避免 pane 啟動時變成未登入。如果你是在 Navide 外換成另一個帳號，Navide 不會蓋掉它，而是問你要「保留目前的登入」還是切回原帳號；在 Navide 外登出，Navide 只會告訴你，不會自動幫你登回。這一項可在便利功能總覽關閉，關閉後 Navide 完全不碰 CLI 目前的登入。另外，你在 pane 內完成的 Codex 登入，如果這台電腦還沒有 Codex 登入，會成為整台電腦的 Codex 登入（同樣可關閉）。',
+        'en-US': '“Account sign-in auto-repair” is on by default: when a CLI’s live sign-in goes missing after an account switch, Navide restores the account you chose so panes do not start signed out. If you switched to another account outside Navide, Navide does not overwrite it — it asks whether to keep the current sign-in or switch back; if you signed out outside Navide, it tells you and does not sign you back in. Turn it off in the convenience overview and Navide leaves the CLI’s live sign-in alone entirely. Also, a Codex sign-in you make inside a pane becomes this computer’s Codex sign-in when there is none yet (this can be turned off too).',
+        'ja-JP': '「アカウントのログイン自動修復」は既定でオンです。アカウント切り替え後に CLI の現在のログインが失われた場合、選んだアカウントを Navide が復元し、ペインが未ログインで起動しないようにします。Navide の外で別のアカウントに切り替えていた場合は上書きせず、今のログインを残すか元に戻すかを尋ねます。Navide の外でログアウトした場合は知らせるだけで、自動でログインし直すことはしません。便利機能の一覧でオフにすると、Navide は CLI の現在のログインに一切触れません。また、このコンピューターにまだ Codex のログインがない場合、ペイン内で行った Codex のログインがコンピューター全体の Codex のログインになります（これもオフにできます）。',
+      },
+      {
+        'zh-TW': '新增「切換 Claude 帳號時，固定帳號的 pane 一起換」（設定 → 一般，預設關閉）：開啟後，切換 Claude 帳號時會列出還在用原帳號的 pane，勾選的 pane 會改用新帳號重新開啟並接續原本的對話。原帳號和額度用完的 pane 會預先勾好，忙碌中的 pane 會等它做完，不會被打斷；額度用完的 pane 旁邊也會出現「換帳號 ›」按鈕。',
+        'en-US': 'New “Move pinned panes along when switching Claude accounts” (Settings → General, off by default): when on, switching Claude accounts lists the panes still on their own account, and the ones you tick reopen on the new account and pick up their conversation. Panes on the old account and panes out of quota come pre-ticked, a busy pane is waited for rather than interrupted, and a pane out of quota gets a “Switch account ›” button.',
+        'ja-JP': '「Claude アカウントの切り替え時に、固定したペインも一緒に切り替える」を追加しました（設定 → 一般、既定はオフ）。オンにすると、Claude アカウントを切り替えるときに元のアカウントのままのペインが一覧に並び、チェックしたペインは新しいアカウントで開き直して会話を再開します。元のアカウントのペインと使用量を使い切ったペインはあらかじめチェックされ、作業中のペインは中断せず終わるまで待ちます。使用量を使い切ったペインには「アカウントを切り替え ›」ボタンが表示されます。',
+      },
+      {
+        'zh-TW': '跨裝置配對更可靠：配對紀錄改存成這台電腦上的加密檔，不再受 macOS 鑰匙圈長度限制，重新啟動後也不會再壞掉，可配對的裝置數也不再只有十幾台。從 0.2.19 升級時會自動搬過去，配對都保留，不需要在每台電腦重建或重新配對。只有少數 Mac 的紀錄在 0.2.19 已經存壞：如果帳號視窗的「需要你處理」出現「從受損的配對紀錄中救回」，比對指紋後按「核准」就好；如果顯示「Navide Cloud 已停止」、配對資料損毀，請按「重新開始」→「確定，清除並重新開始」，再從兩端重新配對其他裝置。',
+        'en-US': 'Sturdier cross-device pairing: the pairing record is now an encrypted file on this computer, so it no longer outgrows the macOS Keychain, no longer breaks after a restart, and is no longer capped at a dozen or so devices. Updating from 0.2.19 moves it over automatically with every pairing kept — there is nothing to rebuild or re-pair on each computer. Only a few Macs whose record 0.2.19 had already saved cut off need a step: if “Needs you” in the account window shows a device “recovered from a damaged pairing record”, compare the fingerprint and choose Approve; if it says Navide Cloud is stopped because the pairing record is damaged, choose “Start over” → “Yes, erase and start over”, then pair each other device again from both ends.',
+        'ja-JP': 'デバイス間ペアリングがより確かになりました。ペアリング記録はこのコンピューター上の暗号化ファイルになり、macOS のキーチェーンの長さ制限を超えたり再起動後に壊れたりすることはなくなり、ペアリングできるデバイス数の十数台という上限もなくなりました。0.2.19 からのアップデートでは自動で移行され、ペアリングはすべて残るので、各コンピューターで作り直したりペアリングし直したりする必要はありません。0.2.19 の時点ですでに記録が途中で切れて保存されていた一部の Mac だけ操作が必要です。アカウント画面の「確認が必要」に「破損したペアリング記録から復元しました」と出たら、フィンガープリントを照合して「承認」を選んでください。ペアリング記録が破損して Navide Cloud が止まっていると表示された場合は、「最初からやり直す」→「はい、消去してやり直す」を選び、ほかのデバイスと両側からペアリングし直してください。',
+      },
+      {
+        'zh-TW': 'Navide Cloud：伺服器支援時，「設定 → Navide Cloud」會分成「同步／分享／裝置」，你可以在 Plans 按「分享連結」把計畫或報告分享成唯讀連結（在這台電腦加密，金鑰只在連結裡），並在「分享」分頁複製、延長、換新或撤銷；伺服器還不支援時，畫面和 0.2.19 一樣。同步多了「版本記錄」，可以還原到上一版。登出時會一併撤銷這台裝置在伺服器上的登入；被其他裝置撤銷或密碼變更時，會告訴你原因。',
+        'en-US': 'Navide Cloud: when the server supports it, Settings → Navide Cloud splits into Sync / Share / Devices, the Plans view’s “Share link” turns a plan or report into a read-only link (encrypted on this computer, with the key only in the link), and the Share tab lets you copy, extend, renew or revoke links; until then the page is the same as in 0.2.19. Sync gains a Version history that can restore the previous version. Signing out also revokes this device’s sign-in on the server, and a session ended from another device or by a password change tells you why.',
+        'ja-JP': 'Navide Cloud：サーバーが対応している場合、「設定 → Navide Cloud」が「同期／共有／デバイス」に分かれます。Plans の「共有リンク」で計画やレポートを読み取り専用のリンクにでき（このコンピューターで暗号化し、鍵はリンクの中だけ）、「共有」タブでコピー・延長・新しいリンクへの切り替え・取り消しができます。サーバーがまだ対応していないときは 0.2.19 と同じ画面です。同期には「バージョン履歴」が加わり、前のバージョンに戻せます。ログアウトするとサーバー上のこのデバイスのログインも取り消され、別のデバイスからの取り消しやパスワード変更でセッションが終わったときは理由が表示されます。',
+      },
+      {
+        'zh-TW': '傳給剛接續對話的 pane 的訊息，會等 CLI 真的啟動後才送，不會再被吃掉或誤報已送達；送出但無法確認的訊息會標成「未確認」，不提供重送，以免同一件事做兩次。設定側欄也重新整理：「憑證與金鑰」和「擴充」移到「Agent 資產」，「Navide 外掛」與「Navide 市集」有了自己的分組。',
+        'en-US': 'Messages to a pane that is just resuming its conversation now wait until the CLI has really started, so they are no longer lost or reported delivered when they were not; one that went out but could not be confirmed is marked unconfirmed, without Resend, so the work does not run twice. The Settings sidebar is regrouped too: Credentials & keys and Extensions move under Agent Assets, and Navide Plugins and Navide Marketplace get their own group.',
+        'ja-JP': '会話を再開したばかりのペインへのメッセージは、CLI が実際に起動するまで待ってから送るようになり、消えたり、届いていないのに配信済みと表示されたりしなくなりました。送信したものの確認できなかったメッセージは「未確認」と表示され、同じ作業が二重に走らないよう再送ボタンは出ません。設定のサイドバーも整理し、「認証情報とキー」と「拡張機能」は「エージェント資産」へ移り、「Navide プラグイン」と「Navide マーケットプレイス」は独自のグループになりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.19',
     title: {
       'zh-TW': 'CLI 擴充一覽、不再遺失的最近工作區、資源限制',
