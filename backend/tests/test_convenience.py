@@ -51,7 +51,7 @@ def _apply(gate: convenience.ConvenienceGate, target: _File, feature: str = "cla
 def test_every_feature_is_allowed_by_default(gate) -> None:
     assert all(gate.allowed(feature.id) for feature in convenience.REGISTRY)
     assert {f.id for f in convenience.REGISTRY} >= {
-        "claude.hooks", "qwen.hooks", "copilot.hooks", "codex.hook-trust", "codex.login-promote",
+        "claude.hooks", "qwen.hooks", "copilot.hooks", "codex.hook-trust",
         "cursor.project-mcp", "cursor.project-skills",
         "codex.pane-homes", "pane-shims", "claude.account-homes",
     }
@@ -192,7 +192,7 @@ def test_a_fresh_install_gets_no_upgrade_notice(gate, tmp_path) -> None:
 
 
 def test_a_recorded_event_is_logged_and_announced(gate) -> None:
-    gate.record("codex.login-promote", "prompt", "codex", detail="a login of the user's own exists")
+    gate.record("cursor.project-mcp", "prompt", "workspace", detail="a decision is waiting")
 
     [entry] = gate.history()
     assert (entry["action"], entry["notify"]) == ("prompt", True)

@@ -98,13 +98,6 @@
         "writes": "[hooks.state] rows in ~/.codex/config.toml",
         "cost": "Every Codex pane asks you to trust your own hooks again."
       },
-      "codex_login-promote": {
-        "name": "Share a Codex sign-in made in a pane",
-        "benefit": "A Codex sign-in you make inside a pane becomes Codex's sign-in everywhere.",
-        "purpose": "a sign-in made inside a pane works for Codex everywhere",
-        "writes": "~/.codex/auth.json (a hard link to the pane's sign-in)",
-        "cost": "A sign-in made inside a pane stays in that pane."
-      },
       "cursor_project-mcp": {
         "name": "Navide MCP tools for Cursor",
         "benefit": "Cursor panes get Navide's MCP tools, such as messaging, plans and scheduling.",

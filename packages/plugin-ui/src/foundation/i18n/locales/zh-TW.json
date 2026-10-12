@@ -98,13 +98,6 @@
         "writes": "~/.codex/config.toml 裡的 [hooks.state] 列",
         "cost": "每個 Codex pane 都會再要你信任一次自己的 hooks。"
       },
-      "codex_login-promote": {
-        "name": "Codex pane 內登入全機沿用",
-        "benefit": "你在 pane 內完成的 Codex 登入，會成為整台機器 Codex 的登入。",
-        "purpose": "讓在 pane 內完成的登入在其他地方也能用",
-        "writes": "~/.codex/auth.json（指向 pane 登入的硬連結）",
-        "cost": "在 pane 內完成的登入只留在那個 pane。"
-      },
       "cursor_project-mcp": {
         "name": "Cursor 的 Navide MCP 工具",
         "benefit": "Cursor pane 可以使用 Navide 的 MCP 工具，例如傳訊、計畫與排程。",

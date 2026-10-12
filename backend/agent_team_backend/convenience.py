@@ -51,7 +51,6 @@ REGISTRY: tuple[Feature, ...] = (
     Feature("qwen.hooks", "qwen"),
     Feature("copilot.hooks", "copilot"),
     Feature("codex.hook-trust", "codex"),
-    Feature("codex.login-promote", "codex"),
     Feature("cursor.project-mcp", "cursor"),
     Feature("cursor.project-skills", "cursor"),
     Feature("codex.pane-homes", "codex", toggleable=False),

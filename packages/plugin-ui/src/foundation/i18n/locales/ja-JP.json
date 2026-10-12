@@ -98,13 +98,6 @@
         "writes": "~/.codex/config.toml の [hooks.state] 行",
         "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
       },
-      "codex_login-promote": {
-        "name": "pane 内の Codex ログインを共有",
-        "benefit": "pane 内で行った Codex のログインが、このコンピューター全体の Codex のログインになります。",
-        "purpose": "pane 内のログインを他の場所でも使える",
-        "writes": "~/.codex/auth.json（pane のログインへのハードリンク）",
-        "cost": "pane 内のログインはその pane の中だけに残ります。"
-      },
       "cursor_project-mcp": {
         "name": "Cursor 用 Navide MCP ツール",
         "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",

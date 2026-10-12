@@ -105,7 +105,6 @@ own, once, as `first` ("found Navide's entry from an earlier version").
 | `qwen.hooks` | qwen | `~/.qwen/settings.json` hooks | yes | same as Claude for Qwen |
 | `copilot.hooks` | copilot | `~/.copilot/hooks/agent-team.json` | yes | same for Copilot |
 | `codex.hook-trust` | codex | `[hooks.state]` rows in `~/.codex/config.toml` | yes | every Codex pane asks you to trust your own hooks again |
-| `codex.login-promote` | codex | `~/.codex/auth.json` (hard link of a pane's login) | yes | a login made inside a pane stays in that pane |
 | `cursor.project-mcp` | cursor | `<workspace>/.cursor/mcp.json` + `.git/info/exclude` | yes | Cursor panes have no Navide tools |
 | `cursor.project-skills` | cursor | `<workspace>/.cursor/skills/` links + `.git/info/exclude` | yes | Cursor panes get no delivered skills |
 | `codex.pane-homes` | codex | `~/.codex-panes/` | no (required) | — |
@@ -154,9 +153,6 @@ interface LogEntry {
   action: 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude'
   target: string
   detail: string             // plain English for the log; UI text comes from i18n by feature/action.
-                             // For action 'prompt' (codex.login-promote) it is the JSON
-                             // object { agentKey, reason: 'logout' }: the user signed
-                             // out outside Navide; there is nothing to choose
   backup: string             // '' when none
   notify: boolean
   source: string             // who triggered it: 'settings' (a Navide main window
