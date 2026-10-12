@@ -609,8 +609,9 @@ jobs:
     needs: release-macos-arm64
     runs-on: windows-latest
     # Dry runs take 38-40 min; v0.2.18 was cancelled at 45 while still
-    # building, so leave real headroom.
-    timeout-minutes: 75
+    # building, and v0.2.20 at 75 after its unsharded backend gate alone took
+    # 64 min, so leave real headroom.
+    timeout-minutes: 120
     environment:
       name: production
       url: https://github.com/Navide-dev/Navide/releases/latest
@@ -780,8 +781,9 @@ jobs:
     runs-on: windows-11-arm
     # Longer than the x64 job's: two of the backend's dependencies publish
     # no win_arm64 wheel (httptools, watchdog) and are compiled from their
-    # sdists here. Dry runs take 46-54 min, too close to the old 60.
-    timeout-minutes: 90
+    # sdists here. Dry runs take 46-54 min, too close to the old 60; the
+    # backend gate grew past an hour on x64 in v0.2.20, so this one gets more.
+    timeout-minutes: 150
     environment:
       name: production
       url: https://github.com/Navide-dev/Navide/releases/latest
