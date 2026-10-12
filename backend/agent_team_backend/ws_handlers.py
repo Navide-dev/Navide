@@ -8043,6 +8043,15 @@ async def _terminal_create_impl(
         payload["command"], push_channel = app.push_delivery.wire_spawn(
             agent_key, payload["command"], str(payload.get("pane_id") or ""), env
         )
+    # Claude's hooks, when the panes carry them instead of ~/.claude/settings.json:
+    # a file of Navide's, merged by Claude Code with the user's own settings —
+    # for a resume and an account-dir pane alike. Not for a login subcommand.
+    from . import convenience_wiring
+
+    if agent_key == "claude" and not login_subcommand and convenience_wiring.pane_carries_hooks("claude"):
+        from . import claude_hooks
+
+        payload["command"] = claude_hooks.wire_spawn(payload["command"])
     # Skills wiring mirrors ~/.codex/hooks.json into the per-pane CODEX_HOME,
     # and codex keys hook trust by that path — without this every spawn stops
     # at "Hooks need review". CODEX_HOME is final only after all wiring above.
@@ -8050,11 +8059,27 @@ async def _terminal_create_impl(
     if agent_key == "codex" and not login_profile_id and env.get("CODEX_HOME") and callable(seeder):
         from . import convenience_wiring
 
-        seeded = await asyncio.to_thread(
-            convenience_wiring.seed_hook_trust_gated, app.codex_home_manager, Path(env["CODEX_HOME"])
-        )
-        if seeded:
-            app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
+        if convenience_wiring.pane_carries_hooks("codex"):
+            # Phase 3: the trust rows ride on the command line instead of
+            # config.toml. After codex_session_hooks.wire, which leaves a
+            # command already holding any `-c hooks…` unwired — Navide's own
+            # SessionStart and Guard hooks would be lost.
+            override = await asyncio.to_thread(
+                app.codex_home_manager.hook_trust_override, Path(env["CODEX_HOME"])
+            )
+            if override and not login_subcommand:
+                command = payload["command"]
+                flag = " -c " + osplat.paths.quote_arg(override)
+                payload["command"] = (
+                    [*command[:-1], f"{command[-1]}{flag}"] if isinstance(command, list) and command
+                    else f"{command}{flag}"
+                )
+        else:
+            seeded = await asyncio.to_thread(
+                convenience_wiring.seed_hook_trust_gated, app.codex_home_manager, Path(env["CODEX_HOME"])
+            )
+            if seeded:
+                app.log.info("codex hook trust seeded for %s (%d hooks)", env["CODEX_HOME"], seeded)
     if transaction["cancelled"]:
         raise _TerminalCreateCancelled
     # The pane's previous PTY, when this create replaces it (restore/rebuild).

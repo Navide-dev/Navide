@@ -18,7 +18,7 @@ type Sender = Pick<Backend, 'send'>
 export type ConvenienceState = 'allowed' | 'off'
 export type ConvenienceReason = 'default' | 'user' | 'removed'
 export type ConvenienceAction =
-  | 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude'
+  | 'first' | 'repair' | 'reset' | 'removed' | 'removed-entry' | 'off' | 'allowed' | 'cleanup' | 'cleanup-failed' | 'prompt' | 'refused-unsafe' | 'refused-name' | 'refused-exclude' | 'retract' | 'retract-failed'
 
 export interface ConvenienceTarget {
   path: string

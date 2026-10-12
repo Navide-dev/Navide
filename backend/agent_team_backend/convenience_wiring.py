@@ -94,12 +94,58 @@ HOOK_FEATURES = {"claude": "claude.hooks", "qwen": "qwen.hooks", "copilot": "cop
 _PER_HOOK = frozenset({"claude", "qwen"})
 
 
-def _hook_target(agent_key: str) -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
-    """(file, present, remove) for one vendor's hook installation."""
+#: Phase 3: vendors whose hooks ride on the panes Navide starts instead of
+#: the shared settings file. ``prepare(port_file, skip)`` writes the pane-side
+#: copy inside Navide's own data (``skip``: the hooks the user removed).
+_PANE_CARRIERS: dict[str, Callable[[str, frozenset[str]], Any]] = {}
+
+#: The carried vendors whose panes carry the hooks right now: their shared
+#: entry is gone and the pane-side copy is ready.
+_CARRYING: set[str] = set()
+
+
+def register_pane_carrier(agent_key: str, prepare: Callable[[str, frozenset[str]], Any]) -> None:
+    _PANE_CARRIERS[agent_key] = prepare
+
+
+def pane_carries_hooks(agent_key: str) -> bool:
+    """Whether a pane of ``agent_key`` starts with Navide's hooks injected."""
+    return agent_key in _CARRYING
+
+
+def pane_carrier_changed(agent_key: str, ready: bool) -> None:
+    """What a carrier needs came or went while running (Copilot: the skills
+    plugin that builds its pane shims). Ready re-runs the vendor's hook pass
+    once the startup pass has registered the carrier, so the panes take the
+    hooks over. Not ready only stops the panes carrying them: a plugin stops
+    only at quit, and writing the shared file back then would be undone at
+    the next start."""
+    if not ready:
+        _CARRYING.discard(agent_key)
+        return
+    if _gate is None or agent_key not in _PANE_CARRIERS:
+        return
+    installer = _installer(agent_key)
+    if installer is not None:
+        from .applog import backend_port_file
+
+        install_hooks_gated(agent_key, installer, str(backend_port_file()))
+
+
+def _hook_target(agent_key: str, port_file: str = "") -> tuple[Path, Callable[[], bool], Callable[[], Any]]:
+    """(file, present, remove) for one vendor's hook installation. For a dev
+    backend (``port_file`` in a ``-dev`` data dir) claude's are its own
+    entries only: the installed app's share the file and are never its to
+    take out."""
     if agent_key == "claude":
         from . import claude_hooks
 
         path = claude_hooks.settings_path()
+        if "-dev" in port_file:
+            return (
+                path, lambda: claude_hooks.hooks_present(path, dev_only=True),
+                lambda: claude_hooks.uninstall_hooks(dev_only=True),
+            )
         return path, lambda: claude_hooks.hooks_present(path), claude_hooks.uninstall_hooks
     if agent_key == "qwen":
         from . import claude_hooks, qwen_hooks
@@ -127,6 +173,10 @@ def install_hooks_gated(
     if g is None or feature_id is None:
         return install(port_file)
     path, present, _ = _hook_target(agent_key)
+    if agent_key in _PANE_CARRIERS:
+        carried = _carry_in_panes(agent_key, feature_id, path, port_file)
+        if carried is not None:
+            return {"convenience": carried}
     result: dict[str, Any] = {}
     parts = None
     if agent_key in _PER_HOOK:
@@ -147,6 +197,28 @@ def install_hooks_gated(
     return {**result, "convenience": outcome}
 
 
+def _carry_in_panes(agent_key: str, feature_id: str, path: Path, port_file: str) -> str | None:
+    """Phase 3 for a carried vendor: take Navide's entry back out of the
+    shared file and let the panes carry the hooks. Returns the outcome, or
+    None when the shared hooks must stay in use (Phase 2): the entry could
+    not be taken back, or the pane-side copy could not be prepared. Never
+    both at once — every hook would run twice."""
+    g = _gate
+    _CARRYING.discard(agent_key)
+    if not g.allowed(feature_id):
+        return "off"
+    if not g.retract(feature_id, _hook_takeback(agent_key, port_file)):
+        return None
+    skip = g.excluded(feature_id, path) if agent_key in _PER_HOOK else frozenset()
+    try:
+        _PANE_CARRIERS[agent_key](port_file, skip)
+    except Exception as err:  # noqa: BLE001 — the shared hooks take over again
+        log.warning("preparing the %s pane hooks failed; using the shared file: %s", agent_key, err)
+        return None
+    _CARRYING.add(agent_key)
+    return "pane"
+
+
 def install_cli_hooks(port_file: str) -> dict[str, dict[str, Any]]:
     """The startup pass: every vendor's hook installer, through the gate, then
     the one-time upgrade notice. Failure per vendor is logged, never raised —
@@ -162,6 +234,10 @@ def install_cli_hooks(port_file: str) -> dict[str, dict[str, Any]]:
             log.info("%s hooks install: %s", key, results[key])
         except Exception as err:  # noqa: BLE001
             log.warning("%s hooks install failed: %s", key, err)
+    try:
+        carry_codex_hook_trust(port_file)
+    except Exception as err:  # noqa: BLE001
+        log.warning("moving codex hook trust into the panes failed: %s", err)
     if _gate is not None:
         try:
             _gate.finish_startup_scan()
@@ -174,8 +250,15 @@ def remove_hooks(agent_key: str) -> Any:
     return _hook_target(agent_key)[2]()
 
 
-def _hook_takeback(agent_key: str) -> list[Takeback]:
-    path, present, remove = _hook_target(agent_key)
+def _hook_takeback(agent_key: str, port_file: str = "") -> list[Takeback]:
+    path, present, remove = _hook_target(agent_key, port_file)
+    if agent_key == "copilot":
+        from . import copilot_hooks
+
+        # Another backend's file (the installed app beside a dev one) is not
+        # this backend's to take back: its panes would lose their hooks.
+        mine = present
+        present = lambda: mine() and not copilot_hooks.another_backends(path)  # noqa: E731
     return [Takeback(str(path), remove, present, path)]
 
 
@@ -192,11 +275,17 @@ def set_feature(feature_id: str, allowed: bool, *, port_file: str, source: str =
     agent_key = next((k for k, f in HOOK_FEATURES.items() if f == feature_id), None)
     takeback = TAKEBACKS.get(feature_id)
     if agent_key is not None:
-        takeback = lambda: _hook_takeback(agent_key)  # noqa: E731
+        takeback = lambda: _hook_takeback(agent_key, port_file)  # noqa: E731
     refusing = _targets(feature_id) if allowed and feature_id == "cursor.project-skills" else []
+    if not allowed and agent_key is not None:
+        _CARRYING.discard(agent_key)
+    if not allowed and feature_id == "codex.hook-trust":
+        _CARRYING.discard("codex")
     g.set_allowed(feature_id, allowed, takeback=takeback, source=source)
     if refusing:
         _clear_refused_skills(refusing)
+    if allowed and feature_id == "codex.hook-trust":
+        carry_codex_hook_trust(port_file)
     if allowed and agent_key is not None:
         installer = _installer(agent_key)
         if installer is not None:
@@ -435,6 +524,27 @@ def seed_hook_trust_gated(manager: Any, pane_home: Path) -> int:
         quiet_repairs=True, reset_folder=manager.real_home,
     )
     return 0 if outcome in ("off", "removed") else seeded[0]
+
+
+def carry_codex_hook_trust(port_file: str) -> bool:
+    """Phase 3: take the trust rows Navide seeded back out of the user's
+    config.toml and let each pane carry its own inline (``-c hooks.state=``,
+    `CodexHomeManager.hook_trust_override`). Runs at startup and on re-allow.
+    False when the feature is off, or a row could not be taken back: spawns
+    then keep seeding config.toml (Phase 2), never both.
+
+    A dev backend (its port file says ``-dev``, as in claude_hooks) never
+    takes rows back: ~/.codex-panes is shared with the installed Navide,
+    whose live panes' rows would go too. It stays on Phase 2. The installed
+    one does take back a dev backend's rows; that dev's next spawn re-seeds."""
+    g = _gate
+    _CARRYING.discard("codex")
+    if g is None or not g.allowed("codex.hook-trust") or "-dev" in port_file:
+        return False
+    if not g.retract("codex.hook-trust", _codex_hook_trust_takeback()):
+        return False
+    _CARRYING.add("codex")
+    return True
 
 
 def _drop_codex_hook_trust() -> None:
