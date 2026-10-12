@@ -49,7 +49,7 @@ The aggregate verdict is a shell step with explicit job-result inputs; it needs
 no checkout or Node setup. Infrastructure tests execute that actual shell body
 for success and every non-success result, and verify that every job is in
 `needs`. Shell execution is mandatory in the Linux static job; local hosts probe
-for Bash. Backend job budgets remain 15 minutes on macOS/Linux and 45 minutes
+for Bash. Backend job budgets are 25 minutes on macOS/Linux and 45 minutes
 per Windows shard, with a separate 35-minute detached-runner wait limit.
 
 Secret scanning remains a separate workflow. Repository branch protection must
