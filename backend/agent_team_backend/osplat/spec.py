@@ -648,6 +648,25 @@ class SecretFiles(Protocol):
         ...
 
 
+class DurableSecretFiles(Protocol):
+    """A secret file that has to survive a power cut and is never read or
+    written through a link: fsync on the file and its directory, every byte
+    written, `O_NOFOLLOW`. Windows has no such writer and uses DPAPI through
+    `SecretFiles` instead.
+
+    Separate from `SecretFiles` because that writer is shared with CLI account
+    slots and is left exactly as it was.
+    """
+
+    def read(self, path: Path) -> bytes:
+        """The file's bytes. Raises `OSError` (including `FileNotFoundError`)."""
+        ...
+
+    def write(self, path: Path, data: bytes) -> None:
+        """Atomically and durably replace `path` with `data`, owner-only."""
+        ...
+
+
 class SchedulerError(Exception):
     """A scheduler operation failed for an operational reason.
 
