@@ -29,6 +29,37 @@ export interface PairingRow {
   /** When this exchange began. Two requests from one device are two questions,
    *  so this is what tells them apart — see `requestKey`. */
   startedAt?: number
+  /** When it stops waiting, in seconds since the epoch. */
+  expiresAt?: number
+}
+
+/** A round that ended because one side refused a frame of it. */
+export interface PairingFailure {
+  deviceId: string
+  deviceName: string
+  /** The refusal's wire reason: trust-unavailable, policy-denied, … */
+  reason: string
+  /** local: this machine refused; remote: the other one did. */
+  side: string
+  at: number
+}
+
+/** Reasons with a sentence of their own; anything else gets the general one. */
+const FAILURE_REASONS: Record<string, string[]> = {
+  local: ['trust-unavailable', 'pairing-refused'],
+  remote: ['trust-unavailable', 'policy-denied', 'unauthenticated', 'pairing-refused'],
+}
+
+/** The i18n key under `settings.p2p.pair` that says what ended a round and
+ *  what to do next. */
+export function failureKey(failure: Pick<PairingFailure, 'reason' | 'side'>): string {
+  const side = failure.side === 'local' ? 'local' : 'remote'
+  const reason = FAILURE_REASONS[side].includes(failure.reason) ? failure.reason : 'other'
+  return `failed-${side}-${reason}`
+}
+
+function failureId(failure: Pick<PairingFailure, 'deviceId' | 'at'>): string {
+  return `${failure.deviceId}:${failure.at}`
 }
 
 /**
@@ -45,6 +76,7 @@ export function requestKey(row: Pick<PairingRow, 'deviceId' | 'startedAt'>): str
 
 interface Snapshot {
   pairings?: PairingRow[]
+  pairingFailures?: PairingFailure[]
   [key: string]: unknown
 }
 
@@ -56,6 +88,8 @@ const snapshot = ref<Snapshot | null>(null)
  *  and pruned on every read so a key can never outlive the request it names —
  *  which is what made "later" behave like "never". */
 const dismissed = ref<Set<string>>(new Set())
+/** Ended rounds whose notice somebody closed, by device and end time. */
+const dismissedFailures = ref<Set<string>>(new Set())
 /**
  * Requests this machine has just sent, before any answer has come back.
  *
@@ -146,6 +180,17 @@ export function usePairingState(backend: Backend) {
     unavailable,
     readFailed,
     pairings: computed<PairingRow[]>(() => snapshot.value?.pairings ?? []),
+    /** Rounds that ended on a refusal, not yet closed by anybody. Both
+     *  surfaces show them: the card that was waiting is gone, and without this
+     *  its absence was the only thing that said anything had happened. */
+    failures: computed<PairingFailure[]>(() =>
+      (snapshot.value?.pairingFailures ?? []).filter(
+        (failure) => !dismissedFailures.value.has(failureId(failure)),
+      ),
+    ),
+    dismissFailure(failure: Pick<PairingFailure, 'deviceId' | 'at'>): void {
+      dismissedFailures.value = new Set([...dismissedFailures.value, failureId(failure)])
+    },
     /**
      * What the prompt should show: every exchange waiting on a person here,
      * whichever end this machine is.
@@ -222,6 +267,7 @@ export function usePairingState(backend: Backend) {
 export function _resetForTest(): void {
   snapshot.value = null
   dismissed.value = new Set()
+  dismissedFailures.value = new Set()
   asked.value = new Map()
   unavailable.value = false
   readFailed.value = false
