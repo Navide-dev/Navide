@@ -1407,9 +1407,9 @@ def _claude_home_after_prepare(
 
     tree: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
-        rel = str(path.relative_to(root))
+        rel = path.relative_to(root).as_posix()
         if path.is_symlink():
-            tree[rel] = "-> " + str(Path(_link_target(os.readlink(path))).relative_to(root))
+            tree[rel] = "-> " + Path(_link_target(os.readlink(path))).relative_to(root).as_posix()
         elif path.is_file():
             tree[rel] = path.read_text(encoding="utf-8")
         else:
