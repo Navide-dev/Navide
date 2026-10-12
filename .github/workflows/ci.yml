@@ -269,7 +269,7 @@ jobs:
           retention-days: 7
 
   # macOS exercises native PTY/zsh behavior; Linux and Windows retain their
-  # complete suites. Only Windows is split across three collection-based shards.
+  # complete suites. Only Windows is split across four collection-based shards.
   backend:
     name: Backend tests (${{ matrix.platform }}, ${{ matrix.shard }})
     strategy:
@@ -288,18 +288,23 @@ jobs:
             timeout: 25
           - platform: Windows
             runner: windows-latest
-            shard: 1/3
+            shard: 1/4
             artifact: windows-1
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 2/3
+            shard: 2/4
             artifact: windows-2
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 3/3
+            shard: 3/4
             artifact: windows-3
+            timeout: 45
+          - platform: Windows
+            runner: windows-latest
+            shard: 4/4
+            artifact: windows-4
             timeout: 45
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}

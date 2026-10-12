@@ -40,7 +40,8 @@ DONE = "ci-windows-tests.done"
 # for 34 minutes with a 35-minute step timeout, inside a 45-minute job.
 # By 2026-09-25 the whole suite took 1109-1880 s on one runner depending on the
 # host (8400 tests), so CI splits it with `--shard K/N` rather than stretching
-# the cap again (three shards since 2026-10-12, when one half hit the cap).
+# the cap again (three shards since 2026-10-12, when one half hit the cap;
+# four since later that day).
 CAP_SECONDS = 30 * 60
 REPORT_EVERY = 60
 RESULT_RE = re.compile(r" (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)")
