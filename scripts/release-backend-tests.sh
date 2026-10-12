@@ -6,7 +6,8 @@
 #   - env -i with a throwaway HOME and TMPDIR,
 #   - a fake `security` first on PATH that only logs and fails,
 #   - on macOS, sandbox-exec denying exec of /usr/bin/security.
-# The few files that need setuid `ps` (which the sandbox also blocks) run in a
+# The few files that need setuid `ps` or the pane helper's own spawn (which the
+# sandbox also blocks) run in a
 # second pass with the same environment but without sandbox-exec; the
 # conftest guard keeps /usr/bin/security out of reach there too. The earlier
 # release gates have already synced backend/.venv, so these runs use --no-sync
@@ -28,6 +29,7 @@ echo "release-backend-tests: HOME=$SCRATCH/home" >&2
 
 NO_SANDBOX_FILES=(
   backend/tests/cli_regression/test_isolation.py
+  backend/tests/test_osplat_darwin_pane_helper.py
   backend/tests/test_proc_rusage.py
   backend/tests/test_pty_registry.py
   backend/tests/test_terminals_breakaway_kill.py
