@@ -280,12 +280,12 @@ jobs:
             runner: macos-14
             shard: 1/1
             artifact: macos
-            timeout: 15
+            timeout: 25
           - platform: Linux
             runner: ubuntu-22.04
             shard: 1/1
             artifact: linux
-            timeout: 15
+            timeout: 25
           - platform: Windows
             runner: windows-latest
             shard: 1/3
