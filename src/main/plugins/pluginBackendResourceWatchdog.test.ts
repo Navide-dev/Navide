@@ -187,17 +187,23 @@ describe('watchBackendResources', () => {
   it.runIf(process.platform !== 'win32')('kills a real child that exceeds a memory limit', async () => {
     const child = spawn(process.execPath, ['-e', 'const keep = Buffer.alloc(64 * 1024 * 1024, 1); setInterval(() => keep[0]++, 50)'])
     const exited = new Promise<NodeJS.Signals | null>((resolve) => child.on('exit', (_code, signal) => resolve(signal)))
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    const onViolation = vi.fn()
-    const watch = watchBackendResources(
-      child.pid!,
-      '/nonexistent',
-      onViolation,
-      { ...limits, maxRssBytes: 32 * MiB, rssStrikes: 1, sampleIntervalMs: 60_000 },
-      createHostWatchdogDeps(),
-    )
-    expect(await watch.sample()).toBe('memory')
-    expect(await exited).toBe('SIGKILL')
-    expect(onViolation).toHaveBeenCalledWith('memory')
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      const onViolation = vi.fn()
+      const watch = watchBackendResources(
+        child.pid!,
+        '/nonexistent',
+        onViolation,
+        { ...limits, maxRssBytes: 32 * MiB, rssStrikes: 1, sampleIntervalMs: 60_000 },
+        createHostWatchdogDeps(),
+      )
+      expect(await watch.sample()).toBe('memory')
+      expect(await exited).toBe('SIGKILL')
+      expect(onViolation).toHaveBeenCalledWith('memory')
+    } finally {
+      // A failed sample (no `ps` in a sandbox, a timeout under load) must not
+      // leave the 64 MiB child running forever under launchd.
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
+    }
   }, 30_000)
 })

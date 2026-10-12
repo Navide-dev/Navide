@@ -452,6 +452,30 @@ async def test_unpairing_walks_the_whole_handler_and_tells_the_windows(monkeypat
     assert events[0]["payload"]["pending"] == []
 
 
+@pytest.mark.parametrize("full", [True, False])
+async def test_unpairing_reconnects_only_when_the_record_was_full(monkeypatch, full) -> None:
+    """R4-3: a link stopped for a full record re-adopts only on a hello, so the
+    unpair that made the room reconnects it; any other unpair does not."""
+    reconnects: list[int] = []
+
+    async def fake_reconfigure() -> None:
+        reconnects.append(1)
+
+    async def quiet(*_a, **_k) -> None:
+        return None
+
+    monkeypatch.setattr(app, "broadcast", quiet)
+    monkeypatch.setattr(server_link, "reconfigure", fake_reconfigure)
+    monkeypatch.setattr(server_link, "trust_full", lambda: full)
+    trust_store.load()
+    trust_store.pin_device("dev-new", sign_key=_A_KEY, member_id="m-mine")
+
+    reply = await _call("p2p.trust.device.unpair", {"deviceId": "dev-new"})
+
+    assert reply["ok"] is True
+    assert reconnects == ([1] if full else [])
+
+
 async def test_unpairing_an_unknown_device_announces_nothing(monkeypatch) -> None:
     """It answers, and the answer says nothing went. Broadcasting anyway would
     redraw every window for an act that did not happen."""

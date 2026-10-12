@@ -48,6 +48,7 @@ import os
 import platform
 import secrets
 import ssl
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -55,8 +56,11 @@ from typing import Any, Callable
 import certifi
 import websockets
 
+from .credential_vault import vault_to_thread
 from . import (
+    __version__,
     agent_messaging,
+    cloud_secrets,
     device_crypto,
     device_identity,
     device_pairing,
@@ -95,10 +99,29 @@ SERVER_URL_SETTING = "agentTeam.p2p.serverUrl"
 # the vault.
 ACCOUNT_EMAIL_SETTING = "agentTeam.p2p.accountEmail"
 
-#: Vault secret name for the access token. It is a *long-lived* credential —
-#: the server neither expires nor rotates it, the only way it stops working is
-#: an admin revoking it — so it is stored once and read back, never refreshed.
+#: Vault secret name for the access token: this device's own token (servers
+#: with per-device tokens) or, from an older sign-in, the account-wide one. It
+#: is rewritten only by a rotation, and only after the server handed out the
+#: replacement; the old one stays valid until the new one is confirmed as
+#: stored (see ``ServerLink._maybe_rotate``).
 ACCESS_TOKEN_SECRET = "navide-server-token"
+
+#: Where a rotation writes the new token first. It becomes the current token
+#: only after the server confirmed it, so a write that goes wrong at any point
+#: of a rotation never touches the one token known to work.
+ACCESS_TOKEN_NEXT_SECRET = "navide-server-token.next"
+
+#: How long sign-out waits for the server to revoke this device's token
+#: before erasing it locally anyway.
+LOGOUT_TIMEOUT_S = 5.0
+
+#: Rotate on connect when the token is older than this, or is still the
+#: account-wide token a pre-C1 sign-in stored. Checked only when connecting.
+ROTATE_AFTER_S = 30 * 24 * 3600
+
+#: After a server answered that it has no rotation (UNKNOWN_TYPE), how long
+#: before asking again — once per connection would ask on every reconnect.
+ROTATE_RETRY_COOLDOWN_S = 24 * 3600
 
 #: Reported in ``auth.hello`` so the server can tell client kinds apart.
 CLIENT_NAME = "navide-desktop"
@@ -169,6 +192,17 @@ STATUS_NOT_OPENED = "not-opened"
 #: with a sender attached to it.
 MESSAGE_MEMORY_MAX = 500
 MESSAGE_MEMORY_TTL_S = 3600.0
+#: How old, and how far ahead of this clock, a v2-signed message may be (plan
+#: 797ad7, B4). Together inside the ledger's one-hour TTL, so a message still
+#: accepted is one the ledger still remembers, and a replay after that is
+#: refused for its age.
+SIG2_MAX_AGE_S = 55 * 60
+SIG2_MAX_AHEAD_S = 5 * 60
+#: Whether a device that has signed v2 is refused when a message of its arrives
+#: without sig2. Off in 0.2.20 (plan 797ad7, Q4: v1 is refused from 0.2.21): a
+#: server rolled back to a release without sig2, or a relay stripping it, would
+#: otherwise cut that device off. Logged and noticed meanwhile.
+REFUSE_V1_FROM_V2_PEERS = False
 
 #: How long a message this device relayed may go unanswered before it asks the
 #: server what became of it, and how often it asks again after that. The
@@ -217,6 +251,10 @@ LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
 LINK_TRUST_UNAVAILABLE = "p2p-trust-unavailable"
+#: Refused because the trust record has no room for the change (a policy
+#: sequence). Said apart from LINK_TRUST_UNAVAILABLE, which reads as "this
+#: machine cannot open its record" and would send someone looking for a lock.
+TRUST_STORE_FULL = "p2p-trust-store-full"
 
 #: The one word every unauthenticated inbound message is refused with. Kept
 #: single on purpose, exactly as "policy-denied" covers both blocked and merely
@@ -298,6 +336,9 @@ class ServerLinkTerminated(RuntimeError):
 class ServerLinkConfig:
     url: str = ""
     token: str = ""
+    #: A rotated token written to the ``.next`` slot whose confirm may or may
+    #: not have reached the server; tried only when ``token`` is refused.
+    next_token: str = ""
 
     @property
     def configured(self) -> bool:
@@ -352,10 +393,102 @@ def access_token() -> str:
         return ""
 
 
-def set_access_token(token: str | None) -> None:
-    """Store the Navide-Server access token, or erase it when None/empty."""
+class StaleTokenWrite(RuntimeError):
+    """A rotation write refused because the user signed in, out or over since it began."""
+
+
+#: Bumped by every user-level change of the stored token (sign-in, sign-out,
+#: a revocation clearing it). A rotation carries the value it started under and
+#: every one of its writes is refused once it has moved, so a reply that lands
+#: after a sign-out can never write a token back.
+_token_generation = 0
+_token_lock = threading.Lock()
+
+
+def token_generation() -> int:
+    return _token_generation
+
+
+def set_access_token(
+    token: str | None,
+    *,
+    slot: str = ACCESS_TOKEN_SECRET,
+    expect_generation: int | None = None,
+) -> None:
+    """Store the Navide-Server access token, or erase it when None/empty.
+
+    The one writer for both slots. Without ``expect_generation`` this is a
+    user-level change (sign-in, sign-out): it moves the generation and drops
+    any half-finished rotation's ``.next`` token. With it, it is a rotation's
+    write, refused if the generation has moved since the rotation began.
+    """
+    global _token_generation
     value = (token or "").strip()
-    _vault().write_app_secret(ACCESS_TOKEN_SECRET, value or None)
+    with _token_lock:
+        if expect_generation is not None and expect_generation != _token_generation:
+            raise StaleTokenWrite("the stored navide-server token changed since this rotation began")
+        cloud_secrets.write(_vault(), slot, value or None)
+        if expect_generation is None:
+            _token_generation += 1
+            if slot == ACCESS_TOKEN_SECRET:
+                cloud_secrets.write(_vault(), ACCESS_TOKEN_NEXT_SECRET, None)
+
+
+def _read_token_slot_strict(slot: str) -> str:
+    """A slot's token, raising if the Keychain will not answer. Rotation's
+    read-back uses this: a read that fails must not count as a match."""
+    return (_vault().read_app_secret(slot) or "").strip()
+
+
+def next_access_token() -> str:
+    """A rotated token stored but not yet known to be confirmed; "" if none."""
+    try:
+        return _read_token_slot_strict(ACCESS_TOKEN_NEXT_SECRET)
+    except Exception as err:  # noqa: BLE001
+        log.warning("the rotated navide-server token could not be read (%s)", err)
+        return ""
+
+
+def replace_access_token(token: str | None) -> None:
+    """A user-level change of the stored token (sign-in, sign-in over another
+    token, sign-out, a revocation) that also forgets the member pins of the
+    tokens it replaces (R4-2). Each of those used to leave its pin behind, and
+    the trust record has room for only so many before pairing and sign-in are
+    refused. A pin goes only once its token reads back gone (R4-4): a delete
+    that failed quietly leaves the token stored, and it keeps its pin. Blocking.
+    """
+    value = (token or "").strip()
+    current = access_token()
+    replaced = {current, next_access_token() if current else ""} - {"", value}
+    set_access_token(value or None)
+    if not replaced:
+        return
+    try:
+        left = {_read_token_slot_strict(ACCESS_TOKEN_SECRET), _read_token_slot_strict(ACCESS_TOKEN_NEXT_SECRET)}
+    except Exception as err:  # noqa: BLE001 - unconfirmed gone, the pins stay
+        log.warning("kept the replaced navide-server token's member pin: the token could not be read back (%s)", err)
+        return
+    url = server_url()
+    for old in replaced - left:
+        try:
+            trust_store.forget_own_member(url, old)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not the sign-in
+            log.warning("could not forget the replaced navide-server token's member pin: %s", err)
+    if replaced & left:
+        log.warning("the replaced navide-server token is still stored; its member pin is kept")
+
+
+class KeychainTokenStore:
+    """The two token slots as ServerLink uses them; tests pass their own."""
+
+    def generation(self) -> int:
+        return token_generation()
+
+    def write(self, value: str | None, slot: str, expect_generation: int) -> None:
+        set_access_token(value, slot=slot, expect_generation=expect_generation)
+
+    def read(self, slot: str) -> str:
+        return _read_token_slot_strict(slot)
 
 
 def load_config() -> ServerLinkConfig:
@@ -366,7 +499,10 @@ def load_config() -> ServerLinkConfig:
     starting, and on-machine messaging does not depend on any of this.
     """
     try:
-        return ServerLinkConfig(url=server_url(), token=access_token())
+        token = access_token()
+        # The .next slot is only read for a signed-in machine: with no token
+        # this makes exactly the Keychain calls it made before rotation existed.
+        return ServerLinkConfig(url=server_url(), token=token, next_token=next_access_token() if token else "")
     except Exception as err:  # noqa: BLE001
         log.warning("navide-server link configuration is unreadable: %s", err)
         return ServerLinkConfig()
@@ -432,7 +568,7 @@ def _workspace_salt() -> bytes:
         stored = _vault().read_app_secret(WORKSPACE_SALT_SECRET)
         if not stored:
             stored = secrets.token_hex(32)
-            _vault().write_app_secret(WORKSPACE_SALT_SECRET, stored)
+            cloud_secrets.write(_vault(), WORKSPACE_SALT_SECRET, stored)
     except Exception as err:  # noqa: BLE001
         log.warning("workspace digest salt is unavailable (%s); using a per-run one", err)
         stored = secrets.token_hex(32)
@@ -613,6 +749,17 @@ async def _warm_tls(url: str) -> None:
             await asyncio.to_thread(_tls_context)
 
 
+#: What each auth.revoked reason means for the person at this machine.
+REVOKE_REASONS = {
+    "password-changed": "the account password was changed on another device; sign in with the new password",
+    "logged-out": "this device was signed out",
+    "token-revoked": "this device's sign-in was revoked from another device",
+    "device-removed": "this device was removed from the account",
+    "account-deleted": "the account was deleted",
+    "rotated": "this device's sign-in was replaced by a newer one",
+}
+
+
 class ServerLink:
     """One outbound connection: authenticate, then keep the roster published."""
 
@@ -622,11 +769,25 @@ class ServerLink:
         connect: Callable[..., Any] | None = None,
         config_loader: Callable[[], ServerLinkConfig] | None = None,
         token_clearer: Callable[[], None] | None = None,
+        token_store: Any = None,
         device_name: str | None = None,
     ) -> None:
         self._connect = connect or _dial
         self._load_config = config_loader or load_config
-        self._clear_token = token_clearer or (lambda: set_access_token(None))
+        self._clear_token = token_clearer or (lambda: replace_access_token(None))
+        # Rotation and the hello fallback store through set_access_token, the
+        # same writer sign-in uses (KeychainTokenStore), so a write is a write
+        # wherever it comes from.
+        self._tokens = token_store or KeychainTokenStore()
+        # What the last accepted auth.hello said about the token it carried.
+        self._token_id = ""
+        self._token_age_s: float | None = None
+        self._legacy_token = False
+        self._rotate_retry_after = 0.0
+        # The token generation as of the last configuration read, i.e. before
+        # the hello (N2): a sign-out or sign-in that lands while the hello is
+        # in flight has moved it, and every rotation-side write refuses.
+        self._config_generation = 0
         self._device_name = device_name or platform.node() or "unknown"
         self._task: asyncio.Task | None = None
         self._stopped = False
@@ -684,6 +845,10 @@ class ServerLink:
         # no-downgrade list at once, and every one of those fails *silently* if
         # the answer is to start over.
         self._trust_locked = ""
+        # Which stop `_trust_locked` is, when the account view must word it
+        # differently: "full" for a record with no room left (R4-3), where
+        # unpairing a device is the way back and starting over is no answer.
+        self._trust_locked_code = ""
         # The member id pinned for *this link's* credential. Never the one the
         # last auth.hello asserted: that is the value C1 moved.
         self._own_member = ""
@@ -818,6 +983,7 @@ class ServerLink:
     async def _run(self) -> None:
         delay = RECONNECT_BASE_S
         while not self._stopped:
+            self._config_generation = self._tokens.generation()
             config = await self._read_config()
             if not config.configured:
                 log.info(
@@ -949,6 +1115,8 @@ class ServerLink:
                 # re-sent for it. One catch-up round per connection; deliberately
                 # spawned rather than awaited, because a large first sync must
                 # not hold the session open before its reader starts.
+                if self._sync_engine is not None:
+                    self._sync_engine.reset_connection()  # sync.caps is per connection
                 self._spawn(self._sync_all())
                 # Messages in both directions whose answer the dropped
                 # connection may have swallowed: acks this device could not send,
@@ -957,6 +1125,9 @@ class ServerLink:
                 # Approvals and notes left on this device's share links while
                 # it was away (links.feedback.list); a no-op without links.
                 self._spawn(self._drain_link_feedback())
+                # At most once per connection, and never on a server that does
+                # not describe its tokens.
+                self._spawn(self._maybe_rotate(config))
                 reconciler = asyncio.create_task(self._reconcile_loop())
                 reporter = asyncio.create_task(self._report_loop())
                 # Deliberately *not* in the wait below. That set means "the
@@ -1303,6 +1474,116 @@ class ServerLink:
         except Exception as err:  # noqa: BLE001 - same reason as above
             log.warning("syncing %s after a change notice failed: %s", scope, err)
 
+    def _rotation_due(self) -> bool:
+        if not self._token_id or time.time() < self._rotate_retry_after:
+            return False
+        if self._legacy_token:
+            return True
+        # The age comes from the server's clock (tokenAgeS); this machine's
+        # clock is never compared with the server's timestamps.
+        return self._token_age_s is not None and self._token_age_s > ROTATE_AFTER_S
+
+    async def _maybe_rotate(self, config: ServerLinkConfig) -> None:
+        """Swap this device's token for a fresh one, without ever being left
+        with none.
+
+        The server keeps the old token valid until it hears the new one is
+        stored. Here the new token goes to the ``.next`` slot, is read back,
+        and only then confirmed; after a confirmed confirm it becomes the
+        current token. Every way this can stop part-way leaves a token that
+        works: before the confirm the current one still does, and if the
+        confirm landed but its answer was lost, the next hello finds the
+        current one refused and promotes ``.next`` (``_settle_token_slots``).
+        A refused confirm drops ``.next``. A sign-out meanwhile moves the
+        generation and every write below is refused.
+        """
+        if not self._rotation_due():
+            return
+        # N1: the new token is pinned to this member before it is confirmed;
+        # with no settled pin there is nothing to carry over, so no rotation.
+        if not self._own_member:
+            return
+        generation = self._config_generation
+        try:
+            reply = await self._request("auth.token.rotate", {})
+        except Exception as err:  # noqa: BLE001 - the connection went; next one retries
+            log.info("navide-server token rotation did not complete: %s", err)
+            return
+        if not reply.get("ok"):
+            code = self._conflict_code(reply)
+            if code == "UNKNOWN_TYPE":
+                self._rotate_retry_after = time.time() + ROTATE_RETRY_COOLDOWN_S
+            log.info("navide-server declined to rotate the token (%s)", code or "no code")
+            return
+        payload = reply.get("payload") if isinstance(reply.get("payload"), dict) else {}
+        token = str(payload.get("token") or "")
+        token_id = str(payload.get("tokenId") or "")
+        if not token or not token_id:
+            return
+        if not await self._token_write(token, ACCESS_TOKEN_NEXT_SECRET, generation):
+            return
+        try:
+            stored = await vault_to_thread(self._tokens.read, ACCESS_TOKEN_NEXT_SECRET)
+        except Exception as err:  # noqa: BLE001
+            log.warning("reading back the rotated navide-server token failed; keeping the current one (%s)", err)
+            return
+        if stored != token:
+            log.warning("the rotated navide-server token did not read back intact; keeping the current one")
+            return
+        try:
+            await asyncio.to_thread(trust_store.adopt_own_member, config.url, token, self._own_member)
+        except Exception as err:  # noqa: BLE001 - unpinned, the new token could name any member
+            log.warning("not confirming the rotated navide-server token: it could not be pinned to this member (%s)", err)
+            return
+        if self._tokens.generation() != generation:
+            # Signed in, out or over since the rotation began: .next is not ours
+            # to confirm any more, and neither is the pin just taken for it.
+            await self._forget_next_pin(config.url, config.token, token)
+            return
+        try:
+            confirmed = await self._request("auth.token.confirm", {"tokenId": token_id})
+        except Exception as err:  # noqa: BLE001
+            log.info("navide-server token confirm did not complete (%s); the next hello settles it", err)
+            # R4-1: .next stays for the next hello, its pin does not. If the
+            # confirm did land, settling carries the pin over again first.
+            await self._forget_next_pin(config.url, config.token, token)
+            return
+        if not confirmed.get("ok"):
+            # N3: only NOT_FOUND says the server did not swap. Any other error
+            # may come after the swap was committed (the current token already
+            # revoked), so .next stays and the next hello settles it.
+            if self._conflict_code(confirmed) == "NOT_FOUND":
+                log.info("navide-server refused the rotation confirm; keeping the current token")
+                await self._drop_next_token(config.url, config.token, token, generation)
+            else:
+                log.info("navide-server rotation confirm failed (%s); the next hello settles it", self._conflict_code(confirmed) or "no code")
+            return
+        self._token_id = token_id
+        self._legacy_token = False
+        self._token_age_s = 0.0
+        # N1b: the old token is gone for good; drop its member pin now that the
+        # new one is pinned (it was, before the confirm) so the record stays bounded.
+        await self._forget_retired_pin(config.url, config.token, token)
+        # Promote. If this write fails, .next still holds the token and the next
+        # hello promotes it after the current one is refused.
+        if await self._token_write(token, ACCESS_TOKEN_SECRET, generation):
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+        log.info("navide-server token rotated")
+
+    async def logout_on_server(self) -> bool:
+        """Tell the server this device signs out, so its token stops working
+        there too. Best effort: False when not connected or the server did not
+        confirm — the caller erases the local token either way."""
+        if not self._authenticated or self._ws is None:
+            return False
+        try:
+            async with asyncio.timeout(LOGOUT_TIMEOUT_S):
+                reply = await self._request("auth.logout", {})
+        except Exception as err:  # noqa: BLE001
+            log.info("navide-server auth.logout did not complete: %s", err)
+            return False
+        return bool(reply.get("ok"))
+
     async def _on_revoked(self, payload: Any) -> None:
         """The server withdrew this member's access mid-connection.
 
@@ -1315,7 +1596,11 @@ class ServerLink:
         data = payload if isinstance(payload, dict) else {}
         reason = str(data.get("reason") or "no reason given")
         member = str(data.get("memberId") or "unknown")
-        self.terminated_reason = f"access revoked for member {member}: {reason}"
+        explained = REVOKE_REASONS.get(reason)
+        self.terminated_reason = (
+            f"access revoked for member {member}: {reason}"
+            + (f" ({explained})" if explained else "")
+        )
         log.error(
             "navide-server revoked this device's access (member %s): %s — the stored "
             "access token has been cleared; sign in again to reconnect",
@@ -1410,7 +1695,96 @@ class ServerLink:
         # Replacing what is recorded is only allowed when the server refused it,
         # which is exactly the case where more than one candidate was tried.
         self._replacing_node_id = len(candidates) > 1 and self._device_id != candidates[0]
+        config, reply = await self._settle_token_slots(config, reply)
         await self._finish_authenticate(config, reply)
+
+    async def _settle_token_slots(
+        self, config: ServerLinkConfig, reply: dict[str, Any]
+    ) -> tuple[ServerLinkConfig, dict[str, Any]]:
+        """Reconcile the two token slots with what the server just said.
+
+        A rotation leaves a token in ``.next`` when it could not finish: the
+        write or the confirm failed, or the App stopped in between. If the
+        current token was refused, the confirm reached the server after all —
+        say hello with ``.next`` and, if that works, make it current. If the
+        current token works, whatever is in ``.next`` was never confirmed, so it
+        is dropped. Writes carry the generation taken when the configuration
+        was read (N2), so none of this outlives a sign-out or sign-in that
+        lands meanwhile, even one finishing during the hello.
+        """
+        generation = self._config_generation
+        if not config.next_token:
+            return config, reply
+        if reply.get("ok"):
+            await self._drop_next_token(config.url, config.token, config.next_token, generation)
+            return config, reply
+        if self._conflict_code(reply) != "AUTH_REJECTED":
+            return config, reply
+        # N1: the rotated token must mean the member the current one meant.
+        # A rotation pins it before its confirm; pin it here too if that pin is
+        # missing, so the hello below is held to the same member like any other.
+        try:
+            await asyncio.to_thread(self._carry_member_pin, config.url, config.token, config.next_token)
+        except Exception as err:  # noqa: BLE001 - a pin that cannot be carried over is no promotion
+            log.warning("not promoting the rotated navide-server token: the member pin could not be carried over (%s)", err)
+            return config, reply
+        promoted = ServerLinkConfig(url=config.url, token=config.next_token)
+        retry = await self._hello(promoted)
+        if not retry.get("ok"):
+            return config, reply
+        log.info("the current navide-server token was refused; the rotated one was accepted")
+        if await self._token_write(config.next_token, ACCESS_TOKEN_SECRET, generation):
+            await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+            # N1b: the refused current token is retired; forget its pin.
+            await self._forget_retired_pin(config.url, config.token, config.next_token)
+        return promoted, retry
+
+    @staticmethod
+    async def _forget_retired_pin(url: str, old_token: str, new_token: str) -> None:
+        """Forget *old_token*'s member pin, but only once *new_token* carries one,
+        so the credential in use is never left without a pin. Best effort."""
+        try:
+            if await asyncio.to_thread(trust_store.member_for_credential, url, new_token):
+                await asyncio.to_thread(trust_store.forget_own_member, url, old_token)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not safety
+            log.warning("could not forget the retired navide-server token's member pin: %s", err)
+
+    async def _drop_next_token(self, url: str, current: str, next_token: str, generation: int) -> None:
+        """Drop ``.next`` and the member pin a rotation gave its token (R4-1), so
+        a server that never lets a rotation finish cannot grow the record."""
+        await self._forget_next_pin(url, current, next_token)
+        await self._token_write(None, ACCESS_TOKEN_NEXT_SECRET, generation)
+
+    @staticmethod
+    async def _forget_next_pin(url: str, current: str, next_token: str) -> None:
+        """Forget an abandoned rotated token's member pin — never the current
+        token's, should a server hand that back as the rotated one. Best effort."""
+        if not next_token or next_token == current:
+            return
+        try:
+            await asyncio.to_thread(trust_store.forget_own_member, url, next_token)
+        except Exception as err:  # noqa: BLE001 - a stale pin costs record space, not safety
+            log.warning("could not forget the dropped rotated navide-server token's member pin: %s", err)
+
+    @staticmethod
+    def _carry_member_pin(url: str, old_token: str, new_token: str) -> None:
+        """Pin *new_token* to the member *old_token* is pinned to, if it is not
+        pinned yet. Blocking (trust store)."""
+        member = trust_store.member_for_credential(url, old_token)
+        if member and not trust_store.member_for_credential(url, new_token):
+            trust_store.adopt_own_member(url, new_token, member)
+
+    async def _token_write(self, value: str | None, slot: str, generation: int) -> bool:
+        """One rotation-side write, off the event loop; False if it did not happen."""
+        try:
+            await vault_to_thread(self._tokens.write, value, slot, generation)
+        except StaleTokenWrite:
+            log.info("dropped a navide-server token write: the account changed meanwhile")
+            return False
+        except Exception as err:  # noqa: BLE001
+            log.warning("writing the navide-server token (%s) failed: %s", slot, err)
+            return False
+        return True
 
     @staticmethod
     def _conflict_code(reply: dict[str, Any]) -> str:
@@ -1423,6 +1797,9 @@ class ServerLink:
             {
                 "credential": config.token,
                 "client": CLIENT_NAME,
+                # The server records the last version each device reported, so a
+                # protocol migration can tell whether older builds are still online.
+                "clientVersion": __version__,
                 "deviceId": self._device_id,
                 "deviceName": self._device_name,
                 # Published on every hello, not only the first: the server keeps
@@ -1480,6 +1857,12 @@ class ServerLink:
         )
         await self._adopt_member(config, member)
         self.display_name = str(payload.get("displayName") or "")
+        # Servers before per-device tokens send none of these, and nothing
+        # below treats their absence as "rotate": an old server cannot.
+        self._token_id = str(payload.get("tokenId") or "")
+        age = payload.get("tokenAgeS")
+        self._token_age_s = float(age) if isinstance(age, (int, float)) and not isinstance(age, bool) else None
+        self._legacy_token = payload.get("legacyToken") is True
         self.email_verified = bool(payload.get("emailVerified"))
         # Per connection, not per process: the server this dialled may be a
         # newer one than the last. A sticky flag meant a machine that met an old
@@ -1530,17 +1913,28 @@ class ServerLink:
             # changes the store's answer has to make adoption run again. That is
             # why `p2p.trust.rebuild` reconnects rather than clearing a string.
             self._trust_locked = ""
+            self._trust_locked_code = ""
             await self._bind_sync_keyring(config, self.member_id)
+        except trust_store.TrustStoreFull as err:
+            # Readable and intact, just out of room for this credential's pin:
+            # nothing was written, and unpairing a device makes the room.
+            self._trust_locked = str(err)
+            self._trust_locked_code = "full"
+            sync_keyring.unbind()
+            log.error("cross-device traffic is refused on this machine: %s", err)
+            await self._announce_trust_notices()
         except trust_store.TrustStoreLocked as err:
             # The link stays up: the account view, the roster and the team
             # management calls do not depend on any of this, and dropping the
             # connection would hide the reason. Message traffic is what stops.
             self._trust_locked = str(err)
+            self._trust_locked_code = ""
             sync_keyring.unbind()
             log.error("cross-device traffic is refused on this machine: %s", err)
             await self._announce_trust_notices()
         except Exception as err:  # noqa: BLE001
             self._trust_locked = f"the device trust store could not be opened ({err})"
+            self._trust_locked_code = ""
             sync_keyring.unbind()
             log.error("cross-device traffic is refused on this machine: %s", err)
             await self._announce_trust_notices()
@@ -1876,6 +2270,9 @@ class ServerLink:
             return self._trust_refusal()
         try:
             signed = await asyncio.to_thread(self._signed_policy, policy)
+        except trust_store.TrustStoreFull as err:
+            log.warning("could not sign the pane policy: %s", err)
+            return {"ok": False, "error": {"code": TRUST_STORE_FULL, "message": str(err)}}
         except Exception as err:  # noqa: BLE001
             log.warning("could not sign the pane policy: %s", err)
             return self._trust_refusal()
@@ -2436,6 +2833,8 @@ class ServerLink:
             # device list it is about.
             "pairings": self.pairing_rows(),
             "trustLocked": self._trust_locked,
+            # "full" when that stop is a record with no room left; see above.
+            "trustLockedCode": self._trust_locked_code,
             # No rules written under this identity yet, so `is_allowed(None)`
             # refuses everything inbound. That is the correct state — it is
             # where a device that never wrote a policy already is — but it is
@@ -2450,6 +2849,12 @@ class ServerLink:
             # erase everything, which has nothing to erase when the keychain was
             # merely locked for a moment.
             "trustLockedTransient": trust_store.transient_lock(),
+            # The record is there but cut off, so the card can say "damaged —
+            # pair again" instead of an unexplained lock.
+            "trustDamaged": trust_store.damaged(),
+            # The journal (notices, delivered-message ledger) is unreadable or
+            # was set aside. Pairing is unaffected; the card says so.
+            "trustJournalProblem": trust_store.journal_problem(),
             # This device first, then by label: the row a user recognises is
             # the one that should not move as other machines come and go.
             "devices": sorted(
@@ -2575,7 +2980,24 @@ class ServerLink:
             # somehow got through would be one nobody could attribute.
             log.warning("refusing to send an unsigned message to %s: %s", to_device, err)
             return self._trust_refusal()
-        payload: dict[str, Any] = {"to": to, "msgKey": msg_key, "sig": signature, **body}
+        # v2 beside it, covering the send time. A server that does not know the
+        # field drops it, and a receiver that does not know it reads sig only.
+        try:
+            signature_v2 = await asyncio.to_thread(
+                device_signing.sign_message_v2,
+                msg_key=msg_key,
+                from_device=self._device_id,
+                to_device=to_device,
+                kind=kind,
+                body=body[kind],
+                sent_at=int(time.time()),
+            )
+        except device_signing.SigningError as err:
+            log.warning("refusing to send an unsigned message to %s: %s", to_device, err)
+            return self._trust_refusal()
+        payload: dict[str, Any] = {
+            "to": to, "msgKey": msg_key, "sig": signature, "sig2": signature_v2, **body
+        }
         if sender:
             payload["from"] = sender
         try:
@@ -2781,7 +3203,55 @@ class ServerLink:
             )
             return None
 
-        if not device_signing.verify_message(
+        signature_v2 = str(data.get("sig2") or "")
+        v2_verified = False
+        if signature_v2:
+            # v2 (plan 797ad7, B4): the same tuple plus the send time, so a
+            # message the relay held back past the window is refused for its age
+            # rather than accepted once the ledger has forgotten it.
+            sent_at = device_signing.verify_message_v2(
+                signature_v2,
+                public_key_b64=key,
+                msg_key=msg_key,
+                from_device=device_id,
+                to_device=self._device_id,
+                kind=kind,
+                body=body,
+            )
+            age = None if sent_at is None else time.time() - sent_at
+            if sent_at is None:
+                problem = "its v2 signature does not verify"
+            elif age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
+                problem = f"sent {int(-age)}s from now, outside the window"
+            else:
+                problem = ""
+            if not problem:
+                v2_verified = True
+                if not pin.get("sigV2"):
+                    # Marked only now that it has proven it sends v2, never before.
+                    try:
+                        await asyncio.to_thread(trust_store.note_signs_v2, device_id)
+                    except Exception as err:  # noqa: BLE001 - asked again with the next one
+                        log.warning("could not record that %s signs v2 (%s)", device_id, err)
+            elif REFUSE_V1_FROM_V2_PEERS:
+                log.warning("refusing message %s: %s", msg_key, problem)
+                return None
+            else:
+                # 0.2.20 (review B4-1): a clock that is off puts every message of
+                # a device outside the window, and refusing them would cut it off
+                # where main delivers. v1 decides instead, as if there were no
+                # sig2, and a notice says why — once per device, and only once
+                # v1 has taken it (review L1): the notice says it was delivered.
+                log.warning("message %s from %s: %s — check both machines' clocks; deciding on v1",
+                            msg_key, device_id, problem)
+        if v2_verified:
+            pass
+        elif not signature_v2 and pin.get("sigV2") and REFUSE_V1_FROM_V2_PEERS:
+            # This device has signed v2 before, so a message without it had it
+            # removed on the way — or is older than the device's switch to it.
+            log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
+            return None
+        elif not device_signing.verify_message(
             signature,
             public_key_b64=key,
             msg_key=msg_key,
@@ -2792,6 +3262,15 @@ class ServerLink:
         ):
             log.warning("refusing message %s: its signature does not verify", msg_key)
             return None
+        elif not signature_v2 and pin.get("sigV2"):
+            # Taken in 0.2.20 (see REFUSE_V1_FROM_V2_PEERS): a v1 signature that
+            # verifies, from a device that signs v2 — a server without sig2, or
+            # a relay that removed it. Said once per device, not per message.
+            log.warning("message %s from %s carries no v2 signature; taken on v1", msg_key, device_id)
+            await asyncio.to_thread(trust_store.note_sig2_missing, device_id)
+        elif signature_v2:
+            # A sig2 that could not be used, and the v1 beside it verified.
+            await asyncio.to_thread(trust_store.note_sig2_unusable, device_id)
 
         # It reached us again. Whoever said "not now" was answering the attempts
         # they had already seen, so a fresh one puts the row back in front of
@@ -3192,6 +3671,18 @@ class ServerLink:
                 member_id=member_id or member_id_for(device_id),
                 own_member_id=self._own_member,
             )
+        except trust_store.TrustStoreFull as err:
+            # Said where the person looks, not only in the log: the digits
+            # matched and nothing else explains why the device is not paired.
+            log.warning("could not pin %s after pairing: %s", device_id, err)
+            await asyncio.to_thread(
+                trust_store.note_pairing,
+                device_id,
+                kind="full",
+                device_name=pairing.device_name or self._device_name_for(device_id),
+            )
+            await self._announce_trust_notices()
+            return False
         except Exception as err:  # noqa: BLE001
             log.error("could not pin %s after pairing: %s", device_id, err)
             return False
@@ -3860,6 +4351,12 @@ async def _note_account(namespace: str | None) -> None:
     if previous is None or previous == namespace:
         _settled_account = namespace
         await _record_account(namespace)
+        try:
+            from . import sync_scopes
+
+            await asyncio.to_thread(sync_scopes.adopt_account, namespace)
+        except Exception as err:  # noqa: BLE001 - rows stay unclaimed until the next settle
+            log.warning("could not mark the sync state as this account's: %s", err)
         # Back on the account a failed switch was leaving: whatever that
         # switch did let go of belonged to this account, so sync reopens
         # rather than staying shut for a switch that is no longer happening.
@@ -3872,7 +4369,7 @@ async def _note_account(namespace: str | None) -> None:
     try:
         from . import sync_scopes
 
-        await asyncio.to_thread(sync_scopes.on_account_changed)
+        await asyncio.to_thread(sync_scopes.switch_account, previous, namespace)
     except Exception as err:  # noqa: BLE001 - retried on the next call
         log.warning("could not let go of the previous account's sync state; will retry: %s", err)
         _settled_account = previous
@@ -3935,6 +4432,13 @@ async def stop() -> None:
     if _link is not None:
         await _link.stop()
         _link = None
+
+
+async def logout_on_server() -> bool:
+    """Ask the server to revoke this device's token (best effort; see
+    ``ServerLink.logout_on_server``). False when there is no live link."""
+    link = _link
+    return await link.logout_on_server() if link is not None else False
 
 
 async def reconfigure() -> None:
@@ -4063,6 +4567,11 @@ async def sync_inventory(scope: str = "") -> dict[str, Any]:
                 "status": engine_mod.INVENTORY_NOT_CONNECTED,
                 "items": [],
             }
+        elif name in sync_scopes.NEVER_SYNCED:
+            # Credentials never sync, so the cloud's copy is never listed (that
+            # takes credential traffic): answered as offline, which the CLI
+            # accounts page shows as "not connected", nothing to act on.
+            scopes[name] = {"scope": name, "status": engine_mod.INVENTORY_NOT_CONNECTED, "items": []}
         else:
             try:
                 scopes[name] = await link.sync_engine().inventory(name)
@@ -4145,9 +4654,9 @@ def _inventory_devices(
 
 async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Send the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4159,9 +4668,9 @@ async def sync_push_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
 
 async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     """Take the chosen items of one scope and report what became of each."""
-    from . import sync_approvals
+    from . import sync_approvals, sync_scopes
 
-    if scope in sync_approvals.RETIRED_SCOPES:
+    if scope in sync_scopes.NEVER_SYNCED:
         raise sync_approvals.RetiredScopeError(scope)
     link = _link
     if link is None or not link._authenticated:  # noqa: SLF001 - same module
@@ -4169,6 +4678,31 @@ async def sync_pull_items(scope: str, item_ids: Any) -> list[dict[str, Any]]:
     if not await link.ensure_sync_key():
         raise ConnectionError("this machine does not hold the account sync key")
     return await link.sync_engine().pull_items(scope, item_ids)
+
+
+async def _history_engine(scope: str) -> Any:
+    from . import sync_approvals, sync_scopes
+
+    if scope in sync_scopes.NEVER_SYNCED:
+        raise sync_approvals.RetiredScopeError(scope)
+    link = _link
+    if link is None or not link._authenticated:  # noqa: SLF001 - same module
+        raise ConnectionError("the navide-server link is not connected")
+    # Looking at history never mints a key (ensure_sync_key would, on a
+    # machine paired with nobody): no key here means nothing to read.
+    if not await asyncio.to_thread(sync_keyring.has_account_key):
+        raise ConnectionError("this machine does not hold the account sync key")
+    return link.sync_engine()
+
+
+async def sync_versions(scope: str, item_id: str) -> list[dict[str, Any]]:
+    """The earlier versions the server keeps of one item, newest first."""
+    return await (await _history_engine(scope)).versions(scope, item_id)
+
+
+async def sync_restore_version(scope: str, item_id: str, rev: int) -> dict[str, Any]:
+    """Bring version *rev* of one item back here; ``held`` says it waits for approval."""
+    return await (await _history_engine(scope)).restore(scope, item_id, rev)
 
 
 def sync_conflicts(scope: str = "") -> list[dict[str, Any]]:
@@ -4352,6 +4886,12 @@ async def revoke_pairing(device_id: str) -> None:
 def own_member_id() -> str:
     """The member id pinned for this link's credential, or "" with no link."""
     return _link._own_member if _link is not None else ""
+
+
+def trust_full() -> bool:
+    """Whether the link stopped cross-device traffic because the trust record
+    had no room for its credential's pin (R4-3)."""
+    return _link is not None and _link._trust_locked_code == "full"
 
 
 def link_state() -> str:

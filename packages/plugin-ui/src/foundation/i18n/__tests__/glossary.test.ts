@@ -34,6 +34,17 @@ const BANNED: Record<string, RegExp> = {
 // Legitimate uses that are not about either kind of package.
 const ALLOWED_PHRASES = [/\bfile extensions?\b/gi]
 
+// The one exception (the user's call, 2026-10-11): the Settings page listing
+// CLI extensions is named "Extensions" on its own. Its name may stand bare as
+// the page's label and search title, and when prose points at that page.
+const CLI_EXTENSIONS_PAGE: Record<string, string> = { 'en-US': 'Extensions', 'zh-TW': '擴充', 'ja-JP': '拡張機能' }
+const CLI_EXTENSIONS_PAGE_KEYS = ['settings.nav.cliExtensions', 'settings.search.item.cliExtensions.title']
+const CLI_EXTENSIONS_PAGE_REF: Record<string, RegExp> = {
+  'en-US': /\bSettings → Extensions\b/g,
+  'zh-TW': /「設定 → 擴充」/g,
+  'ja-JP': /「設定 → 拡張機能」/g
+}
+
 function leaves(value: unknown, prefix = ''): Array<[string, string]> {
   if (typeof value === 'string') return [[prefix, value]]
   if (!value || typeof value !== 'object') return []
@@ -50,8 +61,9 @@ function prose(text: string): string {
   return out
 }
 
-function violations(locale: string, text: string): string[] {
-  const body = prose(text)
+function violations(locale: string, text: string, key = ''): string[] {
+  if (CLI_EXTENSIONS_PAGE_KEYS.includes(key) && text === CLI_EXTENSIONS_PAGE[locale]) return []
+  const body = prose(text).replace(CLI_EXTENSIONS_PAGE_REF[locale], ' ')
   const found: string[] = []
   for (const match of body.matchAll(BANNED[locale])) found.push(`banned "${match[0]}"`)
   for (const match of body.matchAll(TERMS[locale])) {
@@ -68,7 +80,7 @@ describe('glossary: plugin, extension and marketplace terms always carry a prefi
       const locale = fileName.replace(/\.json$/, '')
       const strings = leaves(JSON.parse(readFileSync(resolve(dir, fileName), 'utf8')))
       const problems = strings.flatMap(([key, text]) =>
-        violations(locale, text).map((problem) => `${key}: ${problem} in "${text.slice(0, 80)}"`)
+        violations(locale, text, key).map((problem) => `${key}: ${problem} in "${text.slice(0, 80)}"`)
       )
       expect(problems, problems.join('\n')).toEqual([])
     })
@@ -80,6 +92,17 @@ describe('glossary: plugin, extension and marketplace terms always carry a prefi
     expect(violations('zh-TW', '第三方 Navide 外掛與 CLI 擴充')).toEqual([])
     expect(violations('en-US', 'Allow third-party extensions')).toEqual(['bare "extensions"'])
     expect(violations('ja-JP', '拡張子と Navide プラグイン')).toEqual([])
+  })
+
+  it('lets the CLI extensions page, and nothing else, carry its bare name', () => {
+    expect(violations('en-US', 'Extensions', 'settings.nav.cliExtensions')).toEqual([])
+    expect(violations('zh-TW', '擴充', 'settings.search.item.cliExtensions.title')).toEqual([])
+    expect(violations('ja-JP', '拡張機能', 'settings.nav.cliExtensions')).toEqual([])
+    expect(violations('en-US', 'the same inventory Settings → Extensions shows')).toEqual([])
+    expect(violations('zh-TW', '跟「設定 → 擴充」看到的是同一份')).toEqual([])
+    expect(violations('en-US', 'Extensions', 'settings.nav.extensions')).toEqual(['bare "Extensions"'])
+    expect(violations('ja-JP', '拡張機能', 'settings.nav.marketplace')).toContain('banned "拡張機能"')
+    expect(violations('zh-TW', '安裝擴充')).toEqual(['bare "擴充"'])
   })
 
   it('rejects bare and banned terms', () => {

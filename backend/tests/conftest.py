@@ -214,6 +214,23 @@ def _isolated_skills_home(tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def _no_real_security_binary():
+    """A CredentialVault built without a ``security_runner`` falls back to
+    ``/usr/bin/security`` — the developer's login Keychain. A write that goes
+    wrong there is not cleaned up by any tmp_path, so it is refused outright."""
+    # Its own MonkeyPatch, undone at this fixture's teardown: a test calling
+    # ``monkeypatch.undo()`` must not undo the isolation along with its own.
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        from agent_team_backend import credential_vault
+
+        def refuse(args, input_text=None):
+            raise AssertionError(f"a test reached the real Keychain: security {args[:1]}")
+
+        monkeypatch.setattr(credential_vault, "_default_security_runner", refuse)
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _isolated_credential_vault(tmp_path):
     """Tests must NEVER touch the real home or the real Keychain: swap the
     app-wide vault for one rooted in tmp, backed by an in-process stand-in for
@@ -279,6 +296,11 @@ def _isolated_trust_store():
     # The sync key is cached in-process for the same reason the others are
     # singletons, and it outlives the per-test vault above.
     sync_keyring._reset_for_test()
+    yield
+    # The one thing stopped on the way out: the delivered-message timer is a
+    # thread, and one left running fires after this test's vault and data dir
+    # are gone (review R2-9). Stopping it touches neither.
+    trust_store._stop_seen_timer_for_test()
 
 
 @pytest.fixture(autouse=True)

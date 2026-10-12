@@ -73,7 +73,7 @@ from pathlib import Path
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from . import osplat
+from . import cloud_secrets, osplat
 from .cli_vendors.base import PortableCredential, SlotKind
 from .cli_vendors.registry import VENDORS, vendor
 
@@ -225,7 +225,7 @@ def _wrapping_key(*, create: bool) -> bytes | None:
                 raise PortableCredentialError("the stored portable-credential key is not 32 bytes")
         elif create:
             raw = os.urandom(_KEY_LEN)
-            _vault().write_app_secret(WRAPPING_KEY_SECRET, base64.b64encode(raw).decode("ascii"))
+            cloud_secrets.write(_vault(), WRAPPING_KEY_SECRET, base64.b64encode(raw).decode("ascii"))
             log.info("minted the portable-credential wrapping key (%s)", key_storage())
         else:
             return None

@@ -215,23 +215,24 @@ else:
     assert refusal["boundary"] == ("real CLI" if boundary == "popen" else "real native CLI")
 
 
-def test_shards_partition_real_collection_without_omission(tmp_path):
+@pytest.mark.parametrize("n", [2, 3])
+def test_shards_partition_real_collection_without_omission(tmp_path, n):
     backend_root = Path(__file__).resolve().parents[2]
     reports = []
-    for shard in ("1/2", "2/2"):
-        report = tmp_path / f"collection-{shard[0]}.json"
-        env = isolated_environment(tmp_path / f"collector-{shard[0]}")
+    for k in range(1, n + 1):
+        report = tmp_path / f"collection-{k}.json"
+        env = isolated_environment(tmp_path / f"collector-{k}")
         subprocess.run(
             [sys.executable, "-m", "pytest", "tests/cli_regression/test_shared.py",
-             "--collect-only", "-q", "--shard", shard, "--collection-report", str(report)],
+             "--collect-only", "-q", "--shard", f"{k}/{n}", "--collection-report", str(report)],
             cwd=backend_root, env=env, capture_output=True, text=True, check=True,
         )
         reports.append(json.loads(report.read_text()))
-    assert reports[0]["collected"] == reports[1]["collected"]
-    first, second = (set(report["selected"]) for report in reports)
-    assert first and second
-    assert first.isdisjoint(second)
-    assert first | second == set(reports[0]["collected"])
+    assert all(report["collected"] == reports[0]["collected"] for report in reports)
+    selected = [set(report["selected"]) for report in reports]
+    assert all(selected)
+    assert sum(len(part) for part in selected) == len(set().union(*selected))
+    assert set().union(*selected) == set(reports[0]["collected"])
 
 
 def test_failure_cleanup_reaps_a_tracked_orphan(tmp_path):

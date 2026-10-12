@@ -132,6 +132,34 @@ describe('SettingsSystemHelp', () => {
     expect(unexpectedWarnings(warn)).toEqual([])
   })
 
+  it.each([
+    ['en-US', 'Extensions'],
+    ['zh-TW', '擴充'],
+    ['ja-JP', '拡張機能'],
+  ] as const)('draws Credentials and Extensions under Agent Assets in %s', (locale, extensionsLabel) => {
+    i18n.global.locale.value = locale
+    const wrapper = mountHelp()
+    const t = (key: string) => i18n.global.t(key)
+
+    // Group titles and nav items are flat siblings in the mock, so a group
+    // runs from its title to the next one.
+    const groups: { title: string; items: string[] }[] = []
+    for (const el of wrapper.findAll('.mk-fig')[0].findAll('.mk-set-grouptitle, .mk-set-navitem')) {
+      if (el.classes('mk-set-grouptitle')) groups.push({ title: el.text(), items: [] })
+      else groups[groups.length - 1].items.push(el.text())
+    }
+    const group = (key: string) => groups.find((g) => g.title === t(key))?.items
+
+    expect(t('settings.nav.cliExtensions')).toBe(extensionsLabel)
+    expect(group('settings.nav.group.integration')).toEqual(
+      ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'].map((k) => t(`settings.nav.${k}`))
+    )
+    expect(group('settings.nav.group.accountsAgents')).toEqual(
+      ['settings.nav.accounts', 'settings.nav.cliAgents', 'settings.nav.analyzer', 'guard.nav', 'channels.nav', 'settings.nav.crossDevice'].map(t)
+    )
+    expect(unexpectedWarnings(warn)).toEqual([])
+  })
+
   it('renders the mock labels in Traditional Chinese under zh-TW', () => {
     i18n.global.locale.value = 'zh-TW'
     const wrapper = mountHelp()
