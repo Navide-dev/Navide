@@ -20,8 +20,11 @@ from tests.cli_regression.support.backend_process import BackendProcess
 @pytest.fixture
 def registered(monkeypatch: pytest.MonkeyPatch) -> list[tuple]:
     calls: list[tuple] = []
+    # faulthandler.register does not exist on Windows; main() never reaches it
+    # there (no SIGUSR1), and the fake is what proves that.
     monkeypatch.setattr(
-        backend_main.faulthandler, "register", lambda *args, **kwargs: calls.append((args, kwargs))
+        backend_main.faulthandler, "register",
+        lambda *args, **kwargs: calls.append((args, kwargs)), raising=False,
     )
     return calls
 
