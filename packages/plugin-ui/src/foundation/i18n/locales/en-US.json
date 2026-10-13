@@ -10269,7 +10269,7 @@
     },
     "rules": {
       "title": "Custom rules",
-      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). Adding an allow or removing a deny needs confirmation.",
+      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). On a pane with external content, a command Guard cannot analyse is only released by a glob pattern that matches the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
       "kind": {
         "allow": "Allow",
         "deny": "Deny"
