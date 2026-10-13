@@ -543,11 +543,15 @@ async def test_kill_all_leaves_a_vendor_without_a_spec_on_the_old_grace(
 
 
 @pytest.mark.asyncio
-async def test_kill_all_waits_the_longest_grace_once_not_once_per_pane() -> None:
+async def test_kill_all_waits_the_longest_grace_once_not_once_per_pane(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The cost of honouring the grace has to be the maximum, not the sum —
     Electron kills the backend if quit drags, and a workspace has tens of
     panes. kill_all signals every target first and then polls them together,
-    so three TERM-ignoring claudes cost one grace between them."""
+    so three TERM-ignoring claudes cost one grace between them. Counted on
+    _SteppingClock, not timed: the wall clock also carried the snapshot and
+    the drain, and a loaded Windows runner took 10.66s with no grace at all."""
     svc = TerminalService(emit=_noop_emit)
     sessions = [
         svc.create(
@@ -557,17 +561,35 @@ async def test_kill_all_waits_the_longest_grace_once_not_once_per_pane() -> None
         for i in range(3)
     ]
     await asyncio.sleep(0.4)
+    clock = _SteppingClock(svc._loop, 0.05)  # noqa: SLF001
+    svc._loop = clock  # type: ignore[assignment]  # noqa: SLF001
+    signalled: list[tuple[bool, float]] = []
+    real = osplat.process_tree.kill_group
 
-    started = time.monotonic()
+    def spy(gid: int, *, force: bool) -> None:
+        signalled.append((force, clock.now))
+        real(gid, force=force)
+
+    monkeypatch.setattr(osplat.process_tree, "kill_group", spy)
+
     await svc.kill_all()
-    waited = time.monotonic() - started
 
-    grace = vendor("claude").shutdown.grace_s
-    assert waited < grace * 2, (
-        f"three panes took {waited:.2f}s — the waits stacked instead of "
-        f"overlapping (one grace is {grace}s)"
-    )
     assert all(s.proc.poll() is not None for s in sessions)
+    terms = [at for force, at in signalled if not force]
+    kills = [at for force, at in signalled if force]
+    assert len(terms) >= 3, signalled
+    if not kills:
+        # Windows: the TERM already terminated them, so no grace ran at all.
+        assert sys.platform == "win32", signalled
+        return
+    # Every TERM goes out before the first escalation, and every escalation
+    # comes when the one shared grace runs out — stacked waits would put the
+    # second a whole grace after the first.
+    grace = vendor("claude").shutdown.grace_s
+    assert len(kills) == 3, signalled
+    assert max(terms) < min(kills), signalled
+    for killed_at in kills:
+        assert grace <= killed_at - max(terms) <= grace + 3 * clock.step, signalled
 
 
 # --- failure release -----------------------------------------------------
