@@ -13,7 +13,7 @@ import { i18n } from '@navide/plugin-ui/foundation'
 import KeyboardShortcutsEditor from '../KeyboardShortcutsEditor.vue'
 import { getUserRules, initKeybindingsPort, isKeyCaptureActive } from '@navide/plugin-ui/shared'
 import { _resetKeybindingsState } from '@navide/plugin-ui/shared/testing'
-import { NATIVE_MENU_KEYS, TERMINAL_KEYS } from '@navide/plugin-ui/shared'
+import { nativeMenuKeys, TERMINAL_KEYS } from '@navide/plugin-ui/shared'
 
 interface Bridge {
   readKeybindings: ReturnType<typeof vi.fn>
@@ -173,7 +173,7 @@ describe('read-only reference sections', () => {
   it('shows every documented external key', () => {
     wrapper = mountEditor()
     const rows = wrapper.findAll('.kse-reference tbody tr')
-    expect(rows).toHaveLength(TERMINAL_KEYS.length + NATIVE_MENU_KEYS.length)
+    expect(rows).toHaveLength(TERMINAL_KEYS.length + nativeMenuKeys().length)
   })
 
   it('offers no way to edit them', () => {

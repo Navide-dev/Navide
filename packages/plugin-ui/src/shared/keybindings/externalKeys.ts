@@ -13,6 +13,7 @@
 // KeyboardShortcutsHelp page, which this replaces.
 
 import { canonicalizeKeySpec, isMacPlatform } from './parseKey'
+import { keySpecToTokens } from './keyDisplay'
 
 export interface ExternalKeyRow {
   /** Display glyphs, space-separated; '/' and '–' read as separators. */
@@ -174,6 +175,38 @@ export function menuOwnedSpecs(mac: boolean): Set<string> {
 }
 
 export const MENU_OWNED_SPECS = menuOwnedSpecs(isMacPlatform())
+
+/**
+ * The "Application menu" reference rows for a platform.
+ *
+ * NATIVE_MENU_KEYS is the macOS table and is returned as is. Elsewhere the rows
+ * are built from the accelerators the menu actually carries there, so Windows
+ * and Linux read Ctrl rather than ⌘, and a row whose keys do not exist on the
+ * platform (Hide, and Reload, which MENU_OMITTED_ROLES keeps out of the menu)
+ * is dropped.
+ */
+export function nativeMenuKeys(mac = isMacPlatform()): ExternalKeyRow[] {
+  if (mac) return NATIVE_MENU_KEYS
+  const role = (name: string): string | null => MENU_ROLE_ACCELERATORS[name]?.other ?? null
+  const sources: [desc: string, accelerators: (string | null)[]][] = [
+    ['menuSettings', ['CmdOrCtrl+,']],
+    ['menuNewWindow', ['CmdOrCtrl+N']],
+    ['menuOpenWorkspace', ['CmdOrCtrl+O']],
+    ['devTools', [role('toggleDevTools')]],
+    ['fullScreen', [role('togglefullscreen')]],
+    ['clipboard', ['CmdOrCtrl+C', role('paste'), role('cut'), role('undo'), role('selectAll')]],
+    ['windowControls', [role('quit'), role('minimize')]],
+    ['hide', [role('hide'), role('hideOthers')]],
+  ]
+  const rows: ExternalKeyRow[] = []
+  for (const [desc, accelerators] of sources) {
+    const keys = accelerators
+      .filter((accelerator): accelerator is string => accelerator !== null)
+      .map((accelerator) => keySpecToTokens(acceleratorToSpec(accelerator, false), false)[0].join(' '))
+    if (keys.length) rows.push({ keys: keys.join(' / '), desc })
+  }
+  return rows
+}
 
 const SEPARATORS = new Set(['/', '–'])
 
