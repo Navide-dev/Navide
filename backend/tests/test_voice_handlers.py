@@ -429,12 +429,22 @@ async def _speak(session: _Session, sid: str, blocks: range, pause: float = 0.06
         await asyncio.sleep(pause)
 
 
+@pytest.fixture
+def no_partial_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Partials are never cancelled for running long. A cancelled partial
+    applies no hypothesis, so the next one hears twice the new audio and the
+    window can pass the cap by that much: on a loaded machine (CI) a decode
+    can outrun the 2 s budget at any step. The budget has its own tests."""
+    monkeypatch.setattr(voice_handlers, "_PARTIAL_BUDGET_MIN_S", float("inf"))
+
+
 async def _speak_in_step(session: _Session, sid: str, blocks: range, timeout: float = 5.0) -> None:
     """Like _speak, but each partial hears the same amount of new audio: two
     blocks (the least a partial waits for) go in, then nothing more until the
     partials have caught up. _speak's pace is wall-clock, so how much audio a
     partial takes in depends on the machine (and on Windows' 15.6 ms clock);
-    the window size scales with it."""
+    the window size scales with it. Tests using it also need
+    no_partial_budget, or a partial cancelled under load breaks the step."""
     for i in blocks:
         await _speak(session, sid, range(i, i + 1), pause=0.0)
         if (i - blocks.start) % 2 == 0:
@@ -527,6 +537,7 @@ async def test_missing_or_unknown_script_sends_none(stream: Path, script: Any) -
     assert {r["script"] for r in _requests(stream)} == {None}
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_streaming_dedup_compares_converted_text(stream: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Every other run hears the "Simplified" forms; the sidecar converts them
     # all to Traditional, so the overlap still matches and no word repeats.
@@ -559,6 +570,7 @@ async def test_unstable_tail_is_never_committed(stream: Path, monkeypatch: pytes
     assert stop["text"][:-1] == _text(12) and stop["text"][-1].isdigit()
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_window_advances_so_each_partial_stays_bounded(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -716,6 +728,7 @@ def test_strip_overlap() -> None:
     assert voice_handlers._strip_overlap("最後,", ["當你放開按鍵,"])[1] is False
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_force_trim_when_no_agreement_at_cap(stream: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Every segment ends in a digit that changes per request, so no two
     # hypotheses agree: only the cap moves the window. Fed in step with the
@@ -741,6 +754,7 @@ async def test_force_trim_when_no_agreement_at_cap(stream: Path, monkeypatch: py
     assert all(ch in heard for ch in _text(40)), stop["text"]
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_late_boundaries_step_back_but_never_past_the_cap(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -822,6 +836,7 @@ def test_a_forced_cut_on_collapsed_timestamps_is_not_placed_late() -> None:
     assert rec.committed_until < 9000 * ms
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_stop_after_an_unverified_advance_transcribes_only_the_short_tail(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
