@@ -231,6 +231,18 @@ async def test_the_test_box_shows_each_rule_and_its_grading(guard_store):
                                "rule_ids": ["git-push", f"user-deny:{rid}"], "tainted": False}
 
 
+async def test_the_test_box_applies_a_glob_allow_to_a_taint_raise(guard_store):
+    # Mirrors engine._evaluate (issue #192).
+    guard_store.rules_add("allow", "python3")
+    payload = {"command": "python3 -c 'print(1)'", "source": "local", "tainted": True}
+    assert (await raw("guard.test", payload))["payload"]["decision"]["action"] == "ask"
+    rid = guard_store.rules_add("allow", "python3 -c *")
+    res = (await raw("guard.test", payload))["payload"]
+    assert res["decision"]["action"] == "allow" and f"user-allow:{rid}" in res["decision"]["rule_ids"]
+    relay = (await raw("guard.test", {**payload, "source": "relay"}))["payload"]
+    assert relay["decision"]["action"] == "deny"
+
+
 # ── migration ──────────────────────────────────────────────────────────────
 async def test_v3_to_v4_keeps_legacy_deny_rows_critical(tmp_path):
     db = Database(tmp_path / "old.db")
