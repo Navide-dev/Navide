@@ -2,6 +2,36 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.21] — 2026-10-13 — signed release
+
+### Added
+
+- **One click switches every following Claude pane** (main window): clicking another account in a pane's account badge list swaps the live sign-in, and every following pane uses the new account from its next turn, without a restart and with one sign-in per account. New panes follow by default. The pin beside a pane's account badge fixes it to its account (the pane reopens once in that account's own folder and resumes its conversation, signing that folder in first if needed); clicking it again makes the pane follow (it reopens once on the live sign-in). "Make all follow" in the account list reopens every fixed pane on the live sign-in, asking once about panes that are working (move when finished, skip, or cancel). The account list is titled "Default account" and says how many panes follow. Following or fixed is remembered per pane in this computer's app storage and kept consistent across windows. "Move pinned panes along when switching Claude accounts" (0.2.20) is unchanged and still covers only fixed panes. Without any account folder sign-in, switching behaves as in 0.2.20.
+- Cross-device pairing: a waiting pairing has a "Cancel request" button, and a pairing still in progress says about how many minutes are left.
+
+### Changed
+
+- Navide Guard: on a pane that has received external content, a command Guard cannot analyse is released only by an allow pattern with wildcards that matches the whole command (for example `python3 -c *`); other allow patterns do not release it. The release is written to the audit log, and the custom rules hint says so. Anything written in a way Guard cannot read is always left for you to confirm, so on such a pane a command like `find -exec … \;` may ask once more.
+- Windows: Ctrl+V pastes in the terminal, and on Windows and Linux Ctrl+Shift+V does too; plain Ctrl+V on Linux still goes to the program, and macOS is unchanged. A plain shell on Windows no longer receives Ctrl+V as a key.
+- Windows and Linux: right-clicking in a program that has mouse reporting on (Claude Code, vim, htop, …) is left to that program and no longer opens Navide's Copy/Paste menu; Shift+right-click opens it.
+- Settings → Keyboard Shortcuts lists the application menu with the keys each platform uses: Ctrl chords on Windows and Linux, without the macOS-only Hide and Reload rows.
+- Settings: the status badges, keyboard shortcuts and analyzer pages are tidied up; the analyzer uses line icons instead of emoji.
+- CI: the Windows backend suite runs in four shards, the release workflow runs the Windows backend gates as sharded jobs beside the macOS build, and three tests that timed out on loaded runners now check order or wait longer instead (#185, #186, #187, #198, #200).
+
+### Fixed
+
+- A refused cross-device pairing ends at once, on either side, and the pairing card and the account window say why and what to do next, instead of showing "waiting" until the five-minute deadline. Starting a pairing while this machine's trust record cannot be read is refused up front with the reason.
+- With several workspace windows open, a quit that was cancelled part-way (a refused close, the quit timer, or an update install that never started) no longer leaves the windows it had already closed out of the next launch. A window saved on a display that is no longer connected opens on the main display. Window restores, cancelled quits and abandoned update installs are written to `main.log`.
+- Right-click submenus in the Git panel and the file explorer open to the left, or below, when opening to the right would be cut off at the view's edge.
+- The channel menu in a pane header shows a chat connected to a pane in another window as "Connected to …" and does not offer it.
+- A one-time schedule that came due while Navide was closed is no longer sent twice when the restart catch-up and the regular tick reach it together.
+- The account switch dialog stays inside its card when a pane's status is long, shows out-of-quota accounts in grey instead of red, and tells you to switch to the built-in Default first instead of asking it to sign in inside a folder it does not have.
+
+### Known limitations
+
+- Cross-device messages without the send-time signature are still accepted in 0.2.21, with one notice per device. Refusing them from devices that already sign it was planned for this release and is not turned on yet.
+- Panes that were running in an account folder before the update stay fixed; choose "Make all follow" in the account list to have them switch with the account.
+
 ## [0.2.20] — 2026-10-12 — signed release
 
 ### Added
