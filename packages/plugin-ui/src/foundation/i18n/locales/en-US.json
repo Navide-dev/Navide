@@ -9205,6 +9205,9 @@
     "follow-default-title": "Default account",
     "follow-hint": "New panes and {count} following pane(s) use it",
     "follow-hint-none": "New panes use it. Mark a pane to follow with the pin beside its account badge.",
+    "pinned-hint": "{count} pane(s) are fixed to an account's own folder and stay put when you switch.",
+    "unpin-all": "Make all follow",
+    "unpin-all-tooltip": "Reopen these panes on the current login so they move with every account switch. Each reopens once and picks up its conversation; one that is working is asked about first.",
     "continue-with": "Continue ›",
     "continue-with-tooltip": "Reopen this pane on {account} and resume its conversation",
     "dir-sign-in": "Sign in",
@@ -10834,8 +10837,12 @@
     "follow-body": "These following panes are mid-turn. They can move once they finish, or stay on their current account this time. The idle ones move now.",
     "follow-wait": "Move when finished",
     "follow-skip-running": "Skip running panes",
-    "toggle-label": "Follow the default account",
-    "toggle-follow-tooltip": "Following: when you choose a default account, this pane moves to it and resumes its conversation. Click to keep it fixed.",
-    "toggle-fixed-tooltip": "Fixed: choosing a default account does not move this pane. Click to make it follow."
+    "toggle-label": "Fix this pane to its account",
+    "toggle-follow-tooltip": "Following: when you switch accounts, this pane uses the new one from its next turn — no restart. Click to fix it to the current account (it reopens once in that account’s own folder; you sign in there first if you have not).",
+    "toggle-fixed-tooltip": "Fixed: switching accounts does not move this pane; it keeps running in its account’s own folder. Click to make it follow again (it reopens once and picks up its conversation).",
+    "unpin-title": "{count} pane(s) to make follow are working",
+    "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
+    "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
+    "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   }
 }

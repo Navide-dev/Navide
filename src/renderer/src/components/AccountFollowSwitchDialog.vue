@@ -12,8 +12,10 @@ const props = defineProps<{
   /** 'switch': after a global switch, which pinned panes come along.
    *  'quota': an out-of-quota pane picks an account to resume on.
    *  'follow': a new default account, and following panes are mid-turn —
-   *  move them once they finish, or leave them out. */
-  mode: 'switch' | 'quota' | 'follow'
+   *  move them once they finish, or leave them out.
+   *  'unpin': "make all follow", and some of the fixed panes are mid-turn —
+   *  same choice, about reopening them on the live login. */
+  mode: 'switch' | 'quota' | 'follow' | 'unpin'
   /** Label of the account switched to ('switch' mode) or of the pane that
    *  ran out ('quota' mode) — used in the heading. */
   subject: string
@@ -52,6 +54,8 @@ function toggle(id: string): void {
 }
 
 const count = computed(() => checked.value.size)
+// The modes that ask about running panes: wait for them, or skip them.
+const waitMode = computed(() => props.mode === 'follow' || props.mode === 'unpin')
 const canConfirm = computed(() =>
   props.mode === 'switch' ? count.value > 0 : target.value !== null
 )
@@ -80,13 +84,17 @@ function confirm(): void {
           ? $t('account-follow.switch-title', { account: subject })
           : mode === 'follow'
             ? $t('account-follow.follow-title', { account: subject, count: rows.length })
-            : $t('account-follow.quota-title', { pane: subject })"
+            : mode === 'unpin'
+              ? $t('account-follow.unpin-title', { count: rows.length })
+              : $t('account-follow.quota-title', { pane: subject })"
       >
         <h2>{{ mode === 'switch'
           ? $t('account-follow.switch-title', { account: subject })
           : mode === 'follow'
             ? $t('account-follow.follow-title', { account: subject, count: rows.length })
-            : $t('account-follow.quota-title', { pane: subject }) }}</h2>
+            : mode === 'unpin'
+              ? $t('account-follow.unpin-title', { count: rows.length })
+              : $t('account-follow.quota-title', { pane: subject }) }}</h2>
 
         <template v-if="mode === 'quota'">
           <p>{{ $t('account-follow.quota-pick') }}</p>
@@ -109,13 +117,14 @@ function confirm(): void {
           <p v-if="rows.length" class="sub">{{ $t('account-follow.quota-peers') }}</p>
         </template>
         <p v-else-if="mode === 'follow'">{{ $t('account-follow.follow-body') }}</p>
+        <p v-else-if="mode === 'unpin'">{{ $t('account-follow.unpin-body') }}</p>
         <p v-else>{{ $t('account-follow.switch-body') }}</p>
 
         <ul v-if="rows.length" class="rows">
           <li v-for="r in rows" :key="r.paneId" :data-testid="`account-follow-row-${r.paneId}`">
             <label>
               <input
-                v-if="mode !== 'follow'"
+                v-if="!waitMode"
                 type="checkbox"
                 :checked="checked.has(r.paneId)"
                 @change="toggle(r.paneId)"
@@ -133,14 +142,14 @@ function confirm(): void {
             {{ mode === 'switch' ? $t('account-follow.switch-skip') : $t('account-follow.cancel') }}
           </button>
           <button
-            v-if="mode === 'follow'"
+            v-if="waitMode"
             data-testid="account-follow-skip-running"
             @click="emit('confirm', [], null)"
           >
             {{ $t('account-follow.follow-skip-running') }}
           </button>
           <button
-            v-if="mode === 'follow'"
+            v-if="waitMode"
             class="primary"
             data-testid="account-follow-confirm"
             @click="emit('confirm', rows.map((r) => r.paneId), null)"

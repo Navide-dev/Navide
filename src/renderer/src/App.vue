@@ -361,7 +361,14 @@ import {
   type QuotaTarget,
   type QuotaTargetInput,
 } from './lib/accountFollowSwitch'
-import { accountFollowKey, createAccountFollowStore, followingPaneRows } from './lib/accountFollowPanes'
+import {
+  accountFollowKey,
+  accountPinKey,
+  accountSpawnPin,
+  createAccountFollowStore,
+  followingPaneRows,
+  isAccountFixed,
+} from './lib/accountFollowPanes'
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
@@ -6877,6 +6884,15 @@ async function spawnPane(opts: SpawnInternal): Promise<string | null> {
     spawnedBy: opts.spawnedBy,
     formerPaneIds: opts.formerPaneIds?.length ? [...opts.formerPaneIds] : undefined,
   }
+  // Scheme A (plan claude_f1bf4b): a claude pane that runs on the live login
+  // follows account switches; one its pin puts in an account dir is fixed.
+  if (
+    opts.agentKey === FOLLOW_SWITCH_AGENT &&
+    !opts.isLogin &&
+    (!opts.profileId || !followDirSignedIn(opts.profileId))
+  ) {
+    accountFollow.add(id)
+  }
   // If this spawn carries its kickoff directly (fallback path), embed the
   // marker now. Pre-spawned panes get it at activateStage injection time.
   if (sessionMarker && pane.kickoffPrompt) {
@@ -8015,7 +8031,13 @@ async function rebuildPaneViaResume(
       // stage advance on the very turn that ran out (see completion.ts).
       usageLimitSeenAt: pane.usageLimitSeenAt ?? null,
       quotaGateIncidentId: pane.quotaGateIncidentId ?? null,
+      // Read before the kill: whether the pin goes with the respawn
+      // (accountSpawnPin) depends on it.
+      following: accountFollow.has(paneId),
     }
+    // A rebuild onto a named account (a quota move, fixing the pane) puts the
+    // pane on that account: it no longer follows.
+    const explicitPin = opts?.quotaCommit?.toSlotId ?? (opts?.profileId || undefined)
     try { localStorage.removeItem(`terminal-scroll:${sessionId}`) } catch {}
     // Taken from the live xterm now, not from the stored snapshot: the exit
     // that follows the kill discards that snapshot, and its periodic save can
@@ -8031,6 +8053,7 @@ async function rebuildPaneViaResume(
     }
     // Preserve layout order: keep the old pane as a dummy to avoid layout
     // reflow, then swap the replacement pane into its slot.
+    if (explicitPin) accountFollow.remove(paneId)
     await onKill(paneId, { markRemoved: false, force: true, keepInList: true })
     const newId = await spawnPane({
       agentKey: snap.agentKey,
@@ -8049,7 +8072,7 @@ async function rebuildPaneViaResume(
       skipRoleInjection: true,
       restoreMode: 'fresh',
       sessionHomeId: snap.sessionHomeId,
-      profileId: opts?.quotaCommit?.toSlotId ?? opts?.profileId ?? snap.profileId,
+      profileId: explicitPin ?? accountSpawnPin(snap.profileId, snap.following, followDirSignedIn),
       resumeSessionId: sessionId,
       model: snap.model,
       effort: snap.effort,
@@ -8275,7 +8298,7 @@ async function restartAgentPanes(agentKey: string): Promise<void> {
 const followSwitchFlag = useAccountFollowSwitchFlag()
 
 interface FollowDialogState {
-  mode: 'switch' | 'quota' | 'follow'
+  mode: 'switch' | 'quota' | 'follow' | 'unpin'
   subject: string
   rows: FollowDialogRow[]
   targets?: QuotaTarget[]
@@ -8324,7 +8347,7 @@ function followPaneInput(p: ActivePane): FollowPaneInput {
     name: p.messagingName || p.customName || p.autoName || p.agentLabel,
     agentKey: p.agentKey,
     realized: p.realized,
-    profileId: p.profileId,
+    profileId: paneRunPin(p),
     usageLimited: p.usageLimitAt != null,
     busy: followPaneBusy(p.id),
     canRebuild: paneCanRebuild(p),
@@ -8440,7 +8463,7 @@ const accountFollowOffered = computed(() =>
 
 function paneAccountFollow(p: ActivePane): 'follow' | 'fixed' | undefined {
   if (!accountFollowOffered.value || p.agentKey !== FOLLOW_SWITCH_AGENT) return undefined
-  return accountFollow.has(p.id) ? 'follow' : 'fixed'
+  return paneAccountFixed(p) ? 'fixed' : 'follow'
 }
 
 /** The following panes a new default `target` moves. Running ones are asked
@@ -8466,6 +8489,85 @@ provide(accountFollowKey, {
     panes.value.filter((p) => p.agentKey === FOLLOW_SWITCH_AGENT && accountFollow.has(p.id)).length,
   plan: planAccountFollow,
   move: moveFollowPanes,
+})
+
+// ── Scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed ──
+// The badge's account list swaps the live credential (selectProfile), so
+// every pane on the live login moves on its next turn. A pane is fixed when
+// it runs in an account's own dir; fixing and unfixing, and "make all
+// follow", reopen panes through the ordinary rebuild and follow batch.
+
+/** The pin this pane's (re)spawn would send — and so the account the badge
+ *  and the follow rows should read it as running on. */
+function paneRunPin(p: ActivePane): string | undefined {
+  return accountSpawnPin(p.profileId, accountFollow.has(p.id), followDirSignedIn)
+}
+
+function paneAccountFixed(p: ActivePane): boolean {
+  return (
+    p.agentKey === FOLLOW_SWITCH_AGENT &&
+    isAccountFixed(p.profileId, accountFollow.has(p.id), followDirSignedIn)
+  )
+}
+
+/** The pane header's toggle. Unfixing reopens the pane on the live login;
+ *  fixing reopens it in the live account's own dir, or first starts that
+ *  dir's sign-in when there is none. The rebuild asks before stopping a pane
+ *  that is working; a declined or failed rebuild leaves the flag as it was. */
+async function toggleAccountPin(paneId: string): Promise<void> {
+  const pane = panes.value.find((p) => p.id === paneId)
+  if (!pane || pane.agentKey !== FOLLOW_SWITCH_AGENT) return
+  if (paneAccountFixed(pane)) {
+    accountFollow.add(paneId)
+    if (await rebuildPaneViaResume(paneId)) accountFollow.remove(paneId)
+    return
+  }
+  const live = cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT)
+  if (!live || live === DEFAULT_SLOT_ID) {
+    notifyRestore.toast(i18n.global.t('account-follow.pin-default-refused'), { type: 'error' })
+    return
+  }
+  if (!followDirSignedIn(live)) {
+    notifyRestore.toast(i18n.global.t('account-follow.pin-needs-dir-login', { account: followAccountLabel(live) }))
+    void onCliLoginSpawn(FOLLOW_SWITCH_AGENT, undefined, { accountDirProfileId: live })
+    return
+  }
+  accountFollow.remove(paneId)
+  if (await rebuildPaneViaResume(paneId, { profileId: live })) accountFollow.add(paneId)
+}
+
+/** "Make all follow" from the badge: reopen every fixed pane on the live
+ *  login. Panes that are working are asked about once — moved when they
+ *  finish (the follow batch waits, never interrupts) or skipped. Runs only
+ *  when the user clicks it. */
+async function unpinAllAccountPanes(): Promise<void> {
+  const fixed = panes.value.filter((p) => p.realized && paneAccountFixed(p) && paneCanRebuild(p))
+  if (fixed.length === 0) return
+  const idle = fixed.filter((p) => !followPaneBusy(p.id)).map((p) => p.id)
+  const running = fixed.filter((p) => followPaneBusy(p.id))
+  let ids = idle
+  if (running.length > 0) {
+    const choice = await askFollowDialog({ mode: 'unpin',
+      subject: '',
+      rows: followDialogRows(running.map((p) => ({
+        paneId: p.id,
+        name: followPaneInput(p).name,
+        profileId: p.profileId ?? DEFAULT_SLOT_ID,
+        state: 'running' as const,
+        checked: true,
+      }))),
+    })
+    if (!choice) return
+    ids = [...idle, ...choice.paneIds]
+  }
+  if (ids.length === 0) return
+  for (const id of ids) accountFollow.add(id)
+  await moveFollowPanes(ids, '')
+}
+
+provide(accountPinKey, {
+  fixedCount: () => panes.value.filter((p) => paneAccountFixed(p)).length,
+  unpinAll: unpinAllAccountPanes,
 })
 
 async function rebuildPanesViaResume(
@@ -11675,7 +11777,7 @@ async function restoreWorkspacePanes(payload: ProjectPayload, workspacePath: str
         workspacePath,
         runGroupId: runGroupId || undefined,
         sessionHomeId,
-        profileId: saved.profile_id,
+        profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
         commandOverride,
         fallbackCommand,
         isResume,
@@ -12141,7 +12243,7 @@ async function performRealizeRestoredPane(
       runGroupId: placeholder.runGroupId || undefined,
       spawnedBy: placeholder.spawnedBy,
       sessionHomeId: placeholder.sessionHomeId,
-      profileId: saved.profile_id,
+      profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),
       commandOverride,
       fallbackCommand,
       isResume,
@@ -21224,7 +21326,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :preparing-label="panePreparationLabel(p)"
           :terminal-port="terminalPort"
           :cli-profiles="cliProfilesApi"
-          :profile-id="p.profileId"
+          :profile-id="paneRunPin(p)"
           :workspace-path="p.workspacePath"
           :mention-candidates="mentionCandidatesFor"
           @mention-pick="rememberMentionPick"
@@ -21254,7 +21356,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @fix-login="fixPaneLogin(p.id)"
           @usage-limit-dismiss="dismissPaneUsageLimit(p.id)"
           @quota-switch-account="onQuotaSwitchAccount(p.id)"
-          @toggle-account-follow="accountFollow.toggle(p.id)"
+          @toggle-account-follow="toggleAccountPin(p.id)"
           @toggle-mute="togglePaneMuted(p.id)"
           @continue-resume="continueRestoredPane(p.id)"
           @user-resume="persistPaneStopped(p.id, false)"

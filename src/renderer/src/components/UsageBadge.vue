@@ -20,7 +20,7 @@ import {
   cliAccountSwitchKey,
   type useCliProfiles,
 } from '../composables/useCliProfiles'
-import { accountFollowKey } from '../lib/accountFollowPanes'
+import { accountFollowKey, accountPinKey } from '../lib/accountFollowPanes'
 import { DEFAULT_SLOT_ID, FOLLOW_SWITCH_AGENT } from '../lib/accountFollowSwitch'
 import {
   DEFAULT_PROFILE_ID,
@@ -160,12 +160,14 @@ const canSwitch = computed(() => props.cliProfiles.hasProfiles(props.agentKey))
 const switchProfiles = computed(() => props.cliProfiles.profilesForAgent(props.agentKey))
 // The account NEW panes start on — the pane default when one is chosen, else
 // the live credential's owner. The tick marks this; with no account dirs it
-// is exactly the active account it always was.
-const activeProfileId = computed(
-  () =>
-    props.cliProfiles.newPaneProfileId?.(props.agentKey) ??
-    props.cliProfiles.defaultProfileId(props.agentKey) ??
-    ''
+// is exactly the active account it always was. Under scheme A (liveMode) a row
+// swaps the live credential, so the tick is the live account.
+const activeProfileId = computed(() =>
+  liveMode.value
+    ? (props.cliProfiles.defaultProfileId(props.agentKey) ?? '')
+    : (props.cliProfiles.newPaneProfileId?.(props.agentKey) ??
+      props.cliProfiles.defaultProfileId(props.agentKey) ??
+      '')
 )
 // Some account runs on its own config dir: the list then chooses the account
 // for new panes rather than switching every pane, and says so.
@@ -323,8 +325,9 @@ async function selectProfile(id: string): Promise<void> {
   switching.value = id
   try {
     // An account with its own config dir is simply chosen for new panes:
-    // nothing is swapped and no running pane changes account.
-    if (accountDirSignedIn(id)) {
+    // nothing is swapped and no running pane changes account. Not under
+    // scheme A, where every row swaps the live credential.
+    if (!liveMode.value && accountDirSignedIn(id)) {
       const chosen = await props.cliProfiles.setPaneDefault(props.agentKey, id)
       if (!chosen.ok && chosen.message) {
         void notifyAlert(chosen.message, { title: t('cli-account.switch-title') })
@@ -400,7 +403,12 @@ function signInDir(profileId: string): void {
 // dir, another CLI — the list is exactly what it was.
 const follow = inject(accountFollowKey, null)
 const followMode = computed(
-  () => !!follow && !!dirActions && props.agentKey === FOLLOW_SWITCH_AGENT && anyAccountDir.value
+  () =>
+    !!follow &&
+    !pins &&
+    !!dirActions &&
+    props.agentKey === FOLLOW_SWITCH_AGENT &&
+    anyAccountDir.value
 )
 const liveProfileId = computed(() => props.cliProfiles.defaultProfileId(props.agentKey) ?? '')
 
@@ -448,6 +456,25 @@ async function chooseDefault(id: string): Promise<void> {
 
 function onRowClick(id: string): void {
   void (followMode.value ? chooseDefault(id) : selectProfile(id))
+}
+
+// ── Scheme A (plan claude_f1bf4b): a row swaps the live credential ─────────
+// The main window lends the pin actions. Once some claude account runs on its
+// own config dir, every row goes through the live switch (selectProfile), as
+// it did up to v0.2.15: following panes move on their next turn, nothing
+// restarts, no second sign-in. Panes fixed to a dir stay; the list says how
+// many and offers to make them all follow — only when that button is clicked.
+// Takes precedence over scheme B (followMode). With no account dir, or in
+// another window, the list is exactly what it was.
+const pins = inject(accountPinKey, null)
+const liveMode = computed(
+  () => !!pins && !!dirActions && props.agentKey === FOLLOW_SWITCH_AGENT && anyAccountDir.value
+)
+
+function unpinAll(): void {
+  if (!pins) return
+  closePop()
+  void pins.unpinAll()
 }
 
 // ── Renaming an account from the list ───────────────────────────────────────
@@ -726,7 +753,13 @@ function acctTitle(profileId: string | null): string {
             ? $t('usage.switch-low')
             : followMode
               ? $t('usage.follow-default-title')
-              : anyAccountDir ? $t('usage.pane-default-title') : $t('usage.switch-title') }}
+              : anyAccountDir && !liveMode ? $t('usage.pane-default-title') : $t('usage.switch-title') }}
+        </div>
+        <div v-if="canSwitch && liveMode && pins?.fixedCount()" class="usage-acct-pin-hint">
+          <span>{{ $t('usage.pinned-hint', { count: pins.fixedCount() }) }}</span>
+          <button class="usage-acct-unpin" :title="$t('usage.unpin-all-tooltip')" @click="unpinAll">
+            {{ $t('usage.unpin-all') }}
+          </button>
         </div>
         <div v-if="canSwitch && followMode" class="usage-acct-follow-hint">
           {{ follow?.followingCount()
@@ -848,7 +881,7 @@ function acctTitle(profileId: string | null): string {
               <span v-else-if="activeProfileId === p.id" class="usage-acct-tick">✓</span>
             </button>
             <button
-              v-if="!followMode && renamingId !== p.id && canContinueWith(p.id)"
+              v-if="!followMode && !liveMode && renamingId !== p.id && canContinueWith(p.id)"
               class="usage-acct-continue"
               :title="$t('usage.continue-with-tooltip', { account: rowLabel(p.id) })"
               @click.stop="continueWith(p.id)"
@@ -856,7 +889,7 @@ function acctTitle(profileId: string | null): string {
               {{ $t('usage.continue-with') }}
             </button>
             <button
-              v-else-if="!followMode && renamingId !== p.id && needsDirSignIn(p.id)"
+              v-else-if="!followMode && !liveMode && renamingId !== p.id && needsDirSignIn(p.id)"
               class="usage-acct-signin"
               :title="$t('usage.dir-sign-in-tooltip')"
               @click.stop="signInDir(p.id)"
@@ -1103,6 +1136,33 @@ function acctTitle(profileId: string | null): string {
 }
 .usage-pop-switch-title.crit {
   color: var(--danger-fg);
+}
+.usage-acct-pin-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 6px;
+  font-size: var(--font-3xs);
+  color: var(--text-tertiary, var(--text-secondary));
+}
+.usage-acct-pin-hint span {
+  flex: 1;
+  min-width: 0;
+}
+.usage-acct-unpin {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-muted);
+  border-radius: var(--radius-xs);
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.usage-acct-unpin:hover {
+  border-color: var(--accent-fg);
 }
 .usage-acct-follow-hint {
   font-size: var(--font-3xs);

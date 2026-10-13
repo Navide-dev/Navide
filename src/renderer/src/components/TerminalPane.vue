@@ -96,10 +96,11 @@ interface Props {
   cliProfiles: ReturnType<typeof useCliProfiles>
   /** The CLI account this pane was started on (its restore pin). */
   profileId?: string
-  /** Whether this pane follows the default account chosen in the quota
-   *  badge's list or stays where it is. Undefined hides the toggle: App.vue
-   *  offers it only to claude panes once some account runs on its own config
-   *  dir. A string, not a boolean: Vue reads an absent boolean prop as false. */
+  /** Whether this pane follows the account (moves with an account switch) or
+   *  is fixed to its account's own config dir. Undefined hides the toggle:
+   *  App.vue offers it only to claude panes once some account runs on its own
+   *  config dir. A string, not a boolean: Vue reads an absent boolean prop as
+   *  false. */
   accountFollow?: 'follow' | 'fixed'
   workspacePath?: string
   /** Resolves the addresses offered by this pane's @-mention menu (self
@@ -746,7 +747,7 @@ onMounted(() => {
           class="account-follow-toggle"
           :class="{ on: accountFollow === 'follow' }"
           data-testid="account-follow-toggle"
-          :aria-pressed="accountFollow === 'follow' ? 'true' : 'false'"
+          :aria-pressed="accountFollow === 'fixed' ? 'true' : 'false'"
           :aria-label="$t('account-follow.toggle-label')"
           :title="$t(accountFollow === 'follow' ? 'account-follow.toggle-follow-tooltip' : 'account-follow.toggle-fixed-tooltip')"
           @click.stop="emit('toggle-account-follow')"
@@ -1073,8 +1074,9 @@ onMounted(() => {
   flex-shrink: 0;
   cursor: pointer;
 }
-/* Beside the account badge: fixed (muted pin) or following the default
-   account (accent link). */
+/* Beside the account badge: following the account (accent link, the default)
+   or fixed to its account's own config dir (muted pin). The button is the
+   "fix" toggle, so it reads pressed when fixed. */
 .account-follow-toggle {
   display: inline-flex;
   align-items: center;
