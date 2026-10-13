@@ -9202,6 +9202,9 @@
     "exhausted-tooltip-no-reset": "Out of quota — reset time unknown",
     "switch-manage": "Add / manage accounts…",
     "pane-default-title": "New panes use",
+    "follow-default-title": "Default account",
+    "follow-hint": "New panes and {count} following pane(s) use it",
+    "follow-hint-none": "New panes use it. Mark a pane to follow with the pin beside its account badge.",
     "continue-with": "Continue ›",
     "continue-with-tooltip": "Reopen this pane on {account} and resume its conversation",
     "dir-sign-in": "Sign in",
@@ -10826,6 +10829,13 @@
     "note-window": "Only panes in this window are listed.",
     "quota-button": "Switch account ›",
     "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
-    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details."
+    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details.",
+    "follow-title": "{count} following pane(s) running — move to {account}?",
+    "follow-body": "These following panes are mid-turn. They can move once they finish, or stay on their current account this time. The idle ones move now.",
+    "follow-wait": "Move when finished",
+    "follow-skip-running": "Skip running panes",
+    "toggle-label": "Follow the default account",
+    "toggle-follow-tooltip": "Following: when you choose a default account, this pane moves to it and resumes its conversation. Click to keep it fixed.",
+    "toggle-fixed-tooltip": "Fixed: choosing a default account does not move this pane. Click to make it follow."
   }
 }

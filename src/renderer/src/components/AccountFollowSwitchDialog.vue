@@ -10,8 +10,10 @@ export interface FollowDialogRow extends FollowSwitchRow {
 const props = defineProps<{
   open: boolean
   /** 'switch': after a global switch, which pinned panes come along.
-   *  'quota': an out-of-quota pane picks an account to resume on. */
-  mode: 'switch' | 'quota'
+   *  'quota': an out-of-quota pane picks an account to resume on.
+   *  'follow': a new default account, and following panes are mid-turn —
+   *  move them once they finish, or leave them out. */
+  mode: 'switch' | 'quota' | 'follow'
   /** Label of the account switched to ('switch' mode) or of the pane that
    *  ran out ('quota' mode) — used in the heading. */
   subject: string
@@ -76,11 +78,15 @@ function confirm(): void {
         aria-modal="true"
         :aria-label="mode === 'switch'
           ? $t('account-follow.switch-title', { account: subject })
-          : $t('account-follow.quota-title', { pane: subject })"
+          : mode === 'follow'
+            ? $t('account-follow.follow-title', { account: subject, count: rows.length })
+            : $t('account-follow.quota-title', { pane: subject })"
       >
         <h2>{{ mode === 'switch'
           ? $t('account-follow.switch-title', { account: subject })
-          : $t('account-follow.quota-title', { pane: subject }) }}</h2>
+          : mode === 'follow'
+            ? $t('account-follow.follow-title', { account: subject, count: rows.length })
+            : $t('account-follow.quota-title', { pane: subject }) }}</h2>
 
         <template v-if="mode === 'quota'">
           <p>{{ $t('account-follow.quota-pick') }}</p>
@@ -102,12 +108,18 @@ function confirm(): void {
           </div>
           <p v-if="rows.length" class="sub">{{ $t('account-follow.quota-peers') }}</p>
         </template>
+        <p v-else-if="mode === 'follow'">{{ $t('account-follow.follow-body') }}</p>
         <p v-else>{{ $t('account-follow.switch-body') }}</p>
 
         <ul v-if="rows.length" class="rows">
           <li v-for="r in rows" :key="r.paneId" :data-testid="`account-follow-row-${r.paneId}`">
             <label>
-              <input type="checkbox" :checked="checked.has(r.paneId)" @change="toggle(r.paneId)" />
+              <input
+                v-if="mode !== 'follow'"
+                type="checkbox"
+                :checked="checked.has(r.paneId)"
+                @change="toggle(r.paneId)"
+              />
               <span v-truncate class="name">{{ r.name }}</span>
               <span class="acct">{{ r.accountLabel }}</span>
               <span :class="['state', r.state]">{{ $t(`account-follow.state-${r.state}`) }}</span>
@@ -121,6 +133,22 @@ function confirm(): void {
             {{ mode === 'switch' ? $t('account-follow.switch-skip') : $t('account-follow.cancel') }}
           </button>
           <button
+            v-if="mode === 'follow'"
+            data-testid="account-follow-skip-running"
+            @click="emit('confirm', [], null)"
+          >
+            {{ $t('account-follow.follow-skip-running') }}
+          </button>
+          <button
+            v-if="mode === 'follow'"
+            class="primary"
+            data-testid="account-follow-confirm"
+            @click="emit('confirm', rows.map((r) => r.paneId), null)"
+          >
+            {{ $t('account-follow.follow-wait') }}
+          </button>
+          <button
+            v-else
             class="primary"
             data-testid="account-follow-confirm"
             :disabled="!canConfirm"

@@ -361,6 +361,7 @@ import {
   type QuotaTarget,
   type QuotaTargetInput,
 } from './lib/accountFollowSwitch'
+import { accountFollowKey, createAccountFollowStore, followingPaneRows } from './lib/accountFollowPanes'
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
@@ -8274,7 +8275,7 @@ async function restartAgentPanes(agentKey: string): Promise<void> {
 const followSwitchFlag = useAccountFollowSwitchFlag()
 
 interface FollowDialogState {
-  mode: 'switch' | 'quota'
+  mode: 'switch' | 'quota' | 'follow'
   subject: string
   rows: FollowDialogRow[]
   targets?: QuotaTarget[]
@@ -8423,6 +8424,49 @@ async function onQuotaSwitchAccount(paneId: string): Promise<void> {
   if (!choice?.targetId) return
   await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)
 }
+
+// ── Panes that follow the default account (plan_8debb8, scheme B) ──────────
+// The quota badge's list chooses the default account; the panes marked
+// "follow" move with it through moveFollowPanes, every other pane stays put.
+// The flag is renderer-local (see accountFollowPanes.ts) and re-keyed with
+// the lineage when a rebuild or restore retires a pane id.
+const accountFollow = createAccountFollowStore()
+
+/** The toggle shows on claude panes once some claude account runs on its own
+ *  config dir — the only time the list works this way. */
+const accountFollowOffered = computed(() =>
+  cliProfilesApi.profilesForAgent(FOLLOW_SWITCH_AGENT).some((p) => followDirSignedIn(p.id)),
+)
+
+function paneAccountFollow(p: ActivePane): 'follow' | 'fixed' | undefined {
+  if (!accountFollowOffered.value || p.agentKey !== FOLLOW_SWITCH_AGENT) return undefined
+  return accountFollow.has(p.id) ? 'follow' : 'fixed'
+}
+
+/** The following panes a new default `target` moves. Running ones are asked
+ *  about once — moved when they finish (the batch waits) or left out; null
+ *  when the user cancels the whole choice. */
+async function planAccountFollow(target: string): Promise<string[] | null> {
+  const rows = followingPaneRows(panes.value.map(followPaneInput), {
+    target,
+    liveId: cliProfilesApi.defaultProfileId(FOLLOW_SWITCH_AGENT),
+    dirSignedIn: followDirSignedIn,
+    isFollowing: accountFollow.has,
+  })
+  const idle = rows.filter((r) => r.state !== 'running').map((r) => r.paneId)
+  const running = rows.filter((r) => r.state === 'running')
+  if (running.length === 0) return idle
+  const choice = await askFollowDialog({ mode: 'follow', subject: followAccountLabel(target), rows: followDialogRows(running) })
+  if (!choice) return null
+  return [...idle, ...choice.paneIds]
+}
+
+provide(accountFollowKey, {
+  followingCount: () =>
+    panes.value.filter((p) => p.agentKey === FOLLOW_SWITCH_AGENT && accountFollow.has(p.id)).length,
+  plan: planAccountFollow,
+  move: moveFollowPanes,
+})
 
 async function rebuildPanesViaResume(
   scope: 'tab' | 'all',
@@ -10780,6 +10824,8 @@ interface RestoredPaneSpawnResult {
  *  dropped: a pane that became its own parent would make the walk loop. */
 function rekeyLineage(oldId: string, newId: string): void {
   if (!oldId || oldId === newId) return
+  // The follow-the-default-account flag rides the same id hand-offs.
+  accountFollow.rekey(oldId, newId)
   for (const p of panes.value) {
     if (p.spawnedBy === oldId) p.spawnedBy = p.id === newId ? undefined : newId
   }
@@ -21190,6 +21236,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :usage-limit-until="p.usageLimitUntil"
           :usage-limit-hit="p.usageLimitAt != null"
           :quota-switch-offered="followSwitchFlag && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p)"
+          :account-follow="paneAccountFollow(p)"
           :continue-available="p.resumeContinueAvailable"
           :restoring="p.restoring"
           @set-focus="(ev) => onSetFocus(p.id, ev, stageSurfaceOrderedIds)"
@@ -21207,6 +21254,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @fix-login="fixPaneLogin(p.id)"
           @usage-limit-dismiss="dismissPaneUsageLimit(p.id)"
           @quota-switch-account="onQuotaSwitchAccount(p.id)"
+          @toggle-account-follow="accountFollow.toggle(p.id)"
           @toggle-mute="togglePaneMuted(p.id)"
           @continue-resume="continueRestoredPane(p.id)"
           @user-resume="persistPaneStopped(p.id, false)"
