@@ -20,6 +20,8 @@ import {
   cliAccountSwitchKey,
   type useCliProfiles,
 } from '../composables/useCliProfiles'
+import { accountFollowKey } from '../lib/accountFollowPanes'
+import { DEFAULT_SLOT_ID, FOLLOW_SWITCH_AGENT } from '../lib/accountFollowSwitch'
 import {
   DEFAULT_PROFILE_ID,
   accountChipLabel,
@@ -390,6 +392,64 @@ function signInDir(profileId: string): void {
   dirActions.signIn(props.agentKey, profileId)
 }
 
+// ── The list chooses the default account (plan_8debb8, scheme B) ───────────
+// In the main window, once some claude account runs on its own config dir, a
+// row only chooses the default account: new panes start on it and the panes
+// marked "follow" move to it; every other pane stays where it is. Nothing
+// here swaps the live credential. Elsewhere — no follow actions, no account
+// dir, another CLI — the list is exactly what it was.
+const follow = inject(accountFollowKey, null)
+const followMode = computed(
+  () => !!follow && !!dirActions && props.agentKey === FOLLOW_SWITCH_AGENT && anyAccountDir.value
+)
+const liveProfileId = computed(() => props.cliProfiles.defaultProfileId(props.agentKey) ?? '')
+
+// An account a pane can run on without swapping the live credential: the
+// live one, or one signed in inside its own config dir.
+function landable(profileId: string): boolean {
+  return profileId === liveProfileId.value || accountDirSignedIn(profileId)
+}
+
+// What a row that cannot be chosen yet says instead of its figure.
+function needText(profileId: string): string {
+  if (!followMode.value || landable(profileId)) return ''
+  return t(profileId === '' ? 'account-follow.default-needs-switch' : 'account-follow.needs-dir-sign-in')
+}
+
+async function chooseDefault(id: string): Promise<void> {
+  if (!follow || switching.value !== null) return
+  // Not landable: its row is the way to make it so — the sign-in, or for the
+  // built-in Default the account settings, where the live switch lives.
+  if (!landable(id)) {
+    if (id === '') openAccountSettings()
+    else signInDir(id)
+    return
+  }
+  switching.value = id
+  try {
+    const target = id || DEFAULT_SLOT_ID
+    // Asks first when a following pane is mid-turn; null = cancelled.
+    const ids = await follow.plan(target)
+    if (ids === null) return
+    // The live account is the default with no pane default set.
+    const paneDefault = accountDirSignedIn(id) ? id : null
+    if ((props.cliProfiles.paneDefaults?.value?.[props.agentKey] || null) !== paneDefault) {
+      const chosen = await props.cliProfiles.setPaneDefault(props.agentKey, paneDefault)
+      if (!chosen.ok) {
+        if (chosen.message) void notifyAlert(chosen.message, { title: t('cli-account.switch-title') })
+        return
+      }
+    }
+    if (ids.length > 0) void follow.move(ids, target)
+  } finally {
+    switching.value = null
+  }
+}
+
+function onRowClick(id: string): void {
+  void (followMode.value ? chooseDefault(id) : selectProfile(id))
+}
+
 // ── Renaming an account from the list ───────────────────────────────────────
 // The row id being edited ('' = the built-in Default), or null when no row is.
 // The field holds the ALIAS only: empty clears it and the row falls back to
@@ -664,7 +724,14 @@ function acctTitle(profileId: string | null): string {
         <div v-if="canSwitch" class="usage-pop-switch-title" :class="{ crit: critSwitch }">
           {{ critSwitch
             ? $t('usage.switch-low')
-            : anyAccountDir ? $t('usage.pane-default-title') : $t('usage.switch-title') }}
+            : followMode
+              ? $t('usage.follow-default-title')
+              : anyAccountDir ? $t('usage.pane-default-title') : $t('usage.switch-title') }}
+        </div>
+        <div v-if="canSwitch && followMode" class="usage-acct-follow-hint">
+          {{ follow?.followingCount()
+            ? $t('usage.follow-hint', { count: follow.followingCount() })
+            : $t('usage.follow-hint-none') }}
         </div>
         <div v-if="canSwitch" class="usage-acct-list" role="listbox">
           <!-- Each row is a button so a click anywhere on it switches; the
@@ -691,7 +758,7 @@ function acctTitle(profileId: string | null): string {
               :class="{ active: activeProfileId === '' }"
               :aria-selected="activeProfileId === ''"
               :disabled="switching !== null"
-              @click="selectProfile('')"
+              @click="onRowClick('')"
             >
               <span class="usage-acct-av default">{{
                 avatarInitial(rowLabel(null, $t('usage.switch-default')))
@@ -700,7 +767,8 @@ function acctTitle(profileId: string | null): string {
                 <span class="usage-acct-name" v-truncate>{{ rowLabel(null, $t('usage.switch-default')) }}</span>
                 <span v-if="rowEmail(null)" class="usage-acct-email" v-truncate>{{ rowEmail(null) }}</span>
               </span>
-              <span v-if="acctSignedOut(null)" class="usage-acct-out">{{
+              <span v-if="needText('')" class="usage-acct-need">{{ needText('') }}</span>
+              <span v-else-if="acctSignedOut(null)" class="usage-acct-out">{{
                 $t('settings.accounts.cli.not-signed-in')
               }}</span>
               <span
@@ -750,7 +818,7 @@ function acctTitle(profileId: string | null): string {
               :class="{ active: activeProfileId === p.id }"
               :aria-selected="activeProfileId === p.id"
               :disabled="switching !== null"
-              @click="selectProfile(p.id)"
+              @click="onRowClick(p.id)"
             >
               <span class="usage-acct-av" :style="{ background: avatarColor(p.id) }">{{
                 avatarInitial(rowLabel(p.id))
@@ -759,7 +827,8 @@ function acctTitle(profileId: string | null): string {
                 <span class="usage-acct-name" v-truncate>{{ rowLabel(p.id) }}</span>
                 <span v-if="rowEmail(p.id)" class="usage-acct-email" v-truncate>{{ rowEmail(p.id) }}</span>
               </span>
-              <span v-if="acctSignedOut(p.id)" class="usage-acct-out">{{
+              <span v-if="needText(p.id)" class="usage-acct-need">{{ needText(p.id) }}</span>
+              <span v-else-if="acctSignedOut(p.id)" class="usage-acct-out">{{
                 $t('settings.accounts.cli.not-signed-in')
               }}</span>
               <span
@@ -779,7 +848,7 @@ function acctTitle(profileId: string | null): string {
               <span v-else-if="activeProfileId === p.id" class="usage-acct-tick">✓</span>
             </button>
             <button
-              v-if="renamingId !== p.id && canContinueWith(p.id)"
+              v-if="!followMode && renamingId !== p.id && canContinueWith(p.id)"
               class="usage-acct-continue"
               :title="$t('usage.continue-with-tooltip', { account: rowLabel(p.id) })"
               @click.stop="continueWith(p.id)"
@@ -787,7 +856,7 @@ function acctTitle(profileId: string | null): string {
               {{ $t('usage.continue-with') }}
             </button>
             <button
-              v-else-if="renamingId !== p.id && needsDirSignIn(p.id)"
+              v-else-if="!followMode && renamingId !== p.id && needsDirSignIn(p.id)"
               class="usage-acct-signin"
               :title="$t('usage.dir-sign-in-tooltip')"
               @click.stop="signInDir(p.id)"
@@ -1035,6 +1104,11 @@ function acctTitle(profileId: string | null): string {
 .usage-pop-switch-title.crit {
   color: var(--danger-fg);
 }
+.usage-acct-follow-hint {
+  font-size: var(--font-3xs);
+  color: var(--text-tertiary, var(--text-secondary));
+  margin: -2px 0 4px;
+}
 .usage-acct-list {
   display: flex;
   flex-direction: column;
@@ -1205,6 +1279,16 @@ function acctTitle(profileId: string | null): string {
   color: var(--text-secondary);
 }
 /* Signed-out rows take the quota slot but read as a state, not a number. */
+.usage-acct-need {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: var(--attention-subtle);
+  color: var(--attention-fg);
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
 .usage-acct-out {
   flex-shrink: 0;
   font-size: var(--font-3xs);

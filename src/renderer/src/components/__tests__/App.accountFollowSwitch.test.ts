@@ -53,10 +53,12 @@ describe('follow switch wiring: off means unchanged', () => {
   it('renders the dialog only while one is asked for, and only the two flag paths ask', () => {
     expect(appSource).toContain('<AccountFollowSwitchDialog\n    v-if="followDialog"')
     const asks = appSource.split('askFollowDialog(').length - 1
-    // definition + offerFollowSwitch + onQuotaSwitchAccount
-    expect(asks).toBe(3)
+    // definition + offerFollowSwitch + onQuotaSwitchAccount + planAccountFollow
+    // (scheme B's running-pane confirm, asked only when the list is used)
+    expect(asks).toBe(4)
     expect(functionBody('offerFollowSwitch')).toContain('askFollowDialog(')
     expect(functionBody('onQuotaSwitchAccount')).toContain('askFollowDialog(')
+    expect(functionBody('planAccountFollow')).toContain('askFollowDialog(')
   })
 
   it('sends nothing of its own to the backend: moves are ordinary resume rebuilds', () => {
@@ -103,5 +105,39 @@ describe('follow switch wiring: flag on', () => {
     expect(functionBody('onQuotaSwitchAccount')).toContain(
       'await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)',
     )
+  })
+})
+
+describe('follow the default account (plan_8debb8, scheme B) wiring', () => {
+  it('moves following panes through the existing follow batch, not a new switch path', () => {
+    const start = appSource.indexOf('provide(accountFollowKey, {')
+    expect(start).toBeGreaterThan(-1)
+    const block = appSource.slice(start, appSource.indexOf('\n})\n', start))
+    expect(block).toContain('plan: planAccountFollow,')
+    expect(block).toContain('move: moveFollowPanes,')
+    const plan = functionBody('planAccountFollow')
+    expect(plan).toContain('followingPaneRows(panes.value.map(followPaneInput), {')
+    expect(plan).toContain('isFollowing: accountFollow.has,')
+    // The menu path never swaps the live credential.
+    expect(plan).not.toContain('cliAccountSwitch')
+    expect(plan).not.toContain('setDefault(')
+  })
+
+  it('asks only about running panes, and a cancel moves nothing', () => {
+    const plan = functionBody('planAccountFollow')
+    expect(plan).toContain("if (running.length === 0) return idle")
+    expect(plan).toContain("askFollowDialog({ mode: 'follow'")
+    expect(plan).toContain('if (!choice) return null')
+  })
+
+  it('offers the toggle only on claude panes once an account runs on its own dir', () => {
+    expect(appSource).toContain(':account-follow="paneAccountFollow(p)"')
+    expect(appSource).toContain('@toggle-account-follow="accountFollow.toggle(p.id)"')
+    const fn = functionBody('paneAccountFollow')
+    expect(fn).toContain('if (!accountFollowOffered.value || p.agentKey !== FOLLOW_SWITCH_AGENT) return undefined')
+  })
+
+  it('keeps the flag on a pane across rebuilds and restores', () => {
+    expect(functionBody('rekeyLineage')).toContain('accountFollow.rekey(oldId, newId)')
   })
 })
