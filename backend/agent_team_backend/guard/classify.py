@@ -547,6 +547,25 @@ def _split(text: str) -> list[list[_Cmd]]:
     return pipelines
 
 
+def single_command(text: str) -> bool:
+    """Whether `text` runs one simple command, after any number of plain
+    `cd DIR` steps, with no substitution and no heredoc left unparsed: the
+    only shape a whole-command allow glob may vouch for on a tainted pane
+    (policy.apply_taint_allow). A glob's `*` spans `;` and newlines, so on a
+    longer line it would vouch for commands it never named."""
+    ctx = _Ctx("", "", "")
+    try:
+        flat, subs = _extract_substitutions(_extract_heredocs(text, ctx))
+        pipelines = _split(flat)
+    except ValueError:
+        return False
+    if subs or ctx.heredoc_unparsed or not pipelines or any(len(p) != 1 for p in pipelines):
+        return False
+    return all(
+        p[0].argv[:1] == ["cd"] and len(p[0].argv) <= 2 and not p[0].redirects for p in pipelines[:-1]
+    )
+
+
 def _unwrap(argv: list[str], acc: _Acc) -> tuple[list[str], bool]:
     """Strip sudo/env/nohup/time/... wrappers. Returns (argv, from_stdin)."""
     from_stdin = False

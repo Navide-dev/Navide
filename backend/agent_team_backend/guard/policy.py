@@ -26,7 +26,7 @@ from __future__ import annotations
 import fnmatch
 
 from .builtin_rules import FLOOR_RULES, RULES_BY_ID
-from .classify import LEVEL_ORDER
+from .classify import LEVEL_ORDER, single_command
 
 _MATRIX = {
     "local": {"critical": "ask", "high": "allow", "normal": "allow"},
@@ -120,11 +120,12 @@ def apply_taint_allow(
     """Lower a high that only taint caused (effective_level raised `before`
     to `after`, and the user's patterns left `graded` as it was) back to
     normal when an allow pattern with glob characters matches the whole
-    command. A substring pattern never does, so text slipped into a command
-    cannot release what Guard could not analyse; a command graded high, or
-    one a deny matched, is never released here; a chat approval (relay)
-    stays denied."""
-    if source == "relay" or after == before or before != graded:
+    command, and only when the command is a single simple command
+    (classify.single_command). A substring pattern never does, so text slipped
+    into a command cannot release what Guard could not analyse; a command
+    graded high, or one a deny matched, is never released here; a chat
+    approval (relay) stays denied."""
+    if source == "relay" or after == before or before != graded or not single_command(subject):
         return after, rule_ids
     for r in rules:
         pattern = (r.get("pattern") or "").strip()

@@ -161,6 +161,35 @@ def test_taint_raised_unparseable_needs_a_whole_command_glob_allow(guard_store):
     assert run("python3 -c 'secret'").action == "ask"
 
 
+@pytest.mark.parametrize(
+    "command, action",
+    [
+        # Legit single commands the glob names.
+        ("python3 -c 'import json; print(1)'", "allow"),
+        ('python3 -c "import json; print(1)"', "allow"),
+        ("cd dir && python3 - <<'EOF'\nimport json\nprint(1)\nEOF", "allow"),
+        ("cd a && cd b && python3 -c 'import json'", "allow"),
+        # The glob's `*` spans these, the shell does not: a second command.
+        ("python3 -c 'import json'; bash /tmp/x.sh", "ask"),
+        ("python3 -c 'import json'\neval \"$X\"", "ask"),
+        ("python3 -c 'import json'; python3 -c 'import os; os.system(\"x\")'", "ask"),
+        ("python3 -c 'import json' && bash /tmp/x.sh", "ask"),
+        ("python3 -c 'import json' & bash /tmp/x.sh", "ask"),
+        ("python3 -c 'import json' | bash /tmp/x.sh", "ask"),
+        ("python3 -c 'import json' || bash /tmp/x.sh", "ask"),
+        ("python3 -c 'import json' \"$(cat /tmp/x)\"", "ask"),
+        ("python3 -c 'import json' `cat /tmp/x`", "ask"),
+        ("cd /tmp > /tmp/x && python3 -c 'import json'", "ask"),
+    ],
+)
+def test_taint_allow_glob_vouches_only_for_one_command(guard_store, command, action):
+    guard_store.rules_add("allow", "python3 -c 'import json*")
+    guard_store.rules_add("allow", 'python3 -c "import json*')
+    guard_store.rules_add("allow", "cd * && python3 *")
+    mark_tainted("p1", "agent")
+    assert run(command).action == action
+
+
 def test_taint_allow_keeps_main_semantics_elsewhere(guard_store):
     guard_store.rules_add("allow", "python3 -c *")
     guard_store.rules_add("allow", "git push*")
