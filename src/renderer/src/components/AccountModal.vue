@@ -16,7 +16,7 @@ import { useI18n } from 'vue-i18n'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { LegalRoute } from '../../../shared/legalLinks'
 import { linkErrorKey } from '../lib/linkStatus'
-import { usePairingState } from '../composables/usePairingState'
+import { usePairingState, failureKey } from '../composables/usePairingState'
 import NavideCloudMark from './NavideCloudMark.vue'
 import { relativeTime } from '../lib/relativeTime'
 import PaneGitChip, { type PaneGit } from './PaneGitChip.vue'
@@ -185,6 +185,8 @@ interface Pairing {
   /** Their signing key's digest, beside the code so the two things a person can
    *  compare are in the same place. */
   fingerprint: string
+  /** When it stops waiting, in seconds since the epoch. */
+  expiresAt?: number
 }
 
 /** A device that tried to reach a pane here and was refused. */
@@ -631,6 +633,8 @@ async function copyFingerprint(): Promise<void> {
 }
 
 const pairings = computed<Pairing[]>(() => pairingState.pairings.value as Pairing[])
+/** Rounds that ended because one side refused a frame, with why. */
+const pairingFailures = computed(() => pairingState.failures.value)
 /** Everything waiting on a person, of either shape. */
 const needsYouCount = computed(() => trustPending.value.length + accessRequests.value.length)
 
@@ -656,7 +660,7 @@ async function startPairing(device: NetworkDevice): Promise<void> {
       await withConfirmation('p2p.pair.start', device.deviceId, { deviceId: device.deviceId }),
     )
     if (!resp.ok) {
-      const message = resp.error?.message ?? t('account.err-generic')
+      const message = startPairingError(device, resp.error) ?? t('account.err-generic')
       error.value = message
       // Said on the card too. Clearing it instead would return the screen to
       // the silence this replaced, with the failure only in the panel below.
@@ -671,6 +675,25 @@ async function startPairing(device: NetworkDevice): Promise<void> {
   } finally {
     pending.value = ''
   }
+}
+
+/**
+ * What a refused "Pair" press says. Two refusals get a sentence that says what
+ * to do next; the rest are the backend's own words, as before.
+ */
+function startPairingError(
+  device: NetworkDevice,
+  err: { code?: string; message?: string } | null | undefined,
+): string | undefined {
+  if (err?.code === 'TRUST_UNAVAILABLE') return t('settings.p2p.pair.trust-unavailable-start')
+  if (err?.code === 'PAIRING_BUSY') {
+    const row = pairings.value.find((r) => r.deviceId === device.deviceId)
+    if (row?.expiresAt) {
+      const minutes = Math.max(1, Math.ceil((row.expiresAt * 1000 - Date.now()) / 60000))
+      return t('settings.p2p.pair.busy', { device: deviceLabel(device), minutes })
+    }
+  }
+  return err?.message
 }
 
 /**
@@ -1474,9 +1497,31 @@ onUnmounted(() => {
         <!-- Pairings in flight, at either end. Above everything else in this
              panel: it is the only thing here that another person is currently
              standing in front of, waiting on. -->
-        <section v-if="signedIn && pairings.length" class="net">
+        <section v-if="signedIn && (pairings.length || pairingFailures.length)" class="net">
           <h2 class="net-title">{{ t('settings.p2p.pair.title') }}</h2>
           <div class="card net-card">
+            <!-- A round that ended because one side refused a frame of it. The
+                 card that was waiting is gone; without this, its absence — or
+                 five minutes of "waiting" — was all anybody was told. -->
+            <div
+              v-for="f in pairingFailures"
+              :key="'failed:' + f.deviceId + ':' + f.at"
+              class="req pair-card"
+            >
+              <div class="req-head">
+                <span class="dev-name" v-truncate>
+                  {{ t('settings.p2p.pair.failed-title', { device: f.deviceName || f.deviceId }) }}
+                </span>
+              </div>
+              <p class="req-what danger-text">
+                {{ t('settings.p2p.pair.' + failureKey(f), { device: f.deviceName || f.deviceId, reason: f.reason }) }}
+              </p>
+              <div class="req-acts">
+                <button class="btn ghost small" @click="pairingState.dismissFailure(f)">
+                  {{ t('settings.p2p.pair.dismiss') }}
+                </button>
+              </div>
+            </div>
             <div v-for="row in pairings" :key="row.deviceId" class="req pair-card">
               <div class="req-head">
                 <!-- "Waiting for them to answer" stops being true the moment
@@ -1506,6 +1551,19 @@ onUnmounted(() => {
                 </span>
                 <p class="req-what">{{ t('settings.p2p.pair.waiting-response') }}</p>
                 <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
+                <!-- The way out of a wait. Without it the only end was the
+                     five-minute deadline, and pressing "Pair" again in the
+                     meantime only said one was already in progress. -->
+                <div class="req-acts">
+                  <button
+                    class="btn ghost small"
+                    :disabled="!!pending || !linkReady"
+                    :title="linkWaitReason || undefined"
+                    @click="answerPairing(row, false)"
+                  >
+                    {{ t('settings.p2p.pair.cancel-request') }}
+                  </button>
+                </div>
               </template>
               <template v-else>
                 <!-- Labelled: six digits and sixteen hex characters, one above
@@ -1536,6 +1594,16 @@ onUnmounted(() => {
                   <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
                   <p class="req-what">{{ t('settings.p2p.pair.waiting-remote') }}</p>
                   <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
+                  <div class="req-acts">
+                    <button
+                      class="btn ghost small"
+                      :disabled="!!pending || !linkReady"
+                      :title="linkWaitReason || undefined"
+                      @click="answerPairing(row, false)"
+                    >
+                      {{ t('settings.p2p.pair.cancel-request') }}
+                    </button>
+                  </div>
                 </template>
                 <!-- Whose turn it is, said plainly. The heading above says
                      which exchange this is, not who it is waiting on, so this

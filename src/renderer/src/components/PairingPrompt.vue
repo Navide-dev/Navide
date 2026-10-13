@@ -26,7 +26,13 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { useBackend } from '../composables/useBackend'
-import { usePairingState, requestKey, POLL_MS, type PairingRow } from '../composables/usePairingState'
+import {
+  usePairingState,
+  requestKey,
+  failureKey,
+  POLL_MS,
+  type PairingRow,
+} from '../composables/usePairingState'
 import NavideCloudMark from './NavideCloudMark.vue'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
@@ -90,6 +96,14 @@ const timers: ReturnType<typeof setTimeout>[] = []
  *  answered is drawn from `settled`, not from the snapshot, which is why the
  *  card survives its own disappearance from the list. */
 const cards = computed(() => [
+  // A round that ended on a refusal, here or there. First, because it is the
+  // answer to the card that was waiting — which is gone — and it stays until
+  // somebody closes it: it says what to do next, and that has to be read.
+  ...state.failures.value.map((f) => ({
+    kind: 'failed' as const,
+    key: `failed:${f.deviceId}:${f.at}`,
+    failure: f,
+  })),
   ...settled.value.map((s) => ({ kind: 'settled' as const, key: s.key, settled: s })),
   // The press, acknowledged before anything has been sent. Drops out the moment
   // the exchange is real — the snapshot owns it from there.
@@ -248,6 +262,24 @@ function grouped(value: string | undefined): string {
         </div>
         <p v-if="card.asked.error" class="pp-err">{{ card.asked.error }}</p>
         <p v-else class="pp-body">{{ t('settings.p2p.pair.waiting-response') }}</p>
+      </template>
+      <template v-else-if="card.kind === 'failed'">
+        <div class="pp-head">
+          <p class="pp-title">
+            {{ t('settings.p2p.pair.failed-title', { device: card.failure.deviceName || card.failure.deviceId }) }}
+          </p>
+          <button
+            class="pp-close"
+            :aria-label="t('settings.p2p.pair.dismiss')"
+            @click="state.dismissFailure(card.failure)"
+          >×</button>
+        </div>
+        <p class="pp-err">
+          {{ t('settings.p2p.pair.' + failureKey(card.failure), {
+            device: card.failure.deviceName || card.failure.deviceId,
+            reason: card.failure.reason,
+          }) }}
+        </p>
       </template>
       <template v-else-if="card.kind === 'settled'">
         <p class="pp-title">

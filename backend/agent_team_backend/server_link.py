@@ -849,6 +849,17 @@ class ServerLink:
         # differently: "full" for a record with no room left (R4-3), where
         # unpairing a device is the way back and starting over is no answer.
         self._trust_locked_code = ""
+        # Pairing frames this side sent, by msgKey, with the round each was
+        # part of. The ack the far side sends back is the only word a refusal
+        # there produces, and without this nothing read it as being about a
+        # pairing — so a refused request left the card here waiting out the
+        # five minutes. Bounded: see `_note_pair_frame_sent`.
+        self._pair_frames_sent: dict[str, tuple[str, Any]] = {}
+        # How the last round with each device ended, when it ended because a
+        # frame of it was refused — here or there. In memory on purpose: the
+        # refusal this most often reports is a trust record that cannot be
+        # read, which is the one place a notice could not be written.
+        self._pairing_failures: dict[str, dict[str, Any]] = {}
         # The member id pinned for *this link's* credential. Never the one the
         # last auth.hello asserted: that is the value C1 moved.
         self._own_member = ""
@@ -2832,6 +2843,9 @@ class ServerLink:
             # asking "do these digits match" must not be half a poll behind the
             # device list it is about.
             "pairings": self.pairing_rows(),
+            # Rounds that ended because one side refused a frame of them, and
+            # why. Without this the card simply vanished, or kept waiting.
+            "pairingFailures": list(self._pairing_failures.values()),
             "trustLocked": self._trust_locked,
             # "full" when that stop is a record with no room left; see above.
             "trustLockedCode": self._trust_locked_code,
@@ -3510,12 +3524,61 @@ class ServerLink:
             "text": text,
             "from": {"deviceId": self._device_id, "memberId": self.member_id},
         }
+        # Noted before the send, not after: the far side's ack can arrive
+        # before the relay's reply to the send does.
+        self._note_pair_frame_sent(msg_key, device_id)
         try:
             reply = await self._request("messages.send", payload)
         except Exception as err:  # noqa: BLE001
             log.warning("could not send a %s to %s: %s", kind, device_id, err)
+            self._pair_frames_sent.pop(msg_key, None)
             return False
+        if not reply.get("ok"):
+            self._pair_frames_sent.pop(msg_key, None)
         return bool(reply.get("ok"))
+
+    #: How many sent pairing frames are remembered while their ack is awaited.
+    #: A round is a handful of frames, so this covers many at once; past it the
+    #: oldest is forgotten, which costs only the early end of that one round.
+    PAIR_FRAMES_REMEMBERED = 64
+
+    def _note_pair_frame_sent(self, msg_key: str, device_id: str) -> None:
+        pairing = device_pairing.get(device_id)
+        if pairing is None:
+            # A reject or a revoke: the round is already over here.
+            return
+        self._pair_frames_sent[msg_key] = (device_id, pairing)
+        while len(self._pair_frames_sent) > self.PAIR_FRAMES_REMEMBERED:
+            self._pair_frames_sent.pop(next(iter(self._pair_frames_sent)))
+
+    def _end_refused_pairing(
+        self, device_id: str, pairing: Any, *, reason: str, side: str
+    ) -> bool:
+        """End *pairing* because a frame of it was refused, and say why.
+
+        Only that exact round: an exchange begun since is a different question,
+        and a refusal of the old one says nothing about it. Decides nothing
+        about trust — whatever refused the frame has already done so; this only
+        stops the wait that refusal made pointless. Returns whether it ended.
+        """
+        if pairing is None or device_pairing.get(device_id) is not pairing:
+            return False
+        device_pairing.cancel(device_id)
+        self._pairing_failures[device_id] = {
+            "deviceId": device_id,
+            "deviceName": pairing.device_name or self._device_name_for(device_id),
+            "reason": reason,
+            # "local": this machine refused; "remote": the other one did.
+            "side": side,
+            "at": time.time(),
+        }
+        log.info(
+            "pairing with %s ended: a frame was refused %s (%s)",
+            device_id,
+            "here" if side == "local" else "there",
+            reason,
+        )
+        return True
 
     async def _on_pair_frame(
         self,
@@ -3592,6 +3655,7 @@ class ServerLink:
                     their_enc_key=their_enc_key,
                     their_nonce=str(frame.get("nonce") or ""),
                 )
+                self._pairing_failures.pop(device_id, None)
                 await self._send_pair_frame(
                     device_id,
                     device_pairing.PAIR_RESPONSE,
@@ -3645,6 +3709,16 @@ class ServerLink:
                     )
         except device_pairing.PairingError as err:
             log.info("refusing a %s from %s: %s", kind, device_id, err)
+            # The answer this round was waiting on, refused: no other is coming,
+            # so the round ends now rather than at its deadline.
+            if (
+                kind == device_pairing.PAIR_RESPONSE
+                and existing is not None
+                and existing.state == device_pairing.STATE_AWAITING_RESPONSE
+            ):
+                self._end_refused_pairing(
+                    device_id, existing, reason="pairing-refused", side="local"
+                )
             await self._ack(msg_key, "rejected", reason="pairing-refused")
             return
 
@@ -3704,6 +3778,12 @@ class ServerLink:
         """Ask another device to pair. The local half of the exchange."""
         if self._ws is None or not self._authenticated:
             return self._unavailable()
+        if self._trust_locked:
+            # Every answer would be refused on arrival (see _receive_message),
+            # so a request sent now could only put a card on the other screen
+            # that this side can never finish.
+            return {"ok": False, "error": {"code": "TRUST_UNAVAILABLE",
+                                           "message": self._trust_locked}}
         if trust_store.pin_for(device_id) is not None:
             return {"ok": False, "error": {"code": "ALREADY_PAIRED",
                                            "message": "that device is already paired"}}
@@ -3726,6 +3806,8 @@ class ServerLink:
             )
         except device_pairing.PairingError as err:
             return {"ok": False, "error": {"code": "PAIRING_BUSY", "message": str(err)}}
+        # A new round: what was said about how the last one ended is history.
+        self._pairing_failures.pop(device_id, None)
         sent = await self._send_pair_frame(
             device_id,
             device_pairing.PAIR_REQUEST,
@@ -3791,6 +3873,9 @@ class ServerLink:
                     ),
                     "fingerprint": device_signing.fingerprint(pairing.their_key),
                     "startedAt": pairing.started_at,
+                    # When it stops waiting, so "already in progress" can say
+                    # how long that is.
+                    "expiresAt": pairing.deadline,
                 }
             )
         return rows
@@ -3841,6 +3926,26 @@ class ServerLink:
             # are unreadable, and "deliver it anyway" is the one answer that
             # would make losing them costless.
             log.error("refusing message %s: %s", msg_key, self._trust_locked)
+            # A pairing frame from a device this machine has a round with: that
+            # round cannot go on — every frame of it would be refused here just
+            # like this one — so it ends now, with the reason on the card.
+            # The sender is unverified at this point, and that is fine: this
+            # only ends a wait that is already hopeless, and decides nothing.
+            frame = device_pairing.parse(data.get("text"))
+            if frame is not None and frame.get("kind") not in (
+                SYNC_KEY_REQUEST,
+                SYNC_KEY_OFFER,
+            ):
+                source = data.get("from") if isinstance(data.get("from"), dict) else {}
+                sender = str(source.get("deviceId") or "")
+                self._end_refused_pairing(
+                    sender,
+                    device_pairing.get(sender),
+                    reason="trust-unavailable",
+                    side="local",
+                )
+            # After the round is ended, not before: once the ack is out the
+            # refusal is public, and the card here must already agree with it.
             await self._ack(msg_key, "rejected", reason="trust-unavailable")
             return
 
@@ -4250,6 +4355,15 @@ class ServerLink:
         self._outbound.pop(msg_key, None)
         state = str(data.get("state") or "")
         reason = str(data.get("reason") or "")
+        sent_pair_frame = self._pair_frames_sent.pop(msg_key, None)
+        if sent_pair_frame is not None and state != "delivered":
+            # The other machine refused a frame of a round this side is in.
+            # The ack is the whole of what it says — every build has always
+            # sent it — so reading it here asks nothing new of the far side.
+            device_id, pairing = sent_pair_frame
+            self._end_refused_pairing(
+                device_id, pairing, reason=reason or state or "failed", side="remote"
+            )
         if state == "delivered":
             window_reason = ""
         else:
