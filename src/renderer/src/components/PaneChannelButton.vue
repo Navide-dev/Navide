@@ -122,14 +122,30 @@ watch(
 
 /** Name of another live pane already connected to this chat, or '' when it is free.
  *  A chat serves one pane at a time; unbinding there frees it here. A holder
- *  this window does not know (closed without its unbind landing, or a pane in
- *  another window) is left to the backend, which refuses a live one. */
-function holderOf(platform: string, account: string, chatId: string): string {
+ *  this window does not know is named by the backend's overview when it is a
+ *  live pane in another window; one that closed without its unbind landing
+ *  stays free, left to the backend, which refuses a live one. */
+function holderOf(platform: ChannelPlatform, account: string, chatId: string): string {
   const held = store?.bindings.value.find(
     (b) => b.platform === platform && (b.account || DEFAULT_ACCOUNT) === account && b.chat_id === chatId &&
       !b.thread_id && b.pane_id !== props.paneId
   )
-  return held ? (messaging.nameOf(held.pane_id) ?? '') : ''
+  if (!held) return ''
+  const local = messaging.nameOf(held.pane_id)
+  if (local !== null) return local
+  const other = store?.overviewFor(platform, account)?.chats.find((c) => c.chat_id === chatId)
+    ?.bindings.find((b) => !b.thread_id && b.pane_id !== props.paneId)
+  return other?.pane.exists ? other.pane.name : ''
+}
+
+/** Fetch the overview once a holder this window cannot name shows up; a window
+ *  that knows every holder never asks. Kept fresh by the store afterwards. */
+function loadHolderNames(): void {
+  if (!store || (store.overviewLoaded.value && !store.overviewError.value)) return
+  const unnamed = store.bindings.value.some(
+    (b) => !b.thread_id && b.pane_id !== props.paneId && messaging.nameOf(b.pane_id) === null
+  )
+  if (unnamed) void store.loadOverview()
 }
 
 async function loadGroups(): Promise<void> {
@@ -191,6 +207,7 @@ async function toggle(): Promise<void> {
   document.addEventListener('keydown', onKeydown, true)
   await nextTick()
   position()
+  loadHolderNames()
   await loadGroups()
 }
 
