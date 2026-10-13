@@ -550,19 +550,36 @@ def _split(text: str) -> list[list[_Cmd]]:
     return pipelines
 
 
+_PLAIN_REDIRECTS = frozenset({"<", ">", ">>", "<<", "<<-", "<<<", ">|", "<>", "&>", "&>>"})
+_OPERATOR_CHARS = frozenset(";&|()<>")
+
+
 def single_command(text: str) -> bool:
     """Whether `text` runs one simple command, after any number of plain
     `cd DIR` steps, with no substitution and no heredoc left unparsed: the
     only shape a whole-command allow glob may vouch for on a tainted pane
     (policy.apply_taint_allow). A glob's `*` spans `;` and newlines, so on a
     longer line it would vouch for commands it never named."""
+    # Only shapes whose split is unambiguous vouch for anything; quoting and
+    # comment edge cases are refused rather than trusted.
+    if "$'" in text or "\r" in text:
+        return False
     ctx = _Ctx("", "", "")
     try:
-        flat, subs = _extract_substitutions(_extract_heredocs(text, ctx))
+        body_free = _extract_heredocs(text, ctx)
+        flat, subs = _extract_substitutions(body_free)
+        if len(flat) != len(_extract_substitutions(body_free.replace("#", "\x01"))[0]):
+            return False
         pipelines = _split(flat)
     except ValueError:
         return False
     if subs or ctx.heredoc_unparsed or not pipelines or any(len(p) != 1 for p in pipelines):
+        return False
+    # Redirection and operator tokens must be plain.
+    if any(
+        op not in _PLAIN_REDIRECTS or set(target) <= _OPERATOR_CHARS
+        for p in pipelines for op, target in p[0].redirects
+    ) or any(set(word) <= _OPERATOR_CHARS for p in pipelines for word in p[0].argv):
         return False
     # An unquoted heredoc body runs its substitutions; quotes there are text.
     if any(not quoted and ("$(" in body or "`" in body) for body, quoted in ctx.heredocs):
