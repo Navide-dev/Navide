@@ -124,11 +124,13 @@ def _evaluate(*, pane_id, vendor, tool, tool_input, cwd, workspace, source) -> D
     verdict = classify(tool, tool_input, cwd=cwd, workspace=workspace, protected_branches=branches)
     excerpt = excerpt_of(tool, tool_input)
     level = policy.apply_overrides(verdict.level, verdict.rule_ids, overrides)
+    tainted = is_tainted(pane_id)
+    # Taint raises unparseable commands to high before the user's patterns
+    # apply, so an allow pattern also covers that raise (issue #192).
+    level = policy.effective_level(level, parseable=verdict.parseable, tainted=tainted)
     level, rule_ids = policy.apply_user_rules(
         level, verdict.rule_ids, _subject(tool_input) or excerpt, store.rules_list()
     )
-    tainted = is_tainted(pane_id)
-    level = policy.effective_level(level, parseable=verdict.parseable, tainted=tainted)
     enforced = policy.enforced(store.enabled(), source)
     action = policy.decide(level, source, tainted=tainted) if enforced else "allow"
     reason = _reason(action, level, verdict.reasons, source, tainted, verdict.parseable)

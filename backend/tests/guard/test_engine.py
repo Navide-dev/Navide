@@ -130,6 +130,20 @@ def test_user_rules(guard_store):
     assert (d.level, d.action) == ("critical", "ask")
 
 
+def test_allow_rule_covers_taint_raised_unparseable(guard_store):
+    # Issue #192: inline interpreter code is normal but unparseable; a tainted
+    # pane raises it to high, and the user's allow pattern must still apply.
+    mark_tainted("p1", "agent")
+    cmd = "python3 -c 'print(1)'"
+    assert (run(cmd).level, run(cmd).action) == ("high", "ask")
+    guard_store.rules_add("allow", "python3")
+    d = run(cmd)
+    assert (d.level, d.action) == ("normal", "allow")
+    assert any(r.startswith("user-allow:") for r in d.rule_ids)
+    # Without a matching allow the tainted pane still asks.
+    assert run("node -e 'console.log(1)'").action == "ask"
+
+
 def test_fail_mode(monkeypatch):
     from agent_team_backend.guard import engine
 

@@ -13,7 +13,7 @@ Pure and deterministic; the matrix is the approved plan's decision table
 Relay wins over taint: a chat approval can never become "ask", because the
 person answering is not at the computer. The relay row also holds while the
 Guard switch is off (see enforced()). Unparseable commands count as
-"high" on a tainted pane.
+"high" on a tainted pane, before the user's patterns apply.
 
 The matrix is fixed. What the user edits is the level going into it: a
 level per built-in rule (apply_overrides; FLOOR_RULES never below high) and
