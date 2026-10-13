@@ -124,3 +124,34 @@ describe('followingPaneRows', () => {
     ])
   })
 })
+
+describe('account follow store shared by several windows', () => {
+  beforeEach(() => localStorage.clear())
+
+  it("one window's toggle does not drop a flag another window set", () => {
+    const a = createAccountFollowStore()
+    const b = createAccountFollowStore()
+    a.toggle('a1')
+    b.toggle('b1')
+    const reloaded = createAccountFollowStore()
+    expect(reloaded.has('a1')).toBe(true)
+    expect(reloaded.has('b1')).toBe(true)
+  })
+
+  it('a rekey in one window keeps the flags another window set', () => {
+    const a = createAccountFollowStore()
+    a.toggle('old')
+    const b = createAccountFollowStore()
+    b.toggle('b1')
+    a.rekey('old', 'new')
+    expect([...createAccountFollowStore().ids.value].sort()).toEqual(['b1', 'new'])
+  })
+
+  it("sees another window's change when the storage event arrives", () => {
+    const a = createAccountFollowStore()
+    const b = createAccountFollowStore()
+    b.toggle('b1')
+    window.dispatchEvent(new StorageEvent('storage', { key: ACCOUNT_FOLLOW_PANES_KEY }))
+    expect(a.has('b1')).toBe(true)
+  })
+})
