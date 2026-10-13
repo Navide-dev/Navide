@@ -3452,6 +3452,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     rendererKind,
     optionSelectHint,
     getSelection: () => term.getSelection(),
+    /** True while the CLI has mouse reporting on, so xterm forwards clicks to it. */
+    isMouseTracking: () => term.modes.mouseTrackingMode !== 'none',
     setDisableStdin: (disabled: boolean) => {
       if (_stdinGated === disabled) return
       _stdinGated = disabled
