@@ -111,6 +111,41 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.21',
+    title: {
+      'zh-TW': '點一下就切換所有 pane 的帳號、Guard 可放行信任的指令、配對失敗會說原因',
+      'en-US': 'One Click Switches Every Pane’s Account, Trusted Commands in Navide Guard, and Pairing Failures That Say Why',
+      'ja-JP': 'ワンクリックで全ペインのアカウントを切り替え、Navide Guard で信頼するコマンドを許可、ペアリング失敗の理由を表示',
+    },
+    highlights: [
+      {
+        'zh-TW': '點一下就切換帳號：在 pane 帳號徽章的帳號清單點另一個 Claude 帳號，所有跟隨中的 pane 下一回合就改用新帳號，不用重開，每個帳號也只要登入一次。新開的 pane 預設跟隨；想讓某個 pane 留在原帳號，按帳號徽章旁的圖釘把它固定（會在該帳號的資料夾重開一次並接續對話），再按一次就改回跟隨。0.2.20 的「切換 Claude 帳號時，固定帳號的 pane 一起換」照舊只管固定的 pane：開啟時，切換後會列出這些 pane 讓你選要不要一起換；跟隨中的 pane 不用這個設定就會跟著換。升級前就在帳號資料夾裡執行的 pane 會維持固定，在帳號清單按「全部改為跟隨」就會跟著切換（每個 pane 重開一次並接續對話，正在執行的會先問你）。',
+        'en-US': 'One click switches accounts: click another Claude account in a pane’s account badge list, and every following pane uses it from its next turn — no restart, and one sign-in per account. New panes follow by default. To keep a pane on its account, fix it with the pin beside its account badge (it reopens once in that account’s own folder and picks up its conversation); click again to make it follow. 0.2.20’s “Move pinned panes along when switching Claude accounts” still covers only fixed panes: when on, a switch lists them so you can choose which move too; following panes move without it. Panes that were already running in an account folder before the update stay fixed until you choose “Make all follow” in the account list (each reopens once and picks up its conversation; one that is working is asked about first).',
+        'ja-JP': 'ワンクリックでアカウントを切り替え：ペインのアカウントバッジの一覧で別の Claude アカウントをクリックすると、追従中のペインはすべて次のターンから新しいアカウントを使います。再起動は不要で、サインインもアカウントごとに一度だけです。新しいペインは既定で追従します。ペインを元のアカウントのままにしたいときは、アカウントバッジの横のピンで固定します（そのアカウントの専用フォルダーで一度開き直し、会話を続けます）。もう一度押すと追従に戻ります。0.2.20 の「Claude アカウントの切り替え時に、固定したペインも一緒に切り替える」はこれまでどおり固定したペインだけが対象で、オンにすると切り替え後にそれらのペインが一覧に並び、一緒に切り替えるかを選べます。追従中のペインはこの設定がなくても切り替わります。アップデート前からアカウントのフォルダーで動いていたペインは固定のままなので、アカウント一覧の「すべて追従にする」を選ぶと切り替えに追従します（各ペインは一度開き直して会話を続け、実行中のペインは先に確認します）。',
+      },
+      {
+        'zh-TW': 'Navide Guard：在收過外部內容的 pane，你可以用比對整條指令的萬用字元樣式（例如 python3 -c *）放行信任的指令，不必每次確認。Guard 看不懂的特殊寫法一律交給你確認；因此在這類 pane 上，find -exec … \\; 這類寫法可能會多問你一次。',
+        'en-US': 'Navide Guard: on a pane that has received external content, an allow pattern that matches the whole command with wildcards (for example python3 -c *) now lets a command you trust run without asking each time. Anything written in a way Guard cannot read is always left for you to confirm, so on such a pane a command like find -exec … \\; may ask you once more.',
+        'ja-JP': 'Navide Guard：外部の内容を受け取ったペインでも、コマンド全体に一致するワイルドカードの許可パターン（例：python3 -c *）で、信頼するコマンドを毎回確認せずに実行できるようになりました。Guard が読み取れない特殊な書き方は必ずあなたの確認に回すため、そのようなペインでは find -exec … \\; のような書き方で一度多く確認されることがあります。',
+      },
+      {
+        'zh-TW': '跨裝置配對被拒時會馬上結束，並說明原因和下一步，不會再一直顯示「等待回應」到逾時。等待中的配對可以按「取消請求」；配對還在進行時再按「配對」，會告訴你大約還要等幾分鐘。',
+        'en-US': 'A refused cross-device pairing now ends at once and says why and what to do next, instead of showing “waiting” until it times out. A pairing that is waiting can be cancelled with “Cancel request”, and pressing Pair while one is still in progress tells you about how many minutes are left.',
+        'ja-JP': 'デバイス間ペアリングが拒否されると、タイムアウトまで「応答待ち」のままになることはなくなり、すぐに終了して理由と次にすることを表示します。待機中のペアリングは「リクエストを取り消す」で取り消せます。ペアリングの進行中にもう一度「ペアリング」を押すと、あと何分ほどかかるかを表示します。',
+      },
+      {
+        'zh-TW': 'Windows 與 Linux：在 Windows 的終端機可以用 Ctrl+V 貼上，Windows 與 Linux 也可以用 Ctrl+Shift+V。在 Claude Code 這類自己處理滑鼠的程式裡按右鍵，不會再貼上兩次；要開 Navide 的複製／貼上選單，請按 Shift＋右鍵。設定 → 鍵盤快速鍵裡的應用程式選單按鍵，也改成顯示 Windows 與 Linux 實際使用的 Ctrl 組合鍵。',
+        'en-US': 'Windows and Linux: Ctrl+V pastes in the terminal on Windows, and Ctrl+Shift+V pastes on Windows and Linux. Right-clicking inside a program that handles the mouse itself, such as Claude Code, no longer pastes twice; Shift+right-click opens Navide’s Copy/Paste menu. Settings → Keyboard Shortcuts now lists the application menu with the Ctrl keys Windows and Linux actually use.',
+        'ja-JP': 'Windows と Linux：Windows のターミナルで Ctrl+V で貼り付けられるようになり、Windows と Linux では Ctrl+Shift+V でも貼り付けられます。Claude Code のようにマウスを自分で扱うプログラムで右クリックしても、二重に貼り付けられることはなくなりました。Navide のコピー／貼り付けメニューは Shift＋右クリックで開きます。設定 → キーボードショートカットのアプリケーションメニューも、Windows と Linux で実際に使う Ctrl の組み合わせで表示されます。',
+      },
+      {
+        'zh-TW': '其他修正：開著多個工作區視窗時，結束到一半被取消，下次啟動不會少開視窗；原本在已拔除螢幕上的視窗會回到主螢幕。Git 面板和檔案總管的右鍵子選單靠近邊緣時會改往左或往下開，不再被切掉。pane 標頭的頻道選單會把已連到其他視窗 pane 的聊天標成「已連接」，不能重複選。Navide 關閉期間到期的單次排程，重新啟動補跑時不會送出兩次。切換帳號的對話框在狀態文字很長時不再超出畫面，額度用完的帳號改用灰色顯示。設定的狀態徽章、鍵盤快速鍵和分析頁面的版面也整理過。',
+        'en-US': 'Also fixed: with several workspace windows open, a quit that was cancelled part-way no longer leaves windows out of the next launch, and a window saved on a display that is no longer connected comes back on the main display. Right-click submenus in the Git panel and the file explorer open to the left or below near an edge instead of being cut off. The channel menu in a pane header marks a chat connected to a pane in another window as connected, so it cannot be picked twice. A one-time schedule that came due while Navide was closed is no longer sent twice when it is caught up after a restart. The account switch dialog no longer runs off screen when a status is long, and out-of-quota accounts are shown in grey. The status badges, keyboard shortcuts and analyzer pages in Settings are tidied up too.',
+        'ja-JP': 'その他の修正：複数のワークスペースウィンドウを開いているときに終了が途中で取り消されても、次回の起動でウィンドウが欠けなくなりました。接続されていないディスプレイに保存されていたウィンドウはメインディスプレイに戻ります。Git パネルとファイルエクスプローラーの右クリックのサブメニューは、端に近いと左または下に開き、切れなくなりました。ペインのヘッダーのチャンネルメニューでは、別のウィンドウのペインに接続しているチャットが「接続中」と表示され、重ねて選べなくなりました。Navide を閉じている間に期限が来た一回限りのスケジュールが、再起動後の追い上げで二度送られることはなくなりました。アカウント切り替えのダイアログは長い状態表示で画面からはみ出さなくなり、使用量を使い切ったアカウントは灰色で表示されます。設定のステータスバッジ、キーボードショートカット、分析のページのレイアウトも整えました。',
+      },
+    ],
+  },
+  {
     version: '0.2.20',
     title: {
       'zh-TW': '看得見的便利功能、帳號登入自動修復、更可靠的跨裝置配對',
