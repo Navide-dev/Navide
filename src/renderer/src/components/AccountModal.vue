@@ -13,9 +13,10 @@
 import { canonicalJson } from '../../../shared/canonicalJson'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { LegalRoute } from '../../../shared/legalLinks'
 import { linkErrorKey } from '../lib/linkStatus'
-import { usePairingState } from '../composables/usePairingState'
+import { usePairingState, failureKey } from '../composables/usePairingState'
 import NavideCloudMark from './NavideCloudMark.vue'
 import { relativeTime } from '../lib/relativeTime'
 import PaneGitChip, { type PaneGit } from './PaneGitChip.vue'
@@ -184,6 +185,8 @@ interface Pairing {
   /** Their signing key's digest, beside the code so the two things a person can
    *  compare are in the same place. */
   fingerprint: string
+  /** When it stops waiting, in seconds since the epoch. */
+  expiresAt?: number
 }
 
 /** A device that tried to reach a pane here and was refused. */
@@ -249,6 +252,9 @@ interface NetworkSnapshot {
    * an attacker who deleted that state wants next.
    */
   trustLocked?: string
+  /** "full" when that stop is a trust record with no room left: intact, and
+   *  unpairing a device is the way back, so there is no start-over to offer. */
+  trustLockedCode?: string
   /** No rules written under this identity yet, so nothing inbound is accepted.
    *  Reachable by recovering — a machine that heals a device conflict lands on
    *  a new identity with an empty policy. */
@@ -256,6 +262,12 @@ interface NetworkSnapshot {
   /** True when that stop is a read that may succeed next time — the offer to
    *  erase everything waits on this being false. */
   trustLockedTransient?: boolean
+  /** The record is there but cut off — a damaged record is known to be
+   *  useless, so the card says so and that pairing again is the fix. */
+  trustDamaged?: boolean
+  /** The trust journal (notices, delivered-message ledger) is unreadable or
+   *  was set aside; the backend's sentence says which. Pairing is unaffected. */
+  trustJournalProblem?: string
 }
 
 /** The four the server defines; anything else is shown as the server spelled it. */
@@ -432,6 +444,7 @@ async function refresh(): Promise<void> {
 const trustNotices = computed<TrustNotice[]>(() => network.value?.trustNotices ?? [])
 const trustPending = computed<PendingDevice[]>(() => network.value?.trustPending ?? [])
 const trustLocked = computed(() => network.value?.trustLocked ?? '')
+const trustFull = computed(() => network.value?.trustLockedCode === 'full')
 /** The last read did not come back. Says only that, because a failed read says
  *  nothing about the socket — see usePairingState. */
 const readFailed = pairingState.readFailed
@@ -439,6 +452,8 @@ const readFailed = pairingState.readFailed
  *  to erase everything: a keychain locked for a moment has nothing wrong with
  *  it to erase, and that offer is the one act here nobody can undo. */
 const trustLockedTransient = computed(() => network.value?.trustLockedTransient === true)
+const trustDamaged = computed(() => network.value?.trustDamaged === true)
+const trustJournalProblem = computed(() => network.value?.trustJournalProblem ?? '')
 /** Two clicks, not one: the first only reveals what the second costs. A single
  *  button beside an explanation of a lock is a button people press to make the
  *  red text go away. */
@@ -618,6 +633,8 @@ async function copyFingerprint(): Promise<void> {
 }
 
 const pairings = computed<Pairing[]>(() => pairingState.pairings.value as Pairing[])
+/** Rounds that ended because one side refused a frame, with why. */
+const pairingFailures = computed(() => pairingState.failures.value)
 /** Everything waiting on a person, of either shape. */
 const needsYouCount = computed(() => trustPending.value.length + accessRequests.value.length)
 
@@ -643,7 +660,7 @@ async function startPairing(device: NetworkDevice): Promise<void> {
       await withConfirmation('p2p.pair.start', device.deviceId, { deviceId: device.deviceId }),
     )
     if (!resp.ok) {
-      const message = resp.error?.message ?? t('account.err-generic')
+      const message = startPairingError(device, resp.error) ?? t('account.err-generic')
       error.value = message
       // Said on the card too. Clearing it instead would return the screen to
       // the silence this replaced, with the failure only in the panel below.
@@ -658,6 +675,25 @@ async function startPairing(device: NetworkDevice): Promise<void> {
   } finally {
     pending.value = ''
   }
+}
+
+/**
+ * What a refused "Pair" press says. Two refusals get a sentence that says what
+ * to do next; the rest are the backend's own words, as before.
+ */
+function startPairingError(
+  device: NetworkDevice,
+  err: { code?: string; message?: string } | null | undefined,
+): string | undefined {
+  if (err?.code === 'TRUST_UNAVAILABLE') return t('settings.p2p.pair.trust-unavailable-start')
+  if (err?.code === 'PAIRING_BUSY') {
+    const row = pairings.value.find((r) => r.deviceId === device.deviceId)
+    if (row?.expiresAt) {
+      const minutes = Math.max(1, Math.ceil((row.expiresAt * 1000 - Date.now()) / 60000))
+      return t('settings.p2p.pair.busy', { device: deviceLabel(device), minutes })
+    }
+  }
+  return err?.message
 }
 
 /**
@@ -1083,8 +1119,14 @@ async function decide(key: string, type: string, args: Record<string, unknown>):
   if (deciding.value) return
   deciding.value = key
   try {
-    await props.backend.send(type, args)
+    const resp = await props.backend.send(type, args)
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    // KC3-1: a block refused before it reached the server (p2p-trust-store-full)
+    // made nothing; one whose local copy was not saved is in force (fail closed).
+    if (type === 'p2p.trust.block' && resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
+    if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
+    if (type === 'p2p.trust.block' && resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1108,11 +1150,15 @@ async function blockPending(row: PendingDevice): Promise<void> {
   if (pending.value) return
   pending.value = row.deviceId
   try {
-    await props.backend.send(
+    const resp = await props.backend.send(
       'p2p.trust.block',
       await withConfirmation('p2p.trust.block', row.deviceId, { deviceId: row.deviceId }),
     )
     await loadNetwork()
+    if (!resp.ok) error.value = resp.error?.message ?? t('account.err-generic')
+    if (resp.error?.code === 'p2p-trust-store-full') error.value = t('settings.p2p.trust.block-full')
+    if (resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY') error.value = t('settings.p2p.trust.block-not-saved')
+    if (resp.error?.code === 'P2P_BLOCK_NOT_SAVED_LOCALLY_FULL') error.value = t('settings.p2p.trust.block-not-saved-full')
   } catch {
     /* the row stays, and the next poll shows whatever is really true */
   } finally {
@@ -1451,9 +1497,31 @@ onUnmounted(() => {
         <!-- Pairings in flight, at either end. Above everything else in this
              panel: it is the only thing here that another person is currently
              standing in front of, waiting on. -->
-        <section v-if="signedIn && pairings.length" class="net">
+        <section v-if="signedIn && (pairings.length || pairingFailures.length)" class="net">
           <h2 class="net-title">{{ t('settings.p2p.pair.title') }}</h2>
           <div class="card net-card">
+            <!-- A round that ended because one side refused a frame of it. The
+                 card that was waiting is gone; without this, its absence — or
+                 five minutes of "waiting" — was all anybody was told. -->
+            <div
+              v-for="f in pairingFailures"
+              :key="'failed:' + f.deviceId + ':' + f.at"
+              class="req pair-card"
+            >
+              <div class="req-head">
+                <span class="dev-name" v-truncate>
+                  {{ t('settings.p2p.pair.failed-title', { device: f.deviceName || f.deviceId }) }}
+                </span>
+              </div>
+              <p class="req-what danger-text">
+                {{ t('settings.p2p.pair.' + failureKey(f), { device: f.deviceName || f.deviceId, reason: f.reason }) }}
+              </p>
+              <div class="req-acts">
+                <button class="btn ghost small" @click="pairingState.dismissFailure(f)">
+                  {{ t('settings.p2p.pair.dismiss') }}
+                </button>
+              </div>
+            </div>
             <div v-for="row in pairings" :key="row.deviceId" class="req pair-card">
               <div class="req-head">
                 <!-- "Waiting for them to answer" stops being true the moment
@@ -1462,7 +1530,7 @@ onUnmounted(() => {
                      now sits over this window rather than under it, so the two
                      were on screen together saying different things about the
                      same exchange — and this was the half that was wrong. -->
-                <span class="dev-name">
+                <span class="dev-name" v-truncate>
                   {{ row.role === 'responder'
                     ? t('settings.p2p.pair.asked-by', { device: row.deviceName || row.deviceId })
                     : t(row.code ? 'settings.p2p.pair.with-device' : 'settings.p2p.pair.asking',
@@ -1483,6 +1551,19 @@ onUnmounted(() => {
                 </span>
                 <p class="req-what">{{ t('settings.p2p.pair.waiting-response') }}</p>
                 <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
+                <!-- The way out of a wait. Without it the only end was the
+                     five-minute deadline, and pressing "Pair" again in the
+                     meantime only said one was already in progress. -->
+                <div class="req-acts">
+                  <button
+                    class="btn ghost small"
+                    :disabled="!!pending || !linkReady"
+                    :title="linkWaitReason || undefined"
+                    @click="answerPairing(row, false)"
+                  >
+                    {{ t('settings.p2p.pair.cancel-request') }}
+                  </button>
+                </div>
               </template>
               <template v-else>
                 <!-- Labelled: six digits and sixteen hex characters, one above
@@ -1513,6 +1594,16 @@ onUnmounted(() => {
                   <span class="dev-tag pair-step">{{ t('settings.p2p.pair.step-you-confirmed') }}</span>
                   <p class="req-what">{{ t('settings.p2p.pair.waiting-remote') }}</p>
                   <p class="hint">{{ t('settings.p2p.pair.auto-updates') }}</p>
+                  <div class="req-acts">
+                    <button
+                      class="btn ghost small"
+                      :disabled="!!pending || !linkReady"
+                      :title="linkWaitReason || undefined"
+                      @click="answerPairing(row, false)"
+                    >
+                      {{ t('settings.p2p.pair.cancel-request') }}
+                    </button>
+                  </div>
                 </template>
                 <!-- Whose turn it is, said plainly. The heading above says
                      which exchange this is, not who it is waiting on, so this
@@ -1560,7 +1651,7 @@ onUnmounted(() => {
                      the two surfaces name the same machine the same way. The id
                      is a tooltip: it is what the logs show, and it is not the
                      question anybody is being asked. -->
-                <span class="dev-name" :title="row.deviceId">
+                <span class="dev-name" v-truncate :title="row.deviceId">
                   {{ row.deviceName || row.deviceId }}
                 </span>
               </div>
@@ -1617,7 +1708,7 @@ onUnmounted(() => {
             <div v-for="req in accessRequests" :key="req.key" class="req">
               <div class="req-head">
                 <span class="dev-tag">{{ t('settings.p2p.trust.kind-access') }}</span>
-                <span class="dev-name">{{ req.deviceName || req.deviceId }}</span>
+                <span class="dev-name" v-truncate>{{ req.deviceName || req.deviceId }}</span>
                 <span v-if="req.attempts > 1" class="dev-count">
                   {{ t('settings.p2p.trust.attempts', { count: req.attempts }) }}
                 </span>
@@ -1731,7 +1822,7 @@ onUnmounted(() => {
             >
               <template v-if="n.kind === 'device-key-changed'">
                 <div class="req-head">
-                  <span class="dev-name danger-text">
+                  <span class="dev-name danger-text" v-truncate>
                     {{ t('settings.p2p.trust.key-changed', { device: n.deviceId }) }}
                   </span>
                   <!-- Present tense, and a standing state rather than a line of
@@ -1756,7 +1847,7 @@ onUnmounted(() => {
 
               <template v-else-if="n.kind === 'plaintext-refused'">
                 <div class="req-head">
-                  <span class="dev-name danger-text">
+                  <span class="dev-name danger-text" v-truncate>
                     {{ t('settings.p2p.trust.plaintext-refused', { device: n.deviceId }) }}
                   </span>
                 </div>
@@ -1766,7 +1857,7 @@ onUnmounted(() => {
 
               <template v-else-if="n.kind === 'member-changed'">
                 <div class="req-head">
-                  <span class="dev-name danger-text">
+                  <span class="dev-name danger-text" v-truncate>
                     {{ t('settings.p2p.trust.member-changed', { device: n.deviceId }) }}
                   </span>
                 </div>
@@ -1776,7 +1867,7 @@ onUnmounted(() => {
 
               <template v-else-if="n.kind === 'policy-unverified'">
                 <div class="req-head">
-                  <span class="dev-name danger-text">
+                  <span class="dev-name danger-text" v-truncate>
                     {{ t('settings.p2p.trust.policy-unverified') }}
                   </span>
                 </div>
@@ -1819,7 +1910,7 @@ onUnmounted(() => {
                    is exactly the complaint the two-sided exchange answers. -->
               <template v-else-if="n.kind === 'device-pairing'">
                 <div class="req-head">
-                  <span class="dev-name">
+                  <span class="dev-name" v-truncate>
                     {{ t('settings.p2p.pair.' + n.pairing, { device: n.deviceName || n.deviceId }) }}
                   </span>
                 </div>
@@ -1827,7 +1918,7 @@ onUnmounted(() => {
 
               <template v-else-if="n.kind === 'device-first-seen'">
                 <div class="req-head">
-                  <span class="dev-name">
+                  <span class="dev-name" v-truncate>
                     {{ t('settings.p2p.trust.first-seen', { device: n.deviceId }) }}
                   </span>
                   <span v-if="n.own" class="dev-tag">
@@ -1852,7 +1943,7 @@ onUnmounted(() => {
                    panel came to announce member changes as first sightings. -->
               <template v-else>
                 <div class="req-head">
-                  <span class="dev-name danger-text">
+                  <span class="dev-name danger-text" v-truncate>
                     {{ t('settings.p2p.trust.unknown-notice', { kind: n.kind }) }}
                   </span>
                 </div>
@@ -1977,40 +2068,50 @@ onUnmounted(() => {
                say that, and would have to be worth interrupting somebody for.
                The backend still reports `policyEmpty`; it is a true fact with
                no honest use here yet. -->
+          <div v-if="trustJournalProblem" class="card journal-card">
+            <p class="req-what">{{ t('settings.p2p.trust.journal-problem') }}</p>
+            <p class="hint">{{ trustJournalProblem }}</p>
+          </div>
           <div v-if="trustLocked" class="card locked-card">
             <h2 class="net-title">{{ t('settings.p2p.trust.locked-title') }}</h2>
-            <p class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
-            <p class="hint">{{ trustLocked }}</p>
-            <p v-if="trustLockedTransient" class="hint locked-warn">
-              {{ t('settings.p2p.trust.locked-retrying') }}
-            </p>
-            <p v-else-if="rebuildDone" class="hint ok-text">
-              {{ t('settings.p2p.trust.rebuild-done') }}
-            </p>
-            <template v-else-if="rebuildArmed">
-              <p class="hint locked-warn">{{ t('settings.p2p.trust.rebuild-warn') }}</p>
-              <div class="locked-acts">
+            <p v-if="trustFull" class="req-what">{{ t('settings.p2p.trust.full-body') }}</p>
+            <template v-else>
+              <p v-if="trustDamaged" class="req-what">{{ t('settings.p2p.trust.damaged-body') }}</p>
+              <p v-else class="req-what">{{ t('settings.p2p.trust.locked-body') }}</p>
+              <p class="hint">{{ trustLocked }}</p>
+              <p v-if="trustLockedTransient" class="hint locked-warn">
+                {{ t('settings.p2p.trust.locked-retrying') }}
+              </p>
+              <p v-else-if="rebuildDone" class="hint ok-text">
+                {{ t('settings.p2p.trust.rebuild-done') }}
+              </p>
+              <template v-else-if="rebuildArmed">
+                <p class="hint locked-warn">
+                  {{ t(trustDamaged ? 'settings.p2p.trust.damaged-rebuild-warn' : 'settings.p2p.trust.rebuild-warn') }}
+                </p>
+                <div class="locked-acts">
+                  <button
+                    class="dev-review locked-go"
+                    :disabled="!!pending"
+                    @click="rebuildTrust()"
+                  >
+                    {{ t('settings.p2p.trust.rebuild-confirm') }}
+                  </button>
+                  <button class="dev-review" :disabled="!!pending" @click="rebuildArmed = false">
+                    {{ t('settings.p2p.trust.rebuild-cancel') }}
+                  </button>
+                </div>
+              </template>
+              <div v-else class="locked-acts">
                 <button
-                  class="dev-review locked-go"
-                  :disabled="!!pending"
-                  @click="rebuildTrust()"
+                  class="dev-review"
+                  :title="t('settings.p2p.trust.rebuild-title')"
+                  @click="rebuildArmed = true"
                 >
-                  {{ t('settings.p2p.trust.rebuild-confirm') }}
-                </button>
-                <button class="dev-review" :disabled="!!pending" @click="rebuildArmed = false">
-                  {{ t('settings.p2p.trust.rebuild-cancel') }}
+                  {{ t('settings.p2p.trust.rebuild') }}
                 </button>
               </div>
             </template>
-            <div v-else class="locked-acts">
-              <button
-                class="dev-review"
-                :title="t('settings.p2p.trust.rebuild-title')"
-                @click="rebuildArmed = true"
-              >
-                {{ t('settings.p2p.trust.rebuild') }}
-              </button>
-            </div>
           </div>
 
           <div class="card net-card">
@@ -2060,9 +2161,9 @@ onUnmounted(() => {
                 <ul v-if="paneHits.length" class="panes flat">
                   <li v-for="hit in paneHits" :key="hit.key" class="pane">
                     <span class="pane-agent">{{ hit.pane.agentKey || '—' }}</span>
-                    <span class="pane-name" :title="hit.pane.title">{{ hit.pane.title }}</span>
+                    <span class="pane-name" v-truncate>{{ hit.pane.title }}</span>
                     <span v-if="dockWindowLabelKey(hit.pane.surface)" class="pane-window">{{ t(dockWindowLabelKey(hit.pane.surface)!) }}</span>
-                    <span class="pane-ws">{{ hit.device }} · {{ hit.pane.workspace }}</span>
+                    <span class="pane-ws" v-truncate>{{ hit.device }} · {{ hit.pane.workspace }}</span>
                     <!-- The pill comes back here and only here: out of its
                          section, the row has nothing else saying what state it
                          is in. -->
@@ -2103,7 +2204,7 @@ onUnmounted(() => {
                        line with five other elements and was clipped to "M…"
                        while a two-line sentence about being offline sat beside
                        it. -->
-                  <span class="dev-name">{{ deviceLabel(device) }}</span>
+                  <span class="dev-name" v-truncate="device.deviceName || device.deviceId">{{ deviceLabel(device) }}</span>
                   <span v-if="device.isLocal" class="dev-tag">
                     {{ t('settings.p2p.network.this-device') }}
                   </span>
@@ -2111,7 +2212,7 @@ onUnmounted(() => {
                        name rather than under it: a second line turned every row
                        into two, which is a lot of height for the secondary
                        half of the sentence. -->
-                  <span class="dev-meta" :title="deviceMetaTitle(device)">
+                  <span class="dev-meta" v-truncate :title="deviceMetaTitle(device)">
                     {{ deviceMeta(device) }}
                   </span>
                   <!-- Without this the list said nothing about trust, so a
@@ -2205,7 +2306,7 @@ onUnmounted(() => {
                           <!-- `title` because the longest name is the one
                                carrying the most information, and it was the one
                                being clipped. -->
-                          <span class="pane-name" :title="row.pane.title">{{ row.pane.title }}</span>
+                          <span class="pane-name" v-truncate>{{ row.pane.title }}</span>
                           <!-- An embedded AI panel says which window it lives in. -->
                           <span v-if="dockWindowLabelKey(row.pane.surface)" class="pane-window">{{ t(dockWindowLabelKey(row.pane.surface)!) }}</span>
                           <PaneGitChip v-if="device.isLocal && row.pane.git" :git="row.pane.git" />
@@ -2254,7 +2355,7 @@ onUnmounted(() => {
           <div class="card net-card">
             <div v-for="entry in blocked" :key="entry.deviceId || entry.memberId" class="req">
               <div class="req-head">
-                <span class="dev-name">{{ blockedLabel(entry) }}</span>
+                <span class="dev-name" v-truncate>{{ blockedLabel(entry) }}</span>
                 <span v-if="entry.reason" class="dev-count">{{ entry.reason }}</span>
               </div>
               <div class="req-acts">
@@ -2687,6 +2788,7 @@ input:focus {
    warning has to be read from — so it needs the same gap the connection card
    carries. Restored: the rule was written when the card moved there and was
    lost to a parallel edit before it reached any commit. */
+.journal-card { margin-bottom: 10px; }
 .locked-card { border-color: var(--danger-fg); margin-bottom: 10px; }
 .req { padding: 8px 0; border-bottom: 1px solid var(--border-muted); }
 .req:last-child { border-bottom: none; }

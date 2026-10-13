@@ -443,7 +443,7 @@ def test_write_to_other_agent_team_dirs_is_refused(
     host = _RootOnlyHost({"instance-1": mine})
 
     response = _write(backend_process, host, rel_path, _plan_html("Smuggled"))
-    assert _error_code(response) == "BACKEND_UNAVAILABLE"
+    assert _error_code(response) == "WORKSPACE_SCOPE_VIOLATION"
     assert not (mine / rel_path).exists()
     # The user-facing subtrees stay writable, as before.
     assert _value(_write(backend_process, host, ".agent-team/reports/kept.md", "# Kept\n")) == {"ok": True}

@@ -22,10 +22,10 @@ const HTML_ADVISORY = '[intlify] Detected HTML in '
 const LITERAL_OPTIONS = ['繁體中文', '日本語']
 
 // Row counts per table, in template order.
-// The first table is the settings nav: nineteen pages in four groups,
+// The first table is the settings nav: twenty-four pages in five groups,
 // counted from SettingsModal.vue's `.s-nav-group` blocks rather than from the
 // prose. The last one is section 8's which-surface-is-which table.
-const TABLE_ROWS = [22, 14, 9, 4, 3, 6, 2, 6, 3, 8, 4, 10, 3]
+const TABLE_ROWS = [24, 15, 9, 4, 3, 6, 2, 6, 3, 8, 4, 10, 3]
 
 function unexpectedWarnings(warn: ReturnType<typeof vi.spyOn>): unknown[][] {
   return warn.mock.calls.filter(([first]) => !String(first).startsWith(HTML_ADVISORY))
@@ -108,9 +108,9 @@ describe('SettingsSystemHelp', () => {
     const figures = wrapper.findAll('.mk-fig')
     expect(figures).toHaveLength(2)
     expect(figures.map((f) => f.findAll('.mk-fig-legend li').length)).toEqual([3, 3])
-    // The nav picture draws the real sidebar: four groups, nineteen pages.
-    expect(figures[0].findAll('.mk-set-grouptitle')).toHaveLength(4)
-    expect(figures[0].findAll('.mk-set-navitem')).toHaveLength(22)
+    // The nav picture draws the real sidebar: five groups, twenty-four pages.
+    expect(figures[0].findAll('.mk-set-grouptitle')).toHaveLength(5)
+    expect(figures[0].findAll('.mk-set-navitem')).toHaveLength(24)
     // ...and the search box with the two hits it drops down.
     expect(figures[0].findAll('.mk-set-result')).toHaveLength(2)
     // The resource picture: a header row plus one row per pane.
@@ -129,6 +129,34 @@ describe('SettingsSystemHelp', () => {
     expect(mockText).toContain('Marketplace')
     expect(mockText).toContain('Resource Manager')
 
+    expect(unexpectedWarnings(warn)).toEqual([])
+  })
+
+  it.each([
+    ['en-US', 'Extensions'],
+    ['zh-TW', '擴充'],
+    ['ja-JP', '拡張機能'],
+  ] as const)('draws Credentials and Extensions under Agent Assets in %s', (locale, extensionsLabel) => {
+    i18n.global.locale.value = locale
+    const wrapper = mountHelp()
+    const t = (key: string) => i18n.global.t(key)
+
+    // Group titles and nav items are flat siblings in the mock, so a group
+    // runs from its title to the next one.
+    const groups: { title: string; items: string[] }[] = []
+    for (const el of wrapper.findAll('.mk-fig')[0].findAll('.mk-set-grouptitle, .mk-set-navitem')) {
+      if (el.classes('mk-set-grouptitle')) groups.push({ title: el.text(), items: [] })
+      else groups[groups.length - 1].items.push(el.text())
+    }
+    const group = (key: string) => groups.find((g) => g.title === t(key))?.items
+
+    expect(t('settings.nav.cliExtensions')).toBe(extensionsLabel)
+    expect(group('settings.nav.group.integration')).toEqual(
+      ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'].map((k) => t(`settings.nav.${k}`))
+    )
+    expect(group('settings.nav.group.accountsAgents')).toEqual(
+      ['settings.nav.accounts', 'settings.nav.cliAgents', 'settings.nav.analyzer', 'guard.nav', 'channels.nav', 'settings.nav.crossDevice'].map(t)
+    )
     expect(unexpectedWarnings(warn)).toEqual([])
   })
 

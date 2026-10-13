@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 // Manual "reconnect a lost conversation" picker. Mirrors AgentHistoryModal's
 // overlay/modal shell and its props(list)/emits(select,close) shape. The pane
@@ -81,14 +82,14 @@ function confirmSelection(): void {
                 @click="orphan.resumable && (selectedId = orphan.session_id)"
               >
                 <div class="reconnect-row-head">
-                  <span class="reconnect-name">{{ orphan.name || $t('reconnect.unnamed') }}</span>
+                  <span class="reconnect-name" v-truncate>{{ orphan.name || $t('reconnect.unnamed') }}</span>
                   <span
                     class="reconnect-badge"
                     :class="orphan.resumable ? 'ok' : 'stale'"
                   >{{ orphan.resumable ? $t('reconnect.resumable') : $t('reconnect.not-resumable') }}</span>
                 </div>
                 <div v-if="orphan.preview.length" class="reconnect-preview">
-                  <div v-for="(line, i) in orphan.preview" :key="i" class="reconnect-preview-line">{{ line }}</div>
+                  <div v-for="(line, i) in orphan.preview" :key="i" class="reconnect-preview-line" v-truncate>{{ line }}</div>
                 </div>
                 <div class="reconnect-meta">
                   <span>{{ formatMtime(orphan.mtime) }}</span>

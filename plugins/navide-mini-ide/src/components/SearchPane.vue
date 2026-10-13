@@ -5,7 +5,7 @@ import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
   workspacePath: string
@@ -363,7 +363,7 @@ defineExpose({ openReplace, focusInput, setQuery })
             <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4V4Z" /></svg>
           </span>
           <span class="sp-file-name">{{ file.name }}</span>
-          <span class="sp-file-path">{{ file.rel_path }}</span>
+          <span class="sp-file-path" v-truncate>{{ file.rel_path }}</span>
           <span class="sp-file-count">{{ file.matches.length }}</span>
           <button
             v-if="showReplace"
@@ -383,7 +383,7 @@ defineExpose({ openReplace, focusInput, setQuery })
             @click="openMatch(file, m)"
           >
             <span class="sp-ln">{{ m.line }}</span>
-            <span class="sp-text"><span>{{ parts(m).a }}</span><span class="sp-hit">{{ parts(m).h }}</span><span>{{ parts(m).b }}</span></span>
+            <span class="sp-text" v-truncate><span>{{ parts(m).a }}</span><span class="sp-hit">{{ parts(m).h }}</span><span>{{ parts(m).b }}</span></span>
             <span v-if="showReplace" class="sp-match-actions">
               <button
                 v-if="!isRegex"

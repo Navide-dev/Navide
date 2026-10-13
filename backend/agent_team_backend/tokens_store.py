@@ -1229,6 +1229,7 @@ class TokensStore:
         run_id: str,
         task: str,
         run_dir: str,
+        pipeline_id: str = "",
     ) -> dict[str, Any]:
         """Archive any in-progress current_run, then start a fresh one."""
         with self._flush_lock, self._lock:
@@ -1238,16 +1239,31 @@ class TokensStore:
                 prev["ended_at"] = _now_iso()
                 doc["runs"].append(prev)
             doc["current_run"] = _new_run(run_id, task, run_dir)
+            if pipeline_id:
+                doc["current_run"]["pipeline_id"] = pipeline_id
             self._dirty_workspaces.add(workspace_path)
             result = deepcopy(doc["current_run"])
             self._flush_dirty()
             return result
 
-    def end_run(self, workspace_path: str) -> None:
+    def end_run(
+        self,
+        workspace_path: str,
+        *,
+        outcome: str = "",
+        node_states: dict[str, Any] | None = None,
+    ) -> None:
+        """outcome ('completed' / 'aborted' / 'failed') and the final per-node
+        run states are recorded on the archived run when given (additive keys
+        the Executions view replays)."""
         with self._flush_lock, self._lock:
             doc = self._load_workspace(workspace_path)
             if doc["current_run"]:
                 doc["current_run"]["ended_at"] = _now_iso()
+                if outcome:
+                    doc["current_run"]["outcome"] = outcome
+                if node_states:
+                    doc["current_run"]["node_states"] = deepcopy(node_states)
                 doc["runs"].append(doc["current_run"])
                 doc["current_run"] = None
             self._dirty_workspaces.add(workspace_path)

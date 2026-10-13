@@ -43,7 +43,7 @@ export class TerminalStorageOwnerService {
   }
 
   private readonly onReady = (event: IpcMainEvent): void => {
-    const owner = [...this.owners.values()].find(item => item.view.webContents.id === event.sender.id)
+    const owner = [...this.owners.values()].find(item => item.view.webContents?.id === event.sender.id)
     if (owner && event.senderFrame === event.sender.mainFrame) owner.resolveReady()
   }
 
@@ -60,7 +60,7 @@ export class TerminalStorageOwnerService {
 
   private getOwner(origin: TerminalOwnerOrigin): Owner {
     const existing = this.owners.get(origin)
-    if (existing && !existing.view.webContents.isDestroyed()) return existing
+    if (existing && existing.view.webContents && !existing.view.webContents.isDestroyed()) return existing
     // An unattached WebContentsView does not keep a user BrowserWindow open
     // or change the application's window-all-closed behavior.
     const view = new WebContentsView({
@@ -79,7 +79,7 @@ export class TerminalStorageOwnerService {
     const startupTimer = setTimeout(() => rejectReady(new Error('Terminal storage owner did not become ready')), 10_000)
     void ready.then(() => clearTimeout(startupTimer), () => {
       clearTimeout(startupTimer)
-      if (!view.webContents.isDestroyed()) view.webContents.close()
+      if (view.webContents && !view.webContents.isDestroyed()) view.webContents.close()
     })
     this.owners.set(origin, owner)
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -126,7 +126,7 @@ export class TerminalStorageOwnerService {
   }
 
   dispose(): void {
-    for (const owner of this.owners.values()) owner.view.webContents.close()
+    for (const owner of this.owners.values()) owner.view.webContents?.close()
     this.owners.clear()
     ipcMain.removeListener('terminal-owner:ready', this.onReady)
     ipcMain.removeListener('terminal-owner:response', this.onResponse)

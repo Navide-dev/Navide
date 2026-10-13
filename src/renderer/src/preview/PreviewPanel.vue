@@ -10,7 +10,7 @@
 // panel is read-only, and pulling Monaco into the main window would cost every
 // workspace window. "Open in editor" is the escape hatch instead.
 import { computed, ref, toRef } from 'vue'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { createHostGitFileAccessPort } from '../composables/hostSurfacePorts'
 import { createHostGitTransport } from '../composables/hostGitTransport'
@@ -199,7 +199,7 @@ function clearTrack(): void {
     <div v-if="target" class="pv-live">
       <header class="pv-hdr">
         <span class="pv-kind">{{ target.kind }}</span>
-        <span class="pv-title" :title="subtitle || title">{{ title }}</span>
+        <span class="pv-title" v-truncate :title="subtitle || title">{{ title }}</span>
         <span class="pv-acts">
           <button
             v-if="inlineContent !== null"
@@ -256,7 +256,7 @@ function clearTrack(): void {
       </div>
 
       <footer class="pv-foot">
-        <span v-if="subtitle" class="pv-sub" :title="subtitle">{{ subtitle }}</span>
+        <span v-if="subtitle" class="pv-sub" v-truncate>{{ subtitle }}</span>
         <span v-if="target.kind === 'html'" class="pv-flag">{{ $t('preview.sandboxed') }}</span>
         <span v-if="isForeignWorkspace" class="pv-flag pv-warn">{{ $t('preview.foreign-workspace') }}</span>
         <span v-if="attribution" class="pv-flag">{{ attribution }}</span>
@@ -302,7 +302,7 @@ function clearTrack(): void {
             {{ changeMark(e.change) }}
           </span>
           <span class="pv-row-path">{{ rowLabel(e) }}</span>
-          <span class="pv-row-who">{{ rowAuthor(e) }}</span>
+          <span class="pv-row-who" v-truncate>{{ rowAuthor(e) }}</span>
         </button>
       </div>
       <div v-else-if="entries.length" class="pv-track-note">{{ $t('preview.track-no-match') }}</div>

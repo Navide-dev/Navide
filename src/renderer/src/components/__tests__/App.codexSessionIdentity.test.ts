@@ -8,6 +8,7 @@ import {
   shouldPreserveMissingSessionOnRestore, shouldWarnMissingResume,
 } from '../../platform/plugin-shell/lib/resume-command'
 import { pinFreshSessionAtLaunch, shouldAttemptResume } from '../../lib/sessionHeal'
+import { accountSpawnPin } from '../../lib/accountFollowPanes'
 
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -67,6 +68,7 @@ function harness() {
     spawnHistory: { value: [] }, runGroups: { value: [] },
     activeTab: { value: '' }, runGroupsReady: { value: true },
     registerPaneMessaging: vi.fn(), unregisterPaneMessaging: vi.fn(),
+    messaging: { handOverQueue: vi.fn() },
     selectPane: vi.fn(), setPaneAutoName: vi.fn(), requestLlmPaneName: vi.fn(),
     deriveAutoName: (text: string) => text, roleLabel: (role: string) => role,
     entryBelongsToWorkspace: () => true,
@@ -101,6 +103,9 @@ function harness() {
     stripDeadOpencodeAutoFlag: (_agent: string, command: string) => command,
     minimizedPanes: { value: new Set<string>() },
     useChannels: () => ({ paneReplaced: vi.fn(), paneClosed: vi.fn() }),
+    // Scheme A's follow flag (plan claude_f1bf4b): no account dir here.
+    FOLLOW_SWITCH_AGENT: 'claude', followDirSignedIn: () => false, accountSpawnPin,
+    accountFollow: { add: vi.fn(), remove: vi.fn(), has: () => false },
   }
   const actions = new Function(...Object.keys(deps), `${javascript}; return {
     spawnPane, onManualSpawn, rebuildPaneClean, performRealizeRestoredPane,

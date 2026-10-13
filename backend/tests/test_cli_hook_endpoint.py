@@ -507,3 +507,119 @@ def test_the_secret_survives_a_restart_so_running_panes_keep_their_hooks() -> No
     assert hook_auth.presented(hook_auth.token())
     assert not hook_auth.presented("")
     assert not hook_auth.presented(None)
+
+
+# ── idle_prompt after a finished turn ──────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "composer",
+    ["", "先列恩梯的案例候選給我挑"],
+    ids=["empty-composer", "unsent-composer-text"],
+)
+def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
+    client: TestClient, events: list[dict], monkeypatch, composer: str
+) -> None:
+    """Claude fires Notification(idle_prompt) about a minute after EVERY turn
+    ends, whether or not the user has left a draft in the composer. Recording
+    it as agent_active replaced the turn_complete entry: cli_get_status then
+    reported a finished pane as agent_active forever, with no turn text and an
+    age counted from the notification instead of the turn end."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import server as plan_mcp, wiring as plan_mcp_wiring
+
+    agent_messaging._reset_for_test()
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    agent_messaging.register("pw", "worker", "/ws/alpha", agent_key="claude")
+    agent_messaging.register("other", "caller", "/ws/somewhere-else")
+
+    async def _ui(*_args, **_kwargs):
+        buffer = "✻ Baked for 51s · done 3:34 PM\n────\n❯ " + composer
+        return {"ok": True, "result": {"status": "idle", "buffer": buffer}, "error": None}
+
+    monkeypatch.setattr(plan_mcp, "_ui_request", _ui)
+    try:
+        # The transcript's end_turn line, then the Stop hook, a minute ago.
+        app_module._record_pane_activity("pw", "turn_complete", "what the agent said")
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "stop"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha"},
+        )
+        app_module._pane_activity["pw"]["ts_monotonic"] -= 60.0
+
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "notification"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha", "notification_type": "idle_prompt"},
+        )
+
+        ctx = SimpleNamespace(
+            request_context=SimpleNamespace(
+                request=SimpleNamespace(
+                    query_params={"pane": "other", "t": plan_mcp_wiring.caller_token()}
+                )
+            )
+        )
+        result = asyncio.run(plan_mcp.cli_get_status("alpha/worker", ctx))
+
+        assert result["ui"]["status"] == "idle"
+        assert result["last_activity"]["type"] == "turn_complete"
+        assert result["last_activity"]["text"] == "what the agent said"
+        assert result["last_activity"]["age_seconds"] >= 60.0
+    finally:
+        agent_messaging._reset_for_test()
+        app_module._pane_activity.clear()
+
+
+def test_idle_prompt_still_reaches_the_frontend(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    # Not recording it is a backend-store decision only; the renderer still
+    # gets the notification and decides AWAITING / chime from its type.
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    try:
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "notification"},
+            json={"session_id": "s-1", "cwd": "/ws/alpha", "notification_type": "idle_prompt"},
+        )
+        payload = _payload(events)
+        assert payload["pane_id"] == "pw"
+        assert payload["notification_type"] == "idle_prompt"
+    finally:
+        app_module._pane_activity.clear()
+
+
+def test_permission_prompt_still_records_the_turn_as_active(
+    client: TestClient, events: list[dict], monkeypatch
+) -> None:
+    # A permission prompt parks the turn mid-way: it has not ended, so
+    # agent_active is the right answer and must keep replacing an older entry.
+    app_module._pane_activity.clear()
+    monkeypatch.setattr(
+        app_module.attribution, "pane_for_session", lambda _sid: ("pw", "/ws/alpha", "")
+    )
+    app_module._record_pane_activity("pw", "turn_complete", "previous turn")
+    try:
+        client.post(
+            "/hooks/claude",
+            headers={"X-Agent-Team-Event": "notification"},
+            json={
+                "session_id": "s-1",
+                "cwd": "/ws/alpha",
+                "notification_type": "permission_prompt",
+            },
+        )
+        assert app_module._pane_activity["pw"]["event_type"] == "agent_active"
+    finally:
+        app_module._pane_activity.clear()

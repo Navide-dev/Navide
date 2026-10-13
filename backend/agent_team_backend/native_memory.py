@@ -428,11 +428,24 @@ def save(
     # path was a separate call: re-check the directory actually being written.
     if not _contained(target, scope, root):
         raise ValueError("not a known instruction file")
-    handle, temp = tempfile.mkstemp(dir=str(target.parent), prefix=".navide-", suffix=".tmp")
+    # A linked file is written where the link points: os.replace would
+    # otherwise swap the link itself for a plain file, cutting the user's
+    # dotfiles repo out. _contained has already kept a project link inside
+    # its workspace. A dangling link is refused: following it would create a
+    # file, and directories, wherever it happens to point.
+    written = target
+    if target.is_symlink():
+        try:
+            written = target.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise ValueError("the instruction file is a link to nothing") from exc
+        if not written.is_file():
+            raise ValueError("the instruction file links to something that is not a file")
+    handle, temp = tempfile.mkstemp(dir=str(written.parent), prefix=".navide-", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as stream:
             stream.write(text)
-        os.replace(temp, target)
+        os.replace(temp, written)
     except BaseException:
         Path(temp).unlink(missing_ok=True)
         raise
@@ -456,8 +469,9 @@ def _contained(path: Path, scope: str, root: Path) -> bool:
         return True
     if not _within(path.parent, root):
         return False
-    # A dangling link cannot be written through (os.replace renames over the
-    # link itself), but one in a repository is not something to offer either.
+    # ``save`` writes through a link only to an existing file and refuses a
+    # dangling one, but a dangling link in a repository is not something to
+    # offer either.
     if path.is_symlink() or path.exists():
         return _within(path, root)
     return True

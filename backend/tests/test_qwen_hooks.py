@@ -112,3 +112,30 @@ def test_skips_when_qwen_is_not_configured(tmp_path, monkeypatch) -> None:
     assert result["installed"] is False
     assert result["reason"] == "qwen not configured"
     assert not (tmp_path / ".qwen").exists()
+
+
+def test_uninstall_removes_only_our_hooks(tmp_path) -> None:
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({
+        "hooks": {"Notification": [{"hooks": [{"type": "command", "command": "notify-send mine"}]}]},
+        "theme": "dark",
+    }))
+    qwen_hooks.install_hooks("/tmp/port-file", settings_file=settings)
+
+    result = qwen_hooks.uninstall_hooks(settings_file=settings)
+
+    assert result["removed"] is True
+    data = json.loads(settings.read_text())
+    assert _hook_commands(data) == ["notify-send mine"]
+    assert data["theme"] == "dark"
+
+
+def test_uninstall_leaves_a_file_it_cannot_parse_alone(tmp_path) -> None:
+    settings = tmp_path / "settings.json"
+    original = '{\n  // which model to use\n  "model": "qwen3-coder-plus"\n}'
+    settings.write_text(original)
+
+    result = qwen_hooks.uninstall_hooks(settings_file=settings)
+
+    assert result["removed"] is False
+    assert settings.read_text() == original

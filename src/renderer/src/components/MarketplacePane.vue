@@ -12,6 +12,7 @@
 // (no v-html), so a package cannot inject markup into the settings window.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { InlineText, renderLines } from '../editor/markdownRender'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
@@ -668,8 +669,8 @@ watch(
                 :size="32"
               />
               <div class="mkt-pack-member-main">
-                <span class="mkt-pack-member-name" :title="m.display_name || m.id">{{ m.display_name || m.id }}</span>
-                <span class="mkt-muted mkt-pack-member-id" :title="m.version ? `${m.id} · ${m.version}` : m.id">
+                <span class="mkt-pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
+                <span class="mkt-muted mkt-pack-member-id" v-truncate>
                   {{ m.version ? `${m.id} · ${m.version}` : m.id }}
                 </span>
               </div>
@@ -1044,8 +1045,8 @@ watch(
                   :path="ext.icon_path"
                   :size="index === 0 ? 56 : 40"
                 />
-                <span class="mkt-featured-name">{{ ext.display_name || ext.name }}</span>
-                <span class="mkt-featured-desc">{{ ext.description }}</span>
+                <span class="mkt-featured-name" v-truncate>{{ ext.display_name || ext.name }}</span>
+                <span class="mkt-featured-desc" v-truncate>{{ ext.description }}</span>
                 <span v-if="index === 0" class="mkt-featured-tags">
                   <span v-if="ext.trust_tier === 'signed-verified'" class="mkt-quiet mkt-quiet--ok">✓ {{ $t('settings.extensions.marketplace.signedShort') }}</span>
                   <span v-if="ext.compatible === true" class="mkt-quiet">{{ $t('settings.extensions.marketplace.compatibleWith', { version: ext.app_version ?? '' }) }}</span>
@@ -1101,7 +1102,7 @@ watch(
                   {{ $t('settings.extensions.marketplace.requiresNavide', { version: ext.min_navide_version ?? '' }) }}
                 </span>
               </div>
-              <p v-if="ext.description" class="mkt-card-desc" :title="ext.description">{{ ext.description }}</p>
+              <p v-if="ext.description" class="mkt-card-desc" v-truncate>{{ ext.description }}</p>
               <p v-if="isIncompatible(ext)" class="mkt-card-incompatible">
                 {{ $t('settings.extensions.marketplace.updateNavideToInstall', { current: ext.app_version ?? '' }) }}
               </p>

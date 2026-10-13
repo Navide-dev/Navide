@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -11,7 +12,7 @@ import pytest
 from agent_team_backend import agent_messaging
 from agent_team_backend.channels import mirror as mirror_mod
 from agent_team_backend.channels import redact, ws_api
-from agent_team_backend.channels.base import Capabilities, Location
+from agent_team_backend.channels.base import Capabilities, ChannelSendError, Location
 from agent_team_backend.channels.mirror import (
     EchoGuard, Outbox, OwnerMap, format_tree, match_name, parse_at_target, parse_command,
 )
@@ -19,7 +20,7 @@ from agent_team_backend.channels.store import ChannelStore
 from agent_team_backend.db import Database
 
 from .test_manager import (  # noqa: F401 — fixtures and helpers shared with the manager suite
-    Env, _said, _until, env, fast_timers,
+    Env, _said, _until, clocked, env, fast_timers,
 )
 
 NO_THREADS = Capabilities(threads=False, create_location=False, edit=False, typing=False,
@@ -392,7 +393,7 @@ async def test_without_threads_child_results_ride_the_parent_chat_with_a_prefix(
     assert [b for b in env.store.bindings() if b.auto] == []
     long_text = "T" * 900
     env.turn_complete("pane-2", long_text)
-    await _until(lambda: any(t.startswith("↳ tester ✅ 完成 · 🖥 本機\n") for t in env.tg.texts()))
+    await _until(lambda: any(t.startswith(f"{mirror_mod.child_tag('tester')} ✅ 完成 · 🖥 本機\n") for t in env.tg.texts()))
     # Full verbosity: the whole text, chunked by the platform limit rather than summarised.
     assert sum(t.count("T") for t in env.tg.texts()) == 900
     _set_verbosity(env, "standard")
@@ -415,7 +416,92 @@ async def test_topic_creation_failure_falls_back_to_prefixed_messages(env: Env) 
     await env.m.mirror.sync_lineage()
     assert [b for b in env.store.bindings() if b.auto] == []
     env.turn_complete("pane-2", "still reported")
-    await _until(lambda: _said(env, "↳ tester ✅ 完成"))
+    await _until(lambda: _said(env, f"{mirror_mod.child_tag('tester')} ✅ 完成"))
+
+
+async def test_a_chat_that_is_not_a_forum_is_asked_for_a_topic_only_once(env: Env, caplog) -> None:
+    # Every new child in a plain Telegram group used to try createForumTopic again
+    # and warn "the chat is not a forum"; the chat cannot have topics, so it is remembered.
+    calls: list[str] = []
+
+    async def not_a_forum(chat_id: str, title: str) -> Location:
+        calls.append(title)
+        raise ChannelSendError("這個群組沒有開啟主題功能 (the chat is not a forum)")
+
+    env.tg.create_location = not_a_forum  # type: ignore[method-assign]
+    caplog.set_level(logging.INFO, logger="agent_team_backend.channels.mirror")
+    panes = _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
+    await env.m.mirror.sync_lineage()
+    panes.append(_pane("pane-3", "linter", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    assert calls == ["↳ tester"]
+    assert [b for b in env.store.bindings() if b.auto] == []
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING and "topic" in r.getMessage()]
+    assert len(warnings) == 1
+    env.turn_complete("pane-3", "still reported")
+    await _until(lambda: _said(env, f"{mirror_mod.child_tag('linter')} ✅ 完成"))
+
+
+def _flaky_forum(env: Env) -> list[str]:
+    # A plain group until `env.forum_on` is set: then it can have topics.
+    calls: list[str] = []
+    env.forum_on = False  # type: ignore[attr-defined]
+
+    async def create(chat_id: str, title: str) -> Location:
+        calls.append(title)
+        if not env.forum_on:  # type: ignore[attr-defined]
+            raise ChannelSendError("這個群組沒有開啟主題功能 (the chat is not a forum)")
+        return Location(env.tg.platform, env.tg.account, chat_id, f"t-{len(calls)}")
+
+    env.tg.create_location = create  # type: ignore[method-assign]
+    return calls
+
+
+async def test_a_chat_that_is_not_a_forum_is_not_asked_again_within_the_retry_window(clocked) -> None:
+    env, clock = clocked
+    calls = _flaky_forum(env)
+    panes = _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
+    await env.m.mirror.sync_lineage()
+    clock.t += mirror_mod.NO_TOPIC_RETRY_S - 1
+    panes.append(_pane("pane-3", "linter", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    assert calls == ["↳ tester"]
+
+
+async def test_a_chat_that_is_not_a_forum_is_asked_again_after_the_retry_window(clocked, caplog) -> None:
+    # A group can turn topics on later; that used to need an app restart.
+    env, clock = clocked
+    calls = _flaky_forum(env)
+    caplog.set_level(logging.INFO, logger="agent_team_backend.channels.mirror")
+    panes = _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
+    await env.m.mirror.sync_lineage()
+    clock.t += mirror_mod.NO_TOPIC_RETRY_S + 1
+    panes.append(_pane("pane-3", "linter", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    assert calls == ["↳ tester", "↳ linter"]
+    # Still not a forum: one info line, no second warning, and the chat is remembered again.
+    topic = [r for r in caplog.records if "topic" in r.getMessage()]
+    assert [r.levelno for r in topic] == [logging.WARNING, logging.INFO]
+    assert f"tried again in {int(mirror_mod.NO_TOPIC_RETRY_S // 60)} minutes" in topic[0].getMessage()
+    panes.append(_pane("pane-4", "fmt", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    assert calls == ["↳ tester", "↳ linter"]
+
+
+async def test_a_chat_that_became_a_forum_gets_topics_after_the_retry_window(clocked) -> None:
+    env, clock = clocked
+    calls = _flaky_forum(env)
+    panes = _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
+    await env.m.mirror.sync_lineage()
+    env.forum_on = True  # type: ignore[attr-defined]
+    clock.t += mirror_mod.NO_TOPIC_RETRY_S + 1
+    panes.append(_pane("pane-3", "linter", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    panes.append(_pane("pane-4", "fmt", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    assert calls == ["↳ tester", "↳ linter", "↳ fmt"]
+    assert {b.pane_id for b in env.store.bindings() if b.auto} == {"pane-3", "pane-4"}
+    assert env.m.mirror._no_topic_chats == {}
 
 
 async def test_closed_child_releases_its_topic_and_says_so(env: Env) -> None:
@@ -525,7 +611,7 @@ async def test_at_name_routes_to_the_child_and_its_reply_carries_the_prefix(env:
     env.fake.verdicts["k1"] = {"status": "delivered"}
     await asyncio.sleep(0.1)
     env.turn_complete("pane-2", "e2e green")
-    await _until(lambda: "↳ tester ✅ 完成 · 💬 alice\ne2e green" in env.tg.texts())
+    await _until(lambda: f"{mirror_mod.child_tag('tester')} ✅ 完成 · 💬 alice\ne2e green" in env.tg.texts())
 
 
 async def test_reply_to_a_childs_message_routes_to_that_child(env: Env) -> None:
@@ -632,3 +718,29 @@ async def test_long_local_prompts_are_mirrored_whole_up_to_the_cap(env: Env) -> 
     assert not _said(env, "完整內容請在 Navide 查看")
     env.m.mirror.on_local_prompt("pane-1", "x" * mirror_mod.LOCAL_PROMPT_MAX)
     await _until(lambda: _said(env, "完整內容請在 Navide 查看"))
+
+
+# --- C1: telling children apart in a chat without topics -------------------------------
+
+
+def test_a_child_tag_has_a_colour_that_stays_with_its_name() -> None:
+    tag = mirror_mod.child_tag("tester")
+    assert tag.startswith("↳ ") and tag.endswith(" tester")
+    assert tag.split(" ")[1] in mirror_mod.CHILD_COLOURS
+    assert mirror_mod.child_tag("tester") == tag
+    tags = {mirror_mod.child_tag(name).split(" ")[1] for name in ("a", "b", "c", "d", "e", "f", "g", "h", "i")}
+    assert len(tags) > 1
+
+
+async def test_a_chat_without_topics_is_told_once_how_to_get_them(env: Env) -> None:
+    async def not_a_forum(chat_id: str, title: str) -> Location:
+        raise ChannelSendError("這個群組沒有開啟主題功能 (the chat is not a forum)")
+
+    env.tg.create_location = not_a_forum  # type: ignore[method-assign]
+    panes = _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
+    await env.m.mirror.sync_lineage()
+    panes.append(_pane("pane-3", "linter", "pane-1"))
+    await env.m.mirror.sync_lineage()
+    await _until(lambda: _said(env, "主題"))
+    await env.m.wait_idle()
+    assert sum(mirror_mod.MSG_NO_TOPICS in t for t in env.tg.texts()) == 1

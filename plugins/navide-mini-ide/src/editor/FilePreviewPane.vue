@@ -16,6 +16,7 @@ import CsvPreview from './preview/CsvPreview.vue'
 import FontPreview from './preview/FontPreview.vue'
 import NotebookPreview from './preview/NotebookPreview.vue'
 import OfficePreview from './preview/OfficePreview.vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
   workspacePath: string
@@ -212,7 +213,7 @@ onMounted(() => {
 <template>
   <div class="fpv">
     <div class="fpv-toolbar">
-      <span class="fpv-name" :title="relPath">{{ name }}</span>
+      <span class="fpv-name" v-truncate :title="relPath">{{ name }}</span>
       <span v-if="metaText" class="fpv-meta">{{ metaText }}</span>
       <span v-if="kind === 'html'" class="fpv-hint">{{ $t('preview.html-scripts-disabled') }}</span>
       <span class="fpv-spacer" />

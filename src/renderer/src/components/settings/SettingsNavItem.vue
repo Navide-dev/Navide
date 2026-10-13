@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTruncate } from '@navide/plugin-ui/foundation'
 /**
  * Sidebar nav item. Clickable full-width row with an optional `icon` slot and
  * a text label; emits `select` on activation. Keyboard-accessible via button.
@@ -27,7 +28,7 @@ const emit = defineEmits<{
     <span class="settings-nav-item-icon">
       <slot name="icon"></slot>
     </span>
-    <span class="settings-nav-item-label">{{ label }}</span>
+    <span class="settings-nav-item-label" v-truncate>{{ label }}</span>
     <span v-if="badge" class="settings-nav-item-badge">{{ badge }}</span>
   </button>
 </template>

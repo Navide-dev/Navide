@@ -114,8 +114,11 @@ def _norm_email(value: object) -> str | None:
     return value.casefold() if isinstance(value, str) and value else None
 
 
-def _match_live_slot(agent_key: str) -> tuple[str | None, str, str | None]:
-    """``(live email, active slot id, matching slot id)`` for one agent.
+def _match_live_slot(
+    agent_key: str, scope: str | None = None
+) -> tuple[str | None, str, str | None]:
+    """``(live email, active slot id, matching slot id)`` for one agent
+    (``scope``: one provider entry of a per-provider store).
 
     The live email is None whenever the account cannot be identified at all —
     signed out, kimi (no identity field), or a claude long-lived-token login
@@ -131,7 +134,8 @@ def _match_live_slot(agent_key: str) -> tuple[str | None, str, str | None]:
     from . import app
 
     vault = app.credential_vault
-    live = vault.identity(agent_key)
+    kw = {"scope": scope} if scope else {}
+    live = vault.identity(agent_key, **kw)
     raw_email = live.get("email") if live.get("signedIn") else None
     email = _norm_email(raw_email)
     doc = app.cli_profiles_store.list()
@@ -146,15 +150,19 @@ def _match_live_slot(agent_key: str) -> tuple[str | None, str, str | None]:
     if DEFAULT_SLOT_ID not in slot_ids:
         slot_ids.append(DEFAULT_SLOT_ID)
     for slot_id in slot_ids:
-        slot_email = _norm_email(vault.identity(agent_key, slot_id).get("email"))
+        slot_email = _norm_email(vault.identity(agent_key, slot_id, **kw).get("email"))
         if slot_email == email or (slot_email is None and slot_id == active):
             return raw_email, active, slot_id
     return raw_email, active, None
 
 
-def _adopt_unregistered_live_account(agent_key: str, email: str) -> str | None:
+def _adopt_unregistered_live_account(
+    agent_key: str, email: str, *, scope: str | None = None
+) -> str | None:
     """Give a live login no slot holds its own profile and make it the active
     one; returns the new profile id, or None when nothing was registered.
+    ``scope`` is the provider entry the login was read from (per-provider
+    stores); the profile is created in it.
 
     Without this the ledger keeps naming some other account, and the next
     switch would capture this login into a slot that belongs to a different
@@ -172,14 +180,14 @@ def _adopt_unregistered_live_account(agent_key: str, email: str) -> str | None:
     store = app.cli_profiles_store
     vault = app.credential_vault
     try:
-        profile = store.create(agent_key=agent_key, name=email)
+        profile = store.create(agent_key=agent_key, name=email, scope=scope)
     except Exception as err:  # noqa: BLE001 — a watcher must never crash
         log.warning("registering the live %s account failed: %s", agent_key, err)
         return None
     profile_id = str(profile["id"])
     registered = False
     try:
-        if vault.harvest(agent_key, profile_id):
+        if vault.harvest(agent_key, profile_id, **({"scope": scope} if scope else {})):
             store.set_default(agent_key, profile_id)
             registered = True
         else:
@@ -200,14 +208,15 @@ def _adopt_unregistered_live_account(agent_key: str, email: str) -> str | None:
         except Exception as err:  # noqa: BLE001
             log.error("undoing profile %s for %s failed: %s", profile_id, agent_key, err)
         return None
+    # The profile is named by the account's email; the log names only the id.
     log.info(
-        "live %s account %s was unregistered; registered it as profile %s",
-        agent_key, email, profile_id,
+        "live %s account was unregistered; registered it as profile %s",
+        agent_key, profile_id,
     )
     return profile_id
 
 
-def align_default_to_live(agent_key: str) -> str | None:
+def align_default_to_live(agent_key: str, *, scope: str | None = None) -> str | None:
     """Point ``defaults[agent_key]`` at the slot whose snapshot matches the
     live credentials, registering a profile for the account when no slot holds
     it (see ``_adopt_unregistered_live_account``); returns the slot id when the
@@ -220,11 +229,13 @@ def align_default_to_live(agent_key: str) -> str | None:
     ``cli_profiles.set_default`` cannot interleave. Blocking."""
     from . import app
 
-    email, active, matched = _match_live_slot(agent_key)
+    email, active, matched = _match_live_slot(agent_key, scope)
     if matched is None:
         # An account nothing holds. Registering it needs an identity to name
         # it by, which is exactly what a None email says we do not have.
-        return None if email is None else _adopt_unregistered_live_account(agent_key, email)
+        return None if email is None else _adopt_unregistered_live_account(
+            agent_key, email, scope=scope
+        )
     if matched == active:
         return None
     app.cli_profiles_store.set_default(
@@ -235,6 +246,35 @@ def align_default_to_live(agent_key: str) -> str | None:
         agent_key, matched,
     )
     return matched
+
+
+def point_at_profile_holding_live(agent_key: str, *, scope: str | None = None) -> str | None:
+    """Make the profile whose slot holds exactly the live secret the active
+    one; returns its id, or None when no other profile holds it. For a login
+    with no email to match by: the same login followed twice lands on the
+    profile it got the first time. Never writes credentials. Call inside
+    ``switch_lock(agent_key)``. Blocking."""
+    from . import app
+    from .quota_failover import profile_scope
+
+    vault = app.credential_vault
+    kw = {"scope": scope} if scope else {}
+    live = vault.read_live(agent_key, strict=True, **kw).secret
+    if live is None:
+        return None
+    doc = app.cli_profiles_store.list()
+    active = doc["defaults"].get(agent_key)
+    for profile in doc["profiles"]:
+        profile_id = profile.get("id")
+        if (
+            profile.get("agentKey") != agent_key or profile_id == active
+            or profile_scope(agent_key, profile) != scope
+        ):
+            continue
+        if vault.read_slot(agent_key, profile_id, **kw).secret == live:
+            app.cli_profiles_store.set_default(agent_key, profile_id)
+            return str(profile_id)
+    return None
 
 
 async def reconcile_live_account(agent_key: str) -> None:

@@ -4,6 +4,7 @@
 // "Cancel pack" and no "accept all". Presentation only: usePackInstallFlow
 // owns the state and every IPC call.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { PackInstallFlow } from '../composables/usePackInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
 
@@ -94,8 +95,8 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
               :data-status="m.status"
             >
               <div class="pack-member-main">
-                <span class="pack-member-name" :title="m.display_name || m.id">{{ m.display_name || m.id }}</span>
-                <span class="pack-muted pack-member-id" :title="m.version ? `${m.id} · ${m.version}` : m.id">
+                <span class="pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
+                <span class="pack-muted pack-member-id" v-truncate>
                   {{ m.version ? `${m.id} · ${m.version}` : m.id }}
                 </span>
               </div>
@@ -148,7 +149,7 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
               :title="m.id"
             >
               <span class="pack-step-mark">{{ stepState(m) === 'done' ? '✓' : index + 1 }}</span>
-              <span class="pack-step-label">{{ m.id }}</span>
+              <span class="pack-step-label" v-truncate>{{ m.id }}</span>
             </li>
           </ol>
           <p v-if="!prepared" class="nv-loading">{{ $t('settings.extensions.pack.verifying') }}</p>
@@ -225,8 +226,8 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
           <ul class="pack-members">
             <li v-for="m in pack.members" :key="m.id" class="pack-member pack-member--result" :data-member="m.id">
               <span class="pack-member-main">
-                <span class="pack-member-name">{{ m.display_name || m.id }}</span>
-                <span v-if="m.display_name" class="pack-muted pack-member-id">{{ m.id }}</span>
+                <span class="pack-member-name" v-truncate>{{ m.display_name || m.id }}</span>
+                <span v-if="m.display_name" class="pack-muted pack-member-id" v-truncate>{{ m.id }}</span>
               </span>
               <span
                 class="pack-result"

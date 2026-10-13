@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import functools
+import hashlib
+import hmac
 import json
 import logging
 import mimetypes
@@ -36,6 +38,7 @@ from . import mem_probe
 from . import osplat
 from . import portable_credentials
 from . import push_delivery
+from . import resource_limits
 from . import subagent_tracker
 from .analyzer import DEFAULT_MODEL as ANALYZER_DEFAULT_MODEL
 from .analyzer import (
@@ -101,9 +104,13 @@ from .tokens_store import TokensStore
 
 
 # Electron gives the backend one bearer used only for the private Host WebSocket
-# registration. Keep it in this process, not in os.environ: backend-launched
-# shells, PTYs, Git hooks, and CLI helpers must not inherit a Host credential.
-_HOST_SESSION_TOKEN = os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", "")
+# registration. It arrives on stdin, on the confirm key's line after a space (see
+# __main__ and set_host_session_token) -- never in the environment: on macOS a
+# same-uid process reads the spawn env block with `ps -E` even after a pop.
+# The variable is still scrubbed, never adopted, so a stale launcher that sets
+# it cannot leak it into backend-launched shells, PTYs, Git hooks or helpers.
+os.environ.pop("NAVIDE_BACKEND_HOST_TOKEN", None)
+_HOST_SESSION_TOKEN = ""
 from .ui_settings import UiSettingsStore
 from .cli_risk import CliRiskService
 from .cli_risk_store import CliRiskStore
@@ -184,6 +191,17 @@ async def reject_foreign_host(request: Request, call_next: Any) -> Response:
     return await call_next(request)
 
 database = Database(app_data_dir() / DB_FILENAME)
+# Every write outside Navide's own data goes through this gate
+# (docs/en-US/convenience-features.md).
+from . import convenience_wiring  # noqa: E402
+from .convenience import ConvenienceGate  # noqa: E402
+
+convenience_gate = ConvenienceGate(
+    database,
+    backup_root=app_data_dir() / "convenience-backups",
+    notify=convenience_wiring.broadcast_change,
+)
+convenience_wiring.install(convenience_gate)
 workspace_databases = WorkspaceDatabases()
 project_store = ProjectStore(databases=workspace_databases)
 spawn_history_store = SpawnHistoryStore(databases=workspace_databases)
@@ -383,13 +401,17 @@ async def unicast_to(session: "Session | None", event: dict[str, Any]) -> bool:
 
 
 async def unicast_any(event: dict[str, Any]) -> bool:
-    """Send *event* to one arbitrary connected session.
+    """Send *event* to one connected window that runs the UI action bus.
 
     For requests any live window can service (e.g. a global UI action with no
     fixed owner), so a broadcast that every window would otherwise have to
-    ignore is unnecessary. Returns False when no session is connected.
+    ignore is unnecessary. Only sessions that announced `ui.invoke.ready` are
+    candidates — any other session (a plugin or editor window) would drop the
+    request and leave the caller to time out — and the most recently focused
+    one goes first. Returns False when no such window is connected.
     """
-    for session in list(_SESSIONS):
+    ready = [s for s in _SESSIONS if s.ui_bus_ready]
+    for session in sorted(ready, key=lambda s: s.ui_focused_at, reverse=True):
         if session.dead:
             continue
         try:
@@ -399,6 +421,9 @@ async def unicast_any(event: dict[str, Any]) -> bool:
             # than failing the request outright.
             log.warning("unicast send failed: %s", err)
             _SESSIONS.discard(session)
+            continue
+        if session.dead:
+            # send_json marks a vanished peer dead instead of raising.
             continue
         return True
     return False
@@ -427,13 +452,38 @@ def host_supports_plans_backend() -> bool:
     )
 
 
+def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
+    """Whether `proof` answers this connection's window challenge: main
+    returns HMAC-SHA256(host token, "navide-window/v2\\0" + challenge) to its
+    main windows (backend:proveWindow) and to nothing else. The token file is
+    readable by every pane process, so it cannot say this; the host token
+    never leaves main and this process. The challenge is per connection, so a
+    proof seen once is worth nothing on any other."""
+    expected = _HOST_SESSION_TOKEN
+    if not isinstance(proof, str) or not expected or not challenge:
+        return False
+    digest = hmac.new(
+        expected.encode(), b"navide-window/v2\0" + challenge.encode(), hashlib.sha256
+    ).hexdigest()
+    # Bytes, not str: compare_digest raises on a str with non-ASCII in it.
+    return secrets.compare_digest(proof.encode(), digest.encode())
+
+
+def set_host_session_token(token: str) -> bool:
+    """Adopt the host token main handed over on stdin. Returns whether there
+    was one; without it host.register refuses and no session is a window."""
+    global _HOST_SESSION_TOKEN
+    _HOST_SESSION_TOKEN = token if isinstance(token, str) else ""
+    return bool(_HOST_SESSION_TOKEN)
+
+
 def host_session_token_matches(token: Any) -> bool:
     """Validate the per-backend token used by Electron's Host session."""
     expected = _HOST_SESSION_TOKEN
     return (
         isinstance(token, str)
         and bool(expected)
-        and secrets.compare_digest(token, expected)
+        and secrets.compare_digest(token.encode(), expected.encode())
     )
 
 
@@ -488,6 +538,19 @@ class Session:
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
         self.plans_backend_v2 = False
+        # Set by `ui.invoke.ready`: only a main window runs the UI action bus,
+        # while plugin, editor and manager windows share this server and never
+        # answer a ui.invoke.request. unicast_any picks among these alone, the
+        # most recently focused first.
+        self.ui_bus_ready = False
+        self.ui_focused_at = 0.0
+        # Set by `window.prove` answering this connection's challenge (see
+        # navide_window_proof_matches): a Navide window, as opposed to any
+        # other client holding the token. ui_bus_ready is self-declared.
+        self.navide_window = False
+        # The nonce sent in `ws.welcome`; cleared by the first right
+        # `window.prove`, so a connection is proved at most once.
+        self.window_challenge = secrets.token_hex(32)
         # Throttle state for the slow-send probe (see _note_send_timing).
         # None rather than 0.0: the first slow send must always report, which a
         # zero baseline would swallow whenever the clock starts near zero.
@@ -902,6 +965,7 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
             # stops, so the count would stay above zero for a pane id that no
             # longer has a CLI behind it.
             subagent_tracker.reset(str(exit_pane_id))
+        await ws_handlers.note_terminal_exit_async(payload)
     session_id = payload.get("terminal_session_id") if isinstance(payload, dict) else None
     if session_id and event.get("type") == "terminal.exit":
         sess = _PTY_OWNERS.pop(session_id, None)
@@ -1537,6 +1601,20 @@ def track_live_session(
     _schedule_live_scan(key)
 
 
+def pane_token_total(pane_id: str) -> dict[str, int] | None:
+    """The live token totals of every session ``pane_id`` is bound to, summed;
+    None when the pane has no tracked session. Read-only."""
+    found = False
+    total = _empty_totals()
+    for state in list(_live_scans.values()):
+        if pane_id and pane_id in state["panes"]:
+            found = True
+            for key, value in (state.get("totals") or {}).items():
+                if isinstance(value, int):
+                    total[key] = total.get(key, 0) + value
+    return total if found else None
+
+
 def refresh_live_scans(workspace_path: str) -> None:
     """os.stat sweep over a workspace's tracked sessions, rescanning only the
     logs that changed. Called from `tokens.snapshot` so the panel is
@@ -2087,6 +2165,9 @@ async def _start_log_watcher() -> None:
             ui_settings_store.get().get(push_delivery.DISABLED_SETTING_KEY) or []
         )
     )
+    # Settings → Resource limits, for code with no handle on the store
+    # (terminals marks new panes for the leftover-server list).
+    resource_limits.set_settings_reader(lambda: ui_settings_store.get())
     # Per-pane watch files hold message text in the clear and belong to panes
     # that died with the previous process. Only a startup sweep ever removes
     # the ones a killed backend left behind.
@@ -2166,6 +2247,15 @@ async def _start_log_watcher() -> None:
     except Exception as err:  # noqa: BLE001
         log.warning("scheduler startup failed: %s", err)
 
+    # Each workspace's self-evolution: its watchdog notices runs that ran past
+    # their time or budget, and runs a missed slot once its workspace opens.
+    from . import evolve_service
+
+    try:
+        await evolve_service.get_service().start()
+    except Exception as err:  # noqa: BLE001
+        log.warning("evolve startup failed: %s", err)
+
     # Name a frozen backend the moment it freezes: a daemon thread logs the
     # loop thread's stack when the loop stops turning (issue #24), instead of
     # the freeze being reproducible only under sample(1).
@@ -2228,15 +2318,16 @@ async def _start_log_watcher() -> None:
     # backend for reliable "agent active / turn complete / parked on a prompt"
     # signals that buffer scanning cannot give. Each installer no-ops when its
     # CLI's config root is absent, and failure is non-fatal — the orchestrator
-    # falls back to log-tail + sentinel detection.
-    for _key, _spec in _CLI_VENDORS.items():
-        if _spec.install_hooks is None:
-            continue
-        try:
-            result = _spec.install_hooks(str(backend_port_file()))
-            log.info("%s hooks install: %s", _key, result)
-        except Exception as err:  # noqa: BLE001
-            log.warning("%s hooks install failed: %s", _key, err)
+    # falls back to log-tail + sentinel detection. Each is the convenience
+    # feature "<cli>.hooks": announced when it changes a file, skipped when the
+    # user turned it off or deleted the hooks by hand.
+    convenience_wiring.remember_loop(asyncio.get_running_loop())
+    # Claude's hooks ride on the panes Navide starts (--settings), not on the
+    # user's ~/.claude/settings.json; registered before the pass that moves them
+    # (the CLI hooks pass below, after the plugins).
+    from . import claude_hooks
+
+    convenience_wiring.register_pane_carrier("claude", claude_hooks.prepare_pane_settings)
 
     # Backend plugin host: load and activate only bundled legacy v1 plugins.
     # The Host-bound Manifest v2 activation catalog is validated by the wiring
@@ -2258,6 +2349,14 @@ async def _start_log_watcher() -> None:
         await plugin_wiring.run_startup_hooks(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin host startup failed: %s", err)
+
+    # The CLI hooks pass (see above), after the plugins: Copilot's hooks ride
+    # on the pane shims the skills plugin builds (copilot_hooks), and fall
+    # back to the shared file when that plugin is not running.
+    from . import copilot_hooks
+
+    convenience_wiring.register_pane_carrier("copilot", copilot_hooks.prepare_pane_hooks)
+    convenience_wiring.install_cli_hooks(str(backend_port_file()))
 
     # Navide's own MCP server. Deliberately outside the guard above: this is
     # the endpoint every CLI pane is wired to, and it must come up even if
@@ -2285,77 +2384,122 @@ async def _start_log_watcher() -> None:
 @app.on_event("shutdown")
 async def _stop_log_watcher() -> None:
     global _log_watcher, _git_watcher, _credential_watcher
-    await cli_risk_service.close()
-    if _ownerless_sweeper_task is not None:
-        _ownerless_sweeper_task.cancel()
-    if _mem_probe_task is not None:
-        _mem_probe_task.cancel()
-    if _dev_time_sweeper_task is not None:
-        _dev_time_sweeper_task.cancel()
-    from . import scheduler
+    try:
+        await cli_risk_service.close()
+        if _ownerless_sweeper_task is not None:
+            _ownerless_sweeper_task.cancel()
+        if _mem_probe_task is not None:
+            _mem_probe_task.cancel()
+        if _dev_time_sweeper_task is not None:
+            _dev_time_sweeper_task.cancel()
+        from . import scheduler
 
-    await scheduler.shutdown()
-    from . import voice_handlers
+        await scheduler.shutdown()
+        from . import evolve_service
 
-    await voice_handlers.shutdown()
-    await loop_watchdog.stop()
-    # PTY children are detached process groups (start_new_session=True); they
-    # must be killed here or they outlive the app as CPU-spinning orphans.
-    # Guarded so a sweep failure never skips the watcher/MCP teardown below.
-    if _TERMINALS is not None:
+        await evolve_service.shutdown()
+        from . import voice_handlers
+
+        await voice_handlers.shutdown()
+        await loop_watchdog.stop()
+        # PTY children are detached process groups (start_new_session=True); they
+        # must be killed here or they outlive the app as CPU-spinning orphans.
+        # Guarded so a sweep failure never skips the watcher/MCP teardown below.
+        if _TERMINALS is not None:
+            try:
+                await _TERMINALS.kill_all()
+            except Exception as err:  # noqa: BLE001
+                log.warning("pty shutdown sweep failed: %s", err)
+        if _log_watcher is not None:
+            # Settle what the drain has read but not yet counted, BEFORE stop()
+            # cancels the flush task that would have done it. See
+            # LogWatcher.drain_pending_tokens.
+            await _log_watcher.drain_pending_tokens()
+            _log_watcher.stop()
         try:
-            await _TERMINALS.kill_all()
+            tokens_store.flush()
         except Exception as err:  # noqa: BLE001
-            log.warning("pty shutdown sweep failed: %s", err)
-    if _log_watcher is not None:
-        # Settle what the drain has read but not yet counted, BEFORE stop()
-        # cancels the flush task that would have done it. See
-        # LogWatcher.drain_pending_tokens.
-        await _log_watcher.drain_pending_tokens()
-        _log_watcher.stop()
-    try:
-        tokens_store.flush()
-    except Exception as err:  # noqa: BLE001
-        log.warning("token store shutdown flush failed: %s", err)
-    try:
-        dev_time_store.shutdown()
-    except Exception as err:  # noqa: BLE001
-        log.warning("dev time store shutdown failed: %s", err)
-    if _git_watcher is not None:
-        _git_watcher.stop()
-    if _credential_watcher is not None:
-        _credential_watcher.stop()
-    await channels.stop()
-    await server_link.stop()
+            log.warning("token store shutdown flush failed: %s", err)
+        try:
+            dev_time_store.shutdown()
+        except Exception as err:  # noqa: BLE001
+            log.warning("dev time store shutdown failed: %s", err)
+        if _git_watcher is not None:
+            _git_watcher.stop()
+        if _credential_watcher is not None:
+            _credential_watcher.stop()
+        await channels.stop()
+        await server_link.stop()
+    finally:
+        # Delivered message keys still in the batch: written now, or a message
+        # received just before a normal restart could be replayed after it.
+        # After channels and the link stop, since they record keys until then,
+        # and in a finally so no earlier step that raises can skip it (R2-1).
+        try:
+            from . import trust_store
+
+            trust_store.flush_seen_messages()
+        except Exception as err:  # noqa: BLE001
+            log.warning("delivered-message ledger shutdown flush failed: %s", err)
     await mcp_manager.shutdown()
+    log.info("shutdown: MCP clients stopped")
     try:
         await plugin_wiring.run_shutdown_hooks(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin shutdown hooks failed: %s", err)
+    log.info("shutdown: plugin hooks done")
     try:
         await mcp_server.shutdown()
     except Exception as err:  # noqa: BLE001
         log.warning("MCP server shutdown failed: %s", err)
+    log.info("shutdown: MCP server stopped")
     try:
         plugin_wiring.shutdown(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin host shutdown failed: %s", err)
+    log.info("shutdown: plugin host stopped")
     try:
         guard_runtime.flush()
     except Exception as err:  # noqa: BLE001
         log.warning("guard audit flush failed: %s", err)
+    log.info("shutdown: guard audit flushed")
     # Last: nothing may touch the databases after this point.
     try:
         workspace_databases.close_all()
     except Exception as err:  # noqa: BLE001
         log.warning("workspace database close failed: %s", err)
+    log.info("shutdown: workspace databases closed")
     try:
         database.close()
     except Exception as err:  # noqa: BLE001
         log.warning("database close failed: %s", err)
+    log.info("shutdown: database closed")
     _log_watcher = None
     _git_watcher = None
     _credential_watcher = None
+
+
+def _default_pool_reading(loop: asyncio.AbstractEventLoop) -> dict[str, int]:
+    """The shared default executor's size and backlog. It is created lazily,
+    so before the first to_thread it reads as empty. Private attributes of
+    ThreadPoolExecutor — read-only, and the caller drops the reading on error."""
+    executor = getattr(loop, "_default_executor", None)
+    if executor is None:
+        return {"threads": 0, "max_workers": 0, "queued": 0}
+    return {
+        "threads": len(executor._threads),  # noqa: SLF001
+        "max_workers": int(executor._max_workers),  # noqa: SLF001
+        "queued": int(executor._work_queue.qsize()),  # noqa: SLF001
+    }
+
+
+async def _loop_lag_ms(loop: asyncio.AbstractEventLoop) -> float:
+    """How long a callback waits behind the work already queued on the loop."""
+    started = time.monotonic()
+    ran = loop.create_future()
+    loop.call_soon(ran.set_result, None)
+    await ran
+    return round((time.monotonic() - started) * 1000, 3)
 
 
 @app.get("/health")
@@ -2363,11 +2507,22 @@ async def health() -> dict[str, Any]:
     # backend_log is deliberately absent: the absolute path carries the account
     # name, and this is the one route that answers without a credential. The
     # clients that need it read it from the ws settings.paths reply instead.
-    return {
+    body: dict[str, Any] = {
         "status": "ok",
         "version": __version__,
         "started_at": STARTED_AT,
     }
+    # A load reading for diagnosing starvation. Measuring must never cost the
+    # route its answer, so any failure just leaves the block out.
+    try:
+        loop = asyncio.get_running_loop()
+        body["diagnostics"] = {
+            "loop_lag_ms": await _loop_lag_ms(loop),
+            "default_pool": _default_pool_reading(loop),
+        }
+    except Exception as err:  # noqa: BLE001 — fail open
+        log.debug("health diagnostics unavailable: %s", err)
+    return body
 
 
 # Font mimes served inline (specimen @font-face fetch, /fs/page subresources).
@@ -2725,7 +2880,12 @@ async def cli_hook(vendor: str, request: Request) -> Any:
             # call the pane idle and start injecting the NEXT queued message
             # over stdin, into a pane that is already working.
             event_type = "agent_active"
-    if pane_id:
+    # idle_prompt fires about a minute after EVERY finished turn (draft in the
+    # composer or not). It reports the pane waiting, not working, so recording
+    # it as agent_active would replace the turn_complete entry for good —
+    # cli_get_status would show a finished pane as active, with no turn text.
+    # The broadcast below still carries it for the renderer to judge.
+    if pane_id and notification_type != "idle_prompt":
         # The log-reader sink is not the only writer of _pane_activity any
         # more: for the hook vendors the Stop hook is the earliest and most
         # reliable end-of-turn signal there is, and cli_wait_idle could not see
@@ -2922,6 +3082,13 @@ async def ws(websocket: WebSocket) -> None:
     log.info("ws client connected")
     session = Session(websocket)
     _SESSIONS.add(session)
+    # First thing on every connection: the challenge a Navide main window
+    # answers through main (window.prove) to be told apart from any other
+    # client holding the token. Fresh per connection, so a reconnect proves
+    # again and a proof seen once cannot be replayed.
+    await session.send_json(
+        make_event("ws.welcome", {"windowChallenge": session.window_challenge})
+    )
     # An MCP client reads this backend's tool list once, when it connects, so a
     # CLI that was already talking to the previous backend keeps the tools it
     # saw then. Told to the window rather than logged: only the window can put

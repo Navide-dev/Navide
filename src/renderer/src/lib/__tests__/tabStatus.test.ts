@@ -4,7 +4,7 @@
 // Every case below is a rule the UI depends on, so a change in the vocabulary
 // (a new DisplayStatus, say) fails here rather than silently reading as idle.
 import { describe, expect, it } from 'vitest'
-import { rollupTabStatus, sameRenderedTabs } from '../tabStatus'
+import { countLivePanes, rollupTabStatus, sameRenderedTabs } from '../tabStatus'
 
 describe('rollupTabStatus', () => {
   it('reports empty for a tab with no panes', () => {
@@ -64,8 +64,8 @@ describe('rollupTabStatus', () => {
 
 describe('sameRenderedTabs', () => {
   const tabs = [
-    { key: 'rg-1', label: 'Main', count: 2, status: 'active' as const },
-    { key: 'rg-2', label: 'Specs', count: 1, status: 'idle' as const }
+    { key: 'rg-1', label: 'Main', count: 2, live: 2, status: 'active' as const },
+    { key: 'rg-2', label: 'Specs', count: 1, live: 1, status: 'idle' as const }
   ]
 
   it('treats an identical list as unchanged', () => {
@@ -75,6 +75,7 @@ describe('sameRenderedTabs', () => {
   it.each([
     ['status', { status: 'idle' as const }],
     ['count', { count: 3 }],
+    ['live count', { live: 1 }],
     ['label', { label: 'Renamed' }],
     ['key', { key: 'rg-9' }]
   ])('sees a changed %s', (_field, patch) => {
@@ -85,5 +86,18 @@ describe('sameRenderedTabs', () => {
   it('sees an added or removed tab', () => {
     expect(sameRenderedTabs(tabs, tabs.slice(0, 1))).toBe(false)
     expect(sameRenderedTabs(tabs.slice(0, 1), tabs)).toBe(false)
+  })
+})
+
+describe('countLivePanes', () => {
+  // The workspace heading's "live / total": a cold-restored or reclaimed
+  // placeholder is the only pane that reports 'waiting' and holds no process.
+  it('counts every pane that is not a waiting placeholder', () => {
+    expect(countLivePanes(['running', 'waiting', 'idle', 'disconnected', 'waiting'])).toBe(3)
+  })
+
+  it('is zero for a tab of placeholders or no panes', () => {
+    expect(countLivePanes(['waiting', 'waiting'])).toBe(0)
+    expect(countLivePanes([])).toBe(0)
   })
 })

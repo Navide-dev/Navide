@@ -1,0 +1,1534 @@
+[
+ {
+  "description": "List the CLI panes you can send instructions to with cli_send.\n\n    Returns {you, targets}. Each target: {name, address, pane_id,\n    workspace_path, same_workspace, busy, offline, git?}. Address a pane in YOUR\n    workspace by its bare name; a pane in another workspace window by the\n    `<folder>/<pane>` address given here. A caller with no pane identity (host\n    / external credential) has no \"own workspace\" — every target comes back\n    with same_workspace false and \"you\" set to the credential kind (\"host\" or\n    \"external\"); always use the qualified address. Read-only.\n\n    Plain terminal panes (login shells) are listed too; cli_get_status reports\n    their `agent_key` as \"terminal\", and whatever you cli_send one runs as a\n    shell command — see cli_send.\n\n    This is who exists, not who is related to you — the list carries no\n    lineage. The panes you opened with cli_open_agent are yours to keep track\n    of; that record lives in your own context, not in this answer. Refer to\n    them however reads naturally when talking to the user; the word does not\n    matter, remembering who you opened does.\n\n    `pane_id` is that pane's internal id. It is the key every `ui.pane.*` action\n    takes (`ui.pane.close`, `ui.pane.focus`, `ui.pane.getStatus` via ui_invoke)\n    — those reject a pane NAME — and it is also accepted by cli_send,\n    cli_send_and_wait, cli_read_log, cli_get_status and cli_wait_idle in place\n    of an address. Prefer `address`: it is stable and readable, and it survives\n    the pane being rebuilt. Reach for `pane_id` when an address cannot say\n    which pane you mean — two targets below with the SAME address are two panes\n    sharing a name, and every one of those tools refuses that address as\n    \"ambiguous-target\" rather than guessing between them. Remote targets have no\n    local id and carry none, so they can only be addressed by name.\n\n    `offline` marks a pane whose Navide window has lost its connection: it still\n    exists and is expected back, but sending to it fails until it returns.\n\n    `git` appears on a local target whose pane works inside a git checkout:\n    {branch, worktreeRoot, isLinkedWorktree, dirty, ahead, behind, fetchedAt}.\n    It describes the checkout the pane's CLI runs in (its terminal's cwd, so a\n    pane in a linked worktree reports that worktree), not the workspace folder.\n    `branch` is the short sha when HEAD is detached; `dirty` is the number of\n    `git status --porcelain` lines; `ahead` / `behind` count commits against\n    `origin/main` (null when there is no origin/main); `fetchedAt` is when\n    FETCH_HEAD was last written (ISO-8601 UTC, null when never fetched) —\n    nothing here fetches, so ahead/behind are only as fresh as that. The\n    snapshot is cached per worktree for up to ~30 s and refreshed early when\n    Navide's git watcher sees a change, so a just-made edit can take that long\n    to count. Absent outside a repository, or when git did not answer in\n    time; remote targets never carry it.\n\n    `hold_reason` appears on a target that has a cli_send message still waiting\n    to go in, and names what is holding it (\"typing\", \"mid-turn\", \"starting\",\n    \"behind\", …). It is the same reason the Messages panel shows, and it is\n    what makes `busy` explainable — but it exists only while a message sent\n    from here is queued for that pane, so its absence says nothing.\n\n    `remote_targets` appears only when this machine is linked to a Navide-Server\n    and that server knows of panes on *other* machines. Those are a separate\n    list because they are a separate deal: their `address` is the three-part\n    `<device>/<workspace>/<pane>` form, the message travels through the server\n    (so it can fail in ways a local one cannot — the far machine may be offline,\n    or refuse on policy grounds), and there is no reading their output from\n    here. Each carries `device` (the machine's human-readable label, or its id\n    when the server knows no name), `host_online` (that whole machine is\n    reachable) and `status` (the server's own word for the pane). `offline` is\n    true when either half says the message would not land right now. Prefer a\n    local target when one would do.\n\n    Four tools take that three-part address: cli_send, cli_send_and_wait,\n    cli_get_status and cli_wait_idle. So a remote pane can be told something,\n    asked something and watched — but never read, stopped or closed, because\n    those three need the pane's own machine. Two of them say so: cli_interrupt\n    refuses a remote address with \"interrupt-local-only\" and cli_close_agent\n    with \"close-local-only\". cli_read_log does not — it has no remote branch,\n    so the address falls through to the local lookup and comes back\n    \"unknown-target\", which reads like a typo and is not one. `pane_id` is no\n    way around any of it: remote targets carry none, so the three-part name is\n    the only handle there is.\n\n    That key being absent covers two situations that are not the same: this\n    machine has no server link at all, or it has one and no other machine has a\n    pane open. cli_whoami's `cloud` key tells them apart, and only the first is\n    something the user can go do anything about. Linking itself — signing in,\n    pairing a device, trusting or blocking one — moves trust state and is on no\n    tool by design: it is the user's to do in Navide's account window, so say\n    that rather than looking for a tool that would do it for them.\n    ",
+  "name": "cli_list_targets",
+  "parameters": {
+   "properties": {},
+   "title": "cli_list_targetsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Your own entry, in the same shape cli_list_targets gives you for others.\n\n    cli_list_targets deliberately leaves you out of its `targets` and names you\n    only as `you`, a single address string. So every field it hands you about\n    everyone else — `pane_id` above all — was the one thing you could not learn\n    about yourself. That is what this answers. Read-only.\n\n    `pane_id` is why this exists. It is the key every `ui.pane.*` action takes\n    (`ui.pane.close`, `ui.pane.focus`, `ui.pane.getStatus` via ui_invoke) and\n    those REFUSE a pane name, so without it you could close or focus any pane\n    but your own. It also disambiguates you to cli_read_log and cli_get_status\n    when another pane in your workspace shares your name — an address both of\n    them refuse as \"ambiguous-target\".\n\n    `spawned_by` names the pane that opened you, when one did, as\n    {pane_id, name, address}. This is the only place that fact survives: the\n    name of whoever opened you was written into the words of your kickoff task\n    and nowhere else, so a compaction of your context loses it permanently —\n    along with any idea of who your finished work should go back to. When that\n    pane has since closed, only `pane_id` comes back alongside `gone: true`;\n    the key is absent entirely when nobody opened you.\n\n    This is a fact about yourself, not the roster's lineage: cli_list_targets\n    still says nothing about who is related to whom, and who *you* opened is\n    still yours alone to remember.\n\n    `waiting_on_me` is who is BLOCKED on you at this moment — every caller\n    currently parked in a cli_wait_idle or cli_send_and_wait aimed at your\n    pane, as [{waiting_s, pane_id?, name?, address?, caller?}], longest wait\n    first. Waiting was one-way before this: someone could sit on a two-minute\n    budget while you, deciding you had another twenty minutes of digging in\n    you, had no way to learn that finishing now was worth more than finishing\n    well. Read it before committing to a long stretch of work — a waiter at 90\n    seconds is about to time out. `caller` (\"host\" / \"external\") stands in for\n    a waiter that has no pane and therefore no name. The key is ABSENT when\n    nobody is waiting; it is never an empty list. It is also process memory: a\n    backend restart forgets every wait, so absence is \"nobody is parked on me\n    that this backend knows of\", not proof that nobody wants your answer.\n\n    `cloud` says whether this machine is linked to a Navide-Server, which is\n    what decides whether panes on the user's OTHER machines can be addressed at\n    all. `state` is \"connected\" when they can, and \"connecting\", \"unreachable\",\n    \"unauthorized\" or \"waiting-for-keychain\" when the link exists but is not\n    carrying anything right now — each one a different thing to tell the user.\n    `device_id` is this machine's own id once the server has issued one. The\n    key is ABSENT when no link is configured. Read it when cli_list_targets\n    came back with no `remote_targets`: that absence means \"no server\" and \"a\n    server, but no pane open on any other machine\" alike, and this is what\n    tells the two apart. Nothing here is a control: signing in, pairing a\n    device, trusting or blocking one all move trust state, so they are the\n    user's to do in Navide's account window and are deliberately on no tool.\n\n    `delegation_hint` restates the rule for where delegated work goes (a\n    Navide pane via cli_open_agent rather than your own subagents) so that a\n    pane which never read the server instructions still meets it here.\n\n    A caller with no pane identity (host / external credential) is not a pane\n    and has none of these: it gets {ok, caller} only.\n    Returns {ok, caller, name, address, pane_id, workspace_path, agent_key,\n    busy, offline, delegation_hint, hold_reason?, surface?, window_kind?,\n    spawned_by?, waiting_on_me?,\n    cloud?} or {ok: false, error}.\n    ",
+  "name": "cli_whoami",
+  "parameters": {
+   "properties": {},
+   "title": "cli_whoamiArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Open a new CLI pane and give it a task.\n\n    Delegation rule: work that edits files, runs longer than a few minutes, or\n    that the user may want to watch, interrupt or take over goes to a Navide\n    CLI pane via cli_open_agent — not to your own subagent facility (Agent /\n    Task tools). A pane is visible in Navide, can be opened mid-run and\n    outlives your session; a subagent is a black box that hands back one\n    summary. Keep subagents for short read-only lookups whose whole result is\n    a paragraph.\n\n    `agent` is the CLI to run (e.g. \"claude\", \"codex\"), `name` is what the pane\n    will be called — that name is also its messaging address, so pick something\n    role-shaped like \"reviewer\" — and `task` is what it should do.\n\n    `agent: \"terminal\"` opens a plain login-shell pane instead of an agent.\n    Its `task` is optional: a shell command line typed once after the prompt\n    is up, exactly as given — nothing is appended, so the report-back advice\n    below does not apply (a shell cannot report). Empty `task` opens it on a\n    bare prompt. `model`, `effort` and `session_id` are refused for it. Its\n    kickoff is typed once and never retyped (a retype would run the command\n    twice), so an unconfirmed one answers \"unverified\": read cli_read_log\n    before resending. A destructive `task` is refused before the pane opens\n    (error_code \"terminal-command-refused\" — see cli_send). Talk to it\n    afterwards with cli_send — see there.\n\n    The pane you open is related to you: you opened it, so its result needs to\n    come back to you. When you talk to the user about it, use whatever reads\n    naturally — partner, junior, the one you sent out, your child agent. No\n    word is prescribed and none is more correct than another; what matters is\n    not the label but that you remember who you opened.\n\n    Say both of these in `task`: who opened it (your own name, from\n    cli_list_targets' `you`), and who to send the result to when it is done.\n    Without that line it finishes, writes the answer to its own screen, and\n    nobody ever sees it.\n\n    Pane callers open the pane in their own workspace; `workspace_path` is\n    ignored for them. A caller with no pane identity (host / external\n    credential) has no workspace of its own, so `workspace_path` is required —\n    the pane opens there with no parent, so it has no child/depth counts of\n    its own; the workspace's CLI-pane count is still tracked for the advisory\n    below.\n\n    `run_group_id` optionally chooses an existing tab group in the pane's\n    workspace. Omit it (or pass null) to keep the usual parent/resume/active\n    tab placement. `\"\"` explicitly selects the ungrouped manual tab. Nonempty\n    ids must belong to that workspace; read them from ui_snapshot or\n    cli_list_sessions. This overrides a resumed conversation's saved group,\n    but keeps its saved parent. It cannot be combined with `pane_id`: reopen\n    that pane first, then use cli_place_pane to move it.\n    When explicitly requested, a successful answer includes `run_group_id`.\n\n    `ok: true` means the pane exists, and `kickoff` says whether the task\n    reached it. The call blocks until the window has booted the CLI, waited\n    for its prompt and typed the task (up to ~45s on top of the spawn), then\n    answers `kickoff: \"sent\"` — our own text was observed landing and being\n    submitted — or `kickoff: \"failed\"`: the injection could not be verified\n    after a bounded retry, or no verdict arrived in time. A failed kickoff is\n    still `ok: true` (the pane is open; do NOT open it again) and comes with\n    `hint` and the window's reason in `advisories`. FOLLOW THE HINT: when the\n    window saw the task not go in, it says to resend with cli_send to the\n    returned address; when the window could not tell (its text may be sitting\n    in the composer, or it was still typing when the deadline hit), it says to\n    read cli_get_status first — a blind resend there doubles the task.\n    For a pane caller, the new pane is asked to report its result to you by\n    message when it finishes — but that report is the child agent's own\n    output, not a guarantee from Navide: it is held until you are between\n    turns, and nothing arrives if the child never writes the block. Poll\n    cli_get_status / cli_wait_idle whenever you need to be sure it is still\n    working. An external or host caller gets no such message at all and must\n    poll.\n\n    `model` names the model the new pane runs, and `effort` its reasoning\n    level. Both are optional, and asking a CLI that cannot take them is\n    REFUSED rather than ignored — otherwise the pane would start on the\n    default and look no different from one that got what it asked for.\n\n    That guarantee covers the vendor, not the value: a CLI that accepts\n    `--model` may still reject the id itself, and several report that only\n    briefly before continuing on their default. So a refusal here means the\n    pane did not open, while silence means it opened — not that the model was\n    recognised. Which CLIs accept them differs: most take a\n    model, only some take a separate effort — the rest encode effort in the\n    model id itself (cursor's `gpt-5.3-codex-high`), and two take neither.\n    The refusal names what that CLI accepts, so ask for what you want and\n    read the error rather than guessing first. Model ids are not checked\n    here — an unknown one is the CLI's own error to report — but effort is\n    checked against that CLI's vocabulary before the pane opens.\n\n    Use the returned name, not the one you asked for: a concurrent request may\n    have taken that name, in which case yours gets a suffix.\n\n    Refused when the name is taken, the agent key is unknown, or the task is\n    empty. A high child/workspace/depth count never refuses the spawn — it\n    just gets logged as a diagnostic warning and, on success, also returned\n    here as `advisories` (a list of human-readable notes; the key is absent\n    when there is nothing to report).\n    `pane_id` is the new pane's internal id — the key `ui.pane.close`,\n    `ui.pane.focus` and `ui.pane.getStatus` take through ui_invoke, all of which\n    refuse a pane NAME. Keep it if you may want to close or focus what you\n    opened; `address` remains the right thing to send to.\n    Returns {ok, name, address, pane_id, kickoff, hint?, advisories?} or\n    {ok: false, error}.\n\n    Passing `pane_id` REOPENS an existing pane instead of creating one: the\n    one whose cli_list_targets row says `realized: false` — a restore\n    placeholder holding a saved pane with no CLI behind it. Use the id, not the\n    name: the placeholder already owns that name, so asking for it by `name`\n    opens a second pane called `<name>-2` and leaves the first one closed.\n    `agent`, `name` and `task` are ignored on this path — the pane keeps its\n    own, and nothing is injected; send the task with cli_send afterwards (or\n    use cli_send(open_target=True) to do both at once). Answers {ok, pane_id,\n    name, address, realized, reason, reopened: true}; `reason: \"fresh\"` means\n    a new session with no memory of the earlier conversation. A pane that is\n    already open answers reopened: false, reason \"already-open\" and is left\n    alone. Unknown ids are refused with \"unknown-pane-id\".\n\n    `session_id` opens a NEW pane that RESUMES an existing conversation — the\n    CLI's own session id, not a Navide pane id. This is what `pane_id` cannot\n    do: a placeholder can only ever resume the one conversation its own record\n    remembers, while this takes any session the vendor still has on disk,\n    including one started outside Navide in a plain terminal. Read the ids from\n    cli_list_sessions. The pane opens with the vendor's own resume syntax\n    (`claude --resume <id>`, `codex resume <id>`, `opencode --session <id>`, …)\n    so it starts with the earlier conversation's memory intact, and `task` is\n    then typed into it as usual — send the follow-up, not a restatement of what\n    that conversation already knows.\n\n    The id is checked against the vendor's own session store before the pane\n    opens: an id with nothing on disk is REFUSED with \"unknown-session-id\"\n    rather than opening a pane that silently starts fresh, which is\n    indistinguishable from a successful resume until you read the transcript.\n    `session_id` and `pane_id` are mutually exclusive — one reopens a pane\n    Navide already holds, the other opens a new pane onto an old conversation.\n    aider has no session ids at all and is refused.\n    ",
+  "name": "cli_open_agent",
+  "parameters": {
+   "properties": {
+    "agent": {
+     "title": "Agent",
+     "type": "string"
+    },
+    "effort": {
+     "default": "",
+     "title": "Effort",
+     "type": "string"
+    },
+    "model": {
+     "default": "",
+     "title": "Model",
+     "type": "string"
+    },
+    "name": {
+     "title": "Name",
+     "type": "string"
+    },
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "run_group_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Run Group Id"
+    },
+    "session_id": {
+     "default": "",
+     "title": "Session Id",
+     "type": "string"
+    },
+    "task": {
+     "title": "Task",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "agent",
+    "name",
+    "task"
+   ],
+   "title": "cli_open_agentArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Conversations in this workspace a new pane could be opened onto.\n\n    This is where the `session_id` cli_open_agent takes comes from. A CLI\n    session outlives the pane that ran it: the pane is closed, the app is\n    restarted, the pane is rebuilt — the vendor's transcript stays on disk, and\n    naming its id opens a pane that starts with that conversation's memory\n    rather than an empty one.\n\n    Newest first. Each row is `{session_id, agent_key, pane_id, pane_name,\n    spawned_at, removed_at, starred, live, resumable}`:\n\n    - `resumable` is the vendor's own on-disk check — the same one behind the\n      Rebuild button. **A row with `resumable: false` is history, not an\n      option**: the transcript is gone and cli_open_agent refuses the id.\n    - `live` says the pane that owned the conversation is still open. Resuming\n      a live session into a second pane is what forks or corrupts it, because\n      the CLI holding it does not expect a second reader — send to that pane\n      with cli_send instead. Pass `include_gone: false` to see only live ones.\n    - `pane_id` is the pane that owned it, and it may be gone; it is for\n      recognising the row, not for addressing anything. Reopening a *placeholder*\n      is cli_open_agent(pane_id=…), which is a different operation.\n\n    `agent` narrows to one vendor key (\"claude\", \"codex\", …). `limit` is capped\n    at 200, and one call scans the most recent few hundred panes rather than\n    the whole history, so `scanned` says how deep it actually went. One\n    conversation appears once however many panes pointed at it.\n\n    A pane caller's own workspace is the default; a host or external caller has\n    none and must pass `workspace_path`. Read-only — nothing here opens,\n    closes or changes a pane.\n    ",
+  "name": "cli_list_sessions",
+  "parameters": {
+   "properties": {
+    "agent": {
+     "default": "",
+     "title": "Agent",
+     "type": "string"
+    },
+    "include_gone": {
+     "default": true,
+     "title": "Include Gone",
+     "type": "boolean"
+    },
+    "limit": {
+     "default": 50,
+     "title": "Limit",
+     "type": "integer"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "cli_list_sessionsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Send an instruction to another CLI pane, in this or another workspace.\n\n    `to` is a pane name for a pane in your own workspace, or `<folder>/<pane>`\n    for one in another workspace window — cli_list_targets shows both forms. A\n    caller with no pane identity (host / external credential) has no \"own\n    workspace\" and must always use the qualified `<folder>/<pane>` form. The\n    text is delivered verbatim and submitted for the receiving agent to act on,\n    once that pane is idle; it is queued if the pane is mid-turn. An unknown or\n    ambiguous target is refused rather than guessed.\n\n    A chat sender (`telegram:alice`) is not a pane: answer it in your turn (an\n    MSG block addressed to it), which Navide posts to your bound chat when the\n    turn ends. Sent here, nothing goes out — the answer is {ok: true,\n    handed_to_channel: true, note} and the text is dropped.\n\n    A plain terminal pane (agent_key \"terminal\" in cli_get_status) is a\n    login shell, not an agent: `text` is typed in bare — no sender line, no\n    reply instructions — and Enter runs it as a shell command line with the\n    user's privileges. It is held while anything but the shell is in front of\n    its tty — a running command, an editor, a sudo/ssh password prompt, a REPL,\n    printing or not — and for 60s after the user's last keystroke in it; it\n    never gets a turn end, so cli_wait_idle / cli_send_and_wait settle on\n    \"quiet_period\" for it; read cli_read_log for the result. Where the platform\n    cannot see the shell's prompt (Windows) the answer carries\n    `prompt_check: \"unavailable\"` and a warning, and it is held only while\n    printing. Enter is pressed once: \"delivered\" means the line went in, not\n    that the command succeeded. A multi-line `text` fails (send one line at a\n    time) when the shell has no bracketed paste, and a message still queued\n    after 2 minutes fails rather than running late. A terminal cannot reply, is\n    left out of `to: \"group\"` broadcasts, and refuses content from a chat\n    channel or remote device.\n\n    Destructive commands are refused for a terminal, never typed — whatever\n    the Guard switch says. The line is split into segments (; && || | &,\n    newlines, $( ), backticks) and one refused segment refuses it all:\n    anything Guard rates critical (high too, if the user turned that\n    category on — it is off by default), recursive deletes of / ~ or outside\n    the workspace (Remove-Item -Recurse C:\\ and rmdir /s too), sudo/su/doas,\n    disk formatting and raw device writes, shutdown/reboot, killall/pkill,\n    recursive chmod/chown on / or ~, writes into system folders, disabling\n    services, fork bombs, piping a download into a shell, credential files,\n    force-pushing main, and lines that cannot be judged statically. The answer\n    is ok: false with error_code \"terminal-command-refused\" and `refused`\n    {rule, segment, reason}; tell the user to run it themselves. The user\n    tunes the categories and patterns in Settings → Security.\n\n    `to: \"group\"` broadcasts instead: every other pane in YOUR OWN tab group,\n    in your own workspace. Deliberately narrower than the bare-line protocol's\n    `all`, which means every pane in the window regardless of group. Panes in no\n    group share one implicit group, so they reach each other rather than nobody.\n    A caller with no pane identity has no group and is refused (\"no-group\").\n    The answer is a different shape — {ok, broadcast, group_id, delivered_to,\n    recipients: [{name, pane_id, msg_key, accepted, reason?}]} — with ONE\n    msg_key per recipient, because each is an ordinary independent message:\n    its own rate-limit budget, its own idle hold, its own delivery report. Pass\n    each key to cli_check_message separately; `wait_for_delivery_s` does not\n    apply to a broadcast and is ignored. An empty `recipients` means your group\n    has nobody else in it — not a failure.\n\n    `pane_id` addresses one exact pane and makes `to` unnecessary — copy it from\n    cli_list_targets. Reach for it when a name cannot say which pane you mean:\n    two panes in one workspace may share a name, and that is refused as\n    \"ambiguous-target\" however the name is spelled. It also survives a rename.\n    It names a pane on this machine only, so a cross-device target must still be\n    addressed by name. An id follows its pane through a window reload or a\n    detach, but a pane restarted around a fresh CLI gets a new one — treat\n    \"unknown-pane-id\" as \"read a fresh id from cli_list_targets\", not as \"that\n    pane is gone\".\n\n    `reply_to` threads this message onto one you were sent, instead of starting\n    a new conversation. Pass back the `correlation_id` of the message you are\n    answering — cli_read_incoming reports it, and so does the `re:` field of an\n    envelope typed into your pane. The recipient's Messages panel then shows\n    this as the answer to that message rather than as an unrelated one, and its\n    own cli_read_incoming reports it under `in_reply_to`. An id the receiving\n    window never handed out is ignored, exactly as an unrecognised `re:` is:\n    the message still goes, it simply arrives unthreaded. Omit it for a message\n    that starts a thread — the send is then exactly what it always was.\n\n    One limit, and it is the bare-line protocol's too: `reply_to` does NOT\n    travel to another device. The relay frame carries to/sender/text/msg_key\n    and nothing else, so threading across machines needs a wire field both ends\n    understand — a protocol change, not a routing one (`agent_msg.route` in\n    ws_handlers says the same at the same seam). The far side still mints a\n    correlation id from the msg_key, so the thread holds over there; what is\n    lost is the link back to the row on this machine.\n\n    `kind: \"ack\"` is for a pure acknowledgement — \"got it\", \"done\", \"thanks\" —\n    and it changes what the message IS. An ack is written to the user's message\n    log and is NEVER put into the receiving agent's input box: that agent is not\n    interrupted, is not woken, and will not know you sent it. Use it to close a\n    loop the user is watching without spending another agent's turn. Anything\n    the other side has to act on, answer, or even know about must go as an\n    ordinary message — an ack carrying an instruction is an instruction nobody\n    reads. Any other value is treated as an ordinary message.\n\n    An ack reaches panes on this machine only, `to: \"group\"` included. A\n    `<device>/<workspace>/<pane>` target is refused with `ack-not-relayable`:\n    the relay cannot promise a message stays out of an input box on someone\n    else's machine, and a guarantee that holds only sometimes is one no agent\n    should build on. Send it as an ordinary message if it has to cross devices.\n\n    Delivery is asynchronous: this returns once the message is accepted for\n    delivery, not once the other agent has read it. Returns\n    {ok, target, cross_workspace, msg_key} or {ok: false, error, error_code}.\n    Pass `msg_key` to cli_check_message to learn whether the receiving window\n    actually delivered it.\n\n    `wait_for_delivery_s` (0 by default, capped at 120) is the alternative to\n    remembering to poll: wait that long for the message to actually go in, and\n    answer with what happened. 10-30s is the useful range — the wait costs your\n    own turn, and a pane that is mid-turn or being typed in can hold a message\n    far longer than that. With it set, the answer also carries:\n\n      - `status: \"delivered\"` and `settled_after_s` — it went in.\n      - `status: \"failed\"` (or \"rejected\" for another device) and `reason` —\n        the receiving window refused it. `ok` stays TRUE: the send itself\n        happened and `msg_key` is real, so re-sending on this would dispatch\n        the work twice. Read the reason and decide.\n      - `status: \"unconfirmed\"` and `reason: \"delivery-unconfirmed\"` — it was\n        typed and submitted into a CLI that had just been resumed, and that\n        CLI has not shown it received it. It may well be running. Do NOT\n        resend on this alone: check cli_get_status (is the pane busy?) or\n        cli_read_log (is the message in its output?) first. The status turns\n        \"delivered\" if the CLI shows it later.\n      - `status: \"queued\"` with `waited_s`, plus `hold` and `held_for_s` when\n        the receiving window said why — the message is still waiting. `hold.key`\n        is \"typing\" (someone is at that keyboard), \"mid-turn\" (the agent is\n        working), \"behind\" (other messages first), \"starting\", \"settling\",\n        \"not-ready\" or \"gone\". Nothing was lost; it goes in when the pane frees\n        up, and cli_check_message picks the story up later.\n\n    `error_code` \"target-offline\" is not \"unknown-target\": the pane exists but\n    its Navide window is disconnected. Wait for it to come back and retry —\n    re-sending elsewhere or reopening the pane would duplicate the work.\n\n    A `<device>/<workspace>/<pane>` target names a pane on another machine and\n    is relayed through the configured Navide-Server. Copy the address from\n    cli_list_targets' `remote_targets` rather than assembling it: `device` may\n    be either the machine's id or its name, and only the id is guaranteed not\n    to collide with one of this machine's own workspace paths. \"device-offline\"\n    means that machine has no connection at all, so waiting is the only option;\n    the receiving device may also refuse on policy grounds, which shows up in\n    cli_check_message as status \"rejected\".\n\n    Three error codes tell apart the ways cross-device sending can fail before\n    the message even leaves here, and only the first is about the address:\n    \"unknown-device\" (no server is configured on this machine, so no device but\n    this one can be named), \"link-offline\" (a server is configured but this\n    machine is not connected to it — the address may be perfectly good) and\n    \"link-unauthorized\" (this machine's server credential was rejected or\n    revoked; retrying cannot help until it is signed in again).\n\n    The two link errors also carry ``link_state`` and ``last_error``, and the\n    message says what to do: \"connecting\" is the only one worth retrying,\n    \"unreachable\" means the address is not answering from here, and\n    \"unauthorized\" means somebody has to sign in again. Telling all three to\n    retry shortly — which is what this used to do — is advice that works for\n    one of them.\n\n    A target whose cli_list_targets row says `realized: false` is a restore\n    placeholder: the window holds the saved pane but no CLI is running behind\n    it, so it is busy forever and the message parks until someone opens it.\n    The send still succeeds, and the answer says so with\n    `target_state: \"not-opened\"` and a `warning`. `open_target: true` opens it\n    first — the same restore the user's click would do, without the \"resume\n    which?\" modal — and only then delivers; the answer then carries\n    `opened: {realized: true, reason}`. `reason: \"fresh\"` means the pane came\n    up on a NEW session (resume behavior \"never\", or the user had chosen start\n    fresh for that workspace): the agent does not remember its earlier\n    conversation, so say what it needs to know. If the open fails the message\n    is NOT sent — {ok: false, error_code: \"open-failed\", open: {realized:\n    false, reason}}. A target that is already open is unaffected by the flag.\n\n    `open_target` applies to ONE named pane only. It is ignored — never\n    forwarded, never acted on — for `to: \"group\"` and for a cross-device\n    target: a broadcast must not be able to pull a whole batch of reclaimed\n    panes back up, and another machine's placeholders are that machine's to\n    open. This is a fixed boundary, not a missing feature.\n    ",
+  "name": "cli_send",
+  "parameters": {
+   "properties": {
+    "kind": {
+     "default": "message",
+     "title": "Kind",
+     "type": "string"
+    },
+    "open_target": {
+     "default": false,
+     "title": "Open Target",
+     "type": "boolean"
+    },
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "reply_to": {
+     "default": "",
+     "title": "Reply To",
+     "type": "string"
+    },
+    "text": {
+     "title": "Text",
+     "type": "string"
+    },
+    "to": {
+     "title": "To",
+     "type": "string"
+    },
+    "wait_for_delivery_s": {
+     "default": 0.0,
+     "title": "Wait For Delivery S",
+     "type": "number"
+    }
+   },
+   "required": [
+    "to",
+    "text"
+   ],
+   "title": "cli_sendArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Look up what became of a message you sent with cli_send.\n\n    `msg_key` is the value cli_send returned. Returns {ok, msg_key, status,\n    target, age_seconds, reason?, settled_after_s?, hold?, held_for_s?,\n    stale?}. `status` is one of:\n\n      - \"queued\"    — broadcast for delivery; no window has reported back yet.\n                      A message held for a busy pane stays here until it is\n                      actually injected.\n      - \"delivered\" — the receiving window injected and submitted it.\n      - \"failed\"    — the receiving window refused or lost it; see `reason`.\n      - \"unconfirmed\" — typed and submitted into a just-resumed CLI that has\n                      not shown it received it (`reason`\n                      \"delivery-unconfirmed\"). Sent, not lost: it may be\n                      running. Check cli_get_status or cli_read_log before\n                      resending, or the work may run twice. Becomes\n                      \"delivered\" if the CLI shows it later.\n      - \"rejected\"  — only for a message sent to another device: that device's\n                      pane policy refuses this sender. Re-sending refuses\n                      again; this is a permission question for a human, not\n                      something to retry.\n      - \"cancelled\" — withdrawn before it went in, by cli_cancel_message or by\n                      someone using the Messages panel. Nothing went wrong and\n                      nothing is waiting; resend only if you still mean it.\n\n    `reason` values come from the receiving window: \"rate-limit\" (too many\n    messages between the same pair too quickly), \"queue-full\" (the target's\n    pending-message queue is at its cap), \"inject-failed\" (typing it into the\n    pane did not take), \"pane-closed\" (the target went away before delivery),\n    \"no-report\" (the delivery attempt never reported an outcome). Two reasons\n    do NOT mean something went wrong: \"read\" pairs with \"delivered\" and means\n    the recipient took the message with cli_read_incoming instead of having it\n    typed in, and \"cancelled\" pairs with the status of the same name.\n\n    On a \"queued\" message, `hold` is why it has not gone in yet — {key, n?},\n    the same reason the Messages panel shows — and `held_for_s` is how long it\n    has been that way. `hold.key` is \"typing\" (someone is typing in that pane),\n    \"mid-turn\" (its agent is working), \"behind\" (`n` messages ahead of it),\n    \"starting\", \"settling\", \"not-ready\", \"gone\", \"paused\" or \"remote-ack\". Both\n    keys are absent once the message settles, and while no window has reported\n    a hold at all — a message queued with no hold is simply on its way in.\n\n    A message to another device that has gone a minute without an answer is\n    asked about through the server, and its hold then says which silence it is:\n    \"remote-busy\" (the target pane is mid-turn by the roster, so the message is\n    waiting for that turn to end — wait, or ask whoever runs that machine to\n    let it finish) or \"remote-unreported\" (the pane is not working and the far\n    side has still said nothing — waiting longer is unlikely to help). An answer\n    the far side gave while this machine was disconnected is picked up the same\n    way, so a message never stays \"queued\" just because its ack was missed.\n\n    `stale` is true once a queued message has been waiting more than two\n    minutes. It is not a failure and nothing has given up on it — it is the\n    point at which waiting longer is probably not the answer, so read `hold`\n    and decide whether to wait, address someone else, or tell the user.\n\n    Bounds: this is in-memory backend state, not a log. It is lost on backend\n    restart, keeps only the last hour, and only the most recent few hundred\n    sends — an unknown `msg_key` means \"not tracked any more\", not \"never\n    sent\". Returns {ok: false, error} for an unknown key.\n    ",
+  "name": "cli_check_message",
+  "parameters": {
+   "properties": {
+    "msg_key": {
+     "title": "Msg Key",
+     "type": "string"
+    }
+   },
+   "required": [
+    "msg_key"
+   ],
+   "title": "cli_check_messageArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the messages you sent that are stuck or that never got through.\n\n    Takes no arguments and asks about no one but you: it returns the sends made\n    from this caller — this pane, or this external client — that are currently\n    stale (queued more than two minutes), failed, or unconfirmed (see\n    cli_check_message — check the pane before resending one of those). Everything that was\n    delivered, and everything still on its way in, is left out.\n\n    This is the pull half of delivery feedback, and it exists for the agent the\n    push half cannot reach. A failure notice is typed back into the sending\n    pane once that pane is idle, so an agent that stays busy for an hour never\n    sees one, and an external client has no pane to type into at all. Calling\n    this between pieces of your own work is how you find out that the message\n    you sent twenty minutes ago is still sitting in a queue.\n\n    Returns {ok, count, messages: [{msg_key, target, status, age_seconds,\n    stale?, reason?, hold?, held_for_s?, excerpt}], tracked, tracking_since_s},\n    newest send last. `excerpt` is the first 60 characters of what you sent, so\n    a message is recognizable without keeping every msg_key. The same in-memory\n    bounds as cli_check_message apply: the last hour, the last few hundred\n    sends, gone on backend restart. An empty list means nothing of yours is\n    stuck — it never means nothing was sent.\n\n    `tracked` and `tracking_since_s` are what make that last sentence checkable\n    instead of a warning you have to remember. `tracked` is how many of YOUR\n    sends this table still holds, delivered ones included; `tracking_since_s`\n    is how far back its records reach at all. \"0 of your sends, and I have only\n    been keeping records for 40 seconds\" is a backend that restarted under you\n    and took every msg_key you were holding with it — every one of them now\n    answers cli_check_message with \"unknown\", and you cannot tell from here\n    whether those messages were delivered. \"12 tracked, none stuck\" is the\n    other thing entirely. Neither number counts anybody else's sends.\n    ",
+  "name": "cli_inbox_summary",
+  "parameters": {
+   "properties": {},
+   "title": "cli_inbox_summaryArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the messages waiting to be delivered *to you*.\n\n    The mirror of cli_inbox_summary, which asks only about what you sent. This\n    asks what is queued for you and has not gone in yet — which, while you are\n    working, is everything anyone has sent you: a message is typed into a pane\n    only between turns, so an agent that stays busy is precisely the one that\n    cannot be told. Until this existed there was no way to find out; the queue\n    lives in the receiving window, and nothing offered the recipient's view of\n    it.\n\n    Call it between pieces of your own work when something may be waiting on\n    you — after dispatching a task with cli_open_agent, or during a long run\n    someone might need to interrupt. A non-empty answer is grounds to wrap up\n    the turn you are in, which is what lets the message land.\n\n    `excerpt` is 200 characters with the whitespace flattened: enough to tell\n    what a message is about, not enough to act on. cli_read_incoming returns\n    what was actually written, and can take a message off the queue so it is\n    not typed in afterwards.\n\n    Returns {ok, count, messages: [{uid, sender, status, age_seconds, kind?,\n    excerpt, correlation_id?, in_reply_to?, hold?, held_for_s?, stale?}]},\n    oldest first. `status` is \"queued\" (waiting for you to be between turns) or\n    \"delivering\" (going in right now). `kind` marks a message Navide wrote\n    rather than an agent: \"notice\" is delivery feedback about your own send,\n    \"fallback\" is a spawned pane's turn forwarded because it ended without\n    writing a report.\n\n    `correlation_id` is the one string you and the sender both know this\n    message by — the sender's `msg_key`. Pass it to cli_send's `reply_to` to\n    answer this message rather than start a new thread. `in_reply_to` is the\n    `uid` of the message THIS one answers, when it is itself a reply. Both are\n    absent for a message between two panes of a single window: that message is\n    never routed, so no such id is ever minted, and the two of you already\n    share this `uid`.\n\n    `hold` says why your queue is not moving — {key, n?}, the same reason the\n    sender reads from cli_check_message, with `held_for_s` and `stale` (waiting\n    over two minutes) beside it. \"mid-turn\" is you: the message goes in when\n    you finish this turn. \"typing\" is a human at that keyboard, \"paused\" is\n    delivery switched off in that window, and \"behind\" means `n` messages are\n    ahead of this one. It is absent unless this backend dispatched the message\n    and the owning window has reported a hold for it — so absence means\n    \"nothing recorded\", not \"nothing is holding it\". For the live queue state\n    of a message this cannot explain, read it with cli_read_incoming\n    (`peek: true` leaves delivery alone), which asks the window that owns the\n    queue instead of this log.\n\n    Read from the persisted message log, so unlike cli_inbox_summary this\n    survives a backend restart. Two limits are worth knowing: the log is\n    written by the receiving window a moment after a message is queued, so\n    something sent in the last second may not be listed yet; and messages are\n    matched by your current messaging name, so anything queued for a name you\n    have since been renamed away from is not yours to see. An empty list means\n    nothing is waiting — it never means nothing was sent.\n    ",
+  "name": "cli_pending_incoming",
+  "parameters": {
+   "properties": {
+    "limit": {
+     "default": 20,
+     "title": "Limit",
+     "type": "integer"
+    }
+   },
+   "title": "cli_pending_incomingArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read the full text of messages sent TO you.\n\n    cli_pending_incoming tells you a message exists and shows 200 characters\n    of it with the whitespace flattened. This returns what was actually\n    written. Until it existed you could read another pane's entire log but not\n    one message addressed to yourself.\n\n    BY DEFAULT READING CONSUMES. A message you read here is not typed into\n    your input box afterwards — you have it, so delivering it again would\n    repeat it. Pass `peek: true` to read without consuming, which leaves\n    delivery exactly as it was.\n\n    `uid` reads one message (the uid comes from cli_pending_incoming);\n    omitting it reads the oldest `limit` waiting for you. `include_delivered`\n    also returns messages already typed into your pane, for looking back at\n    what someone said — those are never consumed, because they already were.\n\n    Consuming is two steps, and the failure mode is deliberate: the message is\n    reserved, handed to you, and only then released. If the release is lost\n    the reservation expires and the message goes BACK to the queue, so it may\n    reach you a second time. That is the safe direction — a duplicate is\n    visible and a loss is not. Treat a message you have already handled as\n    something to recognise, not something that cannot arrive twice.\n\n    Returns {ok, count, messages: [{uid, sender, status, kind?, content,\n    age_seconds, consumed, correlation_id?, in_reply_to?, hold?, held_for_s?,\n    stale?}]}. `consumed` is per message and is false when the read was a peek,\n    when the message was already delivered, or when the window could not be\n    reached to release the reservation — in that last case you have the text\n    but delivery was left alone, so expect it in your pane.\n\n    `correlation_id` is the one string you and the sender both know this\n    message by. Pass it to cli_send's `reply_to` and your answer lands ON this\n    message instead of starting a new thread — the same thing an envelope typed\n    into your pane asks for with its `re:` field, which until now was the only\n    way to reply to a specific message. `in_reply_to` is the `uid` of the\n    message THIS one answers, when it is itself a reply. Both are absent for a\n    message between two panes of a single window: nothing routes it, so no such\n    id exists, and you and the sender already share this `uid`.\n\n    `hold` is why the message had not been typed in yet — {key, n?}: \"mid-turn\"\n    (you are working; it goes in when this turn ends), \"typing\" (a human at\n    that keyboard), \"behind\" (`n` messages ahead of it), \"paused\" (delivery\n    switched off in that window), \"starting\", \"settling\", \"not-ready\", \"gone\"\n    or \"remote-ack\". `held_for_s` and `stale` (waiting over two minutes) come\n    with it when this backend dispatched the message. Absent means nothing is\n    holding it, not that nothing is known — and note that a read of your own\n    reserves what it returns, so a hold you read here is the state BEFORE that.\n\n    Only a Navide CLI pane has an inbox. Messages are matched by your current\n    messaging name, so anything queued for a name you have been renamed away\n    from is not yours to see.\n    ",
+  "name": "cli_read_incoming",
+  "parameters": {
+   "properties": {
+    "include_delivered": {
+     "default": false,
+     "title": "Include Delivered",
+     "type": "boolean"
+    },
+    "limit": {
+     "default": 5,
+     "title": "Limit",
+     "type": "integer"
+    },
+    "peek": {
+     "default": false,
+     "title": "Peek",
+     "type": "boolean"
+    },
+    "uid": {
+     "default": "",
+     "title": "Uid",
+     "type": "string"
+    }
+   },
+   "title": "cli_read_incomingArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Withdraw a message you sent, if it has not gone in yet.\n\n    A message sits in the recipient's queue until that pane is between turns,\n    which is often a long time. Until now a sender that changed its mind — the\n    wrong target, a premise that stopped being true, a task already done by\n    someone else — could only watch it go in and then send a correction, which\n    costs the recipient a whole turn to work out that the first message no\n    longer applies.\n\n    `msg_key` is what cli_send returned. Withdrawal is decided by the window\n    that owns the queue, because only it knows whether the message is still\n    waiting: if it is, the message is dropped and the status becomes\n    \"cancelled\"; if delivery already started, the withdrawal is ignored and the\n    delivery reports its own outcome as usual. Either way you get the settled\n    status back, so a \"delivered\" answer here means you were too late rather\n    than that something failed.\n\n    Withdrawing is not failing. The status is \"cancelled\" and no failure notice\n    is written back to you — there is nothing to explain to the pane that just\n    changed its mind. Resend with cli_send if you still mean it.\n\n    Only messages this server sent can be withdrawn, and only for about an\n    hour, which is how long their keys are tracked. An unknown key means \"not\n    tracked any more\", not \"never sent\" — the same caveat cli_check_message\n    carries.\n\n    Returns {ok, msg_key, status, reason?} or {ok: false, error}.\n    ",
+  "name": "cli_cancel_message",
+  "parameters": {
+   "properties": {
+    "msg_key": {
+     "title": "Msg Key",
+     "type": "string"
+    }
+   },
+   "required": [
+    "msg_key"
+   ],
+   "title": "cli_cancel_messageArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read a CLI pane's conversation log file.\n\n    `target` uses the same addressing as cli_send (cli_list_targets shows the\n    forms); a caller with no pane identity must use the qualified\n    `<folder>/<pane>` form. `pane_id` names one exact pane and makes `target`\n    unnecessary — cli_send documents when to reach for it. Returns\n    {ok, target, log_path, text, truncated, next_cursor, rotated} — `text` is\n    at most 512KB and `tail_lines` lines, whichever is smaller; `truncated` is\n    true when older content was dropped to fit. Fails when the target is\n    unknown or its log file was never recorded / no longer exists.\n\n    `since` reads incrementally: pass the `next_cursor` from your previous\n    call to get only what the pane has said since then, instead of re-reading\n    the same tail. The cursor is a byte offset into an append-only capture\n    file. If the file was truncated or replaced under you the cursor no longer\n    means anything — the call then returns a plain tail with `rotated: true`,\n    so treat that read as a fresh start rather than as new output.\n    ",
+  "name": "cli_read_log",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "since": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Since"
+    },
+    "tail_lines": {
+     "default": 200,
+     "title": "Tail Lines",
+     "type": "integer"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_read_logArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Report whether a CLI pane is busy and its most recent activity.\n\n    `target` uses the same addressing as cli_send, and `pane_id` names one\n    exact pane instead. Returns {ok, name,\n    agent_key, busy, last_activity?, usage?, git?, ui?, prompt_fingerprint?}. `last_activity`, when known,\n    is {type: \"agent_active\"|\"turn_complete\", text? (turn_complete only),\n    age_seconds}. `ui`, when the owning Navide window answers in time, is\n    {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,\n    effort?, profileId?, loginExpired?, usageLimitUntil?} straight from the\n    renderer; it is omitted (not a failure) when the window does not reply.\n    `busy` is the backend's own activity verdict OR'd with that badge: true\n    when `ui.status` is \"running\" or \"starting\", since the renderer sees\n    things the activity log cannot (a delivered message the CLI has queued\n    but not yet consumed). Without a `ui` block it is the backend's alone.\n\n    The identity keys in `ui` describe what the pane was LAUNCHED with, each\n    present only when it has a value: `agentLabel` is the vendor's display\n    name behind `agent_key`; `model` / `effort` are what cli_open_agent or the\n    spawn form asked for — absent means the vendor's own default, and a\n    `/model` switch typed inside the CLI is invisible here; `profileId` is\n    the account pin the pane was spawned on (\"__default__\" = the real home),\n    bookkeeping only — every pane runs on the vendor's live credentials, so\n    after an account switch it names the old login while the CLI already runs\n    on the new one; `loginExpired` (true) and `usageLimitUntil` (wall-clock\n    ms) appear only while the CLI has printed its expired-login / hit-your-\n    limit message — live detection from the pane's output, not a poll.\n\n    `usage` is the quota snapshot Navide holds for this pane's vendor, the\n    same row cli_usage reports under `providers[agent_key]` and unchanged from\n    what the vendor said: {provider, status, planType, windows, fetchedAt,\n    stale, …}. It is a CACHED read — nothing is refreshed on this call, which\n    cli_wait_idle polls every second — so `fetchedAt` / `stale` say how old it\n    is, and cli_usage or the window's own refresh is where a fresh number\n    comes from. For claude it is the ACTIVE account's snapshot, which is the\n    login every claude pane actually runs on (see `profileId` above). Absent\n    when Navide has no snapshot for that vendor at all.\n\n    `git` is the pane's checkout, in the shape and with the caveats\n    cli_list_targets gives it: branch, worktree, dirty count and drift against\n    origin/main, cached for up to ~30 s. Absent outside a repository, when git\n    did not answer in time, and for a remote target.\n\n    While `ui.status` is \"awaiting\", `ui` also carries what the pane is\n    waiting on, read off its screen: `awaitingPrompt` (the prompt text) and,\n    when the screen shows a numbered menu, `awaitingOptions` (its rows, option\n    1 first). The reply then has a top-level `prompt_fingerprint` naming that\n    exact prompt; pass it to cli_answer_prompt to answer the pane, which\n    refuses when the screen has moved on.\n\n    `ui.kickoff` is how this pane's spawn-time task injection ended, and it is\n    the authoritative answer to \"did cli_open_agent's task actually arrive\":\n\n      - \"sent\" — our own text was observed landing in the composer.\n      - \"unverified\" — the bytes were written and the echo check passed, but\n        only on buffer growth, which a CLI painting its first screen does\n        whatever happened to our text. Treat it as \"probably not delivered\":\n        read `buffer`, and re-send with cli_send if the prompt is empty.\n      - \"failed\" — the injection did not go in. \n      - \"pending\" — still running.\n\n    Absent when the pane was not spawned with a task.\n\n    A `<device>/<workspace>/<pane>` target is answered from Navide-Server's\n    session directory instead, and comes back in cli_list_targets'\n    `remote_targets` shape — {ok, remote: true, source: \"roster_status\", name,\n    address, device, workspace, workspace_path, agent_key, busy, offline,\n    host_online, status} — with `source` naming where the answer came from.\n    That answer is WEAKER in three ways and none of them are hidden: there is\n    no `last_activity` and no `ui` block (neither the local activity log nor\n    the owning window is reachable from here), `status` is one word with no\n    `awaitingKind` behind it, so an \"awaiting\" pane may be parked on a human or\n    merely asking a question, and the word itself is what the far window last\n    uploaded — near-live, not live. `offline` is its own answer, not a kind of\n    busy: it means the far machine or its window is away, and the row you are\n    reading is the last thing the server said about a pane nobody can reach.\n    There is no `usage` either: this machine's quota cache describes this\n    machine's logins, which is the wrong answer for a pane running elsewhere.\n    ",
+  "name": "cli_get_status",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_get_statusArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Block until a CLI pane goes idle, or a timeout passes.\n\n    `target` uses the same addressing as cli_send, and `pane_id` names one\n    exact pane instead. `timeout_s` is capped at\n    120s. Three signals settle it, in the order they become available: the\n    pane's last activity was a turn_complete (aider/antigravity/claude/codex/\n    copilot/cursor/kilo/muse/opencode report one directly, so detection is\n    precise for them; grok/kimi/pi/qwen synthesize one from 8s of silence, so\n    theirs is already an inference); at least 10s of silence\n    passed since its last activity; or, while the registry still reports busy,\n    the owning window reports the pane itself as idle/exited/stopped/error.\n    That last one matters because the busy flag is frontend-reported and can\n    stay stale. Returns {idle, source, waited_s, last_activity?, ui_status?}\n    where source is \"turn_complete\", \"quiet_period\", \"ui_status\",\n    \"never_started\", or \"timeout\"; or {ok: false, error} if `target` cannot be\n    resolved.\n\n    `last_activity` is what cli_get_status reports under the same key — {type,\n    text? (turn_complete only), age_seconds} — so a caller that waited for a\n    turn to end also gets what the turn said, without a second call. It is\n    absent for a pane whose CLI records no activity at all. `ui_status` is the\n    owning window's own word for the pane, present only when a probe reached\n    it during the wait.\n\n    \"never_started\" is idle in the sense that nothing is running, but the pane\n    has shown no activity at all — a CLI that finished booting and is sitting\n    at its prompt. If you just gave it a task, that task has not begun yet;\n    keep waiting rather than treating it as done.\n\n    On timeout the result also carries `reason`, which separates three very\n    different failures: \"awaiting\" (the pane is parked on a permission prompt\n    and is waiting on a HUMAN, not on work — answer it in the UI), \"busy\" (it\n    really is still working; wait longer), and \"unreachable\" (the window that\n    owns the pane stopped answering, so nothing here is current).\n\n    A `<device>/<workspace>/<pane>` target is waited on through Navide-Server's\n    session directory, and that wait is WEAKER than this one — read `source`,\n    which never says \"turn_complete\" for a remote pane because no end-of-turn\n    signal crosses the link. It settles as \"roster_status\" (the far window's\n    badge stopped saying the pane was working), \"roster_offline\" (that machine\n    or its window went away — a third answer, neither busy nor idle), or\n    \"timeout\" with `reason` \"busy\" or \"awaiting_unclassified\" — the latter\n    meaning the pane is parked and the roster does not carry the\n    `awaitingKind` that would say whether it is stuck on a human or merely\n    asking a question. There is no `last_activity` and no `ui_status`; the\n    badge word is reported as `status`, and it is what the far window last\n    uploaded (it debounces by 0.5s and re-sweeps every 30s), so it is near-live\n    rather than live.\n    ",
+  "name": "cli_wait_idle",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    },
+    "timeout_s": {
+     "default": 60.0,
+     "title": "Timeout S",
+     "type": "number"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_wait_idleArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Ask a CLI pane to stop what it is doing, without closing it.\n\n    This presses that CLI's interrupt key in its terminal — Ctrl-C for most\n    vendors, Esc for codex — exactly what the pane's own stop button does. It\n    is the middle rung: cli_send asks and waits for the current turn to finish,\n    ui_invoke \"ui.pane.close\" takes the pane and its PTY away, and until now\n    there was nothing in between.\n\n    WHAT THIS DOES NOT DO. It sends a keystroke; it does not stop a turn. What\n    the CLI makes of that keystroke is the CLI's business — most abort the\n    running turn, some only clear the text sitting in the input box, and one\n    already at an idle prompt may take a second press as \"quit\" and exit.\n    Nothing here waits for a stop or verifies that one happened, so a result\n    with `sent: true` means the bytes were written and nothing more. Check with\n    cli_get_status or cli_wait_idle if you need to know, and prefer cli_send\n    whenever the work can be allowed to finish.\n\n    Interrupting an idle pane is NOT refused — clearing whatever is in its\n    input box is a real reason to want it — but it is reported rather than\n    passed off as a stop: `status_before` is the pane's status at the instant\n    the key went in, and `advisories` says when no turn was interrupted (and\n    that a line somebody had typed but not sent may be gone with it).\n\n    `target` uses the same addressing as cli_send and `pane_id` names one exact\n    pane instead. Panes on this machine only: an interrupt is a byte written\n    into a local PTY and there is no relay for it, so a\n    `<device>/<workspace>/<pane>` address fails with \"interrupt-local-only\" —\n    that is a limit of this tool, not a wrong address.\n\n    Returns {ok, target, name, sent, status_before, advisories?}. `sent` false\n    means the interrupt was never issued — no live CLI behind the pane (a\n    cold-restore placeholder, or one whose session is gone), or the owning\n    window's own socket was down, in which case it drops the request rather\n    than queueing a stop for whatever turn is running after it reconnects.\n    `sent` true means the keystroke was issued and accepted; it is not a\n    receipt from the CLI, and a PTY write that fails on the far side is logged\n    there rather than reported here.\n    ",
+  "name": "cli_interrupt",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_interruptArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Answer another CLI pane's permission prompt or option menu, as an agent.\n\n    For a pane parked on \"awaiting\" — claude's permission box or\n    AskUserQuestion menu, codex's approval menu, aider's (Y)es/(N)o line —\n    this presses the CLI's own key for one choice, instead of cli_send typing\n    prose the menu would not take. Read the prompt first: cli_get_status\n    returns it as `ui.awaitingPrompt` and `ui.awaitingOptions` (the numbered\n    menu rows), and `prompt_fingerprint` identifies exactly that screen.\n\n    `answer` is \"allow\" (the menu's \"Yes\", option 1), \"deny\" (its \"No\"), or\n    an option number \"1\"..\"9\" from `ui.awaitingOptions`. aider takes only\n    allow / deny. `prompt_fingerprint` must be the one cli_get_status gave\n    for the prompt you decided on; when the screen has moved on since, the\n    answer is refused with `error_code` \"prompt-changed\" and the reply\n    carries the current `prompt`, `options` and `prompt_fingerprint` to\n    decide again with.\n\n    THIS IS DISCLOSED, NOT HIDDEN. Every answer is written to that pane's\n    Navide Guard audit trail (source \"agent\", tool \"answer_prompt\": who\n    answered, what was pressed, Guard's verdict), and the reply carries\n    `answered_by_agent: true` with a `disclosure` line to pass on to the\n    user. Approving a prompt is approving that pane's action on the user's\n    behalf.\n\n    Refused, each with its own `error_code` and nothing pressed:\n      - \"permanent-allow-refused\" — a \"don't ask again\" / \"always allow\" /\n        \"for this session\" option, or \"allow\" when option 1 is one: that\n        choice is the user's, at the computer.\n      - \"guard-veto\" — Navide Guard rates the prompt high or critical (or\n        cannot screen it); approving needs the user. `guard` says why.\n        Refusing (\"deny\", or a \"No …\" option) is never vetoed.\n      - \"computer-only\" — a multi-select menu or a free-text row.\n      - \"unsupported-cli\" — only claude, codex and aider have mapped keys.\n      - \"not-awaiting\", \"prompt-changed\", \"invalid-answer\".\n      - \"answer-local-only\" — a pane on another device: there is no relay.\n    The raw key action (ui_invoke \"ui.pane.sendKeys\") stays refused for\n    agents; this tool is the fenced way to the same keys.\n\n    Returns {ok, target, sent, answer, chosen?, answered_by_agent,\n    disclosure, guard?}. The window re-reads its screen right before pressing\n    and refuses with \"prompt-changed\" when the prompt checked here (and\n    screened by Guard) is no longer the one showing. `sent` true means the\n    keys were written into the pane; it is not a receipt from the CLI —\n    cli_get_status or cli_wait_idle tells you what happened next.\n    ",
+  "name": "cli_answer_prompt",
+  "parameters": {
+   "properties": {
+    "answer": {
+     "title": "Answer",
+     "type": "string"
+    },
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "prompt_fingerprint": {
+     "title": "Prompt Fingerprint",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target",
+    "answer",
+    "prompt_fingerprint"
+   ],
+   "title": "cli_answer_promptArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Move a pane: change the tab group it sits in and/or the pane it is a\n    child of. The write half of the lineage cli_list_targets and\n    cli_list_sessions report.\n\n    Two independent halves, each optional — pass only what should change:\n\n    - `run_group_id`: the tab (run group) to move the pane to. `\"\"` is the\n      ungrouped 手動 tab. Read group ids off cli_list_sessions rows or\n      ui_snapshot; an id no tab has is refused.\n    - `spawned_by`: the pane to make this one a child of, as a `pane_id`\n      (not a name — names are messaging addresses and can change). `\"\"` makes\n      it a root. Refused when the parent is the pane itself or one of its own\n      descendants (the tree would loop), or a pane in another workspace.\n\n    Both take `\"\"` as a real value, which is why a half you do not pass is\n    left alone rather than reset. Group is applied first, then parent, and the\n    answer's `applied` says which halves landed — a parent refusal does not\n    undo a group move that already did. Same write paths as dragging the pane\n    in the sidebar, so the record and the screen agree and a restart keeps\n    the position.\n\n    Use it to tidy up after a resume that landed somewhere unhelpful, to adopt\n    a pane opened by someone else into your own subtree, or to gather related\n    panes onto one tab. It does not touch the pane's CLI: nothing is sent,\n    interrupted or restarted. Local panes only — a `<device>/…` address is\n    refused, since another machine's tree is that machine's to arrange.\n    Returns `{ok, target, name, pane_id, applied, run_group_id, spawned_by}`\n    with the position as it is afterwards.\n    ",
+  "name": "cli_place_pane",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "run_group_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Run Group Id"
+    },
+    "spawned_by": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Spawned By"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_place_paneArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Send an instruction to another CLI pane and wait for it to finish it.\n\n    cli_send followed by cli_wait_idle, with the race between them handled:\n    the target is idle at the moment you send, so a plain wait would return\n    \"already idle\" before it ever read your message. This one waits for the\n    message to actually GO IN first, then remembers the target's last activity\n    before sending and only accepts a turn NEWER than that as your answer.\n\n    `to`, `text`, `pane_id`, `reply_to` and addressing are cli_send's — an id\n    given here addresses both halves, the send and the wait. Answering a\n    question with this tool is the case `reply_to` exists for, so it threads\n    the same way a plain send does. `timeout_s` (capped at 120s)\n    covers the whole thing, not just the wait: at most half of it is spent\n    getting the message in, and whatever is left waits for the turn.\n\n    On success returns cli_wait_idle's result — {idle: true, source, waited_s,\n    last_activity?, ui_status?} — plus {ok: true, target, msg_key}.\n    `last_activity.text` is what the other agent said, when its CLI records\n    that. ALWAYS read `source`, because it says how much the \"finished\" is\n    worth:\n\n      - \"turn_complete\" — the CLI reported the turn ended. Trustworthy.\n        aider/antigravity/claude/codex/copilot/cursor/kilo/muse/opencode report\n        it directly; grok/kimi/pi/qwen infer it from 8s of silence, so it is a\n        heuristic for them and a long pause mid-turn can end the wait early.\n      - \"quiet_period\" — no end-of-turn signal ever arrived, the pane just\n        went quiet. This is the only outcome available for a plain terminal\n        pane, and the fallback whenever a turn ends without its reader\n        recording one. Treat it as a guess and check the content.\n      - \"ui_status\" — the owning window reports the pane idle.\n      - \"target_lost\" — the target stopped being addressable during the wait\n        (its window closed, the pane was killed), so the wait could not\n        finish. The send still happened and `msg_key` is still valid; this is\n        \"delivered, but I can no longer confirm it was finished\", NOT a failed\n        send — do not resend on it. `error` carries the resolve failure.\n      - \"not_delivered\" — the message never got into the pane, so there was no\n        turn to wait for. `delivery_status` is \"queued\" (still waiting, with\n        `hold` and `held_for_s` saying what for — typically someone typing in\n        that pane, or a queue ahead of it), \"failed\"/\"rejected\" with\n        `reason`, or \"unconfirmed\" (typed into a just-resumed CLI that has not\n        shown it — check cli_get_status or cli_read_log before resending). A queued message is not lost: it goes in when the pane frees\n        up, and cli_check_message picks the story up. Do NOT resend on this.\n\n    On timeout returns {ok: true, idle: false, source: \"timeout\", reason,\n    ...}: `reason` is cli_wait_idle's (\"awaiting\" / \"busy\" / \"unreachable\"),\n    or \"never_started\" when the target stayed idle and never showed any sign\n    of having read the message. `reason` is only meaningful for \"timeout\" and\n    is absent from every other source. A send that is refused outright returns\n    cli_send's {ok: false, error} unchanged.\n\n    A `<device>/<workspace>/<pane>` target works end to end, and `source` is\n    where you see what it cost. It is NEVER \"turn_complete\" for a remote pane\n    — no end-of-turn signal crosses the link — and instead settles as\n    \"roster_status\" (Navide-Server's session directory stopped reporting the\n    pane as working, which is the strongest thing observable from here),\n    \"roster_offline\" (the far machine or its window went away mid-wait: a\n    third answer, neither busy nor idle), or \"timeout\" with `reason` \"busy\",\n    \"never_started\", or \"awaiting_unclassified\" — that last one meaning the\n    pane is parked and the roster carries no `awaitingKind`, so whether it is\n    stuck on a human or merely asking a question could not be told apart. Nor\n    is there a `last_activity`: what the other agent said cannot be read back\n    from here, only that it appears to have stopped. \"not_delivered\" reaches\n    remote targets too, and there `reason` is the far device's own ack —\n    \"rejected\" meaning its pane policy refused, which resending will not fix.\n    ",
+  "name": "cli_send_and_wait",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "reply_to": {
+     "default": "",
+     "title": "Reply To",
+     "type": "string"
+    },
+    "text": {
+     "title": "Text",
+     "type": "string"
+    },
+    "timeout_s": {
+     "default": 60.0,
+     "title": "Timeout S",
+     "type": "number"
+    },
+    "to": {
+     "title": "To",
+     "type": "string"
+    }
+   },
+   "required": [
+    "to",
+    "text"
+   ],
+   "title": "cli_send_and_waitArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the UI actions registered by the Navide window for workspace_path.\n\n    Returns the list of registered action ids (plain strings), so a caller\n    can discover what ui_invoke accepts before calling it. Errors if no\n    window owns workspace_path within 15s.\n\n    Called from a CLI pane, this goes to that pane's own window when\n    workspace_path names that pane's own workspace (or is empty) — see\n    ui_invoke.\n    ",
+  "name": "ui_list_actions",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "workspace_path"
+   ],
+   "title": "ui_list_actionsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Invoke a registered UI action in the Navide window for workspace_path.\n\n    `action` must be one returned by ui_list_actions; `args` is passed through\n    to it verbatim. `action` \"ui.workspace.open\" is routed differently: it has\n    no fixed owner (the workspace may not have a window yet), so it is sent to\n    any one live Navide window instead of broadcast to all. Errors if no\n    window owns workspace_path (or, for ui.workspace.open, no window is open\n    at all) within 15s.\n\n    Called from a CLI pane, the request is delivered straight to the window\n    that hosts that pane — whether or not it is focused, and whatever project\n    that window currently has open — as long as workspace_path names that\n    pane's own workspace (or is empty). Naming a DIFFERENT project is a\n    deliberate call on someone else's window and keeps the broadcast path,\n    where only a window with that project open answers; a caller with no pane\n    identity (host / external) always depends on that match.\n\n    Being delivered is not the same as being run against workspace_path. The\n    actions that act on \"the project this window is showing\" — ui.pane.create,\n    ui.preview.show, ui.window.openGit — are refused with an error when the\n    hosting window has switched to another project, rather than silently\n    running against the wrong one. Switch that window back, or spawn the pane\n    from a window that has the project open.\n\n    ui.pane.sendKeys, and ui.settings.yolo with yolo true, are refused with\n    error_code \"ui_human_only\": answering a pane's prompt and switching the\n    permission bypass on are the user's to do.\n\n    ui.pane.reclaim frees a finished pane's resources without closing it — the\n    same \"reclaim now\" the status bar and Resource Manager offer; cli_reclaim_agent\n    does the same for one pane addressed by name, in whichever window has it. args\n    {\"paneId\": id} or {\"paneId\": [id, ...]} (pane ids from cli_list_targets).\n    Each CLI process ends and the pane stays as a click-to-resume card holding\n    its conversation; the user resumes it by clicking. Use it from a parent pane\n    on the children it opened once their work is reported. The status bar's\n    guards apply unchanged, so a pane that is busy or awaiting an answer, the\n    one the user has focused, one with unsent input, one with queued messages\n    or a running pipeline/loop, and one whose session cannot be resumed are\n    refused. Returns {reclaimed: [paneId], refused: [{paneId, reason, detail}]}\n    with ok true even when every pane was refused.\n    ",
+  "name": "ui_invoke",
+  "parameters": {
+   "properties": {
+    "action": {
+     "title": "Action",
+     "type": "string"
+    },
+    "args": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Args"
+    },
+    "workspace_path": {
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "workspace_path",
+    "action"
+   ],
+   "title": "ui_invokeArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Return a structured snapshot of UI state for the Navide window at workspace_path.\n\n    Shape is decided by the renderer (panes, tabs, focus, etc.). Errors if no\n    window owns workspace_path within 15s.\n\n    Called from a CLI pane, this snapshots that pane's own window when\n    workspace_path names that pane's own workspace (or is empty) — see\n    ui_invoke. The snapshot then describes the project that window has open\n    right now, which is not necessarily workspace_path.\n    ",
+  "name": "ui_snapshot",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "workspace_path"
+   ],
+   "title": "ui_snapshotArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read renderer-side diagnostics recorded by the Navide window at workspace_path.\n\n    These are warnings the renderer logged about its own UI actions — e.g.\n    injectText resending content because its echo check timed out, or giving\n    up entirely — that a `ui_invoke` caller cannot see from `ok: true` alone\n    (they only ever appeared in that window's devtools console before this).\n    Use this to diagnose cases where a tool reported success but the actual\n    in-window behavior looked wrong (duplicated input, a stuck send, etc.).\n\n    `since_seq` returns only entries recorded after that sequence number —\n    pass the `nextSeq` from a previous call to poll incrementally without\n    re-reading old entries. `pane_id` filters to one pane; `limit` caps how\n    many entries come back. Errors if no window owns workspace_path within 15s.\n\n    Called from a CLI pane, this reads that pane's own window when\n    workspace_path names that pane's own workspace (or is empty) — see\n    ui_invoke.\n    ",
+  "name": "ui_diagnostics",
+  "parameters": {
+   "properties": {
+    "limit": {
+     "default": 50,
+     "title": "Limit",
+     "type": "integer"
+    },
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "since_seq": {
+     "default": 0,
+     "title": "Since Seq",
+     "type": "integer"
+    },
+    "workspace_path": {
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "workspace_path"
+   ],
+   "title": "ui_diagnosticsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Report a file you just created, modified or deleted in this workspace.\n\n    Call it once per write, right after the write lands: the user then sees\n    what you touched in Navide's Preview panel, and other sessions read it back\n    with preview_list. The record is persisted in the workspace and survives\n    restarts. Attribution (which pane, which agent) comes from your own\n    credential — there is nothing to pass for it.\n\n    change is one of created, modified, deleted; a preview push is recorded by\n    preview_show instead, so \"shown\" is not accepted here. kind defaults to\n    \"file\": pass rel_path (workspace-relative) for kind \"file\" or \"diff\", or\n    content for an inline \"snippet\" / \"html\" / \"markdown\" record. note is a\n    short reason (\"added the retry guard\"); title labels an inline record.\n\n    Returns {uid, created_at, rel_path, change, merged}. merged is true when\n    the event folded into a record already on the feed — same path, same\n    change, a couple of seconds apart, e.g. the file watcher got there first —\n    in which case nothing new was added and uid is \"\" with created_at 0. A\n    \"warning\" field means no live Navide pane uses workspace_path, so the user\n    cannot see this record where it landed.\n\n    workspace_path defaults to your own pane's workspace; pass it only to\n    record against another project.\n    ",
+  "name": "preview_record",
+  "parameters": {
+   "properties": {
+    "change": {
+     "default": "modified",
+     "title": "Change",
+     "type": "string"
+    },
+    "content": {
+     "default": "",
+     "title": "Content",
+     "type": "string"
+    },
+    "kind": {
+     "default": "file",
+     "title": "Kind",
+     "type": "string"
+    },
+    "note": {
+     "default": "",
+     "title": "Note",
+     "type": "string"
+    },
+    "rel_path": {
+     "default": "",
+     "title": "Rel Path",
+     "type": "string"
+    },
+    "title": {
+     "default": "",
+     "title": "Title",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "preview_recordArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read back what has been created, modified, deleted or shown here.\n\n    Use it to catch up on a workspace before editing in it: the feed carries\n    what other sessions, the user, and the file watcher did, newest first, and\n    survives restarts.\n\n    limit caps how many come back (300 at most). since takes a created_at from\n    an earlier call and returns only what happened after it, so you can poll\n    without re-reading. change filters to one of created / modified / deleted /\n    shown; agent filters to one vendor key (e.g. \"claude\").\n\n    Returns {workspace_path, entries, truncated}; truncated is true when the\n    limit cut the answer off, so raise it or page with since. Each entry has\n    uid, created_at (epoch milliseconds), change, rel_path, kind, title, source\n    (user / agent / watcher), pane_id, agent, tool, note, payload.\n\n    workspace_path defaults to your own pane's workspace; pass it only to read\n    another project's feed.\n    ",
+  "name": "preview_list",
+  "parameters": {
+   "properties": {
+    "agent": {
+     "default": "",
+     "title": "Agent",
+     "type": "string"
+    },
+    "change": {
+     "default": "",
+     "title": "Change",
+     "type": "string"
+    },
+    "limit": {
+     "default": 50,
+     "title": "Limit",
+     "type": "integer"
+    },
+    "since": {
+     "default": 0,
+     "title": "Since",
+     "type": "integer"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "preview_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Show a file, a diff, or inline content in Navide's Preview panel.\n\n    This is how you put something in front of the user without them going\n    looking for it: the file you just rewrote, the diff you want reviewed, a\n    rendered report. The push reaches the Navide window that owns the\n    workspace, and only lands on the record feed once that window confirms it\n    took it — so a push nobody saw is never recorded as shown.\n\n    kind \"file\" or \"diff\" needs rel_path (workspace-relative); \"snippet\",\n    \"html\" and \"markdown\" need content (512 KB at most) and take an optional\n    title.\n\n    Returns the window's own reply — {ok, result, error} — plus recorded\n    (whether a \"shown\" record was landed), uid, and merged (true when the push\n    folded into an identical one already on the feed). ok false means no window\n    took it: nothing was recorded, and the error says whether workspace_path is\n    wrong or the window did not answer in time.\n\n    workspace_path defaults to your own pane's workspace, which is the window\n    the user is looking at; pass it only to show something in another project's\n    window.\n    ",
+  "name": "preview_show",
+  "parameters": {
+   "properties": {
+    "content": {
+     "default": "",
+     "title": "Content",
+     "type": "string"
+    },
+    "kind": {
+     "default": "file",
+     "title": "Kind",
+     "type": "string"
+    },
+    "rel_path": {
+     "default": "",
+     "title": "Rel Path",
+     "type": "string"
+    },
+    "title": {
+     "default": "",
+     "title": "Title",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "preview_showArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read how much CLI quota each vendor has left, as Navide tracks it.\n\n    Check it before handing work to another pane: cli_send queues a task for a\n    CLI whose plan is exhausted just as happily as for one that can run it, and\n    the message lands only for the other agent to fail on it. The same is worth\n    doing before cli_open_agent picks which vendor to open. Read-only.\n\n    The numbers are the vendors' own, reported unchanged — Navide neither\n    recomputes them nor annotates them, so read the fields a vendor gives you\n    rather than expecting one shape for all of them.\n\n    agent narrows the answer to one vendor key (\"claude\", \"codex\", ...) — the\n    same key cli_whoami reports as agent_key. Left empty, every tracked vendor\n    comes back.\n\n    Returns {ok, providers, accounts, enabled, intervalSec}, plus `agent` when\n    a filter was applied. `providers` maps a vendor key to its current\n    snapshot; `accounts` maps a vendor key to that vendor's per-account\n    snapshots, keyed by account slot, for the vendors where Navide tracks more\n    than one login. `enabled` false means quota polling is switched off, so\n    whatever is here is only what was read last. A vendor with no entry at all\n    is one Navide cannot read a quota for — which is not the same claim as a\n    vendor with quota left. A snapshot with status \"unverified\" is not an\n    error: no standard pane has verified that vendor's credential store yet,\n    so nothing is read until the user opens one; its quota is unknown.\n    ",
+  "name": "cli_usage",
+  "parameters": {
+   "properties": {
+    "agent": {
+     "default": "",
+     "title": "Agent",
+     "type": "string"
+    }
+   },
+   "title": "cli_usageArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the projects Navide knows about, so you can name one by path.\n\n    Every tool that takes a workspace_path — plan_create, preview_record,\n    cli_open_agent — wants the absolute path of a project root, and nothing\n    told you which paths those are. This is that list: the workspaces the user\n    has opened, most recently opened first. Read-only.\n\n    Returns {workspaces, live_pane_workspaces}. Each workspace carries the\n    store's own record (path, name, last_opened_at, pinned, exists) plus\n    has_live_panes: true when a CLI pane is running in it right now. Prefer one\n    of those — a workspace with has_live_panes false has no Navide window\n    watching it, so a plan or a preview written there is not shown to the user\n    at all. `exists` false is the harder failure: the folder is gone from disk.\n\n    `live_pane_workspaces` is that live set on its own, resolved. A pane can be\n    running in a project the user never opened from the welcome screen, which\n    is a perfectly legal workspace_path that the recent list does not mention.\n\n    Each workspace also carries window_ready: true when a Navide window holds\n    it right now and would take a cli_open_agent for it — the readiness\n    workspace_open reports, asked again. `window_ready_workspaces` lists those\n    paths. Asking costs up to about a second.\n    ",
+  "name": "workspace_list",
+  "parameters": {
+   "properties": {},
+   "title": "workspace_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Open `path` as a workspace in Navide.\n\n    Whether that is a new window or an existing one that already has the\n    project open is Navide's decision. `path` must be the absolute path of a\n    project root — the kind `workspace_list` reports. This is the same as\n    `ui_invoke` with action \"ui.workspace.open\", without having to look the\n    action up first; like it, the request goes to any one live window (the\n    workspace may not have a window yet), so it errors only when no Navide\n    window is open at all.\n\n    A leading \"~\" is expanded; the `path` returned is the expanded one.\n\n    Returns {ok: true, path, ready} once the window has handled the request,\n    or the error the window (or the routing) reported. A new window takes a\n    moment to load, so this waits (up to about 15s) for the window holding\n    `path` to answer: ready true means cli_open_agent(workspace_path=path)\n    will be picked up now. ready false comes with a hint — the window may\n    still be loading; workspace_list reports window_ready for it later. The\n    workspace is in workspace_list as soon as this returns either way.\n    ",
+  "name": "workspace_open",
+  "parameters": {
+   "properties": {
+    "path": {
+     "title": "Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "path"
+   ],
+   "title": "workspace_openArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Switch the window you are in to another workspace it already holds.\n\n    One Navide window can hold several projects (the sidebar lists them);\n    this puts `path` on screen in YOUR window. Panes are not affected — the\n    ones of the workspace being left keep running. `path` must be one the\n    window already holds: otherwise the window refuses with an error that\n    points at `workspace_open`, which is the tool for opening a project. The\n    window also refuses while a pipeline is running in it (a switch would\n    abort it, and the confirmation that asks is not yours to answer): call\n    `pipeline_abort` first, or let the user switch from the sidebar.\n\n    Only a CLI pane can call this, because \"your window\" is the window that\n    hosts the calling pane. A host or external caller has no window of its\n    own and gets ok: false — it can use `ui_invoke` with a workspace_path and\n    action \"ui.workspace.switch\" instead.\n\n    Returns {ok: true, path} with the workspace now on screen, or the error\n    the window reported.\n    ",
+  "name": "workspace_switch",
+  "parameters": {
+   "properties": {
+    "path": {
+     "title": "Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "path"
+   ],
+   "title": "workspace_switchArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List Navide's pipeline templates and the roles their stages are cast from.\n\n    A pipeline is a saved multi-stage run: an ordered set of stages, each with\n    slots naming which CLI plays which role. The user starts one from the\n    Pipelines window, and it is the shape a whole team of panes is built in —\n    none of which was visible from here. Read it to describe what the user's\n    Navide can run, or to see which stage a task belongs to before opening a\n    pane for it yourself. Read-only: nothing here starts a run.\n\n    Returns {pipelines, active_pipeline_id, roles}. Each pipeline is {id, name,\n    builtin, stage_count, stages}; each stage is {id, title, short_title,\n    description, sentinel, allow_questions, recommended_roles, slots}, and each\n    slot {agent_key, role_key, label, is_commander}. `active_pipeline_id` is\n    the template the Pipelines window currently has selected.\n\n    Two things are deliberately not here, because both are whole prompts: a\n    slot's kickoff body, and a role's system prompt. `roles` gives each role's\n    {key, label, one_line, is_default} — enough to know what a role_key means.\n\n    Templates only. Where a run has actually got to is pipeline_status.\n    ",
+  "name": "pipeline_list",
+  "parameters": {
+   "properties": {},
+   "title": "pipeline_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Report where a workspace's pipeline run has got to, if it has one.\n\n    Use it to find out whether you are part of something larger: a pane opened\n    as a pipeline slot is told its task, not that it is stage three of five,\n    and the stage after yours does not start until yours is recorded finished.\n    Read it before deciding how much of a job is yours. Read-only.\n\n    Returns {workspace_path, active, ...}. `active` is true only while a run is\n    in progress. A workspace that has never run a pipeline answers with\n    {workspace_path, active: false} and nothing else — that is the empty state,\n    not an error.\n\n    When a project exists it also carries: state (idle / running / completed /\n    aborted), task_description (what the run was started for), pipeline_id\n    (which template from pipeline_list), current_stage_index and total_stages,\n    run_count, log_file_name, updated_at, plus `stages` — {stage_id, title,\n    agent, role, pane_id, status, started_at, ended_at} each — and `panes`,\n    the pipeline slots as {pane_id, agent, role, stage_id, stage_index,\n    slot_label, spawn_status, kickoff_status}. Panes the user or an agent\n    opened by hand are not pipeline slots and are left out; cli_list_targets is\n    where every pane is listed.\n\n    Per graph node it also carries `nodes` — {node_id: {status, startedAt,\n    endedAt, tokens, paneId, attempts, pinned}}, status one of pending /\n    running / done / awaiting / rejected / failed / skipped / aborted — and\n    `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},\n    or {} when it is not paused). Node ids are the ones pipeline_graph op\n    \"get\" returns; a pipeline without a stored graph uses n-<stage_id>-<slot\n    index>. A paused gate is resolved with pipeline_gate.\n\n    workspace_path defaults to your own pane's workspace; pass it only to ask\n    about another project.\n    ",
+  "name": "pipeline_status",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_statusArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List known skills and configured delivery, not proof of CLI loading.\n\n    A skill is a folder of instructions a CLI loads on demand. Navide keeps a\n    shared library the user can deliver to any vendor, and also reflects the\n    ones each CLI keeps in its own directory. Read this to find out what is\n    available before writing an instruction yourself, or to tell the user which\n    skill would cover what they are asking for. Read-only. Use skills_inspect\n    with a listed id for instructions and a delivery revision; authorized\n    changes use skills_set_delivery. Install through skills_prepare_install\n    then skills_install after reviewing the preview; the user approves the\n    install in Navide, and skills_install_status reports the outcome.\n\n    Returns {skills, native, root, agents}. Each shared skill is {name,\n    id, description, enabled, targets, managed, valid, native_conflict}: `targets`\n    null means every vendor receives it, a list means only those vendors, and\n    `enabled` false disables Navide's projected delivery; automatic shared-root\n    discovery is unaffected. Each native entry is {name, description,\n    source, owner_agent, real_path, valid} — a skill some CLI already owns.\n    `agents` is every vendor with its delivery support (wired / planned /\n    unsupported), so \"not delivered\" and \"cannot be delivered\" stay apart.\n\n    `configured_for_me` contains the current routing decision for your vendor.\n    `delivered_to_me` is its legacy alias: both describe configuration, not a\n    spawn snapshot or proof the running CLI loaded it. Current-session\n    materialization and loading are explicitly unknown; changes take effect in\n    a new session. Both are absent without pane identity.\n    Shared-root readers in `automatic_agents` discover original shared files\n    regardless of Navide routing. `skills_sync_enabled` reports whether managed\n    content and routing are eligible for the user's cross-device Skills sync.\n\n    Names and descriptions only. A skill's instructions are read from its own\n    folder when you use it, not from here.\n    ",
+  "name": "skills_list",
+  "parameters": {
+   "properties": {},
+   "title": "skills_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read your own message history — what you sent and what reached you.\n\n    cli_inbox_summary reports only your sends that are stuck, and\n    cli_pending_incoming only what has not been delivered yet. Neither answers\n    \"what did we already say to each other\": once a message lands it leaves\n    both of those, and after a compaction it is gone from your context too.\n    This is the persisted log, so it survives a backend restart. Read-only —\n    reading here never takes a message off anyone's queue.\n\n    limit is how many of your own messages come back (1..200, newest last).\n\n    Only your own messages are returned: a row is yours when you are its sender\n    or its recipient, matched on your current messaging name. Everybody else's\n    traffic is not readable from here, and a message queued for a name you have\n    since been renamed away from stops matching as yours.\n\n    Returns {ok, count, messages, scanned, truncated}. Each message is {uid,\n    created_at (epoch milliseconds), status, sender, recipient, direction,\n    excerpt} plus, when set, kind / reason / delivered_at / correlation_id /\n    reply_to / remote / remote_workspace. `direction` is \"sent\" when you were\n    the sender, \"received\" otherwise. `excerpt` is 200 characters with the\n    whitespace flattened; cli_read_incoming is what returns a message in full.\n\n    `truncated` true means older messages of yours were cut off — either by\n    `limit`, or by the window of recent rows this scans. `scanned` is how many\n    rows that window held.\n    ",
+  "name": "cli_message_log",
+  "parameters": {
+   "properties": {
+    "limit": {
+     "default": 50,
+     "title": "Limit",
+     "type": "integer"
+    }
+   },
+   "title": "cli_message_logArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Empty this workspace's Preview record feed.\n\n    The fourth verb: preview_record adds to the feed, preview_list reads it,\n    preview_show pushes to it, and until now nothing could take anything off\n    it. Use it when the feed is stale enough to mislead — a finished task's\n    churn sitting above what the user is about to review.\n\n    This deletes rows the user can see in the Preview panel and cannot be\n    undone. Everything on the feed goes, not only your own records: the file\n    watcher's and the user's are on it too, so prefer `before` over a full\n    clear whenever the point is \"drop what is already dealt with\".\n\n    before is a created_at timestamp from preview_list (epoch milliseconds):\n    rows stamped BEFORE it go and everything at or after it stays, which is\n    what makes clearing safe while other sessions are still recording. Left at\n    0 the whole feed is cleared.\n\n    Returns {workspace_path, removed, before}; `removed` is how many rows went,\n    0 when the feed was already empty. A \"warning\" field means no live Navide\n    pane uses workspace_path, so this cleared a feed the user is not watching.\n\n    workspace_path defaults to your own pane's workspace; pass it only to clear\n    another project's feed.\n    ",
+  "name": "preview_clear",
+  "parameters": {
+   "properties": {
+    "before": {
+     "default": 0,
+     "title": "Before",
+     "type": "integer"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "preview_clearArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read how many tokens this workspace has spent, as Navide counts them.\n\n    The numbers behind the Token panel: what the current run has used, what the\n    project has used across every run, and what every vendor has used all time.\n    Read it when the user asks what a job has cost, or before starting\n    something long enough that the answer matters. cli_usage is the other half\n    — that is quota left with the vendor, this is spend recorded here.\n    Read-only.\n\n    Returns {workspace_path, current_run, cumulative, runs, runs_truncated,\n    live_sessions, live_session_count, all_time, by_vendor, by_day}. The three\n    aggregates come through whole: `cumulative` is this project's totals with\n    by_vendor and by_stage breakdowns, `all_time` and `by_vendor` are every\n    project's. `current_run` is null when no pipeline run is open. `runs` is the\n    last few archived runs, aggregate only, with runs_truncated true when older\n    ones were cut. `live_sessions` is the busiest CLI sessions running now\n    ({input, output, calls} each, keyed by session), `live_session_count` how\n    many there are in total, and `by_day` the last week of global usage.\n\n    A count is what a vendor's own session log holds, so a vendor whose log\n    Navide cannot read contributes nothing rather than a zero.\n\n    workspace_path defaults to your own pane's workspace; pass it only to ask\n    about another project.\n    ",
+  "name": "cli_token_stats",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "cli_token_statsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the instruction files the CLIs here load, or read one of them.\n\n    CLAUDE.md, AGENTS.md, GEMINI.md and the rest: the standing instructions a\n    vendor reads at startup, in this project and in the user's home. Read them\n    before writing something that has to live alongside them — a convention the\n    project already states, or the reason another vendor behaves differently\n    from you. Read-only: editing an instruction file is the user's decision,\n    made in Settings, and there is no tool here for it.\n\n    Called with no path this lists metadata only — {workspace_path, files,\n    agents}. Each file is {scope (user / project), path, relative, readers (the\n    vendor keys that load it), canonical, exists, size, modified, error}; a\n    file that does not exist yet is still listed, because it names where a\n    convention would go. `agents` is every vendor with how Navide finds its\n    files (mapped / configured).\n\n    Called with a path it returns that one file: {workspace_path, file, path,\n    text, exists, modified}. The path must be one this listing reported —\n    anything else is refused, so this is not a way to read arbitrary files.\n\n    workspace_path defaults to your own pane's workspace; pass it only to ask\n    about another project. Without one, only user-scope files are listed.\n    ",
+  "name": "memory_list",
+  "parameters": {
+   "properties": {
+    "path": {
+     "default": "",
+     "title": "Path",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "memory_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the MCP servers configured here — Navide's own and each CLI's.\n\n    Two sources, both the ones Settings → MCP shows. The servers Navide\n    connects to as a client come with their live state; the servers each CLI\n    keeps in its own config (`~/.claude.json`, `~/.codex/config.toml`, ...)\n    are reflected as that file states them. Read it to learn what a server is\n    called, whether it is up, and how many tools it exposes before telling the\n    user a capability is missing. Read-only — adding, enabling or editing a\n    server is the user's decision, made in Settings; there is no tool here for\n    it.\n\n    Returns {servers, native, agents}. Each managed server is {name, enabled,\n    transport, command, args, env} or {name, enabled, transport, url, headers},\n    plus `status` (disabled / connected / error / unknown) and `tool_count`.\n    Each native entry is {name, agent, transport, path, command, args, url,\n    env, headers, enabled, valid, error}. `agents` is every vendor with what\n    Navide can do with its MCP (wired / planned / unsupported) and whether its\n    own config is reflected here.\n\n    Every credential-shaped value — env and header values, `--api-key=` style\n    arguments, URL userinfo and secret query parameters — is already masked\n    as `***` in both halves; names and hosts are kept so an entry stays\n    recognisable. This is a global inventory: it does not vary by workspace.\n    ",
+  "name": "mcp_list",
+  "parameters": {
+   "properties": {},
+   "title": "mcp_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the CLI extensions each AI CLI installed for itself.\n\n    These are the CLIs' own add-ons, not Navide plugins (see\n    docs/en-US/glossary.md): Claude plugins and mods, Codex plugins and\n    hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi\n    extensions, Qwen extensions, and every CLI's hooks. The same inventory\n    Settings → CLI Extensions shows. Read it before telling the user a CLI\n    has, or lacks, an add-on. Read-only: installing, enabling or removing a\n    CLI extension is the user's decision and there is no tool here for it.\n\n    Returns {vendors, items}. `vendors` is every CLI with an extension system\n    ({cli, label, supported, note, count}); `supported: false` means Navide\n    cannot read where that CLI keeps them yet. Each item is {cli, id, name,\n    version, kind (plugin / mod / extension / hook / package), type_label\n    (the vendor's own name), scope, enabled, exec_tier (L1 text assets, L2\n    subprocess such as hooks and MCP, L3 code inside the CLI's own process),\n    capabilities, native_consent (what the CLI itself asks before running\n    it), owner (navide when Navide installed it), evidence (inferred when\n    capabilities were read off source text)}.\n\n    Items of kind `navide-change` are what Navide itself wrote into a CLI's\n    world for a convenience feature (name = the feature id, enabled = the\n    feature is allowed); their id ends with a hash of the file Navide changed\n    — the file itself is named on Settings → CLI Extensions, where the user\n    can see exactly what was touched.\n\n    Names and metadata only: no paths and no hook command lines, which can\n    name scripts, hosts and tokens. A global inventory: it does not vary by\n    workspace.\n    ",
+  "name": "cli_extensions_list",
+  "parameters": {
+   "properties": {},
+   "title": "cli_extensions_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List this machine's credentials and keys by name and metadata only.\n\n    What the user sees in Settings → Credentials & keys: git credential\n    helpers, gh / glab accounts, SSH private keys, OS keyring item metadata,\n    remotes whose URL carries userinfo, token-looking environment variable\n    names, and plaintext credential files. Read it to tell the user which\n    identity or key exists before suggesting a push or a fix.\n\n    Values are never returned — no token, password, private key or\n    passphrase, and no prefix, length or hash of one. The scan is read-only:\n    it never writes git config, the keychain, ~/.ssh or a remote, and it\n    runs no command that prints a secret. Results are cached for 60 seconds.\n\n    Returns {ok, scanned_at, platform, keyring: {available, backend,\n    reason?}, items: [{id, kind, label, detail}]}. Keyring items carry only\n    their class and dates: no service, server or account (the lookup keys of\n    a keychain query).\n    ",
+  "name": "credentials_list",
+  "parameters": {
+   "properties": {},
+   "title": "credentials_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Risk findings from the read-only credentials and keys scan.\n\n    Each finding is {id, code, severity (high/medium/low), kind, location,\n    params, links, actions, manual_fix, reminder}. `location` is already\n    redacted (a URL token shows as removed, never as a value).\n    `reminder.state` is active, snoozed or dismissed as the user set it in\n    Navide. `manual_fix` true means no safe command exists and the user has\n    to fix it by hand. `actions` are fix action names\n    (remote-set-url, ssh-add-passphrase, chmod-600, gh-auth-switch,\n    gh-login-keyring, glab-login-keyring, inspect-helper-config,\n    inspect-url-rewrite, manual-fix); no shell command is returned here.\n    Codes include url-token,\n    ssh-no-passphrase-default-host, ssh-no-passphrase, ssh-key-unreferenced,\n    ssh-key-mode, cli-token-plaintext, gh-active-account-only,\n    helper-duplicate, helper-shadowed, env-token-in-shell-rc, env-token-set,\n    plaintext-credential-file and keyring-unavailable.\n\n    Values are never returned, and nothing here changes anything: report a\n    finding to the user; fixing it (and snoozing or dismissing it) is the\n    user's decision, made in Navide. Returns {ok, scanned_at, summary:\n    {high, medium, low, active_reminders}, findings}.\n    ",
+  "name": "credentials_findings",
+  "parameters": {
+   "properties": {},
+   "title": "credentials_findingsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List the prompt skills the user keeps in Settings → Prompts, or read one.\n\n    A prompt skill is a saved instruction the user fires at a CLI pane from\n    the app — a name, a description and the prompt text itself, optionally\n    with a resume prompt and a turn limit. Read the list to find out what the\n    user has already written before drafting an instruction of your own, or\n    to tell them which saved prompt covers what they are asking. Read-only:\n    creating or editing one is done in Settings.\n\n    Called with no id this lists metadata only — {skills, default_id}. Each\n    skill is {id, name, icon, description, category, enabled, isDefault,\n    maxTurns}; `default_id` is the id of the skill marked default, or \"\" when\n    none is. A `note` is added when the user has never saved any: the list is\n    then the builtin skill the app starts with.\n\n    Called with an id it returns that one skill in full — {skill}, carrying\n    `prompt` and `resumePrompt` as well. An id the list does not contain\n    answers {ok: false, error}.\n    ",
+  "name": "prompt_list",
+  "parameters": {
+   "properties": {
+    "id": {
+     "default": "",
+     "title": "Id",
+     "type": "string"
+    }
+   },
+   "title": "prompt_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Close a CLI pane: the other half of cli_open_agent.\n\n    THIS ENDS THE OTHER AGENT'S WORK. The pane and its PTY go away, whatever\n    turn was running dies with them, and anything queued for that pane is never\n    delivered. It cannot be undone — a closed pane's session is gone, not\n    parked. Check cli_get_status first and do not close a pane that is working;\n    cli_interrupt is the softer rung (it presses the interrupt key and leaves\n    the pane open), and cli_send is softer still (it waits for the turn to\n    finish).\n\n    Use it to clean up a pane you opened with cli_open_agent and no longer\n    need. Panes the user opened are the user's; closing one takes their work\n    away with no warning they will see first. To free a finished pane's memory\n    but leave it for the user to check, use cli_reclaim_agent instead: the CLI\n    process ends and the pane stays as a click-to-resume card.\n\n    `target` uses the same addressing as cli_send and `pane_id` names one exact\n    pane instead. Panes on this machine only: closing one is an action taken by\n    the window that owns it and there is no relay for it, so a\n    `<device>/<workspace>/<pane>` address fails with \"close-local-only\" — that\n    is a limit of this tool, not a wrong address.\n\n    Returns {ok, target, name, closed, advisories?}. `advisories` is what\n    closing cost that nobody else would have reported: the pane was mid-turn,\n    messages were queued for it, it had children that are now orphaned. They\n    are gathered before the kill because none of it is knowable afterwards.\n    `ok` false means nothing was closed — an unknown target, or the owning\n    window did not answer.\n    ",
+  "name": "cli_close_agent",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_close_agentArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Reclaim a finished CLI pane: end its CLI process, keep the pane.\n\n    The pane stays where it is as a click-to-resume card holding its\n    conversation — the same \"reclaim now\" the status bar and Resource Manager\n    offer (ui_invoke \"ui.pane.reclaim\"). Use it on a pane whose work is done\n    and reported, to free its memory while leaving it for the user to check or\n    resume. cli_close_agent is the permanent version: it removes the pane.\n\n    The status bar's guards apply unchanged, so a pane that is busy or awaiting\n    an answer, the one the user has focused, one with unsent input, one with\n    queued messages or a running pipeline/loop, and one whose session cannot be\n    resumed are refused rather than reclaimed.\n\n    `target` uses the same addressing as cli_send and `pane_id` names one exact\n    pane instead. Panes on this machine only: a `<device>/<workspace>/<pane>`\n    address fails with \"reclaim-local-only\", and your own pane with\n    \"self-reclaim\".\n\n    Returns {ok, target, name, reclaimed}. A refused pane answers ok false,\n    reclaimed false, `reason` (the guard's code, e.g. \"focused\", \"not-idle\")\n    and `error` saying why, with error_code \"reclaim-refused\". A Navide window\n    older than v0.2.16 cannot reclaim and answers error_code\n    \"reclaim-unsupported\": the app needs updating — do not fall back to\n    cli_close_agent, which ends the session instead of parking it.\n    ",
+  "name": "cli_reclaim_agent",
+  "parameters": {
+   "properties": {
+    "pane_id": {
+     "default": "",
+     "title": "Pane Id",
+     "type": "string"
+    },
+    "target": {
+     "title": "Target",
+     "type": "string"
+    }
+   },
+   "required": [
+    "target"
+   ],
+   "title": "cli_reclaim_agentArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Start a pipeline run: open the first stage's panes and hand them the task.\n\n    THIS OPENS CLI PANES AND SPENDS THEIR QUOTA. A pipeline is a template of\n    stages, and every slot of a stage is a fresh CLI process with its own\n    context and its own bill; later stages open as the run advances. Read\n    pipeline_list first for the templates this machine has and what each one is\n    made of, and pipeline_status for whether a run is already in progress —\n    starting one is not a step to take on a guess.\n\n    `pipeline_id` is the template to run, as pipeline_list reports its id. Left\n    empty, the workspace's currently selected pipeline runs; a workspace with\n    none selected refuses rather than picking one for you. `task` is what the\n    run is for — the text each stage's kickoff message is built from.\n\n    Returns the window's own reply — {ok, result, error}. `result` carries\n    {pipelineId, stages, workspacePath, state} for a run that actually started.\n    ok false means nothing started: a run already going (abort it first), no\n    pipeline to run, or a first stage whose panes all failed to spawn. The\n    window reports the run's own state rather than the fact that the call\n    returned, so \"ok\" here is not the \"started but nothing happened\" answer.\n\n    workspace_path defaults to your own pane's workspace; pass it only to start\n    a run in another project's window.\n    ",
+  "name": "pipeline_start",
+  "parameters": {
+   "properties": {
+    "pipeline_id": {
+     "default": "",
+     "title": "Pipeline Id",
+     "type": "string"
+    },
+    "task": {
+     "default": "",
+     "title": "Task",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_startArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Stop the pipeline run in progress in a workspace.\n\n    Abort is a pause, not a kill: the orchestration stops (no further stage is\n    activated, no more routing between the panes), and the panes already open\n    stay open with their work intact, so the user can resume the run from the\n    banner the window then shows. Nothing is deleted.\n\n    Returns the window's own reply — {ok, result, error}, `result` carrying\n    {workspacePath, state}. ok false means nothing was aborted, the usual\n    reason being that no run was in progress; pipeline_status says whether one\n    is.\n\n    workspace_path defaults to your own pane's workspace; pass it only to stop\n    a run in another project's window.\n    ",
+  "name": "pipeline_abort",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_abortArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Create, rename, delete or re-seed a pipeline TEMPLATE (not a run).\n\n    A pipeline is the template pipeline_start runs: a named, ordered set of\n    stages. This edits the template list itself; stage_define edits what is\n    inside one, and role_define the roles its slots are cast from. Nothing here\n    starts, stops or advances a run.\n\n    `op` selects the operation and decides which other arguments are required:\n\n    - \"create\"        — needs `name`. Adds an empty pipeline (no stages) and\n                        returns it with its generated id. It is not made\n                        active; use \"set_active\" for that, and stage_define\n                        with op \"upsert\" to give it stages — a pipeline with no\n                        stages cannot be run.\n    - \"rename\"        — needs `pipeline_id` and `name`. Renames in place; ids\n                        and stages are untouched.\n    - \"delete\"        — needs `pipeline_id`. DESTRUCTIVE, see below.\n    - \"set_active\"    — needs `pipeline_id`. Selects the template the Pipelines\n                        window shows and that pipeline_start uses when called\n                        with no pipeline_id of its own.\n    - \"reset_builtin\" — needs `pipeline_id`, and only \"default\" or\n                        \"maintenance\" have seed data. DESTRUCTIVE, see below.\n\n    `workspace_path` names the project whose run the guards check; it defaults\n    to your own pane's workspace, and a caller with no pane that passes nothing\n    gets no guard at all. Pass it when editing on behalf of another project.\n\n    What the destructive ops actually do to a run in progress:\n\n    - \"delete\" and \"set_active\" are REFUSED outright while that workspace has\n      a run in the running state (error_code \"pipeline_running\"). Abort the run\n      first if you mean it.\n    - \"reset_builtin\" replaces every stage of the pipeline with its seed set,\n      and is refused while the run in progress is using that pipeline — a run\n      records which pipeline it belongs to, and naming it explicitly does not\n      get past the guard.\n    - A deleted pipeline does not stop or rewind a run that was already\n      started: the run keeps its own recorded pipeline_id and the panes it has\n      already opened. What breaks is resuming it later, since the template it\n      names is gone. The last remaining pipeline cannot be deleted at all.\n    - Nothing here touches a run's recorded progress. Editing a template while\n      an unrelated workspace runs a different one is fine.\n\n    Returns {ok, op, pipelines, active_pipeline_id}, plus `pipeline` for the\n    ops that produce one (\"create\", \"rename\", \"reset_builtin\"). ok false\n    carries `error` and `error_code` — one of \"bad_op\", \"missing_argument\",\n    \"pipeline_running\", \"not_found\", \"invalid\" — and nothing was written.\n    ",
+  "name": "pipeline_define",
+  "parameters": {
+   "properties": {
+    "name": {
+     "default": "",
+     "title": "Name",
+     "type": "string"
+    },
+    "op": {
+     "title": "Op",
+     "type": "string"
+    },
+    "pipeline_id": {
+     "default": "",
+     "title": "Pipeline Id",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "op"
+   ],
+   "title": "pipeline_defineArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Add, edit, remove, reorder or re-seed the STAGES inside one pipeline.\n\n    A stage is one step of a pipeline and holds the slots that become panes:\n    each slot names a CLI (agent_key) and a role (role_key) and carries the\n    kickoff text that pane is started with. pipeline_list shows the current\n    shape of every pipeline; this changes it.\n\n    `op` selects the operation and decides which other arguments are required:\n\n    - \"upsert\"  — needs `stage`, a full stage object. Matched by `stage[\"id\"]`:\n                  an existing id is merged over (fields you omit keep their old\n                  values), a new one is appended at the end. The store requires\n                  `id` (alphanumeric, hyphen, underscore and dot only) and a\n                  non-empty `slots` list. A stage looks like\n                  {id, title, short_title, question, description, sentinel,\n                  recommended_roles, allow_questions, doc_query, slots}, and\n                  each slot {agent_key, role_key, label, kickoff_body,\n                  is_commander}. Read one out of pipeline_list first and edit\n                  that shape rather than composing one blind — but note\n                  pipeline_list deliberately omits kickoff_body, so an upsert\n                  built from it alone would blank the kickoffs of the slots it\n                  rewrites.\n    - \"delete\"  — needs `stage_id`. Refused for the last remaining stage of a\n                  pipeline.\n    - \"reorder\" — needs `ids`, the stage ids in the order you want. Ids not\n                  listed keep their relative order at the end, unknown ids and\n                  duplicates are ignored. The order IS the run order.\n    - \"reset\"   — takes no extra argument. DESTRUCTIVE, see below.\n\n    `pipeline_id` picks which pipeline to edit; left empty it means the active\n    one, which is what the Pipelines window has selected and not necessarily\n    the one you were reading. Name it.\n\n    `workspace_path` names the project whose run the guard checks; it defaults\n    to your own pane's workspace.\n\n    What this does to a run in progress: EVERY op here is refused while the\n    workspace has a run using this pipeline (error_code \"pipeline_running\") —\n    a run compares against the pipeline it recorded at start, so naming that\n    pipeline explicitly does not slip past. That is the whole protection: a\n    stage list edited mid-run would change the flow underneath the run. Runs in\n    other workspaces, or on other pipelines, are unaffected — and an edit\n    landing between two runs changes what the NEXT one does, silently, which is\n    the case to warn the user about.\n\n    \"reset\" throws away every stage of the pipeline and puts back the seed set:\n    the built-in stages for \"default\" and \"maintenance\", and NOTHING AT ALL for\n    a pipeline you created — a custom pipeline reset this way is left empty and\n    unrunnable, and there is no undo. Read it out of pipeline_list first if you\n    might want it back.\n\n    A pipeline whose graph has gates, reject loops or cross-layer edges cannot\n    be expressed as a stage list: \"upsert\", \"delete\" and \"reorder\" are refused\n    for it (error_code \"graph_nonlinear\") — edit it with pipeline_graph. On a\n    pipeline whose graph is still linear they work and the graph follows.\n\n    Returns {ok, op, stages, pipeline_id, pipelines, active_pipeline_id}, plus\n    `stage` for \"upsert\". ok false carries `error` and `error_code` — one of\n    \"bad_op\", \"missing_argument\", \"pipeline_running\", \"graph_nonlinear\",\n    \"not_found\", \"invalid\" — and nothing was written.\n    ",
+  "name": "stage_define",
+  "parameters": {
+   "properties": {
+    "ids": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Ids"
+    },
+    "op": {
+     "title": "Op",
+     "type": "string"
+    },
+    "pipeline_id": {
+     "default": "",
+     "title": "Pipeline Id",
+     "type": "string"
+    },
+    "stage": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Stage"
+    },
+    "stage_id": {
+     "default": "",
+     "title": "Stage Id",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "op"
+   ],
+   "title": "stage_defineArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Create, edit, rename, delete or re-seed the ROLES pipeline slots cast from.\n\n    A role is a named system prompt: a stage slot names one by `role_key`, and\n    the pane that slot opens is started with that role's prompt. Roles are\n    global to the machine, not per pipeline and not per workspace, so an edit\n    here reaches every pipeline that names the role. pipeline_list lists the\n    roles that exist (key, label, one_line) but never their prompt bodies.\n\n    `op` selects the operation and decides which other arguments are required:\n\n    - \"upsert\" — needs `key`, `label` and `system_prompt`; `one_line` is the\n                 short description shown next to the label. An existing key is\n                 overwritten, a new one created. `key` must be lowercase\n                 letters, digits, underscore or dash, 1-32 characters.\n                 REPLACES the whole role: label and system_prompt you do not\n                 pass are not kept, they are written blank — and blank is\n                 refused, which is the only thing stopping a partial upsert\n                 from erasing a prompt.\n    - \"rename\" — needs `key` (the current one) and `new_key`. Renames in one\n                 step and repoints every stage slot that named the old key, so\n                 there is no intermediate state where slots point at nothing.\n                 `label` / `one_line` / `system_prompt` are optional here: what\n                 you omit is carried over from the existing role. Refused if\n                 `key` does not exist, or if `new_key` is already taken —\n                 merging two roles would silently drop one side's prompt.\n    - \"delete\" — needs `key`. REFUSED while any stage slot still names the\n                 role, and the refusal lists those slots in `usages` so you can\n                 repoint them (stage_define op \"upsert\") or rename instead. A\n                 slot pointing at a deleted role fails role injection and\n                 leaves that stage's pane sitting at an empty prompt with\n                 nothing on screen to say why — which is what the refusal is\n                 for. The last remaining role cannot be deleted at all.\n    - \"reset\"  — takes no extra argument. DESTRUCTIVE: throws away every role,\n                 custom ones included, and puts back the built-in set. Slots\n                 left naming a role the seed set does not have are then blanked\n                 rather than left dangling, so pipelines survive but those\n                 slots lose their role and must be re-cast. There is no undo.\n\n    `properties` (optional, \"upsert\" and \"rename\") declares the settings form a\n    slot of this role shows: a list of {name, type, label?, description?,\n    default?, options?, required?, displayOptions?}, type one of string / text\n    / template / number / boolean / options (\"options\" needs `options`, a list\n    of {value, label?}), displayOptions {show?, hide?} mapping another\n    property's name to the values that show or hide this one. Omitted, a\n    role's existing properties are kept; [] clears them. A slot stores its\n    values in `params`.\n\n    Roles have no run guard: unlike stages, editing one is allowed while a\n    pipeline runs. A pane already started keeps the prompt it was given — the\n    change reaches the next pane opened for that slot, not the ones on screen.\n\n    Returns {ok, op, roles}, plus `role` for \"upsert\" and \"rename\", and\n    `repointed_pipeline_ids` for \"rename\". ok false carries `error` and\n    `error_code` — one of \"bad_op\", \"missing_argument\", \"not_found\",\n    \"role_key_exists\", \"role_in_use\", \"invalid\" — and nothing was written.\n    ",
+  "name": "role_define",
+  "parameters": {
+   "properties": {
+    "key": {
+     "default": "",
+     "title": "Key",
+     "type": "string"
+    },
+    "label": {
+     "default": "",
+     "title": "Label",
+     "type": "string"
+    },
+    "new_key": {
+     "default": "",
+     "title": "New Key",
+     "type": "string"
+    },
+    "one_line": {
+     "default": "",
+     "title": "One Line",
+     "type": "string"
+    },
+    "op": {
+     "title": "Op",
+     "type": "string"
+    },
+    "properties": {
+     "anyOf": [
+      {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Properties"
+    },
+    "system_prompt": {
+     "default": "",
+     "title": "System Prompt",
+     "type": "string"
+    }
+   },
+   "required": [
+    "op"
+   ],
+   "title": "role_defineArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read or edit a pipeline TEMPLATE as a graph: nodes, edges, gates, loops.\n\n    A pipeline's shape is a graph — slot nodes (one CLI pane each, carrying the\n    same agentKey / roleKey / label / kickoffBody / isCommander a stage slot\n    has, plus optional `params`), gate nodes (the run pauses there until\n    pipeline_gate passes or rejects it) and a trigger — joined by edges keyed\n    by id. Its stages (what stage_define and pipeline_list show) are derived\n    from it: each longest-path layer of slot nodes is one stage, run in order,\n    so a node waits for every node upstream of it. A pipeline that has never\n    been edited as a graph answers \"get\" with the graph its stages imply\n    (derived: true) and is unchanged until you write one.\n\n    `op`:\n    - \"get\"   — returns {graph, derived, stages}.\n    - \"apply\" — needs `ops`, a list applied all-or-nothing:\n        {op:\"add_node\", node:{id, kind:\"slot\"|\"gate\"|\"trigger\", label?,\n           position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,\n           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}\n           (after/before wire main edges; an edge after→before is replaced,\n           i.e. inserting on an edge)\n        {op:\"remove_node\", id, reconnect?:true}  (upstream rewired to downstream)\n        {op:\"update_node\", id, label?, slot?:{...partial}, gate?:{prompt?}}\n        {op:\"move_node\", id, position:{x,y}}\n        {op:\"add_edge\", edge:{id?, from, to, kind?:\"main\"|\"reject\", maxLoops?}}\n        {op:\"remove_edge\", id}\n        {op:\"set_gate\", id, prompt?}\n        {op:\"set_pin\", id, pinned}   (a pinned slot is skipped on later runs and\n           its last output reused)\n        {op:\"set_stage_meta\", stageId, title?, shortTitle?, question?,\n           description?, sentinel?, allowQuestions?, docQuery?,\n           recommendedRoles?}  (metadata of the stage a layer derives to)\n    - \"set\"   — needs `graph` ({version:1, nodes, edges}); replaces it whole.\n\n    Rules a write must satisfy: main edges form no cycle; the only loops are\n    \"reject\" edges, which must point to an upstream node and carry maxLoops\n    1..10 (default 2) — a rejected gate follows its reject edge back and re-runs\n    from there at most that many times, then the run fails.\n\n    Refused while the workspace's run is using this pipeline (error_code\n    \"pipeline_running\"), like stage_define. `pipeline_id` empty means the\n    active pipeline; name it. Returns {ok, op, pipeline_id, graph, stages}\n    (+ derived for \"get\"); ok false carries `error`, `error_code` (\"bad_op\",\n    \"missing_argument\", \"pipeline_running\", \"not_found\", \"invalid\") and, for\n    an invalid graph, `errors` — nothing was written.\n    ",
+  "name": "pipeline_graph",
+  "parameters": {
+   "properties": {
+    "graph": {
+     "anyOf": [
+      {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Graph"
+    },
+    "op": {
+     "title": "Op",
+     "type": "string"
+    },
+    "ops": {
+     "anyOf": [
+      {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Ops"
+    },
+    "pipeline_id": {
+     "default": "",
+     "title": "Pipeline Id",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "op"
+   ],
+   "title": "pipeline_graphArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Advance a running pipeline to its next stage now, without waiting.\n\n    THIS OPENS CLI PANES AND SPENDS THEIR QUOTA. Normally the window decides a\n    stage is finished by watching its panes; this says so on their behalf and\n    activates the next stage immediately, spawning a pane for each of its\n    slots. Work still in flight in the current stage is not waited for — its\n    output simply does not reach the stage that follows.\n\n    On the last stage there is nothing to advance to and this is REFUSED, not\n    quietly turned into a completion: a caller that asked to step forward must\n    not get a finished run back instead. Ending a run there is the window's own\n    job, or pipeline_abort's. pipeline_status shows current_stage_index and\n    total_stages, which is how to see that case coming before calling.\n\n    Returns the window's own reply — {ok, result, error}. ok false means\n    nothing advanced, the usual reason being that no run is in progress.\n\n    workspace_path defaults to your own pane's workspace; pass it only to drive\n    a run in another project's window.\n    ",
+  "name": "pipeline_next",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_nextArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Carry on a pipeline run that was aborted or interrupted, from where it stopped.\n\n    THIS OPENS CLI PANES AND SPENDS THEIR QUOTA. Resume is the other half of\n    pipeline_abort: the recorded run is picked back up at the stage after the\n    last finished one, and that stage's panes are spawned. Progress already\n    made is kept — this is the non-destructive way back into a run, unlike\n    pipeline_reset and pipeline_restart.\n\n    The run is resumed against the pipeline it was started with, switching the\n    active pipeline back if it has since changed; if that pipeline is gone or\n    its stages no longer reach the recorded index, the resume stops and says so\n    rather than running an unrelated stage against this run's task.\n\n    Returns the window's own reply — {ok, result, error}. ok false means\n    nothing resumed: no recorded run to resume, or one already running.\n    pipeline_status shows whether a run exists and what state it is in.\n\n    workspace_path defaults to your own pane's workspace; pass it only to\n    resume a run in another project's window.\n    ",
+  "name": "pipeline_resume",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_resumeArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Clear the workspace back to idle: close EVERY pane and drop the run's progress.\n\n    DESTRUCTIVE, AND WIDER THAN IT SOUNDS. Unlike pipeline_abort, which pauses\n    the orchestration and leaves the panes alive to be resumed, reset tears\n    down every pane in the workspace — the ones the pipeline opened AND the\n    ones the user or another agent opened by hand — and returns the workspace\n    to an idle, empty state with the run's task, stage index and log cleared.\n    There is no resume afterwards and no undo.\n\n    Read pipeline_status first: it says whether a run is in progress and how\n    far it got, and cli_list_targets says which panes are about to be closed.\n    If the intent is only to stop the run, pipeline_abort keeps the work.\n\n    Returns the window's own reply — {ok, result, error}.\n\n    workspace_path defaults to your own pane's workspace; pass it only to reset\n    another project's window.\n    ",
+  "name": "pipeline_reset",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_resetArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Throw the current run away and run the same pipeline again from stage one.\n\n    DESTRUCTIVE, AND IT OPENS CLI PANES AND SPENDS THEIR QUOTA. Every pane the\n    pipeline opened is closed, the progress recorded for the run is discarded,\n    and the run starts over at the first stage with the same task — so the\n    stages that had already finished are paid for and run a second time. There\n    is no undo.\n\n    Read pipeline_status first: a run three stages in is three stages of work\n    to redo, and if the goal is only to move past a stuck stage then\n    pipeline_next costs nothing already spent.\n\n    Returns the window's own reply — {ok, result, error}. ok false means\n    nothing restarted, the usual reason being that the workspace has no run to\n    restart.\n\n    workspace_path defaults to your own pane's workspace; pass it only to\n    restart a run in another project's window.\n    ",
+  "name": "pipeline_restart",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "title": "pipeline_restartArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Pass or reject the gate a running pipeline is paused on.\n\n    A gate node stops the run between two stages until someone decides.\n    pipeline_status shows it in `gate` ({gateId, label, prompt, ...}) — read\n    that prompt and look at the work before deciding.\n\n    - \"pass\"   — the run carries on with the next stage. THIS OPENS CLI PANES\n                 AND SPENDS THEIR QUOTA.\n    - \"reject\" — the gate's reject edge is followed back and the stages from\n                 its target on run again, with `comment` put in front of their\n                 kickoffs so the agents know what to fix. Each reject edge has\n                 a loop budget; once it is spent, or when the gate has no\n                 reject edge, rejecting ends the run as failed.\n\n    `node_id` is optional: given, it must be the gate the run is waiting on,\n    which guards against deciding a different gate than the one you read.\n\n    Returns the window's own reply — {ok, result, error}; ok false means no\n    run is waiting on a gate (or on that one) and nothing changed.\n    ",
+  "name": "pipeline_gate",
+  "parameters": {
+   "properties": {
+    "comment": {
+     "default": "",
+     "title": "Comment",
+     "type": "string"
+    },
+    "node_id": {
+     "default": "",
+     "title": "Node Id",
+     "type": "string"
+    },
+    "op": {
+     "title": "Op",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "op"
+   ],
+   "title": "pipeline_gateArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Start a new run of the pipeline at one node instead of stage one.\n\n    THIS CLOSES THE PIPELINE'S PANES, OPENS NEW ONES AND SPENDS THEIR QUOTA.\n    The stages before the node's stage are not run again: their last recorded\n    output is reused as context (the same as a pinned node). Use it when an\n    early stage's work is good and only a later one needs redoing — cheaper\n    than pipeline_restart, which re-runs everything. Refused while a run is in\n    progress (pipeline_abort first).\n\n    `node_id` comes from pipeline_graph op \"get\" (or pipeline_status `nodes`).\n    `task` defaults to the recorded run's task.\n\n    Returns the window's own reply — {ok, result, error}.\n    ",
+  "name": "pipeline_restart_from",
+  "parameters": {
+   "properties": {
+    "node_id": {
+     "title": "Node Id",
+     "type": "string"
+    },
+    "task": {
+     "default": "",
+     "title": "Task",
+     "type": "string"
+    },
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    }
+   },
+   "required": [
+    "node_id"
+   ],
+   "title": "pipeline_restart_fromArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "List Navide's scheduled jobs. Returns {ok, jobs, now}.\n\n    Every job is listed, including ones you may not change: `editable` says\n    whether you may (you may change only jobs you created), `owner` says who\n    created it ({kind: \"user\"}, {kind: \"pane\", pane_id, pane_name, workspace}\n    or {kind: \"external\"}), and `owner_gone` is true when the creating pane is\n    gone — such a job is the user's to change now. `limits` reports the agent\n    limits (see scheduler_upsert, LIMITS) and how much of them is in use:\n    yours_enabled, agent_enabled, agent_runs_today.\n\n    Jobs fire only while Navide is running; nothing wakes the machine or the\n    app. See scheduler_upsert for the shape of a job.\n    ",
+  "name": "scheduler_list",
+  "parameters": {
+   "properties": {},
+   "title": "scheduler_listArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Create a scheduled job, or update one (pass its `id`). Returns {ok, job}.\n\n    A job wakes a CLI pane on a timetable and sends it an instruction. It fires\n    ONLY WHILE NAVIDE IS RUNNING: a slot missed while the app was closed is run\n    once on the next start (catch_up \"once\") or dropped (catch_up \"skip\").\n\n    UNATTENDED RUNS SPEND QUOTA. Every run is a turn the target agent pays for,\n    with nobody watching. Each job is capped at max_runs_per_day (default 24),\n    a run whose target CLI is marked out of quota is skipped, and failures back\n    off 30s → 1m → 5m → 15m → 60m. Pick the slowest schedule that does the job.\n\n    Skips are not errors: \"no_window\" (no Navide window open), \"busy\" (this\n    job's previous message is still queued at the pane), \"budget\" (daily cap or\n    quota), \"budget_global\" (agent jobs' daily total), \"expired\" (see LIMITS),\n    \"target_gone\" (pane_id no longer names a pane). A message to a pane\n    that is mid-turn is queued by the normal delivery path and runs as \"ok\".\n\n    Defaults for a pane caller: action.workspace is your own workspace, and an\n    action with neither pane_id nor pane_name targets YOUR OWN pane — so\n    \"wake me up in an hour and continue\" is a once job whose action is just\n    `text`: {name, schedule: {kind: \"once\", in_ms: 3600000}, action: {kind:\n    \"message\", text}}. Do not use \"every\" for a one-off wake-up — it repeats. A\n    caller with no pane identity must pass workspace and a target.\n\n    OWNERSHIP. A job you create is yours; you may update, remove, pause/resume\n    or run_now only your own jobs — the user's and other agents' answer {ok:\n    false, code: \"SCHEDULER_NOT_OWNER\"}; ask the user to change those. If your\n    pane is closed, its jobs keep running but become the user's to change. A\n    pane caller may only target panes in its own workspace (another workspace\n    answers code \"SCHEDULER_CROSS_WORKSPACE\"); a caller with no pane identity\n    has no own workspace and is not limited this way.\n\n    LIMITS on agents' jobs (the user's own jobs have none): at most 10 enabled\n    jobs of yours and 100 enabled agent jobs in all; every_ms at least 300000\n    (5 minutes) and max_runs_per_day at most 288; 300 runs a day across all\n    agent jobs (your run_now included) — past that a slot is skipped as\n    \"budget_global\". A periodic job of yours disables itself 7 days after you\n    last saved or enabled it (skip reason \"expired\"; the user can keep it), so\n    save or re-enable it to keep it going. A finished once job of yours is\n    deleted 30 days after it ran. A limit answers {ok: false, code:\n    \"SCHEDULER_LIMIT\", limit, max, used, error}; `max` is the bound (the\n    minimum, for \"min_every_ms\").\n\n    A once job runs a single time, then disables itself whatever the outcome\n    (ok, error or skipped); it stays listed with its state. Enabling it again\n    after its moment has passed is refused — give it a new at_ms / in_ms.\n\n    Invalid definitions answer {ok: false, error} and save nothing.\n\n    Updating (with `id`) is partial: send only what changes — a field left out\n    keeps its stored value, and `policy` merges key by key. A sent `action` is\n    validated whole (it replaces the stored one; it is not merged). Creating\n    (no `id`) needs name, schedule and action.\n\n    A job is {id, name, enabled, created_at, updated_at, schedule, action, policy,\n    state, owner, updated_by, owner_gone}; times are epoch milliseconds. owner\n    and updated_by are recorded by Navide; anything sent there is ignored.\n\n      schedule — one of:\n        {kind: \"every\",  every_ms, anchor_ms?}   every N ms (60000 .. 7 days),\n                                                 on a grid from anchor_ms (default: now)\n        {kind: \"daily\",  at: \"HH:MM\", tz}        tz is an IANA zone, e.g. \"Asia/Taipei\"\n        {kind: \"weekly\", days: [1..7], at, tz}   1 = Monday .. 7 = Sunday\n        {kind: \"once\",   at_ms}                  one run at that moment (at most 1 min\n                                                 in the past, at most 10 years ahead)\n        {kind: \"once\",   in_ms}                  shorthand: saved as at_ms = now + in_ms\n      action — {kind: \"message\", workspace, pane_id?, pane_name?, text}: wake that\n        CLI pane (a closed-idle restore placeholder is opened first) and send\n        `text`, exactly as cli_send(open_target=True) would. At least one of\n        pane_id / pane_name. pane_id pins one exact pane (read it from\n        cli_list_targets or cli_whoami); if that pane is gone the run is skipped as\n        \"target_gone\" — it never falls back to another pane of the same name.\n        A pane rebuilt by resuming the same session keeps its jobs: they move\n        to the new pane id. Three \"target_gone\" runs in a row disable the job\n        (state.disabled_reason \"target_gone\") and tell its creator once.\n      policy — optional {catch_up: \"once\" | \"skip\", max_runs_per_day, timeout_s};\n        defaults {\"once\", 24, 1800}.\n      state — owned by Navide (next_run_at, running_at, last_status, last_error,\n        consecutive_errors, backoff_until, ...); anything sent there is ignored.\n    ",
+  "name": "scheduler_upsert",
+  "parameters": {
+   "properties": {
+    "job": {
+     "additionalProperties": true,
+     "title": "Job",
+     "type": "object"
+    }
+   },
+   "required": [
+    "job"
+   ],
+   "title": "scheduler_upsertArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Delete a scheduled job and its run history. Returns {ok} or {ok: false, error}.\n\n    Only a job you created (see scheduler_upsert, OWNERSHIP).\n    ",
+  "name": "scheduler_remove",
+  "parameters": {
+   "properties": {
+    "id": {
+     "title": "Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "title": "scheduler_removeArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Pause (enabled=false) or resume a scheduled job. Returns {ok}.\n\n    Resuming never fires a slot that passed while the job was paused; it waits\n    for the next one. Resuming a once job whose moment has passed answers\n    {ok: false, error} — set a new time with scheduler_upsert instead. Only a\n    job you created (see scheduler_upsert, OWNERSHIP).\n    ",
+  "name": "scheduler_set_enabled",
+  "parameters": {
+   "properties": {
+    "enabled": {
+     "title": "Enabled",
+     "type": "boolean"
+    },
+    "id": {
+     "title": "Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "id",
+    "enabled"
+   ],
+   "title": "scheduler_set_enabledArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Run a job once, right now, outside its timetable. Returns {ok, enqueued}.\n\n    Answers as soon as the run has started, not when it ends — read\n    scheduler_runs for the outcome. Refused while that job is already running.\n    Clears a failure backoff; the error count resets only if this run succeeds.\n    The run does not move the job's next scheduled slot. Only a job you created\n    (see scheduler_upsert, OWNERSHIP).\n    ",
+  "name": "scheduler_run_now",
+  "parameters": {
+   "properties": {
+    "id": {
+     "title": "Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "title": "scheduler_run_nowArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "A job's run history, newest first (up to 200 kept). Returns {ok, runs}.\n\n    Each run is {id, job_id, started_at, ended_at, status: \"ok\" | \"error\" |\n    \"skipped\", reason, detail}.\n    ",
+  "name": "scheduler_runs",
+  "parameters": {
+   "properties": {
+    "id": {
+     "title": "Id",
+     "type": "string"
+    },
+    "limit": {
+     "default": 20,
+     "title": "Limit",
+     "type": "integer"
+    }
+   },
+   "required": [
+    "id"
+   ],
+   "title": "scheduler_runsArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Finish a Navide self-evolution run. Only for a pane Navide opened (or\n    sent) a self-evolution task to: its task names the run_id.\n\n    Call it exactly once, as the last step, with the run_id and run_token\n    your task gave you — a report without the matching token is refused.\n    `status` is \"ok\" or \"error\";\n    `summary` 3–8 lines for the user (mask secrets first); `commits` is\n    [{hash, title}] of fixes now on the main branch; `proposals` is\n    [{rel_path, name}] of plans created; `panes` the names of panes you opened;\n    `tokens` your estimate of tokens used. Navide records it in the workspace's\n    self-evolution history and then reclaims the run's pane. Only the run's own\n    pane, or a pane it opened, may report it. Returns {ok, run_id, status}.\n    ",
+  "name": "evolve_report",
+  "parameters": {
+   "properties": {
+    "commits": {
+     "anyOf": [
+      {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Commits"
+    },
+    "panes": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Panes"
+    },
+    "proposals": {
+     "anyOf": [
+      {
+       "items": {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Proposals"
+    },
+    "run_id": {
+     "title": "Run Id",
+     "type": "string"
+    },
+    "run_token": {
+     "default": "",
+     "title": "Run Token",
+     "type": "string"
+    },
+    "status": {
+     "title": "Status",
+     "type": "string"
+    },
+    "summary": {
+     "title": "Summary",
+     "type": "string"
+    },
+    "tokens": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Tokens"
+    }
+   },
+   "required": [
+    "run_id",
+    "status",
+    "summary"
+   ],
+   "title": "evolve_reportArguments",
+   "type": "object"
+  }
+ },
+ {
+  "description": "Read, or change, the global switch that lets CLIs skip their permission prompts.\n\n    \"Yolo\" is Navide's name for the permission-bypass flag it passes a CLI at\n    spawn (claude's --dangerously-skip-permissions and each vendor's\n    equivalent). It is ONE setting for the whole app — not per workspace, not\n    per pipeline, not per pane — stored with the user's settings and read by\n    every path that starts a CLI: new panes, pipeline slots, resumes and\n    restores alike.\n\n    Called with no argument it only reads. Passing `yolo=false` turns it off,\n    and the new value applies to CLIs started AFTER the change; processes\n    already running keep the flags they were launched with, so turning it off\n    does not reach back into a pane that is already going.\n\n    `yolo=true` is REFUSED (ok false, error_code \"ui_human_only\"): with it on,\n    the CLIs Navide starts stop asking before they edit files, run shell\n    commands or make network calls in the user's workspace. Only the user can\n    switch it on, in Settings. Ask them if your work needs it.\n\n    Returns {ok, result, error}; `result` is {yolo, agents}. `yolo` is the\n    global switch. `agents` is one entry per CLI vendor — {agent, mode,\n    skipFlag} — and it is the half that actually answers \"will this CLI skip\n    its prompts\":\n\n    - `mode` is that vendor's own override and BEATS the global switch:\n      \"inherit\" follows it, \"force-on\" and \"force-off\" ignore it. So `yolo`\n      true on its own does not mean every CLI bypasses, and `yolo` false does\n      not mean none does — reading only the switch will mislead you.\n    - `skipFlag` is the flag that vendor would actually be launched with right\n      now, and empty string means none. Vendors with no bypass flag at all\n      (grok, opencode, pi) are always empty here whatever the switch says.\n\n    Read `agents[].skipFlag` for the per-CLI answer; `yolo` is only the default\n    the ones on \"inherit\" fall back to.\n\n    `workspace_path` is ADDRESSING ONLY — it picks which window is asked, not\n    what the change applies to. The setting is one global value whichever\n    window reads or writes it, so every window gives the same answer and a\n    write through any of them reaches all of them. It defaults to your own\n    pane's window, and a caller with no pane that names nothing simply gets\n    whichever window is open. There is no per-project version of this setting\n    to reach by passing a different path.\n\n    ok false with error_code \"ui_no_window\" means no Navide window was open to\n    ask.\n    ",
+  "name": "cli_permission_settings",
+  "parameters": {
+   "properties": {
+    "workspace_path": {
+     "default": "",
+     "title": "Workspace Path",
+     "type": "string"
+    },
+    "yolo": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Yolo"
+    }
+   },
+   "title": "cli_permission_settingsArguments",
+   "type": "object"
+  }
+ }
+]

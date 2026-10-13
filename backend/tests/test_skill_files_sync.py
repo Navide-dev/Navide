@@ -20,6 +20,21 @@ from .test_skill_blobs import SMALL, FakeStore
 from .test_sync_engine import FakeServer, account_key  # noqa: F401 - a fixture
 
 
+from agent_team_backend import sync_approvals as _sync_approvals  # noqa: E402
+
+_REAL_IS_APPROVED = _sync_approvals.is_approved
+_REAL_NEEDS_REVIEW = sync_scopes.SkillFilesScope.__dict__["_needs_review"]
+
+@pytest.fixture(autouse=True)
+def _approve_everything(monkeypatch):
+    """What these tests check is the transfer, not the approval hold
+    (test_sync_approvals*): every manifest counts as one this machine
+    already reviewed, so it takes the plain download-and-land path."""
+    from agent_team_backend import sync_approvals
+
+    monkeypatch.setattr(sync_approvals, "is_approved", lambda *_a: False)
+    monkeypatch.setattr(sync_scopes.SkillFilesScope, "_needs_review", staticmethod(lambda *_a: False))
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -139,7 +154,8 @@ def test_a_server_without_blob_storage_skips_the_round(tmp_path, account_key) ->
     adapter = HookScope({"big": {"blobs": ["a" * 64]}})
     adapter.supported = False
     engine, _ = _engine(tmp_path, "d1", server, adapter)
-    assert _run(engine.sync("skill-files")) == {"scope": "skill-files", "skipped": "unsupported"}
+    result = _run(engine.sync("skill-files"))
+    assert (result["scope"], result["skipped"]) == ("skill-files", "unsupported")
     assert server.wire == []
 
 
@@ -169,6 +185,7 @@ class Device:
         self.adapter._digests = skill_blobs.DigestCache(Database(tmp_path / f"{name}-digests.db"))
         staging = tmp_path / name / "staging"
         staging.mkdir(parents=True)
+        self.data_dir = tmp_path / name / "data"
         self.adapter._staging = lambda: staging
 
         async def request(kind: str, payload: dict) -> dict:
@@ -188,6 +205,7 @@ class Device:
     async def settle(self, monkeypatch) -> None:
         """One round, then every transfer it started and the rounds those kick."""
         monkeypatch.setattr(app, "skills_store", self.store, raising=False)
+        monkeypatch.setattr(app, "app_data_dir", lambda: self.data_dir, raising=False)
         await self.engine.sync("skill-files")
         for _ in range(50):
             pending = [t for t in list(self.adapter._tasks.values()) + list(self.engine._kicked) if not t.done()]
@@ -353,9 +371,11 @@ def test_the_listing_says_blobs_carry_a_large_skill_once_the_server_can(tmp_path
     a = Device(tmp_path, "a", server, blobs)
     _big_skill(a.store)
     monkeypatch.setattr(sync_scopes, "_skill_files", a.adapter)
+    monkeypatch.setattr(sync_scopes, "_skill_files", a.adapter)
     listing = sync_scopes.annotate_content_sync(a.store.list_skills(), a.store)
     assert listing["skills"][0]["sync_too_large"] is True  # server not asked yet
     _run(a.adapter.prepare(blobs.request, lambda: None))
+    monkeypatch.setattr(sync_scopes, "_skill_files", a.adapter)
     listing = sync_scopes.annotate_content_sync(a.store.list_skills(), a.store)
     assert listing["skills"][0]["sync_too_large"] is False
     assert listing["skills"][0]["sync_via_blobs"] is True
@@ -370,3 +390,145 @@ def test_the_skills_record_of_a_large_skill_keeps_its_old_shape(tmp_path, monkey
     _run(a.adapter.prepare(blobs.request, lambda: None))
     entry = sync_scopes.SkillsStateScope()._present()["big"]
     assert set(entry) == {"enabled", "targets"}
+
+
+def _many_files_skill(store: SkillsStore, count: int) -> None:
+    store.create_skill("many", "d", consent=True)
+    for i in range(count):
+        (store.root / "many" / f"f{i:03}.md").write_bytes(f"file {i}\n".encode())
+
+
+def _counting_stat(blobs, calls):
+    real = blobs.request
+
+    async def request(kind, payload):
+        if kind == "blobs.stat":
+            calls.append(len(payload["blobIds"]))
+            if len(payload["blobIds"]) > skill_blobs.STAT_BATCH:
+                return {"ok": False, "error": {"code": "BAD_REQUEST", "message": "too many blobIds"}}
+        return await real(kind, payload)
+
+    return request
+
+
+def test_blob_state_is_asked_in_batches_the_server_takes(tmp_path, monkeypatch, blobs, account_key) -> None:  # noqa: F811
+    monkeypatch.setattr(skill_blobs, "STAT_BATCH", 50)
+    calls: list[int] = []
+    monkeypatch.setattr(blobs, "request", _counting_stat(blobs, calls))
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    b = Device(tmp_path, "b", server, blobs)
+    _many_files_skill(a.store, 120)
+
+    async def flow() -> None:
+        await a.settle(monkeypatch)
+        await b.settle(monkeypatch)
+
+    _run(flow())
+    assert calls and max(calls) <= 50
+    assert ("skill-files", "many") in server.rows
+    assert (b.store.root / "many" / "f119.md").read_bytes() == b"file 119\n"
+
+
+def test_a_skill_with_more_files_than_a_record_may_name_is_reported(tmp_path, monkeypatch, blobs, account_key) -> None:  # noqa: F811
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    _many_files_skill(a.store, skill_blobs.MAX_REFS + 10)
+    monkeypatch.setattr(app, "skills_store", a.store, raising=False)
+
+    _run(a.settle(monkeypatch))
+    assert ("skill-files", "many") not in server.rows  # never pushed, never a tombstone
+    assert a.adapter.oversized() == ["many"]
+    assert "many" in a.adapter.snapshot()               # still held: absence would read as a delete
+    monkeypatch.setattr(sync_scopes, "_skill_files", a.adapter)
+    listing = sync_scopes.annotate_content_sync(a.store.list_skills(), a.store)
+    row = next(s for s in listing["skills"] if s["name"] == "many")
+    assert row["sync_too_large"] is True
+
+
+def test_files_that_never_download_stop_holding_the_scope(tmp_path, monkeypatch, blobs, account_key) -> None:  # noqa: F811
+    """A record whose download keeps failing held the cursor forever, so no
+    later skill-files record ever arrived. After a few attempts it is given up
+    on (reported, and kept out of the agreed state) and the rest go ahead."""
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    b = Device(tmp_path, "b", server, blobs)
+    _big_skill(a.store)
+    _run(a.settle(monkeypatch))
+    broken = {e["blob"] for e in a.adapter.snapshot()["big"]["files"].values()}
+    # a second large skill, pushed after the first
+    a.store.create_skill("big2", "d", consent=True)
+    (a.store.root / "big2" / "clip.bin").write_bytes(b"\1" + os.urandom(300 * 1024))
+    _run(a.settle(monkeypatch))
+    assert ("skill-files", "big2") in server.rows
+
+    real = skill_blobs.download
+
+    async def flaky(request, ref, dest, layout, **kw):
+        if ref.blob_id in broken:
+            raise skill_blobs.BlobError("the object store lost it")
+        return await real(request, ref, dest, layout, **kw)
+
+    monkeypatch.setattr(skill_blobs, "download", flaky)
+    # Step the engine's clock past any retry backoff, so every round asks again.
+    now = [0.0]
+    b.engine._clock = lambda: now[0]
+    for _ in range(sync_scopes.MAX_DOWNLOAD_ATTEMPTS + 2):
+        _run(b.settle(monkeypatch))
+        now[0] += 3600
+    assert (b.store.root / "big2" / "clip.bin").is_file()
+    assert not (b.store.root / "big").exists()
+    assert b.adapter.failed() == ["big"]
+
+
+def test_reset_forgets_everything_the_last_account_left(tmp_path, monkeypatch, blobs, account_key) -> None:  # noqa: F811
+    adapter = sync_scopes.SkillFilesScope()
+
+    async def flow() -> None:
+        await adapter.prepare(lambda *_a: asyncio.sleep(0), lambda: None)
+        started = asyncio.Event()
+
+        async def forever() -> None:
+            started.set()
+            await asyncio.sleep(3600)
+
+        adapter._start("big", forever)
+        await started.wait()
+        adapter._transfers["big"] = {"direction": "download", "done": 1, "total": 2}
+        adapter._download_failures["big"] = ("d", 3)
+        adapter._oversized.add("huge")
+        task = adapter._tasks["big"]
+        adapter.reset()
+        await asyncio.sleep(0)
+        assert task.cancelled()
+        assert adapter.failed() == [] and adapter.oversized() == []
+        assert adapter.transfer("big") is None and adapter._tasks == {}
+
+    _run(flow())
+
+
+def test_a_large_skill_waits_for_approval_then_lands(tmp_path, monkeypatch, blobs, account_key) -> None:  # noqa: F811
+    from agent_team_backend import sync_approvals
+    from tests.test_sync_engine import FakeSettingsStore
+
+    # The hold is the subject here (the review itself: test_sync_approvals_large_skills).
+    monkeypatch.setattr(sync_approvals, "is_approved", _REAL_IS_APPROVED)
+    monkeypatch.setattr(sync_scopes.SkillFilesScope, "_needs_review", _REAL_NEEDS_REVIEW)
+    monkeypatch.setattr(app, "ui_settings_store", FakeSettingsStore(), raising=False)
+    server = FakeServer()
+    a = Device(tmp_path, "a", server, blobs)
+    b = Device(tmp_path, "b", server, blobs)
+    files = _big_skill(a.store)
+    _run(a.settle(monkeypatch))
+    _run(b.settle(monkeypatch))
+    assert not (b.store.root / "big").exists()   # reviewed, not landed
+    (held,) = sync_approvals.listing()
+    assert held["scope"] == "skill-files" and held["kind"] == "new" and held["displayable"] is True
+    assert held["summary"]["executable"] == (["run.sh"] if os.name != "nt" else [])
+
+    monkeypatch.setattr(app, "skills_store", b.store, raising=False)
+    monkeypatch.setattr(app, "app_data_dir", lambda: b.data_dir, raising=False)
+    assert sync_approvals.decide(b.adapter, "big", True, held["digest"])["status"] == "applied"
+    for rel, data in files.items():
+        assert (b.store.root / "big" / rel).read_bytes() == data
+    assert sync_approvals.listing() == []

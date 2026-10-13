@@ -65,6 +65,29 @@ export function runGroupCreatedAt(id: string, now: number = Date.now()): number 
   return id.startsWith('rg-') && Number.isSafeInteger(stamp) && stamp > 0 ? stamp : now
 }
 
+/** The group record a restored pane's saved id needs added to the list on
+ *  screen, or null when none is due.
+ *
+ *  A relaunch restores every workspace the window holds, but the list on
+ *  screen belongs to the viewed one only. Rebuilding a missing record there for
+ *  another workspace's pane filed that workspace's group into the viewed
+ *  project's record as an empty `Run N` tab — its panes are not on this stage —
+ *  and it was persisted, so every relaunch added more. Another workspace's
+ *  missing record is rebuilt in its own list when it is viewed (by the orphan
+ *  adoption); until then the pane keeps its id untouched.
+ */
+export function savedGroupToRecreate(
+  groups: readonly { id: string }[],
+  groupId: string,
+  restoringWorkspace: string,
+  viewedWorkspace: string,
+  now: number = Date.now(),
+): { id: string; name: string; createdAt: number } | null {
+  if (normalizeWorkspace(restoringWorkspace) !== normalizeWorkspace(viewedWorkspace)) return null
+  if (groups.some((g) => g.id === groupId)) return null
+  return { id: groupId, name: `Run ${groups.length + 1}`, createdAt: now }
+}
+
 /** Parse the legacy per-workspace `agentTeam.runGroups.<ws>` localStorage blob
  *  (one-time migration into project.json's ui_run_groups). Returns null when
  *  nothing was stored; corrupt / non-array data yields [] — matching the old

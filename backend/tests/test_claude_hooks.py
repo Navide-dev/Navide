@@ -9,7 +9,7 @@ import psutil
 import pytest
 
 from agent_team_backend import osplat
-from agent_team_backend.claude_hooks import _build_curl_command
+from agent_team_backend.claude_hooks import _build_curl_command, _build_rewake_command
 from tests import hook_shell
 
 
@@ -115,6 +115,17 @@ def test_stop_hook_puts_the_response_on_stdout_where_the_cli_reads_decisions(tmp
     assert stdout == decision.decode()
 
 
+def test_stop_hook_hands_a_non_ascii_decision_over_byte_for_byte(tmp_path) -> None:
+    """The backend answers with raw UTF-8 (JSONResponse), and on Windows
+    PowerShell re-coded it through the console code page on its way to stdout,
+    so a message in Chinese reached the agent garbled -- #147 on the Stop path."""
+    decision = '{"decision":"block","reason":"[Navide MSG] from: 指揮\\n請修正：日本語、한국어 🚀"}'.encode()
+
+    _received, stdout = _run_hook(tmp_path, "stop", decision)
+
+    assert stdout == decision.decode()
+
+
 def test_other_events_still_discard_the_response(tmp_path) -> None:
     # Their replies are acks, and an unrecognized object on a hook's stdout is
     # reported to the user as a hook error.
@@ -128,6 +139,55 @@ def test_qwens_stop_hook_keeps_discarding_the_response(tmp_path) -> None:
     _received, stdout = _run_hook(tmp_path, "stop", b'{"ok":true}', endpoint="qwen")
 
     assert stdout == ""
+
+
+def _run_rewake(tmp_path, body: bytes) -> subprocess.CompletedProcess[str]:
+    """Run the installed rewake waiter against a one-shot server answering `body`."""
+    port_file = tmp_path / "backend.port"
+    argv = hook_shell.shell_argv(osplat.scripts.hook_entry(_build_rewake_command(str(port_file))))
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    server.timeout = 45
+    thread = threading.Thread(target=server.handle_request)
+    thread.start()
+    port_file.write_text(str(server.server_port), encoding="utf-8")
+    try:
+        return _run_to_completion(argv, '{"hook_event_name":"Stop"}', timeout=45)
+    finally:
+        thread.join(timeout=46)
+        server.server_close()
+
+
+def test_rewake_delivers_a_multiline_non_ascii_body_intact(tmp_path) -> None:
+    """#147: on Windows a multi-line body reached the agent as `System.Object[]`
+    and CJK as `?`, while the sender saw `delivered`. The envelope Navide sends
+    always has a header line, so multi-line is the normal case."""
+    message = "[Navide MSG] from: 指揮\n請修正 #147：多行中文、日本語、한국어 🚀\n第三行"
+
+    result = _run_rewake(tmp_path, message.encode("utf-8"))
+
+    assert result.returncode == 2
+    assert "System.Object[]" not in result.stderr
+    assert result.stderr.replace("\r\n", "\n") == message + "\n"
+
+
+def test_rewake_with_a_blank_body_wakes_nobody(tmp_path) -> None:
+    result = _run_rewake(tmp_path, b"\n\n")
+
+    assert result.returncode == 0
+    assert result.stderr == ""
 
 
 def test_without_curl_the_hook_still_delivers_and_prints_the_decision(tmp_path, monkeypatch) -> None:
@@ -309,4 +369,56 @@ def test_a_windows_install_writes_powershell_and_says_so(tmp_path, monkeypatch) 
 
     rewake = [h for h in entries if h.get("asyncRewake")]
     assert rewake, "the rewake waiter was not installed"
-    assert "[Console]::Error.WriteLine($BODY); exit 2" in rewake[0]["command"]
+    assert "[Console]::OpenStandardError()" in rewake[0]["command"]
+
+
+@pytest.mark.parametrize("content", ['{"model": "opus", // a comment\n}', "[1, 2]"])
+def test_an_unreadable_settings_file_is_left_untouched(tmp_path, content) -> None:
+    """A settings.json that does not parse to an object is the user's, not ours.
+
+    Reading it as an empty dict and writing back would replace every setting
+    the user has with nothing but our hooks.
+    """
+    from agent_team_backend.claude_hooks import install_hooks
+
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(content, encoding="utf-8")
+    port_file = tmp_path / "port"
+    port_file.write_text("1234")
+
+    result = install_hooks(str(port_file), settings_file=settings_file)
+
+    assert result["installed"] is False
+    assert result["reason"] == "settings.json unparseable"
+    assert settings_file.read_text(encoding="utf-8") == content
+    assert not (tmp_path / "settings.json.pre-agent-team.bak").exists()
+
+
+@pytest.mark.skipif(osplat.platform_id == "win32", reason="POSIX symlinks and modes")
+def test_install_and_removal_keep_a_symlinked_settings_file_and_its_mode(tmp_path) -> None:
+    """A dotfiles-managed settings.json is a symlink, and may hold an API key
+    behind 0600. Writing it must change the file it points at, not replace
+    the link with a plain file, and must not widen its mode."""
+    import os
+    import stat
+
+    from agent_team_backend.claude_hooks import hooks_present, install_hooks, uninstall_hooks
+
+    real = tmp_path / "dotfiles" / "claude-settings.json"
+    real.parent.mkdir()
+    real.write_text(json.dumps({"env": {"ANTHROPIC_API_KEY": "sk-secret"}}), encoding="utf-8")
+    real.chmod(0o600)
+    link = tmp_path / "claude" / "settings.json"
+    link.parent.mkdir()
+    link.symlink_to(real)
+    port_file = tmp_path / "port"
+    port_file.write_text("1234")
+
+    assert install_hooks(str(port_file), settings_file=link)["installed"] is True
+    assert link.is_symlink() and hooks_present(real)
+    assert stat.S_IMODE(os.stat(real).st_mode) == 0o600
+
+    assert uninstall_hooks(settings_file=link)["removed"] is True
+    assert link.is_symlink() and not hooks_present(real)
+    assert stat.S_IMODE(os.stat(real).st_mode) == 0o600
+    assert json.loads(real.read_text(encoding="utf-8"))["env"] == {"ANTHROPIC_API_KEY": "sk-secret"}

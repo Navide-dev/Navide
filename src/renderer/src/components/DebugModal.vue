@@ -11,6 +11,7 @@
 // the host's workbench.action.closeModal stack, which deliberately does not
 // fire while a terminal has focus (Esc is the CLI's own interrupt key).
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
@@ -25,6 +26,7 @@ import {
   capLines,
   filterLogLines,
   logLineLevel,
+  maskWsUrlToken,
   splitLogChunk,
   type LogLevel,
 } from '../lib/debugLog'
@@ -372,7 +374,8 @@ function stopTerm(term: InstanceType<typeof AiCliTerminal> | null): void {
   // While 'starting' there is no sessionId yet, so kill() is a no-op and a hung
   // terminal.create would be uncancellable — cancel the pending create instead.
   if (term.status === 'starting') void term.cancelPendingCreate().catch(() => {})
-  else void term.kill()
+  // A refused kill rejects now; it is logged, not left unhandled.
+  else void term.kill().catch((err) => console.warn('[DebugModal] stop failed:', err))
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
@@ -521,7 +524,7 @@ onUnmounted(() => stopTail())
         <!-- Shell -->
         <section v-show="activeTab === 'shell'" class="dbg-body">
           <div class="dbg-toolbar">
-            <span class="dbg-cwd" :title="logDir">{{ logDir || '—' }}</span>
+            <span class="dbg-cwd" v-truncate>{{ logDir || '—' }}</span>
             <span class="dbg-spacer"></span>
             <span class="dbg-count">{{ shellStatus() }}</span>
             <button
@@ -568,7 +571,7 @@ onUnmounted(() => stopTail())
                 {{ s.label }}
               </option>
             </select>
-            <span class="dbg-cwd" :title="aiWorkspace">{{ aiWorkspace || '—' }}</span>
+            <span class="dbg-cwd" v-truncate>{{ aiWorkspace || '—' }}</span>
             <span class="dbg-spacer"></span>
             <span class="dbg-count">{{ aiStatus() }}</span>
             <button
@@ -613,7 +616,7 @@ onUnmounted(() => stopTail())
               <dt>Started</dt>
               <dd>{{ health?.started_at ?? '—' }}</dd>
               <dt>WebSocket</dt>
-              <dd>{{ backend.wsUrl.value || '—' }}</dd>
+              <dd>{{ maskWsUrlToken(backend.wsUrl.value) || '—' }}</dd>
               <dt>HTTP</dt>
               <dd>{{ backend.httpUrl.value || '—' }}</dd>
               <dt>PID</dt>
@@ -624,7 +627,7 @@ onUnmounted(() => stopTail())
             <h3>{{ t('debug.info.paths') }}</h3>
             <div v-for="(value, key) in paths" :key="key" class="dbg-path-row">
               <span class="dbg-path-key">{{ key }}</span>
-              <span class="dbg-path-value" :title="value">{{ value }}</span>
+              <span class="dbg-path-value" v-truncate>{{ value }}</span>
               <button class="dbg-btn" @click="openPath(String(value))">
                 {{ t('debug.info.open') }}
               </button>

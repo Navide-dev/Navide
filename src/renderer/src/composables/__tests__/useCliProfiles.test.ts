@@ -10,6 +10,7 @@ import {
   type SetDefaultResult,
 } from '../useCliProfiles'
 import { createMockBackend, withScope, flush } from './mockBackend'
+import { i18n } from '@navide/plugin-ui/foundation'
 
 function profile(id: string, agentKey: string, name: string): CliProfile {
   return { id, agentKey, name, createdAt: '2026-07-01T00:00:00Z' }
@@ -85,6 +86,37 @@ describe('useCliProfiles', () => {
     expect(res).toEqual({ ok: true, needsLogin: false })
     const call = mock.sent.find((s) => s.type === 'cli_profiles.set_default')
     expect(call?.payload).toEqual({ agent_key: 'claude', profile_id: 'p1', force: true })
+    scope.stop()
+  })
+
+  it('set_default sends the account prompt\'s switch-back with its live-login fingerprint', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.set_default', { defaults: { claude: 'p1' } })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    await result.setDefault('claude', 'p1', { restoreLive: { liveFingerprint: 'fp-b' } })
+    const call = mock.sent.find((s) => s.type === 'cli_profiles.set_default')
+    expect(call?.payload).toEqual({
+      agent_key: 'claude', profile_id: 'p1', restore_live: true, restore_live_fingerprint: 'fp-b',
+    })
+    scope.stop()
+  })
+
+  it('set_default tells a stale switch-back (LIVE_CHANGED) that nothing was switched', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.set_default', null as unknown as object, {
+      ok: false,
+      error: { code: 'LIVE_CHANGED', message: 'another claude login is live since this prompt; nothing was switched' },
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    const res = await result.setDefault('claude', 'p1', { restoreLive: { liveFingerprint: 'fp-b' } })
+    expect(res).toMatchObject({ ok: false, code: 'LIVE_CHANGED' })
+    expect(res.ok ? '' : res.message).toContain('nothing was switched')
     scope.stop()
   })
 
@@ -539,7 +571,7 @@ describe('createCliAccountSwitchHandler', () => {
   type SetDefaultFn = (
     agentKey: string,
     profileId: string | null,
-    opts?: { force?: boolean },
+    opts?: { force?: boolean; restoreLive?: { liveFingerprint: string } },
   ) => Promise<SetDefaultResult>
 
   function makeCaps(confirmResult = true) {
@@ -560,6 +592,20 @@ describe('createCliAccountSwitchHandler', () => {
     expect(setDefault).toHaveBeenCalledTimes(1)
     expect(setDefault).toHaveBeenCalledWith('claude', 'p1')
     expect(caps.confirm).not.toHaveBeenCalled()
+  })
+
+  it('carries the account prompt\'s restoreLive through the first send and the forced resend', async () => {
+    const setDefault = vi.fn<SetDefaultFn>()
+      .mockResolvedValueOnce({ ok: false, code: 'PANES_RUNNING', count: 1, message: 'busy' })
+      .mockResolvedValueOnce({ ok: true })
+    const handler = createCliAccountSwitchHandler({ setDefault }, makeCaps())
+
+    const restoreLive = { liveFingerprint: 'fp-b' }
+    expect(await handler('claude', 'p1', { restoreLive })).toEqual({ ok: true })
+    expect(setDefault.mock.calls).toEqual([
+      ['claude', 'p1', { restoreLive }],
+      ['claude', 'p1', { force: true, restoreLive }],
+    ])
   })
 
   it('starts a sign-in when the switched-to account has no usable credentials', async () => {
@@ -1114,6 +1160,86 @@ describe('runAccountRestartBatch', () => {
       ['p-listed', 'imported'],
       ['p-removed', 'none'],
     ])
+    scope.stop()
+  })
+})
+
+describe('useCliProfiles – claude accounts with their own config dir', () => {
+  it('loads account dirs and pane defaults, and follows the broadcast', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', {
+      profiles: [profile('p1', 'claude', 'A'), profile('p2', 'claude', 'B')],
+      defaults: { claude: 'p1' },
+      supported_agents: SUPPORTED,
+      accountDirs: { claude: { p2: { signedIn: true, email: 'b@x.com' } } },
+      paneDefaults: { claude: 'p2' },
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    expect(result.accountDirFor('claude', 'p2')).toEqual({ signedIn: true, email: 'b@x.com' })
+    expect(result.accountDirFor('claude', 'p1')).toBe(null)
+    expect(result.accountDirFor('claude', '__default__')).toBe(null)
+    expect(result.newPaneProfileId('claude')).toBe('p2')
+
+    // Clearing the last choice broadcasts {} — it must not be ignored.
+    mock.emit('cli_profiles.changed', { paneDefaults: {}, accountDirs: {}, reason: 'set_pane_default' })
+    expect(result.newPaneProfileId('claude')).toBe('p1')
+    expect(result.accountDirFor('claude', 'p2')).toBe(null)
+    scope.stop()
+  })
+
+  it('setPaneDefault sends the choice and adopts the returned map', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.set_pane_default', { paneDefaults: { claude: 'p2' } })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    const res = await result.setPaneDefault('claude', 'p2')
+    expect(res).toEqual({ ok: true })
+    const call = mock.sent.find((s) => s.type === 'cli_profiles.set_pane_default')
+    expect(call?.payload).toEqual({ agent_key: 'claude', profile_id: 'p2' })
+    expect(result.newPaneProfileId('claude')).toBe('p2')
+    scope.stop()
+  })
+})
+
+describe('useCliProfiles – deleting an account its own-dir panes still use', () => {
+  it('explains ACCOUNT_DIR_IN_USE in the UI language, with the pane count', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.delete', null as unknown as object, {
+      ok: false,
+      error: {
+        code: 'ACCOUNT_DIR_IN_USE',
+        message: "2 running claude pane(s) use this account's own config dir; close them before deleting it",
+        details: { count: 2, agent_key: 'claude' },
+      },
+    })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    expect(await result.remove('p1')).toBe(false)
+    expect(result.error.value).toBe(
+      i18n.global.t('settings.accounts.cli.account-dir-in-use-error', { count: 2 }),
+    )
+    expect(result.error.value).not.toContain('config dir')
+    scope.stop()
+  })
+})
+
+describe('useCliProfiles – a pane reports its account dir login expired', () => {
+  it('sends the profile to the backend and reports whether it was marked', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('cli_profiles.list', { profiles: [], defaults: {}, supported_agents: SUPPORTED })
+    mock.setResponse('cli_profiles.account_dir_expired', { ok: true, marked: true })
+    const { result, scope } = withScope(() => useCliProfiles(mock.backend))
+    await flush()
+
+    expect(await result.reportAccountDirExpired('p2')).toBe(true)
+    const call = mock.sent.find((s) => s.type === 'cli_profiles.account_dir_expired')
+    expect(call?.payload).toEqual({ profile_id: 'p2' })
     scope.stop()
   })
 })

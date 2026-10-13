@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   composerHoldsPayload, echoEvidence, echoLanded, echoTimeoutFor, growthNeededFor, injectionVerified,
-  composerFromScreen, kickoffVerified, normalizeForMatch, submitBaseline, submitEvidence,
+  composerFromScreen, framedComposerHolds, kickoffVerified, normalizeForMatch, submitBaseline, submitEvidence,
   submitLanded, TAIL_MATCH_LEN
 } from '../injectEcho'
 
@@ -476,5 +476,35 @@ describe('kickoffVerified', () => {
     expect(kickoffVerified(null, 'growth', true)).toBe(false)
     expect(kickoffVerified('growth', null, true)).toBe(false)
     expect(kickoffVerified(null, null, true)).toBe(false)
+  })
+})
+
+// The screens of the 10-07 16:16 kickoff, as Claude Code drew them: the
+// collapsed paste sitting in the box unsent, and the empty box it would leave.
+describe('framedComposerHolds', () => {
+  const rule = '─'.repeat(60)
+  const tail = normalizeForMatch('不可放進 code block）').slice(-TAIL_MATCH_LEN)
+  const held = [rule, '❯\u00a0[Pasted text #1 +31 lines]', rule, 'paste again to expand'].join('\n')
+  const empty = [rule, '❯\u00a0Try "create a util logging.py that..."', rule, 'ctrl+g to edit in Vim'].join('\n')
+
+  it('sees the collapsed paste inside the box', () => {
+    expect(framedComposerHolds(held, tail)).toBe(true)
+  })
+
+  it('sees our tail inside the box', () => {
+    expect(framedComposerHolds([rule, `❯ ${'不可放進 code block）'}`, rule].join('\n'), tail)).toBe(true)
+  })
+
+  it('reads an empty box — vendor hint included — as released', () => {
+    expect(framedComposerHolds(empty, tail)).toBe(false)
+  })
+
+  it('ignores a summary drawn above the box after a submit that took', () => {
+    const submitted = ['> [Pasted text #1 +31 lines]', rule, '❯ ', rule].join('\n')
+    expect(framedComposerHolds(submitted, tail)).toBe(false)
+  })
+
+  it('answers null without a frame, so nothing acts on a guess', () => {
+    expect(framedComposerHolds('❯ [Pasted text #1 +31 lines]', tail)).toBeNull()
   })
 })

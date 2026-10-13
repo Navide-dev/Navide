@@ -54,9 +54,13 @@ describe('McpHelp', () => {
     const tables = wrapper.findAll('.mh-table')
     expect(tables).toHaveLength(7)
     expect(tables[0].findAll('tbody tr')).toHaveLength(6) // plan tools
-    expect(tables[1].findAll('tbody tr')).toHaveLength(25) // workspace tools
+    expect(tables[1].findAll('tbody tr')).toHaveLength(31) // workspace tools
+    // The graph-pipeline tools sit with the other pipeline tools.
+    const workspaceNames = tables[1].findAll('tbody tr td:first-child').map((td) => td.text())
+    expect(workspaceNames).toEqual(expect.arrayContaining(['pipeline_graph', 'pipeline_gate', 'pipeline_restart_from']))
+    expect(workspaceNames.indexOf('pipeline_graph')).toBe(workspaceNames.indexOf('pipeline_define') + 1)
     expect(tables[2].findAll('tbody tr')).toHaveLength(4) // preview tools
-    expect(tables[3].findAll('tbody tr')).toHaveLength(20) // cli tools
+    expect(tables[3].findAll('tbody tr')).toHaveLength(22) // cli tools
     expect(tables[4].findAll('tbody tr')).toHaveLength(4) // ui tools
     expect(tables[5].findAll('tbody tr')).toHaveLength(5) // comparison
     expect(tables[5].findAll('tbody tr')).toHaveLength(5) // troubleshooting
@@ -88,7 +92,7 @@ describe('McpHelp', () => {
     expect(text).toContain('出問題時')
     expect(wrapper.findAll('.mh-h2')).toHaveLength(5)
     expect(wrapper.findAll('.mh-dir')).toHaveLength(3)
-    expect(wrapper.findAll('.mh-table').at(3)!.findAll('tbody tr')).toHaveLength(20)
+    expect(wrapper.findAll('.mh-table').at(3)!.findAll('tbody tr')).toHaveLength(22)
     expect(wrapper.findAll('.mk-fig')).toHaveLength(2)
 
     expect(unexpectedWarnings(warn)).toEqual([])

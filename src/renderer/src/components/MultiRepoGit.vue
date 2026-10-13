@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { defineAsyncComponent } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
 import { useRepoDiscovery, type DiscoveredRepoWithBadge } from '../composables/useRepoDiscovery'
 import type { GitSurfacePorts } from '../ports/gitSurface'
@@ -239,7 +240,7 @@ function repoLabel(relPath: string): string {
       >
         <span class="repo-tab-name">{{ repoLabel(repo.rel_path) }}</span>
         <span v-if="repo.badge.branch || repo.badge.dirtyCount > 0 || repo.badge.error" class="repo-tab-row2">
-          <span v-if="repo.badge.branch" class="repo-tab-branch">
+          <span v-if="repo.badge.branch" class="repo-tab-branch" v-truncate>
             <svg width="9" height="9" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0;opacity:0.7">
               <path d="M11.75 2.5a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0zm.75 2.728a2.25 2.25 0 1 1 0-4.456 2.25 2.25 0 0 1 0 4.456zM2.75 13.5a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0zm.75 2.25a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5zM3.5 7.25A2.25 2.25 0 0 1 5.728 5h4.544a2.25 2.25 0 0 1 2.228 1.952V9.5a.75.75 0 0 1-1.5 0V6.952A.75.75 0 0 0 10.272 6.5H5.728a.75.75 0 0 0-.728.75V9.5a.75.75 0 0 1-1.5 0V7.25z"/>
             </svg>

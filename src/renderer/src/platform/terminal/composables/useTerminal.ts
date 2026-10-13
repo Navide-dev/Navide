@@ -745,6 +745,11 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
   // memory predictable across long-running panes.
   const cleanBuffer = ref<string>('')
   const cleanBytesSeen = ref(0)
+  // When this terminal created a PTY for a resume spawn (0 otherwise, and for a
+  // reattach, whose CLI never stopped). The messaging gate reads it: a resumed
+  // CLI reloads its transcript in silence, so quiet alone does not mean ready —
+  // see lib/resumeBoot.ts.
+  const resumeSpawnedAt = ref(0)
   // `lastActivityAt` only updates when CLEANED text changes — i.e. real content.
   // Used for analyzer triggers and sentinel scans.
   const lastActivityAt = ref<number>(0)
@@ -2781,6 +2786,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
         outputLogFile: opts.outputLogFile ?? null,
         loginProfileId: opts.loginProfileId ?? null,
         isLogin: opts.isLogin ?? false,
+        ...(opts.accountDirLogin ? { accountDirLogin: true } : {}),
         replacesTerminalId: replacesPtyId || null,
         quotaTransactionId: opts.quotaTransactionId,
         quotaOriginalPaneId: opts.quotaOriginalPaneId,
@@ -2808,6 +2814,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
       startingStartedAt.value = null
       sessionId.value = resp.payload.terminal_session_id
       rememberSessionId(sessionId.value)  // enable reattach after a reload
+      resumeSpawnedAt.value = opts.isResume ? Date.now() : 0
       status.value = 'running'
       const probe = resp.payload.startup_probe
       if (probe?.binary_path) {
@@ -3238,10 +3245,24 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     return !(reply && typeof reply === 'object' && (reply as { ok?: unknown }).ok === false)
   }
 
-  async function kill(opts?: { force?: boolean }): Promise<void> {
+  async function kill(opts?: { force?: boolean; retireRestore?: boolean }): Promise<void> {
     if (!sessionId.value) return
+    const killedId = sessionId.value
     rememberSessionId('')  // explicit kill — never reattach to this PTY
-    await terminalPort.kill(sessionId.value, opts?.force ?? false)
+    const force = opts?.force ?? false
+    // Only an explicit Stop carries the flag; every other kill stays two-argument.
+    const reply = opts?.retireRestore
+      ? await terminalPort.kill(killedId, force, { retireRestore: true })
+      : await terminalPort.kill(killedId, force)
+    // wsClient resolves an `ok: false` rather than rejecting it (see interrupt).
+    // A refused kill left the PTY running, so it must not read as done: keep the
+    // id the pane still owns and let the caller sweep.
+    if (reply && typeof reply === 'object' && (reply as { ok?: unknown }).ok === false) {
+      rememberSessionId(killedId)
+      const error = (reply as { error?: unknown }).error
+      const code = error && typeof error === 'object' ? (error as { code?: unknown }).code : error
+      throw new Error(`terminal kill refused: ${String(code ?? 'unknown')}`)
+    }
   }
 
   // Pin this pane's width at its current column count, so a layout mode that
@@ -3403,6 +3424,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     lastCommand,
     cleanBuffer,
     cleanBytesSeen,
+    resumeSpawnedAt,
     lastActivityAt,
     lastRawActivityAt,
     hasDraft,
@@ -3430,6 +3452,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     rendererKind,
     optionSelectHint,
     getSelection: () => term.getSelection(),
+    /** True while the CLI has mouse reporting on, so xterm forwards clicks to it. */
+    isMouseTracking: () => term.modes.mouseTrackingMode !== 'none',
     setDisableStdin: (disabled: boolean) => {
       if (_stdinGated === disabled) return
       _stdinGated = disabled

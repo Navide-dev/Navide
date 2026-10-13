@@ -11,6 +11,7 @@ import pytest
 
 from agent_team_backend.gitignore import GitIgnore
 from agent_team_backend.git_watcher import GitWatcher, _RepoHandler
+from tests.watcher_arming import arm, arming_delay, wait_until  # noqa: F401
 
 
 def _handler(root: Path) -> _RepoHandler:
@@ -97,40 +98,49 @@ def test_git_internal_churn_is_ignored(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_on_change_fires_debounced_on_file_write(tmp_path: Path) -> None:
-    fired: list[str] = []
+async def test_on_change_fires_debounced_on_file_write(tmp_path: Path, arming_delay: float) -> None:
+    fired: list[tuple[str, set[str]]] = []
 
     async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
-        fired.append(ws)
+        fired.append((ws, {rel for rel, _ in paths}))
 
-    watcher = GitWatcher(sink, debounce_s=0.1)
+    watcher = GitWatcher(sink, debounce_s=0.5)
     watcher.start()
     try:
         watcher.watch(str(tmp_path))
+        await arm(tmp_path, fired, per_probe_s=2.0)
         # Burst of writes should coalesce into a single on_change call.
-        for i in range(5):
-            (tmp_path / f"f{i}.txt").write_text("x")
-        await asyncio.sleep(0.5)
-        assert fired == [str(tmp_path)]
+        burst = {f"f{i}.txt" for i in range(5)}
+        for name in sorted(burst):
+            (tmp_path / name).write_text("x")
+        assert await wait_until(lambda: any(paths & burst for _, paths in fired))
+        # Let a further debounce window pass: the burst must not fire twice.
+        await asyncio.sleep(1.0)
+        hits = [(ws, paths & burst) for ws, paths in fired if paths & burst]
+        assert hits == [(str(tmp_path), burst)]
     finally:
         watcher.stop()
 
 
 @pytest.mark.asyncio
-async def test_noise_write_does_not_fire(tmp_path: Path) -> None:
-    fired: list[str] = []
+async def test_noise_write_does_not_fire(tmp_path: Path, arming_delay: float) -> None:
+    fired: list[set[str]] = []
 
     async def sink(ws: str, paths: list[tuple[str, str]]) -> None:
-        fired.append(ws)
+        fired.append({rel for rel, _ in paths})
 
     watcher = GitWatcher(sink, debounce_s=0.1)
     watcher.start()
     try:
         watcher.watch(str(tmp_path))
+        # Without arming, a watcher that is not reading yet passes this vacuously.
+        await arm(tmp_path, fired, per_probe_s=2.0)
         nm = tmp_path / "node_modules" / "pkg"; nm.mkdir(parents=True)
         (nm / "index.js").write_text("x")
-        await asyncio.sleep(0.4)
-        assert fired == []
+        # A write after the noise: once it is reported, the noise was judged.
+        (tmp_path / "sentinel.txt").write_text("x")
+        assert await wait_until(lambda: any("sentinel.txt" in paths for paths in fired))
+        assert not any(rel.startswith("node_modules") for paths in fired for rel in paths)
     finally:
         watcher.stop()
 

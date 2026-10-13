@@ -221,3 +221,147 @@ def test_a_client_holding_the_token_is_let_through(client) -> None:
         while reply.get("id") != "p1":
             reply = ws.receive_json()
         assert reply.get("ok") is True
+
+
+# ---- which client is a Navide window -------------------------------------------
+
+
+# HMAC-SHA256("host-secret", "navide-window/v2\0nonce-1"), pinned on both sides.
+WINDOW_PROOF_VECTOR = "a4c453f892421e367a36312ee518ccbca38a442e010fc441ed351d433ec3d0f6"
+
+
+def _window_proof(host_token: str, nonce: str) -> str:
+    """What Electron main answers backend:proveWindow with for one of its main
+    windows: src/main/backend.ts proveWindow. Recomputed here rather than
+    imported so the two languages are checked against each other."""
+    import hashlib
+    import hmac
+
+    return hmac.new(host_token.encode(), b"navide-window/v2\0" + nonce.encode(), hashlib.sha256).hexdigest()
+
+
+def _welcome(ws) -> str:
+    """The challenge the backend sends first on every connection."""
+    while True:
+        msg = ws.receive_json()
+        if msg.get("type") == "ws.welcome":
+            return msg["payload"]["windowChallenge"]
+
+
+def _prove(ws, msg_id: str, proof: str) -> dict:
+    ws.send_json({"id": msg_id, "type": "window.prove", "payload": {"proof": proof}})
+    while True:
+        reply = ws.receive_json()
+        if reply.get("id") == msg_id:
+            return reply
+
+
+def _new_session(before: set):
+    (session,) = set(app_module._SESSIONS) - before
+    return session
+
+
+def test_every_connection_gets_a_fresh_window_challenge(client, monkeypatch) -> None:
+    """R3-M2: the old proof was a static HMAC in the URL, replayable by
+    anything that once read it. Each connection now gets its own nonce."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    token = ws_auth.issue_token()
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        first = _welcome(ws)
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        second = _welcome(ws)
+    assert len(first) == 64 and len(second) == 64
+    assert first != second
+
+
+def test_the_right_proof_makes_a_navide_window_once(client, monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    token = ws_auth.issue_token()
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        nonce = _welcome(ws)
+        session = _new_session(before)
+        assert session.navide_window is False
+        proof = _window_proof("host-secret", nonce)
+        assert _prove(ws, "p1", proof).get("ok") is True
+        assert session.navide_window is True
+        # Accepted once: the same proof again is refused, and changes nothing.
+        assert _prove(ws, "p2", proof).get("ok") is False
+        assert session.navide_window is True
+
+
+@pytest.mark.parametrize("wrong", ["bad-key", "other-nonce", "empty", "not-a-string", "non-ascii"])
+def test_a_wrong_proof_is_refused(client, monkeypatch, wrong) -> None:
+    """Refused without spending the challenge: a proof meant for the previous
+    socket can land on a fresh one during a reconnect, and must not lock that
+    window out. Guessing an HMAC-SHA256 is not a budget worth rationing."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    token = ws_auth.issue_token()
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        nonce = _welcome(ws)
+        session = _new_session(before)
+        bad = {
+            "bad-key": _window_proof("other", nonce),
+            "other-nonce": _window_proof("host-secret", "a" * 64),
+            "empty": "",
+            "not-a-string": 7,
+            "non-ascii": "é" * 64,
+        }[wrong]
+        assert _prove(ws, "p1", bad).get("ok") is False
+        assert session.navide_window is False
+        assert _prove(ws, "p2", _window_proof("host-secret", nonce)).get("ok") is True
+        assert session.navide_window is True
+
+
+def test_a_non_ascii_proof_or_host_token_is_refused_not_raised(monkeypatch) -> None:
+    """R4-L1: compare_digest raises TypeError on a str with non-ASCII
+    characters; a client must get a refusal, never a traceback."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    assert app_module.navide_window_proof_matches("a" * 64, "é" * 64) is False
+    assert app_module.host_session_token_matches("hést-secret") is False
+    assert app_module.host_session_token_matches("host-secret") is True
+
+
+def test_a_proof_replayed_on_another_connection_is_refused(client, monkeypatch) -> None:
+    """What a sniffed or logged proof buys: nothing on any other connection."""
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    token = ws_auth.issue_token()
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        stolen = _window_proof("host-secret", _welcome(ws))
+        assert _prove(ws, "p1", stolen).get("ok") is True
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        _welcome(ws)
+        session = _new_session(before)
+        assert _prove(ws, "p1", stolen).get("ok") is False
+        assert session.navide_window is False
+
+
+def test_the_old_url_proof_no_longer_counts(client, monkeypatch) -> None:
+    import hashlib
+    import hmac
+
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "host-secret")
+    static = hmac.new(b"host-secret", b"navide-window", hashlib.sha256).hexdigest()
+    token = ws_auth.issue_token()
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}&w={static}") as ws:
+        _welcome(ws)
+        assert _new_session(before).navide_window is False
+
+
+def test_without_a_host_token_no_client_counts_as_a_navide_window(client, monkeypatch) -> None:
+    monkeypatch.setattr(app_module, "_HOST_SESSION_TOKEN", "")
+    token = ws_auth.issue_token()
+    before = set(app_module._SESSIONS)
+    with client.websocket_connect(f"/ws?t={token}") as ws:
+        nonce = _welcome(ws)
+        session = _new_session(before)
+        assert _prove(ws, "p1", _window_proof("", nonce)).get("ok") is False
+        assert session.navide_window is False
+
+
+def test_the_window_proof_matches_the_vector_main_computes() -> None:
+    """src/main/backend.test.ts pins the same value for proveWindow."""
+    assert _window_proof("host-secret", "nonce-1") == WINDOW_PROOF_VECTOR

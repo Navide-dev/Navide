@@ -28,7 +28,8 @@ STRIDE as the checklist for "what can go wrong".
 ```
 
 Secrets and where they live: trust store, server token and workspace salt in
-the Keychain; the confirm-token key handed to the backend over stdin; the ws
+the Keychain; the confirm-token key and the host token handed to the backend
+over stdin (never the spawn environment, which `ps -E` shows); the ws
 token and the hook secret in 0600 files under the app data dir; the pane MCP
 token in each pane's command line (known exposure, see L1 in the audit
 reports).

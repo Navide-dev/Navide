@@ -10,6 +10,7 @@ import sys
 
 import pytest
 
+from agent_team_backend import detached_servers
 from agent_team_backend import terminals as terminals_mod
 from agent_team_backend.terminals import TerminalService
 
@@ -52,6 +53,13 @@ async def _settle() -> None:
     await asyncio.sleep(0.05)
 
 
+def _without_pane_mark(env: dict[str, str]) -> dict[str, str]:
+    """The spawn env minus the per-session leftover-server marker every pane
+    carries (detached_servers.MARK_ENV) — a fresh random value each spawn."""
+    assert env.get(detached_servers.MARK_ENV)
+    return {k: v for k, v in env.items() if k != detached_servers.MARK_ENV}
+
+
 async def test_no_env_remove_is_byte_compatible(capture_popen: list[dict]) -> None:
     svc = TerminalService(_emit)
     expected = os.environ.copy()
@@ -62,7 +70,7 @@ async def test_no_env_remove_is_byte_compatible(capture_popen: list[dict]) -> No
     svc.create(pane_id="p1", agent_key=None, command=[sys.executable], cwd=".")
     await _settle()
 
-    assert capture_popen[0]["env"] == expected
+    assert _without_pane_mark(capture_popen[0]["env"]) == expected
 
 
 async def test_env_remove_pops_inherited_keys(
@@ -122,4 +130,4 @@ async def test_env_remove_missing_key_is_noop(capture_popen: list[dict]) -> None
     )
     await _settle()
 
-    assert capture_popen[0]["env"] == expected
+    assert _without_pane_mark(capture_popen[0]["env"]) == expected

@@ -44,9 +44,11 @@ describe('arming the report debt', () => {
     expect(body).toContain('spawnedByName = parentName')
   })
 
-  it('keeps both fields runtime-only, like spawnedBy', () => {
+  it('persists both fields, so a pane resumed after a relaunch still reports', () => {
+    // Reversed 2026-10-07: the owed report used to be runtime-only, which left
+    // a parent waiting forever on a child interrupted by a relaunch.
     const decl = appSource.slice(appSource.indexOf('  spawnedByName?: string') - 600)
-    expect(decl.slice(0, 600)).toContain('Runtime only')
+    expect(decl.slice(0, 600)).toContain('PaneRecord.report_to / report_pending')
   })
 })
 

@@ -172,7 +172,7 @@ describe('ExtensionsPane', () => {
     await wrapper.get('.ext-pack-remove').trigger('click')
     await flushPromises()
     await wrapper.get('.pack-uninstall-member input').setValue(true)
-    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 extension(s)')
+    expect(wrapper.get('.pack-uninstall-confirm').text()).toBe('Uninstall pack and 1 Navide plugin(s)')
     await wrapper.get('.pack-uninstall-confirm').trigger('click')
     await flushPromises()
     // The Host removes the chosen members itself, so it can refuse a member
@@ -402,7 +402,7 @@ describe('ExtensionsPane', () => {
 
     expect(api.remove).toHaveBeenCalledWith('acme.backend')
     expect(wrapper.find('[data-id="acme.backend"]').exists()).toBe(false)
-    expect(wrapper.get('.ext-empty').text()).toContain('No extensions installed')
+    expect(wrapper.get('.ext-empty').text()).toContain('No Navide plugins installed')
   })
 
 
@@ -593,12 +593,12 @@ describe('ExtensionsPane', () => {
       expect(wrapper.get('[data-id="acme.prev"] .ext-rollback').text()).toBe('回復到 1.0.0')
       expect(wrapper.get('[data-id="acme.fact"] .ext-rollback').text()).toBe('回復為內建版本')
       expect(wrapper.get('[data-id="acme.staged"] .ext-candidate').text()).toBe('更新 3.1.0 已就緒')
-      expect(wrapper.get('[data-id="acme.staged"] .ext-restart').text()).toBe('重新啟動擴充功能')
+      expect(wrapper.get('[data-id="acme.staged"] .ext-restart').text()).toBe('重新啟動 Navide 外掛')
 
       await wrapper.get('[data-id="acme.prev"] .ext-rollback').trigger('click')
       await flushPromises()
       const dialog = useNotify().dialog.value as { message?: string; title?: string; confirmText?: string }
-      expect(dialog.title).toBe('回復擴充功能')
+      expect(dialog.title).toBe('回復 Navide 外掛')
       expect(dialog.confirmText).toBe('回復')
       expect(dialog.message).toContain('要將 acme.prev 回復到 1.0.0 嗎')
       useNotify().resolveDialog(false)
@@ -616,7 +616,7 @@ describe('ExtensionsPane', () => {
       )
       expect(row.get('.ext-risk-note').text()).toContain('沒有沙盒')
       expect(row.get('.ext-risk-note').text()).toContain('使用者權限')
-      expect(row.get('.ext-risk-note').text()).toContain('讀取與寫入計畫文件都由此插件的後端直接進行')
+      expect(row.get('.ext-risk-note').text()).toContain('讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行')
       expect(row.get('.ext-risk-note').text()).toContain('刪除與改名仍經由 Navide 進行')
     })
 
@@ -668,7 +668,7 @@ describe('ExtensionsPane', () => {
       const risk = wrapper.get('[data-factory-id="navide.plans"] .ext-risk-note').text()
       expect(risk).toContain('サンドボックスはありません')
       expect(risk).toContain('ユーザー権限')
-      expect(risk).toContain('読み取りと書き込みはどちらもこのプラグインのバックエンドが直接行い')
+      expect(risk).toContain('読み取りと書き込みはどちらもこの Navide プラグインのバックエンドが直接行い')
       expect(risk).toContain('削除と名前変更は引き続き Navide を経由します')
     })
   })

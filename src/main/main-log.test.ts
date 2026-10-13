@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import {
   logMain,
   warnMain,
+  infoMain,
+  errorMain,
   setMaxDiagnosticLogBytes,
   setLogDirectory,
   resetDiagnosticLogConfig,
@@ -30,6 +32,23 @@ describe('durable plugin diagnostic persistence in main-log', () => {
     } catch {
       /* ignore */
     }
+  })
+
+  it('keeps backend lifecycle info and errors in main.log, not only on stdout', () => {
+    // 2026-10-08: a packaged run's "backend failed to start" / auto-restart
+    // lines went to console only, so the cause of a Retry screen was lost.
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    infoMain('[main] backend ready at 127.0.0.1:58426')
+    errorMain('[main] backend failed to start', new Error('backend did not become healthy within 45000ms'))
+    errorMain('[main] backend exited (code 0)')
+
+    const content = readFileSync(join(tempDir, 'main.log'), 'utf8')
+    expect(content).toContain('[main] backend ready at 127.0.0.1:58426')
+    expect(content).toContain('[main] backend failed to start: Error: backend did not become healthy within 45000ms')
+    expect(content).toContain('[main] backend exited (code 0)\n')
+    expect(log).toHaveBeenCalledWith('[main] backend ready at 127.0.0.1:58426')
+    expect(error).toHaveBeenCalledWith('[main] backend failed to start', expect.any(Error))
   })
 
   it('bounds total retained diagnostic capacity across repeated backend generations and restarts', () => {

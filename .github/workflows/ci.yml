@@ -269,7 +269,7 @@ jobs:
           retention-days: 7
 
   # macOS exercises native PTY/zsh behavior; Linux and Windows retain their
-  # complete suites. Only Windows is split across two collection-based shards.
+  # complete suites. Only Windows is split across four collection-based shards.
   backend:
     name: Backend tests (${{ matrix.platform }}, ${{ matrix.shard }})
     strategy:
@@ -280,21 +280,31 @@ jobs:
             runner: macos-14
             shard: 1/1
             artifact: macos
-            timeout: 15
+            timeout: 25
           - platform: Linux
             runner: ubuntu-22.04
             shard: 1/1
             artifact: linux
-            timeout: 15
+            timeout: 25
           - platform: Windows
             runner: windows-latest
-            shard: 1/2
+            shard: 1/4
             artifact: windows-1
             timeout: 45
           - platform: Windows
             runner: windows-latest
-            shard: 2/2
+            shard: 2/4
             artifact: windows-2
+            timeout: 45
+          - platform: Windows
+            runner: windows-latest
+            shard: 3/4
+            artifact: windows-3
+            timeout: 45
+          - platform: Windows
+            runner: windows-latest
+            shard: 4/4
+            artifact: windows-4
             timeout: 45
     runs-on: ${{ matrix.runner }}
     timeout-minutes: ${{ matrix.timeout }}
@@ -312,16 +322,22 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
         run: uv --project backend sync --locked
+      # A per-test deadline, as the Windows runner has: a hung test fails with
+      # its own traceback (pytest-timeout's signal method interrupts even a
+      # loop that never yields) and the suite goes on, instead of the step
+      # being cancelled at the job timeout with no word of where it stopped.
+      # The slowest tests take ~35 s; faulthandler dumps every thread if a
+      # hang sits where the signal cannot reach.
       - name: Complete backend suite
         if: runner.os != 'Windows'
-        run: uv --project backend run --locked pytest backend/tests --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
+        run: uv --project backend run --locked pytest backend/tests --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
       - name: Linux runtime capabilities
         if: runner.os == 'Linux'
         run: uv --project backend run --locked python backend/linux_smoke.py
       - name: Backend imports on Windows
         if: runner.os == 'Windows'
         run: uv --project backend run --locked python -c "import agent_team_backend.app"
-      # Full Windows runs took 1109–1880 seconds on 2026-09-25; two shards
+      # Full Windows runs took 1109–1880 seconds on 2026-09-25; shards
       # retain coverage while bounding runner time. The runner uses a Job Object
       # to clean up descendants when pytest exits.
       # Preserve detached supervision: watchdog threads attached to the Actions

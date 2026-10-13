@@ -26,17 +26,26 @@ const emit = defineEmits<{ close: [completed: boolean] }>()
 
 const { t } = useI18n()
 
+// The step the tour is on, and the step whose card is drawn. They differ only
+// while a step looks for its anchor: a step with no prepare keeps the previous
+// card up for that one frame, so Next never leaves an empty dimmed window, and
+// a step with a prepare (which may take a while) shows its own card centred at
+// once and moves it beside the anchor when that turns up.
 const index = ref(0)
+const shownIndex = ref<number | null>(null)
 const anchorEl = ref<HTMLElement | null>(null)
 const rect = ref<DOMRect | null>(null)
-// True once the current step has finished looking for its anchor — the card
-// is not drawn before that, so it never jumps from the centre to its place.
+// True once the current step has finished looking for its anchor.
 const settled = ref(false)
 const cardRef = ref<HTMLElement | null>(null)
 
 const step = computed(() => props.steps[index.value])
 const isLast = computed(() => index.value === props.steps.length - 1)
-const missing = computed(() => settled.value && !!step.value?.anchor && !anchorEl.value)
+const shownStep = computed(() => (shownIndex.value === null ? undefined : props.steps[shownIndex.value]))
+const shownIsLast = computed(() => shownIndex.value === props.steps.length - 1)
+const missing = computed(
+  () => settled.value && shownIndex.value === index.value && !!step.value?.anchor && !anchorEl.value,
+)
 
 // Each step change starts a new lookup; an older one still polling must not
 // write its result over the newer step's.
@@ -48,15 +57,30 @@ function clearPoll(): void {
   pollTimer = null
 }
 
+/** One frame: long enough for a state change to be laid out. A hidden or
+ *  minimised window may not paint frames at all, so a short timer stands in. */
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, 100)
+    requestAnimationFrame(() => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
 async function enterStep(): Promise<void> {
   const token = ++lookupToken
   clearPoll()
   settled.value = false
-  anchorEl.value = null
-  rect.value = null
   const current = step.value
   if (!current) return
   if (current.prepare && props.runPrepare) {
+    // Opening Settings can take a while: show this step's card centred now
+    // rather than leaving the previous one up or nothing at all.
+    shownIndex.value = index.value
+    anchorEl.value = null
+    rect.value = null
     // A prepare that never settles must not leave the tour without a card:
     // it gets the anchor budget, then the step shows regardless.
     let capTimer: ReturnType<typeof setTimeout> | null = null
@@ -81,6 +105,15 @@ async function enterStep(): Promise<void> {
     return
   }
   const selector = current.anchor
+  if (!current.prepare) {
+    // Nothing was opened for this step, so the window already is what it
+    // points at: the anchor is there after one frame or not at all. Waiting
+    // out the budget here only left a blank dimmed window for two seconds.
+    await nextFrame()
+    if (token !== lookupToken) return
+    settle(token, findTourAnchor(selector))
+    return
+  }
   const deadline = Date.now() + props.anchorTimeoutMs
   const poll = (): void => {
     if (token !== lookupToken) return
@@ -94,10 +127,12 @@ async function enterStep(): Promise<void> {
 function settle(token: number, el: HTMLElement | null): void {
   if (token !== lookupToken) return
   anchorEl.value = el
+  rect.value = null
   if (el) {
     el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
     rect.value = el.getBoundingClientRect()
   }
+  shownIndex.value = index.value
   settled.value = true
   void nextTick(() => cardRef.value?.querySelector<HTMLElement>('[data-tour-primary]')?.focus())
 }
@@ -214,7 +249,7 @@ const cardStyle = computed((): Record<string, string> => {
       <div v-if="rect" class="tour-hole" :style="holeStyle" data-testid="tour-hole"></div>
       <div v-else class="tour-dim"></div>
       <div
-        v-if="settled && step"
+        v-if="shownStep"
         ref="cardRef"
         class="tour-card"
         :class="{ centred: !rect }"
@@ -223,23 +258,23 @@ const cardStyle = computed((): Record<string, string> => {
         aria-modal="true"
         aria-labelledby="tour-title"
         aria-describedby="tour-body"
-        :data-step="step.id"
+        :data-step="shownStep.id"
       >
         <p class="tour-progress" aria-live="polite">
-          {{ t('tour.progress', { n: index + 1, total: steps.length }) }}
+          {{ t('tour.progress', { n: (shownIndex ?? 0) + 1, total: steps.length }) }}
         </p>
-        <h2 id="tour-title" class="tour-title">{{ t(step.titleKey) }}</h2>
-        <p id="tour-body" class="tour-body">{{ t(step.bodyKey) }}</p>
-        <p v-if="missing && step.missingKey" class="tour-missing" data-testid="tour-missing">
-          {{ t(step.missingKey) }}
+        <h2 id="tour-title" class="tour-title">{{ t(shownStep.titleKey) }}</h2>
+        <p id="tour-body" class="tour-body">{{ t(shownStep.bodyKey) }}</p>
+        <p v-if="missing && shownStep.missingKey" class="tour-missing" data-testid="tour-missing">
+          {{ t(shownStep.missingKey) }}
         </p>
         <div class="tour-actions">
-          <button v-if="!isLast" type="button" class="tour-skip" data-testid="tour-skip" @click="leave">
+          <button v-if="!shownIsLast" type="button" class="tour-skip" data-testid="tour-skip" @click="leave">
             {{ t('tour.skip') }}
           </button>
           <span class="tour-spacer"></span>
           <button
-            v-if="index > 0"
+            v-if="(shownIndex ?? 0) > 0"
             type="button"
             class="nv-btn"
             data-testid="tour-back"
@@ -251,7 +286,7 @@ const cardStyle = computed((): Record<string, string> => {
             data-tour-primary
             data-testid="tour-next"
             @click="next"
-          >{{ isLast ? t('tour.done') : t('tour.next') }}</button>
+          >{{ shownIsLast ? t('tour.done') : t('tour.next') }}</button>
         </div>
       </div>
     </div>

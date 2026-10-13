@@ -9,6 +9,7 @@
 //    it renders the list layout instead — same skills, same keys, different
 //    arrangement.
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import PromptSkillIcon from './PromptSkillIcon.vue'
 import {
   RING_MAX_SLOTS,
@@ -294,7 +295,7 @@ defineExpose({ closeNow })
                 skill.maxTurns > 0 ? `×${skill.maxTurns}` : ''
               }}</span>
             </span>
-            <span class="ps-row-desc">{{ skill.description || skill.prompt }}</span>
+            <span class="ps-row-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
           </span>
           <span class="ps-key-inline">{{ i + 1 }}</span>
         </button>

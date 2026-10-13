@@ -68,6 +68,20 @@ const sidebarModeLabels = computed(() => ({
   workspace: t('label.workspace'),
   free: t('label.sidebar-mode-free'),
 }))
+// The workspace row's context menu and ⋯ menu, as ControlPane.vue labels them.
+const workspaceRowLabels = computed(() => ({
+  more: t('action.more-workspace-actions'),
+  rename: t('action.rename-workspace'),
+  finder: t('action.open-in-finder'),
+  copyPath: t('action.copy-path'),
+  moveToGroup: t('label.move-to-workspace-group'),
+  reclaim: t('action.reclaim-workspace'),
+  close: t('action.close-workspace'),
+  closePanes: t('action.close-workspace-and-panes'),
+  rebuildAll: t('action.rebuild-all-cli-panes-label'),
+  history: t('label.history'),
+  detach: t('action.detach-workspace'),
+}))
 
 // ── Voice input ─────────────────────────────────────────────────────────
 // One take, in order, then the rows of Settings ▸ Voice Input in the order
@@ -472,7 +486,7 @@ const shortcuts: { key: string; keys: string }[] = [
       <h3 class="wph-h3">{{ $t('settings.help.workspace.s5.h2') }}</h3>
       <p class="wph-p" v-html="$t('settings.help.workspace.s5.p1')"></p>
       <ul class="wph-list">
-        <li v-html="$t('settings.help.workspace.s5.rows.workspace')"></li>
+        <li v-html="$t('settings.help.workspace.s5.rows.workspace', workspaceRowLabels)"></li>
         <li v-html="$t('settings.help.workspace.s5.rows.group')"></li>
         <li v-html="$t('settings.help.workspace.s5.rows.pane')"></li>
       </ul>

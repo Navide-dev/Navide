@@ -7,6 +7,7 @@
 // line, then the preview. The message body lives in an expandable detail block
 // that scrolls instead of widening the rail.
 import { computed, ref } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import { AGENT_SPECS } from '@navide/plugin-shell'
 import {
@@ -98,7 +99,7 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
 <template>
   <div class="msg-panel">
     <div class="msg-bar">
-      <span class="msg-title">{{ $t('msg.panel-title') }}</span>
+      <span class="msg-title" v-truncate>{{ $t('msg.panel-title') }}</span>
       <span class="msg-acts">
         <button
           class="msg-btn"
@@ -197,13 +198,16 @@ function vendorOf(agentKey: string | undefined, handle: string): string | null {
             {{ $t('msg.retry') }}
           </button>
         </div>
-        <div class="msg-preview">{{ msg.content }}</div>
+        <div class="msg-preview" v-truncate>{{ msg.content }}</div>
         <!-- Why this row is where it is, without having to expand it. -->
-        <div v-if="msg.reason" class="msg-reason" :title="reasonText(msg.reason)">
+        <div v-if="msg.reason" class="msg-reason" v-truncate>
           {{ reasonText(msg.reason) }}
         </div>
-        <div v-else-if="msg.hold" class="msg-hold">
+        <div v-else-if="msg.hold" class="msg-hold" v-truncate>
           {{ $t(`msg.hold-${msg.hold.key}`, { n: msg.hold.n ?? 0 }) }}
+        </div>
+        <div v-else-if="msg.deliveredWhileBusy" class="msg-hold" v-truncate>
+          {{ $t('msg.delivered-while-busy') }}
         </div>
         <div v-if="expandedId === msg.id" class="msg-detail">
           <pre>{{ msg.content }}</pre>

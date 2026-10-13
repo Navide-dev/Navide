@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { vTruncate } from '@navide/plugin-ui/foundation'
+
 const props = defineProps<{
   paneId: string
   title: string
@@ -8,6 +10,9 @@ const props = defineProps<{
   pipeTag?: string
   isFocus?: boolean
   realizing?: boolean
+  /** The pane was working when the app was restarted, and the relaunch did not
+   *  bring it back by itself (over the cap, or the resume failed). */
+  interrupted?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -41,14 +46,19 @@ function activate(): void {
     <header class="pane-header">
       <div class="header-main">
         <span v-if="pipeTag" class="pipe-tag">{{ pipeTag }}</span>
-        <span class="title">{{ title }}</span>
+        <span class="title" v-truncate>{{ title }}</span>
         <span
           v-if="autoNamed"
           class="auto-name-mark"
           :title="$t('pane.terminal.auto-named-tooltip')"
         >◦</span>
+        <span
+          v-if="interrupted"
+          class="interrupted-mark"
+          :title="$t('pane.terminal.interrupted-at-launch-tooltip')"
+        >{{ $t('pane.terminal.interrupted-at-launch') }}</span>
       </div>
-      <span v-if="subtitle" class="header-sub">{{ subtitle }}</span>
+      <span v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</span>
     </header>
     <button
       class="resume-prompt"
@@ -137,6 +147,17 @@ function activate(): void {
   opacity: 0.45;
   margin-left: -6px; /* same gap pull-back as TerminalPane's header */
   user-select: none;
+}
+
+.interrupted-mark {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--warning-fg);
+  border-radius: 3px;
+  color: var(--warning-fg);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .minimize-btn {

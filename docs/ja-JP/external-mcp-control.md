@@ -108,6 +108,7 @@ Plan ウィンドウが Plan を解決する際の基準と同じものです。
 | `cli_send_and_wait` | `to`, `text`, `timeout_s=60`（上限 120）, `pane_id?` | `cli_send` に加えてその Turn の完了まで待機。`cli_wait_idle` の結果に `{ok, target, msg_key}` を付けて返す  **リモート Pane**: 送信と配信 gate はローカルと同じ（`rejected` は `failed` と区別されたまま）。待機の半分は名簿バッジを使い、弱点は `cli_wait_idle` と同じです。 |
 | `cli_open_agent` | `agent`, `name`, `task`, `workspace_path`（Pane 以外の呼び出し元では必須）, `model`, `effort`, `pane_id?`, `session_id?`, `run_group_id?` | Task 付きで新しい CLI Pane を Spawn。`{ok, name, address, pane_id}` を返し、Spawn が Advisory の閾値を越えた場合は `advisories` も返す。**委譲ルール**（server instructions にも同じ一文があります）: ファイルを編集する、数分以上かかる、あるいはユーザーが途中で見たり中断したり引き継いだりしたくなる作業は、ここで開いた Pane に渡します — Agent 自身の subagent 機構（Claude Code の `Agent`／`Task` ツール）にではなく。Pane は Navide 上で見え、実行中に開け、呼び出し元の Session より長く生きます。subagent は要約を一つ返すだけのブラックボックスです。結果が一段落で済む短い読み取り専用の調査には、引き続き subagent が適しています。`model` と `effort` は任意で、その CLI が受け付けない場合は無視せず「拒否」するため、Pane が別のモデルで静かに起動することはない。多くの CLI は model を受け付けるが、独立した effort を受け付けるものは少なく、残りは effort を model id に埋め込む（`gpt-5.3-codex-high`）。model id は検証しない（リリースごとに変わるため）が、effort はその CLI の語彙と照合する。**`agent: "terminal"`** はプレーンなログインシェルの Pane を開く。`task` は省略可能で、プロンプトが出たあとに一度だけ打ち込まれるコマンドライン（後ろには何も付け足さない。シェルは報告できないため報告の指示もない）。`model`、`effort`、`session_id` は拒否される。再入力はしないので、確認できなかった Kickoff は `unverified` を返す。再送すればコマンドがもう一度実行されるため、再送前に `cli_read_log` を読むこと |
 | `cli_close_agent` | `target`, `pane_id?` | Pane を閉じる — `cli_open_agent` のもう半分です。**これは相手の作業を終わらせます**: Pane と PTY が消え、走っていた Turn もろとも死に、その Pane 宛に Queue されていたものは配信されません。取り消しは効きません — 閉じた Pane の Session は待避ではなく消滅です。先に `cli_get_status` を見て、作業中の Pane は閉じないでください。`cli_interrupt` はより穏当な段（割り込みキーを押すだけで Pane は開いたまま）、`cli_send` はさらに穏当（Turn の完了を待つ）です。`{ok, target, name, closed, advisories?}` を返します。`advisories` は閉じたことの代償のうち他の誰も報告しないもの — Pane が Turn の途中だった、メッセージが Queue に残っていた、子 Pane が孤児になった — で、Kill の後では知りようがないため事前に集めます。このマシン上の Pane のみ: `<device>/<workspace>/<pane>` 形式のアドレスは `close-local-only` で失敗します。これはアドレスの誤りではなく、この Tool の限界です |
+| `cli_reclaim_agent` | `target`, `pane_id?` | 作業を終えた Pane を回収する — `cli_close_agent` の取り消し可能な版です。CLI プロセスは終了し、Pane は会話を保ったままクリックで再開できるカードとして残ります。ステータスバーの「今すぐ回収」（`ui.pane.reclaim`）を、`cli_send` と同じアドレスで指定した 1 つの Pane に対して、その Pane を持つウィンドウで実行します。ステータスバーのガードが適用され、ビジー・フォーカス中・再開不可の Pane、未送信の入力やキュー中のメッセージがある Pane は拒否されます。`{ok, target, name, reclaimed}` を返し、拒否時は `ok: false`、`reclaimed: false`、ガードの `reason`、`error_code` `reclaim-refused` です。このマシン上の Pane のみ（`reclaim-local-only`）、自分自身は不可（`self-reclaim`）。v0.2.16 より古いウィンドウは `reclaim-unsupported` を返します — `cli_close_agent` で代用せず、アプリを更新してください |
 
 **Choosing a tab group when opening a pane.** `cli_open_agent` accepts optional
 `run_group_id` for a fresh pane or a new pane opened with `session_id`:
@@ -151,6 +152,12 @@ group ID below with values returned for the target workspace:
 （Pane への打ち込みが通らなかった）、`pane-closed`（配信前に対象が消えた）、
 `no-report`（試行が結果を報告しなかった）です。
 
+`unconfirmed`（reason は `delivery-unconfirmed`）はそのどちらでもありません。
+テキストと Enter は Resume した直後の CLI に送られましたが、その CLI はまだ受信を
+示していません。送信は済んでおり実行中の可能性もあるため、これだけで再送しないで
+ください。先に `cli_get_status` か `cli_read_log` で Pane を確認してください。
+後から CLI の Transcript にメッセージが現れると、状態は `delivered` になります。
+
 失敗は、要求がなくても送信側の Pane にも Push されます。Navide は対象と理由を
 記した `[Navide MSG] delivery failed` の通知を、その Pane が Idle になった時点で、
 通常のメッセージと同じ Queue と注入経路を通じて書き込みます。これは一度も Poll
@@ -178,7 +185,10 @@ Turn の途中の Pane や入力されている Pane はメッセージをはる
 **メッセージがまだ Queue にある理由。** `hold` は Messages パネルが表示するのと
 同じ理由で、`{key, n?}` の形をとります。`key` は `typing`、`mid-turn`、`behind`、
 `starting`、`settling`、`not-ready`、`gone`、`paused`、`remote-ack` のいずれかで、
-`held_for_s` はその状態が続いている長さです。これは `cli_check_message` と、
+`held_for_s` はその状態が続いている長さです。別のデバイスへ送って 1 分以上応答のない
+メッセージは Server に問い合わせられ、その後は `remote-busy`（対象 Pane が Turn の
+途中）または `remote-unreported`（作業中ではなく、相手からもまだ何の応答もない）に
+なります。これは `cli_check_message` と、
 Timeout した `cli_send` の待機に現れ、メッセージが決着したあとや、どのウィンドウも
 理由を報告していない間は現れません。`cli_list_targets` は同じ事実を Pane ごとに
 `hold_reason` として見せ、それが `busy` を説明可能にしています。ただしここから送った
@@ -386,6 +396,7 @@ Host Wiring — だけです。Navide の CLI Pane から、その Pane 自身�
 | `ui.pane.open` | `{paneId}` | 復元用の placeholder（`cli_list_targets` で `realized: false` の Pane）を開き、完了を待つ。`{realized, reason, paneId}` を返す — `paneId` は開いた後の Pane の id、`reason` は `opened`、`fresh`（新しいセッション。以前の会話は覚えていない）、`already-open`、または開けなかった理由。Resume 動作が `ask` でもモーダルは出ません |
 | `ui.pane.getStatus` | `{paneId}` | その Pane の `{status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?, effort?, profileId?, loginExpired?, usageLimitUntil?}` を返す — アイデンティティ系のキーは Pane に値がある場合のみ |
 | `ui.pane.interrupt` | `{paneId}` | その Pane の割り込みキーを押す。`{sent, status, advisories?}` を返す — `status` は押す**前**に読まれます。押すこと自体が、報告しようとしているその状態を変えてしまうためです |
+| `ui.pane.reclaim` | `{paneId}`（単一 id または配列） | 作業を終えた Pane のリソースを解放する：CLI プロセスは終了し、Pane はクリックで再開できるカードとして残る（ステータスバーの「今すぐ回収」と同じ）。ビジーまたは回答待ち、フォーカス中、未送信の入力あり、キュー中のメッセージあり、再開不可の Pane は拒否される。`{reclaimed, refused: [{paneId, reason, detail}]}` を返す |
 | `ui.tab.switch` | `{tabId}` | Active な Stage/Run-group タブを切り替え |
 | `ui.preview.show` | `{kind, …}` | 右レールのプレビューパネルにファイル・diff・インラインスニペットを表示 |
 | `ui.window.openPlans` | `{rel_path?}` | Plan ウィンドウを開く。`rel_path`（`.agent-team/plans/<name>.html`、相対パス、`..` 不可）を渡すとその Plan 1 件に絞って開く |

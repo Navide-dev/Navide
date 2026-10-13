@@ -20,6 +20,7 @@ export const STALE_AFTER_MS = 60 * 60 * 1000
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{ git: PaneGit; now?: number }>()
 const { t } = useI18n()
@@ -49,7 +50,7 @@ const title = computed(() => {
 </script>
 
 <template>
-  <span v-if="git.worktreeRoot" class="pane-git" :class="{ stale }" :title="title">
+  <span v-if="git.worktreeRoot" class="pane-git" v-truncate :class="{ stale }" :title="title">
     <span class="pg-branch">⎇ {{ git.branch ?? '?' }}</span>
     <span v-if="git.dirty" class="pg-dirty">· {{ t('settings.p2p.network.git-dirty', { count: git.dirty }) }}</span>
     <span v-if="hasDrift" class="pg-drift">· ↑{{ git.ahead }} ↓{{ git.behind }}</span>

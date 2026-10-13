@@ -315,3 +315,21 @@ async def test_link_url_opens_the_app_dm_once_bots_info_names_the_app(http: Fake
         assert adapter.link_url("ABCD2345", "direct") == "https://slack.com/app_redirect?app=A77&team=T1"
         assert adapter.link_url("ABCD2345", "group") == ""
         await adapter.stop()
+
+
+async def test_menu_sends_and_edits_one_actions_block_per_button_row(http: FakeHttp) -> None:
+    http.route("POST", "/chat.postMessage", lambda r: {"ok": True, "channel": r.body["channel"], "ts": "9.5"})
+    http.route("POST", "/chat.update", lambda r: {"ok": True})
+    adapter = SlackAdapter(APP, BOT, base_url=http.base_url)
+    loc = Location("slack", "default", "C1", "9.0")
+    rows = [[("💬 A", "nv2:p:aaaaaaaa"), ("💬 B", "nv2:p:bbbbbbbb")], [("Next ▶", "nv2:g:cccccccc")]]
+    assert await adapter.send_menu(loc, "menu", rows) == "9.5"
+    body = http.calls_to("POST", "/chat.postMessage")[0].body
+    assert body["thread_ts"] == "9.0" and body["blocks"][0]["text"]["text"] == "menu"
+    actions = [b for b in body["blocks"] if b["type"] == "actions"]
+    assert [[e["value"] for e in b["elements"]] for b in actions] == [[d for _, d in r] for r in rows]
+    ids = [e["action_id"] for b in actions for e in b["elements"]]
+    assert len(ids) == len(set(ids))
+    await adapter.edit_menu(loc, "9.5", "page 2", rows[1:])
+    upd = http.calls_to("POST", "/chat.update")[0].body
+    assert upd["ts"] == "9.5" and [b["type"] for b in upd["blocks"]] == ["section", "actions"]

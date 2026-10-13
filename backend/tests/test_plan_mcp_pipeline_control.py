@@ -149,9 +149,13 @@ class _FakeRolesStore:
     def get(self, key: str) -> dict[str, Any] | None:
         return next((r for r in self.roles if r["key"] == key), None)
 
-    def upsert(self, *, key: str, label: str, one_line: str, system_prompt: str) -> dict[str, Any]:
+    def upsert(
+        self, *, key: str, label: str, one_line: str, system_prompt: str, properties: Any = None
+    ) -> dict[str, Any]:
         self.writes.append(("upsert", key, label, one_line, system_prompt))
         role = {"key": key, "label": label, "one_line": one_line, "system_prompt": system_prompt}
+        if properties is not None:
+            role["properties"] = properties
         self.roles = [r for r in self.roles if r["key"] != key] + [role]
         return role
 
@@ -975,6 +979,7 @@ async def test_the_pipeline_control_tools_are_registered_with_their_arguments() 
         "label",
         "one_line",
         "system_prompt",
+        "properties",
     }
     for name in ("pipeline_next", "pipeline_resume", "pipeline_reset", "pipeline_restart"):
         assert set(tools[name].inputSchema.get("properties") or {}) == {"workspace_path"}

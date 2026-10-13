@@ -130,6 +130,13 @@ class FakeVault:
         email = self.emails.get(secret or "")
         return {"email": email, "signedIn": email is not None}
 
+    # No claude account has signed in inside its own config dir.
+    def account_dir_signed_in(self, slot_id: str) -> bool:
+        return False
+
+    def account_dir_identity(self, slot_id: str) -> dict | None:
+        return None
+
     def read_slot(self, agent_key: str, slot_id: str) -> SimpleNamespace:
         return SimpleNamespace(secret=self.slot_secrets.get((agent_key, slot_id)), account=None)
 

@@ -165,7 +165,7 @@ describe('MarketplacePane', () => {
     await flushPromises()
     // The Marketplace now lists on mount, so scope to the Extensions page.
     expect(wrapper.find('.extensions-pane [data-id="acme.demo"]').exists()).toBe(false)
-    expect(wrapper.get('.ext-empty').text()).toContain('No extensions installed')
+    expect(wrapper.get('.ext-empty').text()).toContain('No Navide plugins installed')
 
     await wrapper.get('.ext-search button').trigger('click')
     await flushPromises()
@@ -401,7 +401,7 @@ describe('MarketplacePane', () => {
     resolveSearch({ items: [], total: 0, offset: 0, limit: 20 })
     await flushPromises()
     expect(wrapper.find('.mkt-loading').exists()).toBe(false)
-    expect(wrapper.get('.mkt-empty').text()).toContain('No extensions are published yet')
+    expect(wrapper.get('.mkt-empty').text()).toContain('No Navide plugins are published yet')
   })
 
   it('shows the actual registry error when the listing fails', async () => {
@@ -1240,15 +1240,16 @@ describe('MarketplacePane', () => {
     it('shows the members and their permissions on the pack detail page', async () => {
       const api = mockPack()
       await openPackDetail()
-      expect(wrapper!.get('.mkt-pack-badge').text()).toBe('Extension Pack')
+      expect(wrapper!.get('.mkt-pack-badge').text()).toBe('Navide Plugin Pack')
       expect(api.marketplacePackMembers).toHaveBeenCalledWith(['acme.hello', 'acme.lint', 'acme.notes', 'acme.gone'])
       const members = wrapper!.findAll('.mkt-pack-member')
       expect(members.map((m) => m.attributes('data-member'))).toEqual(['acme.hello', 'acme.lint', 'acme.notes', 'acme.gone'])
       // Each row keeps its fields apart: name, id · version, permissions, state.
       expect(members[0].get('.mkt-pack-member-name').text()).toBe('Hello')
       expect(members[0].get('.mkt-pack-member-id').text()).toBe('acme.hello · 1.0.0')
-      expect(members[0].get('.mkt-pack-member-id').attributes('title')).toBe('acme.hello · 1.0.0')
-      expect(members[0].get('.mkt-pack-member-name').attributes('title')).toBe('Hello')
+      // The full value is shown on hover by v-truncate when cut off, not by a title.
+      expect(members[0].get('.mkt-pack-member-id').attributes('data-truncate')).toBe('')
+      expect(members[0].get('.mkt-pack-member-name').attributes('data-truncate')).toBe('')
       expect(members[0].findAll('.mkt-pack-cap').map((c) => c.text())).toEqual(['ui'])
       expect(members[0].find('.mkt-pack-status').exists()).toBe(false)
       // The same "fs · sensitive" label as the install dialog, spaces included.
@@ -1257,8 +1258,8 @@ describe('MarketplacePane', () => {
       // Already installed is a neutral fact, here as in the install dialog.
       expect(members[2].get('.mkt-pack-status').classes()).toContain('mkt-badge--muted')
       // One count rule for the page, the button and the dialog.
-      expect(wrapper!.get('.mkt-pack-counts').text()).toBe('4 extensions · 2 to install · 1 already installed · 1 skipped')
-      expect(members[3].get('.mkt-pack-status').text()).toContain('Not in the Marketplace')
+      expect(wrapper!.get('.mkt-pack-counts').text()).toBe('4 Navide plugins · 2 to install · 1 already installed · 1 skipped')
+      expect(members[3].get('.mkt-pack-status').text()).toContain('Not in the Navide Marketplace')
       // A skipped member gets the grey tile an incompatible card gets in the list.
       expect(members.map((m) => m.classes().includes('mkt-pack-member--skipped'))).toEqual([false, false, false, true])
       // The pack itself grants nothing; it does not say "declares no permissions".
@@ -1274,20 +1275,20 @@ describe('MarketplacePane', () => {
       await wrapper!.get('.mkt-pack-install').trigger('click')
       await flushPromises()
       expect(api.preparePack).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo' })
-      // The id and version stay one token with the full value as a tooltip.
+      // The id and version stay one token; v-truncate shows the full value on hover when cut off.
       const lintId = wrapper!.get('.pack-member--summary[data-member="acme.lint"] .pack-member-id')
       expect(lintId.text()).toBe('acme.lint · 1.0.0')
-      expect(lintId.attributes('title')).toBe('acme.lint · 1.0.0')
+      expect(lintId.attributes('data-truncate')).toBe('')
       // Every summary row has the same three cells, so states line up.
       for (const row of wrapper!.findAll('.pack-member--summary')) {
         expect(row.findAll(':scope > .pack-member-main, :scope > .pack-member-caps, :scope > .pack-status')).toHaveLength(3)
       }
       expect(wrapper!.get('.pack-member--summary[data-member="acme.lint"] .pack-member-caps').findAll('.pack-cap--sensitive').map((c) => c.text())).toEqual(['fs · sensitive', 'shell · sensitive'])
       // Summary: no member has been prepared or installed yet, and there is no accept-all.
-      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 extensions')
+      expect(wrapper!.find('.pack-review').text()).toBe('Review 3 Navide plugins')
       // The title counts every member and the ones to review, like the detail page.
       const total = wrapper!.findAll('.pack-member--summary').length
-      expect(wrapper!.get('#pack-dialog-title').text()).toBe(`Install “Demo Pack”: ${total} extensions, 3 to review`)
+      expect(wrapper!.get('#pack-dialog-title').text()).toBe(`Install “Demo Pack”: ${total} Navide plugins, 3 to review`)
       expect(api.prepareInstall).not.toHaveBeenCalled()
       expect(wrapper!.text()).not.toMatch(/accept all/i)
 
@@ -1329,7 +1330,7 @@ describe('MarketplacePane', () => {
         'acme.hello': '✓ Installed',
         'acme.lint': '– Skipped',
         'acme.notes': '✓ Installed',
-        'acme.gone': '– Not in the Marketplace, skipped',
+        'acme.gone': '– Not in the Navide Marketplace, skipped',
       })
       const tone = (id: string) => wrapper!.get(`.pack-dialog [data-member="${id}"] .pack-result`).classes()
       expect(tone('acme.hello')).toContain('pack-result--success')
@@ -1539,7 +1540,7 @@ describe('MarketplacePane', () => {
         expect(wrapper.get('[data-category="version-control"]').text()).toBe('版本控制')
         await wrapper.get('[data-id="acme.demo"]').trigger('click')
         await flushPromises()
-        expect(wrapper.get('.mkt-categories .mkt-tag').text()).toBe('擴充套件組合')
+        expect(wrapper.get('.mkt-categories .mkt-tag').text()).toBe('Navide 外掛組合')
       } finally {
         i18n.global.locale.value = previous
       }
@@ -1714,7 +1715,7 @@ describe('MarketplacePane', () => {
 
       const card = wrapper.get('.ext-trust-body')
       expect(card.attributes('role')).toBe('alertdialog')
-      expect(document.getElementById(card.attributes('aria-labelledby')!)?.textContent).toContain('Confirm plugin permissions')
+      expect(document.getElementById(card.attributes('aria-labelledby')!)?.textContent).toContain('Confirm Navide plugin permissions')
       expect(card.text()).toContain('Read and write files in your workspace.')
       const cancel = wrapper.get('.ext-cancel').element
       const confirm = wrapper.get('.ext-confirm-risk').element
@@ -1838,7 +1839,7 @@ describe('MarketplacePane', () => {
       push([{ id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.1.0' }])
       await flushPromises()
       expect(wrapper.find('.ext-updates-summary').exists()).toBe(false)
-      expect(wrapper.get('.ext-empty').text()).toContain('No extensions installed')
+      expect(wrapper.get('.ext-empty').text()).toContain('No Navide plugins installed')
       push([])
       stop()
     })

@@ -23,7 +23,7 @@ import type { PlanMeta, ReviewNote, PlanTodo, TodoStatus, PlanStage } from '../c
 import type { PlanStore, PlanCtx } from '../composables/planStore'
 import type { useBackend } from '../composables/useBackend'
 import { sharePlanToGit } from '../composables/planShare'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 
 const props = defineProps<{
@@ -1198,7 +1198,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
           </template>
           <template v-else>
             <div class="prt-note-text">
-              <span v-if="note.anchor" class="prt-note-anchor">{{ note.anchor }}</span>{{ note.text }}
+              <span v-if="note.anchor" class="prt-note-anchor" v-truncate>{{ note.anchor }}</span>{{ note.text }}
             </div>
             <div v-if="note.reply" class="prt-note-reply">{{ note.reply }}</div>
           </template>
@@ -1224,7 +1224,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
         </template>
       </div>
       <div class="prt-new">
-        <span v-if="pendingAnchor" class="prt-note-anchor prt-note-anchor--pending">
+        <span v-if="pendingAnchor" class="prt-note-anchor prt-note-anchor--pending" v-truncate>
           {{ pendingAnchor }}
           <button
             class="prt-anchor-clear"

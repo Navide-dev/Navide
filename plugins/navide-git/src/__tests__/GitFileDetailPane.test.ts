@@ -7,6 +7,7 @@ import ConflictPane from '../editor/ConflictPane.vue'
 import type { GitTransport } from '#git-feature'
 
 vi.mock('@navide/plugin-ui/foundation', () => ({
+  vTruncate: {},
   useNotify: () => ({ toast: vi.fn() }),
 }))
 

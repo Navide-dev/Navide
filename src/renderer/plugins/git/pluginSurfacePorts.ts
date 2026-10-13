@@ -212,6 +212,7 @@ export function createPluginTerminalDockPort(sdk: PluginCapabilitySdk): Terminal
       output_log_file: requestBody.outputLogFile,
       login_profile_id: requestBody.loginProfileId,
       is_login: requestBody.isLogin,
+      ...(requestBody.accountDirLogin ? { account_dir_login: true } : {}),
       replaces_terminal_id: requestBody.replacesTerminalId,
       ...(requestBody.quotaTransactionId ? { quota_transaction_id: requestBody.quotaTransactionId } : {}),
       ...(requestBody.quotaOriginalPaneId ? { quota_original_pane_id: requestBody.quotaOriginalPaneId } : {}),
@@ -231,7 +232,11 @@ export function createPluginTerminalDockPort(sdk: PluginCapabilitySdk): Terminal
       rows,
     }),
     interrupt: (sessionId) => request('terminal.interrupt', { terminal_session_id: sessionId }),
-    kill: (sessionId, force) => request('terminal.kill', { terminal_session_id: sessionId, force }),
+    kill: (sessionId, force, options) => request('terminal.kill', {
+      terminal_session_id: sessionId,
+      force,
+      ...(options?.retireRestore ? { retire_restore: true } : {}),
+    }),
     redraw: (sessionId, cols, rows) => request('terminal.redraw', {
       terminal_session_id: sessionId,
       cols,

@@ -9,11 +9,13 @@
 // does. Without it the content sits flush against the modal edge.
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import PromptSkillIcon from './PromptSkillIcon.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
+import { reorderByIds } from '../lib/paneOrder'
 import {
   PROMPT_SKILL_ICONS,
-  nextSkillId,
+  newSkillId,
   normalizeCustomIcon,
   promptSkillIconGlyph,
   type PromptSkill,
@@ -36,9 +38,12 @@ const categories = computed(() => {
   return [...counts.entries()].map(([key, count]) => ({ key, count }))
 })
 
+// Cards follow the ∞ picker's order: the default skill is always cast first,
+// so it is pinned first here too, and the rest keep their saved order.
 const visible = computed(() => {
   const q = query.value.trim().toLowerCase()
-  return skills.value.filter((s) => {
+  const ordered = [...skills.value].sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
+  return ordered.filter((s) => {
     if (categoryFilter.value !== 'all' && s.category !== categoryFilter.value) return false
     if (!q) return true
     return (
@@ -48,6 +53,37 @@ const visible = computed(() => {
     )
   })
 })
+
+/** Drag reordering works on the full list only — a filtered view hides
+ *  neighbours, so a drop there would land somewhere the user cannot see. */
+const canReorder = computed(() => categoryFilter.value === 'all' && !query.value.trim())
+const dragId = ref('')
+const dragOverId = ref('')
+
+function onDragStart(e: DragEvent, skill: PromptSkill): void {
+  if (!canReorder.value || skill.isDefault) { e.preventDefault(); return }
+  dragId.value = skill.id
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', skill.id)
+  }
+}
+function onDragOver(e: DragEvent, skill: PromptSkill): void {
+  if (!dragId.value || dragId.value === skill.id || skill.isDefault) return
+  e.preventDefault()
+  dragOverId.value = skill.id
+}
+function onDragLeave(skill: PromptSkill): void {
+  if (dragOverId.value === skill.id) dragOverId.value = ''
+}
+function onDrop(skill: PromptSkill): void {
+  const from = dragId.value
+  dragId.value = ''
+  dragOverId.value = ''
+  if (!canReorder.value || !from || skill.isDefault) return
+  const next = [...skills.value]
+  if (reorderByIds(next, from, skill.id)) save(next)
+}
 
 /** Re-read the drawer's working copy from the store. Actions that go through
  *  save() (default / enable / duplicate) change fields the drawer also shows,
@@ -71,7 +107,7 @@ function createSkill(): void {
   const ids = skills.value.map((s) => s.id)
   const name = t('settings.prompts.new-name')
   const skill: PromptSkill = {
-    id: nextSkillId(ids, name),
+    id: newSkillId(ids, name),
     name,
     icon: 'edit',
     description: '',
@@ -91,7 +127,7 @@ function createSkill(): void {
 function duplicate(skill: PromptSkill): void {
   const copy: PromptSkill = {
     ...skill,
-    id: nextSkillId(skills.value.map((s) => s.id), `${skill.id}-copy`),
+    id: newSkillId(skills.value.map((s) => s.id), `${skill.id}-copy`),
     name: t('settings.prompts.copy-name', { name: skill.name }),
     isDefault: false,
   }
@@ -194,17 +230,25 @@ function applyCustomIcon(): void {
             :key="skill.id"
             type="button"
             class="prompt-card"
-            :class="{ active: selectedId === skill.id, off: !skill.enabled }"
+            :data-skill-id="skill.id"
+            :class="{ active: selectedId === skill.id, off: !skill.enabled, 'drag-over': dragOverId === skill.id }"
+            :draggable="canReorder && !skill.isDefault"
+            @dragstart="onDragStart($event, skill)"
+            @dragover="onDragOver($event, skill)"
+            @dragenter="onDragOver($event, skill)"
+            @dragleave="onDragLeave(skill)"
+            @drop.prevent="onDrop(skill)"
+            @dragend="dragId = ''; dragOverId = ''"
             @click="selectedId = selectedId === skill.id ? null : skill.id"
           >
             <span class="prompt-card-head">
               <PromptSkillIcon :name="skill.icon" />
-              <strong>{{ skill.name }}</strong>
+              <strong v-truncate>{{ skill.name }}</strong>
               <span v-if="skill.isDefault" class="prompt-badge default">{{
                 t('settings.prompts.default-badge')
               }}</span>
             </span>
-            <span class="prompt-card-desc">{{ skill.description || skill.prompt }}</span>
+            <span class="prompt-card-desc" v-truncate>{{ skill.description || skill.prompt }}</span>
             <span class="prompt-card-tags">
               <span class="pchip">{{ skill.category }}</span>
               <span v-if="skill.isDefault" class="pchip">{{
@@ -506,6 +550,12 @@ textarea:focus {
 .prompt-card.active {
   border-color: var(--accent-fg);
   background: var(--bg-muted);
+}
+.prompt-card[draggable='true'] {
+  cursor: grab;
+}
+.prompt-card.drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent-focus);
 }
 .prompt-card.off {
   opacity: 0.55;

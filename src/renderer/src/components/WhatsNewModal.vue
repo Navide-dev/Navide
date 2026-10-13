@@ -144,7 +144,10 @@ function onEnter(e: KeyboardEvent): void {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2100;
+  /* Above the Welcome screen (z-modal + 110), where it opens for an upgrade
+     with no workspace restored; below Settings (z-modal + 120). Under Welcome
+     it was unseen and never closed, and every modal check stayed true. */
+  z-index: calc(var(--z-modal) + 112);
 }
 .modal:focus {
   outline: none;

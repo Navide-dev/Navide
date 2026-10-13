@@ -123,7 +123,7 @@ async def test_backoff_restarts_after_a_successful_poll(api: FakeBotApi) -> None
         pass
 
     api.fail("getUpdates", 500, "Internal Server Error", times=3)
-    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=backoff, poll_timeout_s=1)
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=backoff, poll_timeout_s=1, stable_s=0.0)
     await ad.start(emit)
     try:
         await _until(lambda: len(attempts) == 3 and ad.status.lifecycle == "ready"
@@ -131,6 +131,33 @@ async def test_backoff_restarts_after_a_successful_poll(api: FakeBotApi) -> None
         api.fail("getUpdates", 500, "Internal Server Error")
         await _until(lambda: len(attempts) == 4)
         assert attempts == [1, 2, 3, 1]
+    finally:
+        await ad.stop()
+
+
+async def test_a_session_that_answers_then_drops_at_once_keeps_backing_off(api: FakeBotApi) -> None:
+    # Same rule as ReceiveLoop: only a session that stayed up READY_STABLE_S
+    # restarts the series, or a server that answers once and fails would be
+    # retried at the first-step delay forever.
+    attempts: list[int] = []
+
+    def backoff(attempt: int, _r: float) -> float:
+        attempts.append(attempt)
+        return 0.01
+
+    async def emit(_msg: InboundMessage) -> None:
+        pass
+
+    api.fail("getUpdates", 500, "Internal Server Error", times=3)
+    ad = TelegramAdapter(TOKEN, base_url=api.base_url, backoff=backoff, poll_timeout_s=1, stable_s=10.0)
+    await ad.start(emit)
+    try:
+        await _until(lambda: len(attempts) == 3 and ad.status.lifecycle == "ready"
+                     and len(api.calls_of("getUpdates")) >= 5)
+        assert ad.status.reconnect_attempts == 0  # the status still shows a live session
+        api.fail("getUpdates", 500, "Internal Server Error")
+        await _until(lambda: len(attempts) == 4)
+        assert attempts == [1, 2, 3, 4]
     finally:
         await ad.stop()
 
@@ -448,3 +475,20 @@ async def test_managed_bot_token_asks_for_the_new_bots_user_id(api: FakeBotApi) 
     api.fail("getManagedBotToken", 400, "Bad Request: bot not found")
     with pytest.raises(Exception, match="bot not found"):
         await ad.managed_bot_token(1000)
+
+
+async def test_menu_sends_and_edits_several_button_rows(api: FakeBotApi) -> None:
+    ad = _adapter(api)
+    loc = Location("telegram", "default", "42", "50")
+    rows = [[("💬 A", "nv2:p:aaaaaaaa"), ("💬 B", "nv2:p:bbbbbbbb")], [("Next ▶", "nv2:g:cccccccc")]]
+    message_id = await ad.send_menu(loc, "menu", rows)
+    sent = api.calls_of("sendMessage")[0]
+    assert sent["message_thread_id"] == 50 and message_id.isdigit()
+    assert sent["reply_markup"]["inline_keyboard"] == [
+        [{"text": "💬 A", "callback_data": "nv2:p:aaaaaaaa"}, {"text": "💬 B", "callback_data": "nv2:p:bbbbbbbb"}],
+        [{"text": "Next ▶", "callback_data": "nv2:g:cccccccc"}],
+    ]
+    await ad.edit_menu(loc, "9", "page 2", rows[1:])
+    edit = api.calls_of("editMessageText")[0]
+    assert edit["message_id"] == 9
+    assert edit["reply_markup"]["inline_keyboard"] == [[{"text": "Next ▶", "callback_data": "nv2:g:cccccccc"}]]

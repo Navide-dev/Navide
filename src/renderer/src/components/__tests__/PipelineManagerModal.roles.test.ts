@@ -248,4 +248,84 @@ describe('PipelineManagerModal — roles tab', () => {
     expect(fields(w).key.element.value).toBe('qa')
     expect(fields(w).label.element.value).toBe('QA Engin')
   })
+
+  it('counts every role an import could not write and names the first reason', async () => {
+    const { wrapper: w, mock } = await open()
+    // dev is rejected by the backend; the third entry has no system_prompt.
+    mock.setResponse('roles.upsert', null, {
+      ok: false, error: { code: 'ERR', message: 'roles.json is read-only' },
+    })
+    const openJson = vi.fn().mockResolvedValue({
+      ok: true,
+      content: JSON.stringify({ roles: [dev, { key: 'broken' }] }),
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).agentTeam = { openJson }
+
+    await tab(w).findAll('.toolbar .ghost')[1].trigger('click')
+    await flushPromises()
+
+    expect(tab(w).find('.summary-ok').text()).toContain('Imported 0 role(s)')
+    expect(tab(w).find('.summary-ok').text()).toContain('2 failed')
+    expect(tab(w).find('.err-msg').text()).toContain('dev: roles.json is read-only')
+    expect(tab(w).findAll('.toolbar .ghost')[1].attributes('disabled')).toBeUndefined()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).agentTeam
+  })
+
+  it('keeps a role\'s declared step fields through an import', async () => {
+    const { wrapper: w, mock } = await open()
+    const properties = [{ name: 'effort', type: 'options', options: [{ value: 'low' }, { value: 'high' }] }]
+    mock.setResponse('roles.upsert', { role: { ...dev, properties }, roles: [pm, { ...dev, properties }] })
+    const openJson = vi.fn().mockResolvedValue({ ok: true, content: JSON.stringify({ roles: [{ ...dev, properties }, pm] }) })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(window as any).agentTeam = { openJson }
+
+    await tab(w).findAll('.toolbar .ghost')[1].trigger('click')
+    await flushPromises()
+
+    const sent = mock.sent.filter((s) => s.type === 'roles.upsert')
+    expect(sent[0].payload.properties).toEqual(properties)
+    // A role exported without fields must not wipe the ones it has.
+    expect('properties' in sent[1].payload).toBe(false)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).agentTeam
+  })
+
+  it('saves the step fields declared in the role editor', async () => {
+    const { wrapper: w, mock } = await open()
+    const saved: Role = { ...pm, properties: [{ name: 'field1', type: 'string' }] }
+    mock.setResponse('roles.upsert', { role: saved, roles: [saved, dev] })
+
+    await tab(w).findAll('.split-list li')[1].trigger('click') // Project Manager (sorted)
+    await flushPromises()
+    await tab(w).find('.rpe-add').trigger('click')
+    await flushPromises()
+    await saveBtn(w).trigger('click')
+    await flushPromises()
+
+    const sent = mock.sent.filter((s) => s.type === 'roles.upsert').at(-1)
+    expect(sent?.payload.properties).toEqual([{ name: 'field1', type: 'string' }])
+  })
+
+  it('will not save fields the backend would refuse, and leaves untouched fields out', async () => {
+    const { wrapper: w, mock } = await open()
+    await tab(w).findAll('.split-list li')[1].trigger('click')
+    await flushPromises()
+    await tab(w).find('.rpe-add').trigger('click')
+    await tab(w).find('.rpe-add').trigger('click')
+    await tab(w).findAll('.rpe-name')[1].setValue('field1') // duplicate name
+    await tab(w).findAll('.rpe-name')[1].trigger('change')
+    await flushPromises()
+    expect(saveBtn(w).attributes('disabled')).toBeDefined()
+
+    // A plain label edit on a role whose fields did not change sends none.
+    await tab(w).findAll('.split-list li')[0].trigger('click')
+    await fields(w).label.setValue('Dev 2')
+    await flushPromises()
+    mock.setResponse('roles.upsert', { role: { ...dev, label: 'Dev 2' }, roles: [pm, { ...dev, label: 'Dev 2' }] })
+    await saveBtn(w).trigger('click')
+    await flushPromises()
+    expect('properties' in (mock.sent.filter((s) => s.type === 'roles.upsert').at(-1)?.payload ?? {})).toBe(false)
+  })
 })

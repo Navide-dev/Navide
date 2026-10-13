@@ -11,6 +11,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import type { useOnboarding } from '../composables/useOnboarding'
 
@@ -118,7 +119,7 @@ onUnmounted(teardown)
     <div v-if="fallback && !run" class="it-fallback" data-testid="install-terminal-fallback">
       <strong>{{ t('install-terminal.fallback-title') }}</strong>
       <p>{{ t('install-terminal.fallback-desc') }}</p>
-      <code class="it-command">{{ fallback.command }}</code>
+      <code class="it-command" v-truncate>{{ fallback.command }}</code>
       <p v-if="fallback.error" class="it-error">{{ fallback.error }}</p>
       <button
         type="button"
@@ -130,7 +131,7 @@ onUnmounted(teardown)
     <template v-if="run">
       <header class="it-head">
         <span class="it-label">{{ run.label }}</span>
-        <code class="it-command" :title="run.command">{{ run.command }}</code>
+        <code class="it-command" v-truncate>{{ run.command }}</code>
       </header>
       <div ref="host" class="it-screen" />
       <p v-if="run.inputError" class="it-error" role="alert" data-testid="install-terminal-input-error">

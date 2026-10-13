@@ -60,6 +60,7 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
@@ -392,9 +393,12 @@ class FeishuAdapter:
             return
         msg = event.get("message") or {}
         text = _message_text(msg)
+        # A file is reported, not fetched: this adapter has no media support yet.
+        kind = MEDIA_MESSAGE_TYPES.get(str(msg.get("message_type") or ""))
+        files = [InboundAttachment(kind, "", None, "", "")] if kind else []
         open_id = str((sender.get("sender_id") or {}).get("open_id") or "")
         chat_id = str(msg.get("chat_id") or "")
-        if not text or not open_id or not chat_id:
+        if not (text or files) or not open_id or not chat_id:
             return
         is_direct = msg.get("chat_type") == "p2p"
         # Replies inside a thread are addressed by the thread's root message.
@@ -411,7 +415,7 @@ class FeishuAdapter:
             sender_id=open_id, sender_name=name, text=text,
             message_id=str(msg.get("message_id") or ""), is_direct=is_direct,
             ts=int(created) / 1000.0 if str(created or "").isdigit() else time.time(),
-            reply_to_id=str(msg.get("parent_id") or ""),
+            reply_to_id=str(msg.get("parent_id") or ""), attachments=files,
         ))
 
     async def _sender_name(self, open_id: str) -> str:
@@ -518,6 +522,9 @@ class FeishuAdapter:
         name = (title or "Navide").strip()[:100] or "Navide"
         root = await self._send_one(Location(self.platform, self.account, chat_id), f"🧵 {name}")
         return Location(self.platform, self.account, chat_id, root, name)
+
+
+MEDIA_MESSAGE_TYPES = {"image": "photo", "file": "document", "media": "video", "audio": "audio"}
 
 
 def _message_text(msg: dict[str, Any]) -> str:

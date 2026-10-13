@@ -187,6 +187,35 @@ export function pendingFromDoc(doc: RegistryDoc): WindowEntry[] | null {
   return doc.windows.length ? doc.windows : null
 }
 
+/** Same window across lists: one workspace window per path, and a detached
+ *  window per group of it. */
+function sameWindow(a: WindowEntry, b: WindowEntry): boolean {
+  return a.workspace_path === b.workspace_path && (a.detached_group ?? '') === (b.detached_group ?? '')
+}
+
+/** Saved bounds as they can be used on the displays attached now: unchanged
+ *  when they overlap any display's work area, otherwise centred on the primary
+ *  one (shrunk to fit). A window saved on a display that is no longer
+ *  connected would otherwise open where nobody can see it. */
+export function onScreenBounds(
+  bounds: WindowBounds,
+  workAreas: WindowBounds[],
+  primary: WindowBounds,
+): WindowBounds {
+  const overlaps = workAreas.some((area) =>
+    bounds.x < area.x + area.width && bounds.x + bounds.width > area.x
+    && bounds.y < area.y + area.height && bounds.y + bounds.height > area.y)
+  if (overlaps) return bounds
+  const width = Math.min(bounds.width, primary.width)
+  const height = Math.min(bounds.height, primary.height)
+  return {
+    x: primary.x + Math.floor((primary.width - width) / 2),
+    y: primary.y + Math.floor((primary.height - height) / 2),
+    width,
+    height,
+  }
+}
+
 export class WindowRegistry {
   private entries = new Map<number, WindowEntry>()
   private cleanExit = false
@@ -197,6 +226,9 @@ export class WindowRegistry {
   private lastCleanRestore: WindowEntry[] = []
   private lastCleanAuxRestore: AuxWindowEntry[] = []
   private restoreFailures = new Map<string, number>()
+  /** Windows a cancelled quit had already closed. They are owed to the next
+   *  clean-exit snapshot: the user never closed them, the quit did. */
+  private cancelledQuitClosed: WindowEntry[] = []
   private persistTimer: ReturnType<typeof setTimeout> | null = null
 
   // Accepts a path PROVIDER so the location can be resolved lazily: the dev
@@ -300,7 +332,11 @@ export class WindowRegistry {
       // This used to list them one by one, which meant every new field was a
       // silent data-loss bug waiting for someone to forget a line.
       const prev = this.entries.get(winId)
-      this.entries.set(winId, { ...prev, workspace_path: workspacePath })
+      const next = { ...prev, workspace_path: workspacePath }
+      this.entries.set(winId, next)
+      // Reopened: it is tracked live again, and closing it from here on is
+      // the user's call like any other window.
+      this.cancelledQuitClosed = this.cancelledQuitClosed.filter((w) => !sameWindow(w, next))
     }
     this.persistNow()
   }
@@ -389,8 +425,9 @@ export class WindowRegistry {
     // follow during the quit sequence can't empty the restore snapshot. A
     // second call once the windows are already gone must not undo the first:
     // the quit paths that close windows before before-quit reach this twice.
-    if (this.entries.size || !this.snapshot.length) {
-      this.snapshot = [...this.entries.values()]
+    if (this.entries.size || this.cancelledQuitClosed.length || !this.snapshot.length) {
+      this.snapshot = [...this.entries.values(), ...this.cancelledQuitClosed]
+      this.cancelledQuitClosed = []
     }
     // Same guard, on its own count: an auxiliary window can outlive the last
     // workspace window (a Plans window left open after the main one closed), so
@@ -412,6 +449,11 @@ export class WindowRegistry {
   clearCleanExit(): void {
     if (!this.cleanExit) return
     this.cleanExit = false
+    // A quit that closed some windows before it was cancelled (refused, stalled
+    // or an install that never started) must not shrink the next snapshot to
+    // the windows it left behind.
+    const open = [...this.entries.values()]
+    this.cancelledQuitClosed = this.snapshot.filter((w) => !open.some((o) => sameWindow(o, w)))
     this.persistNow()
   }
 

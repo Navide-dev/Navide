@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Run the secret scan CI runs (Secret scan / Gitleaks) over every commit about
+# to be pushed. The pre-commit hook only sees commits made in this clone with
+# hooks on; this catches the rest (cherry-picks from worktrees, commits made
+# with --no-verify) before GitHub does. False positives go in .gitleaksignore,
+# which CI reads too. Bypass with --no-verify if you must.
+set -u
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks is not installed, so the secret scan was skipped (brew install gitleaks)." >&2
+  exit 0
+fi
+
+zero=0000000000000000000000000000000000000000
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue  # deleting a ref: nothing to scan
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha --not --remotes"    # new ref: only commits no remote has
+  else
+    range="$remote_sha..$local_sha"
+  fi
+  # Its stdin is the ref list this loop reads. A finding exits 3; any other
+  # failure is gitleaks not running, which CI still catches.
+  gitleaks git --log-opts="$range" --config .gitleaks.toml --redact --no-banner --log-level warn --exit-code 3 </dev/null
+  scan=$?
+  if [ $scan -eq 3 ]; then
+    echo "pre-push: gitleaks found a possible secret in the commits for $remote_ref (see above)." >&2
+    status=1
+  elif [ $scan -ne 0 ]; then
+    echo "pre-push: the secret scan could not run for $remote_ref (gitleaks exited $scan, see above), so it was skipped; CI still runs it." >&2
+  fi
+done
+
+if [ $status -ne 0 ]; then
+  echo "Remove it, or add its fingerprint to .gitleaksignore if it is not a secret." >&2
+fi
+exit $status

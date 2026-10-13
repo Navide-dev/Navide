@@ -1,5 +1,6 @@
 import { onScopeDispose, ref, shallowRef } from 'vue'
 import type { useBackend } from './useBackend'
+import type { RoleProperty } from '../lib/pipelineGraph'
 
 /** One stage slot that still names a role, as reported by a ROLE_IN_USE
  *  rejection. Deleting the role is refused until every slot is repointed. */
@@ -23,6 +24,9 @@ export interface Role {
   one_line: string
   system_prompt: string
   is_default?: boolean
+  /** Declarative fields a pipeline step using this role can set (the node
+   *  inspector's form). See RoleProperty in lib/pipelineGraph. */
+  properties?: RoleProperty[]
   created_at?: string
   updated_at?: string
 }
@@ -85,13 +89,16 @@ export function useRoles(backend: ReturnType<typeof useBackend>) {
     label: string
     one_line: string
     system_prompt: string
+    /** Declarative node-settings fields; omitted = leave the role's as is. */
+    properties?: unknown[]
   }): Promise<Role | null> {
     try {
       const resp = await backend.send<{ role: Role; roles: Role[] }>('roles.upsert', {
         key: input.key,
         label: input.label,
         one_line: input.one_line,
-        system_prompt: input.system_prompt
+        system_prompt: input.system_prompt,
+        ...(input.properties ? { properties: input.properties } : {})
       })
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'upsert failed'
@@ -110,7 +117,7 @@ export function useRoles(backend: ReturnType<typeof useBackend>) {
    *  halfway, because roles.delete refuses while a slot still names the role. */
   async function rename(
     oldKey: string,
-    input: { key: string; label: string; one_line: string; system_prompt: string }
+    input: { key: string; label: string; one_line: string; system_prompt: string; properties?: unknown[] }
   ): Promise<RoleRenameOutcome> {
     try {
       const resp = await backend.send<{
@@ -122,7 +129,8 @@ export function useRoles(backend: ReturnType<typeof useBackend>) {
         new_key: input.key,
         label: input.label,
         one_line: input.one_line,
-        system_prompt: input.system_prompt
+        system_prompt: input.system_prompt,
+        ...(input.properties ? { properties: input.properties } : {})
       })
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'rename failed'

@@ -9,7 +9,9 @@ import { BrowserWindow } from 'electron'
  * on screen for all of it with nothing to show for it, which reads as a hang.
  * Main narrates the stages instead, and the renderer puts up a shutdown screen.
  */
-export type QuitStage = 'saving' | 'stopping' | 'closing'
+/** 'cancelled': the quit stopped after the shutdown screen went up and the app
+ *  stays, so the screen comes down again. */
+export type QuitStage = 'saving' | 'stopping' | 'closing' | 'cancelled'
 
 export const QUIT_PROGRESS_CHANNEL = 'app:quitProgress'
 

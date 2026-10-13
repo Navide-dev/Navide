@@ -238,7 +238,10 @@ describe('the pane roster', () => {
     // repeated either is the clutter this replaced.
     expect(row.find('.pane-pill').exists()).toBe(false)
     expect(row.find('.pane-ws').exists()).toBe(false)
-    expect(row.find('.pane-name').attributes('title')).toBe('Reclaim button')
+    // Full name on hover comes from v-truncate, only when the name is cut off.
+    expect(row.find('.pane-name').text()).toBe('Reclaim button')
+    expect(row.find('.pane-name').attributes('data-truncate')).toBe('')
+    expect(row.find('.pane-name').attributes('title')).toBeUndefined()
   })
 
   it('dates a pane from its start time, and says nothing when it has none', async () => {

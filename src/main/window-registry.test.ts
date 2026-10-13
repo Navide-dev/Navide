@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { MAX_RESTORE_ATTEMPTS, parseRegistryDoc, pendingFromDoc, WindowRegistry } from './window-registry'
+import { MAX_RESTORE_ATTEMPTS, onScreenBounds, parseRegistryDoc, pendingFromDoc, WindowRegistry } from './window-registry'
 
 describe('parseRegistryDoc', () => {
   it('returns a clean empty doc for missing or corrupt content', () => {
@@ -510,5 +510,141 @@ describe('restore failure breaker', () => {
     // opens the workspace-less Welcome window — the app is never left blind.
     expect(plan.restore).toEqual([])
     expect(plan.skipped).toHaveLength(2)
+  })
+})
+
+describe('a quit that did not complete', () => {
+  let dir: string
+  let file: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'win-reg-'))
+    file = join(dir, 'open-windows.json')
+  })
+  afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+  it('keeps the windows that quit closed in the next clean-exit snapshot', () => {
+    // A quit closes alpha, then beta refuses (or the quit stalls) and the quit
+    // is cancelled. The next quit only sees beta open; it must not shrink the
+    // snapshot to beta alone.
+    const run1 = new WindowRegistry(file)
+    run1.readPendingAndReset()
+    run1.setWorkspace(1, '/ws/alpha')
+    run1.setWorkspace(2, '/ws/beta')
+    run1.markCleanExit()
+    run1.remove(1)
+    run1.clearCleanExit()
+    run1.markCleanExit()
+    run1.remove(2)
+
+    const run2 = new WindowRegistry(file)
+    run2.readPendingAndReset()
+    expect(run2.cleanExitRestore()).toEqual([
+      { workspace_path: '/ws/beta' },
+      { workspace_path: '/ws/alpha' },
+    ])
+  })
+
+  it('survives a second cancelled quit as well', () => {
+    const run1 = new WindowRegistry(file)
+    run1.readPendingAndReset()
+    run1.setWorkspace(1, '/ws/alpha')
+    run1.setWorkspace(2, '/ws/beta')
+    run1.setWorkspace(3, '/ws/gamma')
+    run1.markCleanExit()
+    run1.remove(1)
+    run1.clearCleanExit()
+    run1.markCleanExit()
+    run1.remove(2)
+    run1.clearCleanExit()
+    run1.markCleanExit()
+    run1.remove(3)
+
+    const run2 = new WindowRegistry(file)
+    run2.readPendingAndReset()
+    expect(run2.cleanExitRestore().map((w) => w.workspace_path).sort())
+      .toEqual(['/ws/alpha', '/ws/beta', '/ws/gamma'])
+  })
+
+  it('still drops a window the user closed after the quit was cancelled', () => {
+    const run1 = new WindowRegistry(file)
+    run1.readPendingAndReset()
+    run1.setWorkspace(1, '/ws/alpha')
+    run1.setWorkspace(2, '/ws/beta')
+    run1.setWorkspace(3, '/ws/gamma')
+    run1.markCleanExit()
+    run1.remove(1) // closed by the quit
+    run1.clearCleanExit()
+    run1.remove(2) // closed by the user, outside any quit
+    run1.markCleanExit()
+    run1.remove(3)
+
+    const run2 = new WindowRegistry(file)
+    run2.readPendingAndReset()
+    expect(run2.cleanExitRestore()).toEqual([
+      { workspace_path: '/ws/gamma' },
+      { workspace_path: '/ws/alpha' },
+    ])
+  })
+
+  it('a workspace reopened after the cancel is tracked once, and stays closed if the user closes it', () => {
+    const run1 = new WindowRegistry(file)
+    run1.readPendingAndReset()
+    run1.setWorkspace(1, '/ws/alpha')
+    run1.setWorkspace(2, '/ws/beta')
+    run1.markCleanExit()
+    run1.remove(1)
+    run1.clearCleanExit()
+    run1.setWorkspace(3, '/ws/alpha') // the user reopens alpha...
+    run1.remove(3) // ...and closes it again
+    run1.markCleanExit()
+    run1.remove(2)
+
+    const run2 = new WindowRegistry(file)
+    run2.readPendingAndReset()
+    expect(run2.cleanExitRestore()).toEqual([{ workspace_path: '/ws/beta' }])
+  })
+
+  it('a crash after the cancel still offers only the windows still open', () => {
+    const run1 = new WindowRegistry(file)
+    run1.readPendingAndReset()
+    run1.setWorkspace(1, '/ws/alpha')
+    run1.setWorkspace(2, '/ws/beta')
+    run1.markCleanExit()
+    run1.remove(1)
+    run1.clearCleanExit()
+    // ...crash...
+
+    const run2 = new WindowRegistry(file)
+    expect(run2.readPendingAndReset()).toEqual([{ workspace_path: '/ws/beta' }])
+  })
+})
+
+describe('onScreenBounds', () => {
+  const primary = { x: 0, y: 25, width: 1440, height: 875 }
+  const external = { x: 1440, y: 0, width: 1920, height: 1080 }
+
+  it('keeps bounds that overlap any display', () => {
+    const onExternal = { x: 2000, y: 100, width: 1200, height: 800 }
+    expect(onScreenBounds(onExternal, [primary, external], primary)).toEqual(onExternal)
+    const straddling = { x: 1000, y: 100, width: 1200, height: 800 }
+    expect(onScreenBounds(straddling, [primary, external], primary)).toEqual(straddling)
+  })
+
+  it('moves bounds that overlap no display onto the primary one', () => {
+    // Saved on an external display that is no longer connected.
+    const lost = { x: 2000, y: 100, width: 1200, height: 800 }
+    const moved = onScreenBounds(lost, [primary], primary)
+    expect(moved).toEqual({ x: 120, y: 62, width: 1200, height: 800 })
+  })
+
+  it('shrinks a window larger than the primary display to fit it', () => {
+    const lost = { x: -5000, y: -5000, width: 3000, height: 2000 }
+    expect(onScreenBounds(lost, [primary], primary)).toEqual(primary)
+  })
+
+  it('treats bounds that only touch an edge as off screen', () => {
+    const touching = { x: 1440, y: 25, width: 800, height: 600 }
+    expect(onScreenBounds(touching, [primary], primary).x).toBeLessThan(1440)
   })
 })

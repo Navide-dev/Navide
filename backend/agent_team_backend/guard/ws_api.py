@@ -241,7 +241,8 @@ def _test(payload: dict) -> dict[str, Any]:
     graded = policy.apply_overrides(verdict.level, verdict.rule_ids, overrides)
     rules = store.rules_list()
     level, rule_ids = policy.apply_user_rules(graded, verdict.rule_ids, command, rules)
-    level = policy.effective_level(level, parseable=verdict.parseable, tainted=tainted)
+    raised = policy.effective_level(level, parseable=verdict.parseable, tainted=tainted)
+    level, rule_ids = policy.apply_taint_allow(graded, level, raised, rule_ids, command, rules, source)
     action = policy.decide(level, source, tainted=tainted) if policy.enforced(store.enabled(), source) else "allow"
     matched = []
     for rid, reason in zip(verdict.rule_ids, verdict.reasons):

@@ -154,6 +154,55 @@ def test_an_unreadable_parent_identity_falls_back_to_liveness() -> None:
     assert server.should_exit is True
 
 
+def _run_watch_for(server, identities, polls: int = 6) -> None:
+    """Run the watcher against a scripted identity sequence on a parent that is
+    always alive; stop it from outside after `polls` reads if it did not exit."""
+    seq = iter(identities)
+    reads = {"n": 0}
+
+    def identity(_pid):
+        reads["n"] += 1
+        if reads["n"] > polls:
+            server.should_exit = "stopped-by-test"
+        return next(seq, identities[-1])
+
+    thread = threading.Thread(
+        target=_watch_parent_for_shutdown,
+        args=(server, 4242),
+        kwargs={"interval_s": 0.01, "is_alive": lambda _pid: True, "identity": identity},
+        daemon=True,
+    )
+    thread.start()
+    thread.join(timeout=2)
+
+
+def test_a_failed_identity_probe_mid_watch_is_not_a_dead_parent() -> None:
+    # 2026-10-08 17:25: one `ps` probe timed out on a loaded machine, the start
+    # time read as "", and a live app's backend shut itself down.
+    server = _Server()
+    _run_watch_for(server, ["4242:START-A", "", "4242:START-A"])
+    assert server.should_exit == "stopped-by-test"
+
+
+def test_a_failed_identity_probe_at_startup_is_captured_later() -> None:
+    # The first read failing used to pin "" (or "4242:") as the original, so
+    # the next successful read mismatched and the backend exited 2s after start.
+    server = _Server()
+    _run_watch_for(server, ["", "4242:START-A", "4242:START-A"])
+    assert server.should_exit == "stopped-by-test"
+
+
+def test_a_late_captured_identity_still_detects_pid_reuse() -> None:
+    server = _Server()
+    _run_watch_for(server, ["", "4242:START-A", "4242:START-B"])
+    assert server.should_exit is True
+
+
+def test_posix_identity_is_empty_when_the_probe_fails(monkeypatch) -> None:
+    monkeypatch.setattr(_posix, "_ps", lambda _pid, _fields: None)
+    assert _posix.PosixProcessTree().identity(4242) == ""
+
+
 def test_the_watcher_takes_the_cooperative_exit_once_the_parent_is_gone() -> None:
     server = _Server()
     alive = {"value": True}

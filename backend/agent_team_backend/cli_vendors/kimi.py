@@ -21,6 +21,7 @@ from pathlib import Path
 
 import re
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, PlatformInstall, McpServerConfig, McpValue, McpWiring, SkillsWiring, VendorSpec, command_text
 from ..usage_common import HTTP_TIMEOUT, _epoch_to_iso, _num, _snapshot, _window, parse_retry_after
 from ..log_readers.base import (
@@ -594,7 +595,15 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("hooks", (".kimi-code", "config.toml"), "Kimi hook", section=("hooks",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="kimi",
     # Configurable provider/base URL; no verified default CLI host set here.
     expected_hosts=(),

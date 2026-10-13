@@ -19,10 +19,11 @@ import type {
   GitPaneUiPort,
   IssuePort,
 } from '../ports/gitSurface'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { computeGraph, laneColor } from '../lib/git-graph'
 import { guardedDiscard } from '../lib/discardConfirm'
 import { closeGitPaneMenusOnEscape } from '../lib/gitMenuEscape'
+import { placeSubmenu } from '../lib/submenuPlacement'
 import GitCredentialModal from './GitCredentialModal.vue'
 
 const props = defineProps<{
@@ -1665,7 +1666,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           @click="emit('open-workspace', repo.abs_path)"
         >
           <svg class="repo-icon" width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M14.5 3H7.71l-.85-.85A.5.5 0 0 0 6.5 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-10a.5.5 0 0 0-.5-.5z"/></svg>
-          <span class="repo-path">{{ repo.rel_path }}</span>
+          <span class="repo-path" v-truncate>{{ repo.rel_path }}</span>
           <span v-if="repo.branch" class="repo-branch">{{ repo.branch }}</span>
         </button>
       </div>
@@ -1868,7 +1869,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
             >
               <span class="folder-caret">{{ collapsedDirs.has(row.key) ? '▸' : '▾' }}</span>
               <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>
-              <span class="folder-name" :title="row.dir">{{ row.name }}</span>
+              <span class="folder-name" v-truncate :title="row.dir">{{ row.name }}</span>
               <span class="folder-count">{{ row.fileCount }}</span>
               <div class="row-actions">
                 <button class="row-btn" :title="$t('action.unstage-folder')" @click.stop="unstageFiles(filesUnderDir(row.dir!, true))">−</button>
@@ -1884,7 +1885,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 @contextmenu="openCtxMenu($event, row.file!, true)"
               >
                 <span class="file-status" :data-s="row.file!.status">{{ statusLabel(row.file!.status) }}</span>
-                <span class="file-name-only" :title="row.file!.path">{{ row.name }}</span>
+                <span class="file-name-only" v-truncate :title="row.file!.path">{{ row.name }}</span>
                 <div class="row-actions">
                   <template v-if="row.file!.status === 'U'">
                     <button class="row-btn" title="Accept Ours" @click.stop="doResolveOurs(row.file!.path)">↰</button>
@@ -1901,7 +1902,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 <div v-else-if="!fileHistoryCommits.length" class="loading-text">{{ $t('label.no-commits') }}</div>
                 <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                   <code class="hash-tag">{{ hc.short_hash }}</code>
-                  <span class="mini-msg">{{ hc.message }}</span>
+                  <span class="mini-msg" v-truncate>{{ hc.message }}</span>
                 </div>
               </div>
               <div v-if="diffBlamePath === row.file!.path && diffBlameStaged" class="subpanel green-border diffblame-inline">
@@ -1933,8 +1934,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               @contextmenu="openCtxMenu($event, f, true)"
             >
               <span class="file-status" :data-s="f.status">{{ statusLabel(f.status) }}</span>
-              <span class="file-name-main" :title="f.path">{{ fileName(f.path) }}</span>
-              <span class="file-path-dim" :title="f.path">{{ fileDir(f.path) }}</span>
+              <span class="file-name-main" v-truncate :title="f.path">{{ fileName(f.path) }}</span>
+              <span class="file-path-dim" v-truncate :title="f.path">{{ fileDir(f.path) }}</span>
               <div class="row-actions">
                 <template v-if="f.status === 'U'">
                   <button class="row-btn" title="Accept Ours" @click.stop="doResolveOurs(f.path)">↰</button>
@@ -1950,7 +1951,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               <div v-else-if="!fileHistoryCommits.length" class="loading-text">No commit history</div>
               <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                 <code class="hash-tag">{{ hc.short_hash }}</code>
-                <span class="mini-msg">{{ hc.message }}</span>
+                <span class="mini-msg" v-truncate>{{ hc.message }}</span>
               </div>
             </div>
             <div v-if="diffBlamePath === f.path && diffBlameStaged" class="subpanel green-border diffblame-inline">
@@ -2030,7 +2031,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
               >
                 <span class="folder-caret">{{ collapsedDirs.has(row.key) ? '▸' : '▾' }}</span>
                 <svg class="folder-icon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75z"/></svg>
-                <span class="folder-name" :title="row.dir">{{ row.name }}</span>
+                <span class="folder-name" v-truncate :title="row.dir">{{ row.name }}</span>
                 <span class="folder-count">{{ row.fileCount }}</span>
                 <div class="row-actions">
                   <button class="row-btn danger shrink" :title="$t('action.discard-folder')" @click.stop="confirmDiscard(filesUnderDir(row.dir!, false))">↩</button>
@@ -2047,7 +2048,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                   @contextmenu="openCtxMenu($event, row.file!, false)"
                 >
                   <span class="file-status unstaged-st" :data-s="row.file!.status">{{ statusLabel(row.file!.status) }}</span>
-                  <span class="file-name-only" :title="row.file!.path">{{ row.name }}</span>
+                  <span class="file-name-only" v-truncate :title="row.file!.path">{{ row.name }}</span>
                   <div class="row-actions">
                     <button class="row-btn" :title="$t('action.file-history-blame')" @click.stop="toggleHistoryPanel(row.file!.path, false)">⊡</button>
                     <button class="row-btn danger shrink" :title="$t('action.discard')" @click.stop="confirmDiscard([row.file!.path])">↩</button>
@@ -2059,7 +2060,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                   <div v-else-if="!fileHistoryCommits.length" class="loading-text">No commit history</div>
                   <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                     <code class="hash-tag">{{ hc.short_hash }}</code>
-                    <span class="mini-msg">{{ hc.message }}</span>
+                    <span class="mini-msg" v-truncate>{{ hc.message }}</span>
                   </div>
                 </div>
                 <div v-if="diffBlamePath === row.file!.path && !diffBlameStaged" class="subpanel green-border diffblame-inline">
@@ -2091,8 +2092,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 @contextmenu="openCtxMenu($event, f, false)"
               >
                 <span class="file-status unstaged-st" :data-s="f.status">{{ statusLabel(f.status) }}</span>
-                <span class="file-name-main" :title="f.path">{{ fileName(f.path) }}</span>
-                <span class="file-path-dim" :title="f.path">{{ fileDir(f.path) }}</span>
+                <span class="file-name-main" v-truncate :title="f.path">{{ fileName(f.path) }}</span>
+                <span class="file-path-dim" v-truncate :title="f.path">{{ fileDir(f.path) }}</span>
                 <div class="row-actions">
                   <button class="row-btn" :title="$t('action.file-history-blame')" @click.stop="toggleHistoryPanel(f.path, false)">⊡</button>
                   <button class="row-btn danger shrink" :title="$t('action.discard')" @click.stop="confirmDiscard([f.path])">↩</button>
@@ -2104,7 +2105,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 <div v-else-if="!fileHistoryCommits.length" class="loading-text">{{ $t('label.no-commits') }}</div>
                 <div v-for="hc in fileHistoryCommits" :key="hc.hash" class="mini-row">
                   <code class="hash-tag">{{ hc.short_hash }}</code>
-                  <span class="mini-msg">{{ hc.message }}</span>
+                  <span class="mini-msg" v-truncate>{{ hc.message }}</span>
                 </div>
               </div>
               <div v-if="diffBlamePath === f.path && !diffBlameStaged" class="subpanel green-border diffblame-inline">
@@ -2137,8 +2138,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <template v-for="f in sortFiles(gitStatus.ignored ?? [])" :key="'ig:' + f.path">
           <div class="file-row ignored-row" @contextmenu="openCtxMenu($event, f, false)">
             <span class="file-status" :title="'ignored'">!</span>
-            <span class="file-name-main" :title="f.path">{{ fileName(f.path) }}</span>
-            <span class="file-path-dim" :title="f.path">{{ fileDir(f.path) }}</span>
+            <span class="file-name-main" v-truncate :title="f.path">{{ fileName(f.path) }}</span>
+            <span class="file-path-dim" v-truncate :title="f.path">{{ fileDir(f.path) }}</span>
           </div>
         </template>
       </div>
@@ -2163,7 +2164,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
 
       <!-- Branch + remote action bar (never scrolls) -->
       <div class="remote-bar">
-        <button class="branch-pill" :class="{ active: branchExpanded }" @click.stop="branchExpanded = !branchExpanded">
+        <button class="branch-pill" v-truncate :class="{ active: branchExpanded }" @click.stop="branchExpanded = !branchExpanded">
           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25z"/></svg>
           <span>{{ gitStatus.branch || '(detached)' }}</span>
           <span v-if="aheadBehind" class="ab-text">{{ aheadBehind }}</span>
@@ -2175,7 +2176,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           @click.stop="openAccountMenu($event)"
         >
           <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style="flex-shrink:0"><path d="M10.561 8.073a6.005 6.005 0 0 1 3.432 5.142.75.75 0 1 1-1.498.07 4.5 4.5 0 0 0-8.99 0 .75.75 0 0 1-1.498-.07 6.004 6.004 0 0 1 3.431-5.142 3.999 3.999 0 1 1 5.622 0zM8 1.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>
-          <span class="account-pill-label">{{ boundAccount ? boundAccount.label : $t('git.account.unbound') }}</span>
+          <span class="account-pill-label" v-truncate>{{ boundAccount ? boundAccount.label : $t('git.account.unbound') }}</span>
         </button>
         <button v-if="gitStatus.branch && !gitStatus.remote_branch" class="remote-btn publish-btn" :class="{ busy: remoteBusy === 'publish' }" :title="$t('action.publish-branch')" :disabled="!!remoteBusy" @click="doPushUpstream">
           <span v-if="remoteBusy === 'publish'" class="spinner">⟳</span><template v-else>↑ {{ $t('action.publish') }}</template>
@@ -2255,7 +2256,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <!-- local branches -->
         <div v-for="b in gitBranches.filter(x => !x.is_remote)" :key="b.name" class="branch-row" :class="{ current: b.is_current }" @contextmenu.prevent="!b.is_current && openBranchCtxMenu($event, b.name)">
           <span class="b-check">{{ b.is_current ? '✓' : '' }}</span>
-          <span class="b-name">{{ b.name }}</span>
+          <span class="b-name" v-truncate>{{ b.name }}</span>
           <span v-if="b.tracking" class="b-track">→ {{ b.tracking }}</span>
           <div class="spacer" />
           <template v-if="!b.is_current">
@@ -2276,7 +2277,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
             :class="{ 'remote-has-local': b.has_local }"
           >
             <span class="b-check">{{ b.has_local ? '✓' : '' }}</span>
-            <span class="b-name remote">{{ b.name }}</span>
+            <span class="b-name remote" v-truncate>{{ b.name }}</span>
             <div class="spacer" />
             <button v-if="!b.has_local" class="row-btn always" :title="$t('action.checkout-locally')" @click.stop="doCheckoutRemote(b.name)">⬇</button>
           </div>
@@ -2321,7 +2322,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 />
               </div>
               <div class="commit-body">
-                <div class="commit-msg">{{ c.message }}</div>
+                <div class="commit-msg" v-truncate>{{ c.message }}</div>
                 <div class="commit-meta">
                   <code class="chash">{{ c.short_hash }}</code>
                   <span v-for="b in c.branches" :key="b" class="ref-pill" :class="b.startsWith('origin') ? 'remote' : 'local'">{{ shortBranch(b) }}</span>
@@ -2341,8 +2342,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
                 <div v-if="commitDetailData.files.length">
                   <div class="cd-key">Files ({{ commitDetailData.files.length }})</div>
                   <template v-for="f in commitDetailData.files" :key="f">
-                    <div class="cd-file cd-file-clickable cd-file-row" :title="f" @click="toggleCommitFileDiff(c.hash, f)">
-                      <span class="cd-file-label"><span class="expand-caret">{{ commitDiffFile === f ? '▾' : '▸' }}</span> {{ f }}</span>
+                    <div class="cd-file cd-file-clickable cd-file-row" @click="toggleCommitFileDiff(c.hash, f)">
+                      <span class="cd-file-label" v-truncate><span class="expand-caret">{{ commitDiffFile === f ? '▾' : '▸' }}</span> {{ f }}</span>
                       <button class="row-btn cd-open-btn" :title="$t('action.open-diff-in-editor')" @click.stop="openCommitFileDiffInIDE(c.hash, f)">
                         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25V1.75zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5H3.75zm6.75.56v2.19c0 .138.112.25.25.25h2.19L10.5 2.06z"/></svg>
                       </button>
@@ -2383,7 +2384,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div v-if="!gitStashes.length" class="empty-msg">No draft</div>
         <div v-for="s in gitStashes" :key="s.ref" class="generic-row">
           <span class="stash-ref">{{ s.ref }}</span>
-          <span class="stash-msg">{{ s.message }}</span>
+          <span class="stash-msg" v-truncate>{{ s.message }}</span>
           <div class="row-actions always">
             <button class="row-btn always" :title="$t('action.stash-apply')" :disabled="stashBusy" @click.stop="doStashApply(s.index)">⎘</button>
             <button class="row-btn always" :title="$t('action.stash-pop')" :disabled="stashBusy" @click.stop="doStashPop(s.index)">↑</button>
@@ -2406,7 +2407,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div v-if="!gitRemotes.length" class="empty-msg" style="padding:2px 0">No remotes</div>
         <div v-for="r in gitRemotes" :key="r.name" class="generic-row">
           <span class="remote-name">{{ r.name }}</span>
-          <span class="remote-url" :title="r.fetch_url">{{ r.fetch_url }}</span>
+          <span class="remote-url" v-truncate>{{ r.fetch_url }}</span>
           <button class="row-btn always" :title="$t('action.open-remote-url')" @click.stop="doOpenRemote(r.fetch_url)">↗</button>
           <button class="row-btn always danger" @click.stop="doRemoveRemote(r.name)">✕</button>
         </div>
@@ -2430,7 +2431,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div v-if="tagExpanded" class="card-body collapsible-body">
         <div v-if="!gitTags.length" class="empty-msg" style="padding:2px 0">No tags</div>
         <div v-for="t in gitTags" :key="t.name" class="generic-row">
-          <span class="b-name">{{ t.name }}</span>
+          <span class="b-name" v-truncate>{{ t.name }}</span>
           <code class="chash" style="margin-left:4px">{{ t.commit_hash }}</code>
           <span v-if="t.message" class="b-track">{{ t.message }}</span>
           <div class="spacer" />
@@ -2462,7 +2463,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <span class="wt-icon">{{ wt.is_main ? '✦' : '○' }}</span>
           <div style="flex:1;min-width:0">
             <div class="wt-name-row">
-              <span class="b-name" :title="wt.path">{{ wt.path.split('/').at(-1) }}</span>
+              <span class="b-name" v-truncate :title="wt.path">{{ wt.path.split('/').at(-1) }}</span>
               <span v-if="wt.bare" class="wt-badge">{{ $t('label.bare') }}</span>
               <span v-if="wt.detached" class="wt-badge">{{ $t('label.detached') }}</span>
               <span v-if="wt.locked" class="wt-badge warn" :title="wt.lock_reason">🔒 {{ $t('label.locked') }}</span>
@@ -2531,7 +2532,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
             <button class="btn-ghost sm nv-btn nv-btn--ghost" @click="saveInlineEdit">✓</button>
             <button class="btn-ghost sm nv-btn nv-btn--ghost" @click="cancelInlineEdit">✕</button>
           </template>
-          <span v-else class="config-val clickable" @click="startInlineEdit(key)">{{ gitConfig[key] || '—' }}</span>
+          <span v-else class="config-val clickable" v-truncate @click="startInlineEdit(key)">{{ gitConfig[key] || '—' }}</span>
         </div>
         <p v-if="configError" class="err-text">{{ configError }}</p>
         </div>
@@ -2629,7 +2630,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
             >
               <span class="issue-state-dot" :class="it.state" />
               <div style="flex:1;min-width:0">
-                <div class="b-name" :title="it.title">#{{ it.number }} {{ it.title }}</div>
+                <div class="b-name" v-truncate>#{{ it.number }} {{ it.title }}</div>
                 <div class="b-track">
                   {{ it.author }}
                   <span v-for="l in it.labels" :key="l" class="issue-label">{{ l }}</span>
@@ -2691,14 +2692,14 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
         <div class="menu-sep" />
         <button class="menu-item" @click="ctxStageToggle">{{ ctxMenu.staged ? $t('action.unstage-changes') : $t('action.stage-changes') }}</button>
         <button v-if="!ctxMenu.staged" class="menu-item danger" @click="ctxDiscard">{{ $t('action.discard-changes') }}</button>
-        <div v-if="gitBranches.some(x=>!x.is_current)" class="menu-item has-sub danger">
+        <div v-if="gitBranches.some(x=>!x.is_current)" class="menu-item has-sub danger" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
           <span>{{ $t('action.restore-from-branch') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
             <button v-for="b in gitBranches.filter(x=>!x.is_current)" :key="b.name" class="menu-item" @click="ctxRestoreFromBranch(b.name)">{{ b.name }}</button>
           </div>
         </div>
         <div class="menu-sep" />
-        <div class="menu-item has-sub">
+        <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
           <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
           <div class="ctx-submenu">
             <button class="menu-item" @click="ctxAddToGitignore('project')">.gitignore (project root)</button>
@@ -2721,7 +2722,7 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
           <button class="menu-item" @click="ctxFolderStage">{{ $t('action.stage-changes') }}</button>
           <button class="menu-item danger" @click="ctxFolderDiscard">{{ $t('action.discard-changes') }}</button>
           <div class="menu-sep" />
-          <div class="menu-item has-sub">
+          <div class="menu-item has-sub" @mouseenter="placeSubmenu($event, '.ctx-submenu')">
             <span>{{ $t('action.add-to-ignore') }}</span><span class="sub-caret">▸</span>
             <div class="ctx-submenu">
               <button class="menu-item" @click="ctxFolderAddIgnore('project')">.gitignore (project root)</button>
@@ -3631,6 +3632,8 @@ function isHeadCommit(c: import('../composables/useGit').GitCommit): boolean {
   padding: 4px; box-shadow: 0 8px 24px var(--shadow-scrim);
 }
 .ctx-menu .menu-item.has-sub:hover .ctx-submenu { display: block; }
+.ctx-menu .menu-item.has-sub[data-sub-place="left"] .ctx-submenu { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+.ctx-menu .menu-item.has-sub[data-sub-place="below"] .ctx-submenu { top: 100%; left: 0; margin-left: 0; }
 
 /* Ignored file rows — dimmed */
 .file-row.ignored-row { opacity: 0.55; }

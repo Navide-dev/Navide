@@ -44,6 +44,7 @@ from pathlib import Path
 
 import re
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -849,7 +850,16 @@ def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:
     return (root,)
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("code-files", (".pi", "agent", "extensions"), "Pi extension"),
+    ExtensionsSource("npm-list", (".pi", "agent", "settings.json"), "Pi package", section=("packages",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="pi",
     # Open-ended provider/model config; OpenRouter quota is not a CLI host set.
     expected_hosts=(),

@@ -20,6 +20,7 @@
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 import {
   isSecretSettingKey,
@@ -473,10 +474,10 @@ function entries(map: Record<string, string>): [string, string][] {
                     class="mcp-status-dot"
                     :class="row.navide.status ?? 'unknown'"
                   ></span>
-                  <strong>{{ row.name }}</strong>
+                  <strong v-truncate>{{ row.name }}</strong>
                   <span class="mcp-tag">{{ rowTransport(row) }}</span>
                 </span>
-                <span class="mcp-card-detail">
+                <span class="mcp-card-detail" v-truncate>
                   {{ row.navide?.url || row.navide?.command || row.natives[0]?.url || row.natives[0]?.command || row.natives[0]?.error || '—' }}
                 </span>
                 <span class="mcp-card-places" aria-hidden="true">

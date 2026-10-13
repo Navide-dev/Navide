@@ -84,12 +84,21 @@ class BlobChanged(BlobError):
     """The file changed while it was being uploaded; it is named again next round."""
 
 
+#: Most blob ids one ``blobs.stat`` may ask about (server blobs.ts MAX_STAT).
+STAT_BATCH = 256
+#: Most blob ids one record may name, when ``blobs.caps`` does not say
+#: (server blobs.ts MAX_REFS).
+MAX_REFS = 256
+
+
 @dataclass(frozen=True)
 class Layout:
     """How a blob is cut, as the server reported it in ``blobs.caps``."""
 
     segment_bytes: int
     segments_per_part: int
+    #: Most distinct blobs one record may name; the server refuses more.
+    max_refs: int = MAX_REFS
 
     @property
     def sealed_segment(self) -> int:
@@ -173,7 +182,8 @@ async def server_layout(request: RequestFn) -> Layout | None:
     if caps.get("version") != 2:
         log.info("the server offers blob layout version %r; this build speaks 2", caps.get("version"))
         return None
-    layout = Layout(int(caps["segmentBytes"]), int(caps["segmentsPerPart"]))
+    layout = Layout(int(caps["segmentBytes"]), int(caps["segmentsPerPart"]),
+                    int(caps.get("maxRefs") or MAX_REFS))
     if layout.part_bytes != int(caps.get("partBytes") or 0):
         raise BlobError("the server's part size does not follow from its segment layout")
     return layout

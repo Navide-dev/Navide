@@ -226,3 +226,40 @@ async def test_allowlist_timeout_and_executor_error_keep_the_response_shape(
     assert error_payload == {
         "ok": True, "output": "", "stdout": "", "stderr": "git not found", "exit_code": 127,
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process groups")
+async def test_legacy_timeout_kills_the_whole_process_group(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A timed-out legacy shell.run must take down what sh started, not just sh:
+    a background grandchild still holding the stdout pipe used to orphan and
+    keep communicate() waiting until it exited on its own."""
+    import asyncio
+    import signal
+
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: [str(tmp_path)])
+    monkeypatch.setattr(ws_handlers, "_SHELL_RUN_TIMEOUT_S", 0.5)
+    pidfile = tmp_path / "grandchild.pid"
+    try:
+        payload = await asyncio.wait_for(_run(_session(), {
+            "workspace_path": str(tmp_path),
+            "command": f"sleep 30 & echo $! > {pidfile}; wait",
+        }), timeout=10)
+        assert payload == {"ok": False, "error": "timeout after 0.5s"}
+        grandchild = int(pidfile.read_text().strip())
+        for _ in range(40):
+            try:
+                os.kill(grandchild, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail(f"grandchild {grandchild} outlived the shell.run timeout")
+    finally:
+        if pidfile.exists():
+            try:
+                os.kill(int(pidfile.read_text().strip()), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass

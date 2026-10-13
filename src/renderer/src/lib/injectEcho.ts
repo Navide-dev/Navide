@@ -248,6 +248,19 @@ export function composerHoldsPayload(screen: string, tail: string): boolean {
   return normalizeForMatch(screen).includes(tail) || PASTE_PLACEHOLDER_RE.test(screen)
 }
 
+/** Is the FRAMED input box holding our payload — its tail or a collapsed
+ *  paste summary? null when the screen has no frame to locate the box by.
+ *
+ *  Narrower than composerHoldsPayload on purpose: it decides whether to press
+ *  Enter on a held kickoff and whether that Enter took, and a summary Claude
+ *  Code redraws ABOVE the box after a submit that took must read as released,
+ *  not held. No frame means no answer, so nothing presses Enter on a guess. */
+export function framedComposerHolds(screen: string, tail: string): boolean | null {
+  const framed = framedComposer(screen)
+  if (framed === null) return null
+  return (!!tail && normalizeForMatch(framed).includes(tail)) || PASTE_PLACEHOLDER_RE.test(framed)
+}
+
 /** Lines at the bottom of the visible screen that hold the input box. Small
  *  on purpose: a TUI redraws the submitted message just ABOVE the composer, so
  *  a generous window keeps matching our tail after a successful submit. */

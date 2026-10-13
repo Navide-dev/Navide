@@ -10,6 +10,7 @@ import {
   namedReclaimBlockedBy,
   reclaimBlockedBy,
 } from '../../lib/idleReclaim'
+import { linearPipelineDag } from './pipelineDagTestStub'
 
 // A finished stage used to keep its CLIs alive until the whole run ended or the
 // idle sweep caught them 30 minutes later, so a long pipeline went on paying
@@ -203,6 +204,7 @@ async function load(opts: Options = {}) {
     'applyProjectPaths',
     'activateStage',
     'onKill',
+    'pipelineDag',
     code,
   )
   const api = factory(
@@ -254,6 +256,7 @@ async function load(opts: Options = {}) {
         panes.value = panes.value.filter((p) => p.id !== paneId)
       }
     }),
+    linearPipelineDag().dag,
   )
   const paneById = (id: string): TestPane | undefined => panes.value.find((p) => p.id === id)
   const histFor = (id: string): HistEntry | undefined =>

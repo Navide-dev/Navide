@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerMonitor, protocol, safeStorage, session, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Notification, powerMonitor, protocol, safeStorage, screen, session, shell, systemPreferences, type IpcMainInvokeEvent } from 'electron'
+import { devUserDataPath } from './devUserData'
 import { createGuestAttachHooks, type MutableWebPreferences } from './plugins/pluginGuestAttach'
 import { guardLastWindowClose } from './last-window-close'
 import { join, dirname, basename, isAbsolute, relative, sep } from 'node:path'
@@ -13,6 +14,7 @@ import {
   mintTrustConfirmation,
   type BackendHandle,
 } from './backend'
+import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
 import { abandonPendingBackends } from './backend-pending'
 import { installApplicationMenu, type AppMenuHooks, type RecentMenuEntry } from './menu'
 import { LEGAL_LINKS, isLegalRoute } from '../shared/legalLinks'
@@ -20,6 +22,8 @@ import { createWorkspaceFolder } from './workspace-create'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { openNoopPluginView, openFsProbePluginView, openMiniIdePluginView, devMiniIdePluginDescriptor, openPlansPluginView, devPlansPluginDescriptor, devPlansV2PluginBundle, openGitPluginView, openGitLeftPluginView, updateGitLeftPluginView, closeGitLeftPluginView, registerBundledMiniIde, bundledMiniIdeDir, officialPluginArtifactPackageDir, registerBundledPlans, plansFactoryPackageSummary, registerLegacyBundledGit, hasCompletePlansContributions, createPluginBackendChildEnvironment, frontendPluginManager } from './plugins/frontendPluginManager'
 import { createWindowCloseCoordinator } from './plugins/windowCloseCoordinator'
+import { createQuitCancelReset, createQuitCancelWatch } from './quit-cancel-watch'
+import { dockSurfaceProvided } from './dockSurfaceProvider'
 import {
   handlePluginFrameAssetRequest,
   PLUGIN_FRAME_SCHEME,
@@ -95,7 +99,7 @@ import { clampUiScale, UI_SCALE_SETTING_KEY } from '../shared/uiScale'
 import { installContextMenu, registerTerminalContextMenu } from './context-menu'
 import { inAppUpdateSupported, initUpdater } from './updater'
 import { withDeadline } from './deadline'
-import { MAX_RESTORE_ATTEMPTS, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
+import { MAX_RESTORE_ATTEMPTS, onScreenBounds, WindowRegistry, type AuxWindowEntry, type AuxWindowKind, type WindowBounds, type WindowEntry } from './window-registry'
 import { registeredGitLeftWorkspace, trustedGitLeftWindow } from './gitLeftIpc'
 import { setWindowDockTileBadge } from './dock-tile-badge'
 import { writeTempTextArtifact } from './temp-text-artifact'
@@ -149,13 +153,16 @@ import {
 import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './ui-settings-bootstrap'
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
-import { warnMain } from './main-log'
+import { errorMain, infoMain, warnMain } from './main-log'
+import { watchRendererCrashes } from './renderer-crash-reload'
+import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
 import { isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
+import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
 import {
@@ -201,9 +208,11 @@ const plansDevProfile =
     ? requestedPlansDevProfile
     : null
 if (!app.isPackaged) {
-  app.setPath('userData',
-    `${app.getPath('userData')}${plansDevProfile ? `-dev-plans-${plansDevProfile}` : '-dev'}`,
-  )
+  const devUserData = devUserDataPath(app.getPath('userData'), process.env, plansDevProfile)
+  app.setPath('userData', devUserData.path)
+  if (devUserData.ignored !== null) {
+    console.warn(`[main] NAVIDE_DEV_USER_DATA_DIR must be an absolute path; ignoring ${devUserData.ignored}`)
+  }
 }
 if (
   !app.isPackaged &&
@@ -249,6 +258,9 @@ let quitConfirm = {
   quitLabel: 'Quit',
   cancelLabel: 'Cancel',
   dontShowLabel: "Don't show this again",
+  cancelledMessage: 'Navide did not quit',
+  cancelledDetail: 'A window stopped the quit: {windows}. Finish or close what it is doing, then quit again.',
+  cancelledUnknownWindow: 'a window that has closed since',
 }
 let quitConfirmed = false
 let quittingWindowsPrepared = false
@@ -259,6 +271,50 @@ let quittingWindowsPrepared = false
 // app running.
 let dockQuitInProgress = false
 let quittingWindowsPreparation: Promise<boolean> | null = null
+// Set once teardownBackendAndQuit has stopped the backend and put up the
+// shutdown screen, so a quit cancelled after that can bring both back.
+let quitTeardownRan = false
+// Every path that cancels a quit undoes it through this one reset.
+const resetCancelledQuit = createQuitCancelReset({
+  clearQuitFlags: () => {
+    dockQuitInProgress = false
+    quittingWindowsPrepared = false
+  },
+  clearCleanExit: () => {
+    infoMain('[main] quit cancelled; the app keeps running and the restore snapshot is kept')
+    windowRegistry.clearCleanExit()
+  },
+  takeTeardownRan: () => {
+    const ran = quitTeardownRan
+    quitTeardownRan = false
+    return ran
+  },
+  restartBackend: () => restartBackendNow(),
+  reopenBackendPlugins: () => frontendPluginManager.reopenBackendPlugins(),
+  broadcastCancelled: () => broadcastQuitStage('cancelled'),
+})
+// A quit that before-quit let through can still be cancelled while Electron
+// closes the windows, silently. Clear what the quit set and say which window
+// stopped it, as an abandoned update install does.
+const quitCancelWatch = createQuitCancelWatch({
+  timeoutMs: 5000,
+  openWindowTitles: () => BrowserWindow.getAllWindows()
+    .filter((window) => !window.isDestroyed())
+    .map((window) => window.getTitle()),
+  onCancelled: (titles) => {
+    const windows = titles.length > 0 ? titles.join(', ') : quitConfirm.cancelledUnknownWindow
+    warnMain(`[main] quit did not finish; still open: ${windows}`)
+    void (async () => {
+      // Bring the app back before saying why it stayed.
+      await resetCancelledQuit()
+      await dialog.showMessageBox({
+        type: 'warning',
+        message: quitConfirm.cancelledMessage,
+        detail: quitConfirm.cancelledDetail.replace('{windows}', windows),
+      })
+    })().catch(() => undefined)
+  },
+})
 // True while the quit confirmation dialog is on screen, so a second close
 // request cannot stack another one.
 let quitPromptOpen = false
@@ -302,6 +358,9 @@ const mainWindowWorkspaces = new Map<BrowserWindow, string>()
 const detachedGroups = new Map<string, BrowserWindow>()          // groupId → child window
 const detachedGroupWorkspace = new Map<string, string>()         // groupId → workspace_path
 const detachedWindowIds = new Set<number>()                      // child window ids
+// Navide windows main created that are not main windows (Plans, Token
+// Monitor): they get the full backend:info, but never a window proof.
+const navideAuxWindows = new Set<BrowserWindow>()
 // Workspaces a window has taken on from its sidebar, beyond the one it was
 // opened with. Kept apart from mainWindowWorkspaces so everything that means
 // "this window's own workspace" — the registry, run-group hand-offs, the
@@ -322,6 +381,7 @@ function enterPlansRecovery(reason: string): void {
   if (plansRecoveryEnabled) return
   plansRecoveryEnabled = true
   plansRecoveryReason = reason
+  warnMain(`[main] navide.plans entering legacy recovery (${reason})`)
   for (const [key, hostWindow] of contributionWindows) {
     if (key.startsWith('navide.plans.') && !hostWindow.isDestroyed()) hostWindow.close()
   }
@@ -525,16 +585,22 @@ async function createWindow(
   params: Record<string, string> = {},
   opts?: { bounds?: WindowBounds }
 ): Promise<BrowserWindow> {
+  // Saved bounds may point at a display that is no longer attached.
+  const bounds = opts?.bounds && onScreenBounds(
+    opts.bounds,
+    screen.getAllDisplays().map((display) => display.workArea),
+    screen.getPrimaryDisplay().workArea,
+  )
   const win = new BrowserWindow({
-    width: opts?.bounds?.width ?? 1280,
-    height: opts?.bounds?.height ?? 800,
+    width: bounds?.width ?? 1280,
+    height: bounds?.height ?? 800,
     // Second line of defence for the shell layout. The side panels can be
     // dragged to 560 + 520 px between them; below this the stage would be down
     // to its floor with the panels squeezed, which is usable but not pleasant,
     // and there is no reason to let the window go narrower than that.
     minWidth: 640,
     minHeight: 420,
-    ...(opts?.bounds ? { x: opts.bounds.x, y: opts.bounds.y } : {}),
+    ...(bounds ? { x: bounds.x, y: bounds.y } : {}),
     title: 'Navide',
     titleBarStyle: 'hidden',
     // `titleBarStyle: 'hidden'` means something different on each platform:
@@ -571,6 +637,7 @@ async function createWindow(
     }
   })
   mainWindows.add(win)
+  watchRendererCrashes(win, { kind: params.detached_group ? 'detached-group' : 'main', log: warnMain })
   // In-window plugin contributions attach as <webview> guests. Main overrides
   // their webPreferences here, so the tag the renderer wrote cannot widen what
   // a guest gets, and binds each guest to the identity reserved for it.
@@ -630,6 +697,8 @@ async function createWindow(
   }
   win.once('ready-to-show', showOnce)
   setTimeout(showOnce, 4000)
+  // A Plans notice that found no loaded main window is handed to this one.
+  win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
     mainWindows.delete(win)
@@ -732,7 +801,12 @@ const requestTokenMonitor = createTokenMonitorWindowOpener({
   load: loadWindow,
   // Machine-wide: no workspace_path, so the restore filter reopens it without
   // asking which workspace came back.
-  onWindowCreated: (win) => trackAuxWindow(win, { kind: 'token-monitor' }),
+  onWindowCreated: (win) => {
+    navideAuxWindows.add(win)
+    win.once('closed', () => navideAuxWindows.delete(win))
+    watchRendererCrashes(win, { kind: 'token-monitor', log: warnMain })
+    trackAuxWindow(win, { kind: 'token-monitor' })
+  },
 })
 
 function backendInfoPayload() {
@@ -766,8 +840,15 @@ function backendInfoPayload() {
     // one change here reaches every /ws client at once. A page in a browser
     // can guess the port but cannot read the file this came from, which is
     // the whole of the defence; see backend/agent_team_backend/ws_auth.py.
-    wsUrl: `ws://${backend.host}:${backend.port}/ws?t=${encodeURIComponent(readWsToken(backend))}`
+    // Nothing here marks a Navide window: a main window answers the
+    // connection's challenge through backend:proveWindow instead, so the URL
+    // carries no replayable proof and the plugin broker uses the same one.
+    wsUrl: brokerWsUrl(backend)
   }
+}
+
+function brokerWsUrl(handle: BackendHandle): string {
+  return `ws://${handle.host}:${handle.port}/ws?t=${encodeURIComponent(readWsToken(handle))}`
 }
 
 // Push the current backend info to every window so each renderer's useBackend
@@ -783,13 +864,14 @@ function broadcastBackendChanged(): void {
   // Point the main-process transport at the new backend before changing its
   // bearer. This prevents a reconnect from registering the new token on the
   // old socket while that socket's registration task is still in flight.
-  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' ? payload.wsUrl : null)
+  frontendPluginManager.setBackendWsUrl(payload.status === 'ready' && backend ? brokerWsUrl(backend) : null)
   frontendPluginManager.setBackendHostToken(
     payload.status === 'ready' && backend ? backend.hostSessionToken : null
   )
   // A terminal error bypasses the focus gate — see BackendBroadcastTracker.
   const urgent = payload.status === 'error'
-  for (const win of BrowserWindow.getAllWindows()) {
+  // Navide windows only, like backend:info: the payload carries the ws token.
+  for (const win of backendChangedTargets(BrowserWindow.getAllWindows(), [mainWindows, navideAuxWindows])) {
     if (win.isDestroyed()) continue
     const { immediate } = backendBroadcastTracker.dispatch(win.id, win.isFocused(), payload, urgent)
     if (immediate) win.webContents.send('backend:changed', payload)
@@ -797,8 +879,8 @@ function broadcastBackendChanged(): void {
 }
 
 // Flush a queued backend info snapshot to a window as soon as it regains
-// focus, and stop tracking it once closed. Registered on every BrowserWindow
-// (not just main windows) so Roles/Stages/Editor windows behave the same way.
+// focus, and stop tracking it once closed. Registered on every BrowserWindow,
+// but only a window broadcastBackendChanged pushed to has anything queued.
 app.on('browser-window-created', (_event, win) => {
   win.on('focus', () => {
     const payload = backendBroadcastTracker.takePending(win.id)
@@ -1014,7 +1096,8 @@ frontendPluginManager.setContributionIconResolver(contributionIcon)
 // Windows hosting embedded AI panels end them on close, but not while the app
 // quits: those panels restore next launch. Cmd+Q without the prompt sets only
 // quittingWindowsPrepared; a confirmed quit or an update install sets
-// dockQuitInProgress, which a vetoed quit clears again.
+// dockQuitInProgress, which a vetoed quit clears again. An abandoned install
+// clears both, and so does a quit cancelled while the windows close.
 frontendPluginManager.setAppQuittingProbe(() => dockQuitInProgress || quittingWindowsPrepared)
 frontendPluginManager.setCapabilityGrantResolver((pluginId, packageVersion) =>
   pluginCapabilityGrants.get(pluginId, packageVersion)
@@ -1305,6 +1388,19 @@ frontendPluginManager.setPlansBackendFailureHandler((failure) => {
       if (opened === false) showPlansRecoveryUnavailable(failure.workspacePath)
     })
   }
+})
+// With no main window open, or one still loading, the notice waits for the
+// next main window to finish loading (createWindow flushes it).
+const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
+  find: (workspacePath) => findMainWindowForWorkspace(workspacePath),
+  fallback: () => mainWindow,
+})
+frontendPluginManager.setPlansBackendStoppedHandler(({ workspacePath }) => {
+  // A headless (agent) Plans child failed too often to be restarted. Nothing
+  // on screen shows it, so the workspace's window tells the user how to bring
+  // it back; the renderer owns the localized text.
+  warnMain('[main] navide.plans agent backend stopped after repeated failures')
+  plansBackendStoppedRelay.notify(workspacePath)
 })
 let approvedInstalledPluginActivations = [
   ...installedPluginLoad.activationCatalog,
@@ -1922,7 +2018,15 @@ ipcMain.handle('plans:retryV2', (event) => {
   return retryPlansV2AfterRecovery()
 })
 
-ipcMain.handle('backend:info', () => backendInfoPayload())
+// Full info (wsUrl carries the ws token) for Navide windows only; a plugin
+// frame or view, a webview or any other window learns just the status.
+ipcMain.handle('backend:info', (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], backendInfoPayload())
+)
+// Signs one ws connection's window challenge, for a main window only.
+ipcMain.handle('backend:proveWindow', (event, nonce: unknown) =>
+  answerWindowChallenge(event, nonce, mainWindows, backend?.hostSessionToken ?? null)
+)
 
 // A backend that dies after a successful start must not keep reporting
 // 'ready' with a dead port: watch its exit and, if it is still the active
@@ -1933,7 +2037,7 @@ ipcMain.handle('backend:info', () => backendInfoPayload())
 // visible rather than respawning forever.
 function watchBackendCrash(b: BackendHandle): void {
   watchBackendExit(b.proc, () => backend === b, (message) => {
-    console.error(`[main] ${message}`)
+    errorMain(`[main] ${message}`)
     backend = null
     const attempt = backendAutoRestart.onCrash()
     if (attempt === null) {
@@ -1942,7 +2046,7 @@ function watchBackendCrash(b: BackendHandle): void {
     } else {
       const max = backendAutoRestart.maxAttempts()
       backendRestartPending = { attempt, max, reason: message }
-      console.log(`[main] backend auto-restart scheduled (attempt ${attempt}/${max})`)
+      infoMain(`[main] backend auto-restart scheduled (attempt ${attempt}/${max})`)
     }
     broadcastBackendChanged()
   })
@@ -1963,7 +2067,7 @@ const backendAutoRestart = createBackendAutoRestart({
   restart: () => { void autoRestartBackend() },
   onGiveUp: (attempts) => {
     backendGaveUp = true
-    console.error(`[main] backend auto-restart gave up after ${attempts} attempts`)
+    errorMain(`[main] backend auto-restart gave up after ${attempts} attempts`)
   },
   // A backend that survived the stability window vindicates whatever
   // workspaces this launch restored — pay back their attempt charges.
@@ -2017,7 +2121,7 @@ async function autoRestartBackend(): Promise<void> {
       // for wins; this process must not become the live backend, and must not
       // be left running either.
       backendRestartPending = null
-      console.log('[main] discarding auto-restarted backend: superseded by a deliberate lifecycle op')
+      infoMain('[main] discarding auto-restarted backend: superseded by a deliberate lifecycle op')
       await started.stop()
       return
     }
@@ -2027,11 +2131,11 @@ async function autoRestartBackend(): Promise<void> {
     backendRestartPending = null
     watchBackendCrash(backend)
     backendAutoRestart.onHealthy()
-    console.log(`[main] backend auto-restarted at ${backend.host}:${backend.port}`)
+    infoMain(`[main] backend auto-restarted at ${backend.host}:${backend.port}`)
   } catch (err) {
     // A failed attempt spends budget the same way a crash does; when the
     // budget is gone the error becomes terminal.
-    console.error('[main] backend auto-restart failed', err)
+    errorMain('[main] backend auto-restart failed', err)
     backend = null
     if (epoch !== backendLifecycleEpoch) {
       backendRestartPending = null
@@ -2053,7 +2157,14 @@ async function autoRestartBackend(): Promise<void> {
   }
 }
 
-ipcMain.handle('backend:restart', async () => {
+// Same payload as backend:info, so the same scoping: full only for Navide windows.
+ipcMain.handle('backend:restart', async (event) =>
+  backendInfoFor(event, [mainWindows, navideAuxWindows], await restartBackendNow())
+)
+
+/** A deliberate restart: the Settings button, and a quit cancelled after its
+ *  teardown stopped the backend. */
+async function restartBackendNow(): Promise<ReturnType<typeof backendInfoPayload>> {
   // Supersede the automatic budget BEFORE the busy guard. An auto-restart can
   // hold `backendBusy` for a full health-check timeout (45 s by default), and
   // bailing out first would leave its schedule armed and its in-flight spawn
@@ -2085,9 +2196,9 @@ ipcMain.handle('backend:restart', async () => {
       frontendPluginManager.setTerminalShell(backend.shell)
       backendLastError = null
       watchBackendCrash(backend)
-      console.log(`[main] backend restarted at ${backend.host}:${backend.port}`)
+      infoMain(`[main] backend restarted at ${backend.host}:${backend.port}`)
     } catch (err) {
-      console.error('[main] backend restart failed', err)
+      errorMain('[main] backend restart failed', err)
       backend = null
       backendLastError = String(err)
     }
@@ -2103,7 +2214,7 @@ ipcMain.handle('backend:restart', async () => {
     backendAutoRestart.cancel()
     backendRestartPending = null
   }
-})
+}
 
 ipcMain.handle('backend:stop', async () => {
   // Cancel BEFORE the busy guard, for the reason spelled out in backend:restart:
@@ -3714,6 +3825,14 @@ ipcMain.handle('plugins:openContributionWindow', async (event, args: Record<stri
   return openCatalogContributionWindow(contributionKey, workspacePath)
 })
 
+// Whether a restored AI panel still has a plugin behind its surface; one
+// without retires its record instead of resuming (see dockSurfaceProvider).
+ipcMain.handle('plugins:dockSurfaceProvided', (_event, surface: unknown) =>
+  dockSurfaceProvided(
+    typeof surface === 'string' ? surface : '',
+    (pluginId) => frontendPluginManager.getDescriptor(pluginId) !== undefined,
+  ))
+
 ipcMain.handle('plugins:closeContribution', (event, args: Record<string, unknown>) => {
   const hostWindow = trustedPluginRegionHost(event)
   const contributionKey = typeof args?.contributionKey === 'string' ? args.contributionKey : ''
@@ -3965,6 +4084,9 @@ async function openLegacyPlanWindow(workspacePath: string, relPath?: string): Pr
     }
   })
   planWindows.set(workspacePath, win)
+  navideAuxWindows.add(win)
+  win.once('closed', () => navideAuxWindows.delete(win))
+  watchRendererCrashes(win, { kind: 'plans', log: warnMain })
   // Restored as a plain Plans window: which of the two implementations serves
   // it next launch is decided then, by the router, exactly as it is here.
   trackAuxWindow(win, { kind: 'plans', workspace_path: workspacePath })
@@ -5107,6 +5229,12 @@ app.whenReady().then(async () => {
     [...mainWindows].some((w) => !w.isDestroyed() && w.webContents.id === wc.id)
   )
   app.on('will-quit', () => fnKey.dispose())
+  // Settings → Resource limits: Spotlight's privacy settings, opened on request.
+  registerSpotlightSettingsIpc(ipcMain, {
+    openExternal: (url) => shell.openExternal(url),
+    isTrusted: (event) => isAppWindowSender(event),
+    isMac,
+  })
   registerDeepLinkIpc(deepLinks, (wc) =>
     [...mainWindows].some((w) => !w.isDestroyed() && w.webContents.id === wc.id)
   )
@@ -5202,10 +5330,11 @@ app.whenReady().then(async () => {
     onOpenTurnStats: () => requestTurnStats(),
     onOpenTokenMonitor: () => requestTokenMonitor(),
     onOpenAccount: () => sendMenuAction('open-account'),
-    onOpenRepo: () => void shell.openExternal('https://github.com/nt-nerdtechnic/Navide'),
-    onReportIssue: () => void shell.openExternal('https://github.com/nt-nerdtechnic/Navide/issues'),
+    onOpenRepo: () => void shell.openExternal('https://github.com/Navide-dev/Navide'),
+    onReportIssue: () => void shell.openExternal('https://github.com/Navide-dev/Navide/issues'),
     onShowShortcuts: () => sendMenuAction('show-shortcuts'),
     onShowWhatsNew: () => sendMenuAction('show-whats-new'),
+    onShowWelcomeTour: () => sendMenuAction('show-welcome-tour'),
     onOpenLegal: (route) => void shell.openExternal(LEGAL_LINKS[route]),
     onReloadWindow: (target) => {
       void windowCloseCoordinator.prepareAndReload(target)
@@ -5273,7 +5402,9 @@ app.whenReady().then(async () => {
     // timeout) — restore the confirmation gate the waiver above disabled.
     // ...and the snapshot freeze above goes back with it: the app is still
     // running, so this run is not a clean exit after all.
-    onInstallAbandoned: () => { quitConfirmed = false; dockQuitInProgress = false; windowRegistry.clearCleanExit() },
+    // quitAndInstall's before-quit marked the windows prepared; the app is
+    // still running, so un-mark that too or windows stop ending their panels.
+    onInstallAbandoned: () => { warnMain('[main] update install abandoned; the app keeps running'); quitConfirmed = false; dockQuitInProgress = false; quittingWindowsPrepared = false; windowRegistry.clearCleanExit() },
   })
   // Detect an unclean previous exit and stash its windows for the restore
   // banner. Always reset the file (start tracking this run) — but only OFFER
@@ -5283,7 +5414,7 @@ app.whenReady().then(async () => {
     const pending = windowRegistry.readPendingAndReset()
     const restoreEnabled = app.isPackaged || process.env['AGENT_TEAM_FORCE_RESTORE'] === '1'
     pendingRestore = restoreEnabled ? pending : null
-    if (pendingRestore) console.log('[main] unclean exit detected;', pendingRestore.length, 'workspace(s) restorable')
+    if (pendingRestore) infoMain(`[main] unclean exit detected; ${pendingRestore.length} workspace(s) restorable`)
   }
   // In dev mode, inject the per-session random token into every renderer →
   // dev-server request so browsers without the token get 403.
@@ -5320,11 +5451,11 @@ app.whenReady().then(async () => {
       // Starts the stability window whose completion clears the restore
       // failure ledger (onStable, above); a no-op for the restart budget here.
       backendAutoRestart.onHealthy()
-      console.log(`[main] backend ready at ${b.host}:${b.port}`)
+      infoMain(`[main] backend ready at ${b.host}:${b.port}`)
       broadcastBackendChanged()
     })
     .catch((err) => {
-      console.error('[main] backend failed to start', err)
+      errorMain('[main] backend failed to start', err)
       backendLastError = String(err)
       broadcastBackendChanged()
     })
@@ -5363,10 +5494,10 @@ app.whenReady().then(async () => {
       const plan = windowRegistry.beginRestore(autoRestore)
       skippedRestores = plan.skipped.map((w) => w.workspace_path)
       for (const path of skippedRestores) {
-        console.warn(`[main] restore skipped: ${path} failed to restore ${MAX_RESTORE_ATTEMPTS} times in a row`)
+        warnMain(`[main] restore skipped: ${path} failed to restore ${MAX_RESTORE_ATTEMPTS} times in a row`)
       }
       if (plan.restore.length) {
-        console.log('[main] clean-exit restore;', plan.restore.length, 'workspace window(s)')
+        infoMain(`[main] clean-exit restore; ${plan.restore.length} workspace window(s)`)
       }
       // Main windows first: a detached child broadcasts to its origin window,
       // which has to exist by then for the hand-off bookkeeping to land.
@@ -5444,8 +5575,9 @@ app.on('window-all-closed', () => {
 // can still keep it (see last-window-close.ts). Every window counts as "last"
 // — a Plans or Git window left open after the main window is the one whose
 // close would quit — so the guard goes on each window as Electron creates it,
-// whichever factory made it. A confirmed quit goes through the same teardown
-// as before-quit; `quitConfirmed` then lets app.quit() close the windows.
+// whichever factory made it. A confirmed quit re-enters before-quit like
+// Cmd+Q, so the close participants get their say before anything is torn
+// down; `quitConfirmed` skips the prompt there and lets the windows close.
 app.on('browser-window-created', (_event, win) => {
   win.on('close', (e) => {
     guardLastWindowClose(e, {
@@ -5457,7 +5589,7 @@ app.on('browser-window-created', (_event, win) => {
       quit: () => {
         quitConfirmed = true
         dockQuitInProgress = true
-        void teardownBackendAndQuit()
+        app.quit()
       },
     })
   })
@@ -5487,6 +5619,7 @@ const PLUGIN_BACKEND_STOP_WAIT_MS = 6000
 const SETTINGS_FLUSH_GRACE_MS = 250
 
 async function teardownBackendAndQuit(): Promise<void> {
+  quitTeardownRan = true
   // Put the shutdown screen up before anything below can block: the waits here
   // run into seconds, and the windows stay on screen for all of it.
   broadcastQuitStage('saving')
@@ -5528,7 +5661,11 @@ async function teardownBackendAndQuit(): Promise<void> {
   app.quit()
 }
 
-app.on('will-quit', () => {
+// Not on will-quit: a will-quit listener can still prevent the quit, and only
+// 'quit' follows when none did. Disposing takes the services' IPC listeners
+// down for good, so it waits for the same signal.
+app.on('quit', () => {
+  quitCancelWatch.disarm()
   terminalStorageOwnerService.dispose()
   filePickerHostService.dispose()
 })
@@ -5592,8 +5729,9 @@ app.on('before-quit', async (e) => {
       const prepared = await quittingWindowsPreparation
       if (!prepared) {
         // Vetoed: the app stays open, so closing a window ends its AI panels
-        // again. quitConfirmed is left as it was.
-        dockQuitInProgress = false
+        // again. quitConfirmed is left as it was, and the refusal has already
+        // told the user why.
+        void resetCancelledQuit()
         return
       }
       quittingWindowsPrepared = true
@@ -5610,7 +5748,10 @@ app.on('before-quit', async (e) => {
   // now reports live plugin backends only - bound views, headless MCP instances
   // and in-flight calls - so a packaged launch that merely registered the bundled
   // Plans backend as metadata no longer keeps this guard permanently false.
-  if (!backend && !backendStarting && !frontendPluginManager.hasBackendActivity()) return
+  if (!backend && !backendStarting && !frontendPluginManager.hasBackendActivity()) {
+    quitCancelWatch.arm()
+    return
+  }
   e.preventDefault()
   void teardownBackendAndQuit()
 })

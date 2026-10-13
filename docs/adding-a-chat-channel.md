@@ -53,6 +53,19 @@ be honest about a few facts:
 - Do not truncate or summarise in the adapter: chunking to `text_limit` is fine,
   everything else (verbosity, source labels, secret redaction) is the manager's.
 
+### Attachments: `MediaAdapter` (optional)
+
+- **Inbound**: fill `InboundMessage.attachments` with one `InboundAttachment` per
+  file (kind, name, size, mime, and the `ref` your `download` needs), and emit a
+  file-only message instead of dropping it. Without media support, still report
+  the file with an empty `ref`: the manager then answers "此平台尚不支援媒體".
+- **`download(att, dest, max_bytes)`** writes the file and returns its size; use
+  `adapter_runtime.download_to` (no redirects, size cap, partial file removed).
+  Send a credential only to the platform's own file host.
+- **`send_file(loc, path, filename)`** posts one file and returns its message ids;
+  set `upload_max_bytes` to the platform's documented per-file limit, with the
+  source in a comment. The manager has already checked the path (channels/media.py).
+
 Verify: `uv --project backend run pytest backend/tests -k "channels or pyinstaller"`.
 
 ## Renderer (`src/renderer/src/platform/channels/`)

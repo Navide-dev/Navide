@@ -17,7 +17,7 @@ external_plugins/imessage/server.ts, which does the same thing):
 - Messaging yourself (same Apple ID on phone and Mac) arrives as is_from_me=0 from your own
   address, so replies echo back; they are filtered by (chat, normalised text) for 15 s.
 Gaps: no threads, edit, typing, buttons or chat creation (a pane binds an existing
-conversation). Tapbacks/reactions and attachment-only messages are skipped. The first
+conversation). Tapbacks/reactions are skipped; attachments are reported, not fetched. The first
 send to a chat makes macOS ask for Automation permission to control Messages. Not verified
 on this machine's real chat.db (tests use a fixture database and a stub osascript).
 Replies (InboundMessage.reply_to_id): not mappable. osascript sends return no message
@@ -48,6 +48,7 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
@@ -249,8 +250,11 @@ class IMessageAdapter:
             }
         if row["is_from_me"] or row["associated_message_type"] or row["item_type"]:
             return
-        text = (row["text"] or parse_attributed_body(row["attributedBody"])).replace("￼", "").strip()
-        if not text or not handle or not chat_guid or self._emit is None:
+        raw = row["text"] or parse_attributed_body(row["attributedBody"])
+        text = raw.replace("￼", "").strip()
+        # U+FFFC marks an attachment in the text; it is reported, not fetched (no media support yet).
+        files = [InboundAttachment("file", "", None, "", "") for _ in range(raw.count("￼"))]
+        if not (text or files) or not handle or not chat_guid or self._emit is None:
             return
         if handle.lower() in self._self_addresses and self._consume_echo(chat_guid, text):
             return
@@ -258,7 +262,7 @@ class IMessageAdapter:
         await self._emit(InboundMessage(
             platform=self.platform, account=self.account, chat_id=chat_guid, thread_id="",
             sender_id=handle, sender_name=handle, text=text, message_id=str(row["guid"] or row["rowid"]),
-            is_direct=is_direct, ts=_apple_ts(row["date"]),
+            is_direct=is_direct, ts=_apple_ts(row["date"]), attachments=files,
         ))
 
     def _track_echo(self, chat_guid: str, text: str) -> None:

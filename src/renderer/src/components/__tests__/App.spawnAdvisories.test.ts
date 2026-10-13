@@ -60,6 +60,24 @@ describe('ui.pane.create spawn-gate wiring', () => {
   })
 })
 
+describe('workspace CLI pane advisory counts running panes only', () => {
+  // The advisory says each pane costs 250–500MB of memory. A cold-restore
+  // placeholder (realized: false) has no process behind it, so counting it
+  // made every spawn warn about hundreds of panes that were not running.
+  const contexts = [
+    block('function standaloneSpawnGateContext() {', '\n}\n'),
+    block('function spawnGateContextFor(parentPaneId: string) {', '\n}\n'),
+  ]
+
+  it('skips cold-restore placeholders in both gate contexts', () => {
+    for (const ctx of contexts) {
+      expect(ctx).toContain(
+        "cliPaneCount: panes.value.filter((p) => p.realized && p.agentKey !== 'terminal').length,"
+      )
+    }
+  })
+})
+
 describe('cli_open_agent advisories forwarding (agent_spawn.result)', () => {
   const handler = block(
     'async function handleMcpSpawnRequest(ev: {',

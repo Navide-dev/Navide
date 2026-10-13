@@ -23,6 +23,7 @@ vi.mock('vue-i18n', () => ({
 }))
 
 vi.mock('@navide/plugin-ui/foundation', () => ({
+  vTruncate: {},
   useNotify: () => ({ confirm: vi.fn(async () => true), toast: vi.fn(), alert: vi.fn() }),
 }))
 

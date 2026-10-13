@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 
 import MockFigure from './helpMocks/MockFigure.vue'
@@ -173,14 +174,14 @@ const sampleTitle = computed(() => t('settings.help.crossPlatform.mock.controls.
             <span class="cph-mark">{{ MARKS[0] }}</span>
             <div class="cph-bar cph-bar--mac">
               <span class="cph-lights"><i /><i /><i /></span>
-              <span class="cph-bar-title">{{ sampleTitle }}</span>
+              <span class="cph-bar-title" v-truncate>{{ sampleTitle }}</span>
               <span class="cph-bar-gear" aria-hidden="true">⚙</span>
             </div>
           </div>
           <div class="cph-barrow">
             <span class="cph-mark">{{ MARKS[1] }}</span>
             <div class="cph-bar cph-bar--drawn">
-              <span class="cph-bar-title">{{ sampleTitle }}</span>
+              <span class="cph-bar-title" v-truncate>{{ sampleTitle }}</span>
               <span class="cph-bar-gear" aria-hidden="true">⚙</span>
               <span class="cph-wincontrols" aria-hidden="true">
                 <i class="cph-wc">&#x2500;</i>

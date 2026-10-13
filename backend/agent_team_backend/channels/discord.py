@@ -34,14 +34,17 @@ import hashlib
 import json
 import logging
 import random
+import re
 import time
-from typing import Any, Callable
+from pathlib import Path
+from typing import Any, BinaryIO, Callable
+from urllib.parse import urlsplit
 
 import httpx
 from websockets.asyncio.client import connect as ws_connect
 from websockets.exceptions import ConnectionClosed
 
-from .adapter_runtime import ReceiveLoop, ReconnectNow, error_text, send_request
+from .adapter_runtime import ReceiveLoop, ReconnectNow, download_to, error_text, media_client, send_request
 from .base import (
     STALL_WATCHDOG_S,
     AdapterStatus,
@@ -49,11 +52,16 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
 )
+from .report import Caption
 from .text import TEXT_LIMITS, chunk_discord
+
+# Characters that would start Discord markdown inside a card title.
+_MARKDOWN_RE = re.compile(r"[\\*_~`|]")
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +74,12 @@ INSTALL_PERMISSIONS = (1 << 10) | (1 << 11) | (1 << 16) | (1 << 35) | (1 << 38)
 THREAD_TYPES = {10, 11, 12}
 # Message types that carry user text: DEFAULT and REPLY.
 TEXT_MESSAGE_TYPES = {0, 19}
+# https://docs.discord.com/developers/reference#uploading-files: "The default limit is 20 MiB
+# for all users, but may be higher ... by the server's Boost Tier"; one message request is
+# capped at 25 MiB. The default is what every server allows.
+UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+# Attachment URLs are signed CDN links; nothing else is fetched, and never with the bot token.
+CDN_HOSTS = {"cdn.discordapp.com", "media.discordapp.net"}
 FATAL_CLOSE_CODES = {
     4004: "Discord rejected the bot token (4004)",
     4010: "invalid shard (4010)",
@@ -106,6 +120,8 @@ class DiscordAdapter:
         self._invalid_session_wait_s = invalid_session_wait_s
         self._bot_id = ""
         self._app_id = ""
+        self.upload_max_bytes = UPLOAD_MAX_BYTES
+        self._media_transport: httpx.AsyncBaseTransport | None = None  # tests swap in a mock
         self._session_id = ""
         self._resume_url = ""
         self._seq: int | None = None
@@ -291,6 +307,11 @@ class DiscordAdapter:
             self._known[chat_id] = {"chat_id": chat_id, "title": str(author.get("username") or chat_id),
                                     "kind": "dm", "supports_topics": False}
         self.status.last_inbound_at = time.time()
+        # A reply's gateway payload carries the message it answers. A forward (reference
+        # type 1) is not a reply, and a webhook's author is whatever the webhook says.
+        reference = d.get("message_reference") or {}
+        quoted = (d.get("referenced_message") or {}) if (reference.get("type") or 0) == 0 else {}
+        quoted_author = {} if quoted.get("webhook_id") else (quoted.get("author") or {})
         await self._emit(InboundMessage(
             platform=self.platform, account=self.account, chat_id=chat_id, thread_id=thread_id,
             sender_id=str(author.get("id") or ""),
@@ -298,6 +319,11 @@ class DiscordAdapter:
             text=str(d.get("content") or ""), message_id=str(d.get("id") or ""),
             is_direct=not d.get("guild_id"), ts=time.time(),
             reply_to_id=str((d.get("message_reference") or {}).get("message_id") or ""),
+            reply_to_text=str(quoted.get("content") or ""),
+            reply_to_sender=str(quoted_author.get("global_name") or quoted_author.get("username") or ""),
+            reply_to_sender_id=str(quoted_author.get("id") or ""),
+            reply_to_self=bool(self._bot_id) and str(quoted_author.get("id") or "") == self._bot_id,
+            attachments=[_attachment(a) for a in d.get("attachments") or [] if a.get("url")],
         ))
 
     async def _on_interaction(self, d: dict[str, Any]) -> None:
@@ -366,10 +392,54 @@ class DiscordAdapter:
             ids.append(str(resp.json().get("id") or ""))
         return ids
 
+    async def download(self, att: InboundAttachment, dest: Path, max_bytes: int) -> int:
+        parts = urlsplit(att.ref)
+        if parts.scheme != "https" or parts.hostname not in CDN_HOSTS:
+            raise ChannelSendError(f"not a Discord CDN URL: {parts.scheme}://{parts.hostname}")
+        async with media_client(self._media_transport) as client:  # no Authorization header
+            return await download_to(client, att.ref, dest, max_bytes)
+
+    async def send_file(self, loc: Location, fh: BinaryIO, filename: str,
+                        caption: Caption | None = None) -> list[str]:
+        payload: dict[str, Any] = {"attachments": [{"id": 0, "filename": filename}], "allowed_mentions": {"parse": []}}
+        if caption is not None:
+            title = _MARKDOWN_RE.sub(r"\\\g<0>", caption.title)
+            lines = (f"📄 **{title}**", caption.summary, caption.info)
+            payload["content"] = "\n".join(line for line in lines if line)[: self.capabilities.text_limit]
+        content = await asyncio.to_thread(fh.read)
+        try:
+            resp = await send_request(self._http(), "POST", f"/channels/{self._target(loc)}/messages",
+                                      data={"payload_json": json.dumps(payload)},
+                                      files={"files[0]": (filename, content)})
+        except ChannelAuthError as exc:
+            raise ChannelSendError(str(exc)) from exc
+        if resp.status_code >= 400:
+            raise ChannelSendError(error_text(resp))
+        return [str(resp.json().get("id") or "")]
+
     async def edit_text(self, loc: Location, message_id: str, text: str) -> None:
         # An edit replaces the message, buttons included (Telegram drops them too).
         body = {"content": text[: self.capabilities.text_limit], "allowed_mentions": {"parse": []},
                 "components": []}
+        await self._write("PATCH", f"/channels/{self._target(loc)}/messages/{message_id}", body)
+
+    @staticmethod
+    def _action_rows(rows: list[list[tuple[str, str]]]) -> list[dict[str, Any]]:
+        # Five buttons an action row, five rows a message.
+        return [{"type": 1, "components": [
+            {"type": 2, "style": 2, "label": label[:38], "custom_id": data[:100]} for label, data in row[:5]
+        ]} for row in rows[:5]]
+
+    async def send_menu(self, loc: Location, text: str, rows: list[list[tuple[str, str]]]) -> str:
+        """One message carrying ``rows`` of buttons (the quick menu); its id."""
+        body = {"content": text[: self.capabilities.text_limit], "allowed_mentions": {"parse": []},
+                "components": self._action_rows(rows)}
+        resp = await self._write("POST", f"/channels/{self._target(loc)}/messages", body)
+        return str(resp.json().get("id") or "")
+
+    async def edit_menu(self, loc: Location, message_id: str, text: str, rows: list[list[tuple[str, str]]]) -> None:
+        body = {"content": text[: self.capabilities.text_limit], "allowed_mentions": {"parse": []},
+                "components": self._action_rows(rows)}
         await self._write("PATCH", f"/channels/{self._target(loc)}/messages/{message_id}", body)
 
     async def send_typing(self, loc: Location) -> None:
@@ -390,3 +460,9 @@ def create_adapter(config: dict[str, Any], secret: dict[str, Any], *, store: Any
     if not token:
         raise ValueError("missing bot token")
     return DiscordAdapter(token, account=str(config.get("account") or "default"))
+
+
+def _attachment(a: dict[str, Any]) -> InboundAttachment:
+    mime = str(a.get("content_type") or "")
+    kind = {"image": "photo", "video": "video", "audio": "audio"}.get(mime.split("/", 1)[0], "document")
+    return InboundAttachment(kind, str(a.get("filename") or ""), a.get("size"), mime, str(a["url"]))

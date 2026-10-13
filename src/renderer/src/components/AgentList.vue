@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import ViewPanel, { type LayoutMode } from './ViewPanel.vue'
 import HistoryIcon from './HistoryIcon.vue'
 import type { ActivePaneView } from './ControlPane.vue'
@@ -103,14 +104,14 @@ function kickoffLabel(status?: ActivePaneView['kickoffStatus']): string {
           >∞ Loop</span>
           <button class="icon-btn agent-close-btn" :title="$t('action.remove')" @click.stop="emit('kill', p.id)">✕</button>
         </div>
-        <div v-if="p.roleLabel" class="role-line">{{ p.roleLabel }}</div>
+        <div v-if="p.roleLabel" class="role-line" v-truncate>{{ p.roleLabel }}</div>
         <div v-if="!p.isMinimized && p.origin === 'pipeline'" class="stage-line">
           stage {{ p.stageId }} · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
         </div>
         <div v-else-if="!p.isMinimized" class="stage-line">
           manual · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
         </div>
-        <div v-if="!p.isMinimized" class="agent-cmd"><code>{{ p.command }}</code></div>
+        <div v-if="!p.isMinimized" class="agent-cmd"><code v-truncate>{{ p.command }}</code></div>
         <div v-if="!p.isMinimized && p.sessionId" class="agent-session" title="CLI session id — used to resume this agent's memory on restart">
           🔖 session: <code>{{ p.sessionId }}</code>
         </div>

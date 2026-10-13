@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import type { ChannelBinding, ChannelsStore } from '../composables/useChannels'
 
 /**
@@ -136,8 +136,8 @@ function disconnect(row: Row): void {
             >
               <span class="cmon-dot" :class="row.tone"></span>
               <span class="cmon-text">
-                <span class="cmon-pane">{{ row.pane }}</span>
-                <span class="cmon-channel">{{ row.channel }}</span>
+                <span class="cmon-pane" v-truncate>{{ row.pane }}</span>
+                <span class="cmon-channel" v-truncate>{{ row.channel }}</span>
               </span>
               <span class="cmon-status" :class="row.tone">{{ row.status }}</span>
             </button>
@@ -160,8 +160,8 @@ function disconnect(row: Row): void {
               >
                 <span class="cmon-dot" :class="child.tone"></span>
                 <span class="cmon-text">
-                  <span class="cmon-pane">{{ child.pane }}</span>
-                  <span class="cmon-channel">{{ child.channel }}</span>
+                  <span class="cmon-pane" v-truncate>{{ child.pane }}</span>
+                  <span class="cmon-channel" v-truncate>{{ child.channel }}</span>
                 </span>
                 <span class="cmon-auto" :title="t('channels.monitor.auto-child-hint')">{{ t('channels.monitor.auto-child') }}</span>
                 <span class="cmon-status" :class="child.tone">{{ child.status }}</span>

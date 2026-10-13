@@ -28,6 +28,37 @@ _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _HEADER_KEY_RE = re.compile(r"^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$")
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+#: Characters that print as nothing or as a blank though they are not a
+#: space: Hangul fillers, the braille blank, the combining grapheme joiner.
+_BLANK_LOOKING = frozenset("\u115f\u1160\u3164\uffa0\u2800\u034f")
+#: Invisible characters real paths and names carry, allowed: ZWNJ (Persian),
+#: ZWJ and VS16 (emoji), NBSP, and NNBSP (macOS screenshot file names). The
+#: approval screen shows them escaped.
+_ALLOWED_INVISIBLE = frozenset("\u200c\u200d\ufe0f\u00a0\u202f")
+
+
+def _has_invisible(value: str) -> bool:
+    """Whether *value* holds a character that hides what it says: format
+    characters (bidi overrides, zero-width space), separators other than the
+    plain space, private-use or surrogate code points, variation selectors
+    and the blank-looking letters above — less the ones real paths carry
+    (``_ALLOWED_INVISIBLE``).
+
+    Not part of the schema: a config this machine already has loads whatever
+    it holds. Sync asks it of records that arrive from another device, and of
+    a record again when it is approved (sync_scopes)."""
+    import unicodedata
+
+    for ch in value:
+        if ch in _ALLOWED_INVISIBLE:
+            continue
+        cat = unicodedata.category(ch)
+        cp = ord(ch)
+        if cat in ("Cf", "Co", "Cs", "Zl", "Zp") or (cat == "Zs" and ch != " "):
+            return True
+        if ch in _BLANK_LOOKING or 0xFE00 <= cp <= 0xFE0F or 0xE0100 <= cp <= 0xE01EF:
+            return True
+    return False
 _SECRET_TOKENS = {
     "KEY",
     "TOKEN",

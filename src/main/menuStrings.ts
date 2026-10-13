@@ -53,6 +53,7 @@ export interface MenuStrings {
   reportIssue: string
   shortcuts: string
   whatsNew: string
+  welcomeTour: string
   legal: Record<LegalRoute, string>
 }
 
@@ -83,6 +84,7 @@ export const MENU_STRINGS: Record<SupportedLocale, MenuStrings> = {
     reportIssue: 'Report an Issue…',
     shortcuts: 'Keyboard Shortcuts',
     whatsNew: 'What’s New…',
+    welcomeTour: 'First-Run Tour…',
     // The legal table is the one place those titles are written; English reads
     // them straight from it rather than keeping a second copy in step.
     legal: LEGAL_LABELS
@@ -113,6 +115,7 @@ export const MENU_STRINGS: Record<SupportedLocale, MenuStrings> = {
     reportIssue: '問題を報告…',
     shortcuts: 'キーボードショートカット',
     whatsNew: '新機能…',
+    welcomeTour: 'はじめてのツアー…',
     legal: {
       privacy: 'プライバシー',
       security: 'セキュリティポリシー',
@@ -148,6 +151,7 @@ export const MENU_STRINGS: Record<SupportedLocale, MenuStrings> = {
     reportIssue: '回報問題…',
     shortcuts: '鍵盤快捷鍵',
     whatsNew: '新版更新…',
+    welcomeTour: '首次使用導覽…',
     // The pages themselves are served in English; these label the entrance,
     // not the destination's language, and Settings already says 隱私權 for the
     // same link — a menu reading "Privacy" next to it is the real mismatch.

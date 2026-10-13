@@ -49,9 +49,21 @@ from typing import Any, Callable
 import psutil
 
 from .proctree import children_map, walk_descendants
-from .spec import ProcInfo
+from .spec import ProcInfo, windows_refused_file_name, windows_short_name
 
 log = logging.getLogger(__name__)
+
+
+# A temp path for a hook's response body, ending the hook (exit 0) with one
+# line on stderr when none can be made. A random name rather than
+# GetTempFileName: that creates tmpXXXX.tmp and fails for good once 65535 are
+# left behind by hooks killed mid-wait; curl creates this file itself.
+_PS_TEMP_PATH = (
+    "$TMP = $null; $TMPERR = ''; "
+    "try { $TMP = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName()) } catch { $TMPERR = \"$_\" }; "
+    "if (-not $TMP) { [Console]::Error.Write('navide hook: no temp file: ' + $TMPERR + "
+    "[Environment]::NewLine); exit 0 }; "
+)
 
 
 class WindowsPaths:
@@ -394,7 +406,8 @@ class WindowsProcessTree:
             return ""
 
     def identity(self, pid: int) -> str:
-        return f"{pid}:{self.start_time(pid)}"
+        start = self.start_time(pid)
+        return f"{pid}:{start}" if start else ""
 
     def command_of(self, pid: int) -> str | None:
         try:
@@ -1013,6 +1026,34 @@ class WindowsLayout(WindowsPaths):
         configured = os.environ.get("APPDATA")
         return Path(configured) if configured else None
 
+    def system_dirs(self) -> list[Path]:
+        # Each folder is listed both where its variable points and at its documented
+        # default: a changed variable can add a folder, never drop C:\Windows.
+        env = os.environ
+        found: list[Path] = []
+        for var, default in (
+            ("SystemRoot", r"C:\Windows"), ("ProgramFiles", r"C:\Program Files"),
+            ("ProgramFiles(x86)", r"C:\Program Files (x86)"), ("ProgramData", r"C:\ProgramData"),
+        ):
+            found += [Path(default)] + ([Path(env[var])] if env.get(var) else [])
+        home = Path.home()
+        # Credential Manager, DPAPI master keys and browser profiles (cookies, logins).
+        for var, default, rels in (
+            ("APPDATA", home / "AppData" / "Roaming",
+             ("Microsoft/Credentials", "Microsoft/Protect", "Microsoft/Crypto",
+              "Microsoft/SystemCertificates", "Mozilla/Firefox", "GitHub CLI", "gnupg")),
+            ("LOCALAPPDATA", home / "AppData" / "Local",
+             ("Microsoft/Credentials", "Microsoft/Vault", "Google/Chrome/User Data",
+              "Microsoft/Edge/User Data", "BraveSoftware", "Chromium/User Data")),
+        ):
+            bases = [default] + ([Path(env[var])] if env.get(var) else [])
+            found += [base.joinpath(*rel.split("/")) for base in bases for rel in rels]
+        # The CLIs' dot folders in %USERPROFILE% (.ssh, .aws, .config\gh ...), as on POSIX.
+        from ._posix_paths import _DOT_SECRET_DIRS
+
+        found += [home.joinpath(*rel.split("/")) for rel in _DOT_SECRET_DIRS]
+        return found
+
     def home_env_var(self) -> str:
         return "USERPROFILE"
 
@@ -1305,6 +1346,9 @@ class WindowsDiscoveryLayout(WindowsLayout):
     def enforces_posix_modes(self) -> bool:
         return False
 
+    def file_name_refused(self, name: str) -> bool:
+        return windows_refused_file_name(name) or windows_short_name(name)
+
     def symlinks_available(self) -> bool:
         global _symlinks_available
         if _symlinks_available is None:
@@ -1540,31 +1584,62 @@ class WindowsScripts:
         # `'@file'` are quoted because `@` starts a splat or an array here.
         # `exit_zero` costs nothing to honour -- the line already ends that
         # way, because a PowerShell failure otherwise surfaces as a hook error.
-        sink = "" if keep_body else "-o NUL "
+        # A kept body goes through a temp file and leaves as its raw bytes:
+        # PowerShell's native-output capture re-codes curl's UTF-8 through the
+        # console code page, which garbled a Stop decision carrying a message
+        # in Chinese (the #147 garbling on the Stop path). The console encoding
+        # is left alone for the reason hook_rewake gives.
+        sink = "-o $TMP " if keep_body else "-o NUL "
         extra = f"-H ('{env_header[0]}: ' + $env:{env_header[1]}) " if env_header else ""
-        return (
-            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
-            f"if ($PORT) {{ & ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} {sink}-X POST "
+        post = (
+            f"& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} {sink}-X POST "
             f"-H 'Content-Type: application/json' "
             f"-H 'X-Agent-Team-Event: {event}' "
             f"-H {_ps_quote('@' + header_file)} {extra}"
             f"--data-binary '@-' "
-            f'"http://127.0.0.1:$PORT{url_path}" }}; exit 0'
+            f'"http://127.0.0.1:$PORT{url_path}"'
+        )
+        if keep_body:
+            post = (
+                f"{_PS_TEMP_PATH}"
+                f"{post}; "
+                f"$OUTB = $null; try {{ $OUTB = [IO.File]::ReadAllBytes($TMP) }} catch {{}}; "
+                f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+                f"if ($OUTB) {{ $OUTS = [Console]::OpenStandardOutput(); "
+                f"$OUTS.Write($OUTB, 0, $OUTB.Length); $OUTS.Flush() }}"
+            )
+        return (
+            f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
+            f"if ($PORT) {{ {post} }}; exit 0"
         )
 
     def hook_rewake(
         self, *, port_file: str, header_file: str, url_path: str, timeout_s: int
     ) -> str:
+        # The body never passes through PowerShell's native-output capture:
+        # that splits a multi-line body into object[] (which WriteLine printed
+        # as `System.Object[]`) and decodes it with the console code page, so
+        # CJK came out as `?` on a cp950 box (#147). curl writes it to a temp
+        # file, it is read back as UTF-8 and written to stderr as UTF-8 bytes.
+        # [Console]::OutputEncoding is left alone: set and restored, it still
+        # left the parent console on 65001 when two hooks interleaved or one
+        # was killed mid-wait.
         return (
             f"$PORT = Get-Content -ErrorAction SilentlyContinue {_ps_quote(port_file)}; "
             f"if (-not $PORT) {{ exit 0 }}; "
-            f"$BODY = & ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} -X POST "
+            f"{_PS_TEMP_PATH}"
+            f"& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m {timeout_s} -o $TMP -X POST "
             f"-H 'Content-Type: application/json' "
             f"-H 'X-Agent-Team-Event: rewake' "
             f"-H {_ps_quote('@' + header_file)} "
             f"--data-binary '@-' "
             f'"http://127.0.0.1:$PORT{url_path}" 2>$null; '
-            f"if ($BODY) {{ [Console]::Error.WriteLine($BODY); exit 2 }}; exit 0"
+            f"$BODY = $null; try {{ $BODY = [IO.File]::ReadAllLines($TMP, [Text.Encoding]::UTF8) }} catch {{}}; "
+            f"Remove-Item -LiteralPath $TMP -Force -ErrorAction SilentlyContinue; "
+            f"if (($BODY -join '').Trim()) {{ "
+            f"$ERRB = [Text.Encoding]::UTF8.GetBytes(($BODY -join [Environment]::NewLine) + [Environment]::NewLine); "
+            f"$ERRS = [Console]::OpenStandardError(); $ERRS.Write($ERRB, 0, $ERRB.Length); $ERRS.Flush(); "
+            f"exit 2 }}; exit 0"
         )
 
     def confirm_then_run(self, description: str, command: str) -> str:
@@ -1578,3 +1653,34 @@ class WindowsScripts:
 
 
 scripts = WindowsScripts()
+
+
+class WindowsDurableSecretFiles:
+    """`DurableSecretFiles` through DPAPI — the same files `secret_files` writes,
+    synced before the rename. Not `_write_atomic`: that writer is shared with
+    CLI account slots and is left exactly as it was (KC2R-8)."""
+
+    def read(self, path: Path) -> bytes:
+        return secret_files.read_private(path)
+
+    def write(self, path: Path, data: bytes) -> None:
+        # Wrap first, as write_private does: a DPAPI failure leaves no file.
+        wrapped = DPAPI_MAGIC + _dpapi("CryptProtectData", data)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".")
+        tmp = Path(tmp_name)
+        try:
+            try:
+                view = memoryview(wrapped)
+                while view:
+                    view = view[os.write(handle, view):]
+                os.fsync(handle)
+            finally:
+                os.close(handle)
+            os.replace(tmp, path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+
+
+durable_secret_files = WindowsDurableSecretFiles()

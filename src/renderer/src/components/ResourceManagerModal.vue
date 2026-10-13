@@ -13,6 +13,7 @@
 // and the two row actions are relayed through the main process to whichever
 // window owns the pane, because focusing and reclaiming only exist there.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import type { useResourceUsage } from '../composables/useResourceUsage'
@@ -426,8 +427,8 @@ const diskState = computed<'unscanned' | 'scanning' | 'failed' | 'scanned'>(() =
           >
             <button class="c-name rm-jump" :title="t('resource.jump')" @click="void paneAction(row.paneId, 'focus')">
               <span class="rm-dot" />
-              <span class="rm-name">{{ row.name }}</span>
-              <span v-if="row.workspace || row.vendor" class="rm-meta">
+              <span class="rm-name" v-truncate>{{ row.name }}</span>
+              <span v-if="row.workspace || row.vendor" class="rm-meta" v-truncate>
                 {{ [row.workspace, row.vendor].filter(Boolean).join(' · ') }}
               </span>
             </button>

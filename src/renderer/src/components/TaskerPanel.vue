@@ -38,6 +38,7 @@ import {
   type Translate,
 } from '../lib/cronDescribe'
 import type { SchedulerJob } from '../lib/schedulerJobs'
+import { openEvolvePanel } from '../composables/useEvolve'
 import {
   agentKey,
   bucketOf,
@@ -52,6 +53,7 @@ import {
 } from '../lib/taskerTimeline'
 import JobEditorModal from './JobEditorModal.vue'
 import SchedulerJobRow from './SchedulerJobRow.vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 type Kind = 'crontab' | 'launchagent'
 type FoldGroup = Exclude<Group, 'timeline' | 'interval'>
@@ -300,6 +302,11 @@ const editorOpen = ref(false)
 const editing = ref<SchedulerJob | null>(null)
 
 function openEditor(job: SchedulerJob | null): void {
+  // A system job has no editor: the workspace's evolve panel manages it.
+  if (job && jobsApi.isSystem(job)) {
+    openEvolvePanel(jobsApi.systemWorkspace(job))
+    return
+  }
   editing.value = job
   editorOpen.value = true
 }
@@ -464,7 +471,7 @@ onUnmounted(() => {
 <template>
   <div class="tasker">
     <div class="tk-bar">
-      <span class="tk-stamp">
+      <span class="tk-stamp" v-truncate>
         {{ scannedAtLabel ? t('executions.last-scan', { time: scannedAtLabel }) : '—' }}
       </span>
       <span v-if="jobsApi.limitMeter.value" class="tk-meter" data-test="agent-meter">
@@ -486,35 +493,34 @@ onUnmounted(() => {
     <div class="tk-body">
       <!-- ── One-line notices: errors never take more than a row ─────────── -->
       <p v-if="scanError" class="tk-hint tk-scan-error" :title="scanError">
-        <span class="tk-hint-text">{{ t('executions.scan-failed', { message: scanError }) }}</span>
+        <span class="tk-hint-text" v-truncate>{{ t('executions.scan-failed', { message: scanError }) }}</span>
         <button class="tk-hint-btn" @click="rescan">{{ t('executions.retry') }}</button>
       </p>
       <p v-if="jobsError" class="tk-hint" data-test="jobs-error" :title="jobsApi.listError.value">
-        <span class="tk-hint-text">{{ jobsError }}</span>
+        <span class="tk-hint-text" v-truncate>{{ jobsError }}</span>
         <button class="tk-hint-btn" @click="jobsApi.refresh()">{{ t('executions.retry') }}</button>
       </p>
-      <p v-if="jobsApi.opError.value" class="tk-hint" data-test="op-error" :title="jobsApi.opError.value">
-        <span class="tk-hint-text">{{ jobsApi.opError.value }}</span>
+      <p v-if="jobsApi.opError.value" class="tk-hint" data-test="op-error">
+        <span class="tk-hint-text" v-truncate>{{ jobsApi.opError.value }}</span>
       </p>
       <p
         v-for="notice in jobsApi.limitNotices.value"
         :key="notice.key"
         class="tk-hint"
         :data-test="`agent-limit-${notice.key}`"
-        :title="notice.text"
       >
-        <span class="tk-hint-text">{{ notice.text }}</span>
+        <span class="tk-hint-text" v-truncate>{{ notice.text }}</span>
       </p>
       <template v-for="kind in (['crontab', 'launchagent'] as const)" :key="kind">
-        <p v-if="opError[kind]" class="tk-hint tk-op-error" :data-error-section="kind" :title="opError[kind]">
-          <span class="tk-hint-text">{{ opError[kind] }}</span>
+        <p v-if="opError[kind]" class="tk-hint tk-op-error" :data-error-section="kind">
+          <span class="tk-hint-text" v-truncate>{{ opError[kind] }}</span>
         </p>
       </template>
       <p v-if="crontab?.supported && crontab.error" class="tk-hint tk-sec-error" data-error-source="crontab" :title="crontab.error">
-        <span class="tk-hint-text">crontab · {{ crontab.error }}</span>
+        <span class="tk-hint-text" v-truncate>crontab · {{ crontab.error }}</span>
       </p>
       <p v-if="launchAgents?.supported && launchAgents.error" class="tk-hint tk-sec-error" data-error-source="launchagent" :title="launchAgents.error">
-        <span class="tk-hint-text">launchd · {{ launchAgents.error }}</span>
+        <span class="tk-hint-text" v-truncate>launchd · {{ launchAgents.error }}</span>
       </p>
 
       <!-- ── Failure summary ──────────────────────────────────────────────── -->
@@ -529,10 +535,10 @@ onUnmounted(() => {
       <template v-for="section in sections" :key="section.id">
         <section class="tk-section" :data-section="section.id">
           <div v-if="section.id === 'timeline'" class="tk-sec-hdr">
-            <span class="tk-sec-title">{{ t('executions.timeline.title') }}</span>
+            <span class="tk-sec-title" v-truncate>{{ t('executions.timeline.title') }}</span>
           </div>
           <div v-else-if="section.id === 'failing'" class="tk-sec-hdr">
-            <span class="tk-sec-title">{{ t('executions.only-failing') }}</span>
+            <span class="tk-sec-title" v-truncate>{{ t('executions.only-failing') }}</span>
             <span class="tk-count">{{ section.rows.length }}</span>
           </div>
           <button
@@ -542,7 +548,7 @@ onUnmounted(() => {
             @click="toggleGroup(section.id as FoldGroup)"
           >
             <span class="tk-caret">{{ openGroups[section.id as FoldGroup] ? '▾' : '▸' }}</span>
-            <span class="tk-group-title">{{ t(`executions.group.${section.id}`) }}</span>
+            <span class="tk-group-title" v-truncate>{{ t(`executions.group.${section.id}`) }}</span>
             <span v-if="section.rows.some((r) => r.item.failing)" class="tk-group-err">
               {{ t('executions.failing', { count: section.rows.filter((r) => r.item.failing).length }) }}
             </span>
@@ -584,7 +590,7 @@ onUnmounted(() => {
                   >
                     <div class="tk-line1">
                       <span class="tk-dot" :class="{ idle: !row.item.entry.enabled }" />
-                      <span class="tk-name">{{ row.item.entry.name }}</span>
+                      <span class="tk-name" v-truncate>{{ row.item.entry.name }}</span>
                       <span class="tk-tag src">cron</span>
                       <span class="tk-acts">
                         <button
@@ -605,7 +611,7 @@ onUnmounted(() => {
                       </span>
                     </div>
                     <div class="tk-line2">
-                      <span class="tk-desc">{{ describeCron(row.item.entry.schedule, tr) }}</span>
+                      <span class="tk-desc" v-truncate>{{ describeCron(row.item.entry.schedule, tr) }}</span>
                     </div>
                   </div>
 
@@ -667,7 +673,7 @@ onUnmounted(() => {
                   >
                     <div class="tk-line1">
                       <span class="tk-dot" :class="agentDotClass(row.item.agent)" />
-                      <span class="tk-name">{{ agentName(row.item.agent) }}</span>
+                      <span class="tk-name" v-truncate>{{ agentName(row.item.agent) }}</span>
                       <span v-if="row.item.agent.scope !== 'user'" class="tk-tag scope">
                         {{ t(`executions.scope.${row.item.agent.scope}`) }}
                       </span>
@@ -699,7 +705,7 @@ onUnmounted(() => {
                       </span>
                     </div>
                     <div class="tk-line2">
-                      <span class="tk-desc">{{ describeLaunchAgentSchedule(row.item.agent, tr) }}</span>
+                      <span class="tk-desc" v-truncate>{{ describeLaunchAgentSchedule(row.item.agent, tr) }}</span>
                     </div>
                   </div>
 

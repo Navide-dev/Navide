@@ -190,7 +190,7 @@ An agent integration is declared per vendor rather than threaded through the app
 
 A capability the spec leaves undeclared is treated as unsupported for that vendor and degrades gracefully; it never falls back to another vendor's behavior. This keeps a partial integration honest — a CLI can ship with spawning and install detection while resume, log reading and credential switching stay visibly unavailable until they are verified against a real installation.
 
-See [Adding a CLI vendor](../adding-a-cli-vendor.md) for the procedure, and the [CLI Extension Guide](cli-extension-guide.md) for per-vendor integration records. Credential-vault behavior is the remaining surface that vendor files cannot fully declare.
+See [Adding a CLI vendor](../adding-a-cli-vendor.md) for the procedure, and the [CLI Integration Records](cli-extension-guide.md) for per-vendor integration records. Credential-vault behavior is the remaining surface that vendor files cannot fully declare.
 
 ## Session synchronization direction
 
@@ -240,7 +240,7 @@ and capability runtime as third-party packages. Until Marketplace acquisition
 is available, the App ships a factory `navide.git` package and activates it on a
 fresh profile. A verified Marketplace version takes precedence. Removing the
 factory package records a durable opt-out; restart does not reinstall it, and
-the Extensions view is the only place that restores it.
+the Navide Plugins view is the only place that restores it.
 
 Electron main tries the selected v2 descriptor first. A load, mount, or ready
 failure retires the whole v2 Git package and selects the retained legacy

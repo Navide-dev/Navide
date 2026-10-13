@@ -3,7 +3,7 @@ import { inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { cliAccountSwitchKey, tLogin, type useCliProfiles, type CliProfile } from '../composables/useCliProfiles'
 import PortableCredentialBlock from './PortableCredentialBlock.vue'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   accountUsageFor,
   formatRemaining,
@@ -606,6 +606,7 @@ onMounted(() => void props.api.refreshCloud())
               <span
                 v-else
                 class="cli-card-id"
+                v-truncate
                 :class="{ dim: p && !rowIdentity(spec.agentKey, p.id)?.signedIn }"
               >
                 {{ cardTitle(spec.agentKey, p) }}
@@ -808,7 +809,7 @@ onMounted(() => void props.api.refreshCloud())
           >
             <div class="cli-card-head">
               <span class="cli-card-av imported">☁</span>
-              <span class="cli-card-id">{{ $t('settings.accounts.cli.imported-account') }}</span>
+              <span class="cli-card-id" v-truncate>{{ $t('settings.accounts.cli.imported-account') }}</span>
             </div>
             <span class="cli-card-meta">{{ $t('settings.accounts.cli.imported-account-hint') }}</span>
             <PortableCredentialBlock

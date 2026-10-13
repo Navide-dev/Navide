@@ -79,6 +79,7 @@ from ..log_readers.base import (
     join_text_blocks,
     user_prompt_text,
 )
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -819,7 +820,17 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("plugin-dirs", (".cursor", "plugins", "cache"), "Cursor plugin"),
+    ExtensionsSource("plugin-dirs", (".cursor", "plugins", "local"), "Cursor plugin"),
+    ExtensionsSource("hooks", (".cursor", "hooks.json"), "Cursor hook", section=("hooks",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="cursor",
     # The web quota endpoint is not evidence of the CLI's inference hosts.
     expected_hosts=(),

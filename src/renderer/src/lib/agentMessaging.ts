@@ -24,6 +24,9 @@ import { enUSMessages } from '@navide/plugin-ui/foundation'
 import { CHANNEL_PLATFORM_IDS } from '../platform/channels'
 
 export const MSG_START = '---MSG-START---'
+/** A line `---ATTACH--- <absolute path>` in an MSG block to a chat sender sends that
+ *  file (backend channels/media.py checks the path; this side only explains it). */
+export const ATTACH_MARKER = '---ATTACH---'
 export const MSG_END = '---MSG-END---'
 /** Opening token of everything Navide injects into a pane, whichever form it
  *  takes. See isInjectedMessageText(). */
@@ -51,6 +54,9 @@ export const MSG_FORMAT_PREFIX = `${MSG_INJECTED_PREFIX} message not recognized`
  *  forwarded by Navide in its place. Its own prefix because the parent must be
  *  able to tell a stand-in from the child's own words before acting on it. */
 export const MSG_FALLBACK_PREFIX = `${MSG_INJECTED_PREFIX} fallback report`
+/** Told to a parent after a relaunch: which of its spawned panes were working
+ *  when the app closed, and which of them are back. */
+export const MSG_INTERRUPTED_PREFIX = `${MSG_INJECTED_PREFIX} children interrupted`
 
 /** True when a turn's text is something Navide injected rather than something
  *  the agent wrote — a CLI reader echoes an injection back as a user record,
@@ -396,10 +402,14 @@ export function renderEnvelope(
       ? `to: ${sender} re: ${opts.correlationId}`
       : `to: ${sender}`
     const echo = opts.correlationId ? 're 欄位請原樣帶回，' : ''
+    const attach = isChannelTarget(sender)
+      ? `要傳檔案回聊天室，就在訊息內容中單獨一行寫 ${ATTACH_MARKER} <絕對路徑>（同樣頂格；` +
+        '不傳金鑰類檔案）。'
+      : ''
     lines.push(
       `（回覆方式：第一行完整寫成 ${MSG_START} ${head}，下一行起為訊息內容，` +
         `最後一行寫 ${MSG_END}；to: 必須與 ${MSG_START} 同一行，不可換行；` +
-        `${echo}三行都要頂格，不可縮排，也不可放進 code block。` +
+        `${echo}三行都要頂格，不可縮排，也不可放進 code block。${attach}` +
         `只是「收到」或沒有新資訊就不要回信，純確認請改用 cli_send 的 kind="ack"（不會打擾對方）；` +
         `已用 cli_send 送出的內容不要再用 MSG 區塊重述）`,
     )
@@ -526,6 +536,27 @@ export function renderFallbackReport(turnText: string): string {
   return (
     `${MSG_FALLBACK_PREFIX} — 這個 pane 的 turn 結束時沒有輸出 ${MSG_START} 區塊，` +
     `以下是它這個 turn 的最後輸出，由 Navide 代為轉交，不是它自己寫的回報：\n\n${tail}`
+  )
+}
+
+/** Notice for a parent whose spawned panes a relaunch interrupted. Resuming
+ *  only brings the conversation back — none of them was told to carry on, so
+ *  whether to continue or re-dispatch is the parent's decision. Returns '' for
+ *  no children. */
+export function renderInterruptedChildrenNotice(
+  children: readonly { name: string; resumed: boolean }[],
+): string {
+  if (children.length === 0) return ''
+  const lines = children.map((c) =>
+    c.resumed
+      ? `- ${c.name}：已接回（對話已恢復，停在提示字元）`
+      : `- ${c.name}：未接回（仍是還原佔位，超過自動接回上限或接回失敗）`,
+  )
+  return (
+    `${MSG_INTERRUPTED_PREFIX} — Navide 重新啟動時，你派出的以下 pane 正在工作中，回合被中斷：\n` +
+    `${lines.join('\n')}\n\n` +
+    `已接回的 pane 沒有自動續跑。要它繼續，用 cli_send 叫它繼續；也可以改派或重派。` +
+    `它被叫繼續之後，回合結束時仍會回報給你。`
   )
 }
 

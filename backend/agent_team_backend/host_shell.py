@@ -968,6 +968,12 @@ async def run_public_allowlisted_text(
                 "GH_PAGER": "cat",
                 "GH_EDITOR": "true",
                 "GLAB_PAGER": "cat",
+                # The fresh isolated home drops glab's update-check throttle, so
+                # each run would otherwise call gitlab.com for a version check
+                # and a telemetry event before doing any work (seconds per call,
+                # past the timeout under load).
+                "GLAB_CHECK_UPDATE": "false",
+                "GLAB_SEND_TELEMETRY": "false",
                 "EDITOR": "true",
                 "VISUAL": "true",
             }

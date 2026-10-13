@@ -7,12 +7,17 @@ be running for these to pass, and none of them touches the real Keychain.
 from __future__ import annotations
 
 import asyncio
+import logging
 import base64
 import os
 import json
+import sys
+import threading
+import traceback
 
 import pytest
 
+import agent_team_backend
 from agent_team_backend import (
     agent_messaging,
     app,
@@ -456,6 +461,9 @@ async def test_authenticates_and_publishes_the_roster():
         hello = conn.hellos[0]
         assert hello["credential"] == CONFIG.token
         assert hello["client"] == server_link.CLIENT_NAME
+        # The server records the last version each device reported, which is
+        # how a protocol migration knows whether old builds are still online.
+        assert hello["clientVersion"] == agent_team_backend.__version__
         assert hello["deviceName"] == "test-box"
         assert hello["deviceId"]
         assert link.member_id == "m1"
@@ -632,6 +640,40 @@ async def test_roster_additions_renames_and_removals_are_published():
         settled = (len(conn.upserts), len(conn.syncs), len(conn.removes))
         await asyncio.sleep(0.2)
         assert (len(conn.upserts), len(conn.syncs), len(conn.removes)) == settled
+    finally:
+        await link.stop()
+
+
+async def test_a_session_the_server_no_longer_has_counts_as_removed(caplog):
+    # The server forgot the session (its own cleanup, a restart): SESSION_GONE is
+    # the outcome remove wanted, not a failure to retry on every sweep (7304
+    # warnings in three days on an installed build).
+    def session_gone(conn: "FakeConnection", message: dict) -> dict | None:
+        if message.get("type") == "sessions.remove":
+            conn.removes.append(message.get("payload") or {})
+            return {
+                "id": message["id"],
+                "type": "sessions.remove.result",
+                "ok": False,
+                "error": {"code": "SESSION_GONE", "message": "no such session"},
+            }
+        return default_responder(conn, message)
+
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer(responder=session_gone)
+    link = make_link(server)
+    await link.start()
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        conn = server.opened[0]
+        caplog.set_level(logging.WARNING, logger="agent_team_backend.server_link")
+        agent_messaging.unregister("p1")
+        link.notify_roster_changed()
+        await _until(lambda: bool(conn.removes))
+        link.notify_roster_changed()
+        await asyncio.sleep(0.3)
+        assert len(conn.removes) == 1
+        assert not [r for r in caplog.records if "sessions.remove" in r.getMessage()]
     finally:
         await link.stop()
 
@@ -849,10 +891,35 @@ def broadcasts(monkeypatch):
     return events
 
 
+#: How long a test waits for its link to come up, before the link is anything
+#: the test asserts about. Not `_until`'s 3s: the hello waits on the trust
+#: record, which on Windows is read and written through DPAPI
+#: (CryptProtectData, crypt32), and that service's latency spikes on the
+#: runner. Run 38180394147 measured this wait at 3.1s and 7.1s, against a
+#: median of 0.1s for the file, in a window where loading the system root
+#: store took 2.6s (0.4s otherwise) while tests touching no crypto kept their
+#: usual times and the CPU sat at 5%. What a test asserts keeps the 3s.
+CONNECT_TIMEOUT_S = 20.0
+
+
+def _thread_stacks() -> str:
+    """Every thread's stack, so a link that never came up says where it waited."""
+    names = {thread.ident: thread.name for thread in threading.enumerate()}
+    return "\n".join(
+        f"--- {names.get(ident, ident)}\n" + "".join(traceback.format_stack(frame))
+        for ident, frame in sys._current_frames().items()
+    )
+
+
 async def _connected(server: FakeServer, **kwargs) -> ServerLink:
     link = make_link(server, **kwargs)
     await link.start()
-    await _until(lambda: bool(server.opened and server.opened[0].syncs))
+    try:
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
+    except AssertionError:
+        raise AssertionError(
+            f"the link did not come up within {CONNECT_TIMEOUT_S}s:\n{_thread_stacks()}"
+        ) from None
     return link
 
 
@@ -871,6 +938,12 @@ async def test_outbound_send_goes_over_the_link():
         sent = server.opened[0].sends
         assert len(sent) == 1
         signature = sent[0].pop("sig")
+        # And a v2 signature beside it, covering the send time (plan 797ad7 B4;
+        # test_message_sig2 has the rest).
+        assert device_signing.verify_message_v2(
+            sent[0].pop("sig2"), public_key_b64=device_signing.public_key(), msg_key="pa:mcp:1",
+            from_device=link._device_id, to_device="dev-b", kind="text", body="ship it",
+        ) is not None
         assert sent == [
             {
                 "to": {"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
@@ -1226,6 +1299,29 @@ async def test_a_refused_delivery_is_acked_as_failed(broadcasts):
             "msgKey": "pa:mcp:deadbeef",
             "state": "failed",
             "reason": "rate-limit",
+            "paneId": "p1",
+        }
+    finally:
+        await link.stop()
+
+
+async def test_an_unconfirmed_delivery_is_acked_as_delivered_with_its_reason(broadcasts):
+    """The text went in but the CLI has not shown it yet. "failed" would make
+    the far sender resend work that may already be running, so the ack says
+    delivered and carries the caveat as its reason."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: bool(broadcasts))
+        link.note_delivery_result("pa:mcp:deadbeef", False, '{"key": "delivery-unconfirmed"}')
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks[0] == {
+            "msgKey": "pa:mcp:deadbeef",
+            "state": "delivered",
+            "reason": "delivery-unconfirmed",
             "paneId": "p1",
         }
     finally:
@@ -2366,3 +2462,921 @@ async def test_writing_a_policy_with_no_server_says_so_instead_of_failing_silent
     reply = session.websocket.sent[0]
     assert reply["ok"] is False
     assert reply["error"]["code"] == "P2P_NOT_CONFIGURED"
+
+
+# ---- delivery that is always answered ---------------------------------------
+#
+# A relayed message used to be able to end in silence: the receiver swallowed an
+# exception or a lost ack, the sender had no way to ask afterwards, and a
+# message relayed from a printed MSG block never settled in the sending window
+# even when it was delivered. Each test below reproduces one of those.
+
+
+def _events(monkeypatch) -> list[dict]:
+    """Every broadcast, unfiltered — these tests are about the ones that settle rows."""
+    events: list[dict] = []
+
+    async def fake_broadcast(event: dict, **_kwargs) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(app, "broadcast", fake_broadcast)
+    return events
+
+
+def _with_messages_get(states: dict[str, str], gets: list[str]):
+    """default_responder plus `messages.get`, answering from *states*."""
+
+    def responder(conn: "FakeConnection", message: dict) -> dict | None:
+        if message.get("type") == "messages.get":
+            key = (message.get("payload") or {}).get("msgKey")
+            gets.append(key)
+            if key not in states:
+                return {
+                    "id": message["id"],
+                    "type": "messages.get.result",
+                    "ok": False,
+                    "error": {"code": "NOT_FOUND", "message": "no such message"},
+                }
+            return _ok(
+                message,
+                {"message": {"msgKey": key, "state": states[key], "reason": None}},
+            )
+        return default_responder(conn, message)
+
+    return responder
+
+
+async def test_a_message_whose_handling_raises_is_acked_as_failed(monkeypatch, broadcasts):
+    """Before: the spawned handler died, nothing was logged, nothing was acked."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+
+    def keychain_trouble(*_args, **_kwargs):
+        raise RuntimeError("keychain write failed")
+
+    monkeypatch.setattr(trust_store, "note_remote_command", keychain_trouble)
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: bool(conn.acks))
+        assert conn.acks == [
+            {
+                "msgKey": "pa:mcp:deadbeef",
+                "state": "failed",
+                "reason": server_link.REASON_RECEIVER_ERROR,
+            }
+        ]
+        assert broadcasts == []
+    finally:
+        await link.stop()
+
+
+async def test_a_trust_record_that_will_not_save_does_not_fail_the_message(monkeypatch, broadcasts):
+    """2026-10-10: the record outgrew the Keychain, every save raised, and every
+    relayed message was acked failed/receiver-error instead of delivered."""
+    from agent_team_backend.credential_vault import CredentialVaultError
+
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+
+    def refuse(_state):
+        raise CredentialVaultError("keychain write failed for 'Navide secret navide-device-trust'")
+
+    monkeypatch.setattr(trust_store, "_write", refuse)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts))
+        assert not any(a.get("state") == "failed" for a in conn.acks)
+    finally:
+        await link.stop()
+
+
+async def test_a_resent_message_that_was_already_answered_is_answered_again(broadcasts):
+    """The server re-pushes a key only when its sender sent it again, which a
+    sender does when it never heard back: the first answer was lost."""
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: len(conn.acks) == 1)
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: len(conn.acks) == 2)
+        assert conn.acks[0] == conn.acks[1]
+        assert conn.acks[0]["state"] == "failed"
+        assert broadcasts == []
+    finally:
+        await link.stop()
+
+
+async def test_a_resent_message_still_waiting_for_its_pane_is_not_answered_twice(broadcasts):
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: bool(broadcasts))
+        await conn.push({"type": "messages.pending", "payload": _pending()})
+        await asyncio.sleep(0.1)
+        # Still in the window's queue: no answer yet, and no second delivery.
+        assert conn.acks == []
+        assert len(broadcasts) == 1
+    finally:
+        await link.stop()
+
+
+async def test_an_ack_lost_to_a_dropped_connection_is_sent_on_the_next_one(broadcasts):
+    """Before: logged as a warning and dropped; the sender waited for ever."""
+
+    def responder(conn: "FakeConnection", message: dict) -> dict | None:
+        if message.get("type") == "messages.ack" and conn is conn.server.connections[0]:
+            asyncio.get_running_loop().create_task(conn.close())
+            return None
+        return default_responder(conn, message)
+
+    server = FakeServer(responder=responder)
+    link = await _connected(server)
+    try:
+        await server.opened[0].push({"type": "messages.pending", "payload": _pending()})
+        await _until(lambda: len(server.opened) == 2 and bool(server.opened[1].acks), timeout=8.0)
+        assert server.opened[1].acks[0]["msgKey"] == "pa:mcp:deadbeef"
+        assert server.opened[1].acks[0]["state"] == "failed"
+    finally:
+        await link.stop()
+
+
+async def test_a_remote_ack_settles_the_sending_windows_row(monkeypatch):
+    """Before: only cli_check_message's table heard about it, so a message sent
+    from a printed MSG block failed with "never reported back" after 30 minutes
+    even when it had been delivered."""
+    events = _events(monkeypatch)
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push(
+            {"type": "messages.acked", "payload": {"msgKey": "pb:7", "state": "delivered"}}
+        )
+        await conn.push(
+            {
+                "type": "messages.acked",
+                "payload": {"msgKey": "pb:8", "state": "rejected", "reason": "not-paired"},
+            }
+        )
+        await _until(
+            lambda: len([e for e in events if e["type"] == "agent_msg.delivery_result"]) == 2
+        )
+        results = [e["payload"] for e in events if e["type"] == "agent_msg.delivery_result"]
+        assert results == [
+            {"msg_key": "pb:7", "ok": True, "reason": ""},
+            {"msg_key": "pb:8", "ok": False, "reason": "rejected: not-paired"},
+        ]
+    finally:
+        await link.stop()
+
+
+async def test_an_ack_pushed_while_away_is_recovered_on_reconnect(monkeypatch):
+    """The server pushes messages.acked once; its contract says a sender that was
+    away asks with messages.get. Nothing asked."""
+    from agent_team_backend.mcp_server import server as plan_mcp
+
+    events = _events(monkeypatch)
+    gets: list[str] = []
+    states = {"pa:mcp:away": "delivered"}
+    server = FakeServer(responder=_with_messages_get(states, gets))
+    plan_mcp._record_message_sent("pa:mcp:away", "dev-b/beta/builder", "pa", "ship it")
+    link = await _connected(server)
+    try:
+        reply = await link.send_message(
+            to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
+            sender=None,
+            text="ship it",
+            msg_key="pa:mcp:away",
+        )
+        assert reply["ok"] is True
+        # The connection drops before the far side answers; the answer is
+        # pushed to nobody.
+        await server.opened[0].close()
+        await _until(lambda: "pa:mcp:away" in gets, timeout=8.0)
+        await _until(lambda: plan_mcp._mcp_message_status["pa:mcp:away"]["status"] == "delivered")
+        # The window's delivery_result is broadcast from a spawned task, so it
+        # can land after the status row: wait for it rather than race it.
+        await _until(lambda: any(
+            e["type"] == "agent_msg.delivery_result" and e["payload"]["msg_key"] == "pa:mcp:away"
+            for e in events
+        ))
+        assert "pa:mcp:away" not in link._outbound
+    finally:
+        plan_mcp._mcp_message_status.pop("pa:mcp:away", None)
+        await link.stop()
+
+
+@pytest.mark.parametrize(
+    ("roster_status", "expected_hold"),
+    [
+        ("running", server_link.HOLD_REMOTE_BUSY),
+        ("waiting", server_link.HOLD_REMOTE_UNREPORTED),
+    ],
+)
+async def test_an_unanswered_message_says_which_silence_it_is(roster_status, expected_hold):
+    """"queued" meant both "its pane is mid-turn" and "nothing over there is
+    answering" — the two cases that call for opposite responses."""
+    from agent_team_backend.mcp_server import server as plan_mcp
+
+    gets: list[str] = []
+    server = FakeServer(responder=_with_messages_get({"pa:mcp:quiet": "pending"}, gets))
+    plan_mcp._record_message_sent("pa:mcp:quiet", "dev-b/beta/builder", "pa", "hello")
+    link = await _connected(server)
+    try:
+        await link.send_message(
+            to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
+            sender=None,
+            text="hello",
+            msg_key="pa:mcp:quiet",
+        )
+        remote_roster.replace(
+            [
+                {
+                    "sessionId": "s-b",
+                    "deviceId": "dev-b",
+                    "deviceName": "far box",
+                    "workspace": "beta",
+                    "title": "builder",
+                    "paneId": "pb",
+                    "agentKey": "claude",
+                    "status": roster_status,
+                    "hostOnline": True,
+                }
+            ],
+            local_device_id="dev-local",
+        )
+        await link._reconcile(min_age_s=0.0)
+        entry = plan_mcp._mcp_message_status["pa:mcp:quiet"]
+        assert entry["status"] == "queued"
+        assert entry["hold"] == {"key": expected_hold}
+        # Still unanswered, so it is asked about again next round.
+        assert "pa:mcp:quiet" in link._outbound
+    finally:
+        plan_mcp._mcp_message_status.pop("pa:mcp:quiet", None)
+        remote_roster._reset_for_test()
+        await link.stop()
+
+
+async def test_reconciling_asks_only_about_messages_old_enough(monkeypatch):
+    gets: list[str] = []
+    server = FakeServer(responder=_with_messages_get({"pa:mcp:new": "pending"}, gets))
+    link = await _connected(server)
+    try:
+        await link.send_message(
+            to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
+            sender=None,
+            text="hi",
+            msg_key="pa:mcp:new",
+        )
+        await link._reconcile(min_age_s=server_link.RECONCILE_AFTER_S)
+        assert gets == []
+        link._outbound["pa:mcp:new"]["sent_at"] -= server_link.RECONCILE_AFTER_S
+        await link._reconcile(min_age_s=server_link.RECONCILE_AFTER_S)
+        assert gets == ["pa:mcp:new"]
+    finally:
+        await link.stop()
+
+
+async def test_a_message_the_server_no_longer_has_stops_being_asked_about():
+    gets: list[str] = []
+    server = FakeServer(responder=_with_messages_get({}, gets))
+    link = await _connected(server)
+    try:
+        await link.send_message(
+            to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
+            sender=None,
+            text="hi",
+            msg_key="pa:mcp:gone",
+        )
+        await link._reconcile(min_age_s=0.0)
+        assert gets == ["pa:mcp:gone"]
+        assert "pa:mcp:gone" not in link._outbound
+    finally:
+        await link.stop()
+
+
+# ---- token lifecycle (C1) ----------------------------------------------------
+#
+# The server issues per-device tokens; this device rotates its own on connect
+# when it still holds the legacy shared token or the server says its token is
+# older than ROTATE_AFTER_S. The new token goes to the .next slot, is read back,
+# confirmed, and only then becomes the current token, so no failure part-way
+# can leave this device without a token the server accepts.
+
+CUR = server_link.ACCESS_TOKEN_SECRET
+NXT = server_link.ACCESS_TOKEN_NEXT_SECRET
+
+
+class TokenStore:
+    """The two Keychain slots plus the sign-in generation, with switchable failures."""
+
+    def __init__(self, token: str = CONFIG.token) -> None:
+        self.slots = {CUR: token, NXT: ""}
+        self.gen = 0
+        self.writes: list[tuple[str, str | None]] = []
+        self.fail_write = False
+        self.truncate = False
+        self.read_other = False
+
+    # the ServerLink token_store interface
+    def generation(self) -> int:
+        return self.gen
+
+    def write(self, value: str | None, slot: str, expect_generation: int) -> None:
+        if expect_generation != self.gen:
+            raise server_link.StaleTokenWrite("generation moved")
+        if self.fail_write and value:
+            raise RuntimeError("keychain write failed")
+        self.writes.append((slot, value))
+        self.slots[slot] = (value[:10] if (self.truncate and value) else value) or ""
+
+    def read(self, slot: str) -> str:
+        return "something-else" if (self.read_other and slot == NXT) else self.slots[slot]
+
+    # what a user-level sign-out does
+    def sign_out(self) -> None:
+        self.gen += 1
+        self.slots = {CUR: "", NXT: ""}
+
+
+class TokenServer:
+    """Server-side token state: which tokens are live, which are pending."""
+
+    def __init__(self, live=(CONFIG.token,), *, legacy=False, age_s=10 * 86400, rotate_code=None, confirm="ok"):
+        self.live = set(live)
+        self.pending: dict[str, str] = {}
+        self.legacy = legacy
+        self.age_s = age_s
+        self.rotate_code = rotate_code
+        self.confirm = confirm  # ok | refuse | lost-after-apply | never
+        self.on_rotate = None
+        self.seq = 0
+
+    def _apply(self, new: str) -> None:
+        old = self.pending.pop(new)
+        self.live.discard(old)
+        self.live.add(new)
+        self.legacy = False
+
+    def responder(self, conn: "FakeConnection", message: dict) -> dict | None:
+        kind = message.get("type")
+        if kind == "auth.hello":
+            cred = (message.get("payload") or {}).get("credential")
+            if cred in self.pending:
+                self._apply(cred)
+            if cred not in self.live:
+                conn.hellos.append(message.get("payload") or {})
+                return {"id": message["id"], "type": "auth.hello.result", "ok": False,
+                        "error": {"code": "AUTH_REJECTED", "message": "nope"}}
+            reply = default_responder(conn, message)
+            reply["payload"].update(tokenId="legacy" if self.legacy else f"id-{cred}",
+                                    tokenAgeS=None if self.legacy else self.age_s, legacyToken=self.legacy)
+            return reply
+        if kind == "auth.token.rotate":
+            if self.on_rotate:
+                self.on_rotate()
+            if self.rotate_code:
+                return {"id": message["id"], "type": "auth.token.rotate.result", "ok": False,
+                        "error": {"code": self.rotate_code, "message": "nope"}}
+            self.seq += 1
+            new = f"nvd_rotated-{self.seq}-0123456789"
+            old = (conn.hellos[-1] or {}).get("credential") if conn.hellos else CONFIG.token
+            self.pending[new] = old
+            return _ok(message, {"token": new, "tokenId": new, "pendingUntil": "later"})
+        if kind == "auth.token.confirm":
+            new = (message.get("payload") or {}).get("tokenId")
+            if self.confirm == "refuse" or new not in self.pending:
+                self.pending.pop(new, None)
+                return {"id": message["id"], "type": "auth.token.confirm.result", "ok": False,
+                        "error": {"code": "NOT_FOUND", "message": "nope"}}
+            if self.confirm == "ok":
+                self._apply(new)
+                return _ok(message, {"tokenId": new})
+            if self.confirm == "never":
+                return None  # no answer; the connection stays up until the App stops
+            self._apply(new)  # lost-after-apply: applied, then the connection drops
+            asyncio.get_running_loop().create_task(conn.close())
+            return None
+        if kind == "auth.logout":
+            return _ok(message, {})
+        return default_responder(conn, message)
+
+
+def token_link(server: FakeServer, store: TokenStore, cleared=None) -> ServerLink:
+    return ServerLink(
+        connect=server.connect,
+        config_loader=lambda: ServerLinkConfig(url=CONFIG.url, token=store.slots[CUR], next_token=store.slots[NXT]),
+        token_clearer=(lambda: cleared.append(True)) if cleared is not None else (lambda: None),
+        token_store=store,
+        device_name="test-box",
+    )
+
+
+def _sent(conn: "FakeConnection", kind: str) -> list[dict]:
+    return [m for m in conn.sent if m.get("type") == kind]
+
+
+def _authed(server: FakeServer) -> bool:
+    return any(c.syncs for c in server.opened)
+
+
+async def _reconnect(server: FakeServer, link: ServerLink) -> None:
+    n = len(server.opened)
+    await server.opened[-1].close()
+    await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs))
+
+
+async def test_rotation_writes_next_reads_back_confirms_then_promotes():
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        # The promotion and the .next clear are two writes; wait for both before
+        # reading the order (a slow runner showed the first without the second).
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == "" and len(store.writes) >= 3)
+        conn = server.opened[0]
+        assert [w[0] for w in store.writes] == [NXT, CUR, NXT]  # next, promote, clear next
+        assert store.slots[NXT] == ""
+        assert len(_sent(conn, "auth.token.rotate")) == 1
+        assert _sent(conn, "auth.token.confirm")[0]["payload"] == {"tokenId": store.slots[CUR]}
+        await _reconnect(server, link)
+        assert server.opened[-1].hellos[-1]["credential"] == store.slots[CUR]
+    finally:
+        await link.stop()
+
+
+async def test_a_token_older_than_thirty_days_by_the_server_clock_is_rotated():
+    store, ts = TokenStore(), TokenServer(age_s=server_link.ROTATE_AFTER_S + 1)
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"))
+    finally:
+        await link.stop()
+
+
+async def test_a_young_token_and_a_server_without_an_age_are_left_alone():
+    for age in (10 * 86400, None):
+        store, ts = TokenStore(), TokenServer(age_s=age)
+        server = FakeServer(responder=ts.responder)
+        link = token_link(server, store)
+        assert await link.start() is True
+        try:
+            await _until(lambda: _authed(server))
+            await asyncio.sleep(0.05)
+            assert _sent(server.opened[0], "auth.token.rotate") == []
+            assert store.writes == []
+        finally:
+            await link.stop()
+
+
+@pytest.mark.parametrize("failure", ["truncate", "read_other", "fail_write"])
+async def test_a_bad_next_write_never_costs_the_current_token(failure):
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    setattr(store, failure, True)
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+        assert store.slots[CUR] == CONFIG.token  # untouched
+        store.truncate = store.read_other = store.fail_write = False
+        await _reconnect(server, link)  # and it still connects
+    finally:
+        await link.stop()
+
+
+async def test_a_refused_confirm_drops_next_and_keeps_the_current_token():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="refuse")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+        await _until(lambda: store.slots[NXT] == "" and len(store.writes) == 2)
+        assert store.slots[CUR] == CONFIG.token
+        ts.rotate_code = "UNKNOWN_TYPE"
+        await _reconnect(server, link)
+        assert server.opened[-1].hellos[-1]["credential"] == CONFIG.token
+    finally:
+        await link.stop()
+
+
+async def test_a_confirm_applied_but_never_answered_is_settled_by_the_next_hello():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="lost-after-apply")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        # The server applied it, the answer was lost with the connection: the old
+        # token is now refused and only .next works.
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs))
+        assert store.slots[CUR].startswith("nvd_rotated")  # promoted
+        assert store.slots[NXT] == ""
+        assert [h["credential"] for h in server.opened[-1].hellos][-2:] == [CONFIG.token, store.slots[CUR]]
+    finally:
+        await link.stop()
+
+
+async def test_an_app_stopped_between_write_and_confirm_still_connects():
+    store, ts = TokenStore(), TokenServer(legacy=True, confirm="never")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    await _until(lambda: store.slots[NXT].startswith("nvd_rotated"))
+    await link.stop()  # the App quits before any confirm answer
+    ts.confirm, ts.rotate_code = "ok", "UNKNOWN_TYPE"
+    link2 = token_link(server, store)
+    assert await link2.start() is True
+    try:
+        await _until(lambda: bool(server.opened[-1].syncs))
+        assert server.opened[-1].hellos[-1]["credential"] == CONFIG.token  # the current one still works
+        await _until(lambda: store.slots[NXT] == "")  # the unconfirmed one is dropped
+    finally:
+        await link2.stop()
+
+
+async def test_a_sign_out_during_rotation_writes_nothing_back():
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    ts.on_rotate = store.sign_out  # the user signs out while the rotate reply is in flight
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.05)
+        assert store.slots == {CUR: "", NXT: ""}
+        assert store.writes == []
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+    finally:
+        await link.stop()
+
+
+async def test_an_old_server_without_rotate_is_not_asked_again_by_this_link():
+    store, ts = TokenStore(), TokenServer(legacy=True, rotate_code="UNKNOWN_TYPE")
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _reconnect(server, link)
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[-1], "auth.token.rotate") == []
+    finally:
+        await link.stop()
+
+
+async def test_logout_on_server_sends_auth_logout_when_connected():
+    store, ts = TokenStore(), TokenServer()
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        assert await link.logout_on_server() is True
+        assert len(_sent(server.opened[0], "auth.logout")) == 1
+    finally:
+        await link.stop()
+
+
+async def test_logout_on_server_offline_is_a_quiet_false():
+    link = token_link(FakeServer(count=0), TokenStore())
+    assert await link.logout_on_server() is False
+
+
+def test_sign_out_waits_at_most_five_seconds_for_the_server():
+    assert server_link.LOGOUT_TIMEOUT_S == 5.0
+
+
+@pytest.mark.parametrize(
+    "reason, words",
+    [("password-changed", "password was changed"), ("logged-out", "signed out"),
+     ("token-revoked", "revoked from another device"), ("device-removed", "removed")],
+)
+async def test_revocation_reasons_are_explained(reason, words):
+    store, ts, cleared = TokenStore(), TokenServer(), []
+    server = FakeServer(responder=ts.responder)
+    link = token_link(server, store, cleared=cleared)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        await server.opened[0].push({"type": "auth.revoked", "payload": {"deviceId": "x", "reason": reason}})
+        await _until(lambda: bool(cleared))
+        assert words in link.terminated_reason
+    finally:
+        await link.stop()
+
+
+# ---- C1 desktop re-review: N1 (member pin), N2 (generation at config time), N3 (confirm errors)
+
+
+def _real_token_link(server: FakeServer, monkeypatch) -> ServerLink:
+    """A link on the real KeychainTokenStore and trust store (the conftest vault is a fake)."""
+    monkeypatch.setattr(server_link, "server_url", lambda: CONFIG.url)
+    return ServerLink(connect=server.connect, device_name="test-box")
+
+
+def _member_responder(ts: TokenServer, member_for):
+    def responder(conn, message):
+        reply = ts.responder(conn, message)
+        if message.get("type") == "auth.hello" and reply and reply.get("ok"):
+            reply["payload"]["memberId"] = member_for((message.get("payload") or {}).get("credential"))
+        return reply
+    return responder
+
+
+def _on_first_hello(ts: TokenServer, action):
+    fired: list = []
+
+    def responder(conn, message):
+        if message.get("type") == "auth.hello" and not fired:
+            fired.append(True)
+            action()  # a sign-out / sign-in completes while the hello is in flight
+        return ts.responder(conn, message)
+    return responder
+
+
+async def test_rotation_carries_the_member_pin_to_the_new_token(monkeypatch):
+    """N1: the rotated token is pinned to the member the old one was, before the
+    confirm, so a server naming another member for it is refused like any other."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=_member_responder(ts, lambda c: "m1" if c == CONFIG.token else "m-evil"))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: server_link.access_token().startswith("nvd_rotated"))
+        new = server_link.access_token()
+        assert trust_store.member_for_credential(CONFIG.url, new) == "m1"  # pinned before confirm (N1b: node hint kept)
+        ts.rotate_code = "UNKNOWN_TYPE"
+        await server.opened[0].close()
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos))
+        await _until(lambda: bool(link._trust_locked))
+        assert link._own_member == ""  # the renamed member is not trusted
+    finally:
+        await link.stop()
+
+
+async def test_no_rotation_without_a_pinned_member(monkeypatch):
+    """N1: with no settled member pin there is nothing to carry over, so no rotation."""
+    def locked(*_a, **_k):
+        raise trust_store.TrustStoreLocked("store locked for the test")
+
+    monkeypatch.setattr(trust_store, "adopt_own_member", locked)
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        await asyncio.sleep(0.05)
+        assert _sent(server.opened[0], "auth.token.rotate") == []
+        assert server_link.access_token() == CONFIG.token
+    finally:
+        await link.stop()
+
+
+async def test_a_confirm_error_after_the_server_applied_keeps_next(monkeypatch):
+    """N3: only NOT_FOUND means the server did not swap; any other error keeps
+    .next, and the next hello settles it (the current token was revoked)."""
+    store, ts = TokenStore(), TokenServer(legacy=True)
+    base = ts.responder
+
+    def apply_then_error(conn, message):
+        if message.get("type") == "auth.token.confirm":
+            new = (message.get("payload") or {}).get("tokenId")
+            if new in ts.pending:
+                ts._apply(new)
+            return {"id": message["id"], "type": "auth.token.confirm.result", "ok": False,
+                    "error": {"code": "INTERNAL", "message": "db hiccup"}}
+        return base(conn, message)
+
+    server = FakeServer(responder=apply_then_error)
+    link = token_link(server, store)
+    assert await link.start() is True
+    await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+    await asyncio.sleep(0.1)
+    await link.stop()
+    assert store.slots[NXT].startswith("nvd_rotated")  # kept
+    ts.rotate_code = "UNKNOWN_TYPE"
+    link2 = token_link(server, store)
+    assert await link2.start() is True
+    try:
+        await _until(lambda: any(c.syncs for c in server.opened[1:]))
+        assert store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == ""
+    finally:
+        await link2.stop()
+
+
+@pytest.mark.parametrize("kind", ["logout", "switch"])
+async def test_a_sign_change_during_hello_fences_the_rotation(kind, monkeypatch):
+    """N2: the generation is taken when the config is read, before the hello, so
+    a sign-out / sign-in finishing while the hello is in flight fences the rotation."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    act = (lambda: server_link.set_access_token(None)) if kind == "logout" else (lambda: server_link.set_access_token("tok-B"))
+    server = FakeServer(responder=_on_first_hello(ts, act))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.1)
+        assert server_link.access_token() == ("" if kind == "logout" else "tok-B")
+        assert server_link.next_access_token() == ""
+    finally:
+        await link.stop()
+
+
+async def test_a_sign_out_during_hello_fences_the_settle(monkeypatch):
+    """N2: same for promoting .next when the current token is refused."""
+    server_link.set_access_token("tok-old-revoked")
+    app.credential_vault.write_app_secret(server_link.ACCESS_TOKEN_NEXT_SECRET, "nvd_next-live")
+    ts = TokenServer(live=("nvd_next-live",))
+    server = FakeServer(responder=_on_first_hello(ts, lambda: server_link.set_access_token(None)))
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: len(server.opened[0].hellos) >= 2 if server.opened else False)
+        await asyncio.sleep(0.1)
+        assert server_link.access_token() == ""
+    finally:
+        await link.stop()
+
+
+# ---- N1b: the member pin of a retired token is forgotten (the trust record stays bounded)
+
+
+def _own_members() -> dict:
+    with trust_store._lock:
+        return dict(trust_store._load_locked()["ownMembers"])
+
+
+async def test_rotations_do_not_grow_the_member_pins(monkeypatch):
+    """Each confirmed rotation pins the new token and then forgets the old one,
+    so ownMembers keeps one entry however often the token rotates."""
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(age_s=server_link.ROTATE_AFTER_S + 1)   # every connection rotates
+    server = FakeServer(responder=ts.responder, count=8)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        seen = []
+        for _ in range(3):
+            await _until(lambda: server_link.access_token() not in seen and server_link.access_token().startswith("nvd_rotated"))
+            seen.append(server_link.access_token())
+            await _until(lambda: len(_own_members()) == 1)
+            await server.opened[-1].close()
+            await _until(lambda: bool(server.opened[-1].syncs) and server_link.access_token() not in seen, timeout=5)
+        owners = _own_members()
+        assert len(owners) == 1 and list(owners.values()) == ["m1"]
+        assert trust_store.member_for_credential(CONFIG.url, server_link.access_token()) == "m1"
+        assert trust_store.only_credential_ever(CONFIG.url, server_link.access_token()) is True
+    finally:
+        await link.stop()
+
+
+async def test_a_settled_promotion_forgets_the_old_pin(monkeypatch):
+    """Promoting .next in the hello settle forgets the refused current token's pin."""
+    server_link.set_access_token("tok-old-revoked")
+    trust_store.adopt_own_member(CONFIG.url, "tok-old-revoked", "m1")
+    app.credential_vault.write_app_secret(server_link.ACCESS_TOKEN_NEXT_SECRET, "nvd_next-live")
+    ts = TokenServer(live=("nvd_next-live",), age_s=10)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: server_link.access_token() == "nvd_next-live")
+        await _until(lambda: trust_store.member_for_credential(CONFIG.url, "tok-old-revoked") == "")
+        assert trust_store.member_for_credential(CONFIG.url, "nvd_next-live") == "m1"
+        assert len(_own_members()) == 1
+    finally:
+        await link.stop()
+
+
+async def test_a_rotation_whose_pin_does_not_fit_stops_before_the_confirm(monkeypatch):
+    """KC2R-1: if the trust record has no room to pin the rotated token, the rotation
+    stops before its confirm and the current token keeps working."""
+    original = trust_store.adopt_own_member
+
+    def full_for_rotated(url, token, member):
+        if token.startswith("nvd_rotated"):
+            raise trust_store.TrustStoreFull("no room left in the trust record")
+        return original(url, token, member)
+
+    monkeypatch.setattr(trust_store, "adopt_own_member", full_for_rotated)
+    server_link.set_access_token(CONFIG.token)
+    ts = TokenServer(legacy=True)
+    server = FakeServer(responder=ts.responder)
+    link = _real_token_link(server, monkeypatch)
+    assert await link.start() is True
+    try:
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await asyncio.sleep(0.1)
+        assert _sent(server.opened[0], "auth.token.confirm") == []
+        assert server_link.access_token() == CONFIG.token
+        assert CONFIG.token in ts.live
+    finally:
+        await link.stop()
+
+
+# ---- compatibility: behaviour against a server from before C1, and signed out
+
+
+async def test_against_an_old_server_nothing_rotates_and_nothing_is_written():
+    """A pre-C1 server's hello reply has no tokenId / tokenAgeS / legacyToken:
+    this build then behaves exactly as before — no rotate, no Keychain write."""
+    store = TokenStore()
+    server = FakeServer()  # default_responder: the old hello reply shape
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        await asyncio.sleep(0.05)
+        kinds = {m.get("type") for m in server.opened[0].sent}
+        assert not any(k.startswith("auth.token") for k in kinds)
+        assert store.writes == []
+        assert server.opened[0].hellos[0]["credential"] == CONFIG.token
+    finally:
+        await link.stop()
+
+
+async def test_against_an_old_server_logout_is_a_quiet_false():
+    """auth.logout is unknown to an old server: sign-out still erases locally."""
+
+    def old_server(conn, message):
+        if message.get("type") == "auth.logout":
+            return {"id": message["id"], "type": "auth.logout.result", "ok": False,
+                    "error": {"code": "UNKNOWN_TYPE", "message": "未註冊的 type：auth.logout"}}
+        return default_responder(conn, message)
+
+    store = TokenStore()
+    server = FakeServer(responder=old_server)
+    link = token_link(server, store)
+    assert await link.start() is True
+    try:
+        await _until(lambda: _authed(server))
+        assert await link.logout_on_server() is False
+    finally:
+        await link.stop()
+
+
+def test_signed_out_config_never_reads_the_next_slot(monkeypatch):
+    """With no token stored, load_config makes the same Keychain reads as before."""
+    monkeypatch.setattr(server_link, "access_token", lambda: "")
+
+    def must_not_read():
+        raise AssertionError("read the .next slot while signed out")
+
+    monkeypatch.setattr(server_link, "next_access_token", must_not_read)
+    assert server_link.load_config().next_token == ""
+
+
+# ---- Cloud token writes never touch the CLI account writer (user ruling 10-11)
+
+
+def _guard_vault(tmp_path):
+    from agent_team_backend.credential_vault import CredentialVault
+
+    return CredentialVault(root=tmp_path, platform="darwin", security_runner=lambda args, stdin=None: (0, ""))
+
+
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["login", "rotate", "logout"],
+)
+async def test_cloud_token_writes_never_call_the_cli_keychain_writer(path, tmp_path, monkeypatch):
+    from agent_team_backend import app as app_module
+    from agent_team_backend.credential_vault import CredentialVault
+
+    def forbidden(self, *args, **kwargs):
+        raise AssertionError("a Navide Cloud token write reached CredentialVault._keychain_write")
+
+    monkeypatch.setattr(CredentialVault, "_keychain_write", forbidden)
+    monkeypatch.setattr(app_module, "credential_vault", _guard_vault(tmp_path))
+    if path == "login":
+        # ws_handlers' sign-in stores the issued token through this function.
+        server_link.set_access_token("nvd_from-login")
+    elif path == "rotate":
+        # A link built without a token_store stores rotated tokens the same way,
+        # in both slots.
+        store = server_link.KeychainTokenStore()
+        store.write("nvd_from-rotate", NXT, store.generation())
+        store.write("nvd_from-rotate", CUR, store.generation())
+    else:
+        server_link.set_access_token(None)

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createMockBackend, flush } from './mockBackend'
-import { useChannels } from '../useChannels'
+import { chatRows, useChannels } from '../useChannels'
 
 function seed(mock: ReturnType<typeof createMockBackend>): void {
   mock.setResponse('channels.list', {
@@ -172,5 +172,106 @@ describe('useChannels', () => {
     expect(store.lastLinked.value).toBeNull()
     mock.emit('channels.linked', { platform: 'telegram', chat_id: '-5', title: 'Team', kind: 'group' })
     expect(store.lastLinked.value).toEqual({ platform: 'telegram', chat_id: '-5', title: 'Team', kind: 'group' })
+  })
+})
+
+describe('useChannels overview (Settings → Channels)', () => {
+  const pane = (name: string, exists = true) => ({
+    exists, name, qualified_name: exists ? `Agent-Team/${name}` : '', workspace_path: exists ? '/w/Agent-Team' : '',
+    display_status: exists ? 'idle' : '', agent_key: exists ? 'claude' : '',
+  })
+  const binding = (paneId: string, extra: Record<string, unknown> = {}) => ({
+    pane_id: paneId, platform: 'telegram', account: 'default', chat_id: '-100', thread_id: '', title: paneId,
+    verbosity: 'replies', parent_pane_id: '', auto: false, created_at: 1, pane: pane(paneId), ...extra,
+  })
+  const overview = {
+    ok: true,
+    bots: [{
+      platform: 'telegram', account: 'default', orphans: ['gone'],
+      chats: [
+        { chat_id: '-100', title: 'Dev', kind: 'supergroup', supports_topics: true, bindings: [
+          binding('p1', { thread_id: '50' }),
+          binding('kid', { thread_id: '51', auto: true, parent_pane_id: 'p1' }),
+          binding('gone', { thread_id: '52', pane: pane('support', false) }),
+        ] },
+        { chat_id: '-200', title: 'Quiet', kind: 'group', supports_topics: false, bindings: [] },
+      ],
+    }],
+  }
+
+  it('fetches the overview only once asked, then again on every change', async () => {
+    const mock = createMockBackend('connected')
+    seed(mock)
+    mock.setResponse('channels.overview', overview)
+    const store = useChannels(mock.backend)
+    await flush()
+    expect(mock.sent.some((s) => s.type === 'channels.overview')).toBe(false)
+    await store.loadOverview()
+    expect(store.overviewFor('telegram', 'default')?.chats.map((c) => c.chat_id)).toEqual(['-100', '-200'])
+    expect(store.overviewFor('telegram', 'other')).toBeNull()
+    mock.sent.length = 0
+    mock.emit('channels.changed', {})
+    await flush()
+    expect(mock.sent.filter((s) => s.type === 'channels.overview')).toHaveLength(1)
+  })
+
+  it('keeps an overview failure apart from the rest of the store', async () => {
+    const mock = createMockBackend('connected')
+    seed(mock)
+    mock.setResponse('channels.overview', { ok: false, error: 'boom' })
+    const store = useChannels(mock.backend)
+    await store.loadOverview()
+    expect(store.overviewError.value).toBe('boom')
+    expect(store.error.value).toBe('')
+  })
+
+  it('nests auto child topics under their parent and marks orphans', async () => {
+    const mock = createMockBackend('connected')
+    seed(mock)
+    mock.setResponse('channels.overview', overview)
+    const store = useChannels(mock.backend)
+    await store.loadOverview()
+    const [dev, quiet] = store.overviewFor('telegram', 'default')!.chats.map(chatRows)
+    expect(dev.map((r) => [r.binding.pane_id, r.orphan, r.children.map((c) => c.pane_id)])).toEqual([
+      ['p1', false, ['kid']],
+      ['gone', true, []],
+    ])
+    expect(quiet).toEqual([])
+  })
+
+  it('unbinds a batch in one request and reports each pane', async () => {
+    const mock = createMockBackend('connected')
+    seed(mock)
+    mock.setResponse('channels.unbind_many', {
+      ok: true, results: [{ pane_id: 'p1', ok: true, removed: true }, { pane_id: 'p2', ok: false, error: 'locked' }],
+    })
+    const store = useChannels(mock.backend)
+    await flush()
+    mock.sent.length = 0
+    const res = await store.unbindMany(['p1', 'p2'])
+    expect(mock.sent[0]).toMatchObject({ type: 'channels.unbind_many', payload: { pane_ids: ['p1', 'p2'] } })
+    expect(res.ok).toBe(true)
+    expect(res.data?.results.map((r) => r.ok)).toEqual([true, false])
+    expect(mock.sent.some((s) => s.type === 'channels.list')).toBe(true) // refreshed
+  })
+
+  it('jumps to a bound pane through its current id, in whichever window owns it', async () => {
+    const mock = createMockBackend('connected')
+    seed(mock)
+    mock.setResponse('channels.focus_pane', { ok: true, pane_id: 'p1-new', workspace_path: '/w/Other' })
+    const requestPaneAction = vi.fn(async () => ({ ok: true }))
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { requestPaneAction }
+    try {
+      const store = useChannels(mock.backend)
+      expect(await store.focusPane('p1')).toEqual({ ok: true })
+      expect(mock.sent.find((s) => s.type === 'channels.focus_pane')?.payload).toEqual({ pane_id: 'p1' })
+      expect(requestPaneAction).toHaveBeenCalledWith({ paneId: 'p1-new', action: 'focus' })
+      requestPaneAction.mockResolvedValueOnce({ error: 'not-found' } as never)
+      expect(await store.focusPane('p1')).toEqual({ ok: false, error: 'not-found' })
+      mock.setResponse('channels.focus_pane', { ok: false, error: 'pane not found' })
+      expect(await store.focusPane('p1')).toEqual({ ok: false, error: 'pane not found' })
+    } finally {
+      delete (window as unknown as { agentTeam?: unknown }).agentTeam
+    }
   })
 })

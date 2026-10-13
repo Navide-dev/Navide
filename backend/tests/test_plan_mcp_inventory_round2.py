@@ -866,17 +866,17 @@ async def test_prompt_list_refuses_an_unknown_id(monkeypatch: pytest.MonkeyPatch
 
 @pytest.mark.asyncio
 async def test_prompt_list_when_nothing_was_ever_saved(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Boundary: the key is absent until the user first saves, and the builtin
-    skill the app seeds then lives in the renderer, so the backend can only say
-    that much."""
+    """Boundary: the key is absent until the user first saves; the builtin
+    skill the app starts with is read from the seed both halves share."""
     monkeypatch.setattr(backend_app, "ui_settings_store", _FakeUiSettingsStore({"other": 1}))
     agent_messaging.register("pa", "caller", "/ws")
 
     result = await plan_mcp.prompt_list(_ctx())
 
-    assert result["skills"] == []
-    assert result["default_id"] == ""
-    assert result["note"] == "no prompt skills saved yet; the app seeds a builtin one on first use"
+    assert [s["id"] for s in result["skills"]] == ["advance"]
+    assert result["default_id"] == "advance"
+    assert result["note"] == "no prompt skills saved yet; this is the builtin skill the app starts with"
+    assert (await plan_mcp.prompt_list(_ctx(), id="advance"))["skill"]["prompt"]
 
 
 @pytest.mark.asyncio
@@ -907,6 +907,7 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
         "cli_token_stats",
         "memory_list",
         "cli_close_agent",
+        "cli_reclaim_agent",
         "mcp_list",
         "prompt_list",
     }
@@ -923,6 +924,10 @@ async def test_the_round_two_tools_are_registered_with_their_declared_arguments(
         "path",
     }
     assert set(tools["cli_close_agent"].inputSchema.get("properties") or {}) == {
+        "target",
+        "pane_id",
+    }
+    assert set(tools["cli_reclaim_agent"].inputSchema.get("properties") or {}) == {
         "target",
         "pane_id",
     }

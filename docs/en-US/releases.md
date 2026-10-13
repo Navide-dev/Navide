@@ -18,7 +18,7 @@ release workflow also checks that the pushed tag exactly matches the version.
 
 Packaged builds contain an `app-update.yml` generated from the `publish`
 configuration in `package.json`. Five seconds after startup, the Electron main
-process checks the stable releases in `nt-nerdtechnic/Navide`. The renderer can
+process checks the stable releases in `Navide-dev/Navide`. The renderer can
 also start a manual check from the refresh button in the left sidebar.
 
 Installing an update is always explicit: a user chooses **Update**, watches
@@ -73,7 +73,7 @@ an official release:
    `v*.*.*`; restrict tag creation and put only the release-maintainer team in
    its bypass list.
 5. Store the five signing/notarization secrets listed below. They are
-   **currently repository secrets** on `nt-nerdtechnic/Navide` (readable by the
+   **currently repository secrets** on `Navide-dev/Navide` (readable by the
    `production` Environment job); moving them into the protected Environment and
    removing the repository copies is a recommended hardening step.
 

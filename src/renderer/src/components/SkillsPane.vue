@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 
@@ -994,7 +995,7 @@ watch(
                 @click="openRow(row)"
               >
                 <span class="skill-card-head">
-                  <strong>{{ row.skill.name }}</strong>
+                  <strong v-truncate>{{ row.skill.name }}</strong>
                   <span class="skill-source-tag" :class="row.kind">{{ rowSourceLabel(row) }}</span>
                   <span
                     v-if="row.kind === 'shared' && row.skill.syncTooLarge"
@@ -1009,7 +1010,7 @@ watch(
                     :title="t('settings.skills.sync-via-blobs-hint')"
                   >{{ blobSyncBadge(row.skill) }}</span>
                 </span>
-                <span class="skill-card-desc">
+                <span class="skill-card-desc" v-truncate>
                   {{ row.skill.description || (row.kind === 'native' ? row.skill.error : '') || t('settings.skills.no-description') }}
                 </span>
                 <span class="skill-card-delivery" aria-hidden="true">

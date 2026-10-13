@@ -96,6 +96,7 @@ import os
 import time
 from pathlib import Path
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, VendorSpec
 
 MCODE_BUILD_ENV = "prod"
@@ -313,7 +314,15 @@ def identity_from_secret(secret):
     return {"email": None, "signedIn": _credential_ok(data)}
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("plugin-dirs", (".minimax", "plugins"), "MiniMax Code plugin"),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="mcode",
     # Region/environment auth routing is known; service hosts are not verified.
     expected_hosts=(),

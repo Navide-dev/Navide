@@ -28,9 +28,11 @@ import sqlite3
 import stat
 import threading
 import time
+import tomllib
 
 import psutil
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, McpWiring, SkillsWiring, VendorRuntimeContext, VendorSpec, command_text
 from ..applog import app_data_dir
 from ..skills_store import SkillsStore
@@ -739,6 +741,11 @@ _HOME_RUNTIME_DATABASE = re.compile(
 )
 
 
+#: Per pane home: the config.toml trust rows Navide seeded for it, so a
+#: removal check never counts a row Navide did not write.
+_SEEDED_TRUST_FILE = ".navide-hook-trust.json"
+
+
 class CodexHomeManager:
     """Create isolated CODEX_HOME dirs while sharing stable user config."""
 
@@ -766,6 +773,9 @@ class CodexHomeManager:
         safe_id = self._safe_home_id(home_id)
         pane_home = self.panes_root / safe_id
         pane_home.mkdir(parents=True, exist_ok=True)
+        from ..convenience_wiring import note
+
+        note("codex.pane-homes", self.panes_root, detail="per-pane CODEX_HOME directories")
         self._share_config_entries(pane_home, source)
         self._prepare_skills_view(pane_home, source / "skills")
         return pane_home
@@ -836,7 +846,10 @@ class CodexHomeManager:
             tmp = None
 
             if skills_link.is_symlink():
-                if os.readlink(skills_link) != os.fspath(view):
+                # Imported here: credential_vault imports the vendor registry.
+                from ..credential_vault import _link_target
+
+                if _link_target(os.readlink(skills_link)) != os.fspath(view):
                     skills_link.unlink()
             elif skills_link.exists():
                 log.warning("leaving real Codex skills directory unmodified: %s", skills_link)
@@ -873,12 +886,28 @@ class CodexHomeManager:
         concurrent writer beating us simply wins) and swap the pane's copy
         for the standard symlink so codex token refreshes write through to
         the shared file. Returns True when the real home gained the
-        credential."""
+        credential.
+
+        Through the convenience gate this happens once. A shared login that
+        existed and is gone was signed out outside Navide: the user gets a
+        prompt, and no pane login — least of all an older or different
+        account — takes its place."""
         real_auth = self.real_home / "auth.json"
+        from ..convenience_wiring import gate
+
+        convenience = gate()
+        try:
+            if convenience is not None and not convenience.allowed("codex.login-promote"):
+                return False
+        except Exception as err:  # noqa: BLE001 — an unread ledger never promotes
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
+            return False
         try:
             if real_auth.exists() or real_auth.is_symlink():
                 return False
             if not self.panes_root.is_dir():
+                return False
+            if convenience is not None and self._prompted_for_outside_logout(convenience, real_auth):
                 return False
             stranded = [
                 p for p in self.panes_root.glob("*/auth.json")
@@ -913,7 +942,46 @@ class CodexHomeManager:
             # will diverge on refresh until its next prepare() re-links it.
             log.warning("relinking %s to shared codex auth failed: %s", newest, err)
         log.info("promoted in-pane codex login %s -> %s", newest, real_auth)
+        if convenience is not None:
+            try:
+                convenience.note("codex.login-promote", real_auth, detail=f"from {newest.parent.name}")
+            except Exception as err:  # noqa: BLE001 — the promotion stands
+                log.warning("announcing the codex login promotion failed: %s", err)
         return True
+
+    def _prompted_for_outside_logout(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the shared login was signed out outside Navide, which is
+        told (once) instead of promoting a pane login. True as well when the
+        ledger cannot be read: no promotion then, a spawn or a quota poll
+        never fails on it."""
+        try:
+            if not self._shared_login_existed(convenience, real_auth):
+                return False
+            latest = convenience.history("codex.login-promote", limit=1)
+            if not latest or latest[0]["action"] != "prompt":
+                convenience.record(
+                    "codex.login-promote", "prompt", str(real_auth),
+                    detail=json.dumps({"agentKey": "codex", "reason": "logout"}),
+                )
+        except Exception as err:  # noqa: BLE001
+            log.warning("codex login promotion skipped: the convenience ledger failed: %s", err)
+        return True
+
+    def _shared_login_existed(self, convenience: Any, real_auth: Path) -> bool:
+        """Whether the real auth.json was there before: Navide promoted it (the
+        ledger), or a pane home still links to it."""
+        if any(t["path"] == str(real_auth) for t in convenience.listing_feature("codex.login-promote")["targets"]):
+            return True
+        from ..credential_vault import _link_target
+
+        for link in self.panes_root.glob("*/auth.json"):
+            try:
+                # Windows reads a link back as an extended-length path.
+                if link.is_symlink() and Path(_link_target(os.readlink(link))) == real_auth:
+                    return True
+            except OSError:
+                continue
+        return False
 
     @staticmethod
     def _remove_generated_path(path: Path) -> None:
@@ -936,46 +1004,82 @@ class CodexHomeManager:
         are seeded, and only when the pane file is byte-identical. Returns
         the number of entries appended.
         """
-        pane_hooks = pane_home / "hooks.json"
-        real_hooks = self.real_home / "hooks.json"
         config = self.real_home / "config.toml"
-        try:
-            if not (pane_hooks.is_file() and real_hooks.is_file()):
-                return 0
-            if pane_hooks.read_bytes() != real_hooks.read_bytes():
-                return 0
-            text = config.read_text(encoding="utf-8")
-        except OSError:
-            return 0
-        real_prefix = f"{real_hooks}:"
-        pane_prefix = f"{pane_hooks}:"
-        keys = re.findall(r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*$', text, flags=re.MULTILINE)
-        # Header → the trusted_hash line that follows it.
-        blocks = re.findall(
-            r'^\[hooks\.state\."((?:[^"\\]|\\.)*)"\]\s*\n\s*trusted_hash\s*=\s*("[^"\n]*")',
-            text, flags=re.MULTILINE,
-        )
-        existing = {_toml_unescape(k) for k in keys}
-        additions = []
-        for key, hashed in blocks:
-            key = _toml_unescape(key)
-            if not key.startswith(real_prefix):
-                continue
-            new_key = pane_prefix + key[len(real_prefix):]
-            if new_key in existing:
-                continue
-            existing.add(new_key)
-            additions.append(f'[hooks.state."{_toml_escape(new_key)}"]\ntrusted_hash = {hashed}\n')
+        trust = self._pane_hook_trust(pane_home)
+        additions = [
+            f'[hooks.state."{_toml_escape(key)}"]\ntrusted_hash = "{_toml_escape(hashed)}"\n'
+            for key, hashed in trust.items()
+        ]
+        seeded = list(trust)
         if not additions:
             return 0
-        lead = "" if text.endswith("\n") else "\n"
         try:
+            lead = "" if config.read_text(encoding="utf-8").endswith("\n") else "\n"
             with config.open("a", encoding="utf-8") as f:
                 f.write(lead + "\n" + "\n".join(additions))
         except OSError as err:
             log.warning("seeding codex hook trust for %s failed: %s", pane_home, err)
             return 0
+        self._remember_seeded_trust(pane_home, seeded)
         return len(additions)
+
+    def hook_trust_override(self, pane_home: Path) -> str:
+        """The rows `seed_hook_trust` would write, as one ``-c`` value instead.
+
+        Phase 3: ``hooks.state={"<pane key>"={trusted_hash="<hash>"}, ...}``
+        given on the command line merges with the rows persisted in
+        config.toml (codex 0.160), so the pane starts trusted and the user's
+        file is never written. Only the inline-table form does; the dotted
+        ``hooks.state."<key>".trusted_hash=`` is ignored. '' when there is
+        nothing to carry.
+        """
+        rows = [
+            f"{_toml_inline_key(key)}={{trusted_hash={_toml_inline_key(hashed)}}}"
+            for key, hashed in self._pane_hook_trust(pane_home).items()
+        ]
+        return "hooks.state={" + ",".join(rows) + "}" if rows else ""
+
+    def _pane_hook_trust(self, pane_home: Path) -> dict[str, str]:
+        """The user's trusted rows for the real hooks.json, re-keyed on the
+        pane home's mirror of it: only when the pane file is byte-identical,
+        and never a row config.toml already holds for that key."""
+        pane_hooks = pane_home / "hooks.json"
+        real_hooks = self.real_home / "hooks.json"
+        try:
+            if not (pane_hooks.is_file() and real_hooks.is_file()):
+                return {}
+            if pane_hooks.read_bytes() != real_hooks.read_bytes():
+                return {}
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        real_prefix = f"{real_hooks}:"
+        pane_prefix = f"{pane_hooks}:"
+        trust: dict[str, str] = {}
+        for key, hashed in rows.items():
+            if hashed is None or not key.startswith(real_prefix):
+                continue
+            new_key = pane_prefix + key[len(real_prefix):]
+            if new_key not in rows:
+                trust[new_key] = hashed
+        return trust
+
+    @staticmethod
+    def _seeded_trust(pane_home: Path) -> list[str]:
+        """The trust rows `seed_hook_trust` wrote for this home; [] if unknown."""
+        try:
+            keys = json.loads((pane_home / _SEEDED_TRUST_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [k for k in keys if isinstance(k, str)] if isinstance(keys, list) else []
+
+    def _remember_seeded_trust(self, pane_home: Path, keys: list[str]) -> None:
+        known = self._seeded_trust(pane_home)
+        merged = known + [k for k in keys if k not in known]
+        try:
+            (pane_home / _SEEDED_TRUST_FILE).write_text(json.dumps(merged), encoding="utf-8")
+        except OSError as err:
+            log.warning("recording seeded codex hook trust for %s failed: %s", pane_home, err)
 
     def find_session_home(self, resume_id: str) -> Path | None:
         """Locate the CODEX_HOME that physically holds this session, if any.
@@ -1205,6 +1309,94 @@ class CodexHomeManager:
         if auth.is_file() and not auth.is_symlink():
             return False
         shutil.rmtree(pane_home)
+        self._drop_hook_trust(pane_home)
+        return True
+
+    def _drop_hook_trust(self, pane_home: Path) -> None:
+        """Remove the ``hooks.state`` rows `seed_hook_trust` wrote for a home.
+
+        They are keyed on that home's path, so once it is gone they can never
+        match again and would only pile up in the user's config.toml.
+        """
+        self._drop_trust_rows(f"{pane_home / 'hooks.json'}:")
+
+    def drop_all_hook_trust(self) -> None:
+        """Remove every ``hooks.state`` row seeded for any pane home."""
+        if not self._drop_trust_rows(f"{self.panes_root}{os.sep}"):
+            return
+        for record in self.panes_root.glob(f"*/{_SEEDED_TRUST_FILE}"):
+            record.unlink(missing_ok=True)
+
+    def any_pane_hook_trust(self) -> bool:
+        """Whether config.toml still holds a ``hooks.state`` row keyed on any
+        pane home — what `drop_all_hook_trust` takes out."""
+        try:
+            text = (self.real_home / "config.toml").read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return False
+        prefix = f"{self.panes_root}{os.sep}"
+        return any(key.startswith(prefix) for key in _hook_state_rows(text))
+
+    def hook_trust_intact(self, exclude: Path | None = None) -> bool:
+        """Whether every live pane home still has the trust rows it was seeded.
+
+        Only the rows `seed_hook_trust` recorded writing are checked: a hook
+        the user trusted later, in plain Codex or behind a pane's symlinked
+        hooks.json, was never seeded and is not missing. False means a seeded
+        row was deleted outside Navide. ``exclude`` is the home about to be
+        seeded.
+        """
+        try:
+            rows = _hook_state_rows((self.real_home / "config.toml").read_text(encoding="utf-8"))
+            homes = [p for p in self.panes_root.iterdir() if p.is_dir() and not p.is_symlink()]
+        except (OSError, ValueError):
+            # Unreadable or not TOML: nothing says a row was deleted.
+            return True
+        for home in homes:
+            if exclude is not None and home == exclude:
+                continue
+            if any(key not in rows for key in self._seeded_trust(home)):
+                return False
+        return True
+
+    def _drop_trust_rows(self, prefix: str) -> bool:
+        """Returns False when the rewrite failed and the rows are still there."""
+        config = self.real_home / "config.toml"
+        try:
+            text = config.read_text(encoding="utf-8")
+        except OSError:
+            return True
+        # Textual, to leave the rest of the file byte-identical, but any
+        # spelling TOML allows for the header and value matches.
+        block = re.compile(
+            r'\n*^\[[ \t]*hooks[ \t]*\.[ \t]*state[ \t]*\.[ \t]*(' + _TOML_KEY + r')[ \t]*\][ \t]*(?:#[^\n]*)?\n'
+            r'\s*trusted_hash[ \t]*=[ \t]*(?:' + _TOML_KEY + r')[ \t]*(?:#[^\n]*)?(?:\n|\Z)',
+            flags=re.MULTILINE,
+        )
+        kept = block.sub(
+            lambda m: "\n" if (_toml_key(m.group(1)) or "").startswith(prefix) else m.group(0),
+            text,
+        )
+        if kept == text:
+            return True
+        # Through the resolved path: a dotfiles symlink stays a symlink.
+        target = config.resolve()
+        tmp = target.with_name(target.name + ".navide-tmp")
+        try:
+            # Private from the first byte, then the original's mode: the file
+            # can carry secrets, and a default-umask rewrite would widen it.
+            _discard_temp(tmp)
+            with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w", encoding="utf-8") as f:
+                f.write(kept)
+            shutil.copymode(target, tmp)
+            os.replace(tmp, target)
+        except OSError as err:
+            try:
+                _discard_temp(tmp)
+            except OSError as cleanup:
+                log.warning("removing %s failed: %s", tmp, cleanup)
+            log.warning("dropping codex hook trust under %s failed: %s", prefix, err)
+            return False
         return True
 
     def sweep_orphans(self) -> list[str]:
@@ -1288,9 +1480,64 @@ class CodexHomeManager:
 _CODEX_PANES_ROOT_NAME = ".codex-panes"
 
 
+def _discard_temp(path: Path) -> None:
+    """Remove a temp file of ours. Windows refuses to delete a read-only
+    file, and the temp file takes the original's mode before the replace.
+    Only there, and never through a link: chmod follows one, onto a file
+    that is not ours."""
+    from .. import osplat
+
+    try:
+        path.unlink(missing_ok=True)
+    except PermissionError:
+        if osplat.paths.enforces_posix_modes() or path.is_symlink():
+            raise
+        os.chmod(path, 0o600)
+        path.unlink(missing_ok=True)
+
+
+def _hook_state_rows(text: str) -> dict[str, str | None]:
+    """Every ``hooks.state`` table in config.toml, by key, to its
+    ``trusted_hash`` — the only value seeding copies — else None. Read as
+    TOML, so any legal spelling of a header counts. Seeding and its presence
+    checks all read the file through this one parser; a file that is not
+    TOML raises ``ValueError``."""
+    state = tomllib.loads(text).get("hooks", {})
+    state = state.get("state", {}) if isinstance(state, dict) else {}
+    if not isinstance(state, dict):
+        return {}
+    rows: dict[str, str | None] = {}
+    for key, table in state.items():
+        trusted = table.get("trusted_hash") if isinstance(table, dict) else None
+        rows[key] = trusted if isinstance(trusted, str) else None
+    return rows
+
+
+#: A quoted TOML key or string: basic ("...", with escapes) or literal ('...').
+_TOML_KEY = r'"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\''
+
+
+def _toml_key(quoted: str) -> str | None:
+    """The value of one quoted TOML key, or None when it does not parse."""
+    try:
+        value = tomllib.loads(f"k = {quoted}")["k"]
+    except ValueError:
+        return None
+    return value if isinstance(value, str) else None
+
+
 def _toml_escape(value: str) -> str:
     """Quoted-key body for a TOML basic string (paths: backslash and quote)."""
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _toml_inline_key(value: str) -> str:
+    """`value` quoted for an inline ``-c`` table: a literal string, so it
+    adds no `"` for cmd.exe to mangle (see codex_session_hooks._toml_literal);
+    a basic string only when the value itself holds a `'`."""
+    if "'" not in value and "\n" not in value:
+        return "'" + value + "'"
+    return '"' + _toml_escape(value) + '"'
 
 
 def _toml_unescape(value: str) -> str:
@@ -1615,7 +1862,16 @@ def _android_network_env() -> dict[str, str]:
     }
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("codex-config", (".codex", "config.toml"), "Codex plugin", section=("plugins",)),
+    ExtensionsSource("hooks", (".codex", "hooks.json"), "Codex hook", section=("hooks",), native_consent="hook-trust"),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="codex",
     spawn_env_extra=_android_network_env,
     # Built-in OpenAI API and ChatGPT service defaults (verified 2026-09-21):

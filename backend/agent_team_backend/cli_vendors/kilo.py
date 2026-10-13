@@ -22,6 +22,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -323,7 +324,17 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("code-files", (".config", "kilo", "plugins"), "Kilo plugin"),
+    ExtensionsSource("npm-list", (".config", "kilo", "kilo.json"), "Kilo plugin", section=("plugin",)),
+    ExtensionsSource("npm-list", (".config", "kilo", "kilo.jsonc"), "Kilo plugin", section=("plugin",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="kilo",
     # OpenCode fork with arbitrary providers; quota base is not a CLI host set.
     expected_hosts=(),

@@ -23,7 +23,7 @@ import type { PlanMeta, ReviewNote, PlanTodo, TodoStatus, PlanStage } from './pl
 import type { PlanStore, PlanCtx } from './planStore'
 import { plansShell, type PlansTransport } from './transport'
 import { sharePlanToGit } from './planShare'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { CLI_AGENT_SPECS } from './agentSpecs'
 import { writePlanMeta } from './usePlanFile'
 
@@ -1021,6 +1021,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
         :aria-label="t('pane.plans.review-approve')"
         @click="approve"
       >✓</button>
+      <slot name="actions" />
       <button
         class="prt-icon-btn prt-overflow-btn" data-test="review-notes-overflow"
         :class="{ 'prt-icon-btn--on': overflowOpen }"
@@ -1260,7 +1261,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
           </template>
           <template v-else>
             <div class="prt-note-text">
-              <span v-if="note.anchor" class="prt-note-anchor" :data-test="`review-note-anchor-${note.id}`">{{ note.anchor }}</span>{{ note.text }}
+              <span v-if="note.anchor" class="prt-note-anchor" v-truncate :data-test="`review-note-anchor-${note.id}`">{{ note.anchor }}</span>{{ note.text }}
             </div>
             <div v-if="note.reply" class="prt-note-reply" :data-test="`review-note-reply-${note.id}`">{{ note.reply }}</div>
           </template>
@@ -1288,7 +1289,7 @@ defineExpose({ cycleTodo, toggleSkipTodo, startNoteWithAnchor, closeActiveOverla
         </template>
       </div>
       <div class="prt-new">
-        <span v-if="pendingAnchor" class="prt-note-anchor prt-note-anchor--pending">
+        <span v-if="pendingAnchor" class="prt-note-anchor prt-note-anchor--pending" v-truncate>
           {{ pendingAnchor }}
           <button
             class="prt-anchor-clear"

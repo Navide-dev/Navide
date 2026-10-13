@@ -5,6 +5,7 @@ import { ref } from 'vue'
 
 vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('@navide/plugin-ui/foundation', () => ({
+  vTruncate: {},
   useNotify: () => ({ toast: vi.fn(), alert: vi.fn(), confirm: vi.fn(async () => false) }),
 }))
 

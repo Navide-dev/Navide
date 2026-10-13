@@ -5,6 +5,7 @@
 // xlsx → per-sheet tables behind tabs, mirroring the CsvPreview table styling.
 import { onMounted, ref } from 'vue'
 import type { useBackend } from '../../composables/useBackend'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
   workspacePath: string
@@ -95,7 +96,7 @@ onMounted(async () => {
         <table class="offp-table">
           <tbody>
             <tr v-for="(row, ri) in sheets[activeSheet]?.rows ?? []" :key="ri">
-              <td v-for="(cell, ci) in row" :key="ci" class="offp-td">{{ cell }}</td>
+              <td v-for="(cell, ci) in row" :key="ci" class="offp-td" v-truncate>{{ cell }}</td>
             </tr>
           </tbody>
         </table>

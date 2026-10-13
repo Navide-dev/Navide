@@ -16,6 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import pipeline_graph as pg
 from .applog import app_data_dir
 from .db import DB_FILENAME, Database
 
@@ -535,6 +536,7 @@ class StagesStore:
                 "name": p["name"],
                 "builtin": p.get("builtin", False),
                 "stage_count": len(p.get("stages", [])),
+                "has_graph": "graph" in p,
             }
             for p in doc.get("pipelines", [])
         ]
@@ -572,12 +574,21 @@ class StagesStore:
                 if not stage.get("slots"):
                     raise ValueError(f"stage must have at least one slot: {sid}")
             seen.add(pid)
-            clean_pipelines.append({
+            clean: dict[str, Any] = {
                 "id": pid,
                 "name": str(raw.get("name") or pid),
                 "builtin": bool(raw.get("builtin", False)),
                 "stages": migrated_stages,
-            })
+            }
+            graph = raw.get("graph")
+            if graph is not None:
+                errors = pg.validate_graph(graph)
+                if errors:
+                    raise ValueError(f"invalid graph in pipeline {pid}: {'; '.join(errors)}")
+                clean["graph"] = graph
+                # The graph is authoritative; re-derive so the two cannot disagree.
+                clean["stages"] = pg.derive_stages_from_graph(graph, migrated_stages)
+            clean_pipelines.append(clean)
         if active_pipeline_id not in seen:
             active_pipeline_id = clean_pipelines[0]["id"]
         doc = {
@@ -675,6 +686,8 @@ class StagesStore:
                 pipeline["stages"] = default_maintenance_stages()
             else:
                 raise ValueError(f"no seed data for builtin pipeline: {pipeline_id!r}")
+            # Restoring the seed restores its shape too: the seeds are linear.
+            pipeline.pop("graph", None)
             self._write_doc(doc)
         return {
             "id": pipeline["id"],
@@ -730,6 +743,10 @@ class StagesStore:
                         if slot.get("role_key") == old_key:
                             slot["role_key"] = new_key
                             changed = True
+                for node in _graph_slot_configs(pipeline):
+                    if node.get("roleKey") == old_key:
+                        node["roleKey"] = new_key
+                        changed = True
                 if changed:
                     touched.append(pipeline.get("id", ""))
             if touched:
@@ -760,6 +777,11 @@ class StagesStore:
                         if key and key not in valid_role_keys:
                             slot["role_key"] = ""
                             changed = True
+                for node in _graph_slot_configs(pipeline):
+                    key = node.get("roleKey") or ""
+                    if key and key not in valid_role_keys:
+                        node["roleKey"] = ""
+                        changed = True
                 if changed:
                     touched.append(pipeline.get("id", ""))
             if touched:
@@ -788,12 +810,15 @@ class StagesStore:
             pipeline = self._get_pipeline(doc, pipeline_id)
             stages: list[dict[str, Any]] = pipeline.setdefault("stages", [])
             idx = next((i for i, s in enumerate(stages) if s.get("id") == sid), -1)
+            self._require_stage_editable(pipeline)
             if idx >= 0:
                 updated = {**stages[idx], **data}
                 stages[idx] = updated
+                _resync_linear_graph(pipeline)
                 self._write_doc(doc)
                 return updated
             stages.append(data)
+            _resync_linear_graph(pipeline)
             self._write_doc(doc)
             return data
 
@@ -815,7 +840,9 @@ class StagesStore:
             for s in stages:
                 if s["id"] not in mentioned:
                     reordered.append(s)
+            self._require_stage_editable(pipeline)
             pipeline["stages"] = reordered
+            _resync_linear_graph(pipeline)
             self._write_doc(doc)
             return reordered
 
@@ -829,7 +856,9 @@ class StagesStore:
                 raise KeyError(f"stage not found: {id}")
             if not new_stages:
                 raise ValueError("cannot delete the last remaining stage")
+            self._require_stage_editable(pipeline)
             pipeline["stages"] = new_stages
+            _resync_linear_graph(pipeline)
             self._write_doc(doc)
             return new_stages
 
@@ -844,8 +873,136 @@ class StagesStore:
                 pipeline["stages"] = default_maintenance_stages()
             else:
                 pipeline["stages"] = []
+            pipeline.pop("graph", None)
             self._write_doc(doc)
             return pipeline["stages"]
+
+    # ── Graph (optional, authoritative when present) ──────────────────────────
+
+    @staticmethod
+    def _require_stage_editable(pipeline: dict[str, Any]) -> None:
+        graph = pipeline.get("graph")
+        if graph is not None and not pg.is_linear_graph(graph):
+            raise GraphNonLinearError(
+                "this pipeline has gates, reject loops or cross-layer edges; "
+                "edit it with pipeline_graph / pipelines.graph.* instead of stage tools"
+            )
+
+    def get_graph(self, pipeline_id: str | None = None) -> dict[str, Any]:
+        """{pipeline_id, graph, derived, stages}. derived=True means the
+        pipeline has no stored graph and this one was synthesised from its
+        stages; nothing is written."""
+        doc = self._read_doc()
+        pipeline = self._get_pipeline(doc, pipeline_id)
+        stages = [_migrate(s) for s in pipeline.get("stages", [])]
+        graph = pipeline.get("graph")
+        derived = graph is None
+        if derived:
+            graph = pg.derive_graph_from_stages(stages)
+        return {"pipeline_id": pipeline["id"], "graph": graph, "derived": derived, "stages": stages}
+
+    def set_graph(self, pipeline_id: str | None, graph: Any) -> dict[str, Any]:
+        """Validate and store a graph; stages are re-derived from it."""
+        errors = pg.validate_graph(graph)
+        if errors:
+            raise pg.GraphError(errors)
+        with self._lock:
+            doc = self._read_doc()
+            pipeline = self._get_pipeline(doc, pipeline_id)
+            return self._store_graph(doc, pipeline, graph)
+
+    def apply_graph_ops(self, pipeline_id: str | None, ops: list[dict[str, Any]]) -> dict[str, Any]:
+        """Apply ops to the stored graph (or the derived one); all or none."""
+        with self._lock:
+            doc = self._read_doc()
+            pipeline = self._get_pipeline(doc, pipeline_id)
+            base = pipeline.get("graph")
+            if base is None:
+                base = pg.derive_graph_from_stages([_migrate(s) for s in pipeline.get("stages", [])])
+            graph = pg.apply_graph_ops(base, ops)
+            errors = pg.validate_graph(graph)
+            if errors:
+                raise pg.GraphError(errors)
+            meta_ops = [op for op in ops if op.get("op") == "set_stage_meta"]
+            if not meta_ops:
+                return self._store_graph(doc, pipeline, graph)
+            # Derive first so a layer's new L<n> stage exists to receive its
+            # metadata, then patch and store.
+            self._store_graph(doc, pipeline, graph, write=False)
+            for op in meta_ops:
+                stage = next((s for s in pipeline["stages"] if s.get("id") == op.get("stageId")), None)
+                if stage is None:
+                    raise pg.GraphError([f"stage not found: {op.get('stageId')}"])
+                for field, key in pg.STAGE_META_FIELDS.items():
+                    if field in op:
+                        stage[key] = op[field]
+            self._write_doc(doc)
+            return {"pipeline_id": pipeline["id"], "graph": pipeline["graph"], "stages": pipeline["stages"]}
+
+    def _store_graph(
+        self, doc: dict[str, Any], pipeline: dict[str, Any], graph: dict[str, Any], *, write: bool = True
+    ) -> dict[str, Any]:
+        graph = {**graph, "nodes": [dict(n) for n in graph["nodes"]]}
+        stages = pg.derive_stages_from_graph(graph, [_migrate(s) for s in pipeline.get("stages", [])], stamp=True)
+        for stage in stages:
+            if not self._ID_RE.match(str(stage.get("id", ""))):
+                raise pg.GraphError([f"invalid stage id {stage.get('id')!r} on a slot node's stageId"])
+        clean = {"version": pg.GRAPH_VERSION, "nodes": graph["nodes"], "edges": graph["edges"]}
+        pipeline["graph"] = clean
+        pipeline["stages"] = stages
+        if write:
+            self._write_doc(doc)
+        return {"pipeline_id": pipeline["id"], "graph": clean, "stages": stages}
+
+
+class GraphNonLinearError(ValueError):
+    """A stage-level edit on a pipeline whose graph stages cannot express."""
+
+
+def _graph_slot_configs(pipeline: dict[str, Any]) -> list[dict[str, Any]]:
+    graph = pipeline.get("graph")
+    if not isinstance(graph, dict):
+        return []
+    return [n["slot"] for n in graph.get("nodes", []) if isinstance(n.get("slot"), dict)]
+
+
+def _resync_linear_graph(pipeline: dict[str, Any]) -> None:
+    """After a stage edit on a pipeline with a (linear) graph, rebuild the
+    graph from the new stages, keeping each surviving node's id, position and
+    pin (matched by stage id + slot label) so the canvas does not jump."""
+    old = pipeline.get("graph")
+    if old is None:
+        return
+    keep: dict[tuple[str, str], dict[str, Any]] = {}
+    trigger = None
+    for n in old.get("nodes", []):
+        if n.get("kind") == "slot" and isinstance(n.get("slot"), dict):
+            keep.setdefault((str(n.get("stageId", "")), str(n["slot"].get("label", ""))), n)
+        elif n.get("kind") == "trigger" and trigger is None:
+            trigger = n
+    fresh = pg.derive_graph_from_stages([_migrate(s) for s in pipeline.get("stages", [])])
+    rename: dict[str, str] = {}
+    taken = {n["id"] for n in fresh["nodes"]}
+    for n in fresh["nodes"]:
+        if n["kind"] == "trigger" and trigger is not None:
+            n["position"] = trigger.get("position", n["position"])
+            continue
+        prev = keep.get((str(n.get("stageId", "")), str(n.get("label", ""))))
+        if prev is None:
+            continue
+        if prev["id"] != n["id"] and prev["id"] not in taken:
+            rename[n["id"]] = prev["id"]
+            taken.add(prev["id"])
+        n["position"] = prev.get("position", n["position"])
+        if prev.get("pinned"):
+            n["pinned"] = True
+    for n in fresh["nodes"]:
+        n["id"] = rename.get(n["id"], n["id"])
+    for e in fresh["edges"]:
+        e["from"] = rename.get(e["from"], e["from"])
+        e["to"] = rename.get(e["to"], e["to"])
+        e["id"] = pg.edge_id(e["from"], e["to"])
+    pipeline["graph"] = fresh
 
 
 def _migrate(raw: dict[str, Any]) -> dict[str, Any]:

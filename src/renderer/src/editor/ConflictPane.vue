@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import {
   parseConflicts, buildResolved, countConflicts, hasConflicts,
   type FileSection, type ConflictChoice,
@@ -246,7 +246,7 @@ function choiceOf(idx: number): ConflictChoice | undefined {
     <!-- Toolbar -->
     <div class="cp-toolbar">
       <span class="cp-badge conflict">{{ $t('label.conflict') }}</span>
-      <span class="cp-filepath" :title="filepath">{{ filepath }}</span>
+      <span class="cp-filepath" v-truncate>{{ filepath }}</span>
       <span class="cp-progress">{{ resolvedCount }} / {{ totalConflicts }} resolved</span>
       <button
         v-if="canShowBase"

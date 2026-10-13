@@ -1,5 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`AiCliDock — the header names the address other panes reach it by > draws the header exactly as before while nothing is registered 1`] = `"<div data-v-ca66c762="" class="ai-cli-head"><span data-v-ca66c762="" class="ai-cli-title">AI Terminal</span><span data-v-ca66c762="" class="ai-cli-ws" title="/tmp/ws">ws</span></div>"`;
+exports[`AiCliDock — the header names the address other panes reach it by > draws the header exactly as before while nothing is registered 1`] = `"<div data-v-ca66c762="" class="ai-cli-head"><span data-v-ca66c762="" class="ai-cli-title">AI Terminal</span><span data-v-ca66c762="" class="ai-cli-ws" title="/tmp/ws" data-truncate="">ws</span></div>"`;
 
-exports[`AiCliDock — the header names the address other panes reach it by > draws the header exactly as before while nothing is registered 2`] = `"<div data-v-ca66c762="" class="ai-cli-head"><span data-v-ca66c762="" class="ai-cli-title">AI Terminal</span><span data-v-ca66c762="" class="ai-cli-ws" title="/tmp/ws">ws</span></div>"`;
+exports[`AiCliDock — the header names the address other panes reach it by > draws the header exactly as before while nothing is registered 2`] = `"<div data-v-ca66c762="" class="ai-cli-head"><span data-v-ca66c762="" class="ai-cli-title">AI Terminal</span><span data-v-ca66c762="" class="ai-cli-ws" title="/tmp/ws" data-truncate="">ws</span></div>"`;

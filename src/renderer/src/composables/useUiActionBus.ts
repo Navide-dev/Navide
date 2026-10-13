@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import { invokeCommand, listCommands } from '@navide/plugin-ui/shared'
 import { currentDiagnosticSeq, takeDiagnosticsSince } from '../lib/uiDiagnostics'
 
@@ -49,6 +50,16 @@ export interface UseUiActionBusOptions {
    *  trailing slash or a symlinked path defeats. Defaults to that narrow test
    *  for callers (tests, plugin hosts) that have nothing better. */
   ownsWorkspace?: (path: string) => boolean
+  /** The backend connection's status. When given, this window announces
+   *  `ui.invoke.ready` on every transition to 'connected' (each reconnect is
+   *  a new backend session): the backend sends a global request such as
+   *  ui.workspace.open only to a window that announced it, because plugin and
+   *  editor windows share the same server but never answer one. */
+  connectionStatus?: { readonly value: string }
+  /** Where window focus events arrive; defaults to `window` when there is
+   *  one. A focus re-announces with focused true, so the backend prefers the
+   *  window the user touched last. */
+  focusTarget?: Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
 }
 
 function errorMessage(err: unknown): string {
@@ -195,5 +206,25 @@ export async function handleUiInvokeRequest(
  *  window's lifetime, same as its other backend.on registrations). */
 export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
   const off = opts.backend.on('ui.invoke.request', (raw) => { void handleUiInvokeRequest(raw, opts) })
-  return () => { off?.() }
+  const status = opts.connectionStatus
+  if (!status) return () => { off?.() }
+
+  const announce = (focused: boolean) => {
+    if (status.value !== 'connected') return
+    opts.backend.send('ui.invoke.ready', { focused })
+      .catch(() => { /* best-effort — announced again on reconnect and focus */ })
+  }
+  const stopWatch = watch(
+    () => status.value,
+    (s) => { if (s === 'connected') announce(typeof document !== 'undefined' && document.hasFocus()) },
+    { immediate: true },
+  )
+  const focusTarget = opts.focusTarget ?? (typeof window !== 'undefined' ? window : undefined)
+  const onFocus = () => announce(true)
+  focusTarget?.addEventListener('focus', onFocus)
+  return () => {
+    off?.()
+    stopWatch()
+    focusTarget?.removeEventListener('focus', onFocus)
+  }
 }

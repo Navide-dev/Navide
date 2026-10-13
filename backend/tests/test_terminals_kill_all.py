@@ -8,6 +8,7 @@ load average past 200).
 from __future__ import annotations
 
 import asyncio
+import threading
 from typing import Any
 
 import pytest
@@ -63,3 +64,35 @@ async def test_kill_all_escalates_to_sigkill() -> None:
         await asyncio.sleep(0.05)
     assert session.proc.poll() is not None
     assert svc._sessions == {}
+
+
+@pytest.mark.asyncio
+async def test_drain_does_not_spin_on_a_finished_registry_write() -> None:
+    """A registry write that has finished but whose discard callback has not
+    run yet (it is queued behind the step that set the result) must not keep
+    the drain from returning. gather() over futures that are all done
+    completes without yielding to the loop (Python 3.12), so a drain that
+    re-gathers whatever is in the set never lets that callback run: it spun
+    forever and hung kill_all, and with it the CI backend suite (the Linux
+    job cancelled at its 15-minute limit)."""
+    svc = TerminalService(emit=_noop_emit)
+    write = asyncio.get_running_loop().create_future()
+    svc._lifecycle_futures.add(write)
+    write.add_done_callback(svc._lifecycle_futures.discard)
+    write.set_result(None)  # done; its discard is queued, not yet run
+
+    # A drain that spins never yields, so no await can bound it: a thread
+    # empties the set if the drain has not returned, and the test fails on
+    # that instead of hanging the run.
+    drained = threading.Event()
+    rescued = threading.Event()
+
+    def rescue() -> None:
+        if not drained.wait(5.0):
+            rescued.set()
+            svc._lifecycle_futures.clear()
+
+    threading.Thread(target=rescue, daemon=True).start()
+    await svc._drain_lifecycle()
+    drained.set()
+    assert not rescued.is_set(), "the drain spun on a finished write"

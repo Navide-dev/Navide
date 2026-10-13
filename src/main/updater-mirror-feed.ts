@@ -35,7 +35,7 @@ export const MIRROR_FEED_URL = 'https://dl.navide.dev/releases/latest'
  * electron-builder, restated here because electron-updater offers no public
  * way to read the app-update.yml it loaded at startup back out.
  */
-export const GITHUB_FEED = { provider: 'github', owner: 'nt-nerdtechnic', repo: 'Navide' } as const
+export const GITHUB_FEED = { provider: 'github', owner: 'Navide-dev', repo: 'Navide' } as const
 
 /**
  * Failures that mean "could not reach or be served by the mirror". A 404 or a

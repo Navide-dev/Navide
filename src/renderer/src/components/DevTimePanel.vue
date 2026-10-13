@@ -2,7 +2,7 @@
 import { computed, ref, type Ref } from 'vue'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { executeCommand } from '@navide/plugin-ui/shared'
-import { i18n, useNotify } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { useDevTime, formatDuration, type DevTimeTotals, type DevTimeWindow } from '../composables/useDevTime'
 import type { useBackend } from '../composables/useBackend'
 
@@ -157,11 +157,11 @@ async function confirmReset(): Promise<void> {
             :class="{ selected: selected === c.window }"
             @click="selected = c.window"
           >
-            <div class="big">{{ formatDuration(totalsOf(c.window).merged_s) }}</div>
+            <div class="big" v-truncate>{{ formatDuration(totalsOf(c.window).merged_s) }}</div>
             <div class="lbl">{{ $t(c.labelKey) }}</div>
           </button>
         </div>
-        <div v-if="wallClockOf(selected)" class="wall">
+        <div v-if="wallClockOf(selected)" class="wall" v-truncate>
           {{ $t('devtime.wall-clock', { wall: wallClockOf(selected)!.wall, idle: wallClockOf(selected)!.idle }) }}
         </div>
       </section>
@@ -204,16 +204,16 @@ async function confirmReset(): Promise<void> {
         <table v-else class="grid">
           <tbody>
             <tr v-for="row in paneRows" :key="row.id" class="pane-row" @click="focusPane(row.id)">
-              <th :title="row.sub">
+              <th :title="row.sub" v-truncate>
                 <span class="dot" :class="{ on: row.active }"></span>
                 {{ row.label }}
                 <span v-if="row.vendor" class="vendor">{{ row.vendor }}</span>
               </th>
-              <td>{{ formatDuration(row.today) }}</td>
-              <td class="dim">{{ formatDuration(row.all) }}</td>
+              <td v-truncate>{{ formatDuration(row.today) }}</td>
+              <td class="dim" v-truncate>{{ formatDuration(row.all) }}</td>
             </tr>
             <tr class="head">
-              <th></th><td>{{ $t('devtime.today') }}</td><td class="dim">{{ $t('devtime.all') }}</td>
+              <th></th><td v-truncate>{{ $t('devtime.today') }}</td><td class="dim" v-truncate>{{ $t('devtime.all') }}</td>
             </tr>
           </tbody>
         </table>

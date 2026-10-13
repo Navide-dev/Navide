@@ -31,6 +31,7 @@ import os
 import sys
 import time
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -825,7 +826,16 @@ def _session_path(workspace_path: str, session_id: str) -> Path:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(
+    supported=False,
+    note="agy has plugins (`agy plugin list`), but where it keeps them is not verified yet.",
+)
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="antigravity",
     # Quota/OAuth constants above do not establish CLI service expectations.
     expected_hosts=(),

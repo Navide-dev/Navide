@@ -74,3 +74,9 @@ export function filterLogLines(lines: string[], filter: LogFilter): string[] {
     return !query || line.toLowerCase().includes(query)
   })
 }
+
+/** A /ws URL with its `t=` token value masked, for display: the token is the
+ *  backend credential, and a screenshot of the Debug window must not leak it. */
+export function maskWsUrlToken(url: string): string {
+  return url.replace(/([?&]t=)[^&#]*/, '$1••••')
+}

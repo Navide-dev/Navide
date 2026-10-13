@@ -24,6 +24,7 @@ declare module '*.vue' {
     key: string
     label: string
     count: number
+    live: number
     type: 'stage' | 'manual'
     status: string
   }

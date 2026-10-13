@@ -383,6 +383,23 @@ Pane 之一。若 parent 在子 Agent 工作期間就關閉了，或該回合沒
 以上這些都不會讓那份回報變成完成訊號。要確定 spawn 出來的 Pane 真的做完了，請自己
 用 `cli_get_status` / `cli_wait_idle` 查它的狀態。
 
+### 回收做完的 Pane
+
+子 Pane 回報完、工作結束後，母 Pane 可以釋放它的資源，又不從使用者手上拿走它：
+
+```
+cli_reclaim_agent(target="<子 Pane 名稱>")
+```
+
+它吃跟 `cli_close_agent` 一樣的 `target` / `pane_id`，送到持有那個子 Pane 的視窗。要一次
+回收多個，在自己的視窗用 `ui_invoke(action="ui.pane.reclaim", args={"paneId": [...]})`。
+每個 CLI 行程會結束，Pane 留在原位、變成可點擊接續的卡片，
+對話完整保留——跟狀態列的「立即回收」是同一件事，使用者點開就能核對成果。狀態列的
+守衛照樣適用：忙碌或等待回答中的 Pane、使用者正在聚焦的 Pane、有未送出輸入或有排隊
+訊息的 Pane、以及無法接續 session 的 Pane 都會被拒絕。回傳
+`{reclaimed, refused: [{paneId, reason, detail}]}`。比起會永久結束對話的
+`cli_close_agent`，優先用這個。
+
 ---
 
 ## 投遞實際上如何運作
@@ -691,7 +708,16 @@ hook：這次切換要等到那個 Pane 下一次啟動才對它生效，在那�
 | `paused` | 這個視窗的投遞已暫停 |
 | `gone` | 目標 Pane 已不存在 |
 | `remote-ack` | 已送往另一個視窗；正在等它的回報 |
+| `remote-busy` | 已送往另一台裝置，超過一分鐘沒有回應，而目標 Pane 正在執行中（只出現在 `cli_check_message`） |
+| `remote-unreported` | 已送往另一台裝置，超過一分鐘沒有回應，而目標 Pane 並沒有在執行（只出現在 `cli_check_message`） |
 | `cancelling` | 已向另一個視窗要求撤回；正在等它的回答 |
+
+送往另一台裝置的訊息一定會有回應。接收端的 Backend 會對交給它的每一則訊息回 ack，
+包括處理失敗的（`receiver-error`）；連線斷掉而沒送出的 ack，會在下一次連線時重送。
+送出端的 Backend 依這個 ack 更新送出視窗裡的那一列（從印出的訊息區塊送出的也一樣），
+並對仍未得到回應的訊息用 `messages.get` 向 Server 查詢：自己的連線恢復時查一次，
+之後每分鐘查一次超過一分鐘的訊息。失敗或被拒的遠端訊息會帶著對方的原因，格式是
+`<state>: <reason>`，例如 `rejected: not-paired`。
 
 透過 `cli_send` 進來的訊息也會把它的保留原因一併回報給 Backend，因此送出它的
 Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
@@ -709,8 +735,10 @@ Agent 不必有 Messages 面板可看，也能讀到同一個原因 ——
 | `rate-limit` / `queue-full` | 上面的某條防護欄 |
 | `pane-closed` | 目標在投遞前就關閉了 |
 | `inject-failed` / `inject-error` | 把它輸入到該 Pane 沒有成功 |
+| `delivery-unconfirmed` | 不是失敗：已輸入並送出到剛 resume 的 CLI，但它還沒顯示收到。該列顯示為 delivered 並附上這個提醒；重送前先查看該 Pane。transcript 出現這則訊息後提醒會消失 |
 | `window-reloaded` | 視窗在它傳輸中途重新載入 |
 | `no-report` | 另一個視窗始終沒有回報結果 |
+| `receiver-error` | 另一台裝置收到了，但處理時出錯；錯誤堆疊在它的 Backend log 裡。重試可能會成功 |
 | `unknown-workspace` / `ambiguous-workspace` | 一個沒有對應到任何開啟中 Workspace、或對應到多個的 `<folder>/<pane>` 位址 |
 | `unknown-target-in-workspace` / `ambiguous-target` | Workspace 解析成功，但 Pane 名稱沒有 —— 或是對應到兩個 |
 | `unknown-pane-id` | 一個在這台機器上指不到任何 Pane 的 `pane_id` —— 去 `cli_list_targets` 讀一個新的 |

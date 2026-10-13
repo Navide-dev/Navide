@@ -386,6 +386,56 @@ def mcp_document(
 
 
 @dataclass(frozen=True)
+class ExtensionsSource:
+    """One place a CLI keeps the extensions it installed for itself.
+
+    ``reader`` names a reader in ``cli_extensions`` (the per-format part lives
+    there, not in the vendor module, the same split as ``McpWiring``). Paths
+    are relative to the user's real home. Read-only by construction: a reader
+    either parses files or runs ``list_argv``, a listing command declared here.
+    """
+
+    #: ``plugins-json`` | ``plugin-dirs`` | ``codex-config`` | ``hooks`` |
+    #: ``hooks-dir`` | ``code-files`` | ``npm-list`` | ``qwen-extensions`` |
+    #: ``cli-json``.
+    reader: str
+    relative: tuple[str, ...] = ()
+    #: The vendor's own name for what is found here, shown untranslated
+    #: ("Claude plugin", "Pi extension"); see docs/en-US/glossary.md.
+    type_label: str = ""
+    #: A settings document whose ``enabledPlugins`` map says what is on.
+    settings: tuple[str, ...] = ()
+    #: Where the records sit inside a structured document (``hooks``,
+    #: ``plugin``, ``packages``).
+    section: tuple[str, ...] = ()
+    #: How many directory levels below ``relative`` a plugin directory sits
+    #: (``cache/<marketplace>/<name>`` is 2).
+    depth: int = 0
+    #: A read-only listing command (``cli-json``): the binary name, then args.
+    list_argv: tuple[str, ...] = ()
+    #: What the CLI itself asks before running what is found here: ``none``,
+    #: ``hook-trust``, ``capability-approve`` or ``hot-reload``.
+    native_consent: str = "none"
+    #: The vendor's name for a plugin that carries a function-hook module
+    #: (Claude's "Claude mod"); empty when the CLI has no such thing.
+    mod_label: str = ""
+
+
+@dataclass(frozen=True)
+class ExtensionsSpec:
+    """Where a CLI keeps its own extensions, for the read-only inventory.
+
+    None on a vendor means the CLI has no extension system to show (aider).
+    ``supported=False`` means it has one but where it lives has not been
+    verified, so the page says so instead of guessing.
+    """
+
+    sources: tuple[ExtensionsSource, ...] = ()
+    supported: bool = True
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class PushChannel:
     """How an external process hands this CLI a new instruction without typing
     it into the pane's PTY.
@@ -1034,6 +1084,11 @@ class VendorSpec:
     # The CLI has a skills mechanism, verified against the binary or its
     # official docs. False = no such feature exists to wire.
     skills_supported: bool = False
+
+    # --- CLI extensions (read-only inventory) ---
+    # Where the CLI keeps the plugins, mods, extensions and hooks it installed
+    # for itself. None = no extension system (aider), hidden from the page.
+    extensions: ExtensionsSpec | None = None
 
     # --- model selection (mirrors the frontend AgentSpec) ---
     # Whether a spawn may name the model / reasoning effort for this CLI.

@@ -568,3 +568,47 @@ describe('useUiActionBus — pane-private actions (inbox)', () => {
     expect(sent.find((s) => s.type === 'ui.invoke.result')?.payload).toMatchObject({ ok: true, result: 'focused' })
   })
 })
+
+describe('useUiActionBus — announcing the bus to the backend', () => {
+  // The backend hands a global request (ui.workspace.open) only to a window
+  // that announced it runs this bus; plugin and editor windows never answer.
+  it('announces ui.invoke.ready once connected, and again on every reconnect', async () => {
+    const { backend, sent, status } = createMockBackend('connecting')
+    const off = useUiActionBus({
+      backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}), connectionStatus: status,
+    })
+    await flush()
+    expect(sent.filter((s) => s.type === 'ui.invoke.ready')).toHaveLength(0)
+
+    status.value = 'connected'
+    await flush()
+    status.value = 'disconnected'
+    await flush()
+    status.value = 'connected'
+    await flush()
+
+    expect(sent.filter((s) => s.type === 'ui.invoke.ready')).toHaveLength(2)
+    off()
+  })
+
+  it('announces itself as focused when the window gains focus', async () => {
+    const { backend, sent, status } = createMockBackend('connected')
+    const focusTarget = new EventTarget()
+    const off = useUiActionBus({
+      backend, currentWorkspace: ref('/ws'), buildSnapshot: () => ({}),
+      connectionStatus: status, focusTarget,
+    })
+    await flush()
+
+    focusTarget.dispatchEvent(new Event('focus'))
+    await flush()
+
+    const ready = sent.filter((s) => s.type === 'ui.invoke.ready')
+    expect(ready.at(-1)?.payload).toEqual({ focused: true })
+
+    off()
+    focusTarget.dispatchEvent(new Event('focus'))
+    await flush()
+    expect(sent.filter((s) => s.type === 'ui.invoke.ready')).toHaveLength(ready.length)
+  })
+})

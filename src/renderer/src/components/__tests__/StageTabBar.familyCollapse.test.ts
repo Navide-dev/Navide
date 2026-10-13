@@ -4,7 +4,7 @@ import { i18n } from '@navide/plugin-ui/foundation'
 import { describe, expect, it } from 'vitest'
 import StageTabBar, { type TabItem } from '../StageTabBar.vue'
 
-const tabs: TabItem[] = [{ key: 'feature', label: 'Feature', count: 8, type: 'stage', status: 'active' }]
+const tabs: TabItem[] = [{ key: 'feature', label: 'Feature', count: 8, live: 3, type: 'stage', status: 'active' }]
 
 function mountBar(props: {
   allFamiliesCollapsed?: boolean
@@ -46,7 +46,8 @@ describe('StageTabBar family toggle', () => {
     expect(toggle.attributes('title')).toBe(i18n.global.t('stageTab.expand-families'))
     expect(toggle.attributes('aria-label')).toBe(toggle.attributes('title'))
     expect(toggle.attributes('aria-expanded')).toBe('false')
-    expect(wrapper.get('.tab-count').text()).toBe('8')
+    // Live / total, the same tally the sidebar's workspace heading shows.
+    expect(wrapper.get('.tab-count').text()).toBe('3 / 8')
   })
 
   it.each(['grid', 'empty'] as const)('disables unavailable %s folding with an accessible explanation', async reason => {

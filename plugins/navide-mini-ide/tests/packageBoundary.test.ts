@@ -13,7 +13,7 @@ import {
 } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { delimiter, dirname, join, resolve } from 'node:path'
+import { basename, delimiter, dirname, join, resolve } from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -210,12 +210,19 @@ describe('navide Mini-IDE public package boundary', () => {
 
         const externalRequire = createRequire(join(externalProject, 'package.json'))
         const vueTscCli = resolveInstalledPackageBin(externalProject, 'vue-tsc', 'vue-tsc', externalRequire)
-        await runNodeEntryOrThrow(vueTscCli, ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject)
-
         const viteCli = resolveInstalledPackageBin(externalProject, 'vite', 'vite', externalRequire)
-        await runNodeEntryOrThrow(viteCli, ['build', '--config', join(externalProject, 'vite.config.ts')], externalProject, {
-          NAVIDE_MINI_IDE_DIST_DIR: join(externalProject, 'dist'),
-        })
+        // The typecheck reads only src/ and the build writes only dist/, so the
+        // two run side by side: one after the other they took 1m35s + 3m44s of
+        // wall time at load average ~280 and outran the test timeout. Both
+        // settle before the finally block removes the project they read.
+        const [typecheck, build] = await Promise.allSettled([
+          runNodeEntryOrThrow(vueTscCli, ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject),
+          runNodeEntryOrThrow(viteCli, ['build', '--config', join(externalProject, 'vite.config.ts')], externalProject, {
+            NAVIDE_MINI_IDE_DIST_DIR: join(externalProject, 'dist'),
+          }),
+        ])
+        if (typecheck.status === 'rejected') throw typecheck.reason
+        if (build.status === 'rejected') throw build.reason
 
         const distFiles = collectFiles(join(externalProject, 'dist'))
         const workerFiles = distFiles.filter((path) => /(?:editor|ts|json|css|html)\.worker-[^/]+\.js$/.test(path))
@@ -224,9 +231,22 @@ describe('navide Mini-IDE public package boundary', () => {
           expect(workerFiles.some((path) => path.includes(workerPrefix)), workerPrefix).toBe(true)
         }
         expect(workerFiles.length).toBeGreaterThanOrEqual(5)
+        // Exactly one bundle per worker kind, and that one is the one the code
+        // loads: Monaco's own `new URL('<x>.worker.js')` fallbacks used to add a
+        // second, never-used copy of each language worker (~9MB in all).
+        for (const workerPrefix of workerPrefixes) {
+          expect(workerFiles.filter((path) => basename(path).startsWith(workerPrefix)), workerPrefix).toHaveLength(1)
+        }
+        const javaScriptFiles = distFiles.filter((path) => path.endsWith('.js'))
+        for (const workerFile of workerFiles) {
+          const workerName = basename(workerFile)
+          expect(
+            javaScriptFiles.some((path) => path !== workerFile && readFileSync(path, 'utf8').includes(workerName)),
+            workerName,
+          ).toBe(true)
+        }
 
-        const builtJavaScript = distFiles
-          .filter((path) => path.endsWith('.js'))
+        const builtJavaScript = javaScriptFiles
           .map((path) => readFileSync(path, 'utf8'))
           .join('\n')
         expect(builtJavaScript.length).toBeGreaterThan(0)
@@ -253,6 +273,8 @@ describe('navide Mini-IDE public package boundary', () => {
         rmSync(temporaryRoot, { recursive: true, force: true })
       }
     },
-    180_000,
+    // The build is inherently heavy (3.4K modules, five Monaco worker
+    // sub-builds); at load average ~280 it alone took 3m44s of wall time.
+    600_000,
   )
 })

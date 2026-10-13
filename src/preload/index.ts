@@ -83,6 +83,20 @@ export interface PlansRecoveryChanged {
   reason?: string
 }
 
+export interface PlansBackendStopped {
+  workspacePath: string
+}
+
+function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    'workspacePath' in payload &&
+    typeof payload.workspacePath === 'string'
+  )
+}
+
 function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChanged {
   return (
     typeof payload === 'object' &&
@@ -338,6 +352,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
     },
   },
   getBackendInfo: (): Promise<BackendInfo> => ipcRenderer.invoke('backend:info'),
+  /** Answer a ws connection's window challenge; null outside a main window. */
+  proveWindow: (nonce: string): Promise<string | null> => ipcRenderer.invoke('backend:proveWindow', nonce),
   restartBackend: (): Promise<BackendInfo> => ipcRenderer.invoke('backend:restart'),
   stopBackend: (): Promise<{ ok: boolean }> => ipcRenderer.invoke('backend:stop'),
   onBackendChanged: (cb: (info: BackendInfo) => void): void => {
@@ -372,6 +388,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.on('plans:recoveryChanged', listener)
     return () => ipcRenderer.removeListener('plans:recoveryChanged', listener)
   },
+  // The Host gave up restarting a workspace's agent Plans backend.
+  onPlansBackendStopped: (cb: (stopped: PlansBackendStopped) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPlansBackendStopped(payload)) cb(payload)
+    }
+    ipcRenderer.on('plans:backendStopped', listener)
+    return () => ipcRenderer.removeListener('plans:backendStopped', listener)
+  },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
   },
@@ -388,6 +412,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
     ipcRenderer.invoke('workspace:pick', defaultPath),
   newWorkspace: (): Promise<NewWorkspaceResult> => ipcRenderer.invoke('workspace:new'),
   getHomeDir: (): Promise<string> => ipcRenderer.invoke('app:home-dir'),
+  dockSurfaceProvided: (surface: string): Promise<boolean> => ipcRenderer.invoke('plugins:dockSurfaceProvided', surface),
   listOpenWorkspaces: (): Promise<string[]> => ipcRenderer.invoke('workspace:listOpen'),
   focusWorkspaceWindow: (workspacePath: string): Promise<boolean> =>
     ipcRenderer.invoke('workspace:focusExisting', workspacePath),
@@ -634,6 +659,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
   /** Open one legal page in the default browser; the URL is main's, not the caller's. */
   openLegal: (route: LegalRoute): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('legal:open', route),
+  /** Open Spotlight's privacy settings (macOS); the destination is main's. */
+  openSpotlightSettings: (): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('system:open-spotlight-settings'),
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   stabilizeDroppedPaths: (paths: string[]): Promise<{ ok: boolean; paths: string[] }> =>
     ipcRenderer.invoke('drop:stabilize', paths),
@@ -665,6 +693,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
     quitLabel: string
     cancelLabel: string
     dontShowLabel: string
+    cancelledMessage: string
+    cancelledDetail: string
+    cancelledUnknownWindow: string
   }): void => ipcRenderer.send('app:setQuitConfirm', cfg),
   onQuitConfirmDisabled: (cb: () => void): (() => void) => {
     const listener = (): void => cb()
@@ -673,8 +704,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
   },
   /** Stages of the quit sequence, so the window can show a shutdown screen
    *  instead of sitting there looking hung while the backend is stopped. */
-  onQuitProgress: (cb: (stage: 'saving' | 'stopping' | 'closing') => void): (() => void) => {
-    const listener = (_event: unknown, stage: 'saving' | 'stopping' | 'closing'): void => cb(stage)
+  onQuitProgress: (cb: (stage: 'saving' | 'stopping' | 'closing' | 'cancelled') => void): (() => void) => {
+    const listener = (_event: unknown, stage: 'saving' | 'stopping' | 'closing' | 'cancelled'): void => cb(stage)
     ipcRenderer.on('app:quitProgress', listener)
     return () => ipcRenderer.removeListener('app:quitProgress', listener)
   },

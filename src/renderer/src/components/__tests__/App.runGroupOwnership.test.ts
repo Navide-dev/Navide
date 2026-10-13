@@ -127,8 +127,9 @@ describe('restore puts back a tab whose record was lost', () => {
     // spawn upsert, permanently replacing the saved assignment.
     const restore = body('restoreWorkspacePanes')
     expect(restore).toContain('const ensureSavedGroup = (gid: string): string => {')
-    expect(restore).toContain('if (!runGroups.value.some((g) => g.id === gid)) {')
-    expect(restore).toContain('runGroups.value = [...runGroups.value, { id: gid,')
+    // savedGroupToRecreate builds the record under that same id (its own test
+    // pins the shape); here it only has to be added to the list.
+    expect(restore).toContain('runGroups.value = [...runGroups.value, missing]')
     expect(restore).toContain('return gid')
     // Both restore shapes — cold placeholders and the eager detached/only-group
     // path — take a saved id through it.
@@ -223,5 +224,23 @@ describe('a move between tabs that did not persist does not stay on screen', () 
     expect(loopAt).toBeGreaterThan(-1)
     expect(move.indexOf('const previous = pane.runGroupId')).toBeGreaterThan(loopAt)
     expect(move.indexOf('pane.runGroupId = previous')).toBeGreaterThan(loopAt)
+  })
+})
+
+describe('a relaunch restores other held workspaces without touching the list on screen', () => {
+  // restoreWorkspacePanes runs for every workspace the window holds, while
+  // runGroups is the viewed one's. Recreating a missing group there filed the
+  // other workspace's group into the viewed record as an empty `Run N` tab.
+  const restore = body('restoreWorkspacePanes')
+
+  it('decides recreation against the workspace being restored', () => {
+    expect(restore).toContain(
+      'savedGroupToRecreate(runGroups.value, gid, workspacePath, currentWorkspace.value)',
+    )
+  })
+
+  it('takes a fallback group only from the restored workspace\'s own list', () => {
+    expect(restore).toContain('if (normWs(workspacePath) !== normWs(currentWorkspace.value)) {')
+    expect(restore).toContain("return runGroupsOf(workspacePath)[0]?.id ?? ''")
   })
 })

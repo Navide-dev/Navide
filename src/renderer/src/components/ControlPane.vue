@@ -13,6 +13,7 @@ import { subtreeSignals } from '../lib/paneSubtreeStatus'
 import { workspaceAliasKey, workspaceAliasOf, workspaceBasename, workspaceDisplayName } from '../lib/workspaceAlias'
 import type { SidebarMode } from '../lib/sidebarMode'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
+import { evolveBadgeLabel, evolveBadgeState, isEvolveSystemPane, useEvolveBadges } from '../composables/useEvolve'
 import { rollupTabStatus, runGroupStateLabelKey, tabRunStatePaneStatus } from '../lib/tabStatus'
 import {
   ALL_RAIL_ID,
@@ -52,6 +53,7 @@ import { onSettingsChanged, registerCommand, settingsGet, settingsSet } from '@n
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { useNotify } from '@navide/plugin-ui/foundation'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 // The legacy pane is a recovery adapter only. Normal Plans composition is the
 // Manifest v2 contribution below, so one active package version owns both
@@ -252,6 +254,11 @@ export interface SpawnPayload {
    *  at an interactive sign-in wizard, so nothing may inject input into it.
    *  Only set by that flow — never by the control pane itself. */
   isLogin?: boolean
+  /** With `isLogin`: sign `profileId`'s claude account in inside its own
+   *  config dir. Only set by that flow. */
+  accountDirLogin?: boolean
+  /** The CLI account the pane starts on (its pin). */
+  profileId?: string
 }
 
 export interface ResumePayload {
@@ -314,6 +321,11 @@ export interface ExistingProjectInfo {
   workspacePath: string
   pipelineId: string
   runCount: number
+  /** The DAG gate the run was paused on when it was aborted (project
+   *  node_gate); resume waits on it again. Absent/null = not paused. */
+  nodeGate?: { gateId?: string; nextIndex?: number } | null
+  /** Last reported per-node run states (project node_states). */
+  nodeStates?: Record<string, import('../lib/pipelineGraph').NodeRunState>
 }
 
 export interface AnalyzerModelOption {
@@ -2365,6 +2377,34 @@ function closeWsMoreMenu(): void {
   wsMoreMenuPath.value = ''
 }
 
+// ── Workspace self-evolution (自我優化) ──
+// One badge per heading, read from the shared evolve badge map; the badge and
+// the "自我優化…" rows of both menus open that workspace's panel (App.vue
+// mounts it). The minute tick keeps "running 12m" moving. A reconnect
+// re-reads every path asked for here (useEvolve remembers them).
+const evolve = useEvolveBadges()
+const evolveNow = ref(Date.now())
+const evolveTick = setInterval(() => (evolveNow.value = Date.now()), 60_000)
+onUnmounted(() => clearInterval(evolveTick))
+watch(
+  () => visibleWorkspaceRows.value.map((ws) => ws?.path ?? '').filter(Boolean).join('\n'),
+  (joined) => {
+    if (joined) void evolve.refreshBadges(joined.split('\n'))
+  },
+  { immediate: true }
+)
+function evolveStateOf(path: string) {
+  return evolveBadgeState(evolve.badges.value[path])
+}
+function evolveLabelOf(path: string): string {
+  return evolveBadgeLabel(evolve.badges.value[path], evolveNow.value)
+}
+function openEvolveFor(path: string): void {
+  closeWsMoreMenu()
+  closeWsMenu()
+  evolve.openPanel(path)
+}
+
 /** Same floor as the right-click menu's: a window must keep one workspace, so
  *  the close rows only appear for a project that has somewhere to land. */
 const wsMoreCanClose = computed(
@@ -3342,7 +3382,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           :class="{ 'pipeline-active': p.id === activePipelineId }"
           @click="openPipelineDetail(p.id)"
         >
-          <span class="pipeline-item-name">{{ p.name }}</span>
+          <span class="pipeline-item-name" v-truncate>{{ p.name }}</span>
           <span class="pipeline-item-meta">{{ p.stage_count }} stages</span>
           <span
             class="pipeline-item-badge"
@@ -3391,10 +3431,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <span class="dot">·</span>
             <span>updated {{ existingProject.updatedAt }}</span>
           </div>
-          <div v-if="existingProject.taskDescription" class="resume-task">
-            {{ existingProject.taskDescription.length > 200
-              ? existingProject.taskDescription.slice(0, 200) + '…'
-              : existingProject.taskDescription }}
+          <div v-if="existingProject.taskDescription" class="resume-task" v-truncate>
+            {{ existingProject.taskDescription }}
           </div>
           <div class="row">
             <button class="primary wide" @click="emit('pipeline-resume')">
@@ -3418,11 +3456,16 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div class="prn-title">
             ▶ {{ pipelines?.find(p => p.id === activePipelineId)?.name ?? $t('label.pipelines') }}
           </div>
-          <div v-if="pipeline.task" class="prn-task">{{ pipeline.task }}</div>
+          <div v-if="pipeline.task" class="prn-task" v-truncate>{{ pipeline.task }}</div>
           <div class="prn-meta">
             <span v-if="autoAnswerEnabled" class="prn-auto">{{ $t('label.full-auto') }} · {{ analyzerModelLocal }}</span>
             <span v-else class="prn-manual">{{ $t('label.manual-confirm') }}</span>
           </div>
+          <!-- Full run control (gates, rerun-from-step, per-step state) lives
+               in the Pipeline workspace; this card stays compact. -->
+          <button class="ghost prn-open" @click="openPipelineManager(activePipelineId || undefined)">
+            {{ $t('pipelineEditor.controlPane.open-in-canvas') }}
+          </button>
         </div>
         <div v-if="pipeline.state === 'running'" class="pipeline-running">
           <div class="progress">
@@ -3540,6 +3583,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <button
           v-if="!detachedWindow && freeMode && workspaces?.length"
           class="hdr-add-ws"
+          data-tour="open-agent"
           :disabled="!canSpawn"
           :aria-expanded="addMenuOpen && addMenuWorkspace === workspacePath"
           :title="canSpawn ? `${$t('action.new-agent-here')} · ${pickedAgentLabel}` : $t('label.set-workspace-first')"
@@ -3634,7 +3678,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                   :class="{ tint: !!cell.color }"
                   :style="cell.color ? { '--tint': cell.color } : undefined"
                 ><span class="ws-rglyph">{{ cell.glyph }}</span></span>
-                <span class="ws-rname-t">{{ cell.name }}</span>
+                <span class="ws-rname-t" v-truncate>{{ cell.name }}</span>
                 <!-- You are still working in this group even while looking at
                      another one. Nothing else on screen would say so. -->
                 <span v-if="cell.hasCurrent" class="ws-rdot"></span>
@@ -3642,7 +3686,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               </button>
               <button class="ws-rcell ws-radd" @click.stop="startCreateRail($event)">
                 <span class="ws-rswatch ws-rswatch--add">＋</span>
-                <span class="ws-rname-t">{{ $t('action.new-workspace-group') }}</span>
+                <span class="ws-rname-t" v-truncate>{{ $t('action.new-workspace-group') }}</span>
               </button>
             </div>
           </div>
@@ -3705,12 +3749,26 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               <span
                 v-else
                 class="ws-name"
+                v-truncate
                 :title="wsNameTitle(ws.path)"
                 @dblclick.stop="startWorkspaceRename(ws.path)"
               >{{ ws.label }}</span>
               <span class="ws-count" v-bind="countBadgeAttrs(wsCountStates.get(ws.path))">{{ wsLiveCounts.get(ws.path) ?? 0 }} / {{ ws.count }}</span>
+              <!-- Display-only: the panel opens from the ⋯ and right-click
+                   menus. The click is swallowed so it does not switch the
+                   workspace either. -->
+              <span
+                class="ws-evolve"
+                data-test="evolve-badge"
+                role="img"
+                :data-state="evolveStateOf(ws.path)"
+                :title="$t('evolve.badge.title', { state: evolveLabelOf(ws.path) })"
+                :aria-label="$t('evolve.badge.title', { state: evolveLabelOf(ws.path) })"
+                @click.stop
+                @dblclick.stop
+              ><span aria-hidden="true">✦</span></span>
             </span>
-            <span class="ws-path">{{ ws.displayPath }}</span>
+            <span class="ws-path" v-truncate>{{ ws.displayPath }}</span>
           </span>
           <!-- Folds what hangs BELOW this heading, leaving the project itself
                on screen — the caret beside the name is what hides the project.
@@ -3743,6 +3801,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                workspace — the menu remembers which heading opened it. -->
           <button
             class="ws-add"
+            data-tour="open-agent"
             :disabled="!canSpawn"
             :aria-expanded="addMenuOpen && addMenuWorkspace === ws.path"
             :title="canSpawn ? `${$t('action.add-to-grid')} · ${pickedAgentLabel}` : $t('label.set-workspace-first')"
@@ -3796,7 +3855,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             :style="groupKeyStyle(g.state)"
             :title="$t(runGroupStateLabelKey(g.state))"
           ></span>
-          <span class="ws-grp-name" :title="g.name || $t('label.manual-spawn')">{{ g.name || $t('label.manual-spawn') }}</span>
+          <span class="ws-grp-name" v-truncate>{{ g.name || $t('label.manual-spawn') }}</span>
           <!-- Neutral, unlike the workspace heading's: this row already carries
                its run state in the key beside the name, and a second colour
                here — on a different scale, since the key has four states and a
@@ -3885,6 +3944,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <span
               v-else
               class="badge"
+              v-truncate
               :title="`${p.agentLabel}\n${$t('action.rename')}`"
               @dblclick.stop="startRename(p)"
             >{{ p.agentLabel }}</span>
@@ -3894,7 +3954,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               :title="$t('pane.terminal.auto-named-tooltip')"
             >◦</span>
             <span v-if="p.isCommander" class="manager-inline" :title="$t('label.stage-manager-tooltip')">🎯 Mgr</span>
-            <span v-if="!isRowExpanded(p.id)" class="agent-line-sub">{{ agentTypeLabel(p.agentKey) }} · {{ p.roleLabel || 'No role' }}</span>
+            <span v-if="isEvolveSystemPane(p.id)" class="evolve-pane-tag" data-test="evolve-pane-tag" :title="$t('evolve.panel.system-pane-title')">{{ $t('evolve.panel.system-pane') }}</span>
+            <span v-if="!isRowExpanded(p.id)" class="agent-line-sub" v-truncate>{{ agentTypeLabel(p.agentKey) }} · {{ p.roleLabel || 'No role' }}</span>
             <span
               v-if="p.loopActive"
               class="loop-tag"
@@ -3933,12 +3994,13 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
           <div
             v-if="workspaceTag(p)"
             class="pane-ws-line"
+            v-truncate
             :class="{ 'pane-ws-line--rail': hasChildren || depth || g.rail }"
             :title="p.workspacePath"
           >{{ workspaceTag(p) }}</div>
           <template v-if="isRowExpanded(p.id)">
             <div class="agent-role-line">
-              <span class="agent-role-main">{{ agentTypeLabel(p.agentKey) }}<span v-if="p.roleLabel"> · {{ p.roleLabel }}</span></span>
+              <span class="agent-role-main" v-truncate>{{ agentTypeLabel(p.agentKey) }}<span v-if="p.roleLabel"> · {{ p.roleLabel }}</span></span>
               <span class="state" :data-state="p.status" :style="statusBadgeStyle(p.status)">{{ paneStatusLabelText(p.status) }}</span>
             </div>
             <div v-if="!p.isMinimized && p.origin === 'pipeline'" class="stage-line">
@@ -3947,9 +4009,9 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <div v-else-if="!p.isMinimized" class="stage-line">
               manual · {{ preparationLabel(p.preparationStatus) }} · {{ injectionLabel(p.injectionStatus) }} {{ kickoffLabel(p.kickoffStatus) }}
             </div>
-            <div v-if="!p.isMinimized" class="agent-cmd"><code>{{ p.command }}</code></div>
+            <div v-if="!p.isMinimized" class="agent-cmd"><code v-truncate>{{ p.command }}</code></div>
             <div v-if="!p.isMinimized && p.sessionId" class="agent-session" title="CLI session id — used to resume this agent's memory on restart">
-              <span class="agent-session-k">session</span><code>{{ p.sessionId }}</code>
+              <span class="agent-session-k">session</span><code v-truncate>{{ p.sessionId }}</code>
             </div>
             <div v-if="p.error" class="err">{{ p.error }}</div>
             <div class="row tight">
@@ -4052,6 +4114,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <button class="ws-ctx-opt" @click="startWorkspaceRenameFromMenu()">{{ $t('action.rename-workspace') }}</button>
         <button class="ws-ctx-opt" @click="wsMenuAction('reveal')">{{ $t('action.open-in-finder') }}</button>
         <button class="ws-ctx-opt" @click="wsMenuAction('copy')">{{ $t('action.copy-path') }}</button>
+        <button class="ws-ctx-opt" data-test="evolve-ctx" @click="openEvolveFor(wsMenu.path)">✦ {{ $t('evolve.menu.open') }}</button>
         <!-- Membership is exclusive, so this reads as a radio group: one tick,
              and "None" is a real choice rather than the absence of one. -->
         <template v-if="workspaceRails.length">
@@ -4119,6 +4182,11 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <button class="ws-more-opt" @click="emit('open-history', wsMoreMenuPath); closeWsMoreMenu()">
           <span class="ws-more-ico"><HistoryIcon /></span>
           <span>{{ $t('label.history') }}</span>
+        </button>
+        <button class="ws-more-opt" data-test="evolve-menu" @click="openEvolveFor(wsMoreMenuPath)">
+          <span class="ws-more-ico">✦</span>
+          <span>{{ $t('evolve.menu.open') }}</span>
+          <span v-if="evolve.badges.value[wsMoreMenuPath]?.enabled" class="ws-evolve-on">● {{ $t('evolve.menu.enabled') }}</span>
         </button>
 
         <!-- Everything below already existed, reachable only by right-clicking
@@ -4214,7 +4282,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             @click="spawnAs(spec.agentKey)"
           >
             <span class="ws-add-ck">{{ spec.agentKey === pickedAgent ? '✓' : '' }}</span>
-            <span class="ws-add-lb">
+            <span class="ws-add-lb" v-truncate>
               {{ missingClis.has(spec.agentKey) ? $t('label.agent-not-installed', { label: spec.label }) : spec.label }}
             </span>
           </button>
@@ -4317,7 +4385,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>
-            <p class="role-line">{{ currentRole.one_line }}</p>
+            <p class="role-line" v-truncate>{{ currentRole.one_line }}</p>
             <pre v-if="previewOpen" class="prompt-preview">{{ currentRole.system_prompt }}</pre>
           </div>
           <div v-else class="prompt-block warn-block">
@@ -4342,7 +4410,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
       <section class="block pipeline-detail-header">
         <div class="pipeline-detail-nav">
           <button class="ghost back-btn" @click="backToList">← Back</button>
-          <span class="pipeline-detail-name">{{ openedPipeline?.name ?? openedPipelineId }}</span>
+          <span class="pipeline-detail-name" v-truncate>{{ openedPipeline?.name ?? openedPipelineId }}</span>
           <span v-if="openedPipelineId === activePipelineId" class="active-tag">{{ $t('label.default') }}</span>
           <button class="ghost manage-btn" :title="$t('action.manage-pipelines')" @click="openPipelineManager(openedPipelineId || undefined)">⚙</button>
         </div>
@@ -4388,10 +4456,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
             <span class="dot">·</span>
             <span>updated {{ existingProject.updatedAt }}</span>
           </div>
-          <div v-if="existingProject.taskDescription" class="resume-task">
-            {{ existingProject.taskDescription.length > 200
-              ? existingProject.taskDescription.slice(0, 200) + '…'
-              : existingProject.taskDescription }}
+          <div v-if="existingProject.taskDescription" class="resume-task" v-truncate>
+            {{ existingProject.taskDescription }}
           </div>
           <div class="row">
             <button class="primary wide" @click="emit('pipeline-resume')">
@@ -4512,10 +4578,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         <div class="restart-card">
           <h3>{{ $t('label.restart-title') }}</h3>
           <p v-if="existingProject" v-html="$t('hint.restart-confirm', { completed: existingProject.stagesCompleted, total: existingProject.totalStages })"></p>
-          <div v-if="existingProject?.taskDescription" class="restart-task">
-            {{ existingProject.taskDescription.length > 240
-              ? existingProject.taskDescription.slice(0, 240) + '…'
-              : existingProject.taskDescription }}
+          <div v-if="existingProject?.taskDescription" class="restart-task" v-truncate>
+            {{ existingProject.taskDescription }}
           </div>
           <p class="restart-warn">
             {{ $t('label.restart-preserved') }}
@@ -5404,8 +5468,10 @@ button.icon-btn.muted:hover {
   padding: 6px 8px;
   border-radius: var(--radius-xs);
   white-space: pre-wrap;
-  max-height: 80px;
-  overflow-y: auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .restart-modal {
   position: fixed;
@@ -5449,8 +5515,10 @@ button.icon-btn.muted:hover {
   font-family: var(--font-mono);
   font-size: var(--font-2xs);
   margin: 8px 0;
-  max-height: 120px;
-  overflow-y: auto;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   white-space: pre-wrap;
 }
 .restart-actions {
@@ -5488,6 +5556,17 @@ button.icon-btn.muted:hover {
   font-size: var(--font-3xs);
   color: var(--text-secondary);
 }
+.prn-open {
+  margin-top: 4px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-fg);
+  font-size: var(--font-2xs);
+  cursor: pointer;
+}
+.prn-open:hover { text-decoration: underline; }
+.prn-open:focus-visible { outline: 2px solid var(--accent-focus); outline-offset: 2px; border-radius: var(--radius-xs); }
 .prn-auto {
   color: var(--attention-fg);
 }
@@ -6008,6 +6087,42 @@ button.icon-btn.muted:hover {
    Same defaults and the same --status-badge-* override hooks as the pane row's
    .state pill: one status vocabulary, painted once per surface, so recolouring
    a status in Settings moves the tally with everything else. */
+/* Icon only: the state reads from the colour; its words live in the tooltip
+   and the aria-label. */
+.ws-evolve {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  appearance: none;
+  height: 15px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 400;
+  font-size: var(--font-3xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 15px;
+  cursor: default;
+}
+.ws-evolve[data-state='on'] {
+  background: var(--success-muted);
+  color: var(--success-fg);
+}
+.ws-evolve[data-state='running'] {
+  background: var(--accent-muted);
+  color: var(--accent-fg);
+}
+.ws-evolve[data-state='failed'] {
+  background: var(--danger-muted);
+  color: var(--danger-fg);
+}
+.ws-evolve-on {
+  margin-left: auto;
+  font-size: var(--font-3xs);
+  color: var(--success-fg);
+}
 .ws-count[data-state='running'] {
   background: var(--status-badge-bg, var(--success-muted));
   color: var(--status-badge-fg, var(--success-fg));
@@ -6892,6 +7007,16 @@ button.icon-btn.muted:hover {
   background: var(--success-subtle);
   color: var(--success-fg);
   border: 1px solid var(--success-emphasis);
+  white-space: nowrap;
+}
+.evolve-pane-tag {
+  font-size: var(--font-3xs);
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: var(--accent-subtle);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent-muted);
   white-space: nowrap;
 }
 .loop-tag.waiting {

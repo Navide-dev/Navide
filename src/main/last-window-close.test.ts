@@ -60,7 +60,7 @@ describe('guardLastWindowClose', () => {
       expect(d.quit).not.toHaveBeenCalled()
     })
 
-    it(`${platform}: Quit runs the teardown instead of letting the window die first`, async () => {
+    it(`${platform}: Quit starts the quit instead of letting the window die first`, async () => {
       setPlatformId(platform)
       const e = { preventDefault: vi.fn() }
       const d = deps({ ask: () => Promise.resolve(true) })

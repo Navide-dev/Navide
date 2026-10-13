@@ -53,6 +53,10 @@ class SenderGate:
     def is_allowed(self, platform: str, sender_id: str, account: str = DEFAULT_ACCOUNT) -> bool:
         return bool(sender_id) and self._store.is_allowed(platform, sender_id, account)
 
+    def has_linked(self, platform: str, account: str = DEFAULT_ACCOUNT) -> bool:
+        """Whether any user is linked to (allowed on) this bot."""
+        return any(r["account"] == account for r in self._store.list_allow(platform))
+
     def prune(self) -> None:
         self._store.delete_pairing_older_than(self._now() - CODE_TTL_S)
 

@@ -1,4 +1,5 @@
 import type { Terminal } from '@xterm/xterm'
+import { isMacPlatform } from './shared/keybindings/parseKey'
 
 export interface TerminalAgentProfile {
   bracketedPaste?: boolean
@@ -13,6 +14,17 @@ export function encodeShiftEnter(profile?: TerminalAgentProfile): string {
   if (profile?.shiftEnterSequence) return profile.shiftEnterSequence
   if (profile?.bracketedPaste) return '\x1b[200~\n\x1b[201~'
   return '\x16\x0a'
+}
+
+/**
+ * Ctrl+V pastes on Windows, as it does in Windows Terminal; Ctrl+Shift+V
+ * pastes on Windows and Linux. Plain Ctrl+V on Linux stays ^V — Claude Code
+ * reads the clipboard on it there. macOS pastes with Cmd+V and is untouched.
+ */
+function isPasteChord(e: KeyboardEvent): boolean {
+  if (!e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'v') return false
+  if (isMacPlatform()) return false
+  return e.shiftKey || /^win/i.test(navigator.platform || '')
 }
 
 export interface TerminalInputHandlersOptions {
@@ -111,6 +123,12 @@ export function createTerminalInputHandlers(
       options.send(options.encodeNewline())
       return false
     }
+
+    // ── Paste chord: let the browser fire `paste` ─────────────────────────
+    // xterm would encode the chord as ^V and cancel the event, so the
+    // terminal's paste handler (text and screenshots) never ran. No
+    // preventDefault here: the browser default is what produces the paste.
+    if (isPasteChord(e)) return false
 
     // Every branch below that sends bytes itself and returns false MUST also
     // call e.preventDefault(): returning false only stops xterm's handling,

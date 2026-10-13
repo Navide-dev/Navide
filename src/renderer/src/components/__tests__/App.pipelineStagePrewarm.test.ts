@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { transformWithEsbuild } from 'vite'
 import { MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from '../../lib/cliCoordination'
+import { linearPipelineDag } from './pipelineDagTestStub'
 
 // A pipeline used to pre-spawn EVERY stage the moment Start was pressed, so an
 // N-stage run held N×M CLIs at once and paid the ~190MB-per-claude floor for
@@ -30,7 +31,7 @@ const preSpawnSource = block(
 )
 
 const startSource = block(
-  'async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string }): Promise<void> {',
+  'async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string',
   '\n/** Before firing 🎉',
 )
 
@@ -116,6 +117,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     'spawnPane',
     'activateStage',
     'startGlobalManagerRouter',
+    'pipelineDag',
     code,
   )
   const api = factory(
@@ -141,6 +143,7 @@ async function loadStart(over: { stageCount?: number } = {}) {
     }),
     activateStage,
     vi.fn(),
+    linearPipelineDag().dag,
   )
   return { api, spawned, stageList, pipeline, activateStage }
 }
@@ -241,6 +244,7 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     'ROLE_STANDBY_SUFFIX',
     'runPipelineKickoff',
     'MAX_KICKOFF_ATTEMPTS',
+    'pipelineDag',
     code,
   )
   const api = factory(
@@ -279,6 +283,7 @@ async function loadActivate(over: { stageCount?: number } = {}) {
     '',
     runPipelineKickoff,
     MAX_KICKOFF_ATTEMPTS,
+    linearPipelineDag().dag,
   )
   return {
     api,

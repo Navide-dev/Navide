@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import hashlib
 import itertools
 import sqlite3
@@ -10,6 +11,7 @@ from typing import Any
 import pytest
 
 from agent_team_backend.channels import manager as mgr_mod
+from agent_team_backend.channels import relay as relay_mod
 from agent_team_backend.channels.base import AdapterStatus, Capabilities, InboundMessage, Location
 from agent_team_backend.channels.manager import (
     MSG_INTERRUPTED,
@@ -40,6 +42,8 @@ class FakeAdapter:
         self.typing = 0
         self.fail_edits = False
         self.emit = None
+        self.menus: list[tuple[Location, str, list]] = []
+        self.menu_edits: list[tuple[str, str, list]] = []
 
     async def start(self, emit) -> None:
         self.emit = emit
@@ -59,6 +63,17 @@ class FakeAdapter:
             self.edits.append((message_id, "FAILED"))
             raise RuntimeError("edit failed")
         self.edits.append((message_id, text))
+
+    async def send_menu(self, loc: Location, text: str, rows: list) -> str:
+        if getattr(self, "fail_menus", False):
+            raise RuntimeError("Bad Request: BUTTON_DATA_INVALID")
+        self.menus.append((loc, text, rows))
+        return f"menu{len(self.menus)}"
+
+    async def edit_menu(self, loc: Location, message_id: str, text: str, rows: list) -> None:
+        if self.fail_edits:
+            raise RuntimeError("edit failed")
+        self.menu_edits.append((message_id, text, rows))
 
     async def send_typing(self, loc: Location) -> None:
         self.typing += 1
@@ -88,6 +103,9 @@ class FakeSeams:
         self.gone: set[str] = set()
         self.answers: list[tuple[str, dict[str, Any]]] = []
         self.answer_result: dict[str, Any] = {"ok": True}
+        self.settings: dict[str, Any] = {}
+        self.agents: dict[str, str] = {}
+        self.skills: dict[str, list[str]] = {}
         self._n = 0
 
     async def deliver(self, pane_id: str, text: str, from_display: str) -> dict[str, Any]:
@@ -129,7 +147,9 @@ class FakeSeams:
         return Seams(deliver=self.deliver, await_verdict=self.await_verdict, interrupt=self.interrupt,
                      pane_state=self.pane_state, awaiting_info=self.awaiting_info, answer=self.answer,
                      resolve_pane=self.resolve_pane, broadcast=self.broadcast,
-                     read_secret=self.read_secret, write_secret=self.write_secret)
+                     read_secret=self.read_secret, write_secret=self.write_secret,
+                     ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
+                     agent_skills=lambda a: self.skills.get(a, []))
 
 
 def _said(env: "Env", needle: str) -> bool:
@@ -1301,3 +1321,43 @@ async def test_pairing_approval_after_a_restart_goes_through_the_bot_that_got_th
     finally:
         await e2.m.stop()
         e.db.close()
+
+
+async def test_a_background_task_that_fails_is_logged_with_its_traceback(env: Env, caplog) -> None:
+    async def boom() -> None:
+        raise RuntimeError("background boom")
+
+    async def forever() -> None:
+        await asyncio.sleep(3600)
+
+    caplog.set_level(logging.ERROR, logger=mgr_mod.__name__)
+    failed = env.m._spawn(boom())
+    cancelled = env.m._spawn(forever())
+    await asyncio.sleep(0)
+    cancelled.cancel()
+    await asyncio.wait({failed, cancelled})
+    await asyncio.sleep(0)  # done callbacks run on the next loop turn
+    errors = [r for r in caplog.records if r.name == mgr_mod.__name__ and r.levelno >= logging.ERROR]
+    assert len(errors) == 1  # the cancelled task is not an error
+    assert errors[0].exc_info and "background boom" in str(errors[0].exc_info[1])
+
+
+async def test_a_relay_prompt_that_runs_out_its_ttl_is_settled(clocked) -> None:
+    env, clock = clocked
+    req = env.m.relay.create("pane-1", "permission", [], Location("telegram", "default", "-100", "50"))
+    req.message_id, req.message_text = "77", "⏸ Allow Bash(npm run build)?"
+    clock.t += relay_mod.REQUEST_TTL_S + 1
+    assert env.m.relay.get(req.id) is None  # anything that reads the table prunes it
+    await _until(lambda: any(m == "77" for m, _ in env.tg.edits))
+    assert ("77", f"⏸ Allow Bash(npm run build)?\n\n{mgr_mod.MSG_RELAY_EXPIRED}") in env.tg.edits
+    assert env.m.relay._by_id == {}
+
+
+async def test_a_relay_prompt_that_cannot_be_settled_is_a_warning(env: Env, caplog) -> None:
+    caplog.set_level(logging.INFO, logger=mgr_mod.__name__)
+    env.tg.fail_edits = True
+    req = env.m.relay.create("pane-1", "permission", [], Location("telegram", "default", "-100", "50"))
+    req.message_id = "77"
+    await env.m._settle_prompt(req, mgr_mod.MSG_RELAY_SUPERSEDED)
+    [record] = [r for r in caplog.records if "settling relay prompt" in r.getMessage()]
+    assert record.levelno == logging.WARNING

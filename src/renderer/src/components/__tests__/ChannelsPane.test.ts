@@ -33,6 +33,7 @@ function seed(): void {
     ],
   })
   mock.setResponse('channels.bindings', { ok: true, bindings: [] })
+  mock.setResponse('channels.overview', { ok: true, bots: [] })
   mock.setResponse('channels.pairing.list', {
     ok: true,
     requests: [{ platform: 'telegram', code: 'K7Q2M9XA', sender_id: '42', sender_name: 'neil', created_at: 1 }],
@@ -41,6 +42,11 @@ function seed(): void {
     ok: true,
     entries: [{ platform: 'telegram', sender_id: '7', sender_name: 'amy', added_at: 1 }],
   })
+}
+
+/** `channels.overview` for one bot knowing `chats` (no panes bound unless given). */
+function ov(chats: Record<string, unknown>[], account = 'default', platform = 'telegram') {
+  return { ok: true, bots: chats.length ? [{ platform, account, orphans: [], chats: chats.map((c) => ({ bindings: [], ...c })) }] : [] }
 }
 
 async function render(): Promise<VueWrapper> {
@@ -272,7 +278,7 @@ describe('ChannelsPane', () => {
           { pane_id: 'p3', platform: 'telegram', account: 'default', chat_id: '-3', thread_id: '', title: 'c' },
         ],
       })
-      mock.setResponse('channels.locations', { ok: true, locations: [] })
+      mock.setResponse('channels.overview', ov([]))
     }
 
     const bot = (w: VueWrapper, account: string) => w.get(`[data-platform="telegram"] [data-account="${account}"]`)
@@ -386,7 +392,7 @@ describe('ChannelsPane', () => {
         }],
       })
       mock.setResponse('channels.pairing.list', { ok: true, requests: [] })
-      mock.setResponse('channels.locations', { ok: true, locations })
+      mock.setResponse('channels.overview', ov(locations))
     }
 
     it('shows the next step while the bot knows no chat', async () => {
@@ -401,11 +407,11 @@ describe('ChannelsPane', () => {
 
     it('shows why the chats could not be loaded, and retries', async () => {
       seedConnected([])
-      mock.setResponse('channels.locations', { ok: false, error: 'adapter exploded' })
+      mock.setResponse('channels.overview', { ok: false, error: 'adapter exploded' })
       const w = await render()
       const tg = w.get('[data-platform="telegram"]')
       expect(tg.get('[data-testid="channel-link-block"] [role="alert"]').text()).toContain('adapter exploded')
-      mock.setResponse('channels.locations', { ok: true, locations: [] })
+      mock.setResponse('channels.overview', ov([]))
       await tg.get('[data-testid="channel-link-retry"]').trigger('click')
       await flushPromises()
       expect(tg.find('[role="alert"]').exists()).toBe(false)
@@ -415,12 +421,13 @@ describe('ChannelsPane', () => {
     it('collapses to a summary once a chat is linked, with a button to link another', async () => {
       seedConnected([])
       const w = await render()
-      mock.setResponse('channels.locations', { ok: true, locations: [{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }] })
+      mock.setResponse('channels.overview', ov([{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }]))
       mock.emit('channels.linked', { platform: 'telegram', chat_id: '42', title: 'neil', kind: 'direct' })
       await flushPromises()
       const tg = w.get('[data-platform="telegram"]')
       expect(tg.find('[data-testid="channel-next-step"]').exists()).toBe(false)
-      expect(tg.get('[data-testid="channel-linked-summary"]').text()).toContain('1 chat(s) linked')
+      expect(tg.get('[data-testid="channel-chat-title"]').text()).toBe('neil')
+      expect(tg.find('[data-testid="channel-chat-unbound"]').exists()).toBe(true)
       expect(tg.find('[data-testid="channel-link-guide"]').exists()).toBe(false)
       mock.setResponse('channels.link.create', { ok: true, code: 'ABCD2345', target: 'group', expires_at: Date.now() / 1000 + 600, url: null })
       await tg.get('[data-testid="channel-link-account"]').trigger('click')
@@ -457,7 +464,7 @@ describe('ChannelsPane', () => {
           }],
         }],
       })
-      mock.setResponse('channels.locations', { ok: true, locations: [] })
+      mock.setResponse('channels.overview', ov([]))
     }
 
     /** Hold `channels.quick_add` until the returned release() is called. */
@@ -513,12 +520,12 @@ describe('ChannelsPane', () => {
       expect(tg.get('[data-testid="channel-link-code"]').text()).toBe('/start QK7M2XAB')
       expect(tg.get('[data-testid="channel-bot-name"]').text()).toBe('@quick_bot')
 
-      mock.setResponse('channels.locations', { ok: true, locations: [{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }] })
+      mock.setResponse('channels.overview', ov([{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }]))
       mock.emit('channels.linked', { platform: 'telegram', code: 'QK7M2XAB', chat_id: '42', title: 'neil', kind: 'direct', confirmed: true })
       await flushPromises()
       expect(steps(tg).attributes('data-step')).toBe('done')
       expect(steps(tg).get('li.current').text()).toBe('Done')
-      expect(tg.get('[data-testid="channel-linked-summary"]').text()).toContain('1 chat(s) linked')
+      expect(tg.get('[data-testid="channel-chat-title"]').text()).toBe('neil')
       expect(openExternal).toHaveBeenCalledTimes(1)
     })
 
@@ -639,7 +646,7 @@ describe('ChannelsPane', () => {
         const w = await render()
         mock.setResponse('channels.quick_add', quickOk(true))
         seedAdded('telegram', '@quick_bot')
-        mock.setResponse('channels.locations', { ok: false, error: 'boom' })
+        mock.setResponse('channels.overview', { ok: false, error: 'boom' })
         const tg = await submitTelegram(w)
         expect(tg.find('[data-testid="channel-quick-steps"]').exists()).toBe(false)
         expect(tg.find('[data-testid="channel-quick-added"]').exists()).toBe(true)
@@ -746,7 +753,7 @@ describe('ChannelsPane', () => {
           accounts: [{ account: 'default', name: '', configured: true, enabled: true, status, config: {}, capabilities: null }],
         }],
       })
-      mock.setResponse('channels.locations', { ok: true, locations: [{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }] })
+      mock.setResponse('channels.overview', ov([{ chat_id: '42', title: 'neil', kind: 'private', supports_topics: false }]))
     }
 
     /** The manager plus the bot it created, connected and with no chat linked yet. */
@@ -763,7 +770,7 @@ describe('ChannelsPane', () => {
           ],
         }],
       })
-      mock.setResponse('channels.locations', { ok: true, locations: [] })
+      mock.setResponse('channels.overview', ov([]))
     }
 
     const managerRow = (w: VueWrapper) => w.get('[data-platform="telegram"] [data-account="default"]')
@@ -782,7 +789,7 @@ describe('ChannelsPane', () => {
       expect(managerRow(w).find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
     })
 
-    it('explains how to turn on Bot Management Mode otherwise, with a BotFather link', async () => {
+    it('explains how to turn on Bot Management Mode otherwise, once for the platform, with a BotFather link', async () => {
       for (const flag of [false, undefined]) {
         wrapper?.unmount()
         mock = createMockBackend('connected')
@@ -790,11 +797,13 @@ describe('ChannelsPane', () => {
         seedManager(flag)
         const w = await render()
         const row = managerRow(w)
-        expect(row.find('[data-testid="channel-managed-create"]').exists()).toBe(false)
-        expect(row.get('[data-testid="channel-managed-enable"]').text()).toContain(
-          'To create bots with this bot, turn on "Bot Management Mode" in BotFather first.'
+        expect(row.get('[data-testid="channel-managed-create"]').attributes('disabled')).toBeDefined()
+        expect(row.find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
+        const tg = w.get('[data-platform="telegram"]')
+        expect(tg.get('[data-testid="channel-managed-enable"]').text()).toContain(
+          'Turn on “Bot Management Mode” in BotFather. 1 of your bots don\'t have it on yet.'
         )
-        await row.get('[data-testid="channel-managed-botfather"]').trigger('click')
+        await tg.get('[data-testid="channel-managed-botfather"]').trigger('click')
         expect(openExternal).toHaveBeenLastCalledWith('https://t.me/Botfather?startapp')
       }
     })
@@ -843,6 +852,20 @@ describe('ChannelsPane', () => {
       expect(managerRow(w).find('[data-testid="channel-managed-waiting"]').exists()).toBe(false)
     })
 
+    it('explains a manager no user is linked to, instead of the raw error', async () => {
+      seedManager(true)
+      const w = await render()
+      mock.setResponse('channels.managed_create', {
+        ok: false, reason: 'manager_not_linked', error: 'no user is linked to @navide_bot yet',
+      })
+      await managerRow(w).get('[data-testid="channel-managed-create"]').trigger('click')
+      await managerRow(w).get('[data-testid="channel-managed-confirm"]').trigger('click')
+      await flushPromises()
+      expect(openExternal).not.toHaveBeenCalled()
+      expect(managerRow(w).get('[data-testid="channel-managed-error"]').text()).toBe(
+        'No user is linked to this bot yet. Link one before creating a new bot through it.')
+    })
+
     it('hands the created bot to its link guide, as quick add does', async () => {
       seedManager(true)
       const w = await render()
@@ -869,9 +892,10 @@ describe('ChannelsPane', () => {
     it.each([
       [{ reason: 'timeout', error: 'no bot was created within 600s' }, 'No bot was created within 10 minutes. Try again.'],
       [{ reason: 'token_unavailable', error: 'bot is not managed', created: true }, 'The bot was created in Telegram, but its token could not be read. Check it in BotFather.'],
-      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized'],
-      [{ reason: 'timeout', error: 'no answer from telegram within 10s', created: true }, 'Telegram did not answer in time. Check the network and try again. (no answer from telegram within 10s)'],
-      [{ reason: 'invalid', error: 'chat channels are turned off', created: true }, 'chat channels are turned off'],
+      [{ reason: 'creator_not_linked', error: 'bot 999 was created by Telegram user 8', created: true }, 'The bot was created in Telegram, but by a Telegram account not linked to this bot, so it was not added. Link that account first, or delete the bot in BotFather.'],
+      [{ reason: 'rejected', error: '401 Unauthorized', created: true }, 'Telegram rejected the credential: 401 Unauthorized The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'timeout', error: 'no answer from telegram within 10s', created: true }, 'Telegram did not answer in time. Check the network and try again. (no answer from telegram within 10s) The bot was already created in Telegram; check BotFather before trying again.'],
+      [{ reason: 'invalid', error: 'chat channels are turned off', created: true }, 'chat channels are turned off The bot was already created in Telegram; check BotFather before trying again.'],
     ])('shows a failure in words: %o', async (failure, text) => {
       seedManager(true)
       const w = await render()
@@ -890,6 +914,211 @@ describe('ChannelsPane', () => {
       mock.backend.status.value = 'disconnected'
       await flushPromises()
       expect(managerRow(w).find('[data-testid="channel-managed-waiting"]').exists()).toBe(false)
+    })
+  })
+
+  describe('bindings overview', () => {
+    const ready = { lifecycle: 'ready', connected: true, last_error: '' }
+    const pane = (name: string, extra: Record<string, unknown> = {}) => ({
+      exists: true, name, qualified_name: `Agent-Team/${name}`, workspace_path: '/Users/me/Agent-Team',
+      display_status: 'idle', agent_key: 'claude', ...extra,
+    })
+    const binding = (paneId: string, extra: Record<string, unknown> = {}) => ({
+      pane_id: paneId, platform: 'telegram', account: 'default', chat_id: '-100', thread_id: '', title: paneId,
+      verbosity: 'replies', parent_pane_id: '', auto: false, created_at: 1_760_000_000, pane: pane(paneId), ...extra,
+    })
+
+    function seedBots(): void {
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled: true,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: { ...ready, identity: '@main_bot' }, config: {}, capabilities: null,
+          accounts: [
+            { account: 'default', name: 'Main', configured: true, enabled: true, status: { ...ready, identity: '@main_bot' }, config: {}, capabilities: null },
+            { account: 'bot-b1', name: 'Ops', configured: true, enabled: true, status: { ...ready, identity: '@ops_bot' }, config: {}, capabilities: null },
+            { account: 'bot-c2', name: 'Evolve', configured: true, enabled: false, status: { ...ready, lifecycle: 'stopped', connected: false }, config: {}, capabilities: null },
+          ],
+        }],
+      })
+      mock.setResponse('channels.pairing.list', { ok: true, requests: [] })
+      mock.setResponse('channels.allow.list', { ok: true, entries: [] })
+      mock.setResponse('channels.overview', {
+        ok: true,
+        bots: [
+          { platform: 'telegram', account: 'default', orphans: [], chats: [
+            { chat_id: '42', title: 'neil', kind: 'private', supports_topics: false, bindings: [
+              binding('p1', { chat_id: '42', pane: pane('Navide指揮', { display_status: 'running' }) }),
+            ] },
+            { chat_id: '-100', title: 'Dev group', kind: 'supergroup', supports_topics: true, bindings: [
+              binding('p2', { thread_id: '50', title: 'evolve-scout', verbosity: 'standard', pane: pane('evolve-scout', { workspace_path: '/Users/me/Other' }) }),
+              binding('kid', { thread_id: '51', title: '↳ reviewer', auto: true, parent_pane_id: 'p2', verbosity: 'standard', pane: pane('reviewer') }),
+            ] },
+          ] },
+          { platform: 'telegram', account: 'bot-b1', orphans: ['gone'], chats: [
+            { chat_id: '-200', title: 'Support', kind: 'group', supports_topics: false, bindings: [
+              binding('gone', { account: 'bot-b1', chat_id: '-200', title: 'support-desk', pane: { exists: false, name: 'support-desk', qualified_name: '', workspace_path: '', display_status: '', agent_key: '' } }),
+            ] },
+            { chat_id: '-300', title: 'Quiet', kind: 'group', supports_topics: false, bindings: [] },
+          ] },
+          { platform: 'telegram', account: 'bot-c2', orphans: [], chats: [
+            { chat_id: '-400', title: 'Reports', kind: '', supports_topics: false, bindings: [binding('p4', { account: 'bot-c2', chat_id: '-400', pane: pane('reporter') })] },
+          ] },
+        ],
+      })
+    }
+
+    const bot = (w: VueWrapper, account: string) => w.get(`[data-platform="telegram"] [data-account="${account}"]`)
+    const row = (w: VueWrapper, paneId: string) => w.get(`[data-testid="channel-binding"][data-pane-id="${paneId}"]`)
+
+    it('replaces the "N chat(s) linked" line with each chat and the panes bound to it', async () => {
+      seedBots()
+      const w = await render()
+      expect(w.find('[data-testid="channel-linked-summary"]').exists()).toBe(false)
+      expect(w.get('[data-platform="telegram"] [data-testid="channel-platform-summary"]').text())
+        .toBe('3 bot(s) · 5 chat(s) · 4 pane(s) bound') // an auto child topic's pane is bound too
+      const main = bot(w, 'default')
+      expect(main.findAll('[data-testid="channel-chat-title"]').map((c) => c.text())).toEqual(['neil', 'Dev group'])
+      expect(row(w, 'p1').get('[data-testid="channel-binding-pane"]').text()).toBe('Navide指揮')
+      expect(row(w, 'p1').get('[data-testid="channel-binding-workspace"]').text()).toBe('Agent-Team')
+      expect(row(w, 'p1').get('[data-testid="channel-binding-meta"]').text()).toContain('Chat replies only')
+      expect(row(w, 'p2').text()).toContain('Topic “evolve-scout” →')
+      expect(row(w, 'p2').get('[data-testid="channel-binding-workspace"]').text()).toBe('Other')
+      expect(row(w, 'p2').get('[data-testid="channel-binding-meta"]').text()).toContain('Standard')
+      expect(bot(w, 'bot-b1').get('[data-chat-id="-300"] [data-testid="channel-chat-unbound"]').text()).toContain('💬')
+      // A bot that is off still shows who is bound through it.
+      expect(row(w, 'p4').get('[data-testid="channel-binding-pane"]').text()).toBe('reporter')
+    })
+
+    it('folds auto child topics under their parent until opened', async () => {
+      seedBots()
+      const w = await render()
+      expect(w.find('[data-testid="channel-binding"][data-pane-id="kid"]').exists()).toBe(false)
+      expect(w.find('[data-testid="channel-binding-child"]').exists()).toBe(false)
+      const toggle = row(w, 'p2').get('[data-testid="channel-binding-children-toggle"]')
+      expect(toggle.text()).toContain('1 sub-agent topic(s)')
+      await toggle.trigger('click')
+      expect(row(w, 'p2').get('[data-testid="channel-binding-child"]').text()).toContain('reviewer')
+      expect(row(w, 'p2').get('[data-testid="channel-binding-child"]').text()).toContain('Released with its parent')
+    })
+
+    it('jumps to a pane through the backend and the window that owns it', async () => {
+      seedBots()
+      const requestPaneAction = vi.fn(async () => ({ ok: true }))
+      ;(window as unknown as { agentTeam?: Record<string, unknown> }).agentTeam!.requestPaneAction = requestPaneAction
+      mock.setResponse('channels.focus_pane', { ok: true, pane_id: 'p2-now', workspace_path: '/Users/me/Other' })
+      const w = await render()
+      await row(w, 'p2').get('[data-testid="channel-binding-focus"]').trigger('click')
+      await flushPromises()
+      expect(mock.sent.find((s) => s.type === 'channels.focus_pane')?.payload).toEqual({ pane_id: 'p2' })
+      expect(requestPaneAction).toHaveBeenCalledWith({ paneId: 'p2-now', action: 'focus' })
+      requestPaneAction.mockResolvedValueOnce({ error: 'not-found' } as never)
+      await row(w, 'p2').get('[data-testid="channel-binding-focus"]').trigger('click')
+      await flushPromises()
+      expect(bot(w, 'default').get('[data-testid="channel-bindings-error"]').text()).toBe('“evolve-scout” is not open in any window.')
+    })
+
+    it('unbinds one row only on the second press', async () => {
+      seedBots()
+      mock.setResponse('channels.unbind_many', { ok: true, results: [{ pane_id: 'p1', ok: true, removed: true }] })
+      const w = await render()
+      const btn = () => row(w, 'p1').get('[data-testid="channel-binding-unbind"]')
+      expect(btn().text()).toBe('Unbind')
+      await btn().trigger('click')
+      expect(mock.sent.some((s) => s.type === 'channels.unbind_many')).toBe(false)
+      expect(btn().text()).toBe('Unbind?')
+      await btn().trigger('click')
+      await flushPromises()
+      expect(mock.sent.find((s) => s.type === 'channels.unbind_many')?.payload).toEqual({ pane_ids: ['p1'] })
+    })
+
+    it('clears an orphan binding whose pane is gone', async () => {
+      seedBots()
+      mock.setResponse('channels.unbind_many', { ok: true, results: [{ pane_id: 'gone', ok: true, removed: true }] })
+      const w = await render()
+      const orphan = row(w, 'gone')
+      expect(orphan.classes()).toContain('orphan')
+      expect(orphan.get('[data-testid="channel-binding-pane"]').text()).toBe('Pane no longer exists')
+      expect(orphan.text()).toContain('support-desk')
+      expect(orphan.find('[data-testid="channel-binding-focus"]').exists()).toBe(false)
+      await orphan.get('[data-testid="channel-binding-clear"]').trigger('click')
+      await flushPromises()
+      expect(mock.sent.find((s) => s.type === 'channels.unbind_many')?.payload).toEqual({ pane_ids: ['gone'] })
+    })
+
+    it('unbinds ticked rows together after one confirmation that names them, and reports a partial failure', async () => {
+      seedBots()
+      mock.setResponse('channels.unbind_many', {
+        ok: true, results: [{ pane_id: 'p1', ok: true, removed: true }, { pane_id: 'p2', ok: false, error: 'RuntimeError: db locked' }],
+      })
+      const w = await render()
+      const main = bot(w, 'default')
+      expect(main.find('[data-testid="channel-batch"]').exists()).toBe(false)
+      await row(w, 'p1').get('[data-testid="channel-binding-select"]').setValue(true)
+      await row(w, 'p2').get('[data-testid="channel-binding-select"]').setValue(true)
+      expect(main.get('[data-testid="channel-batch"]').text()).toContain('2 binding(s) selected')
+      await main.get('[data-testid="channel-batch-unbind"]').trigger('click')
+      expect(mock.sent.some((s) => s.type === 'channels.unbind_many')).toBe(false)
+      const ask = main.get('[data-testid="channel-batch-ask"]')
+      expect(ask.text()).toContain('Unbind 2 binding(s)?')
+      expect(ask.text()).toContain('Navide指揮 — neil')
+      expect(ask.text()).toContain('evolve-scout — Dev group')
+      expect(ask.text()).toContain('Each of the 2 chat(s) will be told it was disconnected.')
+      await main.get('[data-testid="channel-batch-confirm"]').trigger('click')
+      await flushPromises()
+      expect(mock.sent.find((s) => s.type === 'channels.unbind_many')?.payload).toEqual({ pane_ids: ['p1', 'p2'] })
+      expect(main.get('[data-testid="channel-batch-error"]').text()).toContain('1 could not be unbound')
+      expect(main.get('[data-testid="channel-batch-error"]').text()).toContain('evolve-scout: RuntimeError: db locked')
+      // The failed one stays ticked for a retry; the unbound one is cleared.
+      expect(main.get('[data-testid="channel-batch"]').text()).toContain('1 binding(s) selected')
+    })
+
+    it('keeps the bot\'s less used actions in its ⋯ menu', async () => {
+      seedBots()
+      const w = await render()
+      const main = bot(w, 'default')
+      const menu = () => main.get('[data-testid="channel-bot-menu-list"]')
+      const shown = () => !(menu().attributes('style') ?? '').includes('display: none')
+      expect(shown()).toBe(false)
+      await main.get('[data-testid="channel-bot-menu"]').trigger('click')
+      expect(shown()).toBe(true)
+      expect(menu().findAll('[role="menuitem"]').map((b) => b.attributes('data-testid'))).toEqual([
+        'channel-rename', 'channel-manage', 'channel-managed-create', 'channel-link-account', 'channel-remove-bot',
+      ])
+      expect(menu().get('[data-testid="channel-managed-create"]').text()).toContain('Turn on Bot Management Mode in BotFather first')
+      await menu().get('[data-testid="channel-remove-bot"]').trigger('click')
+      expect(shown()).toBe(false)
+      expect(main.get('[data-testid="channel-remove-ask"]').text()).toContain('pane(s)')
+      expect(mock.sent.some((s) => s.type === 'channels.remove')).toBe(false)
+      // Esc closes an open menu.
+      await main.get('[data-testid="channel-bot-menu"]').trigger('click')
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      await flushPromises()
+      expect(shown()).toBe(false)
+    })
+
+    it('says the BotFather hint once for the platform and can be dismissed for good', async () => {
+      seedBots()
+      try { localStorage.removeItem('navide.channels.managedHintDismissed') } catch { /* no storage */ }
+      const w = await render()
+      const hints = w.findAll('[data-testid="channel-managed-enable"]')
+      expect(hints).toHaveLength(1)
+      expect(hints[0].text()).toContain('2 of your bots don\'t have it on yet.')
+      await w.get('[data-testid="channel-managed-dismiss"]').trigger('click')
+      expect(w.find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
+      w.unmount()
+      const again = await render()
+      expect(again.find('[data-testid="channel-managed-enable"]').exists()).toBe(false)
+      localStorage.removeItem('navide.channels.managedHintDismissed')
+    })
+
+    it('fetches the overview afresh each time the page shows', async () => {
+      seedBots()
+      const w = await render()
+      w.unmount()
+      mock.sent.length = 0
+      await render()
+      expect(mock.sent.filter((s) => s.type === 'channels.overview').length).toBeGreaterThanOrEqual(1)
     })
   })
 })

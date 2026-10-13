@@ -784,8 +784,8 @@ describe('TaskerPanel', () => {
 
     const err = wrapper.get('[data-error-section="launchagent"]')
     expect(err.text()).toContain('Boot-out failed: 5: Input/output error')
-    // The full message stays reachable when the line is cut.
-    expect(err.attributes('title')).toBe('Boot-out failed: 5: Input/output error')
+    // The full message stays reachable when the line is cut: hover shows it.
+    expect(err.get('.tk-hint-text').attributes('data-truncate')).toBe('')
     expect(err.classes()).toContain('tk-hint')
     // A failed mutation must not claim success by rescanning.
     expect(wire.calls.filter((c) => c.type === 'executions.list')).toHaveLength(1)

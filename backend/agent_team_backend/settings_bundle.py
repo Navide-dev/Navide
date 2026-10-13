@@ -136,7 +136,7 @@ def _catalogue() -> dict[str, list[Candidate]]:
 
 def _collect_prompts() -> list[Candidate]:
     out: list[Candidate] = []
-    for item_id, raw in sorted(sync_scopes.PromptsScope().snapshot().items()):
+    for item_id, raw in sorted(sync_scopes.PromptsScope().local_snapshot().items()):
         if not isinstance(raw, dict):
             continue
         # isDefault is a property of *this* list, not of the skill: carrying it
@@ -156,7 +156,7 @@ def _collect_prompts() -> list[Candidate]:
 
 def _collect_mcp() -> list[Candidate]:
     out: list[Candidate] = []
-    for name, raw in sorted(sync_scopes.McpScope().snapshot().items()):
+    for name, raw in sorted(sync_scopes.McpScope().local_snapshot().items()):
         if not isinstance(raw, dict):
             continue
         payload, redacted = strip_secrets(raw)
@@ -176,7 +176,8 @@ def _collect_mcp() -> list[Candidate]:
 def _collect_skills() -> list[Candidate]:
     facts = _skill_facts()
     out: list[Candidate] = []
-    for name, entry in sorted(sync_scopes.SkillsStateScope().snapshot().items()):
+    # Approvals aside: a record held or rejected here is not this machine's.
+    for name, entry in sorted(sync_scopes.SkillsStateScope().local_snapshot().items()):
         content = entry.get("content") if isinstance(entry, dict) else None
         if isinstance(content, dict) and content:
             # The adapter only ever puts content here for a skill carrying the
@@ -207,7 +208,7 @@ def _collect_memory() -> list[Candidate]:
     out: list[Candidate] = []
     # MemoryScope lists user-scope files only; project-scope instruction files
     # never reach this loop.
-    for relative, entry in sorted(sync_scopes.MemoryScope().snapshot().items()):
+    for relative, entry in sorted(sync_scopes.MemoryScope().snapshot_by_path().items()):
         text = entry.get("text") if isinstance(entry, dict) else None
         if not isinstance(text, str):
             continue
@@ -382,19 +383,68 @@ def preview_import(raw: Any) -> list[dict[str, Any]]:
         local = _local_state(scope)
         for item_id, payload in parsed[scope].items():
             action, reason = _plan_item(scope, item_id, payload, local)
-            rows.append({"scope": scope, "id": item_id, "action": action, "reason": reason})
+            row = {"scope": scope, "id": item_id, "action": action, "reason": reason}
+            if scope == "mcp" and action == OVERWRITE and isinstance(local.get(item_id), dict):
+                # What it would replace, beside what comes in.
+                row["local"] = {f: local[item_id][f] for f in _ENDPOINT_FIELDS if local[item_id].get(f)}
+            summary, _problem = _import_summary(scope, item_id, payload)
+            if summary is not None and action != SKIP:
+                # The whole record, as the sync approval card shows one: what
+                # the user ticks is what lands.
+                row["summary"] = summary
+            rows.append(row)
     return rows
+
+
+def _import_summary(scope: str, item_id: str, payload: Any) -> tuple[dict[str, Any] | None, str]:
+    """For an MCP server or a skill: the summary a sync approval would show
+    (sync_scopes), and why the record cannot be shown whole and as it is —
+    the checks a synced record goes through — or ""."""
+    from . import native_memory, sync_approvals
+
+    if not isinstance(payload, dict):
+        return None, ""
+    if scope == "memory":
+        text = payload.get("text")
+        if not isinstance(text, str):
+            return None, ""
+        size = len(text.encode("utf-8"))
+        if size > native_memory.FILE_SIZE_LIMIT:
+            return None, "the file is over the memory size limit"
+        # Shown whole up to the memory scope's own limit, as a sync approval
+        # shows it: the full text and a diff against this machine's file.
+        # A bundle names a memory file by its path, always (never a wire id).
+        wire_id = sync_scopes.memory_item_id(item_id)
+        summary = sync_scopes._present_memory(wire_id, payload, {"path": item_id, "bytes": size})
+        return summary, "" if sync_approvals._displayable(summary) else "it cannot be shown in full here"
+    if scope == "prompts":
+        problem = ""
+        summary = sync_scopes._present_prompt(item_id, payload, {"id": item_id, "name": str(payload.get("name") or item_id)})
+    elif scope == "mcp":
+        problem = sync_scopes.mcp_record_problem(payload)
+        summary = sync_scopes._mcp_summary(item_id, payload)
+    elif scope == "skills":
+        files = payload.get("files")
+        if not isinstance(files, dict):
+            return None, ""
+        problem = sync_scopes._skill_paths_problem(files)
+        summary = sync_scopes._skill_summary(item_id, {}, files)
+    else:
+        return None, ""
+    if not problem and not sync_approvals.showable(summary):
+        problem = "it cannot be shown in full here"
+    return summary, problem
 
 
 def _local_state(scope: str) -> dict[str, Any]:
     """Whatever ``_plan_item`` needs to judge this scope. Read-only."""
     if scope == "prompts":
-        return sync_scopes.PromptsScope().snapshot()
+        return sync_scopes.PromptsScope().local_snapshot()
     if scope == "mcp":
-        return sync_scopes.McpScope().snapshot()
+        return sync_scopes.McpScope().local_snapshot()
     if scope == "skills":
         return _skill_facts()
-    return sync_scopes.MemoryScope().snapshot()
+    return sync_scopes.MemoryScope().snapshot_by_path()
 
 
 def _plan_item(
@@ -403,22 +453,32 @@ def _plan_item(
     if scope == "prompts":
         if not isinstance(payload, dict):
             return SKIP, "the item is not an object"
+        _summary, problem = _import_summary(scope, item_id, payload)
+        if problem:
+            return SKIP, f"not imported: {problem}"
         return (OVERWRITE if item_id in local else CREATE), ""
     if scope == "mcp":
         if not isinstance(payload, dict):
             return SKIP, "the item is not an object"
+        _summary, problem = _import_summary(scope, item_id, payload)
+        if problem:
+            return SKIP, f"not imported: {problem}"
         blanks = _blank_secret_fields(payload)
         reason = ""
         if blanks:
             reason = (
-                f"{len(blanks)} value(s) were left out of the bundle and "
-                f"must be filled in here: {', '.join(blanks)}"
+                f"{len(blanks)} value(s) were left out of the bundle ({', '.join(blanks)}): "
+                "they keep this machine's values only if the server runs the same command "
+                "or URL as this machine's; otherwise they stay empty"
             )
         return (OVERWRITE if item_id in local else CREATE), reason
     if scope == "skills":
         files = payload.get("files") if isinstance(payload, dict) else None
         if not isinstance(files, dict) or SKILL_FILE not in files:
             return SKIP, f"the bundle carries no {SKILL_FILE} for this skill"
+        _summary, problem = _import_summary(scope, item_id, payload)
+        if problem:
+            return SKIP, f"not imported: {problem}"
         fact = local.get(item_id)
         if fact is None:
             return CREATE, ""
@@ -434,6 +494,9 @@ def _plan_item(
     # instruction file there at all.
     if sync_scopes.MemoryScope._resolve(item_id) is None:
         return SKIP, "no instruction file on this machine sits at that path"
+    _summary, problem = _import_summary(scope, item_id, payload)
+    if problem:
+        return SKIP, f"not imported: {problem}"
     return (OVERWRITE if item_id in local else CREATE), ""
 
 
@@ -516,8 +579,11 @@ class _Run:
 
 
 def _apply_prompts(items: dict[str, Any], deltas: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    before = sync_scopes.PromptsScope().snapshot()
-    adapter = sync_scopes.PromptsScope(broadcast=deltas.append)
+    before = sync_scopes.PromptsScope().local_snapshot()
+    # Not held for approval: the import preview showed the user each of these
+    # records whole (the presenters a sync approval uses) and the user ticked
+    # them; the same checks refused what could not be shown (_import_summary).
+    adapter = sync_scopes.PromptsScope(broadcast=deltas.append, gate=False)
     run = _Run()
     for item_id, payload in items.items():
         action, reason = _plan_item("prompts", item_id, payload, before)
@@ -536,7 +602,7 @@ def _apply_prompts(items: dict[str, Any], deltas: list[dict[str, Any]]) -> list[
             continue
         run.wrote("prompts", item_id, action, reason, body)
 
-    after = sync_scopes.PromptsScope().snapshot()
+    after = sync_scopes.PromptsScope().local_snapshot()
 
     def landed(item_id: str, expect: Any) -> bool:
         stored = after.get(item_id)
@@ -548,8 +614,11 @@ def _apply_prompts(items: dict[str, Any], deltas: list[dict[str, Any]]) -> list[
 
 
 def _apply_mcp(items: dict[str, Any]) -> list[dict[str, Any]]:
-    adapter = sync_scopes.McpScope()
-    before = adapter.snapshot()
+    # Not held for approval: the import preview showed the user each of these
+    # records whole (the presenters a sync approval uses) and the user ticked
+    # them; the same checks refused what could not be shown (_import_summary).
+    adapter = sync_scopes.McpScope(gate=False)
+    before = adapter.local_snapshot()
     run = _Run()
     for name, payload in items.items():
         action, reason = _plan_item("mcp", name, payload, before)
@@ -566,7 +635,7 @@ def _apply_mcp(items: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         run.wrote("mcp", name, action, reason, record)
 
-    after = adapter.snapshot()
+    after = adapter.local_snapshot()
 
     def landed(name: str, expect: Any) -> bool:
         stored = after.get(name)
@@ -584,6 +653,29 @@ def _apply_mcp(items: dict[str, Any]) -> list[dict[str, Any]]:
     return run.verify(landed)
 
 
+#: What an MCP record runs or calls: a secret kept here may only be filled
+#: back into a record that names the same ones.
+_ENDPOINT_FIELDS = ("url", "command", "args")
+#: ... and runs it the same way.
+_SAME_SERVER_FIELDS = (*_ENDPOINT_FIELDS, "cwd", "transport")
+
+
+def _same_endpoint(incoming: Any, existing: Any) -> bool:
+    """Whether *incoming* is this machine's server as it is: the same url,
+    command, args, cwd and transport, and the same env — the same names,
+    and every value the bundle carries (a blank one is the bundle's stripped
+    secret) equal to this machine's."""
+    if not (isinstance(incoming, dict) and isinstance(existing, dict)):
+        return False
+    if any(incoming.get(f) != existing.get(f) for f in _SAME_SERVER_FIELDS):
+        return False
+    mine = existing.get("env") if isinstance(existing.get("env"), dict) else {}
+    theirs = incoming.get("env") if isinstance(incoming.get("env"), dict) else {}
+    if set(mine) != set(theirs):
+        return False
+    return all(value == "" or value == mine.get(key) for key, value in theirs.items())
+
+
 def restore_secrets(incoming: dict[str, Any], existing: Any) -> dict[str, Any]:
     """Fill the blanks a bundle left with what this machine already had.
 
@@ -593,6 +685,10 @@ def restore_secrets(incoming: dict[str, Any], existing: Any) -> dict[str, Any]:
     reason.
     """
     record = copy.deepcopy(incoming)
+    if not _same_endpoint(incoming, existing):
+        # Another URL or command under the same name: this machine's token
+        # would go wherever the bundle points. The blanks stay blank.
+        return record
     for field_name in SECRET_FIELDS:
         values = record.get(field_name)
         if not isinstance(values, dict):
@@ -638,8 +734,11 @@ def _apply_skills(items: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _apply_memory(items: dict[str, Any]) -> list[dict[str, Any]]:
-    adapter = sync_scopes.MemoryScope()
-    before = adapter.snapshot()
+    # Not held for approval: the import preview showed the user each of these
+    # records whole (the presenters a sync approval uses) and the user ticked
+    # them; the same checks refused what could not be shown (_import_summary).
+    adapter = sync_scopes.MemoryScope(gate=False)
+    before = adapter.snapshot_by_path()
     run = _Run()
     for relative, payload in items.items():
         action, reason = _plan_item("memory", relative, payload, before)
@@ -654,7 +753,7 @@ def _apply_memory(items: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         run.wrote("memory", relative, action, reason, payload["text"])
 
-    after = adapter.snapshot()
+    after = adapter.snapshot_by_path()
 
     def landed(relative: str, expect: Any) -> bool:
         stored = after.get(relative)

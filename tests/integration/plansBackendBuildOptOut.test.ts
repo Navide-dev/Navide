@@ -46,7 +46,7 @@ function writePlansPackage(dir: string, options: { backend: boolean }): void {
       marketplace: {
         description: 'Review and update workspace plans.',
         license: 'MIT',
-        repository: 'https://github.com/nt-nerdtechnic/Navide',
+        repository: 'https://github.com/Navide-dev/Navide',
         categories: ['productivity', 'project-management'],
       },
       contributes: {

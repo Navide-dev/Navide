@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useGitAccounts, GitAccountPublic } from '../composables/useGitAccounts'
 
 const props = defineProps<{
@@ -115,7 +116,7 @@ async function remove(id: string): Promise<void> {
         <div v-for="acc in accounts" :key="acc.id" class="ga-row">
           <div class="ga-row-main">
             <span class="ga-row-label">{{ acc.label }}</span>
-            <span class="ga-row-meta">{{ acc.host }} · {{ acc.username }} · ••••{{ acc.tokenLast4 }}</span>
+            <span class="ga-row-meta" v-truncate>{{ acc.host }} · {{ acc.username }} · ••••{{ acc.tokenLast4 }}</span>
           </div>
           <div class="ga-row-actions">
             <template v-if="confirmRemoveId === acc.id">

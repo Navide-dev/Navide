@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { parseHunks, buildPatch, hunkHasChanges, toSideBySide, type Hunk } from '../lib/git-diff'
 import { loadImageDataUrl } from '../lib/imageData'
 import type { GitTransport } from '#git-feature'
@@ -192,7 +192,7 @@ function cellClass(cell: { kind: ' ' | '+' | '-' } | null): string {
     <div class="dp-toolbar">
       <span v-if="commit" class="dp-badge commit">{{ commit.slice(0, 7) }}</span>
       <span v-else class="dp-badge" :class="staged ? 'staged' : 'unstaged'">{{ staged ? 'STAGED' : 'WORKING TREE' }}</span>
-      <span class="dp-filepath" :title="filepath">{{ filepath }}</span>
+      <span class="dp-filepath" v-truncate>{{ filepath }}</span>
       <div class="dp-toolbar-actions">
         <!-- Open file in editor -->
         <button class="dp-tbtn" title="Open file in editor" @click="emit('open-file', { filepath, name })">

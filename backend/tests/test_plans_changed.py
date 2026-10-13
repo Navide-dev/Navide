@@ -11,6 +11,7 @@ import pytest
 
 from agent_team_backend import app, fs_service
 from agent_team_backend.git_watcher import GitWatcher, _RepoHandler
+from tests.watcher_arming import arm, arming_delay, wait_until  # noqa: F401
 
 
 class FakeWebSocket:
@@ -110,7 +111,7 @@ def test_atomic_replace_dest_path_counts_as_plan_event(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_watcher_plan_write_fires_plans_sink_debounced(tmp_path: Path) -> None:
+async def test_watcher_plan_write_fires_plans_sink_debounced(tmp_path: Path, arming_delay: float) -> None:
     git_fired: list[str] = []
     plans_fired: list[str] = []
 
@@ -120,15 +121,19 @@ async def test_watcher_plan_write_fires_plans_sink_debounced(tmp_path: Path) -> 
     async def plans_sink(ws: str) -> None:
         plans_fired.append(ws)
 
-    watcher = GitWatcher(git_sink, on_plans_change=plans_sink, debounce_s=0.1)
+    watcher = GitWatcher(git_sink, on_plans_change=plans_sink, debounce_s=0.5)
     watcher.start()
     try:
         plans = tmp_path / ".agent-team" / "plans"
         plans.mkdir(parents=True)
         watcher.watch(str(tmp_path))
+        # Probes go through the git channel, so the plans channel stays clean.
+        await arm(tmp_path, git_fired, per_probe_s=2.0)
         for _ in range(3):
             (plans / "my-plan_ab12cd.html").write_text(_plan_html("draft"), encoding="utf-8")
-        await asyncio.sleep(0.5)
+        assert await wait_until(lambda: plans_fired)
+        # Let a further debounce window pass: the burst must not fire twice.
+        await asyncio.sleep(1.0)
         assert plans_fired == [str(tmp_path)]
     finally:
         watcher.stop()

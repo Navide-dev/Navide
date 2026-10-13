@@ -38,8 +38,11 @@ def window(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
 
     async def broadcast(event: dict[str, Any], **_kwargs: Any) -> None:
-        events.append(event)
         payload = event["payload"]
+        if event["type"] == "ui.invoke.request":
+            plan_mcp.resolve_ui_invoke(payload["request_id"], {"ok": True, "result": [], "error": None})
+            return
+        events.append(event)
         plan_mcp.resolve_spawn(payload["request_id"], {
             "ok": True, "pane_id": "child", "name": "worker",
         })

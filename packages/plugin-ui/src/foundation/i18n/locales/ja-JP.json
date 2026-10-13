@@ -1,4 +1,162 @@
 {
+  "convenience": {
+    "notice": {
+      "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
+      "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
+      "reset": "リセット後に再追加：許可済みの便利機能「{feature}」により {target} に再び書き込みました（{purpose}ため）",
+      "reset-note": "保存先のフォルダーが削除または作り直されたため、削除ではなくリセットとして扱いました。止めるには、概要ページでこの機能をオフにしてください。",
+      "removed": "{target} が削除されたため、便利機能「{feature}」をオフにしました。自動で戻すことはありません",
+      "prompt": "{agent} のログインが Navide の外で変更されました",
+      "prompt-accounts": "現在のログイン：{live} · Navide が復元するアカウント：{slot}",
+      "prompt-note": "Navide は上書きしていません。現在のログインを維持するか、Navide が復元するアカウントに戻せます。",
+      "prompt-logout": "Navide の外で {agent} からログアウトしました。Navide は自動で再ログインしていません。",
+      "prompt-logout-note": "{agent} を再び使うには、もう一度ログインするか、設定のアカウントでアカウントを切り替えてください。",
+      "upgrade": "以下の便利機能はこれまでどおりオンのままです",
+      "upgrade-note": "許可されたままです。概要ページでいつでもオフにできます。",
+      "action": {
+        "off": "便利機能「{feature}」をオフにしました",
+        "allowed": "便利機能「{feature}」を許可しました",
+        "cleanup": "便利機能「{feature}」の {target} を削除しました",
+        "removed-entry": "{target} が削除されました。Navide はこの項目を戻しません。便利機能「{feature}」のほかの部分はそのまま動作します。元に戻すには、概要ページでこの機能をオフにしてから再度許可してください",
+        "cleanup-failed": "{target} を削除できなかったため、便利機能「{feature}」はオンのままです。ファイルを手動で修正してから（有効な JSON でない可能性があります）、もう一度オフにしてください",
+        "refused-unsafe": "{target} がある .cursor はプロジェクトフォルダーの外を指しているため、安全のため Navide はここで便利機能「{feature}」を設定していません。使うには、.cursor をプロジェクト内の通常のフォルダーにしてください",
+        "refused-name": "Skill「{name}」は Navide のリストファイル .navide-links と同じ名前のため、Navide は {target} にリンクを作成していません。名前を変えると表示されます",
+        "retract": "Navide は便利機能「{feature}」の項目を {target} から引き上げました。Navide が開くペインが自分で持つようになり、このファイルにはもう含まれません（バックアップを保存しました）",
+        "retract-failed": "便利機能「{feature}」の項目を {target} から引き上げられなかったため、ペインは引き続きこのファイルの項目を使います。ファイルを手動で修正してから（有効な JSON でない可能性があります）、Navide を再起動してください",
+        "refused-exclude": "{target} があるリポジトリの .git または .git/info/exclude がリンク、または別ファイルの別名のため、安全のため Navide は git exclude に書き込んでいません。便利機能「{feature}」が作成したリンクは git status に表示されます"
+      },
+      "button": {
+        "overview": "概要を開く",
+        "reallow": "再度許可",
+        "keep-login": "現在のログインを維持",
+        "dismiss": "了解",
+        "switch-back": "{label} に戻す",
+        "upgrade-ack": "了解"
+      }
+    },
+    "action": {
+      "first": "初回書き込み",
+      "repair": "復元・修復",
+      "reset": "リセット後に再追加",
+      "removed": "ユーザーが削除",
+      "off": "オフ",
+      "allowed": "許可",
+      "cleanup": "クリーンアップ",
+      "removed-entry": "ユーザーが項目を削除",
+      "cleanup-failed": "クリーンアップ失敗",
+      "prompt": "Navide の外でログインが変更",
+      "refused-unsafe": "安全のため未設定",
+      "refused-name": "名前のためリンク未作成",
+      "retract": "Navide のペインへ移動",
+      "retract-failed": "Navide のペインへ移動できず",
+      "refused-exclude": "安全のため git exclude 未書き込み"
+    },
+    "overview": {
+      "title": "便利機能と Navide があなたのコンピューターに加えた変更",
+      "intro": "Navide は、許可された便利機能が必要とするときにだけ、Navide のフォルダー外に書き込みます。書き込みは毎回通知・記録され、オフにするか手動で削除すると再び追加されません。",
+      "allClis": "すべての CLI",
+      "required": "必須",
+      "requiredHint": "対応する pane はこれなしでは動作しないため、スイッチはありません。把握できるよう一覧に表示しています。",
+      "allowed": "許可",
+      "off": "オフ",
+      "reasonRemoved": "Navide が書き込んだ内容が削除されたため、オフになっています。スイッチで再度許可できます。",
+      "writes": "書き込み先",
+      "present": "あり",
+      "absent": "なし",
+      "noTargets": "Navide はまだどこにも書き込んでいません。",
+      "cost": "オフにすると",
+      "confirmTitle": "「{feature}」をオフにしますか？",
+      "confirmBody": "Navide が書き込んだ以下の内容を削除します（Navide の印が付いた項目のみ）：",
+      "confirmBodyNone": "削除する Navide の書き込みはありません。",
+      "confirmOff": "オフにして削除",
+      "cancel": "キャンセル",
+      "setFailed": "変更できませんでした：{error}",
+      "loadFailed": "便利機能を読み込めませんでした：{error}",
+      "loading": "読み込み中…",
+      "history": "履歴",
+      "historyEmpty": "履歴はありません。",
+      "backup": "バックアップ：{path}"
+    },
+    "feature": {
+      "claude_hooks": {
+        "name": "Claude hook：ターン検出、Navide Guard、起動",
+        "benefit": "Claude がターンの終了を報告し、Navide Guard が Claude のツール呼び出しを確認し、プッシュチャネルがアイドル中の Claude を起こせます。",
+        "purpose": "Navide が Claude のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "Navide が開く Claude ペインだけで有効：起動時に hooks（ターン検出、Navide Guard、起動）を渡し、~/.claude/settings.json は変更しません。以前のバージョンがそこに書いた項目は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルの hooks を使い続けます",
+        "cost": "ターン終了は報告ではなく出力から推測されます。Navide Guard は Claude のツール呼び出しを確認せず、プッシュチャネルはアイドル中の Claude を起こせません。"
+      },
+      "qwen_hooks": {
+        "name": "Qwen hook：ターン検出と Navide Guard",
+        "benefit": "Qwen がターンの終了を報告し、Navide Guard が Qwen のツール呼び出しを確認します。",
+        "purpose": "Navide が Qwen のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "~/.qwen/settings.json の hooks",
+        "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Qwen のツール呼び出しを確認しません。"
+      },
+      "copilot_hooks": {
+        "name": "Copilot hook：ターン検出と Navide Guard",
+        "benefit": "Copilot がターンの終了を報告し、Navide Guard が Copilot のツール呼び出しを確認します。",
+        "purpose": "Navide が Copilot のターン終了を知り、Navide Guard がツール呼び出しを確認できる",
+        "writes": "Navide が開く Copilot ペインだけで有効：各ペイン自身の hooks フォルダに Navide の hook ファイルを置き、~/.copilot は変更しません。以前のバージョンが書いた ~/.copilot/hooks/agent-team.json は起動時にバックアップを取って引き上げます。引き上げられない場合はそのファイルを使い続けます",
+        "cost": "ターン終了は報告ではなく出力から推測され、Navide Guard は Copilot のツール呼び出しを確認しません。"
+      },
+      "codex_hook-trust": {
+        "name": "Codex hook の信頼を引き継ぐ",
+        "benefit": "Codex pane は、自分の hooks にすでに与えた信頼を引き継ぎ、再確認しません。",
+        "purpose": "Codex pane で自分の hooks を再度信頼する必要がなくなる",
+        "writes": "Navide が開く Codex ペインだけで有効：信頼済みの hook をコマンドラインで渡し、~/.codex/config.toml は変更しません。以前のバージョンがそこに書いた [hooks.state] 行は起動時にバックアップを取って引き上げます。引き上げられない場合（または開発版の Navide）は従来どおりそのファイルに書きます",
+        "cost": "Codex pane ごとに、自分の hooks を信頼するよう再度求められます。"
+      },
+      "codex_login-promote": {
+        "name": "pane 内の Codex ログインを共有",
+        "benefit": "pane 内で行った Codex のログインが、このコンピューター全体の Codex のログインになります。",
+        "purpose": "pane 内のログインを他の場所でも使える",
+        "writes": "~/.codex/auth.json（pane のログインへのハードリンク）",
+        "cost": "pane 内のログインはその pane の中だけに残ります。"
+      },
+      "cursor_project-mcp": {
+        "name": "Cursor 用 Navide MCP ツール",
+        "benefit": "Cursor pane で、メッセージ、プラン、スケジュールなどの Navide MCP ツールを使えます。",
+        "purpose": "Cursor pane が Navide のツールを使える",
+        "writes": "ワークスペースの .cursor/mcp.json と .git/info/exclude の 1 行",
+        "cost": "Cursor pane で Navide のツールを使えません。"
+      },
+      "cursor_project-skills": {
+        "name": "Cursor への skills 配信",
+        "benefit": "Cursor に割り当てた skills をワークスペースにリンクし、Cursor pane で使えるようにします。",
+        "purpose": "Cursor pane が割り当てた skills を使える",
+        "writes": "ワークスペースの .cursor/skills/ 内のリンクと .git/info/exclude の 1 行",
+        "cost": "Cursor pane に skills が配信されません。"
+      },
+      "credentials_auto-repair": {
+        "name": "アカウントのログイン自動修復",
+        "benefit": "アカウント切り替え後に CLI の現在のログインが失われた場合、選んだアカウントを Navide が復元し、pane が未ログインで起動しないようにします。",
+        "purpose": "アカウント切り替え後に pane が未ログインで起動しない",
+        "writes": "CLI の現在のログイン：キーチェーン、~/.claude.json、各ベンダーの認証情報ファイル",
+        "cost": "アカウント切り替えに失敗した後、pane が未ログインで起動することがあります。"
+      },
+      "codex_pane-homes": {
+        "name": "Codex pane 専用フォルダー",
+        "benefit": "Codex pane ごとに専用のフォルダーを用意し、pane ごとに別のアカウントを同時に使えるようにします。",
+        "purpose": "Codex pane で別々のアカウントを同時に使える",
+        "writes": "~/.codex-panes/",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      },
+      "pane-shims": {
+        "name": "pane 起動フォルダー",
+        "benefit": "Kimi、Grok、Antigravity、Muse の pane を専用フォルダーから起動し、pane ごとにアカウントと設定を保ちます。",
+        "purpose": "pane ごとにアカウントと設定を保てる",
+        "writes": "~/.navide-panes/。加えて、pane が作った項目を各ベンダーのフォルダー（~/.kimi-code、~/.grok、~/.gemini、~/.agents、~/.copilot、~/.qwen）へ移動し、そこに空の項目を作成します。移動と作成はそれぞれ記録されます",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      },
+      "claude_account-homes": {
+        "name": "Claude アカウントフォルダー",
+        "benefit": "ログイン済みの Claude アカウントごとに専用フォルダーを持ち、セッションと設定がアカウントに付いていきます。",
+        "purpose": "セッションと設定が各 Claude アカウントに付いていく",
+        "writes": "ログイン済みアカウント用に ~/.claude 内に作成したリンクと移動したファイル",
+        "cost": "必須：対応する pane はこれなしでは動作しません。"
+      }
+    }
+  },
   "windowControls": {
     "group": "ウィンドウ操作",
     "minimize": "最小化",
@@ -201,6 +359,7 @@
     "reason-pane-closed": "配信前に送信先のペインが閉じられました",
     "reason-dropped": "配信前にログから削除されました",
     "reason-inject-failed": "入力の挿入に失敗しました。送信先の CLI がメッセージを表示しませんでした",
+    "reason-delivery-unconfirmed": "送信済みですが、送信先の CLI はまだ受信を示していません。再送する前に Pane を確認してください",
     "reason-inject-error": "入力の挿入エラー：{error}",
     "reason-push-stuck": "2 回送信しても CLI の入力欄が空になりませんでした",
     "reason-route-error": "ルーティングエラー：{error}",
@@ -230,6 +389,7 @@
     "reply-badge": "返信",
     "notice-badge": "システム通知",
     "ack-badge": "確認のみ",
+    "delivered-while-busy": "相手は処理中でしたが、送達済みです",
     "hook-badge": "フック経由",
     "hook-badge-title": "ペインに入力せず、ターン終了時に次の指示としてエージェントに渡しました",
     "push-badge": "{kind} 経由",
@@ -258,6 +418,9 @@
     "dont-show-again": "今後この確認を表示しない",
     "quit-title": "Navide を終了しますか？",
     "quit-body": "アプリ全体を終了してもよろしいですか？",
+    "quit-cancelled-title": "Navide は終了しませんでした",
+    "quit-cancelled-body": "ウィンドウが終了を止めました：{windows}。Navide は実行中のままです。そのウィンドウの作業を完了するか閉じてから、もう一度終了してください。",
+    "quit-cancelled-unknown-window": "既に閉じられたウィンドウ",
     "quit": "終了",
     "setting-title": "閉じる前に確認",
     "setting-hint": "ワークスペースを閉じる前やアプリを終了する前に確認ダイアログを表示します。",
@@ -321,7 +484,7 @@
       "tab-shortcut": "問題 (⌘⇧M)"
     },
     "pluginViews": {
-      "unavailable": "このビューはプラグインが提供しており、開けませんでした。"
+      "unavailable": "このビューは Navide プラグインが提供しており、開けませんでした。"
     },
     "plans": {
       "stage-in-review": "レビュー中",
@@ -513,17 +676,17 @@
         "markdown": "Markdown",
         "errors": {
           "generic": "不明なバックエンドエラー ({code})",
-          "backend-error": "バックエンドプラグインへのリクエストに失敗しました。",
+          "backend-error": "Navide プラグインのバックエンドへのリクエストに失敗しました。",
           "backend-unavailable": "現在バックエンドサービスを利用できません。",
           "invalid-argument": "リクエストの引数が無効です。",
-          "invalid-activation": "プラグインのアクティベーション状態が無効です。",
-          "invalid-runtime": "プラグインのランタイムが無効です。",
-          "capability-denied": "プラグインの機能の使用が拒否されました。",
-          "resource-limit": "プラグインがリソース制限を超えました。",
+          "invalid-activation": "Navide プラグインのアクティベーション状態が無効です。",
+          "invalid-runtime": "Navide プラグインのランタイムが無効です。",
+          "capability-denied": "Navide プラグインの機能の使用が拒否されました。",
+          "resource-limit": "Navide プラグインがリソース制限を超えました。",
           "not-ready": "バックエンドの準備がまだできていません。",
-          "plugin-error": "プラグインのバックエンドでエラーが発生しました。",
+          "plugin-error": "Navide プラグインのバックエンドでエラーが発生しました。",
           "timeout": "操作がタイムアウトしました。",
-          "plugin-stopping": "プラグインは停止中です。",
+          "plugin-stopping": "Navide プラグインは停止中です。",
           "user-cancelled": "ユーザーが操作をキャンセルしました。",
           "protocol-error": "プロトコルエラーが発生しました。",
           "conflict": "競合が検出されました。再読み込みしてからもう一度お試しください。",
@@ -553,6 +716,8 @@
       "open-file-failed": "{file} を開けませんでした。エディタが応答しませんでした",
       "idle-reclaimed": "メモリを解放するため、待機中の CLI ペイン {count} 個を休止しました。クリックすると再開できます",
       "click-to-resume": "クリックして再開",
+      "interrupted-at-launch": "再起動時に作業中",
+      "interrupted-at-launch-tooltip": "Navide の再起動時にこのペインは作業中で、ターンが中断されました。自動では再開されていません（自動再開の上限を超えたか、再開に失敗しました）。クリックすると再開します。",
       "resuming": "再開中…",
       "rebuild-tooltip": "再構築（会話を再開）⌘R — 現在のサイズで --resume を使って開き直し、再描画では直せない残像や重なりを解消します。処理中のターンを中断し、会話を再表示します。",
       "rebuild-tooltip-disabled": "再構築には再開可能なセッションが必要です。まずメッセージを送信してください。会話記録は最初のターンの後に作成されます。",
@@ -619,6 +784,7 @@
       "login-expired-tooltip": "CLI のログイン期限が切れました。クリックしてログインコマンドを送信します",
       "login-expired-notify-title": "CLI のログイン期限が切れました",
       "login-expired-notify-body": "CLI がログイン期限切れを報告しました。ペインのバッジをクリックして再ログインしてください",
+      "login-expired-account-dir-notify-body": "{account} の専用フォルダーでのサインインが無効になりました。このペインのログインバッジをクリックして再サインインするか、使用量バッジのアカウント一覧で「サインイン」を押してください。それまで新しいペインは共有のログインを使います。",
       "skill-picker": {
         "label": "プロンプトスキル",
         "hint": "スキルにカーソルを合わせると、送信される内容を確認できます。",
@@ -644,7 +810,6 @@
     "go-to-stage": "このステージを開く",
     "new-pipeline": "＋ 新規パイプライン",
     "set-as-default": "✓ デフォルトに設定",
-    "save-slot": "スロットを保存",
     "reset-factory-stages": "ステージを初期設定に戻す",
     "open-pipeline": "パイプラインを開く",
     "open-pipeline-named": "パイプライン「{name}」を開く",
@@ -726,10 +891,6 @@
     "close-to-right": "右側を閉じる",
     "close-to-left": "左側を閉じる",
     "close-all": "すべて閉じる",
-    "move-up": "上へ移動",
-    "move-down": "下へ移動",
-    "add-stage": "+ ステージを追加",
-    "add-slot": "+ スロットを追加",
     "remove-slot": "スロットを削除",
     "create": "作成",
     "close-settings-run": "設定を閉じて実行画面へ",
@@ -983,10 +1144,163 @@
     "file-history-blame": "ファイル履歴 + blame",
     "open-diff-in-editor": "差分をエディターで開く"
   },
+  "share": {
+    "notice": {
+      "created-user": "共有リンクを作成しました（{id}）",
+      "created-agent": "{pane} ペインが共有リンクを作成しました（{id}）",
+      "masked": "アップロード前に機密らしき値を {count} か所マスクしました",
+      "opened-first": "共有リンク（{id}）が開かれました",
+      "opened-new-viewer": "共有リンク（{id}）が新しい閲覧者に開かれました",
+      "open-count": "これまでに {count} 回開かれました",
+      "feedback-approved": "スマートフォンから承認：{title}",
+      "feedback-noted": "スマートフォンからレビューメモ：{title}",
+      "feedback-already": "スマートフォンからの承認を記録（段階は変更なし）：{title}",
+      "feedback-rejected": "スマートフォンからのフィードバックは適用されませんでした：{title}",
+      "reason-content-changed": "共有後に内容が変更されました。リンクを開き直して再送信してください。",
+      "reason-other": "理由：{reason}"
+    }
+  },
+  "plans": {
+    "share": {
+      "button": "共有リンク",
+      "title": "読み取り専用リンクを共有",
+      "expiry": "有効期限",
+      "days": "{count} 日",
+      "require-login": "開くときにサインインを必須にする",
+      "send-to-chat": "チャットに送信",
+      "send-to-chat-note": "リンクには復号キーが含まれ、そのチャットサービス（例：Telegram）を経由して送信されます。",
+    "send-to-chat-direct-only": "連携済みのダイレクトメッセージのチャットにのみ送信されます。",
+      "create": "リンクを作成",
+      "creating": "作成中…",
+      "copy": "コピー",
+      "copied": "リンクをコピーしました",
+      "close": "閉じる",
+      "expires-at": "有効期限：{date}",
+      "masked-title": "共有前にマスクしました",
+      "masked-line": "{line} 行目：{category} の疑い、マスク済み",
+      "warned-line": "{line} 行目：{category} の疑い、マスクなし、確認してください",
+      "refused": "この計画は共有できません：{reason}",
+      "failed": "リンクを作成できませんでした（{code}）：{message}",
+    "chat-target": "チャット",
+    "chat-pick": "チャットを選択",
+    "chat-none": "連携済みのダイレクトメッセージのチャットがありません。",
+    "chat-loading": "チャットを読み込み中…",
+    "chat-targets-failed": "チャットを読み込めませんでした（{code}）：{message}",
+    "reason": {
+      "memory": "エージェントのメモリファイル（CLAUDE.md、AGENTS.md など）は共有されません。",
+      "denied_name": "鍵・認証情報・トークンのファイル名に見えるため共有されません。",
+      "system": "システム、認証情報、Navide のデータフォルダ内のファイルは共有されません。",
+      "hard_link": "複数の名前を持つファイル（ハードリンク）は共有されません。",
+      "missing": "ファイルが存在しません。",
+      "not_file": "共有できるのは単一のファイルだけです。",
+      "not_absolute": "共有できるのは絶対パスだけです。",
+      "parent_ref": "「..」を含むパスは共有できません。",
+      "changed": "確認中にファイルが変更されたか、読めなくなりました。",
+      "whitespace": "パスの前後に空白があります。ファイルを正確に指定してください。",
+      "unknown_kind": "この種類のファイルは共有できません。",
+      "kind_source": "計画として共有できるのは .agent-team/plans/ 内のファイルだけです。",
+      "too_large": "32 MiB を超えるファイルは共有できません。",
+      "unreadable": "ファイルを UTF-8 テキストとして読めませんでした。",
+      "ttl": "リンクの有効期限は 15 分から 30 日です。"
+    },
+    "category": {
+      "api-key": "API キー",
+      "github-token": "GitHub トークン",
+      "slack-token": "Slack トークン",
+      "slack-app-token": "Slack アプリトークン",
+      "aws-access-key": "AWS アクセスキー",
+      "jwt": "JWT",
+      "bot-token": "ボットトークン",
+      "telegram-bot-token": "Telegram ボットトークン",
+      "discord-bot-token": "Discord ボットトークン",
+      "authorization-header": "Authorization ヘッダー",
+      "bearer-token": "Bearer トークン",
+      "credential-assignment": "認証情報",
+      "credential-flag": "認証情報フラグ",
+      "url-credentials": "URL 内の認証情報",
+      "google-api-key": "Google API キー",
+      "gitlab-token": "GitLab トークン",
+      "stripe-key": "Stripe キー",
+      "npm-token": "npm トークン",
+      "huggingface-token": "Hugging Face トークン",
+      "sendgrid-key": "SendGrid キー",
+      "pypi-token": "PyPI トークン",
+      "private-key": "秘密鍵",
+      "possible-secret": "機密情報"
+    }
+    }
+  },
   "settings": {
+    "cliExtensions": {
+      "tabInstalled": "インストール済みの CLI 拡張",
+      "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin、Claude mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲を一覧にします。Navide は読み取るだけで、ここでインストール・有効化・変更を行うことはありません。Navide プラグインは専用のページにあります。",
+      "summary": "CLI 拡張 {total} 件 · うち CLI のプロセス内で動くコード {l3} 件",
+      "machineWide": "CLI ごとにマシン全体で 1 セットです。その CLI の Navide ペインとアカウントはすべて同じものを読み込みます。",
+      "rescan": "再スキャン",
+      "loading": "スキャン中…",
+      "loadFailed": "CLI 拡張を読み取れませんでした：{error}",
+      "empty": "CLI 拡張は見つかりませんでした。",
+      "unsupported": "Navide はまだこの CLI の CLI 拡張の保存場所を読み取れません。",
+      "invalid": "読み取れません：{error}",
+      "disabled": "無効",
+      "ownerNavide": "Navide がインストール",
+      "inferred": "推定",
+      "inferredHint": "ソースコードの文字列から推定しました。CLI のマニフェストには記載されていません。",
+      "tier": {
+        "L1": "L1 テキスト資産",
+        "L2": "L2 サブプロセス",
+        "L3": "L3 プロセス内コード"
+      },
+      "tierHint": {
+        "L1": "指示や説明などのテキストだけで、それ自体は実行されません。",
+        "L2": "サブプロセスとしてコマンドを実行します（hook、MCP、LSP）。権限はあなたのユーザーと同じです。",
+        "L3": "CLI 自身のプロセス内で CLI と同じ権限で動き、権限の確認は表示されません。"
+      },
+      "capability": {
+        "exec": "コマンド実行",
+        "network": "ネットワーク",
+        "fs": "ファイル読み書き",
+        "intercept-tools": "ツール呼び出しへの介入",
+        "rewrite-prompt": "プロンプト書き換え",
+        "ui": "UI 描画",
+        "telemetry": "テレメトリー"
+      },
+      "consent": {
+        "none": "CLI は実行前に確認しません",
+        "hook-trust": "CLI が先に hook の信頼を求めます",
+        "capability-approve": "CLI が先に機能の承認を求めます",
+        "hot-reload": "ホットリロード前にセッションごとに 1 回確認します"
+      }
+    },
+    "limits": {
+      "hint": "Navide と、Navide が起動するエージェントがこのマシンに過負荷をかけないための任意の制限です。変更するまで、どの項目もオフ、または Navide の従来の動作のままです。",
+      "test-workers": "新しいペインのテストワーカー数を制限",
+      "test-workers-hint": "新しいペインに NAVIDE_TEST_MAX_WORKERS が渡されます。この変数を読むリポジトリ（このリポジトリの vitest 設定は読みます）は、テストを最大その数のワーカーで実行するため、複数のペインが同時にテストしても CPU を使い切りません。既に開いているペインは元の環境のままです。",
+      "test-workers-value": "テスト実行あたりの最大ワーカー数",
+      "evolve-reclaim": "タイムアウトした自己進化ペインを回収",
+      "evolve-reclaim-hint": "自己進化の実行が制限時間を過ぎても報告しない場合、アイドルになりこの時間が経過した時点でそのペインを回収します（ワンクリックで再開できるカードになり、閉じられはしません）。オフにすると、従来どおりそのようなペインを開いたままにします。",
+      "evolve-reclaim-value": "タイムアウト後の分数",
+      "detached": "閉じたペインが残したサーバーを追跡",
+      "detached-hint": "新しいペインには動作に影響しない NAVIDE_PANE_MARK 変数が付きます。エージェントがバックグラウンドで起動した開発サーバーはこれを引き継ぐため、ペインが閉じた後もここに一覧表示できます。「停止」を押さない限り、何も停止されません。",
+      "detached-find": "残ったサーバーを探す",
+      "detached-empty": "閉じたペインが残したサーバーはありません。",
+      "detached-stop": "停止",
+      "detached-meta": "{cwd} · {size} · {since} から",
+      "detached-failed": "リクエストを完了できませんでした。",
+      "focused-reclaim": "フォーカス中のペインも、操作がなければ回収",
+      "focused-reclaim-hint": "アイドル回収（上記）は各ウィンドウでフォーカス中のペインを回収しないため、そのペインの CLI はどれだけ放置しても動き続けます。オンにすると、この時間入力も出力もないフォーカス中のペインも回収します（ワンクリックで再開できるカードになり、閉じられはしません）。回答待ちや未送信のテキストがあるペインは引き続き保持されます。",
+      "focused-reclaim-value": "操作がない時間（時間）",
+      "spotlight": "Spotlight のインデックス",
+      "spotlight-hint": "Spotlight は node_modules と Navide 自身の隠しフォルダをもともとスキップしますが、リポジトリ内のビルド出力（dist、out、build）や追加の worktree はインデックスするため、エージェントがビルドやテストをしている間ずっと負荷がかかることがあります。Navide はこの設定を変更しません。これらのフォルダは、Spotlight の検索プライバシーリストにご自身で追加してください。",
+      "spotlight-open": "Spotlight 設定を開く"
+    },
     "search": {
       "placeholder": "設定を検索…",
       "item": {
+        "cliExtensions": {
+          "title": "拡張機能",
+          "summary": "各 AI CLI が自分でインストールした CLI 拡張と hook、実行レベルと機能（読み取り専用）。"
+        },
         "cli-agents-list": {
           "title": "CLI エージェント一覧",
           "summary": "CLI エージェントの有効化、無効化、並べ替えができます。各行でインストール、権限、プッシュ、アカウントの状態を確認できます。"
@@ -1018,6 +1332,10 @@
         "mcp-agents": {
           "title": "各 CLI の MCP",
           "summary": "各 CLI の設定ファイルに登録された MCP サーバーと、その設定場所を読み取り専用で表示します。"
+        },
+        "credentials": {
+          "title": "認証情報とキー",
+          "summary": "このマシン上の認証情報とキーの保存場所を読み取り専用でスキャンし、リマインダーを設定できます。"
         },
         "skills": {
           "title": "スキル",
@@ -1124,8 +1442,8 @@
           "summary": "エージェントのグローバルポリシーの編集、ワークスペースの適用元の選択、リポジトリの推奨設定の確認、破損したポリシーストレージの復旧を行います。"
         },
         "marketplace": {
-          "title": "マーケットプレイス",
-          "summary": "拡張機能レジストリを検索し、公開元の信頼性と機能の権限を確認してインストールします。"
+          "title": "Navide マーケットプレイス",
+          "summary": "Navide プラグインレジストリを検索し、公開元の信頼性と機能の権限を確認してインストールします。"
         },
         "help-mcp": {
           "title": "Navide での MCP の使い方",
@@ -1159,6 +1477,10 @@
         "general-quota-failover-loop": {
           "title": "ループ中に利用枠を使い切ったら、切り替え後すぐに再開する",
           "summary": "ループ中の pane がアカウントを切り替え、リセットを待たずに続行"
+        },
+        "general-account-follow-switch": {
+          "title": "Claude アカウントの切り替え時に、固定したペインも一緒に切り替える",
+          "summary": "切り替え後や利用枠を使い切ったときに、別アカウントのフォルダーで動くペインをアカウントを替えて会話を再開させます"
         }
       },
       "no-results": "一致する設定はありません"
@@ -1311,9 +1633,9 @@
       "devUnpacked": "署名なしのローカルフォルダー（開発者モードのみ）",
       "nativeBackends": {
         "title": "ネイティブバックエンド",
-        "description": "一部の拡張機能にはネイティブコードが含まれます。Navide はそれをネットワークなしのサンドボックスで実行します。読み取れるのは一緒に開いたワークスペースだけで、ファイルの変更は許可した場所に限られます。下のスイッチをオンにするまで、ネイティブコードは実行されません。",
-        "enable": "サードパーティ製プラグインのネイティブバックエンド実行を許可",
-        "empty": "ネイティブバックエンドを含むプラグインはインストールされていません。",
+        "description": "一部の Navide プラグインにはネイティブコードが含まれます。Navide はそれをネットワークなしのサンドボックスで実行します。読み取れるのは一緒に開いたワークスペースだけで、ファイルの変更は許可した場所に限られます。下のスイッチをオンにするまで、ネイティブコードは実行されません。",
+        "enable": "サードパーティ製 Navide プラグインのネイティブバックエンド実行を許可",
+        "empty": "ネイティブバックエンドを含む Navide プラグインはインストールされていません。",
         "allow": "許可",
         "disable": "無効化",
         "enable_plugin": "有効化",
@@ -1347,11 +1669,11 @@
       },
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
-      "restartPlugin": "拡張機能を再起動",
+      "restartPlugin": "Navide プラグインを再起動",
       "rollback": {
         "toBundled": "同梱版に戻す",
         "toVersion": "{version} に戻す",
-        "title": "拡張機能を以前のバージョンに戻す",
+        "title": "Navide プラグインを以前のバージョンに戻す",
         "confirm": "戻す",
         "confirmFactory": "{id} を Navide 同梱のバージョンに戻しますか？インストールしたパッケージは待機中のまま保持されるため、再起動して元に戻せます。",
         "confirmPrevious": "{id} を {version} に戻しますか？現在のバージョンは待機中のまま保持されるため、再起動して元に戻せます。",
@@ -1369,19 +1691,19 @@
       },
       "installed": "インストール済み",
       "sensitive": "機密性の高い権限",
-      "empty": "拡張機能はインストールされていません。",
+      "empty": "Navide プラグインはインストールされていません。",
       "permissionDetails": "権限と付与",
-      "plansRiskNote": "このプラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。現在のプロジェクトの計画ドキュメントを扱います：上方向に見つかった Git リポジトリのルート（その中のネストされたリポジトリを含む）から、任意の深さにある .agent-team・.claude・.cursor・docs 配下の plans／reports 系フォルダー、ルートの .plans、およびそれらの .history（読み取り専用）です。計画ドキュメントの読み取りと書き込みはどちらもこのプラグインのバックエンドが直接行い、削除と名前変更は引き続き Navide を経由します。",
-      "searchPlaceholder": "拡張機能を検索",
+      "plansRiskNote": "この Navide プラグインは独自のバックエンドプログラムを持ち、あなたのユーザー権限で動作し、サンドボックスはありません。現在のプロジェクトの計画ドキュメントを扱います：上方向に見つかった Git リポジトリのルート（その中のネストされたリポジトリを含む）から、任意の深さにある .agent-team・.claude・.cursor・docs 配下の plans／reports 系フォルダー、ルートの .plans、およびそれらの .history（読み取り専用）です。計画ドキュメントの読み取りと書き込みはどちらもこの Navide プラグインのバックエンドが直接行い、削除と名前変更は引き続き Navide を経由します。",
+      "searchPlaceholder": "Navide プラグインを検索",
       "search": "検索",
       "install": "インストール",
       "marketplace": {
         "installing": "インストール中…",
         "incompatibleInstalledDetail": "インストール済みの {version} には Navide {min} 以上が必要です（現在 {current}）。Navide を更新するまで正しく動作しない可能性があります。",
-        "loading": "拡張機能を読み込み中…",
-        "loadFailed": "マーケットプレイスを読み込めませんでした：{error}",
-        "noExtensions": "公開されている拡張機能はまだありません。",
-        "noResults": "「{query}」に一致する拡張機能はありません。",
+        "loading": "Navide プラグインを読み込み中…",
+        "loadFailed": "Navide マーケットプレイスを読み込めませんでした：{error}",
+        "noExtensions": "公開されている Navide プラグインはまだありません。",
+        "noResults": "「{query}」に一致する Navide プラグインはありません。",
         "sortLabel": "並べ替え",
         "sort": {
           "downloads": "ダウンロード数順",
@@ -1395,40 +1717,40 @@
         "update": "アップデート",
         "updateTo": "{version} にアップデート",
         "uninstall": "アンインストール",
-        "back": "マーケットプレイスに戻る",
+        "back": "Navide マーケットプレイスに戻る",
         "loadingDetail": "詳細を読み込み中…",
-        "detailFailed": "この拡張機能を読み込めませんでした：{error}",
+        "detailFailed": "この Navide プラグインを読み込めませんでした：{error}",
         "publisher": "発行元",
         "rating": "★ {average}（{count} 件の評価）",
         "noRating": "まだ評価はありません",
         "permissions": "権限",
         "noPermissions": "このバージョンは権限を宣言していません。",
         "readme": "詳細",
-        "noReadme": "この拡張機能には README がありません。",
+        "noReadme": "この Navide プラグインには README がありません。",
         "versions": "バージョン",
         "yanked": "取り下げ済み",
         "unavailable": "このプラットフォーム非対応",
         "unavailableDetail": "バージョン {version} はこのプラットフォーム（{host}）向けに公開されていません。対応プラットフォーム：{targets}。",
-        "uninstallConfirmTitle": "拡張機能をアンインストールしますか？",
-        "uninstallConfirmBody": "{name} をこのデバイスから削除します。マーケットプレイスから再インストールできます。",
+        "uninstallConfirmTitle": "Navide プラグインをアンインストールしますか？",
+        "uninstallConfirmBody": "{name} をこのデバイスから削除します。Navide マーケットプレイスから再インストールできます。",
         "updatesCount": "利用可能なアップデート：{count} 件",
         "retry": "再試行",
         "featured": "注目",
         "clearSearch": "検索をクリア",
         "showAllCategories": "すべてのカテゴリを表示",
         "noResultsHint": "別のキーワードを試すか、すべてのカテゴリを見てください。",
-        "noExtensionsHint": "公開された拡張機能はここに表示されます。",
-        "loadFailedTitle": "マーケットプレイスに接続できません",
-        "loadFailedHint": "接続を確認して再試行してください。インストール済みの拡張機能はそのまま使えます。",
+        "noExtensionsHint": "公開された Navide プラグインはここに表示されます。",
+        "loadFailedTitle": "Navide マーケットプレイスに接続できません",
+        "loadFailedHint": "接続を確認して再試行してください。インストール済みの Navide プラグインはそのまま使えます。",
         "errorDetails": "詳細",
         "info": "情報",
-        "detailTabs": "拡張機能の詳細",
+        "detailTabs": "Navide プラグインの詳細",
         "installVersion": "{version} をインストール",
         "versionLabel": "バージョン {version}",
         "otherTarget": "このプラットフォーム向けではありません（{target}）",
         "updateAvailableVersion": "アップデートあり：{version}",
         "openLinkTitle": "外部リンクを開きますか？",
-        "openLinkBody": "このリンクは拡張機能の公開者が提供したもので、ブラウザーで開きます：",
+        "openLinkBody": "このリンクは Navide プラグインの公開者が提供したもので、ブラウザーで開きます：",
         "openLink": "リンクを開く",
         "repository": "リポジトリ",
         "homepage": "ホームページ",
@@ -1453,7 +1775,7 @@
           "themes": "テーマ",
           "ai": "AI",
           "other": "その他",
-          "extension-packs": "拡張機能パック"
+          "extension-packs": "Navide プラグインパック"
         },
         "hideIncompatible": "非互換を隠す",
         "loadMore": "さらに読み込む",
@@ -1477,7 +1799,7 @@
         "publisherRiskUnsigned": "{publisher} のパッケージ {id} には Registry の署名がありません。この発行元を信頼すると、Navide はそのコードを実行します。",
         "sensitiveHeading": "機密性の高い権限",
         "publisherTitle": "公開元を信頼",
-        "permissionsTitle": "プラグインの権限を確認",
+        "permissionsTitle": "Navide プラグインの権限を確認",
         "publisherRisk": "{id} の公開元 {publisher} を信頼します。有効なレジストリ署名はパッケージの整合性を証明しますが、その公開元のコードを実行してよいかは別途判断が必要です。",
         "backendRisk": "{name} には、お使いのユーザーアカウントの OS 権限で動作するネイティブバックエンド実行ファイルが含まれています。",
         "sensitiveRisk": "{name} は機密性の高い機能へのアクセスを要求しています：{capabilities}。",
@@ -1498,17 +1820,17 @@
       "incompatibleReason": "このバージョンは Navide {version} 以降が必要と宣言しています。有効なままですが、Navide を更新するまで正しく動作しない可能性があります。",
       "pack": {
         "countsLine": "全 {total} 個 · インストール {ready} · インストール済み {installed} · スキップ {skipped}",
-        "badge": "拡張機能パック",
+        "badge": "Navide プラグインパック",
         "install": "パックをインストール（{count}）",
-        "membersTitle": "このパックに含まれる拡張機能",
+        "membersTitle": "このパックに含まれる Navide プラグイン",
         "membersNote": "各メンバーは個別に検証・確認されます。パックをインストールしても、確認していない権限が付与されることはありません。",
         "membersBadge": "パック · {count} 個のメンバー",
         "includes": "含まれるもの：{members}",
         "summaryTitle": "「{name}」をインストール：全 {total} 個、確認するのは {count} 個",
-        "summaryNote": "以下の各拡張機能は個別に検証・確認されます。パック自体は権限を要求しません。",
-        "review": "{count} 個の拡張機能を確認",
+        "summaryNote": "以下の各 Navide プラグインは個別に検証・確認されます。パック自体は権限を要求しません。",
+        "review": "{count} 個の Navide プラグインを確認",
         "finish": "完了",
-        "reviewTitle": "「{name}」をインストール：{count} 個の拡張機能を確認",
+        "reviewTitle": "「{name}」をインストール：{count} 個の Navide プラグインを確認",
         "verifying": "検証中…",
         "noSensitive": "{name} は機密性の高い権限を要求しません。",
         "confirmMember": "確認してインストール",
@@ -1516,7 +1838,7 @@
         "cancelPack": "パックをキャンセル",
         "partialNote": "スキップまたはキャンセルしたメンバーはインストールされません。インストール済みのメンバーは残ります（個別にアンインストールできます）。",
         "doneTitle": "「{name}」：完了",
-        "restartNote": "新しくインストールした拡張機能は「拡張機能」ページに表示され、そこで起動できます。",
+        "restartNote": "新しくインストールした Navide プラグインは「Navide プラグイン」ページに表示され、そこで起動できます。",
         "close": "閉じる",
         "status": {
           "ready": "確認対象",
@@ -1534,11 +1856,11 @@
           "failed": "失敗"
         },
         "uninstallTitle": "「{name}」をアンインストールしますか？",
-        "uninstallBody": "パック自体を削除します。下でチェックしない限り、含まれる拡張機能は残ります。",
+        "uninstallBody": "パック自体を削除します。下でチェックしない限り、含まれる Navide プラグインは残ります。",
         "uninstallMembersHint": "このパックのためだけにインストールされたもの：",
         "uninstallOnly": "パックのみアンインストール",
-        "uninstallWithMembers": "パックと {count} 個の拡張機能をアンインストール",
-        "noPermissionsOfItsOwn": "このパック自体は権限を付与しません。含まれる各拡張機能が、インストール時にそれぞれ権限を要求します。"
+        "uninstallWithMembers": "パックと {count} 個の Navide プラグインをアンインストール",
+        "noPermissionsOfItsOwn": "このパック自体は権限を付与しません。含まれる各 Navide プラグインが、インストール時にそれぞれ権限を要求します。"
       }
     },
     "extensionsPolicy": {
@@ -1677,6 +1999,7 @@
     },
     "general": {
       "auto-resume-reconnect": "バックエンドの再起動後にセッションを再開",
+      "resume-interrupted-on-launch": "Navide の再起動後に作業中のペインを再開",
       "system-notify": "システム通知",
       "system-notify-hint": "Navide がバックグラウンドにあるときに、CLI の応答が完了した場合や入力が必要な場合にデスクトップ通知を表示します。この設定にかかわらず、Dock のバッジは件数を表示します。",
       "notify-sound": "通知音",
@@ -1691,6 +2014,7 @@
         "not-applicable": "このプラットフォームでは利用できません。"
       },
       "auto-resume-reconnect-hint": "バックエンドがクラッシュすると、すべての CLI プロセスも終了します。この設定を有効にすると、復旧後に表示中のペインの会話を自動で再開でき、手動で開き直す必要がなくなります。",
+      "resume-interrupted-on-launch-hint": "Navide の再起動時に、ターン実行中・権限の確認待ち・質問の回答待ちだったペインと、その報告を待っている親ペインを自動で再開します（最大 6 個。残りには「再起動時に作業中」と表示）。自動では続行しません。「続行」を押すか、親ペインが指示したときに続行します。親ペインには中断された子ペインが通知されます。",
       "confirm-close-pane": "ペインを閉じる前に確認",
       "confirm-close-pane-hint": "ペインを閉じるショートカットで CLI ペインを閉じる前に確認します。処理中のペインでは、この設定にかかわらず常に確認します。",
       "confirm-close-workspace": "ワークスペースを閉じる前に確認",
@@ -1787,7 +2111,7 @@
       "appearance": "🎨 外観",
       "accounts": "🔑 アカウント",
       "shortcuts": "⌨️ キーボードショートカット",
-      "extensions": "🧩 拡張機能",
+      "extensions": "🧩 Navide プラグイン",
       "executionPolicy": "🛡️ 実行ポリシー"
     },
     "nav": {
@@ -1796,7 +2120,8 @@
       "group": {
         "general": "一般",
         "accountsAgents": "アカウントとエージェント",
-        "integration": "連携",
+        "integration": "エージェント資産",
+        "navidePlugins": "Navide プラグイン",
         "system": "システム"
       },
       "general": "一般",
@@ -1807,16 +2132,18 @@
       "crossDevice": "Navide Cloud",
       "accounts": "アカウント",
       "cliAgents": "CLI エージェント",
+      "cliExtensions": "拡張機能",
       "roles": "ロール",
       "pipelines": "パイプライン",
       "mcp": "MCP",
+      "credentials": "認証情報とキー",
       "skills": "スキル",
       "prompts": "プロンプト",
       "memory": "メモリ",
       "sharing": "共有",
       "analyzer": "アナライザー",
-      "extensions": "拡張機能",
-      "marketplace": "マーケットプレイス",
+      "extensions": "Navide プラグイン",
+      "marketplace": "Navide マーケットプレイス",
       "executionPolicy": "実行ポリシー",
       "statusBadges": "ステータスバッジ",
       "voice": "音声入力",
@@ -1886,14 +2213,14 @@
         "intro": "19 個の設定タブで変更できる内容、Navide Cloud で複数のマシンを 1 つのプライベートネットワークに接続する方法、そしてメニュー、独立ウィンドウ、使用量の表示、リソースの管理など、メイン画面の外にあるシステム機能を紹介します。",
         "s1": {
           "title": "設定の概要",
-          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 4 つのグループに分かれ、合計 <strong>22 個のタブ</strong>があります。",
+          "p1": "<kbd class=\"syh-kbd\">⌘,</kbd> で設定ウィンドウを開きます。タイトルバーの歯車ボタンからも開けます。左のサイドバーは 5 つのグループに分かれ、合計 <strong>24 個のタブ</strong>があります。",
           "h1": "検索欄",
           "p2": "サイドバーの見出しの下に、<code>設定を検索…</code> と表示された検索欄があります。設定項目のタイトル、所属セクション、キーワードを<strong>タブをまたいで</strong>現在の表示言語と登録済みのキーワードを使って検索し、最大 8 件を表示します。結果をクリックすると該当タブに切り替わり、そのセクションまでスクロールします。ただし「ストレージ」は例外で、設定を閉じてリソースマネージャーを直接開きます。一致する項目がなければ <code>一致する設定がありません</code> と表示されます。<kbd class=\"syh-kbd\">Esc</kbd> で検索欄をクリアします。",
           "callout": {
             "title": "すべての設定を検索できるわけではありません",
             "text": "検索インデックスは手作業で管理する一覧です。<strong>「{layout}」「{notifications}」「{security}」「{channels}」の各タブには登録項目がありません</strong>。そのため、これらのタブ内の設定は検索できず、タブを直接開く必要があります。CLI エージェントの項目をクリックすると、いずれかの CLI の設定ドロワーが直接開きます（「CLI エージェントとアカウント」を参照）。"
           },
-          "h2": "22 個のタブ",
+          "h2": "24 個のタブ",
           "tabTable": {
             "group": "グループ",
             "tab": "タブ",
@@ -1933,12 +2260,20 @@
               "what": "デバイス間の接続状態、このマシンのフィンガープリント、このマシンへの操作を許可する相手",
               "more": "このページのセクション 5"
             },
+            "credentials": {
+              "what": "このマシンにある認証情報とキーのリスクを読み取り専用でスキャン：検出結果、一覧、スキャン範囲、リマインダー",
+              "more": "ページ自体の説明。スキャンするだけで、ファイルは変更しません"
+            },
             "accounts": {
               "what": "Git アカウントと CLI アカウント",
               "more": "「CLI エージェントとアカウント」"
             },
             "cliAgents": {
               "what": "各 CLI のインストール、起動引数、権限モード",
+              "more": "「CLI エージェントとアカウント」"
+            },
+            "cliExtensions": {
+              "what": "各 AI CLI が自分でインストールした CLI 拡張と hook（読み取り専用の一覧）",
               "more": "「CLI エージェントとアカウント」"
             },
             "analyzer": {
@@ -1970,11 +2305,11 @@
               "more": "このページのセクション 3"
             },
             "extensions": {
-              "what": "プラグインに適用する実行ポリシー、同梱およびインストール済みのプラグイン",
+              "what": "Navide プラグインに適用する実行ポリシー、同梱およびインストール済みの Navide プラグイン",
               "more": "このページのセクション 4"
             },
             "marketplace": {
-              "what": "拡張機能レジストリの検索とインストール",
+              "what": "Navide プラグインレジストリの検索とインストール",
               "more": "このページのセクション 4"
             },
             "shortcuts": {
@@ -2033,6 +2368,10 @@
               "desc": "バックエンドがクラッシュすると、すべての CLI プロセスも終了します。この設定をオンにすると、復旧後に画面上のペインを自動で再開します。",
               "fallback": "—"
             },
+            "resumeInterrupted": {
+              "desc": "Navide を再起動すると、作業中だったペイン（とその報告を待つ親ペイン）を最大 6 個まで自動で再開します。自動では続行しません。親ペインには中断された子ペインが通知されます。",
+              "fallback": "オン"
+            },
             "concurrentResume": {
               "desc": "同時に再開するペイン数（1～10）です。残りは待機します。terminal.create がタイムアウトする場合は減らしてください。",
               "fallback": "—"
@@ -2062,7 +2401,7 @@
           "appearance": {
             "theme": "<strong>テーマ</strong> — ダーク（GitHub）、ミッドナイト、フォレスト、ライト、ハイコントラストの 5 種類を標準搭載しています。既定はダーク（GitHub）です。",
             "colors": "<strong>カスタムカラー</strong> — 8 つのカラートークン（背景、サーフェス、文字、補助文字、境界線、アクセント、成功、危険）を上書きできます。上書きした色は現在のテーマに重ねて適用され、<strong>テーマを切り替えても維持されます</strong>。<em>↺ 既定値に戻す</em>で元に戻せます。",
-            "uiScale": "<strong>表示倍率</strong> — <strong>外観 ▸ その他</strong>の先頭行にあり、スライダーではなく<strong>ドロップダウン</strong>で選びます。6 段階（80%、90%、100%、110%、125%、150%。既定は 100%）で、<kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd> でも操作できます。CSS 変数ではなく Electron のページズームを使うため、文字、アイコン、境界線、余白が一緒に拡大・縮小されます。メインプロセスがプラグインのウィンドウも含む<strong>すべてのウィンドウ</strong>に適用します。ペインのフォントサイズとは<strong>別の設定</strong>です。<kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> はターミナルの<strong>内容</strong>の文字サイズだけを変更します（ウィンドウ内の全 CLI ペインで共通）。表示倍率はその周りのシェルにも作用します。この 2 つの倍率は、ブラウザーのページズームとサイト独自の文字サイズのように<strong>掛け合わされます</strong>。",
+            "uiScale": "<strong>表示倍率</strong> — <strong>外観 ▸ その他</strong>の先頭行にあり、スライダーではなく<strong>ドロップダウン</strong>で選びます。6 段階（80%、90%、100%、110%、125%、150%。既定は 100%）で、<kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd> でも操作できます。CSS 変数ではなく Electron のページズームを使うため、文字、アイコン、境界線、余白が一緒に拡大・縮小されます。メインプロセスが Navide プラグインのウィンドウも含む<strong>すべてのウィンドウ</strong>に適用します。ペインのフォントサイズとは<strong>別の設定</strong>です。<kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> はターミナルの<strong>内容</strong>の文字サイズだけを変更します（ウィンドウ内の全 CLI ペインで共通）。表示倍率はその周りのシェルにも作用します。この 2 つの倍率は、ブラウザーのページズームとサイト独自の文字サイズのように<strong>掛け合わされます</strong>。",
             "restore": "<strong>ウィンドウを復元</strong> — 前回の終了時に開いていたワークスペースのウィンドウを開き直します。"
           },
           "callout": {
@@ -2186,7 +2525,7 @@
           }
         },
         "s4": {
-          "title": "ショートカット、更新、アナライザー、拡張機能",
+          "title": "ショートカット、更新、アナライザー、Navide プラグイン",
           "h1": "ショートカット",
           "p1": "表は<em>コマンド</em>、<em>ショートカット</em>、<em>有効になる条件</em>（適用されるコンテキスト）、<em>設定元</em>の 4 列です。",
           "shortcuts": {
@@ -2243,15 +2582,15 @@
             "models": "<strong>モデルマネージャー</strong>（Ollama モード）— モデル名を入力して<em>⬇ ダウンロード</em>を押すと、進捗バーが表示されます。下にはインストール済みモデルの名前、パラメーター数、サイズが並び、個別に削除できます。",
             "benchmark": "<strong>モデルのベンチマーク</strong> — すべてのローカルモデルに対して、技術スタックの検出（JSON 出力）、ワークスペースの 1 文要約、ドキュメント一覧からの最も関連する項目の選択、CLI 出力からの質問と選択肢の抽出という 4 つのタスクを実行します。結果の表に各項目の成否と所要時間を表示します。<strong>4 項目中 3 項目以上（75% 以上）</strong>の合格が必要で、不合格のモデルはモデル選択のドロップダウンに表示されません。"
           },
-          "h4": "拡張機能",
-          "p6": "ポリシー欄の下にプラグイン一覧があり、<strong>2 つの部分</strong>に分かれています。<strong>同梱</strong>は Bundled Git などアプリに付属するパッケージで、無効にした後に<em>復元</em>できます。<strong>インストール済み</strong>は自分でインストールしたもので、機密性の高い機能と依存関係を表示し、<em>削除</em>できます。どちらの一覧でも各行に<em>マニフェストの権限</em>と<em>パッケージバージョンへの許可</em>が表示され、このバージョンに実際に与えられた権限を確認できます。一致する許可がなければ、その旨を表示します。<strong>レジストリの検索と新規パッケージのインストールは、独立した「マーケットプレイス」タブにあります</strong>。",
-          "p7": "インストールには<strong>最大 2 回の確認</strong>があり、それぞれ必要なときだけ表示されます。確認前にディスクへ書き込むことはありません。発行元がまだ信頼されていなければ、まず「発行元を信頼する」で、<em>有効な署名はパッケージが改ざんされていないことを示すだけで、その発行元のコードを実行する意思を示すものではない</em>と明記されます。パッケージに確認が必要なリスクがあれば、次に「プラグインの権限を確認」で、要求される機密性の高い機能を一覧表示し、ネイティブのバックエンド実行ファイルが含まれる場合は専用の警告を表示します。どちらも不要な場合はそのままインストールされます。",
+          "h4": "Navide プラグイン",
+          "p6": "ポリシー欄の下に Navide プラグイン一覧があり、<strong>2 つの部分</strong>に分かれています。<strong>同梱</strong>は Bundled Git などアプリに付属するパッケージで、無効にした後に<em>復元</em>できます。<strong>インストール済み</strong>は自分でインストールしたもので、機密性の高い機能と依存関係を表示し、<em>削除</em>できます。どちらの一覧でも各行に<em>マニフェストの権限</em>と<em>パッケージバージョンへの許可</em>が表示され、このバージョンに実際に与えられた権限を確認できます。一致する許可がなければ、その旨を表示します。<strong>レジストリの検索と新規パッケージのインストールは、独立した「Navide マーケットプレイス」タブにあります</strong>。",
+          "p7": "インストールには<strong>最大 2 回の確認</strong>があり、それぞれ必要なときだけ表示されます。確認前にディスクへ書き込むことはありません。発行元がまだ信頼されていなければ、まず「発行元を信頼する」で、<em>有効な署名はパッケージが改ざんされていないことを示すだけで、その発行元のコードを実行する意思を示すものではない</em>と明記されます。パッケージに確認が必要なリスクがあれば、次に「Navide プラグインの権限を確認」で、要求される機密性の高い機能を一覧表示し、ネイティブのバックエンド実行ファイルが含まれる場合は専用の警告を表示します。どちらも不要な場合はそのままインストールされます。",
           "extRollback": "Host に戻れるパッケージがある場合、その行に「{toBundled}」または「{toVersion}」が表示されます。確認後、置き換えられた元のパッケージに戻し、「{restart}」で切り替えを完了します。ロールバックが拒否・失敗したときは Host 自身の理由が翻訳されて表示され、失敗した場合は外したビューが元に戻ります。",
-          "extPrerelease": "各拡張機能の行に「{prerelease}」のチェックがあり、プレリリースを受け取るかを拡張機能ごとに決めます。マーケットのバージョン一覧ではプレリリースに印が付き、直接インストールすることもできます。",
-          "extNative": "<strong>{native}</strong>：サードパーティの拡張機能は独自のバックエンドプログラムを同梱できますが、既定では実行されません。「{nativeEnable}」をオンにし、その拡張機能のそのバージョンに対して「{allow}」を押します。ネットワークのないサンドボックス（macOS は Seatbelt、Linux は bubblewrap）で動き、一緒に開いたワークスペースだけを読み、許可した場所にだけ書き込めます。プログラムや権限が変わると再度許可が必要です。Windows はまだ対応していません。",
-          "marketplace": "「{marketplace}」タブ：検索、カテゴリーでの絞り込み、ダウンロード数・更新日時・評価での並べ替え、非対応の項目の非表示ができ、上部に最大 3 つの「{featured}」が表示されます。詳細ページには README、変更履歴、バージョン一覧があり、横に権限と互換性が表示されます。評価はここでは閲覧のみで、評価や報告はレジストリの Web サイトにログインして行います。「{pack}」の印が付いたものは「{packInstall}」で一式をまとめてインストールできます。パックを削除しても、ほかのインストール済みパックが使っているメンバーは削除されません。<code>navide://</code> リンクは拡張機能の詳細ページを開くだけで、インストールするかどうかは常にあなたが決めます。",
+          "extPrerelease": "各 Navide プラグインの行に「{prerelease}」のチェックがあり、プレリリースを受け取るかを Navide プラグインごとに決めます。Navide マーケットプレイスのバージョン一覧ではプレリリースに印が付き、直接インストールすることもできます。",
+          "extNative": "<strong>{native}</strong>：サードパーティの Navide プラグインは独自のバックエンドプログラムを同梱できますが、既定では実行されません。「{nativeEnable}」をオンにし、その Navide プラグインのそのバージョンに対して「{allow}」を押します。ネットワークのないサンドボックス（macOS は Seatbelt、Linux は bubblewrap）で動き、一緒に開いたワークスペースだけを読み、許可した場所にだけ書き込めます。プログラムや権限が変わると再度許可が必要です。Windows はまだ対応していません。",
+          "marketplace": "「{marketplace}」タブ：検索、カテゴリーでの絞り込み、ダウンロード数・更新日時・評価での並べ替え、非対応の項目の非表示ができ、上部に最大 3 つの「{featured}」が表示されます。詳細ページには README、変更履歴、バージョン一覧があり、横に権限と互換性が表示されます。評価はここでは閲覧のみで、評価や報告はレジストリの Web サイトにログインして行います。「{pack}」の印が付いたものは「{packInstall}」で一式をまとめてインストールできます。パックを削除しても、ほかのインストール済みパックが使っているメンバーは削除されません。<code>navide://</code> リンクは Navide プラグインの詳細ページを開くだけで、インストールするかどうかは常にあなたが決めます。",
           "mirror": "<strong>ダウンロードミラー</strong>：各リリースのファイルは GitHub Release と <code>dl.navide.dev</code> の両方で公開されます。内容は同一で、検証用の sha256 チェックサムもあります。<strong>更新の既定の取得元はミラー</strong>です。アプリは起動時に配信元を <code>dl.navide.dev</code> に設定し、GitHub は代替として使います。<strong>ネットワーク関連のエラー</strong>（ホストに到達できない、タイムアウト、5xx/429）が起きた場合のみ GitHub に切り替わり、切り替わったあとは<strong>そのセッション中は GitHub を使い続けます</strong>。ミラーに戻るのは再起動後です。<strong>404 や署名・チェックサムのエラーでは切り替えません</strong>。どちらにも同じファイルがあるため同じように失敗します。エラーを隠すより、そのまま報告します。",
-          "policyIntro": "<strong>実行ポリシー</strong>は、プラグインのバックエンドが実行できることを決めます。<strong>独立したタブではなく</strong>、「拡張機能」ページ上部の欄にあり、ユーザー単位・ワークスペース単位の適用範囲バッジとポリシーファイルのパスを表示します。最上部には<em>有効なポリシー</em>の設定元、モード、状態（<em>有効</em>、<em>古い</em>、<em>利用不可</em>、<em>破損</em>）が表示されます。",
+          "policyIntro": "<strong>実行ポリシー</strong>は、Navide プラグインのバックエンドが実行できることを決めます。<strong>独立したタブではなく</strong>、「Navide プラグイン」ページ上部の欄にあり、ユーザー単位・ワークスペース単位の適用範囲バッジとポリシーファイルのパスを表示します。最上部には<em>有効なポリシー</em>の設定元、モード、状態（<em>有効</em>、<em>古い</em>、<em>利用不可</em>、<em>破損</em>）が表示されます。",
           "policy": {
             "hostDefault": "<strong>ホストの既定値</strong> — 標準の最小権限の基準で、<strong>読み取り専用</strong>です。ユーザーポリシーの保存先が完全になくなっても利用できるため、いつでも戻せます。",
             "user": "<strong>ユーザーポリシー</strong> — ワークスペースで設定元に「ユーザー」を選んだときに使う共通ポリシーです。作成するまでは「未作成」と表示されます。<em>full</em>、<em>allowlist</em>、<em>denylist</em> の 3 モードがあります。システムの名前空間とシェル実行ファイルを指定できます。実行ファイルに指定できるのは<strong>最上位の実行ファイル名のみ</strong>で、パスやシェル式は使えません。",
@@ -2261,7 +2600,7 @@
             "failClosed": "正常でない状態では常に<strong>安全側に閉じ、実行を拒否します</strong>。利用可能な設定元を選ぶか問題を修復するまで何も許可しません。保存結果が不確かな場合も同様で、「ポリシー変更の結果を確認できませんでした。実行を拒否した状態を維持します。再確認してください」と表示されます。"
           },
           "policyNote": "すべてのリポジトリへの設定元の固定をまとめて解除するには、確認チェックを入れて「すべてのポリシー設定元の選択をリセット」を使います。リポジトリポリシーファイルを変更・削除することは<strong>ありません</strong>。各ワークスペースが再びグローバルなホストの既定値またはユーザーポリシーを参照するようにするだけです。",
-          "extNote": "問題を起こすプラグインのバックエンドが停止する条件：<strong>プロトコルフレーム（要求 / 応答 / キャンセル）の上限超過だけが、そのバックエンドを停止させます</strong>。ホスト通知の上限超過では通知を破棄して件数を記録するため、大量の通知を出すバックエンドがプラグイン全体を停止させることはなくなりました。正常終了したバックエンドも、黙って消えるのではなく終了理由を記録します。"
+          "extNote": "問題を起こす Navide プラグインのバックエンドが停止する条件：<strong>プロトコルフレーム（要求 / 応答 / キャンセル）の上限超過だけが、そのバックエンドを停止させます</strong>。ホスト通知の上限超過では通知を破棄して件数を記録するため、大量の通知を出すバックエンドが Navide プラグイン全体を停止させることはなくなりました。正常終了したバックエンドも、黙って消えるのではなく終了理由を記録します。"
         },
         "s5": {
           "title": "Navide Cloud",
@@ -2334,7 +2673,7 @@
           "h6": "同期（複数のマシンで同じ設定を使う）",
           "p11": "設定 ▸ Navide Cloud の最初の欄は「同期」です。<strong>独立したタブではなく</strong>、このページの最上部にあります。同期可能な範囲ごとに切り替えがあり、オンにすると、<strong>同じアカウント</strong>にサインインしたすべてのデバイスで内容がそろいます。記録は<strong>このマシン上で暗号化</strong>され、サーバーは復号鍵を持たず、暗号文だけを保存します。",
           "sync": {
-            "scopes": "<strong>4 つの範囲を有効にできます</strong>。<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）、<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI。スキルファイル自体の同期は今後対応）、<em>メモリ</em>（<code>~/.claude/CLAUDE.md</code> などのグローバル指示ファイル。プロジェクト内のものは git で管理）です。",
+            "scopes": "<strong>4 つの範囲を有効にできます</strong>。<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）、<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI、そして Navide で作成したスキルのファイル。自分でフォルダーに置いたスキルは設定のみ）、<em>メモリ</em>（<code>~/.claude/CLAUDE.md</code> などのグローバル指示ファイル。プロジェクト内のものは git で管理）です。",
             "credentials": "<strong>認証情報</strong>の行は<strong>表示されますが無効</strong>で、「まだ同期できません」と表示されます。既定でオフになっていて有効にできる、という意味ではありません。切り替えは操作できません。",
             "states": "欄の下には 2 つの状態を明示します。<em>未接続</em>（接続が戻ると有効な範囲を同期）と、<em>このデバイスにはまだ同期鍵がありません</em>（鍵を持つまで何もアップロードしない）です。接続中にのみ使える<em>今すぐ同期</em>ボタンもあります。",
             "key": "<strong>同期鍵は ID の先頭 8 文字だけを表示</strong>し、鍵自体は表示しません。<em>鍵を更新</em>には<strong>2 回のクリック</strong>が必要です。最初のクリックで<em>今すぐ更新</em>に変わり、横に<em>キャンセル</em>が現れます。更新すると現在の鍵を廃止し、同期済みの全記録を新しい鍵で暗号化し直し、次の鍵交換時に他のデバイスに渡します。鍵の漏洩が疑われる場合に使います。",
@@ -3207,13 +3546,13 @@
           }
         },
         "s10": {
-          "title": "プランはプラグインです — 起動に失敗したときの表示",
-          "p1": "サイドバーの「プラン」タブとプランウィンドウは、どちらも同梱プラグイン <code>navide.plans</code> が描画します。<strong>設定 ▸ 拡張機能</strong>の<em>同梱</em>に、ID、バージョン、有効 / 削除済み / 利用不可のバッジ、マニフェストの権限、パッケージバージョンが表示されます。画面上では「v2」とは呼びません。例外は以下の復旧パネルだけです。",
+          "title": "プランは Navide プラグインです — 起動に失敗したときの表示",
+          "p1": "サイドバーの「プラン」タブとプランウィンドウは、どちらも同梱 Navide プラグイン <code>navide.plans</code> が描画します。<strong>設定 ▸ Navide プラグイン</strong>の<em>同梱</em>に、ID、バージョン、有効 / 削除済み / 利用不可のバッジ、マニフェストの権限、パッケージバージョンが表示されます。画面上では「v2」とは呼びません。例外は以下の復旧パネルだけです。",
           "p2": "アプリのテーマを切り替えると、プランにも即座に反映されます。ウィンドウを開き直す必要はありません。",
           "h1": "プランが起動しないとき：旧版で復旧",
-          "p3": "このセッションでプラグインの起動に失敗すると、「プラン」タブは灰色の<strong>旧版で復旧</strong>というラベルに変わり、その下に従来のプランペインが表示されます。原因を示す<em>このセッションでは Plans v2 を無効にしました（{'{'}reason{'}'}）。</em>という行も表示されます。よくある理由は <code>forced</code>（環境変数 <code>NAVIDE_PLANS_RECOVERY=legacy</code> による指定）、<code>storage-migration-failure</code>（永続ストレージの記録を読み取りまたは移行できない）、バックエンド自体の起動失敗メッセージです。",
+          "p3": "このセッションで Navide プラグインの起動に失敗すると、「プラン」タブは灰色の<strong>旧版で復旧</strong>というラベルに変わり、その下に従来のプランペインが表示されます。原因を示す<em>このセッションでは Plans v2 を無効にしました（{'{'}reason{'}'}）。</em>という行も表示されます。よくある理由は <code>forced</code>（環境変数 <code>NAVIDE_PLANS_RECOVERY=legacy</code> による指定）、<code>storage-migration-failure</code>（永続ストレージの記録を読み取りまたは移行できない）、バックエンド自体の起動失敗メッセージです。",
           "list": {
-            "retry": "<strong>Plans v2 を再試行</strong>はプラグインを再び有効にし、次にプランを開くときにバックエンドを起動し直します。<strong>1 セッションに 2 回までで、押した時点で回数を消費します</strong>。成功・失敗に関係なく 1 回と数えます。使い切ると、アプリを再起動するまで旧版のペインを使います。",
+            "retry": "<strong>Plans v2 を再試行</strong>は Navide プラグインを再び有効にし、次にプランを開くときにバックエンドを起動し直します。<strong>1 セッションに 2 回までで、押した時点で回数を消費します</strong>。成功・失敗に関係なく 1 回と数えます。使い切ると、アプリを再起動するまで旧版のペインを使います。",
             "repair": "<strong>ストレージ記録を修復</strong>は、原因が <code>storage-migration-failure</code> のときだけ表示されます。修復に成功しても<strong>復旧モードのまま</strong>で、<em>ストレージ記録を修復しました。旧版での復旧を終了するには Navide を再起動してください。</em>と表示します。もともと壊れていない場合は<em>ストレージ記録は読み取れます。修復は不要です。</em>と表示します。"
           },
           "p4": "<code>NAVIDE_PLANS_RECOVERY=legacy</code> で復旧モードを強制している場合、またはこのセッションに完全な v2 パッケージが登録されていない場合、再試行は拒否され、ボタンの横に理由が表示されます。試行回数は消費しません。"
@@ -4372,11 +4711,11 @@
               "keys": "⌘5, ⌘⇧D"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> でサイドバー全体を折りたたみます。インストールしたプラグインがタブを追加する場合もあります。",
+          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> でサイドバー全体を折りたたみます。インストールした Navide プラグインがタブを追加する場合もあります。",
           "h2": "エージェントタブの 3 階層",
           "p1": "上から順に、<strong>ワークスペース行 → グループ行 → ペイン行</strong>です。",
           "rows": {
-            "workspace": "<strong>ワークスペース行</strong>には、折りたたみ矢印、プロジェクト名とパス、ペイン数（<code>稼働中 / 全体</code>。回収済みのペインや復元待ちのプレースホルダーは稼働中に数えません）があり、右側に <code>↻</code>（すべて再構築）、履歴、<code>＋</code> が並びます。コンテキストメニューでは、<em>このフォルダーを Finder で開く</em>、<em>パスをコピー</em>、ワークスペースグループへの移動、<em>ワークスペースを閉じる</em>（行を削除し、後で開き直せるよう CLI は実行を継続）、<em>ワークスペースとペインを閉じる</em>（CLI も終了）を選べます。 <code>⋯</code> ボタンは同じ操作群の完全版（すべてのペインを再構築、履歴、Finder、パスをコピー、プロジェクト名を変更、独立したウィンドウで開く、このプロジェクトの CLI のメモリを解放、閉じる）を開きます。ウィンドウ下端に近いときは<strong>自動的に上向きに開き</strong>、メニュー自体が長い場合は<strong>その中をスクロールしても閉じません</strong>。閉じるのはメニュー外をスクロールしたときだけです。",
+            "workspace": "<strong>ワークスペース行</strong>には、左から順に折りたたみ矢印、フォルダーアイコン、プロジェクト名、ペイン数（<code>稼働中 / 全体</code>。回収済みのペインや復元待ちのプレースホルダーは稼働中に数えません）、パス、折りたたみボタン、<code>＋</code>、<code>⋯</code>（{more}）が並びます。コンテキストメニューには順に、<em>{rename}</em>、<em>{finder}</em>、<em>{copyPath}</em>、<em>{moveToGroup}</em>（ワークスペースグループへの移動。グループがあるときだけ表示）、<em>{reclaim}</em>、<em>{close}</em>（行を削除し、後で開き直せるよう CLI は実行を継続）、<em>{closePanes}</em>（CLI も終了）があります。<strong><code>↻</code>「{rebuildAll}」と「{history}」は行にはなく、<code>⋯</code> メニューの中にあります</strong>。サイドバーを最も狭くしたとき、行にボタンがもう 1 つあるとプロジェクト名の幅が削られるため、メニューに収めています。<code>⋯</code> には {rebuildAll}、{history}、{finder}、{copyPath}、{rename}、{detach}（切り離せるときのみ）、{reclaim}、さらに閉じられるときは 2 種類の「閉じる」が並びます。ウィンドウ下端に近いときは<strong>自動的に上向きに開き</strong>、メニュー自体が長い場合は<strong>その中をスクロールしても閉じません</strong>。閉じるのはメニュー外をスクロールしたときだけです。",
             "group": "<strong>グループ行</strong>はスクロール中も上部に固定され、状態の点、グループ名、メンバー数、グループ内でエージェントを開く <code>＋</code> を表示します。メンバー行の左端には同じグループへの所属を示す中間色のバーが付きます。 行にポインターを合わせたときだけ表示される折りたたみボタンもあります。",
             "pane": "<strong>ペイン行</strong>には、名前、状態、ドック内の表示などが並びます。"
           },
@@ -4571,7 +4910,7 @@
         },
         "s1": {
           "title": "方向 1：Navide が CLI エージェントに提供するツール",
-          "p1": "ペインが起動すると、エージェントのツール一覧に表示されます。教え込んだり設定したりする必要はなく、「この計画の第 2 段階を完了にして」のように普通の言葉で依頼できます。現在は<strong>59 個</strong>（コア 53 個と計画プラグインの 6 個）のツールに加え、読み取り専用リソース 3 個とプロンプトテンプレート 3 個があります。",
+          "p1": "ペインが起動すると、エージェントのツール一覧に表示されます。教え込んだり設定したりする必要はなく、「この計画の第 2 段階を完了にして」のように普通の言葉で依頼できます。現在は<strong>62 個</strong>（コア 56 個と Navide プラグイン「プラン」の 6 個）のツールに加え、読み取り専用リソース 3 個とプロンプトテンプレート 3 個があります。",
           "h1": "計画文書",
           "planTools": {
             "plan_list": "このワークスペースの全計画を、段階とタスクの進捗付きで一覧表示します",
@@ -4596,6 +4935,9 @@
             "pipeline_reset": "現在の進捗を消去し、手動で開いたものも含め、そのウィンドウの全ペインを終了します。元に戻せません",
             "pipeline_restart": "既存のパイプラインのペインを終了し、同じタスクを最初から実行します。元に戻せません",
             "pipeline_define": "パイプラインの作成・名前変更・削除、有効なパイプラインの設定、組み込み設定のリセットを行います。実行中は delete と set_active が拒否されます",
+            "pipeline_graph": "パイプラインをグラフとして読み書きします。ステップ、承認ゲート、分岐、合流、上限付きの差し戻しループを扱い、1 回の呼び出しの変更はすべて適用されるか、まったく適用されません。実行中に使われているパイプラインでは拒否されます",
+            "pipeline_gate": "実行中のパイプラインが止まっている承認ゲートを通過または差し戻します。差し戻しにはメモを付けられ、差し戻し先のステップに渡されます",
+            "pipeline_restart_from": "最初のステージではなく特定のステップから新しい実行を始め、それより前のステージは前回の出力を再利用します。パイプラインのペインを閉じて新しく開くため、クォータを消費します",
             "stage_define": "段階の追加、編集、削除、並べ替え、リセットを行います。そのパイプラインが実行中の場合、これらの操作は拒否されます",
             "role_define": "ロールの追加、編集、名前変更、削除、リセットを行います。名前変更は参照するすべてのスロットも更新します。参照中のロールは削除できません",
             "scheduler_list": "Navide のスケジュールジョブを一覧します。変更できないジョブも含まれ、各ジョブに作成者と変更可否が付き、agent の上限と現在の使用量も返します。Navide の実行中にだけ発火し、マシンやアプリを起こすことはありません",
@@ -4608,7 +4950,10 @@
             "workspace_open": "プロジェクトを Navide のワークスペースとして開きます。新しいウィンドウにするか、すでにそのプロジェクトを開いているウィンドウを使うかは、Navide が判断します",
             "workspace_switch": "自分のウィンドウを、そのウィンドウが保持する別のプロジェクトに切り替えます。元のプロジェクトのペインは実行を続けます。そのウィンドウでパイプラインが動作中の場合は、切り替えで実行が中止されるため拒否します",
             "prompt_list": "ユーザーが「設定 → プロンプト」に保存したプロンプトスキルを取得します。作成と編集はユーザーが行うため、読み取り専用です",
-            "mcp_list": "Navide の接続先と、各 CLI 固有の設定にある MCP サーバーを、現在の状態とツール数付きで取得します。読み取り専用で、「設定 → MCP」と同じ一覧です"
+            "mcp_list": "Navide の接続先と、各 CLI 固有の設定にある MCP サーバーを、現在の状態とツール数付きで取得します。読み取り専用で、「設定 → MCP」と同じ一覧です",
+            "cli_extensions_list": "各 AI CLI が自分でインストールした CLI 拡張と hook：種類、実行レベル、機能、誰がインストールしたか。名前とメタデータのみ。読み取り専用で、「設定 → 拡張機能」と同じ一覧です",
+            "credentials_list": "スキャンで棚卸しした認証情報（種類とラベルのみ、値は含みません）",
+            "credentials_findings": "認証情報のリスク検出（深刻度とリマインダー状態付き、読み取り専用）"
           },
           "note2": "これらは、エージェント自身のツールでは扱えない情報です。利用枠、パイプラインの状態、スキルの配布状況を把握しているのは Navide だけです。Git、ファイルアクセス、シェルは、意図的に MCP ツールとして<strong>ラップしていません</strong>。エージェントがすでに持つ機能をラップすると使いにくくなり、長いツール一覧によるコンテキスト消費がすべてのペインに発生するためです。",
           "h3": "他の CLI との連携",
@@ -4625,7 +4970,9 @@
             "cli_get_status": "他のペインが処理中か、最終動作時刻はいつかを確認します。さらに、<strong>起動時</strong>の情報（CLI、モデル、推論の深さ、ログインの期限切れや利用枠上限の有無）と、利用枠のスナップショットを返します。利用枠は<strong>更新しないキャッシュ値</strong>であり、取得時刻と古さを示すフラグで鮮度を確認します。最新値には利用枠ツールが必要です。起動時の情報のため、CLI 内で入力して切り替えたモデルは反映されません",
             "cli_wait_idle": "他のペインがアイドルになるか、待機がタイムアウトするまで待ちます（最大 120 秒）。タイムアウト時は、権限確認で止まっているか、まだ作業中か、到達不能かを返します",
             "cli_interrupt": "ローカルのペインへ、その CLI の割り込みキーを送ります。停止とは異なり、入力欄を消すだけの場合もあるため、結果を確認してください",
+            "cli_answer_prompt": "ローカルのペインの権限確認や選択肢メニューに、選択肢をひとつ押して答えます。恒久的な許可、Guard が危険と判定した承認、画面が変わった後の回答は拒否し、代理回答はそのペインの Guard 監査ログに記録します",
             "cli_close_agent": "別のペインを閉じます。cli_open_agent に対応する終了操作です。作業中の処理も終了し、元に戻せないため、先に cli_get_status で処理中でないことを確認してください",
+            "cli_reclaim_agent": "作業を終えた Pane を回収します。CLI プロセスは終了し、Pane はクリックで再開できるカードとして残ります（ステータスバーの「今すぐ回収」と同じ）。ビジー・フォーカス中・再開不可の Pane は理由付きで拒否され、v0.2.16 より古いウィンドウは reclaim-unsupported を返します",
             "cli_message_log": "自分が送受信したメッセージの履歴です。配信後は inbox_summary と pending_incoming から消えるため、後から確認できるのはここだけです",
             "cli_usage": "各 CLI の残り利用枠を取得します。割り当て前に確認すれば、利用枠を使い切った CLI に作業を送ることを避けられます",
             "cli_token_stats": "このワークスペースの現在のトークン使用量を取得します",
@@ -4760,7 +5107,7 @@
             "legend": {
               "nav": {
                 "label": "設定サイドバー",
-                "text": "MCP はスキル、プロンプト、メモリとともに「連携」にあります。"
+                "text": "MCP はスキル、プロンプト、メモリとともに「エージェント資産」にあります。"
               },
               "actions": {
                 "label": "上部バーの操作",
@@ -4822,9 +5169,9 @@
               "what": "プラン文書の一覧に切り替えます。"
             },
             "plugin": {
-              "name": "プラグインが提供",
+              "name": "Navide プラグインが提供",
               "where": "タブ列の末尾",
-              "what": "プラグインが追加したタブです。プラグイン独自のアイコンがない場合は、このひし形が代わりに表示されます。"
+              "what": "Navide プラグインが追加したタブです。Navide プラグイン独自のアイコンがない場合は、このひし形が代わりに表示されます。"
             },
             "collapse": {
               "where": "タブ列の右端",
@@ -5919,7 +6266,7 @@
             "menubar": "Windows と Linux では<strong>ネイティブメニューバーは既定で非表示</strong>です。<kbd class=\"cph-kbd\">Alt</kbd> を押すと表示されます。独自のタイトルバーの上に 2 本目のバーを重ねないためです。",
             "appMenu": "どちらにも macOS のアプリケーションメニューがないため、<em>設定…</em>、<em>更新を確認…</em>、<em>終了</em>は<strong>ファイル</strong>メニューに配置されます。",
             "closeItem": "<strong>ウィンドウ</strong>メニューには、ウィンドウを閉じるための<em>閉じる</em>が追加されます。macOS では <kbd class=\"cph-kbd\">⌘W</kbd> をペインを閉じる操作に使うため、この項目はありません。",
-            "pluginWindows": "Git ウィンドウなどプラグインが描画するウィンドウは、Windows と Linux では独自のボタンではなく<strong>システムのフレーム</strong>を使います。内部はプラグイン自身のコンテンツで、ホストへのブリッジがなく、操作ボタンを描画できないためです。"
+            "pluginWindows": "Git ウィンドウなど Navide プラグインが描画するウィンドウは、Windows と Linux では独自のボタンではなく<strong>システムのフレーム</strong>を使います。内部は Navide プラグイン自身のコンテンツで、ホストへのブリッジがなく、操作ボタンを描画できないためです。"
           },
           "h2": "最後のウィンドウを閉じる前に確認します",
           "p2": "Windows と Linux では、最後のウィンドウを閉じるとアプリ全体が終了します。そのため Navide は、まだキャンセルできる<strong>ウィンドウを閉じる前</strong>に確認します。閉じた後では、キャンセルしても戻れるウィンドウのないプロセスが残ってしまいます。ダイアログの「今後この確認を表示しない」を選ぶと確認を省略できます。設定の「閉じる前に確認」で再び有効にできます。",
@@ -6078,9 +6425,156 @@
       "catalog-requires-env": "必要な環境変数：{vars}",
       "catalog-empty": "一致する MCP サーバーが見つかりません"
     },
+    "credentials": {
+      "title": "認証情報とキー",
+      "intro": "このマシン上の認証情報とキーの保存場所を読み取り専用でスキャンします。変更・移動・送信は一切行いません。",
+      "meta": "ローカルのみ · 値は表示しません · 同期オフ",
+      "keyring-ok": "キーリング利用可能：{backend}",
+      "keyring-ok-plain": "キーリング利用可能",
+      "keyring-bad": "キーリングを利用できません",
+      "keyring-bad-hint": "システムのキーリングがないと、認証情報は平文ファイルに保存されがちです。",
+      "incomplete": "このスキャンは不完全です。時間やフォルダー数の上限に達したか、安全に読み取れないリポジトリをスキップしたため、以下の場所の検出項目が欠けている可能性があります。",
+      "keyring-reason-unknown": "理由は報告されていません。",
+      "scan": "スキャン",
+      "scanning": "スキャン中…",
+      "scan-roots": "スキャン対象…",
+      "scanned-at": "スキャン {time} · {ms} ms",
+      "banner-high": "高リスクの検出が {count} 件あります",
+      "banner-high-hint": "カードを開くと対処方法が表示されます。このページは何も変更しません。",
+      "filter-label": "種類で絞り込み",
+      "search": "ラベル・場所・ホストを検索…",
+      "view-label": "表示",
+      "view-findings": "検出",
+      "view-inventory": "インベントリ",
+      "all": "すべて",
+      "loading": "このマシンをスキャン中…",
+      "error-load": "スキャンに失敗しました。",
+      "empty-findings-title": "検出はありません",
+      "empty-findings-body": "現在の絞り込みに該当するリスクはありません。",
+      "empty-inventory-title": "インベントリはありません",
+      "empty-inventory-body": "現在の絞り込みに該当する認証情報はありません。",
+      "not-scanned": "「スキャン」を押すとこのマシンの認証情報を調べます。",
+      "severity": {
+        "high": "高",
+        "medium": "中",
+        "low": "低"
+      },
+      "kind": {
+        "git-helper": "Git ヘルパー",
+        "cli-account": "CLI アカウント",
+        "ssh-key": "SSH キー",
+        "keychain-item": "キーチェーン項目",
+        "remote": "Git リモート",
+        "env-var": "環境変数",
+        "plaintext-file": "平文ファイル",
+        "keyring": "キーリング"
+      },
+      "reminder": {
+        "title": "リマインダー",
+        "active": "有効",
+        "snoozed": "スヌーズ中",
+        "dismissed": "無視済み",
+        "until": "{date} まで",
+        "snooze": "7 日間スヌーズ",
+        "dismiss": "無視する",
+        "reactivate": "再び有効にする",
+        "error": "リマインダーを更新できませんでした。"
+      },
+      "drawer": {
+        "close": "詳細を閉じる",
+        "location": "場所",
+        "why": "意味",
+        "todo": "対処",
+        "steps": "自分で実行できるコマンド",
+        "steps-note": "コピーのみです。Navide が代わりに実行することはありません。",
+        "manual-fix": "この値にはシェルの特殊文字が含まれるため、コピー用のコマンドは表示しません。上の場所にある設定ファイルを手動で修正してください。",
+        "links": "プロバイダーのページ",
+        "copy": "コピー",
+        "copied": "コピーしました",
+        "details": "詳細",
+        "no-reveal": "ここでは値を表示せず、表示ボタンもありません。値を確認するにはシステムのキーチェーンアプリを開いてください。"
+      },
+      "roots": {
+        "title": "スキャン対象",
+        "intro": "git リポジトリを探すフォルダです。ワークスペースのルートは開いているワークスペースから取得されます。他の場所にある場合は追加してください。",
+        "placeholder": "/フォルダ/パス",
+        "add": "追加",
+        "browse": "参照…",
+        "remove": "削除",
+        "save": "保存して再スキャン",
+        "empty": "追加のルートはまだありません。",
+        "scanned": "前回のスキャンで調べた場所",
+        "source": {
+          "workspace": "ワークスペース",
+          "user": "ユーザー"
+        },
+        "repos": "{count} リポジトリ",
+        "truncated": "一部のみ",
+        "error": "スキャン対象を保存できませんでした。",
+        "error-load": "スキャン対象を読み込めませんでした。"
+      },
+      "code-unknown": {
+        "title": "認証情報の検出",
+        "body": "この検出タイプの説明はこのバージョンにありません。"
+      },
+      "code": {
+        "url-token": {
+          "title": "リモート URL にトークンが埋め込まれています",
+          "body": "リポジトリ設定・シェル履歴・ログを読める人なら誰でもトークンを見られます。まずプロバイダー側でトークンを失効させ、その後リモート URL から削除して git がキーチェーンを使うようにしてください。"
+        },
+        "ssh-no-passphrase-default-host": {
+          "title": "デフォルトの SSH キーにパスフレーズがありません",
+          "body": "このキーはホストに対して既定で使われ、ファイルをコピーした人なら誰でも使えます。パスフレーズを追加（ssh-keygen -p）し、ssh-agent かキーチェーンに読み込んでください。"
+        },
+        "ssh-no-passphrase": {
+          "title": "SSH キーにパスフレーズがありません",
+          "body": "この秘密鍵ファイルをコピーした人なら誰でも使えます。ssh-keygen -p でパスフレーズを追加するか、使わないなら削除してください。"
+        },
+        "ssh-key-unreferenced": {
+          "title": "どこからも参照されていない SSH キー",
+          "body": "この鍵を指す ssh 設定や既知のホストはなく、残骸かもしれません。不要ならプロバイダーのアカウントから削除し、ファイルも削除してください。"
+        },
+        "ssh-key-mode": {
+          "title": "SSH キーファイルが他のユーザーから読めます",
+          "body": "このマシンの他のユーザーが秘密鍵を読めます。ファイルに chmod 600 を実行し、自分だけがアクセスできるようにしてください。"
+        },
+        "cli-token-plaintext": {
+          "title": "CLI のトークンが平文ファイルに保存されています",
+          "body": "この CLI はログイントークンをキーチェーンではなく読み取り可能なファイルに保存しています。キーチェーンの選択肢があればログアウトして再ログインするか、ファイルを自分だけに制限してください。"
+        },
+        "gh-active-account-only": {
+          "title": "gh のアクティブなアカウントしか使えません",
+          "body": "GitHub CLI は一度に 1 つのアクティブなアカウントしか扱わないため、別アカウントのリポジトリは気付かないうちに誤った身元を使います。push 前に gh auth switch を実行するか、リポジトリごとに credential helper を設定してください。"
+        },
+        "helper-duplicate": {
+          "title": "git の credential helper が重複しています",
+          "body": "同じ helper が複数回設定されており、git が認証情報を二重に尋ねたり保存したりする可能性があります。git 設定から余分な credential.helper を削除してください。"
+        },
+        "helper-shadowed": {
+          "title": "到達しない git の credential helper",
+          "body": "先に並ぶ helper が先に応答するため、この helper は使われません。credential.helper の順序を確認し、使いたいものだけを残してください。"
+        },
+        "env-token-in-shell-rc": {
+          "title": "シェルの起動ファイルでトークンを export しています",
+          "body": "起動するすべてのプログラムがこのトークンを引き継ぎ、ファイルも漏洩やコミットが起きやすくなります。プロバイダー側で失効させ、export 行を削除し、必要なときにキーチェーンから読み込んでください。"
+        },
+        "env-token-set": {
+          "title": "環境変数にトークンが設定されています",
+          "body": "このアプリの環境に認証情報があり、すべての子プロセスに渡されます。どこでも必要でなければ、定義している場所で unset してください。"
+        },
+        "plaintext-credential-file": {
+          "title": "認証情報が平文ファイルにあります",
+          "body": "ディスク上のファイルに認証情報が読める形で保存されています。システムのキーチェーンに移し、ファイルを自分だけに制限し、共有やバックアップされた可能性があるなら認証情報をローテーションしてください。"
+        },
+        "keyring-unavailable": {
+          "title": "システムのキーリングがありません",
+          "body": "キーリングがないとツールは平文ファイルにフォールバックします。macOS キーチェーン、Windows 資格情報マネージャー、GNOME Keyring などの Secret Service を用意してロック解除し、再ログインしてください。"
+        }
+      }
+    },
     "skills": {
       "title": "管理対象のスキル",
-      "intro": "各 CLI のすべてのスキルを確認し、配布先を選び、~/.agents/skills に新しく作成できます。CLI 固有のフォルダーにあるスキルを移動したり編集したりすることはありません。",
+      "intro": "各 CLI のすべてのスキルを確認し、配布先を選び、~/.agents/skills に新しく作成できます。CLI 固有のフォルダーにあるスキルが移動するのは「共有ライブラリに移動」を選んだときだけで、元の場所にはリンクが残ります。「復元」で元に戻せます。",
       "new": "新しいスキル",
       "search": "スキルを検索",
       "empty-title": "管理対象のスキルはまだありません",
@@ -6174,10 +6668,75 @@
       "enabled-hint": "無効にすると、Navide はどこにも配布しません。直接読み込む CLI からは引き続き利用できます。",
       "native-conflict-hint": "同じ名前の CLI 固有のスキルがあり、その CLI ではそちらが優先されます。"
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud のセクション",
+        "sync": "同期",
+        "share": "共有",
+        "devices": "デバイス"
+      },
+      "inventory": {
+        "title": "このマシンとクラウド",
+        "hint": "同期する各項目が、このマシンとクラウドにそれぞれ何件あるか。",
+        "counts": "このマシン {local} · クラウド {cloud} · 一致 {inSync} · 競合 {conflict}",
+        "last-write": "最終書き込み：{device} · {when}",
+        "no-writes": "まだクラウドに書き込まれていません",
+        "sync-off": "同期オフ",
+        "notice-no-key": "このデバイスはアカウントの同期キーをまだ持っていないため、クラウドのデータを開けません。キーを持つデバイスとペアリングすると、ここに件数が表示されます。",
+        "notice-not-connected": "Navide Cloud にサインインすると、このマシンとクラウドを比較できます。",
+        "notice-error": "クラウドを読み込めませんでした。",
+        "row-error": "この項目のクラウドデータを読み込めませんでした。",
+        "row-no-key": "このデバイスにはまだ同期キーがありません。",
+        "row-not-connected": "未接続です。",
+        "refresh": "更新"
+      },
+      "devices": {
+        "title": "クラウドに書き込んだデバイス",
+        "hint": "このアカウントにレコードを書き込んだことのあるすべてのデバイス。",
+        "none": "まだどのデバイスもクラウドに書き込んでいません。",
+        "partial": "一部の項目を読み込めなかったため、この一覧は不完全な可能性があります。",
+        "last-write": "最終書き込み {when}",
+        "last-seen": "最終オンライン {when}",
+        "refresh": "更新"
+      },
+      "share": {
+        "title": "共有リンク",
+        "hint": "このマシンで暗号化した、プランやレポートの読み取り専用リンク。鍵はリンクの中にだけあり、サーバーは開けない暗号文だけを保存します。",
+        "col-item": "項目",
+        "col-creator": "作成者",
+        "col-created": "作成日時",
+        "col-expires": "有効期限",
+        "col-opens": "開封回数",
+        "col-last-open": "最終開封",
+        "creator-user": "あなた",
+        "creator-agent": "エージェント · {pane}",
+        "empty": "共有リンクはまだありません。",
+        "unavailable": "このバージョンではまだ共有リンクを使えません。",
+        "error": "共有リンクを読み込めませんでした。",
+        "copy": "リンクをコピー",
+        "extend": "7 日延長",
+        "rekey": "新しいリンク",
+        "revoke": "取り消す",
+        "revoke-confirm": "今すぐ取り消す",
+        "cancel": "キャンセル",
+        "revoke-all": "すべて取り消す",
+        "revoke-all-confirm": "すべてのリンクを取り消す",
+        "copied": "リンクをコピーしました。",
+        "extended": "7 日延長しました。",
+        "rekeyed": "新しいリンクをコピーしました。古いリンクは開けなくなりました。",
+        "revoked": "リンクを取り消しました。",
+        "revoked-all": "すべてのリンクを取り消しました。",
+        "action-failed": "操作できませんでした（{code}）。",
+        "rekey-confirm": "今すぐリンクを置き換える",
+        "rekeyed-old-alive": "新しいリンクをコピーしました。古いリンクの無効化はサーバーで確認できませんでした。開かれては困る場合は取り消してください。",
+        "refresh": "更新"
+      }
+    },
     "sync": {
       "title": "同期",
       "hint": "項目を有効にすると、このアカウントでログインしているすべてのデバイスで同じ設定を保てます。データはこのマシンで暗号化され、サーバーには復号鍵のない暗号文が保存されます。",
       "not-yet": "まだ同期に対応していません。",
+      "retired-memory": "メモリは同期されなくなりました。このスイッチをオフにしてください。このデバイスの指示ファイルとクラウド上のコピーはそのまま残ります。",
       "not-connected": "未接続 — 接続が復旧すると、有効にした項目が同期されます。",
       "no-key": "このデバイスにはまだ同期キーがありません。キーを取得するまでアップロードされません。",
       "now": "今すぐ同期",
@@ -6188,6 +6747,37 @@
       "keep-other": "相手側を保持",
       "conflicts-title": "選択が必要です（{count} 件）",
       "conflicts-hint": "2 台のデバイスで同じ項目が変更されました。まだ上書きされていません。どちらを保持するか選んでください。",
+      "approvals-title": "承認待ち（{count}）",
+      "approvals-hint": "別のデバイスから、このデバイスで実行されるものが届きました。承認するまで書き込み・有効化・CLI への配布は行いません。",
+      "approval-new": "このデバイスに未登録",
+      "approval-changed": "実行内容が変更",
+      "approval-downloading": "承認済み — ファイルをダウンロード中",
+      "approval-cwd": "実行場所：{path}",
+      "approval-undisplayable": "この項目はここで全体を表示できないため、承認できません。拒否してください。",
+      "approval-cut": "… プレビューはここまで。ファイルには続きがあります",
+      "approval-expand": "全体を表示",
+      "approval-deletes": "このデバイスのプロンプト {name} を削除します。",
+      "approval-new-loop": "{name} がループ用プロンプトになります。",
+      "approval-text": "受信した内容（全文）",
+      "approval-diff": "このデバイスとの差分",
+      "approval-changes": "変更された項目",
+      "approval-change": "{field}：{from} → {to}",
+      "approval-frontmatter": "SKILL.md フロントマター（CLI はこれに従って動きます）",
+      "approval-frontmatter-flag": "{key}：CLI に実行させたり権限を広げたりします — 確認してください",
+      "approval-turn-on": "このスキルを有効にします（このデバイスでは無効です）。",
+      "approval-targets": "配布先：{to}（このデバイス：{from}）",
+      "approval-all-clis": "すべての CLI",
+      "approvals-full": "{scopes} の承認待ちが上限に達しています。いくつか判断するまで、新しい項目は拒否されます。",
+      "approval-headers": "ヘッダー名：{names}",
+      "approval-size": "{bytes} バイト",
+      "approval-executable": "実行可能：{files}",
+      "approve": "承認",
+      "reject": "拒否",
+      "secret-warnings-title": "秘密情報を含む可能性（{count}）",
+      "secret-warnings-hint": "これらの項目にはキーやトークンが含まれているようです。暗号化されたまま同期されます。確認してから閉じてください。",
+      "secret-warning-fields": "{fields} 内",
+      "secret-warning-lines": "{lines} 行目",
+      "secret-dismiss": "閉じる",
       "scope-prompts": "プロンプト",
       "scope-mcp": "MCP",
       "scope-skills": "スキル",
@@ -6195,7 +6785,7 @@
       "scope-hint-prompts": "プロンプトスキルとループプロンプト。",
       "error-load": "同期設定を読み取れませんでした。",
       "scope-hint-mcp": "Navide で追加した MCP サーバー。機密情報は送信前に暗号化されます。",
-      "scope-hint-skills": "スキルの有効・無効と、各スキルの配布先 CLI。スキルファイル自体の同期は今後対応予定です。",
+      "scope-hint-skills": "スキルの有効・無効と各スキルの配布先 CLI、そして Navide で作成したスキルのファイル（大きいものは暗号化された blob として送信）。自分でフォルダーに置いたスキルは設定のみ同期されます。",
       "scope-hint-memory": "~/.claude/CLAUDE.md などのグローバル指示ファイル。プロジェクト内のファイルは引き続き git で管理します。",
       "scope-credentials": "認証情報",
       "scope-hint-credentials": "アカウント画面で貼り付けた、持ち運び可能な CLI 認証情報。送信前にこのデバイスで暗号化されます。ここで削除しても、クラウドや他のデバイスからは削除されません。",
@@ -6206,7 +6796,41 @@
       "rotate-cancel": "キャンセル",
       "rotate-hint": "ローテーションすると現在のキーが置き換わり、同期済みの全データが新しいキーで再暗号化されます。他のデバイスは次回のキー交換時に新しいキーを受け取ります。キーの漏洩が疑われる場合に使用してください。",
       "legacy-key": "アカウントに関連付ける前の同期キーが、このデバイスにあります。このアカウントで使用すると、そのキーで同期したデータを引き続き読み取れます。",
-      "legacy-key-adopt": "このアカウントで使用"
+      "legacy-key-adopt": "このアカウントで使用",
+      "scope-all": "すべてのセクション",
+      "result-ok": "取得 {pulled} 件、送信 {pushed} 件。",
+      "result-conflicts": "{count} 件があなたの判断を待っています。",
+      "result-error": "失敗：{error}",
+      "skipped-not-connected": "スキップ — 未接続です。",
+      "skipped-no-key": "スキップ — このデバイスには同期キーがありません。",
+      "skipped-unsupported": "スキップ — サーバーはこのセクションのファイルを保存できません。",
+      "skipped-other": "スキップ（{reason}）。",
+      "result-held": "待機中、まだ適用されていません：{items}",
+      "result-refused": "このデバイスでは適用できません：{items}",
+      "result-too-large": "大きすぎて同期できません：{items}",
+      "account": "同期アカウント：{email}",
+      "scope-skill-files": "スキルファイル",
+      "result-gave-up": "停滞中、再試行を続けます：{items}",
+      "result-reset-throttled": "サーバーの状態に異常があるため、このセクションの再同期を一時停止しました。1 時間後に再試行します。",
+      "secrets-title": "非表示の値 — どちらを残すかで、異なる値が変わります：",
+      "secret-same": "同じ",
+      "secret-differs": "異なる",
+      "secret-local-only": "このデバイスのみ",
+      "secret-remote-only": "もう一方のデバイスのみ",
+      "history-title": "バージョン履歴",
+      "history-hint": "クラウドは同期項目ごとに直近 10 バージョン、または 30 日以内のバージョンのうち、先に上限に達した方まで保持します。",
+      "history-scope": "セクション",
+      "history-item": "項目",
+      "history-show": "バージョンを表示",
+      "history-no-items": "このセクションにはまだ同期された項目がありません。",
+      "history-empty": "この項目に以前のバージョンはありません。",
+      "history-restore-previous": "前のバージョンに戻す",
+      "history-restore": "このバージョンに戻す",
+      "history-device": "{device} から",
+      "history-restored": "このデバイスで復元しました。次回の同期でほかのデバイスにも反映されます。",
+      "history-held": "復元したバージョンは上で承認待ちです。",
+      "history-error": "バージョン履歴を読み込めませんでした。",
+      "history-not-applied": "このデバイスでは何も変更されていません。このバージョンは適用されませんでした（以前に拒否された可能性があります）。"
     },
     "sharing": {
       "intro": "この 4 つの項目をマシン間で移す方法は、ファイルを受け渡す方法と、共通のアカウントを使う方法の 2 つです。",
@@ -6249,7 +6873,8 @@
         "results-title": "書き込み結果",
         "applied": "{total} 件中 {count} 件を書き込みました。",
         "needs-credentials": "認証情報が必要",
-        "needs-credentials-hint": "機密情報はバンドルから除外されています。ここで入力してください：{fields}"
+        "needs-credentials-hint": "機密情報はバンドルから除外されています：{fields}。サーバーのコマンドまたは URL がこのデバイスと同じ場合のみ、このデバイスの値を使います。それ以外は空のままなので入力してください。",
+        "replaces-here": "このデバイスで置き換えるもの：{what}"
       },
       "cloud": {
         "title": "クラウドの内容",
@@ -6357,12 +6982,11 @@
       "advanced": "詳細設定",
       "send-once": "1 回だけ送信",
       "send-once-hint": "ループするのは既定のスキルのみです。このスキルは 1 回だけ送信され、再開やターン数の上限は適用されません。",
-      "builtin-name": "実装を続ける",
-      "builtin-description": "100% 完了するまで作業を続け、最後に HTML レポートを作成します。",
       "untitled-name": "無題のスキル"
     },
     "section": {
       "general-behavior": "一般的な動作",
+      "resource-limits": "リソース制限",
       "notifications": "通知",
       "settings-management": "設定の管理",
       "theme": "テーマ",
@@ -6410,6 +7034,10 @@
         "paired": "{device} とペアリングしました",
         "refused": "{device} がペアリングを拒否しました",
         "revoked": "{device} がこのデバイスとのペアリングを解除しました",
+        "salvaged": "{device} を破損したペアリング記録から復元しました。キーはそのままですが、もう一度承認が必要です",
+        "sig2-missing": "{device} から時刻署名のないメッセージが届きました。サーバーがこの項目を転送していないか、途中で削除された可能性があります。メッセージは通常どおり配信されました",
+        "sig2-unusable": "{device} から届いたメッセージの時刻署名が無効か、このマシンの時刻と大きくずれていました。旧形式の署名で通常どおり配信しました。両方のマシンの時刻を確認してください",
+        "full": "ペアリング数が上限に達したため、{device} とペアリングできませんでした。デバイスを追加するには Navide をアップデートしてください。",
         "sending": "確認中…",
         "start": "ペアリング",
         "start-title": "このデバイスにペアリングを要求します。両方の画面に比較用の 6 桁の数字が表示され、双方が確認するまで変更は行われません。",
@@ -6423,7 +7051,18 @@
         "with-device": "{device} とペアリング中",
         "your-turn": "両方の画面に数字が表示されています。一致を確認するまで、ペアリングは行われません。",
         "dismiss": "非表示",
-        "dismiss-title": "この通知を非表示にします。リクエストは継続し、応答はここに表示されます。"
+        "dismiss-title": "この通知を非表示にします。リクエストは継続し、応答はここに表示されます。",
+        "failed-title": "{device} とのペアリングは終了しました",
+        "failed-local-trust-unavailable": "{device} は応答しましたが、このマシンの信頼記録を今は読み取れないため応答を受け取れず、このペアリングは終了しました。まず下の「Navide Cloud は停止しています」カードに対処し（例：「最初からやり直す」を押す）、もう一度「ペアリング」を押してください。",
+        "failed-local-pairing-refused": "{device} からの応答がこのペアリングと一致しないため、安全のため終了しました。もう一度「ペアリング」を押してください。",
+        "failed-local-other": "このマシンは {device} からの応答を受け取れませんでした（{reason}）。このペアリングは終了しました。もう一度「ペアリング」を押してください。",
+        "failed-remote-trust-unavailable": "{device} が信頼記録を今は読み取れないため、このペアリングを拒否し、終了しました。{device} のアカウント画面で「Navide Cloud は停止しています」カードに対処してから（例：「最初からやり直す」を押す）、もう一度「ペアリング」を押してください。",
+        "failed-remote-policy-denied": "{device} がこのペアリングを拒否したため、終了しました。このマシンが {device} のブロックリストに入っている可能性があります。{device} のアカウント画面で確認してから、もう一度「ペアリング」を押してください。",
+        "failed-remote-unauthenticated": "{device} がこのペアリングの署名を検証できず拒否したため、終了しました。両方のマシンが最新の Navide であることを確認してから、もう一度「ペアリング」を押してください。",
+        "failed-remote-pairing-refused": "{device} がこのペアリングを拒否したため、終了しました。多くの場合、{device} 側で別のペアリングが進行中です（例：両側で同時に「ペアリング」を押した）。それが終わるか {device} で取り消してから、もう一度「ペアリング」を押してください。",
+        "failed-remote-other": "{device} がこのペアリングを拒否しました（{reason}）。このペアリングは終了しました。もう一度「ペアリング」を押してください。",
+        "busy": "{device} とのペアリングはまだ進行中で、約 {minutes} 分後に自動で終了します。今すぐやり直すには、上の「ペアリング」欄で「リクエストを取り消す」を押してから、もう一度「ペアリング」を押してください。",
+        "trust-unavailable-start": "このマシンの信頼記録を今は読み取れないため、ペアリングは成功しません。まず下の「Navide Cloud は停止しています」カードに対処し（例：「最初からやり直す」を押す）、それから「ペアリング」を押してください。"
       },
       "fingerprint-copy": "コピー",
       "fingerprint-copied": "コピーしました",
@@ -6539,6 +7178,9 @@
         "block": "ブロック",
         "blocked-title": "ブロック済み",
         "blocked-hint": "ブロックはすべてのルールより優先して拒否します。自分の他のデバイスも例外ではありません。",
+        "block-full": "このマシンのペアリング記録がいっぱいのため、ブロックを保存できませんでした。先にこのデバイスのペアリングを解除してから、ブロックしてください。",
+        "block-not-saved-full": "サーバーではブロック済みですが、このマシンのペアリング記録がいっぱいのため、ローカルのコピーを保存できませんでした。再起動するまでは、このマシンもこのデバイスを拒否します。コピーを保存するには、このデバイスのペアリングを解除してから、もう一度ブロックしてください。",
+        "block-not-saved": "サーバーではブロック済みですが、このマシンはローカルのコピーを保存できませんでした。再起動するまでは、このマシンもこのデバイスを拒否します。後でもう一度ブロックして、このマシンにもコピーを残してください。",
         "unblock": "ブロックを解除",
         "unpair": "ペアリングを解除",
         "unpair-title": "このデバイスの登録を解除します。ブロックはしません。",
@@ -6576,6 +7218,10 @@
         "policy-signed-default": "再署名するルールがなかったため、既定の設定に署名しました。まだ何も許可されていません。",
         "locked-title": "Navide Cloud は停止しています",
         "locked-body": "このデバイスに存在していた信頼情報が失われています。原因が明らかになるまで、送受信は行われません。",
+        "full-body": "信頼レコードがいっぱいです。下の一覧からデバイスを 1 台ペアリング解除してください。空きができると Navide Cloud は自動で再接続します。",
+        "damaged-body": "ペアリングデータが破損しています。もう一度ペアリングしてください。このマシンのペアリング記録は途中までしか保存されておらず（キーチェーンへの書き込みが途切れました）、中身はもう信頼できません。",
+        "journal-problem": "ペアリング通知の記録を現在使用できません。ペアリング自体には影響しませんが、通知と「受信済みメッセージ」の記録が一時的に不完全な可能性があります。理由：",
+        "damaged-rebuild-warn": "このマシンの破損したペアリング記録を消去します。その後、ほかの各デバイスを両側からもう一度ペアリングする必要があります。記録はすでに破損しているので、やり直すことが修復方法です。",
         "plaintext-refused": "{device} からの暗号化されていないメッセージを拒否しました",
         "plaintext-refused-body": "このデバイスはこれまで常に暗号化して送信していましたが、このメッセージは平文で届いたため拒否しました。",
         "plaintext-refused-what-to-do": "拒否済みのため、操作は不要です。正規のデバイスである場合は、ペアリングを解除してから再度ペアリングしてください。",
@@ -7026,6 +7672,7 @@
         "unsupported": "このエージェントは複数アカウントに対応していません。",
         "active-error": "このアカウントは現在使用中のため削除できません。先に別のアカウントに切り替えてください。",
         "login-in-progress-error": "このアカウントのログイン処理がまだ実行中です。先にログインを完了するか、ログイン用ペインを閉じてください。",
+        "account-dir-in-use-error": "このアカウント専用フォルダーを使って実行中のペインが {count} 個あります。アカウントを削除する前に閉じてください。",
         "portable-label": "ポータブル認証情報",
         "portable-present": "設定済み",
         "portable-absent": "未設定",
@@ -7099,13 +7746,13 @@
       "model-manager-note": "ローカルモデルのダウンロード・削除",
       "model-placeholder": "モデル名（例：qwen2.5-coder、llama3.2、gemma3）",
       "downloading": "ダウンロード中…",
-      "download": "⬇ ダウンロード",
+      "download": "ダウンロード",
       "connecting": "接続中…",
       "no-local-models": "ローカルモデルが検出されませんでした。ollama pull <model-name> を実行するか、上のダウンロード欄を使用してください。",
       "delete-local-title": "ローカルから削除",
       "model-benchmark": "モデルのベンチマーク",
-      "running": "⏳ 実行中…",
-      "run-benchmark": "🧪 ベンチマークを実行",
+      "running": "実行中…",
+      "run-benchmark": "ベンチマークを実行",
       "testing": "テスト中：",
       "preparing": "準備中…",
       "benchmark-hint": "すべてのローカルモデルで 4 つの標準タスクを実行し、パイプラインの意図検出に適しているか確認します：",
@@ -7164,12 +7811,7 @@
     "backend-state-disconnected": "未接続",
     "backend-state-error": "エラー",
     "loading-stages": "ステージを読み込み中…",
-    "manager-slot": "マネージャー：{label}",
-    "parallel-slots": "{count} 個の並列スロット",
-    "allow-questions": "質問を許可",
     "context7-doc-query": "Context7 ドキュメント検索",
-    "slots": "スロット",
-    "manager-badge": "🎯 マネージャー",
     "unassigned": "（未割り当て）",
     "designate-global-manager": "🎯 全体マネージャーに指定",
     "created-name": "「{name}」を作成しました",
@@ -7191,7 +7833,6 @@
     "imported-roles": "{count} 個のロールをインポートしました",
     "role-label-placeholder": "例：テックリード",
     "role-one-line-placeholder": "ドロップダウンに表示する短い説明",
-    "stage-short-title-placeholder": "例：レビュー",
     "doc-query-placeholder": "例：セキュリティのベストプラクティス、認証",
     "current-branch": "現在のブランチ",
     "date-order": "日時順",
@@ -7237,8 +7878,6 @@
     "unsaved": "未保存",
     "new-role": "新規ロール",
     "edit-role": "ロールを編集",
-    "new-stage": "新規ステージ",
-    "edit-stage": "ステージを編集",
     "saving": "保存中…",
     "no-parallel-slots": "並列スロットがありません。このステージは 1 つのエージェントで実行します。",
     "workspace": "ワークスペース",
@@ -7289,6 +7928,7 @@
     "plans-retry-running": "再試行中…",
     "plans-retry-failed": "再試行に失敗しました：{reason}",
     "plans-recovery-reason": "このセッションでは Plans v2 が無効化されました（{reason}）。",
+    "plans-backend-stopped": "「{folder}」の Plans バックエンドは失敗が繰り返されたため停止しました。このワークスペースで Plans を開くと再起動できます。または Navide を再起動してください。",
     "yolo-mode": "YOLO モード",
     "yolo-bypass": "— 許可の確認を自動でスキップ",
     "default": "デフォルト",
@@ -7457,13 +8097,11 @@
     "disabled": "無効",
     "mcp-command": "コマンド",
     "pipeline-completed-modal": "パイプラインが完了しました！",
-    "id": "ID",
     "short-title": "短いタイトル",
     "title": "タイトル",
     "question": "質問",
     "description": "説明",
     "sentinel": "センチネル",
-    "role-key": "ロールキー",
     "kickoff-body": "開始プロンプトの本文",
     "agent": "エージェント",
     "label": "ラベル",
@@ -7763,7 +8401,6 @@
     "not-git-repo-desc": "このフォルダーには .git ディレクトリがありません",
     "load-failed": "読み込みに失敗しました",
     "initialize-repository": "リポジトリを初期化",
-    "id-exists": "ID はすでに存在します",
     "backend-start-failed": "バックエンドの起動に失敗しました"
   },
   "stageTab": {
@@ -7800,11 +8437,6 @@
     "role-key-exists-recover": "キー \"{key}\" のロールはすでに存在します。名前の変更が途中で止まって残った場合は、先に左の一覧から \"{key}\" を削除してから、名前を変更し直してください。",
     "role-in-use-list": "先に次のステージスロットの参照先を変更するか、スロットを削除してください：",
     "pause-for-user-answers": "ユーザーの回答を待つ",
-    "at-least-one-slot-required": "* 少なくとも 1 つ必要です",
-    "add-slot-before-saving": "保存する前にスロットを 1 つ以上追加してください。",
-    "cannot-delete-last-slot": "最後のスロットは削除できません",
-    "global-manager-desc-1": "— このスロットは自身の作業を終え、",
-    "global-manager-desc-2": "を出力した後、ステージ間の調整を行います。管理者はパイプラインごとに 1 つだけです。",
     "global-manager-desc-short": "— パイプラインごとに 1 つだけです。",
     "prompt-chars-new-spawns": "{count} 文字 · 変更は新しく起動するエージェントにのみ適用されます",
     "delete-pipeline-confirm": "\"{name}\" を削除しますか？この操作は取り消せません。",
@@ -7816,8 +8448,6 @@
     "select-role-or-create": "左のロールを選択するか、「+ 新しいロール」をクリックしてください。",
     "default-role-fallback": "`defaultRole` は実行時に一致したロールにフォールバックします",
     "replace-all-roles": "すべて置き換える — インポートファイルに含まれない既存のロールを削除します",
-    "select-stage-or-create": "左のステージを選択するか、「+ ステージを追加」をクリックしてください。",
-    "delete-stage-warning": "保存済みのレジストリからこのステージを削除します...",
     "reset-stages-warning": "すべてのカスタムステージが削除されます...",
     "completion-modal-body": "すべてのエージェントが結果を提出しました。右側のパネルを確認してください。",
     "git-credential-token": "パスワード欄には、ログインパスワードではなく Personal Access Token を貼り付けてください。",
@@ -7832,7 +8462,6 @@
     "connection-failed": "接続に失敗しました。コマンドが正しいか確認してください",
     "reset-roles-title": "すべてのロールを初期設定に戻しますか？",
     "import-roles-title": "ロールをインポート",
-    "delete-stage-title": "ステージを削除",
     "reset-stages-title": "すべてのステージを初期設定に戻しますか？",
     "at-least-one-pipeline": "少なくとも 1 つのパイプラインを残す必要があります",
     "delete-pipeline": "このパイプラインを削除",
@@ -8108,7 +8737,9 @@
     "open-in": "{window}で開く",
     "resumes-in": "{window}で再開",
     "resumes-in-window": "この AI パネルは「{window}」にあります。再開はそちらで行われ、このウィンドウの Pane にはなりません。",
-    "address-title": "他の Pane からは {'@'}{address} でこのパネルに届きます"
+    "address-title": "他の Pane からは {'@'}{address} でこのパネルに届きます",
+    "roster-error": "他の Pane からこのパネルに届かず、Navide のツールも使えません：{reason}",
+    "roster-error-unknown": "不明なエラー"
   },
   "paneStatus": {
     "running": "実行中",
@@ -8303,6 +8934,7 @@
     "switch-title": "アカウントを切り替え",
     "swap-failed": "アカウントの切り替えに失敗しました。以前のアカウントが引き続き有効です。",
     "panes-running": "実行中の CLI ペイン {count} 個がこのアカウントを使用しています。切り替える前に閉じてください。",
+    "live-changed": "この通知のあとでサインイン中の {agent} アカウントが変わったため、何も切り替えていません。設定 → アカウントで確認してください。",
     "switch-rate-limited": "アカウントの切り替え回数が多すぎます。{seconds} 秒後に再試行してください。",
     "switch-restart-confirm-title": "実行中のペインを再起動",
     "switch-restart-confirm-body": "アカウントを切り替えると、実行中の {agent} ペイン {count} 個が再起動されます。続行しますか？",
@@ -8569,6 +9201,21 @@
     "exhausted-tooltip": "利用枠を使い切りました。{time} 後に回復します。「残り 1% 未満」とは異なり、今送信した作業は拒否されます",
     "exhausted-tooltip-no-reset": "利用枠を使い切りました。リセット時刻は不明です",
     "switch-manage": "アカウントの追加・管理…",
+    "pane-default-title": "新しいペインで使うアカウント",
+    "follow-default-title": "デフォルトのアカウント",
+    "follow-hint": "新しいペインと、追従中の {count} 個のペインがこのアカウントを使います",
+    "follow-hint-none": "新しいペインがこのアカウントを使います。アカウントバッジ横のピンでペインを追従にできます。",
+    "pinned-hint": "{count} 個のペインはアカウント専用フォルダーに固定されていて、アカウントを切り替えても変わりません。",
+    "unpin-all": "すべて追従にする",
+    "unpin-all-tooltip": "これらのペインを現在のログインで開き直し、以後アカウントを切り替えるたびに一緒に切り替わるようにします。各ペインは一度開き直されて会話を続けます。実行中のペインは先に確認します。",
+    "continue-with": "続行 ›",
+    "continue-with-tooltip": "{account} でこのペインを開き直し、会話を続けます",
+    "dir-sign-in": "サインイン",
+    "dir-sign-in-tooltip": "このアカウントは専用フォルダーでまだサインインしていないため、共有のログインで動いています。一度サインインすると、他のアカウントと同時に使えます。",
+    "continue-with-confirm-title": "このペインを {account} で続行しますか？",
+    "continue-with-confirm-body": "このペインを {account} で開き直し、会話を続けます。実行中のターンは中断されます。他のペインには影響しません。",
+    "continue-with-confirm-confirm": "開き直して続行",
+    "continue-with-confirm-cancel": "キャンセル",
     "settings-title": "CLI 利用枠バッジ",
     "settings-enabled": "CLI ペインのヘッダーに残りの利用枠を表示",
     "settings-refresh": "更新間隔",
@@ -8584,6 +9231,8 @@
     "failover-hint": "CLI アカウントが利用上限に達したときの Navide の動作を選びます。何もしない、切り替え候補のアカウントを表示する（初期設定）、または自動で切り替える、のいずれかです。自動切り替えは CLI ごとに 5 時間あたり最大 3 回で、利用枠を使い切ったアカウントへ自動で戻ることはありません。表には各 CLI が対応する操作を示します。実際に切り替えるかどうかはバックエンドが判断します。",
     "failover-loop-title": "ループ中に利用枠を使い切ったら、切り替え後すぐに再開する",
     "failover-loop-hint": "ループ実行中の pane が利用枠を使い切ったとき、利用枠の残っているアカウントへ自動で切り替え、リセットを待たずにすぐ続行を送信します。上で「自動で切り替える」を選択している必要があります。",
+    "follow-switch-title": "Claude アカウントの切り替え時に、固定したペインも一緒に切り替える",
+    "follow-switch-hint": "アカウント専用のサインインフォルダーで動く Claude ペインは、アカウントを切り替えても追従しません。オンにすると、切り替え時にそれらのペインが一覧表示され、一緒に切り替えるかを選べます。利用枠を使い切ったペインには「アカウントを切り替え」ボタンも表示されます。切り替えたペインは新しいアカウントで開き直し、元の会話を再開します。既定はオフです。",
     "failover-mode-off": "無効",
     "failover-mode-notify": "通知する",
     "failover-mode-auto": "自動で切り替える",
@@ -8619,7 +9268,7 @@
       "environment": "Navide は実際のターミナルで CLI を動かします。これらはその実行に必要なツールです。",
       "agents": "開いた各ペインで、いずれかのエージェントが動作します。まずは 1 つあれば始められます。",
       "permissions": "Navide がこのマシンを操作するために必要なアクセスを許可してください。",
-      "ready": "すべての確認が完了しました。アプリを開いてワークスペースを選択してください。"
+      "ready": "すべての確認が完了しました。初めての場合は、いつでもスキップできる短いツアーが、ワークスペースの選択から最初のエージェントを開くまでご案内します。"
     },
     "install": "インストール",
     "installing": "インストール中…",
@@ -8795,6 +9444,13 @@
     "weekday-6": "土曜日"
   },
   "scheduler": {
+    "system": {
+      "tag": "システム",
+      "manage": "workspace で管理 →",
+      "locked-title": "アプリが管理するシステムジョブです。その workspace の自己改善パネルから変更してください",
+      "managed-by": "workspace で管理",
+      "name": "自己改善 · {workspace}"
+    },
     "add": "＋ 新規",
     "empty": "スケジュールされたジョブはまだありません",
     "list-failed": "ジョブを読み込めませんでした：{message}",
@@ -8809,6 +9465,7 @@
     "target-with-id": "→ pane「{name}」（#{id}）を起こして送信",
     "retarget": "再バインド",
     "gone-disabled": "{n} 回続けて見つからず、停止しました",
+    "rebound-reenable": "再接続しました。もう一度有効にしてください",
     "every-minutes": "{n} 分ごと",
     "every-hours": "{n} 時間ごと",
     "daily-at": "毎日 {time}",
@@ -9268,6 +9925,10 @@
     "token-linked": "トークンで接続済み"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "共有リンクの開封通知",
+      "desc": "このコンピューターで作成した共有リンクが新しいデバイスで開かれたとき、バインド済みのチャットに通知します（リンクの URL は送信しません）。Navide Cloud が必要です。"
+    },
     "nav": "チャット連携",
     "platform": {
       "telegram": "Telegram",
@@ -9323,7 +9984,36 @@
       "rename": "名前を変更",
       "remove-ask": "この bot を削除しますか？この bot 経由で接続している {n} 個の pane は切断されます。"
     },
-    "manage": "管理",
+    "platform-summary": "bot {bots} 個 · チャット {chats} 件 · 接続中の pane {panes} 個",
+    "menu": {
+      "label": "{bot} のその他の操作",
+      "connection": "接続設定（トークン・権限）",
+      "create-off": "先に BotFather で Bot Management Mode をオンにしてください",
+      "remove": "bot を削除…"
+    },
+    "bindings": {
+      "topics": "トピック",
+      "unbound": "まだ pane に接続されていません · pane のタイトルバーの 💬 ボタンからこのチャットを選んでください",
+      "select": "{name} を選択",
+      "topic": "トピック「{title}」→",
+      "gone": "pane はもうありません",
+      "orphan-hint": "接続を解除せずに閉じられました · このチャットのメッセージはどこにも届きません",
+      "clear": "消去",
+      "focus": "pane へ移動 ↗",
+      "unbind": "接続を解除",
+      "unbind-confirm": "解除しますか？",
+      "children": "サブエージェントのトピック {n} 件",
+      "auto": "自動",
+      "follows-parent": "親と一緒に解除",
+      "selected": "{n} 件を選択中",
+      "unbind-n": "{n} 件の接続を解除",
+      "batch-ask": "{n} 件の接続を解除しますか？",
+      "batch-note": "{n} 件のチャットに切断を通知します。",
+      "partial": "{n} 件を解除できませんでした：",
+      "bound-at": "{at} に接続",
+      "focus-no-window": "「{name}」はどのウィンドウにも開かれていません。",
+      "focus-failed": "pane へ移動できませんでした：{error}"
+    },
     "quick": {
       "add": "クイック追加",
       "verifying": "確認中…",
@@ -9345,10 +10035,15 @@
     "managed": {
       "create": "新しい bot を作成",
       "disclose": "{manager} は新しい bot のトークンをいつでも取得・再発行できます。{manager} のトークンを持つ人は、作成したすべての bot を操作できます。",
-      "enable-mode": "この bot で新しい bot を作るには、先に BotFather で「Bot Management Mode」をオンにしてください。",
+      "enable-hint": "bot から新しい bot をワンタップで作りたい場合は、BotFather で「Bot Management Mode」をオンにしてください。まだオンになっていない bot が {n} 個あります。",
+      "open-botfather": "BotFather を開く",
+      "dismiss": "今後表示しない",
       "waiting": "Telegram で「作成」をタップしてください…",
       "timeout": "10 分以内に bot が作成されませんでした。もう一度お試しください。",
-      "token-unavailable": "bot は Telegram で作成されましたが、トークンを取得できませんでした。BotFather で確認してください。"
+      "token-unavailable": "bot は Telegram で作成されましたが、トークンを取得できませんでした。BotFather で確認してください。",
+      "creator-not-linked": "bot は Telegram で作成されましたが、作成した Telegram アカウントがこの bot にリンクされていないため追加されませんでした。先にそのアカウントをリンクするか、BotFather で bot を削除してください。",
+      "manager-not-linked": "この bot にはまだリンクされたユーザーがいません。先にリンクしてから、この bot で新しい bot を作成してください。",
+      "created-note": "bot は Telegram で作成済みです。やり直す前に BotFather で確認してください。"
     },
     "connect": "接続",
     "needs": "必要なもの：{fields}",
@@ -9427,7 +10122,6 @@
     "link": {
       "next-step": "次へ：チャットアカウントをリンク",
       "next-step-desc": "下のボタンから {platform} で操作を完了すると自動でリンクされます。ペアリングコードの承認は不要です。",
-      "linked-summary": "{n} 件のチャットをリンク済み · ペインのタイトルバーのチャットボタンで選択",
       "link-account": "アカウントをリンク",
       "open-telegram": "Telegram で開く（DM）",
       "add-group": "グループに追加",
@@ -9575,7 +10269,7 @@
     },
     "rules": {
       "title": "カスタムルール",
-      "hint": "拒否パターンは一致したコマンドを選んだレベル（重大または高）に上げます。許可パターンは「高」を通常に下げます（「重大」は対象外）。許可の追加と拒否の削除には確認が必要です。",
+      "hint": "拒否パターンは一致したコマンドを選んだレベル（重大または高）に上げます。許可パターンは「高」を通常に下げます（「重大」は対象外）。外部の内容を受け取ったペインでは、Guard が解析できないコマンドはコマンド全体に一致するワイルドカードパターン（例：python3 -c *）でのみ許可されます。許可の追加と拒否の削除には確認が必要です。",
       "kind": {
         "allow": "許可",
         "deny": "拒否"
@@ -9681,6 +10375,19 @@
     "back": "戻る",
     "skip": "ツアーをスキップ",
     "done": "完了",
+    "welcome": {
+      "pickFolder": "まず、エージェントが作業するフォルダーを選びます。既存のプロジェクトなら「参照…」、ゼロから始めるなら「新規…」、試すだけなら「ホーム」を押します。",
+      "openAgent": "＋ を押して CLI を選び、最初のエージェントを開きます。",
+      "firstCommand": "ここに 1 文入力して Enter を押し、返事を見てみましょう。",
+      "talkMention": "ペインをもう 1 つ開き、どちらかのペインで {'@'} を入力してもう一方を選び、作業を頼みます。",
+      "talkDrag": "または、ペインのタイトルバーを別のペインのターミナル部分にドラッグして、会話の文脈を渡します。",
+      "usageAccount": "ここにマウスを重ねると、クォータとアカウントが表示されます。必要ならその場で切り替えられます。",
+      "usageAccountMissing": "クォータとアカウントは、ペインのタイトルバーのこの位置に表示されます。まだ表示されていないのは、この CLI のクォータをまだ読み込めていないためです（開いたばかりのペインは少し時間がかかります。クォータ情報のない CLI もあります）。バッジが表示されたら、マウスを重ねるとクォータの確認とアカウントの切り替えができます。",
+      "next": "次へ",
+      "doneFeedback": "✓ できました",
+      "finished": "ツアーが完了しました。「ヘルプ → はじめてのツアー…」からもう一度見られます。",
+      "missing": "この手順で指す場所は、いま画面にありません。「次へ」で先へ進めます。"
+    },
     "v0_2_10": {
       "welcome": {
         "title": "0.2.10 の 2 つの新機能",
@@ -9711,5 +10418,431 @@
         "body": "「ヘルプ → 新機能…」からいつでも開き直せます。ツアーボタンもそこにあります。"
       }
     }
+  },
+  "pipelineEditor": {
+    "error": {
+      "pipeline-running": "このパイプラインは実行中のため、今は変更できません。先に中止するか、実行の終了を待ってください。",
+      "pipeline-not-found": "このパイプラインは見つかりません。別の場所で削除された可能性があります。ほかのパイプラインを選んでください。",
+      "export-failed": "エクスポートに失敗しました：{message}",
+      "role-entry-invalid": "{key}：key または system prompt がありません",
+      "command-failed": "実行がこのコマンドを受け付けませんでした。",
+      "cycle": "この接続ではフローが無限ループになります。代わりにゲートやステップからの差し戻し接続を使ってください（再試行の上限があります）。",
+      "duplicate-edge": "この 2 つのステップはすでに接続されています。",
+      "invalid": "この変更ではパイプラインが壊れます：{detail}",
+      "reject-upstream": "差し戻し接続は前のステップを指す必要があります。",
+      "transport": "バックエンドに接続できません：{message}",
+      "unknown": "バックエンドが理由を示さずに変更を拒否しました。"
+    },
+    "badge": {
+      "open-canvas": "キャンバスでこの接続を表示",
+      "reject": "↺ 第 {layer} 層へ差し戻し（最大 {max} 回）",
+      "skip": "⤳ 第 {layer} 層へスキップ"
+    },
+    "canvas": {
+      "insert-on-edge": "ここにステップを挿入",
+      "loop-label": "↺ 最大 {max} 回",
+      "minimap": "パイプライン全体の縮小図",
+      "pass": "承認されたら続行",
+      "reject-handle": "上流のステップへドラッグして差し戻しループを作成",
+      "zoom-in": "拡大",
+      "zoom-out": "縮小",
+      "zoom-level": "ズーム率"
+    },
+    "exec": {
+      "abort": "実行を中止",
+      "empty-body": "サイドバー、コマンド、または MCP 経由の CLI からこのパイプラインを開始すると、実行がここに表示されます。",
+      "empty-title": "まだ実行はありません",
+      "list": "このパイプラインの実行",
+      "live": "実行中",
+      "next": "次のステージ",
+      "no-task": "タスクの説明なし",
+      "outcome-running": "実行中",
+      "outcome-completed": "完了",
+      "outcome-aborted": "中止",
+      "outcome-failed": "失敗",
+      "outcome-ended": "終了",
+      "outcome-unknown": "不明",
+      "outcome-idle": "待機中",
+      "pick": "実行を選ぶとグラフ上で再生します。",
+      "progress": "{total} ステップ中 {done}",
+      "restart": "最初からやり直す",
+      "resume": "再開",
+      "run-n": "{n} 回目",
+      "title": "実行履歴",
+      "unattributed": "パイプライン名が記録される前の古い実行 {count} 件は表示されていません。",
+      "unreadable": "実行履歴を読み込めませんでした。"
+    },
+    "gate": {
+      "approve": "承認して続行",
+      "awaiting": "承認待ち",
+      "comment": "エージェントへのメモ（任意）",
+      "default-prompt": "パイプラインを続ける前に、上流の成果を確認してください。",
+      "reject": "差し戻す"
+    },
+    "history": {
+      "add": "{name} を追加",
+      "edit-cli": "CLI を変更",
+      "edit-field": "{field} を編集",
+      "edit-gate": "ゲートの説明を編集",
+      "edit-layer": "レイヤー設定を編集",
+      "edit-manager": "マネージャーを変更",
+      "edit-prompt": "プロンプトを編集",
+      "edit-role": "ロールを変更",
+      "link": "ステップを接続",
+      "loop": "差し戻しループを追加",
+      "move": "{name} を移動",
+      "pin": "出力を固定",
+      "position": "キャンバス上で移動",
+      "remove": "{name} を削除",
+      "rename": "名前を変更",
+      "reorder": "レイヤーを並べ替え",
+      "tidy": "整列",
+      "unlink": "接続を削除",
+      "unpin": "固定を解除",
+      "loop-budget": "再試行上限を変更"
+    },
+    "inspector": {
+      "aria": "{name} の設定",
+      "attempts": "試行回数",
+      "elapsed": "所要時間",
+      "gate-help": "承認者に表示されます。誰かが承認または差し戻すまで、実行はここで待機します。",
+      "gate-prompt": "確認する内容",
+      "inputs": "入力元",
+      "kind-gate": "承認ゲート",
+      "kind-slot": "ステップ",
+      "kind-trigger": "開始",
+      "layer": "レイヤー設定",
+      "live-empty": "このステップの実行中にライブ表示が開きます。パイプラインを開始してから戻ってください。",
+      "live-unavailable": "このペインの記録を今は読み込めません。",
+      "locked": "このパイプラインは実行中のため、終了するまで設定は読み取り専用です。",
+      "no-role-fields": "このロールには追加フィールドがありません。",
+      "not-run": "未実行",
+      "open-pane": "ペインを開く",
+      "output-empty": "まだ出力はありません。このステップの実行後、要約がここに表示されます。",
+      "pin": "出力を固定",
+      "pin-help": "再実行時、固定したステップはスキップされ前回の出力を再利用します。",
+      "required": "必須",
+      "restart-from": "ここから再実行",
+      "restart-help": "このステップから新しい実行を始め、それ以前の成果は保持します。",
+      "role": "ロール",
+      "role-fields": "{role} の設定",
+      "sentinel-help": "このレイヤーが完了したときにエージェントが出力する行です。",
+      "status": "状態",
+      "tab-live": "ライブ",
+      "tab-output": "出力",
+      "tab-settings": "設定",
+      "tokens": "トークン",
+      "trigger-help": "すべての実行はここから始まります（サイドバー、コマンド、MCP 経由の CLI）。最初のステップに接続してください。",
+      "unpin": "固定を解除",
+      "variables": "挿入：",
+      "handoff": "その出力はこの変数でこのステップに渡ります："
+    },
+    "lane": {
+      "add-parallel": "＋ 並行ステップ",
+      "append-layer": "レイヤーを追加",
+      "checkpoint": "チェックポイント",
+      "insert-layer": "第 {n} 層の前にレイヤーを挿入",
+      "layer": "第 {n} 層",
+      "move-left": "レイヤーを左へ",
+      "move-right": "レイヤーを右へ",
+      "parallel": "{n} 件並行",
+      "settings": "レイヤー設定",
+      "more": "あと {n} 層"
+    },
+    "node": {
+      "commander": "パイプラインマネージャー",
+      "gate-sub": "承認待ち",
+      "pinned": "出力固定済み",
+      "tokens": "{n} tok",
+      "trigger-sub": "手動・コマンド・MCP"
+    },
+    "notice": {
+      "external-edit": "このパイプラインは別の場所で変更されました。最新版を表示し、元に戻す履歴を消去しました。",
+      "reorder-on-canvas": "このパイプラインにはゲート・ループ・独自の接続があるため、順序は接続で決まります。キャンバスで変更してください。"
+    },
+    "palette": {
+      "agents": "エージェント",
+      "branch-tip": "分岐するにはキャンバスで 1 つのステップから 2 本の線を引き、合流するには 1 つのステップへ 2 本の線を引きます。",
+      "flow": "フロー制御",
+      "gate": "承認ゲート",
+      "gate-desc": "誰かが承認するまで一時停止",
+      "no-match": "「{q}」に一致する項目はありません。",
+      "quick-add": "ステップを追加",
+      "search": "ロールとノードを検索",
+      "title": "ノード"
+    },
+    "state": {
+      "empty-body": "左からロールをドラッグするか ＋ を押して、最初のステップを追加します。",
+      "empty-title": "このパイプラインにはまだステップがありません",
+      "load-failed": "このパイプラインを開けませんでした"
+    },
+    "status": {
+      "pending": "待機中",
+      "running": "実行中",
+      "done": "完了",
+      "awaiting": "承認待ち",
+      "rejected": "差し戻し",
+      "failed": "失敗",
+      "skipped": "固定出力を再利用",
+      "aborted": "中止",
+      "pinned": "出力固定済み"
+    },
+    "toolbar": {
+      "canvas": "キャンバス",
+      "derived": "ステージから生成——最初の編集でグラフとして保存されます",
+      "executions": "実行履歴",
+      "fit": "画面に合わせる",
+      "locked": "実行中・読み取り専用",
+      "redo": "やり直す：{what}",
+      "redo-none": "やり直す操作はありません",
+      "saved": "すべて保存済み",
+      "saving": "保存中…",
+      "swimlane": "スイムレーン",
+      "tidy": "整列",
+      "undo": "元に戻す：{what}",
+      "undo-none": "元に戻す操作はありません",
+      "view": "表示",
+      "show-palette": "ノードパネルを表示",
+      "hide-palette": "ノードパネルを隠す"
+    },
+    "controlPane": {
+      "open-in-canvas": "パイプラインキャンバスで開く"
+    },
+    "edge": {
+      "title": "差し戻しループ",
+      "desc": "{from} が {to} に作業を差し戻します",
+      "max": "最大 {n} 回",
+      "fewer": "再試行を減らす",
+      "more": "再試行を増やす",
+      "remove": "ループを削除"
+    },
+    "roleFields": {
+      "title": "ステップ設定フィールド",
+      "desc": "このロールを使うパイプラインのステップは、設定パネルにこれらのフィールドを表示します。",
+      "add": "＋ フィールドを追加",
+      "empty": "まだフィールドはありません。このロールを使うステップには標準の設定だけが表示されます。",
+      "name": "名前",
+      "label": "表示名",
+      "type": "種類",
+      "default": "既定値",
+      "no-default": "既定値なし",
+      "required": "必須",
+      "remove": "{name} を削除",
+      "move-up": "上へ",
+      "move-down": "下へ",
+      "options": "選択肢",
+      "option-value": "値",
+      "option-label": "表示名",
+      "option-add": "＋ 選択肢",
+      "option-remove": "選択肢を削除",
+      "conditions": "表示条件",
+      "condition-add": "次の場合のみ表示…",
+      "condition-add-more": "＋ 条件を追加",
+      "condition-mode": "表示または非表示",
+      "condition-field": "フィールド",
+      "condition-remove": "条件を削除",
+      "show-when": "表示する条件：",
+      "hide-when": "隠す条件：",
+      "is-one-of": "が次のいずれか",
+      "values-placeholder": "値（カンマ区切り）",
+      "always": "常に表示",
+      "type-string": "短いテキスト",
+      "type-text": "長いテキスト",
+      "type-template": "テンプレート（変数可）",
+      "type-number": "数値",
+      "type-boolean": "オン／オフ",
+      "type-options": "選択リスト",
+      "problem-name-required": "このフィールドに名前を付けてください。",
+      "problem-name-duplicate": "このフィールド名は既に使われています。",
+      "problem-name-invalid": "名前は英字か _ で始め、英数字・_・- のみ使えます。",
+      "problem-options-empty": "選択リストには選択肢が 1 つ以上必要です。",
+      "problem-condition": "表示条件が「{field}」を参照していますが、このロールの別のフィールドではありません。"
+    },
+    "run": {
+      "running": "実行中：{names}",
+      "gate": "「{name}」で承認待ち",
+      "review": "確認する"
+    }
+  },
+  "evolve": {
+    "badge": {
+      "tomorrow": "明日 {time}",
+      "running": "実行中 {min}m",
+      "failed": "前回失敗",
+      "on": "有効",
+      "off": "自己改善 オフ",
+      "title": "自己改善：{state}。クリックでパネルを開く"
+    },
+    "menu": {
+      "open": "自己改善…",
+      "enabled": "有効"
+    },
+    "panel": {
+      "title": "自己改善",
+      "close": "閉じる",
+      "not-git": "git リポジトリではありません",
+      "loading": "読み込み中…",
+      "enabled": "有効",
+      "next": "次回 {time}",
+      "runs-today": "今日 {n} / {max} 回実行",
+      "only-this-workspace": "この workspace のみに影響",
+      "run-now": "今すぐ 1 回実行",
+      "disable": "無効にする",
+      "one-click": "ワンクリックで開始",
+      "one-click-hint": "他の項目は既定値が入っています。押すとこの workspace だけで有効になります。",
+      "run-started": "実行を開始しました。完了したらお知らせセンターに通知します。",
+      "legacy-disabled": "古いスケジュール {n} 件を無効にしました（削除していません）。",
+      "legacy-hint": "有効にすると古いスケジュール {n} 件を無効にします（削除しません）：",
+      "disclose-title": "この機能が行うこと：",
+      "disclose-git": "毎日 agent がこの workspace のログ・診断・issue を読んで問題点を探し、リポジトリ外の独立した worktree でバグを修正して {root} のローカル {branch} に commit します。push・リリース・機能削除は行いません。修正は次回のリリースか dev 版で反映されます。",
+      "disclose-subdir": "この workspace はリポジトリのサブフォルダ（{subdir}）です。このフォルダ配下のファイルだけを変更します。",
+      "disclose-no-git": "毎日 agent がこの workspace のログ・診断・issue を読んで問題点を探します。この workspace は git リポジトリではないため、提案を .agent-team/plans/ に書くだけで、ファイルは変更しません。",
+      "last-result": "前回の結果",
+      "no-runs": "まだ実行履歴がありません",
+      "reclaimed": "（回収済み、クリックで再開）",
+      "not-reclaimed": "（未回収）",
+      "fix": "修正",
+      "proposal": "提案",
+      "history": "履歴（直近 30 回）",
+      "unsaved": "未保存の変更があります",
+      "save": "保存",
+      "ledger-open-failed": "台帳の計画を開けませんでした",
+      "pending-catch-up": "逃した実行が 1 回、この workspace が開かれるのを待っています。",
+      "system-pane": "✦ システム起動",
+      "system-pane-title": "自己改善が開いた pane です"
+    },
+    "field": {
+      "time": "実行時刻",
+      "daily": "毎日",
+      "catch-up-once": "逃したら 1 回だけ実行",
+      "catch-up-skip": "逃したらスキップ",
+      "unit": "実行先",
+      "unit-auto": "pane を自動で開く",
+      "unit-auto-hint": "毎回「evolve-MMDD-HHMM」を開き、終わったら回収",
+      "unit-pane": "指定した pane",
+      "pick-pane": "pane を選択",
+      "pane-gone": "{name}（存在しません）",
+      "unit-pane-hint": "この pane に送って実行し、回収・クローズはしません。pane がない場合はその回だけ自動で pane を開きます。",
+      "cli": "CLI とモデル",
+      "model-default": "モデル（空欄＝CLI の既定）",
+      "model-unsupported": "この CLI はモデルを指定できません",
+      "effort-default": "effort（既定）",
+      "effort-unsupported": "effort 非対応",
+      "budget": "予算",
+      "tokens-per-run": "token／回",
+      "runs-per-day": "回／日",
+      "fixes-per-run": "バグ／回",
+      "minutes-cap": "分 上限",
+      "scope": "権限範囲",
+      "scope-fix": "バグを直接修正",
+      "scope-propose": "提案のみ（コードを変更しない）",
+      "scope-fix-no-git": "この workspace は git リポジトリではなく、worktree もメインブランチもないため「提案のみ」しか選べません。",
+      "scope-always-propose": "新機能・設計上のトレードオフ・データ削除／migration・push・リリースは常に提案になります（組み込みルール）。",
+      "rules": "ルールテンプレート",
+      "rules-builtin": "組み込み v{version}",
+      "rules-view": "全文を表示",
+      "rules-hide": "閉じる",
+      "extra-placeholder": "追加の指示（この workspace のみ）…",
+      "ledger": "台帳",
+      "ledger-placeholder": "plan の相対パス（例：.agent-team/plans/xxx.html）。空欄＝なし"
+    },
+    "error": {
+      "at": "HH:MM 形式で入力してください",
+      "tz": "不明なタイムゾーンです",
+      "range": "範囲 {min}–{max}",
+      "budget": "正の整数を入力してください",
+      "extra": "最大 {max} 文字",
+      "pane": "pane を選んでください",
+      "fix-fields": "赤い項目を先に修正してください"
+    },
+    "status": {
+      "running": "実行中",
+      "ok": "完了",
+      "error": "失敗",
+      "timeout": "タイムアウト",
+      "skipped": "未実行"
+    },
+    "history": {
+      "date": "日付",
+      "result": "結果",
+      "fixes": "修正",
+      "proposals": "提案"
+    },
+    "reason": {
+      "busy": "この workspace ではすでに実行中です",
+      "budget": "今日の実行回数の上限に達しました",
+      "workspace_gone": "workspace フォルダが存在しません",
+      "workspace_not_open": "その時刻にこの workspace を開いたウィンドウがありませんでした。次に開いたときに実行します",
+      "not_git": "git リポジトリではないため提案のみで実行しました"
+    },
+    "notice": {
+      "started": "自己改善を開始 · {workspace}",
+      "finished": "自己改善が完了 · {workspace}",
+      "timeout": "自己改善がタイムアウト · {workspace}",
+      "failed": "自己改善が失敗 · {workspace}",
+      "skipped": "自己改善は実行されませんでした · {workspace}",
+      "fallback_auto": "自己改善は新しい pane で実行 · {workspace}",
+      "not_git": "自己改善は提案のみ · {workspace}",
+      "started-body": "pane「{pane}」を開きました（{agent}）。",
+      "finished-body": "バグ修正 {fixes} 件 · 提案 {proposals} 件 · {tokens} token",
+      "reclaimed": "pane は回収されました。",
+      "timeout-body": "上限時間を過ぎても結果の報告がありません。pane はまだ実行中で、アプリが自動で止めることはありません。",
+      "fallback-body": "指定した pane「{pane}」が存在しないため、今回は新しい pane で実行しました。",
+      "not-git-body": "この workspace は git リポジトリではないため「提案のみ」です。提案はいつもどおり作成し、ファイルは変更しません。",
+      "action": {
+        "open-pane": "pane を開く",
+        "resume-pane": "pane を再開",
+        "interrupt": "中断",
+        "reclaim": "回収",
+        "panel": "パネルを開く →",
+        "result": "結果を見る"
+      },
+      "over_budget": "自己改善が予算超過 · {workspace}",
+      "over-budget-body": "この実行は token 予算の 1.5 倍を超えたため、Navide が一度中断を送りました。"
+    }
+  },
+  "recentWorkspaces": {
+    "search-placeholder": "最近のワークスペースを検索",
+    "group-open": "起動中・固定済み",
+    "group-recent": "その他の履歴",
+    "show-more": "さらに表示（残り {count} 件）",
+    "no-match": "「{query}」に一致するワークスペースはありません。",
+    "trimmed": "履歴の上限により古い項目 {count} 件が削除されました。「設定 → 一般」で変更できます。",
+    "limit-title": "最近のワークスペースの上限",
+    "limit-hint": "「最近使用した項目」は、削除するまで開いたワークスペースをすべて保持します。これは保存領域の安全上限にすぎません。上限に達すると古い項目から削除され、起動中や固定済みのワークスペースは削除されません。",
+    "limit-off": "上限なし",
+    "limit-on": "最大保持数"
+  },
+  "account-follow": {
+    "switch-title": "{account} に切り替えました。これらのペインも切り替えますか？",
+    "switch-body": "これらの Claude ペインは別アカウント専用のフォルダーで動いているため、今回の切り替えは反映されていません。チェックしたペインは新しいアカウントで開き直し、元の会話を再開します。",
+    "switch-skip": "切り替えない",
+    "switch-confirm": "{count} 個のペインを切り替える",
+    "quota-title": "{pane} の利用枠がなくなりました。別アカウントで再開します",
+    "quota-pick": "このアカウントで開き直す：",
+    "quota-peers": "同じアカウントで利用枠を使い切った次のペインも一緒に切り替える：",
+    "quota-confirm": "切り替えて {count} 個のペインを再開",
+    "cancel": "キャンセル",
+    "needs-dir-sign-in": "先に専用フォルダーでサインインしてください",
+    "default-needs-switch": "先にこのアカウントへ切り替えてください",
+    "exhausted": "利用枠なし",
+    "state-idle": "待機中・すぐに開き直す",
+    "state-running": "処理中（実行・応答待ち・入力中）・空いたら開き直す",
+    "state-quota": "利用枠なし・すぐに開き直す",
+    "note-window": "このウィンドウのペインだけを表示しています。",
+    "quota-button": "アカウントを切り替え ›",
+    "quota-button-tooltip": "別のアカウントでこのペインを開き直し、元の会話を再開します",
+    "done-partial": "{total} 個のペインのうち {failed} 個を新しいアカウントに切り替えられませんでした。詳細はログを確認してください。",
+    "follow-title": "追従中の {count} 個のペインが実行中です。{account} に切り替えますか？",
+    "follow-body": "これらの追従中のペインは実行中です。終わってから切り替えるか、今回は切り替えないかを選べます。待機中のペインはすぐに切り替わります。",
+    "follow-wait": "終わったら切り替える",
+    "follow-skip-running": "実行中のペインをスキップ",
+    "toggle-label": "このペインのアカウントを固定",
+    "toggle-follow-tooltip": "追従中：アカウントを切り替えると、このペインは次のターンから新しいアカウントを使います。再起動は不要です。クリックすると現在のアカウントに固定します（そのアカウントの専用フォルダーで一度開き直します。未サインインの場合は先にサインインします）。",
+    "toggle-fixed-tooltip": "固定：アカウントを切り替えてもこのペインは変わらず、アカウントの専用フォルダーで動き続けます。クリックすると追従に戻します（一度開き直して会話を続けます）。",
+    "unpin-title": "追従にするペインのうち {count} 個が実行中です",
+    "unpin-body": "追従にすると、ペインを現在のログインで開き直して会話を続けます。終わるのを待つか、今回はスキップするかを選べます。待機中のペインはすぐに切り替わります。",
+    "pin-default-refused": "組み込みの既定アカウントには専用フォルダーがないため、固定できません。先に別のアカウントに切り替えてください。",
+    "pin-needs-dir-login": "このペインを {account} に固定するには、そのアカウントの専用フォルダーで一度サインインしてください。サインインを開きました。"
   }
 }

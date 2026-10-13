@@ -17,6 +17,7 @@ from typing import Any
 
 from .applog import app_data_dir
 from .db import DB_FILENAME, Database
+from .pipeline_graph import validate_role_properties
 
 log = logging.getLogger("agent_team_backend.roles")
 
@@ -131,13 +132,24 @@ class RolesStore:
         return None
 
     def upsert(
-        self, *, key: str, label: str, one_line: str, system_prompt: str
+        self,
+        *,
+        key: str,
+        label: str,
+        one_line: str,
+        system_prompt: str,
+        properties: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        """properties=None leaves a role's declarative properties as they are;
+        [] clears them."""
         self._validate_key(key)
         if not label.strip():
             raise ValueError("label is required")
         if not system_prompt.strip():
             raise ValueError("system_prompt is required")
+        extra: dict[str, Any] = {}
+        if properties is not None:
+            extra["properties"] = validate_role_properties(properties)
 
         with self._lock:
             roles = self._read()
@@ -150,6 +162,7 @@ class RolesStore:
                     "label": label,
                     "one_line": one_line,
                     "system_prompt": system_prompt,
+                    **extra,
                     "updated_at": now,
                 }
                 roles[idx] = updated
@@ -162,6 +175,7 @@ class RolesStore:
                     "one_line": one_line,
                     "system_prompt": system_prompt,
                     "is_default": False,
+                    **extra,
                     "created_at": now,
                     "updated_at": now,
                 }
@@ -204,12 +218,16 @@ class RolesStore:
             if not system_prompt.strip():
                 raise ValueError(f"system_prompt is required for role: {key}")
             seen.add(key)
+            extra: dict[str, Any] = {}
+            if entry.get("properties") is not None:
+                extra["properties"] = validate_role_properties(entry["properties"])
             clean.append({
                 "key": key,
                 "label": label,
                 "one_line": str(entry.get("one_line", "")).strip(),
                 "system_prompt": system_prompt,
                 "is_default": bool(entry.get("is_default", False)),
+                **extra,
                 "created_at": str(entry.get("created_at") or now),
                 "updated_at": now,
             })

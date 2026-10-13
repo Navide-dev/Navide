@@ -27,6 +27,47 @@ def roaming_app_data() -> Path | None:
     return None
 
 
+# One list for macOS and Linux: a folder that does not exist on one simply never matches.
+_POSIX_SYSTEM_DIRS = (
+    "/etc", "/private/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/libexec", "/boot",
+    "/proc", "/sys", "/dev", "/run", "/var/run", "/var/spool", "/root", "/var/root",
+    "/private/var/root", "/System", "/Library/Keychains", "/private/var/db", "/var/db", "/var/lib",
+)
+# Home-relative credential dot folders, shared with the Windows list (osplat/_windows.py).
+_DOT_SECRET_DIRS = (
+    ".ssh", ".aws", ".azure", ".config/gcloud", ".gnupg", ".kube", ".docker", ".config/gh",
+    ".git-credentials", ".config/git/credentials", ".password-store", ".local/share/keyrings",
+    ".config/google-chrome", ".config/chromium", ".config/BraveSoftware", ".config/microsoft-edge",
+    ".mozilla",
+    # Navide's own CLI account slots and per-pane CLI homes.
+    ".navide", ".codex-panes",
+)
+# Per-user folders holding credentials, browser profiles (cookies, saved logins) and
+# private messages: macOS keeps them under ~/Library, Linux and the CLIs in dot folders
+# (a pane may send hidden files, so these must be listed). Absent folders never match.
+_POSIX_USER_SECRET_DIRS = (
+    "Library/Keychains", "Library/Cookies", "Library/Safari", "Library/Messages", "Library/Mail",
+    "Library/Accounts", "Library/Group Containers", "Library/Containers",
+    "Library/Application Support/Google/Chrome", "Library/Application Support/Firefox",
+    "Library/Application Support/Microsoft Edge", "Library/Application Support/BraveSoftware",
+    "Library/Application Support/com.apple.TCC", "Library/Application Support/1Password",
+    "Library/Application Support/Arc", "Library/Application Support/Vivaldi",
+    "Library/Application Support/com.operasoftware.Opera", "Library/Application Support/Chromium",
+    "Library/Application Support/Slack", "Library/Application Support/discord",
+    "Library/Application Support/Signal", "Library/Application Support/Telegram Desktop",
+    "Library/Application Support/Code/User/globalStorage", "Library/Preferences",
+    # Snap-packaged apps (Chromium, Firefox ...) keep their profiles under ~/snap on Linux.
+    "snap",
+    # Dot folders holding keys, cloud and CLI logins, keyrings and browser profiles.
+    *_DOT_SECRET_DIRS,
+)
+
+
+def system_dirs() -> list[Path]:
+    home = Path.home()
+    return [Path(p) for p in _POSIX_SYSTEM_DIRS] + [home / rel for rel in _POSIX_USER_SECRET_DIRS]
+
+
 def isolated_home_env(home_dir: Path) -> dict[str, str]:
     home = str(home_dir)
     return {"HOME": home, "TMPDIR": home}
@@ -203,6 +244,10 @@ def backend_entry_on_disk(entry: str) -> str:
 
 def enforces_posix_modes() -> bool:
     return True
+
+
+def file_name_refused(name: str) -> bool:
+    return False
 
 
 def symlinks_available() -> bool:

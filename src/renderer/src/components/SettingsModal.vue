@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { canonicalJson } from '../../../shared/canonicalJson'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { disabledReasonKey } from '../lib/linkStatus'
 import type { LegalRoute } from '../../../shared/legalLinks'
@@ -10,7 +10,7 @@ import type { useStages } from '../composables/useStages'
 import type { useAnalyzer } from '../composables/useAnalyzer'
 import type { usePipelines } from '../composables/usePipelines'
 import { MCP_CATALOG, isMcpInstalled, type McpCatalogEntry } from '../data/mcpCatalog'
-import { useTheme } from '@navide/plugin-ui/foundation'
+import { useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useSettings } from '../composables/useSettings'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import {
@@ -32,7 +32,9 @@ import {
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
   RESUME_BEHAVIOR_SETTING_KEY,
   RESTORE_SCOPE_SETTING_KEY,
+  RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
   normalizeAutoResumeOnReconnect,
+  normalizeResumeInterruptedOnLaunch,
   normalizeResumeBehavior,
   normalizeRestoreScope,
   type ResumeBehavior,
@@ -93,6 +95,7 @@ import {
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import { useQuotaFailover, type FailoverMode } from '../composables/useQuotaFailover'
 import { LOOP_FAILOVER_RESUME_SETTING_KEY } from '../lib/loopFailoverResume'
+import { setAccountFollowSwitch, useAccountFollowSwitchFlag } from '../lib/accountFollowSwitch'
 import { platformId } from '../../../shared/osplat'
 import { useUpdater } from '../composables/useUpdater'
 import { updateStages } from '../lib/updaterStages'
@@ -107,6 +110,7 @@ import GitAccountsPane from './GitAccountsPane.vue'
 import CliAccountsPane from './CliAccountsPane.vue'
 import CliManagementPanel from './CliManagementPanel.vue'
 import CliRiskRangesPane from './CliRiskRangesPane.vue'
+import CliExtensionsPane from './CliExtensionsPane.vue'
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import KeyboardShortcutsEditor from './KeyboardShortcutsEditor.vue'
 import CliMessagingHelp from './CliMessagingHelp.vue'
@@ -124,8 +128,15 @@ import { usePluginUpdates } from '../composables/usePluginUpdates'
 import LayoutSettingsPane from '../layout/LayoutSettingsPane.vue'
 import McpPane from './McpPane.vue'
 import SkillsPane from './SkillsPane.vue'
+import CredentialsPane from './CredentialsPane.vue'
 import PromptSkillsPane from './PromptSkillsPane.vue'
 import SyncSettings from './SyncSettings.vue'
+import CloudSubtabs, { type CloudSubtab } from './cloud/CloudSubtabs.vue'
+import CloudInventorySection from './cloud/CloudInventorySection.vue'
+import CloudDevicesSection from './cloud/CloudDevicesSection.vue'
+import ShareLinksPane from './cloud/ShareLinksPane.vue'
+import { useShareLinks } from '../composables/useShareLinks'
+import { forgetSyncInventory } from '../composables/useSyncInventory'
 import MemoryPane from './MemoryPane.vue'
 import StatusBadgeSettingsPane from './StatusBadgeSettingsPane.vue'
 import ChannelsPane from './settings/ChannelsPane.vue'
@@ -136,6 +147,8 @@ import SettingsSection from './settings/SettingsSection.vue'
 import SettingsCard from './settings/SettingsCard.vue'
 import SettingRow from './settings/SettingRow.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import RecentWorkspacesLimitRow from './settings/RecentWorkspacesLimitRow.vue'
+import ResourceLimitsSection from './settings/ResourceLimitsSection.vue'
 import VoiceSettingsSection from './settings/VoiceSettingsSection.vue'
 import { formatBytes } from '../lib/formatBytes'
 import { UI_SCALE_STEPS, formatUiScale, getUiScale, setUiScale } from '../lib/uiScale'
@@ -226,7 +239,10 @@ const reclaimNowCount = computed(() => props.reclaimableNowCount ?? 0)
 const reclaimNowSize = computed(() => formatBytes(props.reclaimableNowBytes ?? 0))
 
 // ── Tab ───────────────────────────────────────────────────────────────────────
-type Tab = 'mcp' | 'skills' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'keybindings' | 'channels' | 'security' | 'help'
+/** Active high-risk credential findings, shown as the nav badge. */
+const credentialsHighCount = ref(0)
+
+type Tab = 'mcp' | 'skills' | 'credentials' | 'prompts' | 'memory' | 'analyzer' | 'cliAgents' | 'cliExtensions' | 'general' | 'cross-device' | 'updates' | 'appearance' | 'language' | 'statusBadges' | 'layout' | 'notifications' | 'voice' | 'accounts' | 'extensions' | 'marketplace' | 'keybindings' | 'channels' | 'security' | 'help'
 
 /** Topics inside the Help tab — read-only reference material, no settings. */
 type HelpTopic =
@@ -239,6 +255,8 @@ type HelpTopic =
   | 'crossPlatform'
   | 'icons'
 const helpTopic = ref<HelpTopic>('workspace')
+// Navide Cloud page sub-tab; every deep link into the page targets Sync.
+const cloudSubtab = ref<CloudSubtab>('sync')
 // Topic order is the reading order: what the main window is made of, then the
 // agents in it, then how they talk, then the code surfaces, then settings.
 const helpTopicComponents: Record<HelpTopic, Component> = {
@@ -262,17 +280,23 @@ const helpTopicOrder: HelpTopic[] = [
   'icons',
 ]
 const activeTab = ref<Tab>(props.initialTab ?? 'general')
+// The CLI Extensions page scans every CLI's files, so it mounts on first visit
+// and stays mounted after that.
+const visitedCliExtensions = ref(activeTab.value === 'cliExtensions')
+watch(activeTab, (tab) => { if (tab === 'cliExtensions') visitedCliExtensions.value = true })
 // initialTab is only read once at mount by the ref initializer above; when the
 // modal is already open and a new tab is requested (e.g. the ui.settings.open
 // action), react to the prop changing too.
 watch(() => props.initialTab, (tab) => {
   if (tab) activeTab.value = tab
+  if (tab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // A repeated request for the tab already named in initialTab does not change
 // the prop, so watch the counter too — otherwise pressing Cmd+K Cmd+S while
 // Settings sits on another tab does nothing at all.
 watch(() => props.tabRequest, () => {
   if (props.initialTab) activeTab.value = props.initialTab
+  if (props.initialTab === 'cross-device') cloudSubtab.value = 'sync'
 })
 // Watching the prop is not enough on its own: re-issuing the same request (⌘K ⌘S
 // twice, with a manual tab switch in between) leaves initialTab unchanged, so the
@@ -287,6 +311,7 @@ defineExpose({
   // for one, which it used to do in prose and with nowhere to click.
   setSection: async (tab: Tab, section: string): Promise<void> => {
     activeTab.value = tab
+    if (tab === 'cross-device') cloudSubtab.value = 'sync'
     if (tab === 'cliAgents') await openCliSection(section)
     await nextTick()
     requestAnimationFrame(() => {
@@ -715,6 +740,15 @@ interface SettingsSearchItem {
 const settingsSearchQuery = ref('')
 const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
   {
+    id: 'cli-extensions',
+    tab: 'cliExtensions',
+    section: 'cli-extensions',
+    title: t('settings.search.item.cliExtensions.title'),
+    group: t('settings.nav.group.integration'),
+    summary: t('settings.search.item.cliExtensions.summary'),
+    keywords: 'cli extension extensions plugin plugins mod mods hook hooks marketplace claude codex copilot droid muse opencode kilo pi cursor grok kimi qwen inventory capability CLI 擴充 外掛 插件 擴展 hook 能力 盤點 CLI 拡張 プラグイン フック',
+  },
+  {
     id: 'cli-agents-list',
     tab: 'cliAgents',
     section: 'cli-agents-list',
@@ -796,6 +830,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     group: t('settings.nav.group.integration'),
     summary: t('settings.search.item.skills.summary'),
     keywords: 'skills skill agent instructions markdown enable disable attachments 技能 指令 啟用 停用 附件',
+  },
+  {
+    id: 'credentials',
+    tab: 'credentials',
+    section: 'credentials',
+    title: t('settings.search.item.credentials.title'),
+    group: t('settings.nav.group.integration'),
+    summary: t('settings.search.item.credentials.summary'),
+    keywords: 'credentials keys secrets token ssh keychain keyring git helper scan risk reminder 憑證 金鑰 密鑰 鑰匙圈 掃描 風險 提醒',
   },
   {
     id: 'prompts',
@@ -987,6 +1030,15 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'loop quota exhausted account switch failover auto resume continue 迴圈 額度 耗盡 切換 帳號 自動 繼續 接續',
   },
   {
+    id: 'general-account-follow-switch',
+    tab: 'general',
+    section: 'general-account-follow-switch',
+    title: t('settings.search.item.general-account-follow-switch.title'),
+    group: t('settings.nav.group.general'),
+    summary: t('settings.search.item.general-account-follow-switch.summary'),
+    keywords: 'pinned pane account switch claude quota resume folder 固定 帳號 切換 額度 接回 資料夾',
+  },
+  {
     id: 'accounts',
     tab: 'accounts',
     section: 'accounts',
@@ -1036,24 +1088,24 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     keywords: 'storage disk space usage cache caches cleanup clean logs node_modules stale free resource manager 儲存 空間 磁碟 快取 清理 清除 日誌 佔用 釋出 資源',
   },
   {
-    // The policy editor is a block on the Extensions page now, so the hit opens
+    // The policy editor is a block on the Navide Plugins page now, so the hit opens
     // that page and scrolls to the block; the section id is unchanged.
     id: 'execution-policy',
     tab: 'extensions',
     section: 'execution-policy',
     title: t('settings.search.item.execution-policy.title'),
-    group: t('settings.nav.group.integration'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.execution-policy.summary'),
-    keywords: 'execution policy permission permissions allowlist denylist full shell executable system namespace source repository recommendation untrusted recovery rebuild security 執行政策 權限 允許清單 拒絕清單 完整模式 shell 可執行檔 系統命名空間 來源 repository 建議 不受信任 修復 重建 安全性',
+    keywords: 'execution policy permission permissions allowlist denylist full shell executable system namespace source repository recommendation untrusted recovery rebuild security 執行政策 權限 允許清單 拒絕清單 完整模式 shell 可執行檔 系統命名空間 來源 repository 建議 不受信任 修復 重建 安全性 extension extensions plugin plugins 擴充 擴充功能 外掛 Navide 外掛 拡張機能 プラグイン',
   },
   {
     id: 'marketplace',
     tab: 'marketplace',
     section: 'marketplace',
     title: t('settings.search.item.marketplace.title'),
-    group: t('settings.nav.group.integration'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.marketplace.summary'),
-    keywords: 'marketplace extension extensions plugin plugins registry search browse install publisher signed unsigned trust 市集 擴充 擴充功能 外掛 搜尋 瀏覽 安裝 發佈者 簽章 信任',
+    keywords: 'marketplace extension extensions plugin plugins registry search browse install publisher signed unsigned trust 市集 擴充 擴充功能 外掛 搜尋 瀏覽 安裝 發佈者 簽章 信任 Navide 市集 拡張機能 プラグイン マーケットプレイス',
   },
   {
     id: 'help-mcp',
@@ -1163,6 +1215,7 @@ async function openSettingsSearchResult(item: SettingsSearchItem): Promise<void>
   if (item.tab === 'cliAgents') await openCliSection(item.section, settingsSearchQuery.value)
   if (item.tab === 'mcp' && item.mcpView) mView.value = item.mcpView
   if (item.tab === 'help' && item.helpTopic) helpTopic.value = item.helpTopic
+  if (item.tab === 'cross-device') cloudSubtab.value = 'sync'
   settingsSearchQuery.value = ''
   await nextTick()
   requestAnimationFrame(() => {
@@ -1283,6 +1336,12 @@ const loopFailoverResumeModel = ref(settingsGet<boolean>(LOOP_FAILOVER_RESUME_SE
 function onLoopFailoverResumeChange(): void {
   settingsSet(LOOP_FAILOVER_RESUME_SETTING_KEY, loopFailoverResumeModel.value)
 }
+// Opt-in: a claude switch offers to move the panes pinned to another account's
+// own config dir, and an out-of-quota pane offers "switch account and resume".
+const accountFollowSwitchModel = ref(useAccountFollowSwitchFlag().value)
+function onAccountFollowSwitchChange(): void {
+  setAccountFollowSwitch(accountFollowSwitchModel.value)
+}
 interface FailoverCapabilityRow {
   agentKey: string
   label: string
@@ -1337,6 +1396,16 @@ const autoResumeOnReconnectModel = ref(
 )
 function onAutoResumeOnReconnectChange(): void {
   settingsSet(AUTO_RESUME_ON_RECONNECT_SETTING_KEY, autoResumeOnReconnectModel.value)
+}
+
+// Whether relaunching Navide brings back, by itself, the panes that were
+// working when it closed. Separate from both settings above: neither the
+// workspace-open scope nor the crash reconnect answers a relaunch.
+const resumeInterruptedOnLaunchModel = ref(
+  normalizeResumeInterruptedOnLaunch(settingsGet(RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY, true))
+)
+function onResumeInterruptedOnLaunchChange(): void {
+  settingsSet(RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY, resumeInterruptedOnLaunchModel.value)
 }
 
 // Background notifications for CLI done / needs-input: the OS notification and
@@ -1476,6 +1545,7 @@ type SettingsScope = 'user' | 'userWorkspace' | 'accountServer' | 'userWorkspace
 const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: keyof SettingsPaths | 'localStorage' | 'mainProcess' | 'safeStorage' | 'cliFiles' }> = {
   mcp: { scope: 'user', storage: 'mcp' },
   skills: { scope: 'user', storage: 'skills' },
+  credentials: { scope: 'user', storage: 'mainProcess' },
   prompts: { scope: 'user', storage: 'localStorage' },
   // The CLIs' own instruction files: each one lives where its CLI looks for
   // it, so the pane shows per-file paths and this tab has none of its own.
@@ -1484,6 +1554,8 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   // Order and the disabled list are persisted per workspace (project.json),
   // with the global KV as the fallback default — so this page is both.
   cliAgents: { scope: 'userWorkspace', storage: 'localStorage' },
+  // Each CLI's own files, read in place; the cards show their paths.
+  cliExtensions: { scope: 'user', storage: 'cliFiles' },
   general: { scope: 'user', storage: 'localStorage' },
   // Neither half of this page is a local setting: the access token is in
   // the credential vault and the authorization rules live on the server,
@@ -1699,6 +1771,9 @@ interface P2pLinkStatus {
  *  on screen rather than freezing on whatever the save call answered. */
 const P2P_POLL_MS = 3000
 const p2pStatus = ref<P2pLinkStatus | null>(null)
+// False from leaving the Navide Cloud page until the next status reply, so a
+// status read before the link dropped elsewhere never opens the cloud views.
+const p2pStatusFresh = ref(false)
 let p2pTimer: ReturnType<typeof setInterval> | null = null
 
 async function loadP2pStatus(): Promise<void> {
@@ -1706,6 +1781,7 @@ async function loadP2pStatus(): Promise<void> {
     const resp = await props.backend.send<{ status: P2pLinkStatus }>('p2p.link.status', {})
     if (!resp.ok || !resp.payload?.status) return
     p2pStatus.value = resp.payload.status
+    p2pStatusFresh.value = true
   } catch { /* non-fatal — the status line keeps its last value */ }
 }
 
@@ -1753,6 +1829,26 @@ const policyDevices = computed<P2pPolicyDevice[]>(() => p2pPolicy.value?.devices
  * broken rather than unavailable.
  */
 const p2pLinkReady = computed(() => p2pState.value === 'connected')
+// The Navide Cloud page grows sub-tabs only while the Cloud link is up and
+// its server does share links. Otherwise — not connected, or connected to a
+// server without them — it is exactly the page it was before them: no bar,
+// no inventory, no share list; an old server is asked share.caps once (F7-2).
+const cloudLinkUp = computed(() => p2pLinkReady.value && p2pStatusFresh.value)
+const shareProbe = useShareLinks(props.backend)
+const cloudSubtabsShown = computed(() => cloudLinkUp.value && shareProbe.supported.value)
+const cloudTabs = computed<CloudSubtab[]>(() =>
+  shareProbe.supported.value ? ['sync', 'share', 'devices'] : ['sync', 'devices']
+)
+watch(cloudLinkUp, (up) => {
+  if (up) {
+    void shareProbe.probe()
+  } else {
+    forgetSyncInventory()
+    shareProbe.reset()
+  }
+})
+// The inventory is module-wide; the next Settings window must not open on this one's.
+onBeforeUnmount(forgetSyncInventory)
 /** The socket's own words. "Not connected" is the half already on screen;
  *  which kind it is decides whether waiting is the right thing to do. */
 const p2pLinkError = computed(() =>
@@ -1905,17 +2001,21 @@ function policyDeviceLabel(deviceId: string): string {
   return known?.deviceName || deviceId
 }
 
-watch(activeTab, (tab) => {
+watch([activeTab, cloudSubtab], ([tab, sub]) => {
   if (p2pTimer) { clearInterval(p2pTimer); p2pTimer = null }
   // Follows the cards, not the page they used to be on: polling the link while
   // General is open would keep asking for something nobody is looking at, and
   // stop the moment somebody actually opened it.
+  if (tab !== 'cross-device') p2pStatusFresh.value = false
   if (tab !== 'cross-device') return
+  // The link is watched on every sub-tab, since it decides whether there are
+  // sub-tabs at all; the rules only on Sync, the one sub-tab that shows them.
+  const rules = sub === 'sync'
   void loadP2pStatus()
-  void loadP2pPolicy()
+  if (rules) void loadP2pPolicy()
   p2pTimer = setInterval(() => {
     void loadP2pStatus()
-    void loadP2pPolicy()
+    if (rules) void loadP2pPolicy()
   }, P2P_POLL_MS)
 }, { immediate: true })
 
@@ -1939,7 +2039,11 @@ function onKeyDown(e: KeyboardEvent) {
 // check) badge the Extensions nav item.
 const pluginUpdates = usePluginUpdates()
 let stopPluginUpdates: (() => void) | null = null
+// A synced MCP change lands in the store behind this pane; re-read the list
+// the way a reopen would (mLoad leaves an unsaved edit alone).
+let offMcpChanged: (() => void) | null = null
 onMounted(() => {
+  offMcpChanged = props.backend.on('mcp.servers_changed', () => { void mLoad() })
   window.addEventListener('keydown', onKeyDown)
   stopPluginUpdates = pluginUpdates.subscribe()
   refreshLaunchOverrides()
@@ -1950,6 +2054,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
+  offMcpChanged?.()
   stopPluginUpdates?.()
   // The onboarding instance is this component's now, so its timers are too:
   // an install watched from the CLI management panel keeps a poll and an
@@ -2408,7 +2513,7 @@ watch(activeTab, (tab) => {
               <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M14.5 8h-1.8M3.3 8H1.5M12.6 3.4l-1.3 1.3M4.7 11.3l-1.3 1.3M12.6 12.6l-1.3-1.3M4.7 4.7 3.4 3.4"/></svg>
             </div>
             <div class="s-ws-meta">
-              <span class="s-ws-name">{{ $t('settings.nav.title') }}</span>
+              <span class="s-ws-name" v-truncate>{{ $t('settings.nav.title') }}</span>
             </div>
           </div>
 
@@ -2429,7 +2534,7 @@ watch(activeTab, (tab) => {
                 @click="openSettingsSearchResult(item)"
               >
                 <span class="s-search-result-main">
-                  <span class="s-search-result-title">{{ item.title }}</span>
+                  <span class="s-search-result-title" v-truncate>{{ item.title }}</span>
                   <span class="s-search-result-group">{{ item.group }}</span>
                 </span>
                 <span class="s-search-result-summary">{{ item.summary }}</span>
@@ -2538,6 +2643,20 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 2.6h6.1l3.5 3.5v7.3H3.2Z"/><path d="M9.1 2.7v3.5h3.5"/><path d="M5.4 8.4h5.2M5.4 10.7h3.4"/></svg>
                 </template>
               </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.credentials')" :active="activeTab === 'credentials'" :badge="credentialsHighCount" @select="activeTab = 'credentials'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.2" cy="10.8" r="2.6"/><path d="M7.1 9 13 3.1M10.9 5.2l1.7 1.7M9 7.1l1.4 1.4"/></svg>
+                </template>
+              </SettingsNavItem>
+              <SettingsNavItem :label="$t('settings.nav.cliExtensions')" :active="activeTab === 'cliExtensions'" @select="activeTab = 'cliExtensions'">
+                <template #icon>
+                  <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.6" y="5.2" width="7.2" height="7.2" rx="1.4"/><path d="M9.8 7.4h1.6a1.2 1.2 0 0 0 0-2.4h-.2V3.6M12.6 8.8v2.4a1.2 1.2 0 0 1-1.2 1.2H9.8"/></svg>
+                </template>
+              </SettingsNavItem>
+            </div>
+
+            <div class="s-nav-group">
+              <div class="s-nav-group-title">{{ $t('settings.nav.group.navidePlugins') }}</div>
               <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
@@ -2592,7 +2711,7 @@ watch(activeTab, (tab) => {
             </div>
             <div class="settings-meta-row">
               <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
-              <span class="settings-path" :title="pathForTab('mcp')">{{ pathForTab('mcp') }}</span>
+              <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
               <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
             </div>
             <p v-if="mError" class="err-msg" style="margin:6px 22px 0">{{ mError }}</p>
@@ -2744,10 +2863,19 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
           <div class="settings-meta-row">
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
-            <span class="settings-path" :title="pathForTab('skills')">{{ pathForTab('skills') }}</span>
+            <span class="settings-path" v-truncate>{{ pathForTab('skills') }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
           </div>
           <SkillsPane :backend="props.backend" />
+        </div>
+
+        <!-- ── CREDENTIALS TAB ──────────────────────────────────────────── -->
+        <div v-show="activeTab === 'credentials'" class="s-body s-body--bleed" data-settings-section="credentials">
+          <h1 class="s-page-title">{{ $t('settings.nav.credentials') }}</h1>
+          <div class="settings-meta-row">
+            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
+          </div>
+          <CredentialsPane :backend="props.backend" :active="activeTab === 'credentials'" @high-count="credentialsHighCount = $event" />
         </div>
 
         <!-- ── PROMPTS TAB ──────────────────────────────────────────────── -->
@@ -2778,10 +2906,10 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.analyzer') }}</h1>
           <div class="settings-meta-row">
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
-            <span class="settings-path" :title="settingsPaths.analyzer">{{ settingsPaths.analyzer }}</span>
+            <span class="settings-path" v-truncate>{{ settingsPaths.analyzer }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
             <span class="settings-path-divider">·</span>
-            <span class="settings-path" :title="settingsPaths.ai_chat">{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}</span>
+            <span class="settings-path" v-truncate>{{ $t('settings.analyzer.ai-keys-label') }} {{ settingsPaths.ai_chat }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.ai_chat" @click="openSettingsPath(settingsPaths.ai_chat)">{{ $t('action.open') }}</button>
           </div>
 
@@ -2923,7 +3051,7 @@ watch(activeTab, (tab) => {
             <!-- Download progress -->
             <div v-if="props.analyzerApi.pulling.value" class="az-progress-wrap">
               <div class="az-progress-label">
-                <span class="az-spin">⏳</span>
+                <span class="az-spin" aria-hidden="true"></span>
                 <span>{{ props.analyzerApi.pullProgress.value?.status ?? $t('settings.analyzer.connecting') }}</span>
                 <template v-if="props.analyzerApi.pullProgress.value?.total">
                   <span class="az-pct">
@@ -2983,7 +3111,7 @@ watch(activeTab, (tab) => {
 
             <div v-if="props.analyzerApi.benchmarking.value" class="az-progress-wrap">
               <div v-if="props.analyzerApi.benchmarkProgress.value" class="az-progress-label">
-                <span class="az-spin">⏳</span>
+                <span class="az-spin" aria-hidden="true"></span>
                 {{ $t('settings.analyzer.testing') }} <strong>{{ props.analyzerApi.benchmarkProgress.value.model }}</strong>
                 · {{ props.analyzerApi.benchmarkProgress.value.task_id }}
               </div>
@@ -3024,11 +3152,15 @@ watch(activeTab, (tab) => {
                     :key="r.name"
                     :class="{ 'az-row-fail': !r.passed }"
                   >
-                    <td class="az-td-model">{{ r.name }}</td>
+                    <td class="az-td-model" v-truncate>{{ r.name }}</td>
                     <td v-for="tid in ['T1','T2','T3','T4']" :key="tid" class="az-td-task">
                       <template v-if="r.tasks.find(t => t.task_id === tid)">
-                        <span :class="r.tasks.find(t => t.task_id === tid)!.passed ? 'az-pass' : 'az-fail'">
-                          {{ r.tasks.find(t => t.task_id === tid)!.passed ? '✅' : '❌' }}
+                        <span
+                          :class="r.tasks.find(t => t.task_id === tid)!.passed ? 'az-pass' : 'az-fail'"
+                          :aria-label="r.tasks.find(t => t.task_id === tid)!.passed ? $t('settings.analyzer.badge-pass') : $t('settings.analyzer.badge-excluded')"
+                        >
+                          <svg v-if="r.tasks.find(t => t.task_id === tid)!.passed" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>
+                          <svg v-else viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>
                         </span>
                         <span class="az-elapsed">{{ r.tasks.find(t => t.task_id === tid)!.elapsed_s }}s</span>
                       </template>
@@ -3045,6 +3177,16 @@ watch(activeTab, (tab) => {
             </div>
           </div>
 
+        </div>
+
+        <!-- ══ CLI EXTENSIONS TAB ══ -->
+        <div v-show="activeTab === 'cliExtensions'" class="s-body s-body--bleed" data-settings-section="cli-extensions">
+          <h1 class="s-page-title">{{ $t('settings.nav.cliExtensions') }}</h1>
+          <div class="settings-meta-row">
+            <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
+          </div>
+          <!-- Mounted on first visit only: the scan reads every CLI's files. -->
+          <CliExtensionsPane v-if="visitedCliExtensions" :backend="props.backend" />
         </div>
 
         <!-- ══ CLI AGENTS TAB ══ -->
@@ -3084,7 +3226,7 @@ watch(activeTab, (tab) => {
                   <span v-if="row.needsAttention" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
                 </div>
                 <div class="cli-card-status">
-                  <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
+                  <span v-for="chip in row.chips.filter((chip) => chip.id === 'install' || chip.id === 'account' || chip.id === 'push')" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span>
                   <span v-if="!row.chips.some((chip) => chip.id === 'install')" class="cli-agent-hint">{{ $t('settings.cliAgents.not-detected') }}</span>
                 </div>
                 <div class="cli-card-footer">
@@ -3112,7 +3254,7 @@ watch(activeTab, (tab) => {
               <section id="cli-panel-overview" class="ap-section cli-overview">
                 <h3 class="ap-title">{{ $t('settings.cliAgents.tab-overview') }}</h3>
                 <p v-if="selectedCli.hint" class="ap-hint">{{ selectedCli.hint }}</p>
-                <div class="cli-agent-chips"><span v-for="chip in selectedCli.chips" :key="chip.id" class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span></div>
+                <div class="cli-agent-chips"><span v-for="chip in selectedCli.chips" :key="chip.id" v-truncate class="cli-chip" :class="`cli-chip--${chip.tone}`">{{ chip.label }}</span></div>
                 <label class="cli-agent-toggle"><input type="checkbox" :checked="cliAgentEnabled(selectedCli.agentKey)" :disabled="cliAgentEnabled(selectedCli.agentKey) && cliEnabledCount <= 1" @change="toggleCliAgent(selectedCli.agentKey)" />{{ $t('settings.cliAgents.enabled') }}</label>
               </section>
           <section id="cli-panel-launch" class="ap-section" data-settings-section="cli-agents-launch">
@@ -3199,6 +3341,7 @@ watch(activeTab, (tab) => {
                           <code>{{ entry.name }}</code>
                           <span
                             v-if="isReservedSpawnEnvKey(entry.name, { foldCase: platformId() === 'win32' })"
+                            v-truncate
                             class="cli-chip cli-chip--bad"
                           >{{ $t('settings.cliLaunch.env-reserved-chip') }}</span>
                         </td>
@@ -3475,6 +3618,20 @@ watch(activeTab, (tab) => {
               </SettingRow>
 
               <SettingRow
+                data-settings-section="general-resume-interrupted-launch"
+                :title="$t('settings.general.resume-interrupted-on-launch')"
+                :description="$t('settings.general.resume-interrupted-on-launch-hint')"
+              >
+                <template #control>
+                  <ToggleSwitch
+                    v-model="resumeInterruptedOnLaunchModel"
+                    :aria-label="$t('settings.general.resume-interrupted-on-launch')"
+                    @update:modelValue="onResumeInterruptedOnLaunchChange"
+                  />
+                </template>
+              </SettingRow>
+
+              <SettingRow
                 data-settings-section="general-resume-concurrency"
                 :title="$t('settings.appearance.resume-concurrency')"
                 :description="$t('settings.appearance.resume-concurrency-hint')"
@@ -3489,6 +3646,8 @@ watch(activeTab, (tab) => {
                   />
                 </template>
               </SettingRow>
+
+              <RecentWorkspacesLimitRow :backend="props.backend" />
 
               <SettingRow
                 data-settings-section="general-default-editor"
@@ -3597,6 +3756,20 @@ watch(activeTab, (tab) => {
                   />
                 </template>
               </SettingRow>
+              <SettingRow
+                data-settings-section="general-account-follow-switch"
+                :title="$t('usage.follow-switch-title')"
+                :description="$t('usage.follow-switch-hint')"
+              >
+                <template #control>
+                  <ToggleSwitch
+                    v-model="accountFollowSwitchModel"
+                    data-testid="account-follow-switch"
+                    :aria-label="$t('usage.follow-switch-title')"
+                    @update:modelValue="onAccountFollowSwitchChange"
+                  />
+                </template>
+              </SettingRow>
               <div v-if="quotaFailover.state.value" class="failover-caps" data-settings-section="general-quota-failover-caps">
                 <p v-if="quotaFailover.state.value.auditDegraded" class="failover-warn">
                   {{ $t('usage.failover-audit-degraded') }}
@@ -3686,6 +3859,8 @@ watch(activeTab, (tab) => {
             </SettingsCard>
           </SettingsSection>
 
+          <ResourceLimitsSection :backend="backend" />
+
           <SettingsSection :label="$t('settings.section.settings-management')">
             <SettingsCard data-settings-section="settings-management">
               <SettingRow
@@ -3702,7 +3877,7 @@ watch(activeTab, (tab) => {
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
                   <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
-                  <span class="settings-path" :title="pathForTab('general')">{{ pathForTab('general') }}</span>
+                  <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
                 <p v-if="settingsBundleSummary" class="summary-ok">{{ settingsBundleSummary }}</p>
                 <p v-if="settingsBundleError" class="err-msg">{{ settingsBundleError }}</p>
@@ -3720,8 +3895,15 @@ watch(activeTab, (tab) => {
             <span class="nvc-page-mark" aria-hidden="true"><NavideCloudMark /></span>
             {{ $t('settings.nav.crossDevice') }}
           </h1>
-          <SyncSettings :backend="props.backend" />
-          <SettingsSection :label="$t('settings.p2p.title')">
+          <CloudSubtabs v-model="cloudSubtab" :enabled="cloudSubtabsShown" :tabs="cloudTabs">
+          <template #sync>
+          <SyncSettings v-show="cloudSubtab === 'sync'" :backend="props.backend" />
+          <CloudInventorySection
+            v-if="activeTab === 'cross-device' && cloudSubtabsShown"
+            v-show="cloudSubtab === 'sync'"
+            :backend="props.backend"
+          />
+          <SettingsSection v-show="cloudSubtab === 'sync'" :label="$t('settings.p2p.title')">
             <SettingsCard>
               <div class="s-fullrow" data-settings-section="general-p2p">
                 <p class="ap-hint">{{ $t('settings.p2p.hint') }}</p>
@@ -3893,6 +4075,14 @@ watch(activeTab, (tab) => {
               </div>
             </SettingsCard>
           </SettingsSection>
+          </template>
+          <template #share>
+            <ShareLinksPane :backend="props.backend" :source="shareProbe" />
+          </template>
+          <template #devices>
+            <CloudDevicesSection :backend="props.backend" />
+          </template>
+          </CloudSubtabs>
         </div>
 
         <!-- ══ UPDATES TAB ══ -->
@@ -3909,7 +4099,7 @@ watch(activeTab, (tab) => {
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
                   <span class="scope-badge">{{ $t('updater.current-version') }}</span>
-                  <span class="settings-path">v{{ updateState.currentVersion }}</span>
+                  <span class="settings-path" v-truncate>v{{ updateState.currentVersion }}</span>
                 </div>
 
                 <!-- Where the update actually is. Each stage below owns the
@@ -4232,7 +4422,7 @@ watch(activeTab, (tab) => {
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
-            <span class="settings-path">{{ pathForTab('accounts') }}</span>
+            <span class="settings-path" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
           <GitAccountsPane :api="accountsApi" />
           <div data-settings-section="cli-accounts" style="margin: 4px 22px 22px; padding-top: 22px; border-top: 1px solid var(--border-default);">
@@ -4279,7 +4469,7 @@ watch(activeTab, (tab) => {
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
               <div class="settings-meta-row inline">
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
-                <span class="settings-path">{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
+                <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
@@ -5440,7 +5630,17 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   flex-shrink: 0;
 }
 .az-progress-label { font-size: var(--font-xs); color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
-.az-spin { animation: spin 1s linear infinite; display: inline-block; }
+.az-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border-default);
+  border-top-color: var(--accent-fg);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .az-hint {
@@ -5453,7 +5653,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-hint ul { margin: 0 0 10px; padding-left: 18px; }
 .az-hint li { margin-bottom: 4px; }
 .az-hint code { background: var(--bg-subtle); padding: 1px 5px; border-radius: var(--radius-xs); font-size: var(--font-2xs); color: var(--text-bright); }
-.az-pass-rule { color: var(--accent-fg); font-size: var(--font-2xs); }
+.az-pass-rule { color: var(--text-secondary); font-size: var(--font-2xs); }
 
 .az-results { padding: 16px 20px; flex: 1; overflow-y: auto; min-height: 0; }
 .az-results-summary {
@@ -5479,6 +5679,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-td-score { text-align: center; color: var(--text-secondary); }
 .az-td-verdict { text-align: center; }
 .az-elapsed { font-size: var(--font-3xs); color: var(--text-secondary); margin-left: 3px; }
+.az-pass,
+.az-fail { display: inline-flex; vertical-align: -2px; }
+.az-pass { color: var(--success-fg); }
+.az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
 .failover-table td { font-size: var(--font-2xs); }
@@ -5493,7 +5697,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .failover-todo { font-size: var(--font-3xs); color: var(--text-muted); }
 .failover-warn { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--attention-fg); }
-.az-row-fail td { color: var(--text-disabled); }
+.az-row-fail td { color: var(--text-secondary); }
 .az-row-fail .az-td-model { color: var(--text-muted); }
 .az-badge-pass {
   background: color-mix(in srgb, var(--success-fg) 15%, transparent);

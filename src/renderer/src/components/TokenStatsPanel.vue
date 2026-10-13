@@ -7,7 +7,7 @@ import { buildTokenGroupRows } from '../lib/tokenGroups'
 import { accountUsageFor, formatRemaining, isExhausted, remainingPercent } from '../composables/useUsage'
 import type { useCliProfiles } from '../composables/useCliProfiles'
 import { DEFAULT_PROFILE_ID, UNKNOWN_PROFILE_ID, accountLabel } from '../lib/accountLabel'
-import { i18n, useNotify } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import HistoryPanel from './HistoryPanel.vue'
 import TaskerPanel from './TaskerPanel.vue'
@@ -460,13 +460,13 @@ function openTurnStats(): void {
             >≡</button>
             <button class="reset-btn" :title="$t('action.reset-run-counter')" @click="confirmReset('run')">⟲</button>
           </div>
-          <div v-if="currentRun" class="run-meta" :title="currentRun.task">
+          <div v-if="currentRun" class="run-meta" v-truncate :title="currentRun.task">
             <span class="run-id">{{ currentRun.run_id || '—' }}</span>
           </div>
           <!-- Whose session these figures belong to. A count was meaningless
                once the block stopped summing sessions — the reader needs to
                recognise the pane in front of them. -->
-          <div v-else class="run-meta">
+          <div v-else class="run-meta" v-truncate>
             <span v-if="!focusPane" class="run-id">{{ $t('label.no-focused-pane') }}</span>
             <span v-else-if="!focusSession" class="run-id">
               {{ $t('label.pane-no-session', { pane: focusPane.agentLabel }) }}
@@ -474,10 +474,10 @@ function openTurnStats(): void {
             <span v-else class="run-id">{{ focusPane.agentLabel }}</span>
           </div>
           <div class="totals">
-            <div class="cell"><div class="big">{{ fmt(topTotals.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(topTotals.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(topTotals.input + topTotals.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
-            <div class="cell"><div class="big">{{ topTotals.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(topTotals.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(topTotals.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(topTotals.input + topTotals.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ topTotals.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
           </div>
         </section>
 
@@ -488,10 +488,10 @@ function openTurnStats(): void {
             <button class="reset-btn" :title="$t('action.wipe-workspace-history')" @click="confirmReset('workspace')">⟲</button>
           </div>
           <div class="totals">
-            <div class="cell"><div class="big">{{ fmt(cumulative.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(cumulative.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(cumulative.input + cumulative.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
-            <div class="cell"><div class="big">{{ cumulative.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(cumulative.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(cumulative.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(cumulative.input + cumulative.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ cumulative.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
           </div>
         </section>
 
@@ -502,10 +502,10 @@ function openTurnStats(): void {
             <button class="reset-btn" :title="$t('action.wipe-global-tally')" @click="confirmReset('global')">⟲</button>
           </div>
           <div class="totals">
-            <div class="cell"><div class="big">{{ fmt(allTime.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(allTime.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
-            <div class="cell"><div class="big">{{ fmt(allTime.input + allTime.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
-            <div class="cell"><div class="big">{{ allTime.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(allTime.input) }}</div><div class="lbl">{{ $t('label.in') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(allTime.output) }}</div><div class="lbl">{{ $t('label.out') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ fmt(allTime.input + allTime.output) }}</div><div class="lbl">{{ $t('label.total') }}</div></div>
+            <div class="cell"><div class="big" v-truncate>{{ allTime.calls }}</div><div class="lbl">{{ $t('label.calls') }}</div></div>
           </div>
         </section>
 
@@ -515,13 +515,13 @@ function openTurnStats(): void {
           <table class="grid">
             <tbody>
               <tr v-for="row in vendorRows" :key="row.key">
-                <th>{{ row.label }}</th>
-                <td>{{ fmt(row.bucket.input) }}</td>
-                <td>{{ fmt(row.bucket.output) }}</td>
-                <td class="dim">{{ row.bucket.calls }}</td>
+                <th v-truncate>{{ row.label }}</th>
+                <td v-truncate>{{ fmt(row.bucket.input) }}</td>
+                <td v-truncate>{{ fmt(row.bucket.output) }}</td>
+                <td class="dim" v-truncate>{{ row.bucket.calls }}</td>
               </tr>
               <tr class="head">
-                <th></th><td>{{ $t('label.in') }}</td><td>{{ $t('label.out') }}</td><td class="dim">{{ $t('label.calls') }}</td>
+                <th></th><td v-truncate>{{ $t('label.in') }}</td><td v-truncate>{{ $t('label.out') }}</td><td class="dim" v-truncate>{{ $t('label.calls') }}</td>
               </tr>
 
             </tbody>
@@ -535,14 +535,14 @@ function openTurnStats(): void {
           <table v-else class="grid grid-accounts">
             <tbody>
               <tr v-for="row in accountRows" :key="row.key" data-row="account" :data-account="row.key" :class="{ unknown: row.unknown }">
-                <th :title="row.key">{{ row.label }}</th>
-                <td>{{ fmt(row.bucket.input) }}</td>
-                <td>{{ fmt(row.bucket.output) }}</td>
-                <td class="dim">{{ row.bucket.calls }}</td>
-                <td class="dim quota" data-part="quota">{{ row.quota }}</td>
+                <th :title="row.key" v-truncate>{{ row.label }}</th>
+                <td v-truncate>{{ fmt(row.bucket.input) }}</td>
+                <td v-truncate>{{ fmt(row.bucket.output) }}</td>
+                <td class="dim" v-truncate>{{ row.bucket.calls }}</td>
+                <td class="dim quota" data-part="quota" v-truncate>{{ row.quota }}</td>
               </tr>
               <tr class="head">
-                <th></th><td>{{ $t('label.in') }}</td><td>{{ $t('label.out') }}</td><td class="dim">{{ $t('label.calls') }}</td><td class="dim">{{ $t('label.quota') }}</td>
+                <th></th><td v-truncate>{{ $t('label.in') }}</td><td v-truncate>{{ $t('label.out') }}</td><td class="dim" v-truncate>{{ $t('label.calls') }}</td><td class="dim" v-truncate>{{ $t('label.quota') }}</td>
               </tr>
             </tbody>
           </table>
@@ -555,10 +555,10 @@ function openTurnStats(): void {
           <table v-else class="grid">
             <tbody>
               <tr v-for="row in stageRows" :key="row.id">
-                <th>{{ row.label }}</th>
-                <td>{{ fmt(row.bucket.input) }}</td>
-                <td>{{ fmt(row.bucket.output) }}</td>
-                <td class="dim">{{ row.bucket.calls }}</td>
+                <th v-truncate>{{ row.label }}</th>
+                <td v-truncate>{{ fmt(row.bucket.input) }}</td>
+                <td v-truncate>{{ fmt(row.bucket.output) }}</td>
+                <td class="dim" v-truncate>{{ row.bucket.calls }}</td>
               </tr>
 
             </tbody>
@@ -572,10 +572,10 @@ function openTurnStats(): void {
           <table v-else class="grid">
             <tbody>
               <tr v-for="row in groupRows" :key="row.key">
-                <th>{{ row.label }}</th>
-                <td>{{ fmt(row.bucket.input) }}</td>
-                <td>{{ fmt(row.bucket.output) }}</td>
-                <td class="dim">{{ row.bucket.calls }}</td>
+                <th v-truncate>{{ row.label }}</th>
+                <td v-truncate>{{ fmt(row.bucket.input) }}</td>
+                <td v-truncate>{{ fmt(row.bucket.output) }}</td>
+                <td class="dim" v-truncate>{{ row.bucket.calls }}</td>
               </tr>
 
             </tbody>
@@ -589,10 +589,10 @@ function openTurnStats(): void {
           <table v-else class="grid">
             <tbody>
               <tr v-for="row in paneRows" :key="row.id">
-                <th :title="row.sub">{{ row.label }}</th>
-                <td>{{ fmt(row.bucket.input) }}</td>
-                <td>{{ fmt(row.bucket.output) }}</td>
-                <td class="dim">{{ row.bucket.calls }}</td>
+                <th :title="row.sub" v-truncate>{{ row.label }}</th>
+                <td v-truncate>{{ fmt(row.bucket.input) }}</td>
+                <td v-truncate>{{ fmt(row.bucket.output) }}</td>
+                <td class="dim" v-truncate>{{ row.bucket.calls }}</td>
               </tr>
 
             </tbody>

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'node:path'
+import { testWorkerCap } from './vitest.workerCap'
 
 // Every source test has one owner. Artifact consumers build/pack once before
 // their workers start; ordinary tests and CLI contracts need no plugin build.
@@ -42,6 +43,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
+    // Empty unless a Navide pane carries a worker cap (Settings → Resource limits).
+    ...testWorkerCap(process.env),
     projects: [
       { extends: true, test: { name: 'unit', include: allTests, exclude: [...excludedTests, ...cliTests, ...artifactTests] } },
       { extends: true, test: { name: 'cli', include: cliTests, exclude: excludedTests } },

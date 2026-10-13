@@ -2,7 +2,7 @@
 
 [English](../en-US/getting-started.md) | 繁體中文 | [日本語](../ja-JP/getting-started.md) | [文件中心](README.md)
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac，以及 Linux x64 與 x64／Arm 版 Windows。[最新的 GitHub Release](https://github.com/nt-nerdtechnic/Navide/releases/latest) 提供 macOS 的 DMG 與 ZIP 下載（已經 Developer ID 簽章與 Apple Notarization）、Windows x64 與 Arm64 的 NSIS 安裝程式，以及 Linux x64 的 AppImage 與 `.deb`。GitHub 下載很慢或失敗時，同一批檔案也由 dl.navide.dev 鏡像提供——README 的下載清單每個檔案旁都有「鏡像」連結，navide.dev 官網在鏡像可達時會自動改用它。
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac，以及 Linux x64 與 x64／Arm 版 Windows。[最新的 GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) 提供 macOS 的 DMG 與 ZIP 下載（已經 Developer ID 簽章與 Apple Notarization）、Windows x64 與 Arm64 的 NSIS 安裝程式，以及 Linux x64 的 AppImage 與 `.deb`。GitHub 下載很慢或失敗時，同一批檔案也由 dl.navide.dev 鏡像提供——README 的下載清單每個檔案旁都有「鏡像」連結，navide.dev 官網在鏡像可達時會自動改用它。
 
 若要在 macOS 安裝，請下載 DMG、將 Navide 複製到「應用程式」，接著正常開啟即可，無需繞過 Gatekeeper。
 
@@ -35,7 +35,7 @@ x64 提供兩種套件：
 ## 從原始碼安裝
 
 ```bash
-git clone https://github.com/nt-nerdtechnic/Navide.git
+git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 pnpm install
 uv --project backend sync

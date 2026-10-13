@@ -72,12 +72,21 @@ export function runGroupStateLabelKey(state: TabRunState): string {
   return `label.run-group-${state}`
 }
 
+/** How many of a tab's panes are live — the "live" of the "live / total" the
+ *  sidebar's workspace heading shows. A cold-restored or reclaimed placeholder
+ *  holds no process and is the only pane whose status is 'waiting', so
+ *  everything else counts. */
+export function countLivePanes(statuses: readonly string[]): number {
+  return statuses.filter((s) => s !== 'waiting').length
+}
+
 /** The fields a rendered tab is made of. Structural typing keeps this file free
  *  of a Vue import — StageTabBar's TabItem satisfies it. */
 interface RenderedTab {
   key: string
   label: string
   count: number
+  live: number
   status: TabRunState
 }
 
@@ -94,6 +103,7 @@ export function sameRenderedTabs(a: readonly RenderedTab[], b: readonly Rendered
       a[i].key !== b[i].key ||
       a[i].label !== b[i].label ||
       a[i].count !== b[i].count ||
+      a[i].live !== b[i].live ||
       a[i].status !== b[i].status
     ) {
       return false

@@ -365,3 +365,19 @@ async def test_link_url_is_the_bot_install_url_from_ready() -> None:
     assert adapter.link_url("ABCD2345", "group") == (
         "https://discord.com/oauth2/authorize?client_id=555&scope=bot&permissions=309237713920")
     assert adapter.link_url("ABCD2345", "direct") == ""
+
+
+async def test_menu_sends_and_edits_one_action_row_per_button_row(http: FakeHttp) -> None:
+    http.route("POST", r"/channels/[^/]+/messages", lambda r: {"id": "msg1"})
+    http.route("PATCH", r"/channels/[^/]+/messages/[^/]+", lambda r: {"id": "msg1"})
+    adapter = DiscordAdapter(TOKEN, base_url=http.base_url)
+    loc = Location("discord", "default", "C1", "T77")
+    rows = [[(f"💬 {i}", f"nv2:p:aaaaaaa{i}") for i in range(5)], [("Next ▶", "nv2:g:bbbbbbbb")]]
+    assert await adapter.send_menu(loc, "menu", rows) == "msg1"
+    body = http.calls_to("POST", "/channels/T77/messages")[0].body
+    assert [r["type"] for r in body["components"]] == [1, 1]
+    assert [b["custom_id"] for b in body["components"][0]["components"]] == [d for _, d in rows[0]]
+    assert body["components"][1]["components"][0]["label"] == "Next ▶"
+    await adapter.edit_menu(loc, "msg1", "page 2", rows[1:])
+    patch = http.calls_to("PATCH", "/channels/T77/messages/msg1")[0].body
+    assert patch["content"] == "page 2" and len(patch["components"]) == 1

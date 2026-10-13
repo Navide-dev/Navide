@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import type { useBackend } from '../composables/useBackend'
@@ -203,7 +204,7 @@ defineExpose({ buildCyclesCsv, buildPeriodsCsv })
 <template>
   <div class="qc-view" data-part="quota-cycles">
     <div class="qc-toolbar">
-      <strong class="qc-account" data-part="account-name">{{ aggregate ? t('quota-cycles.all-accounts') : label }}</strong>
+      <strong class="qc-account" v-truncate data-part="account-name">{{ aggregate ? t('quota-cycles.all-accounts') : label }}</strong>
       <span v-if="!aggregate" data-part="vendor">{{ vendorLabel }}</span>
       <span v-if="!aggregate && profileId !== UNKNOWN_PROFILE_ID" class="qc-active" data-part="active">{{ t(active ? 'account-dim.active' : 'account-dim.inactive') }}</span>
       <span class="qc-spacer" />

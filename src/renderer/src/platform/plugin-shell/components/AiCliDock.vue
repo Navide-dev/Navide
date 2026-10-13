@@ -26,6 +26,7 @@
 //   yet, kill() would be a no-op and a hung create uncancellable).
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { CLI_AGENT_SPECS } from '../agents'
 import {
@@ -206,6 +207,11 @@ async function maybeResume(): Promise<void> {
   }
   if (!record?.sessionId || !isShellSafeSessionId(record.sessionId)) return
   if (!agentSpecs.value.some((s) => s.agentKey === record.agentKey)) return
+  // The plugin behind this surface was removed: retire the record, not resume.
+  const retired = await props.terminalPort.dockSurfaceRetired?.(
+    props.workspacePath, props.paneId, dockSurface.value.surface,
+  ).catch(() => false)
+  if (retired) return
   agentKey.value = record.agentKey
   await launch(record.sessionId)
 }
@@ -282,14 +288,28 @@ const rosterAddress = ref('')
 // Bumped by every unregister, so a register still in flight when the CLI ends
 // knows to undo itself instead of leaving a dead panel in the roster.
 let registerSeq = 0
+// A refused registration is retried before the panel gives up and says why: a
+// Plan window reload races its old connection, which holds the pane id until
+// the backend sees it close (FORBIDDEN "held by another window"). Until it
+// registers, every Navide tool the CLI calls is refused too.
+const REGISTER_RETRY_DELAYS_MS = [1000, 2000, 4000]
+let registerRetryTimer: ReturnType<typeof setTimeout> | null = null
+/** Why the last registration attempt failed, once retries ran out. */
+const rosterError = ref('')
+
+function clearRegisterRetry(): void {
+  if (registerRetryTimer) clearTimeout(registerRetryTimer)
+  registerRetryTimer = null
+}
 
 function dropRegistration(paneId: string): void {
   void Promise.resolve(props.terminalPort.unregisterAgentPane?.(paneId)).catch(() => undefined)
 }
 
-async function registerInRoster(): Promise<void> {
+async function registerInRoster(attempt = 0): Promise<void> {
   const port = props.terminalPort
   if (!port.registerAgentPane || !props.workspacePath) return
+  clearRegisterRetry()
   const seq = ++registerSeq
   const paneId = props.paneId
   let name = registeredAs?.paneId === paneId ? registeredAs.name : ''
@@ -302,8 +322,9 @@ async function registerInRoster(): Promise<void> {
     name = pickDockPaneName(`${dockSurface.value.surface}-${agentKey.value}`, props.workspacePath, paneId, panes)
   }
   let accepted = false
+  let failure = ''
   try {
-    accepted = (await port.registerAgentPane({
+    const resp = await port.registerAgentPane({
       pane_id: paneId,
       name,
       workspace_path: props.workspacePath,
@@ -311,26 +332,45 @@ async function registerInRoster(): Promise<void> {
       surface: dockSurface.value.surface,
       window_kind: dockSurface.value.windowKind,
       ...(port.onAgentMessage ? { deliverable: true } : {}),
-    })).ok
-  } catch {
+    })
+    accepted = resp.ok
+    // A host that cannot map the call never will: stay unregistered quietly,
+    // as on a port without registerAgentPane.
+    if (!accepted && resp.error?.code === 'UNMAPPED_CAPABILITY') return
+    if (!accepted) failure = resp.error?.message || resp.error?.code || ''
+  } catch (err) {
+    failure = err instanceof Error ? err.message : String(err)
+  }
+  if (seq !== registerSeq) {
+    if (accepted) dropRegistration(paneId)
     return
   }
   // A refused or unroutable registration leaves no entry: show no address that
-  // nothing answers at (a reconnect tries again).
-  if (!accepted) return
-  if (seq !== registerSeq) {
-    dropRegistration(paneId)
+  // nothing answers at. Retry; a reconnect also starts over.
+  if (!accepted) {
+    const delay = REGISTER_RETRY_DELAYS_MS[attempt]
+    if (delay === undefined) {
+      rosterError.value = failure || t('dockWindow.roster-error-unknown')
+      return
+    }
+    registerRetryTimer = setTimeout(() => {
+      registerRetryTimer = null
+      if (seq === registerSeq && props.terminalPort.status.value === 'connected') void registerInRoster(attempt + 1)
+    }, delay)
     return
   }
   registeredAs = { paneId, name }
   rosterAddress.value = name
+  rosterError.value = ''
 }
 
 function unregisterFromRoster(): void {
   registerSeq++
+  clearRegisterRetry()
   const previous = registeredAs
   registeredAs = null
   rosterAddress.value = ''
+  rosterError.value = ''
   if (previous) dropRegistration(previous.paneId)
 }
 
@@ -459,12 +499,14 @@ async function pasteContext(
 }
 
 /** Wait for the CLI's output to go quiet (injectQuietMs of silence after its
- *  first output, injectTimeoutMs cap). False when the CLI died meanwhile. */
-async function waitForQuiet(term: InstanceType<typeof AiCliTerminal>): Promise<boolean> {
+ *  first output, injectTimeoutMs cap). 'timed-out' when the cap ran out first,
+ *  false when the CLI died meanwhile. */
+async function waitForQuiet(term: InstanceType<typeof AiCliTerminal>): Promise<'quiet' | 'timed-out' | false> {
   const deadline = Date.now() + props.injectTimeoutMs
   for (;;) {
     const last = term.lastRawActivityAt
-    if ((last > 0 && Date.now() - last >= props.injectQuietMs) || Date.now() >= deadline) return true
+    if (last > 0 && Date.now() - last >= props.injectQuietMs) return 'quiet'
+    if (Date.now() >= deadline) return 'timed-out'
     await new Promise((r) => setTimeout(r, 250))
     if (term.status !== 'running') return false
   }
@@ -512,12 +554,15 @@ async function deliverAgentMessage(message: DockAgentMessage): Promise<void> {
     return
   }
   try {
-    if (!(await waitForQuiet(term))) {
+    const waited = await waitForQuiet(term)
+    if (!waited) {
       report(false, 'pane-closed')
       return
     }
-    if (await pasteContext(term, () => message.text)) report(true)
-    else report(false, 'inject-failed')
+    // Still pasted after the cap, but the sender learns it went into a busy CLI.
+    if (!(await pasteContext(term, () => message.text))) report(false, 'inject-failed')
+    else if (waited === 'timed-out') report(true, 'delivered-while-busy')
+    else report(true)
   } catch {
     report(false, 'inject-failed')
   }
@@ -555,7 +600,9 @@ function stop(): void {
   // While 'starting' there is no sessionId yet, so kill() would be a no-op and
   // a hung terminal.create would be uncancellable — cancel the pending create.
   if (term.status === 'starting') void term.cancelPendingCreate().catch(() => {})
-  else void term.kill()
+  // The user does not want this CLI back: no restore on the next window open.
+  // A refused kill rejects now; it is logged, not left unhandled.
+  else void term.kill({ retireRestore: true }).catch((err) => console.warn('[AiCliDock] stop failed:', err))
 }
 
 function pasteText(text: string): boolean {
@@ -586,10 +633,12 @@ defineExpose({ start, stop, interrupt, pasteText, injectNow, toggle, terminal: t
       <span
         v-if="rosterAddress"
         class="ai-cli-address"
+        v-truncate
         :title="t('dockWindow.address-title', { address: rosterAddress })"
       >@{{ rosterAddress }}</span>
-      <span v-if="workspacePath" class="ai-cli-ws" :title="workspacePath">{{ workspaceName }}</span>
+      <span v-if="workspacePath" class="ai-cli-ws" v-truncate :title="workspacePath">{{ workspaceName }}</span>
     </div>
+    <p v-if="rosterError" class="ai-cli-roster-error">{{ t('dockWindow.roster-error', { reason: rosterError }) }}</p>
     <div v-if="!active" class="ai-cli-controls">
       <select v-model="agentKey" class="ai-cli-agent-select">
         <option v-for="s in agentSpecs" :key="s.agentKey" :value="s.agentKey">{{ s.label }}</option>
@@ -602,7 +651,7 @@ defineExpose({ start, stop, interrupt, pasteText, injectNow, toggle, terminal: t
       >{{ starting ? 'Starting…' : reattaching ? 'Reattaching…' : 'Start' }}</button>
     </div>
     <div v-else class="ai-cli-controls">
-      <span class="ai-cli-running-label">{{ agentLabel }}</span>
+      <span class="ai-cli-running-label" v-truncate>{{ agentLabel }}</span>
       <button class="ai-cli-btn ghost" title="Send Ctrl+C to the CLI" @click="interrupt">Interrupt</button>
       <button class="ai-cli-btn danger" title="Kill the CLI process" @click="stop">Stop</button>
     </div>
@@ -798,6 +847,14 @@ defineExpose({ start, stop, interrupt, pasteText, injectNow, toggle, terminal: t
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ai-cli-roster-error {
+  color: var(--danger-fg);
+  flex-shrink: 0;
+  font-size: var(--font-2xs);
+  margin: 0;
+  padding: 4px 12px;
 }
 
 .ai-cli-empty {

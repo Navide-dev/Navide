@@ -898,6 +898,36 @@ async def test_public_glab_context_hides_local_config_from_installed_glab(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_public_glab_runner_disables_update_check_and_telemetry(tmp_path, monkeypatch) -> None:
+    # Every public run gets a fresh isolated home, so glab never remembers its
+    # last update check: left on, each call phones gitlab.com for a version
+    # check and a telemetry event, which took 3-29s and hit the 15s timeout.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_fake_cli(
+        bin_dir,
+        "glab",
+        "echo \"CHECK_UPDATE=${GLAB_CHECK_UPDATE-unset}\"\n"
+        "echo \"SEND_TELEMETRY=${GLAB_SEND_TELEMETRY-unset}\"",
+    )
+    repo = tmp_path / "repo"
+    _init_repo_with_origin(repo, "https://gitlab.com/acme/repo.git")
+    source_config = tmp_path / "source-glab"
+    source_config.mkdir()
+    (source_config / "config.yml").write_text("hosts: {}\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}/usr/bin:/bin")
+    monkeypatch.setenv("GLAB_CONFIG_DIR", str(source_config))
+    monkeypatch.setenv("GLAB_CHECK_UPDATE", "true")
+    monkeypatch.setenv("GLAB_SEND_TELEMETRY", "true")
+
+    rc, stdout, stderr = await run_public_allowlisted_text(["glab", "issue", "list"], str(repo))
+
+    assert (rc, stderr) == (0, "")
+    assert "CHECK_UPDATE=false" in stdout
+    assert "SEND_TELEMETRY=false" in stdout
+
+
+@pytest.mark.asyncio
 async def test_public_runner_strips_execution_environment_and_injects_fixed_git_policy(
     tmp_path, monkeypatch
 ) -> None:

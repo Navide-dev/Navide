@@ -5,6 +5,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { useBackend } from '../../composables/useBackend'
 import { delimiterFor, parseDelimited } from './csvParser'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
   workspacePath: string
@@ -105,7 +106,7 @@ const sortedRows = computed(() => {
               <th
                 v-for="(cell, ci) in header"
                 :key="ci"
-                class="csvp-th"
+                class="csvp-th" v-truncate
                 @click="toggleSort(ci)"
               >
                 {{ cell }}
@@ -115,7 +116,7 @@ const sortedRows = computed(() => {
           </thead>
           <tbody>
             <tr v-for="(row, ri) in sortedRows" :key="ri">
-              <td v-for="(cell, ci) in header" :key="ci" class="csvp-td">{{ row[ci] ?? '' }}</td>
+              <td v-for="(cell, ci) in header" :key="ci" class="csvp-td" v-truncate>{{ row[ci] ?? '' }}</td>
             </tr>
           </tbody>
         </table>

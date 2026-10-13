@@ -39,6 +39,9 @@ a = Analysis(
         # so onefile builds must ship the real files.
         ('agent_team_backend/plan_assets/_spec.md', 'agent_team_backend/plan_assets'),
         ('agent_team_backend/plan_assets/_template.html', 'agent_team_backend/plan_assets'),
+        # The builtin prompt skill, read via Path(__file__) by prompt_skills.py
+        # (the renderer imports the same file at build time).
+        ('agent_team_backend/prompt_skill_seed.json', 'agent_team_backend'),
         # Builtin backend plugins: the host discovers plugin dirs on disk
         # (plugin.json + backend.py) and imports backend.py by file path, so
         # both must exist as real files next to the extracted package.

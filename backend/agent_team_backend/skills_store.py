@@ -32,7 +32,8 @@ from typing import Any
 import yaml
 from send2trash import send2trash
 
-from . import native_skills
+from . import native_skills, osplat
+from .osplat.spec import windows_refused_file_name
 from .applog import app_data_dir
 
 log = logging.getLogger("agent_team_backend.skills_store")
@@ -710,6 +711,11 @@ class SkillsStore:
                 continue  # recreated on the far side; never carried
             if _is_generated(relative):
                 continue
+            if _safe_relative(relative) is None:
+                # import_content refuses the whole skill over one such path
+                # (a dotfile, say); list_files leaves it out the same way.
+                log.info("skill %s: %s is not carried to other devices", name, relative)
+                continue
             size = path.stat().st_size
             if size > self.CONTENT_FILE_LIMIT:
                 # Sending the rest would land a skill with a file missing.
@@ -724,6 +730,10 @@ class SkillsStore:
                 files[relative] = {"t": "text", "v": raw.decode("utf-8")}
             except UnicodeDecodeError:
                 files[relative] = {"t": "b64", "v": base64.b64encode(raw).decode("ascii")}
+            if _carries_exec_bit(path, raw):
+                # Only when set, so a skill without scripts keeps the record
+                # it always had; a build that predates the flag ignores it.
+                files[relative]["x"] = True
         return files if SKILL_FILE in files else None
 
     def install_bundle(
@@ -921,6 +931,7 @@ class SkillsStore:
             return False
 
         decoded: dict[str, bytes] = {}
+        executable: set[str] = set()
         for relative, entry in files.items():
             safe = _safe_relative(relative)
             if safe is None or not isinstance(entry, dict):
@@ -937,6 +948,13 @@ class SkillsStore:
             if len(raw) > self.CONTENT_FILE_LIMIT:
                 return False
             decoded[safe] = raw
+            if entry.get("x") is True:
+                executable.add(safe)
+        try:
+            _validate_bundle_paths(list(decoded), portable_names=False)
+        except SkillValidationError as err:
+            log.warning("skill %s: %s", name, err)
+            return False
 
         self._root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=f".{name}-", dir=self._root))
@@ -944,8 +962,12 @@ class SkillsStore:
             (staging / MARKER_FILE).write_text("", encoding="utf-8")
             for relative, raw in decoded.items():
                 target = staging / relative
+                if not _inside(target, staging):
+                    raise SkillValidationError(f"skill {name}: {relative} leaves the skill directory")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(raw)
+                if relative in executable:
+                    target.chmod(0o755)
             backup = self._root / f".{name}.old"
             self._remove_tree(backup)
             if skill_dir.exists() or skill_dir.is_symlink():
@@ -1025,6 +1047,11 @@ class SkillsStore:
                 log.warning("skill %s: refusing the path %r", name, relative)
                 return False
             safe_files[safe] = source
+        try:
+            _validate_bundle_paths(list(safe_files), portable_names=False)
+        except SkillValidationError as err:
+            log.warning("skill %s: %s", name, err)
+            return False
 
         self._root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix=f".{name}-", dir=self._root))
@@ -1032,6 +1059,8 @@ class SkillsStore:
             (staging / MARKER_FILE).write_text("", encoding="utf-8")
             for relative, source in safe_files.items():
                 target = staging / relative
+                if not _inside(target, staging):
+                    raise SkillValidationError(f"skill {name}: {relative} leaves the skill directory")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, target)
                 if executable and relative in executable:
@@ -1381,6 +1410,14 @@ class SkillsStore:
             shutil.rmtree(path)
 
 
+def _carries_exec_bit(path: Path, raw: bytes) -> bool:
+    """Whether a synced copy of *path* should be executable. Windows keeps no
+    such bit, so there a script is taken by its shebang."""
+    if osplat.paths.enforces_posix_modes():
+        return bool(path.stat().st_mode & 0o111)
+    return raw[:2] == b"#!"
+
+
 def _is_generated(relative: str) -> bool:
     return (
         "__pycache__/" in f"{relative}/"
@@ -1425,29 +1462,57 @@ def _valid_installation_receipt(receipt: Any) -> bool:
     return False
 
 
-def _validate_bundle_paths(paths: Any, *, directories: Any = (), allow_hidden: bool = False) -> None:
-    """Reject filenames that cannot retain distinct identities on all hosts."""
+def _alias_key(path: str) -> str:
+    """One key for every spelling a case-insensitive, normalising volume
+    opens as the same file: the canonical caseless match
+    NFD(casefold(NFD(p))) — a full casefold decomposes, so composing first
+    and folding after misses pairs APFS treats as one (U+0390 and its
+    decomposed uppercase) — with simple uppercase folded in as well, so
+    pairs such as dotless ı and I, one file on NTFS, share it too."""
+    folded = unicodedata.normalize("NFD", path).casefold()
+    return unicodedata.normalize("NFD", folded.upper().casefold())
+
+
+def _validate_bundle_paths(
+    paths: Any, *, directories: Any = (), allow_hidden: bool = False, portable_names: bool = True
+) -> None:
+    """Reject filenames that cannot retain distinct identities on all hosts.
+
+    Two paths that are one file on a case-insensitive or normalising volume
+    (``SKILL.md``/``skill.md``, NFC/NFD) are refused: one would be written
+    over the other, so what was shown is not what lands. ``portable_names``
+    False leaves Windows-reserved names to the platform that reserves them
+    (``osplat.paths.file_name_refused``), as sync does."""
     spellings: dict[str, str] = {}
     files = set(paths)
     directories = set(directories)
     if files & directories:
         raise SkillValidationError("skill path is both a file and directory")
-    reserved = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)),
-                *(f"lpt{i}" for i in range(1, 10))}
     for relative in files | directories:
         if _safe_relative(relative, allow_hidden=allow_hidden) is None or ":" in relative:
             raise SkillValidationError("invalid skill bundle path")
         parts = relative.split("/")
         for index, part in enumerate(parts):
-            if part.endswith((".", " ")) or part.split(".")[0].casefold() in reserved:
+            refused = windows_refused_file_name(part) if portable_names else osplat.paths.file_name_refused(part)
+            if refused:
                 raise SkillValidationError(f"nonportable skill path: {relative}")
             prefix = "/".join(parts[:index + 1])
-            key = unicodedata.normalize("NFC", prefix).casefold()
+            key = _alias_key(prefix)
             if key in spellings and spellings[key] != prefix:
                 raise SkillValidationError(f"skill paths alias on some filesystems: {relative}")
             spellings[key] = prefix
             if index < len(parts) - 1 and prefix in files:
                 raise SkillValidationError(f"skill path is both a file and directory: {prefix}")
+
+
+def _inside(path: Path, root: Path) -> bool:
+    """Whether *path*, resolved, is *root* or under it."""
+    try:
+        resolved = path.resolve()
+        base = root.resolve()
+    except OSError:
+        return False
+    return resolved == base or base in resolved.parents
 
 
 def _safe_relative(relative: Any, *, allow_hidden: bool = False) -> str | None:
@@ -1463,6 +1528,14 @@ def _safe_relative(relative: Any, *, allow_hidden: bool = False) -> str | None:
         return None
     parts = relative.split("/")
     if any(part in ("", ".", "..") for part in parts):
+        return None
+    # A ":" is refused on every platform: on Windows it is a drive ("C:/x",
+    # "D:x") or an alternate data stream ("SKILL.md:ads") and leaves the
+    # directory it is joined onto. Names only Windows reads differently
+    # (reserved devices, a trailing dot or space) are refused where they
+    # would be misread; "aux.c" is an ordinary file on macOS and Linux, and a
+    # skill carrying one is refused by the Windows device it reaches.
+    if any(":" in part or osplat.paths.file_name_refused(part) for part in parts):
         return None
     # Every dotfile is refused, the marker included: this side writes its own
     # marker, and nothing else hidden has a reason to travel between machines.

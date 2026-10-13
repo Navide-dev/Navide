@@ -3,19 +3,23 @@
 // replacing the old Role Manager and Stages windows. Hosted inside the main
 // window — the backend connection, theme and notification host belong to the
 // host app, so this component only owns the pipeline/stage/role UI.
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import type { TerminalDockPort } from '@navide/terminal'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { AiCliDock } from '@navide/plugin-shell'
 import type { useRoles, Role, RoleUsage } from '../composables/useRoles'
 import type { usePipelines, PipelineSummary } from '../composables/usePipelines'
 import { useStages } from '../composables/useStages'
-import { stageToBackend, type AgentKey, type Stage, type StageSlot } from '../data/stages'
-import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
+import { stageToBackend } from '../data/stages'
 import { buildPmAiContext } from '../lib/pmAiContext'
 import { aiTerminalPaneId } from '@navide/plugin-shell'
+import { backendErrorText } from '../lib/pipelineErrors'
+import { usePipelineRunState, type HostRun } from '../composables/usePipelineRunState'
+import PipelineEditor from './pipeline/PipelineEditor.vue'
+import RolePropertiesEditor, { rolePropertyProblems } from './pipeline/RolePropertiesEditor.vue'
+import type { RoleProperty } from '../lib/pipelineGraph'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -30,6 +34,9 @@ const props = defineProps<{
    *  AiCliDock keeps owning its PTY — unmounting would let the backend janitor
    *  reap a CLI the user is still running. */
   open: boolean
+  /** The host window's own run, so the editor locks the moment a run starts
+   *  here instead of waiting for the first node-state broadcast. */
+  hostRun?: HostRun | null
 }>()
 const emit = defineEmits<{
   (e: 'close'): void
@@ -68,9 +75,8 @@ const backendStatusLabel = computed(
 // here would be dead code behind the capture-phase keybinding dispatcher. The
 // host calls this first so a nested confirm dialog closes before the modal.
 function closeTopLayer(): boolean {
-  const openConfirm = sConfirmDelete.value || sConfirmReset.value || rConfirmDelete.value || rConfirmReset.value
-  if (!openConfirm) return false
-  sConfirmDelete.value = false
+  const openConfirm = sConfirmReset.value || rConfirmDelete.value || rConfirmReset.value
+  if (!openConfirm) return !!editorRef.value?.closeTopLayer()
   sConfirmReset.value = false
   rConfirmDelete.value = false
   rConfirmReset.value = false
@@ -94,25 +100,19 @@ const plRenameText = ref('')
 // Stage cache scoped to the pipeline being edited: getActivePipelineId feeds
 // both refresh() and the stages.changed broadcast filter, so external edits to
 // OTHER pipelines never clobber the list shown here.
-const stagesApi = useStages(
-  backend,
-  () => plEditingId.value,
-  (stages, reason) => { if (reason === 'role_rename') sAdoptRepointedRoleKeys(stages) }
-)
+const stagesApi = useStages(backend, () => plEditingId.value)
 const sActiveStages = computed(() => stagesApi.stages.value)
-const sSelectedId = ref<string | null>(null)
-const sDraft = ref<Stage | null>(null)
-const sIsNew = ref(false)
-const sSaving = ref(false)
 const sError = ref('')
-const sConfirmDelete = ref(false)
 const sConfirmReset = ref(false)
 const sSummary = ref('')
 const sExportBusy = ref(false)
 const sImporting = ref(false)
-const sAddingSlot = ref(false)
-const sEditingSlotIndex = ref<number | null>(null)
-const sSlotDraft = ref<StageSlot>({ agentKey: 'claude', roleKey: '', label: '', kickoffBody: '', isCommander: false })
+
+// The detail view is the graph editor; it owns selection, history and the
+// inspector. This component keeps the pipeline-level actions around it.
+const editorRef = ref<InstanceType<typeof PipelineEditor> | null>(null)
+const runState = usePipelineRunState(backend, () => props.workspacePath, () => props.hostRun ?? null)
+const plLocked = computed(() => runState.isRunning(plEditingId.value))
 
 const plCount = computed(() => pipelinesApi.pipelines.value.length)
 
@@ -123,20 +123,14 @@ const plCurrentPipeline = computed(
 async function plEnterDetail(id: string): Promise<void> {
   plEditingId.value = id
   plView.value = 'detail'
-  sSelectedId.value = null
-  sDraft.value = null
-  sIsNew.value = false
   sError.value = ''
+  sSummary.value = ''
   await stagesApi.refresh(id)
-  if (sActiveStages.value.length > 0) sSelectStage(sActiveStages.value[0].id)
 }
 
 function plBackToList(): void {
   plView.value = 'list'
   plEditingId.value = ''
-  sSelectedId.value = null
-  sDraft.value = null
-  sIsNew.value = false
 }
 
 /** Pipeline mutations resolve to null/false and leave the reason in
@@ -144,6 +138,8 @@ function plBackToList(): void {
  *  fold it into the toast instead of showing a bare "failed". */
 function plFail(key: string): string {
   const reason = pipelinesApi.error.value
+    ? backendErrorText(t, { code: pipelinesApi.errorCode.value, message: pipelinesApi.error.value }, key)
+    : ''
   return reason ? `${t(key)} — ${reason}` : t(key)
 }
 
@@ -217,7 +213,7 @@ async function plResetBuiltin(p: PipelineSummary): Promise<void> {
       plSummary.value = t('label.reset-name', { name: p.name })
       if (plView.value === 'detail' && plEditingId.value === p.id) {
         await stagesApi.refresh(p.id)
-        sSelectStage(sActiveStages.value[0]?.id ?? null)
+        await editorRef.value?.reload()
       }
     } else {
       notify.toast(plFail('error.reset-failed'), { type: 'error' })
@@ -274,231 +270,70 @@ watch(
 // STAGE EDITOR (pipeline detail view)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Every registered CLI vendor is dispatchable — derived from the canonical
-// specs. This list was a hand-kept 3-entry subset (claude/codex/antigravity)
-// for a long time, which silently hid the other nine CLIs from pipelines.
-const AGENT_OPTIONS: { key: AgentKey; label: string }[] = CLI_AGENT_SPECS.map(
-  (s) => ({ key: s.agentKey as AgentKey, label: s.label })
-)
-
-const sIsDirty = computed(() => {
-  if (!sDraft.value) return false
-  if (sIsNew.value) return true
-  const orig = sActiveStages.value.find((s) => s.id === sDraft.value!.id)
-  if (!orig) return true
-  return JSON.stringify(stageToBackend(sDraft.value)) !== JSON.stringify(stageToBackend(orig))
-})
-const sCanSave = computed(() => {
-  if (!sDraft.value || !sDraft.value.id.trim() || !sDraft.value.title.trim()) return false
-  if (!sDraft.value.slots || sDraft.value.slots.length === 0) return false
-  if (sIsNew.value && sActiveStages.value.find((s) => s.id === sDraft.value!.id.trim())) return false
-  return sIsDirty.value
-})
-
-// Keep the selection valid when the stage list changes (broadcasts, deletes).
-watch(() => stagesApi.stages.value, (ss) => {
-  if (plView.value !== 'detail' || sIsNew.value) return
-  if (ss.length > 0 && sSelectedId.value === null) sSelectStage(ss[0].id)
-  else if (sSelectedId.value && !ss.find((s) => s.id === sSelectedId.value)) sSelectStage(ss[0]?.id ?? null)
-}, { deep: false })
-
-/** A roles.rename repoints the persisted slots and broadcasts `role_rename`.
- *  The open draft still holds the deep copy taken before it, so saving would
- *  write the vanished key back — exactly the dangling `role_key` the rename
- *  exists to prevent. Take the repointed keys and nothing else, so the fields
- *  the user is editing survive.
- *
- *  A slot's identity here is its LABEL, never its position. The broadcast
- *  carries no old/new key pair, and the two arrays stop lining up as soon as a
- *  slot auto-save is refused (stages.upsert answers PIPELINE_RUNNING while a run
- *  uses this pipeline; the draft keeps the edit regardless). Equal lengths do
- *  not mean equal positions — delete one slot and add another and every index
- *  names a different slot, so index-matching handed each draft slot its
- *  neighbour's role key. Labels are what the rest of the stage machinery already
- *  treats as a slot's identity (`slot:<label>` in releaseStageSlot, `to: <slot
- *  label>` in the Manager protocol). A label without exactly one counterpart on
- *  each side cannot be matched, so that slot is left as the user has it. */
-function sAdoptRepointedRoleKeys(stages: Stage[]): void {
-  const draft = sDraft.value
-  if (!draft || sIsNew.value || !draft.slots) return
-  const fresh = stages.find((s) => s.id === draft.id)
-  if (!fresh) return
-  const byUniqueLabel = (slots: StageSlot[]): Map<string, StageSlot> => {
-    const seen = new Map<string, StageSlot | null>()
-    for (const slot of slots) seen.set(slot.label, seen.has(slot.label) ? null : slot)
-    const unique = new Map<string, StageSlot>()
-    for (const [label, slot] of seen) if (slot) unique.set(label, slot)
-    return unique
-  }
-  const repointed = byUniqueLabel(fresh.slots)
-  for (const [label, slot] of byUniqueLabel(draft.slots)) {
-    const counterpart = repointed.get(label)
-    if (counterpart) slot.roleKey = counterpart.roleKey
-  }
-}
-
-function sSelectStage(id: string | null): void {
-  sSelectedId.value = id; sError.value = ''; sAddingSlot.value = false; sEditingSlotIndex.value = null
-  if (!id) { sDraft.value = null; return }
-  const s = sActiveStages.value.find((s) => s.id === id)
-  if (s) { sDraft.value = JSON.parse(JSON.stringify(s)); sIsNew.value = false }
-}
-function sStartNew(): void {
-  sSelectedId.value = null; sError.value = ''; sAddingSlot.value = false; sIsNew.value = true
-  sDraft.value = {
-    id: '', title: '', shortTitle: '', question: '', description: '',
-    recommendedRoles: [], sentinel: '', allowQuestions: false, docQuery: '', slots: [],
-  }
-}
-
-async function sSave(): Promise<void> {
-  if (!sDraft.value || !sCanSave.value) return
-  sSaving.value = true; sError.value = ''
-  try {
-    const payload = stageToBackend({ ...sDraft.value, id: sDraft.value.id.trim() })
-    const resp = await backend.send<{ stage: Record<string, unknown> }>(
-      'stages.upsert',
-      { stage: payload, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
-    )
-    if (!resp.ok) { sError.value = resp.error?.message ?? t('error.save-failed'); return }
-    sSummary.value = t('label.saved-name', { name: sDraft.value.title })
-    sSelectedId.value = sDraft.value.id.trim()
-    sIsNew.value = false
-    await stagesApi.refresh(plEditingId.value)
-  } catch (err) {
-    sError.value = err instanceof Error ? err.message : t('error.save-failed')
-  } finally { sSaving.value = false }
-}
-async function sDoDelete(): Promise<void> {
-  if (!sDraft.value || sIsNew.value) { sConfirmDelete.value = false; return }
-  try {
-    const resp = await backend.send<{ stages: unknown[] }>(
-      'stages.delete',
-      { id: sDraft.value.id, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
-    )
-    sConfirmDelete.value = false
-    if (!resp.ok) { sError.value = resp.error?.message ?? t('error.delete-failed'); return }
-    sSummary.value = t('label.deleted-name', { name: sDraft.value.id })
-    await stagesApi.refresh(plEditingId.value)
-    sSelectStage(sActiveStages.value[0]?.id ?? null)
-  } catch (err) {
-    sConfirmDelete.value = false
-    sError.value = err instanceof Error ? err.message : t('error.delete-failed')
-  }
-}
 async function sDoReset(): Promise<void> {
   try {
     const resp = await backend.send<{ stages: unknown[] }>(
       'stages.reset', { pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
     )
     sConfirmReset.value = false
-    if (!resp.ok) { sError.value = resp.error?.message ?? t('error.reset-failed'); return }
+    if (!resp.ok) { sError.value = backendErrorText(t, resp.error, 'error.reset-failed'); return }
     sSummary.value = t('label.reset-to-factory-defaults')
     await stagesApi.refresh(plEditingId.value)
-    sSelectStage(sActiveStages.value[0]?.id ?? null)
+    await editorRef.value?.reload()
   } catch (err) {
     sConfirmReset.value = false
     sError.value = err instanceof Error ? err.message : t('error.reset-failed')
   }
 }
-async function sMoveUp(index: number): Promise<void> {
-  if (index <= 0) return
-  const ids = sActiveStages.value.map((s) => s.id)
-  ;[ids[index - 1], ids[index]] = [ids[index], ids[index - 1]]
-  try {
-    const resp = await backend.send(
-      'stages.reorder',
-      { ids, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
-    )
-    if (!resp.ok) { sError.value = resp.error?.message ?? t('error.save-failed'); return }
-    await stagesApi.refresh(plEditingId.value)
-  } catch { /* ignore transient WS errors for reorder */ }
-}
-async function sMoveDown(index: number): Promise<void> {
-  if (index >= sActiveStages.value.length - 1) return
-  const ids = sActiveStages.value.map((s) => s.id)
-  ;[ids[index], ids[index + 1]] = [ids[index + 1], ids[index]]
-  try {
-    const resp = await backend.send(
-      'stages.reorder',
-      { ids, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
-    )
-    if (!resp.ok) { sError.value = resp.error?.message ?? t('error.save-failed'); return }
-    await stagesApi.refresh(plEditingId.value)
-  } catch { /* ignore transient WS errors for reorder */ }
-}
-
-function sStartAddSlot(): void {
-  sAddingSlot.value = true
-  sEditingSlotIndex.value = null
-  sSlotDraft.value = { agentKey: 'claude', roleKey: '', label: '', kickoffBody: '', isCommander: false }
-}
-function sCancelAddSlot(): void { sAddingSlot.value = false; sEditingSlotIndex.value = null }
-async function sConfirmAddSlot(): Promise<void> {
-  if (!sDraft.value || !sSlotDraft.value.label.trim()) return
-  if (!sDraft.value.slots) sDraft.value.slots = []
-  sDraft.value.slots.push({ ...sSlotDraft.value })
-  sAddingSlot.value = false
-  await sSave()
-}
-function sStartEditSlot(index: number): void {
-  sEditingSlotIndex.value = index
-  sAddingSlot.value = false
-  sSlotDraft.value = { ...sDraft.value!.slots![index] }
-}
-async function sSaveEditSlot(): Promise<void> {
-  if (!sDraft.value?.slots || sEditingSlotIndex.value === null) return
-  sDraft.value.slots[sEditingSlotIndex.value] = { ...sSlotDraft.value }
-  sEditingSlotIndex.value = null
-  await sSave()
-}
-async function sRemoveSlot(index: number): Promise<void> {
-  if (!sDraft.value?.slots || sDraft.value.slots.length <= 1) return  // must keep at least one
-  if (sEditingSlotIndex.value === index) sEditingSlotIndex.value = null
-  sDraft.value.slots.splice(index, 1)
-  await sSave()
-}
-
 async function sExport(): Promise<void> {
   if (!window.agentTeam?.saveJson) return
   sExportBusy.value = true
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  // Export the snake_case backend shape so a round-trip import (raw dicts fed
-  // back to stages.upsert) preserves short_title / slots[].agent_key etc.
-  const envelope = { format_version: 1, exported_at: new Date().toISOString(), stages: sActiveStages.value.map(stageToBackend) }
-  const result = await window.agentTeam.saveJson({ title: t('label.export-stages-title'), defaultName: `agent-team-stages-${stamp}.json`, content: JSON.stringify(envelope, null, 2) })
-  if (result.ok) sSummary.value = t('label.exported-stages', { count: envelope.stages.length })
-  sExportBusy.value = false
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    // Export the snake_case backend shape so a round-trip import (raw dicts fed
+    // back to stages.upsert) preserves short_title / slots[].agent_key etc.
+    const envelope = { format_version: 1, exported_at: new Date().toISOString(), stages: sActiveStages.value.map(stageToBackend) }
+    const result = await window.agentTeam.saveJson({ title: t('label.export-stages-title'), defaultName: `agent-team-stages-${stamp}.json`, content: JSON.stringify(envelope, null, 2) })
+    if (result.ok) sSummary.value = t('label.exported-stages', { count: envelope.stages.length })
+  } catch (err) {
+    sError.value = t('pipelineEditor.error.export-failed', { message: err instanceof Error ? err.message : String(err) })
+  } finally {
+    sExportBusy.value = false
+  }
 }
 async function sImport(): Promise<void> {
   if (!window.agentTeam?.openJson) return
   sImporting.value = true; sError.value = ''
-  const result = await window.agentTeam.openJson({ title: t('label.import-stages-title') })
-  if (result.ok && result.content) {
-    try {
-      const parsed = JSON.parse(result.content)
-      const raw: unknown[] = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.stages) ? parsed.stages : [])
-      let ok = 0, failed = 0
-      let firstFailure = ''
-      for (const entry of raw) {
-        const s = entry as Record<string, unknown>
-        if (!s.id) { failed++; continue }
-        const resp = await backend.send(
-          'stages.upsert',
-          { stage: s, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
-        )
-        if (resp.ok) ok++
-        else {
-          failed++
-          if (!firstFailure) firstFailure = resp.error?.message ?? ''
+  try {
+    const result = await window.agentTeam.openJson({ title: t('label.import-stages-title') })
+    if (result.ok && result.content) {
+      try {
+        const parsed = JSON.parse(result.content)
+        const raw: unknown[] = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.stages) ? parsed.stages : [])
+        let ok = 0, failed = 0
+        let firstFailure = ''
+        for (const entry of raw) {
+          const s = entry as Record<string, unknown>
+          if (!s.id) { failed++; continue }
+          const resp = await backend.send(
+            'stages.upsert',
+            { stage: s, pipeline_id: plEditingId.value, workspace_path: props.workspacePath }
+          )
+          if (resp.ok) ok++
+          else {
+            failed++
+            if (!firstFailure) firstFailure = backendErrorText(t, resp.error, 'error.save-failed')
+          }
         }
-      }
-      if (firstFailure) sError.value = firstFailure
-      sSummary.value = t('label.imported-stages', { count: ok }) + (failed ? t('label.import-failed-count', { count: failed }) : '')
-      await stagesApi.refresh(plEditingId.value)
-    } catch (err) { sError.value = t('error.invalid-json', { message: (err as Error).message }) }
+        if (firstFailure) sError.value = firstFailure
+        sSummary.value = t('label.imported-stages', { count: ok }) + (failed ? t('label.import-failed-count', { count: failed }) : '')
+        await stagesApi.refresh(plEditingId.value)
+        await editorRef.value?.reload()
+      } catch (err) { sError.value = t('error.invalid-json', { message: (err as Error).message }) }
+    }
+  } finally {
+    sImporting.value = false
   }
-  sImporting.value = false
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -507,6 +342,8 @@ async function sImport(): Promise<void> {
 
 interface DraftRole {
   key: string; label: string; one_line: string; system_prompt: string
+  /** The role's declared step fields (the node inspector's form). */
+  properties: RoleProperty[]
   isNew: boolean; originalKey: string
 }
 
@@ -538,7 +375,11 @@ watch(() => rolesApi.roles.value, (rs) => {
 }, { deep: false })
 
 function rFromRole(r: Role, isNew: boolean): DraftRole {
-  return { key: r.key, label: r.label, one_line: r.one_line, system_prompt: r.system_prompt, isNew, originalKey: isNew ? '' : r.key }
+  return {
+    key: r.key, label: r.label, one_line: r.one_line, system_prompt: r.system_prompt,
+    properties: JSON.parse(JSON.stringify(r.properties ?? [])) as RoleProperty[],
+    isNew, originalKey: isNew ? '' : r.key,
+  }
 }
 function rSelectKey(key: string | null): void {
   rSelectedKey.value = key; rError.value = ''; rErrorUsages.value = []
@@ -548,7 +389,7 @@ function rSelectKey(key: string | null): void {
 }
 function rStartNew(): void {
   rSelectedKey.value = null; rError.value = ''; rErrorUsages.value = []
-  rDraft.value = { key: '', label: '', one_line: '', system_prompt: '# Role: \nYou are a...\n\n# Guidelines:\n1. ...\n\n# Output Format:\n...', isNew: true, originalKey: '' }
+  rDraft.value = { key: '', label: '', one_line: '', system_prompt: '# Role: \nYou are a...\n\n# Guidelines:\n1. ...\n\n# Output Format:\n...', properties: [], isNew: true, originalKey: '' }
 }
 
 const rIsDirty = computed(() => {
@@ -556,8 +397,18 @@ const rIsDirty = computed(() => {
   if (rDraft.value.isNew) return true
   const r = rolesApi.find(rDraft.value.originalKey)
   if (!r) return true
-  return r.label !== rDraft.value.label || r.one_line !== rDraft.value.one_line || r.system_prompt !== rDraft.value.system_prompt || r.key !== rDraft.value.key
+  return r.label !== rDraft.value.label || r.one_line !== rDraft.value.one_line || r.system_prompt !== rDraft.value.system_prompt || r.key !== rDraft.value.key || rPropertiesChanged.value
 })
+/** Whether the draft's step fields differ from the stored role's. */
+const rPropertiesChanged = computed(() => {
+  const d = rDraft.value
+  if (!d) return false
+  const stored = d.isNew ? [] : (rolesApi.find(d.originalKey)?.properties ?? [])
+  return JSON.stringify(stored) !== JSON.stringify(d.properties)
+})
+const rPropertiesValid = computed(() =>
+  !rDraft.value || rolePropertyProblems(rDraft.value.properties).every((p) => p.length === 0)
+)
 /** True when the drafted key belongs to a DIFFERENT role than the one being
  *  edited — the state that both disables Save and fails roles.rename. */
 const rKeyTaken = computed(() => {
@@ -574,6 +425,7 @@ const rCanSave = computed(() => {
   // Block if the target key is already taken by a DIFFERENT role (covers both
   // new and rename); rKeyTaken drives the explanation shown beside the field.
   if (rKeyTaken.value) return false
+  if (!rPropertiesValid.value) return false
   return rIsDirty.value
 })
 
@@ -597,7 +449,11 @@ function rRenameErrorMessage(
 async function rSave(): Promise<void> {
   if (!rDraft.value || !rCanSave.value) return
   rSaving.value = true; rError.value = ''; rErrorUsages.value = []; rSummary.value = ''
-  const payload = { key: rDraft.value.key.trim(), label: rDraft.value.label.trim(), one_line: rDraft.value.one_line.trim(), system_prompt: rDraft.value.system_prompt }
+  const payload = {
+    key: rDraft.value.key.trim(), label: rDraft.value.label.trim(), one_line: rDraft.value.one_line.trim(), system_prompt: rDraft.value.system_prompt,
+    // Sent only when changed: omitted, the backend keeps what the role has.
+    ...(rPropertiesChanged.value ? { properties: rDraft.value.properties } : {}),
+  }
   // Capture before awaiting — the draft can be swapped out while requests are in flight.
   const originalKey = rDraft.value.originalKey
   const wasRename = !rDraft.value.isNew && originalKey && originalKey !== payload.key
@@ -651,7 +507,8 @@ async function rDoDelete(): Promise<void> {
  *  click away. Reuses the deep-link path the host uses. */
 async function rGoToUsage(usage: RoleUsage): Promise<void> {
   await openPipelineDeepLink(usage.pipeline_id)
-  if (sActiveStages.value.some((s) => s.id === usage.stage_id)) sSelectStage(usage.stage_id)
+  await nextTick()
+  editorRef.value?.focusSlot(usage.stage_id, usage.slot_label)
 }
 async function rDoReset(): Promise<void> {
   const ok = await rolesApi.reset()
@@ -663,30 +520,56 @@ async function rDoReset(): Promise<void> {
 async function rExport(): Promise<void> {
   if (!window.agentTeam?.saveJson) return
   rExportBusy.value = true
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
-  const envelope = { format_version: 1, exported_at: new Date().toISOString(), roles: rolesApi.roles.value }
-  const result = await window.agentTeam.saveJson({ title: t('label.export-roles-title'), defaultName: `agent-team-roles-${stamp}.json`, content: JSON.stringify(envelope, null, 2) })
-  if (result.ok) rSummary.value = t('label.exported-roles', { count: envelope.roles.length })
-  rExportBusy.value = false
+  try {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const envelope = { format_version: 1, exported_at: new Date().toISOString(), roles: rolesApi.roles.value }
+    const result = await window.agentTeam.saveJson({ title: t('label.export-roles-title'), defaultName: `agent-team-roles-${stamp}.json`, content: JSON.stringify(envelope, null, 2) })
+    if (result.ok) rSummary.value = t('label.exported-roles', { count: envelope.roles.length })
+  } catch (err) {
+    rError.value = t('pipelineEditor.error.export-failed', { message: err instanceof Error ? err.message : String(err) })
+  } finally {
+    rExportBusy.value = false
+  }
 }
 async function rImport(): Promise<void> {
   if (!window.agentTeam?.openJson) return
-  rImporting.value = true
-  const result = await window.agentTeam.openJson({ title: t('label.import-roles-title') })
-  if (result.ok && result.content) {
-    try {
-      const parsed = JSON.parse(result.content)
-      const raw: unknown[] = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.roles) ? parsed.roles : [])
-      let ok = 0
-      for (const entry of raw) {
-        const e = entry as Record<string, unknown>
-        if (typeof e?.key === 'string' && e.key && typeof e.system_prompt === 'string')
-          if (await rolesApi.upsert({ key: e.key as string, label: String(e.label ?? e.key), one_line: String(e.one_line ?? ''), system_prompt: e.system_prompt as string })) ok++
-      }
-      rSummary.value = t('label.imported-roles', { count: ok })
-    } catch (err) { rError.value = t('error.invalid-json', { message: (err as Error).message }) }
+  rImporting.value = true; rError.value = ''; rErrorUsages.value = []
+  try {
+    const result = await window.agentTeam.openJson({ title: t('label.import-roles-title') })
+    if (result.ok && result.content) {
+      try {
+        const parsed = JSON.parse(result.content)
+        const raw: unknown[] = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.roles) ? parsed.roles : [])
+        // Every entry is accounted for: a malformed one or a rejected upsert
+        // used to vanish, so "Imported 3" could mean 3 of 10.
+        let ok = 0, failed = 0
+        let firstFailure = ''
+        for (const entry of raw) {
+          const e = entry as Record<string, unknown>
+          if (!(typeof e?.key === 'string' && e.key && typeof e.system_prompt === 'string')) {
+            failed++
+            if (!firstFailure) firstFailure = t('pipelineEditor.error.role-entry-invalid', { key: typeof e?.key === 'string' && e.key ? e.key : '?' })
+            continue
+          }
+          const saved = await rolesApi.upsert({
+            key: e.key, label: String(e.label ?? e.key), one_line: String(e.one_line ?? ''), system_prompt: e.system_prompt,
+            // Exports carry each role's declared fields; dropping them here
+            // made an imported role lose its step settings form.
+            ...(Array.isArray(e.properties) ? { properties: e.properties } : {}),
+          })
+          if (saved) ok++
+          else {
+            failed++
+            if (!firstFailure) firstFailure = `${e.key}: ${rolesApi.error.value || t('error.save-failed')}`
+          }
+        }
+        if (firstFailure) rError.value = firstFailure
+        rSummary.value = t('label.imported-roles', { count: ok }) + (failed ? t('label.import-failed-count', { count: failed }) : '')
+      } catch (err) { rError.value = t('error.invalid-json', { message: (err as Error).message }) }
+    }
+  } finally {
+    rImporting.value = false
   }
-  rImporting.value = false
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -725,8 +608,8 @@ function buildAiContext(): string {
 
 <template>
   <Teleport to="body">
-    <div v-show="open" class="pm-overlay nv-modal-overlay" @click.self="emit('close')">
-      <div class="pm-modal nv-modal-shell nv-modal-shell--wide">
+    <div v-show="open" class="pm-overlay" role="dialog" aria-modal="true" :aria-label="$t('label.pipeline-manager')">
+      <div class="pm-modal">
   <div class="app">
     <header class="top">
       <div class="title">{{ $t('label.pipeline-manager') }}</div>
@@ -776,7 +659,7 @@ function buildAiContext(): string {
             @click="plEnterDetail(p.id)"
             @keydown.enter.prevent="plEnterDetail(p.id)"
             @keydown.space.prevent="plEnterDetail(p.id)">
-            <span class="pl-name">{{ p.name }}</span>
+            <span class="pl-name" v-truncate>{{ p.name }}</span>
             <span class="pl-tags">
               <span v-if="p.id === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
               <span v-if="p.builtin" class="pl-badge pl-badge--builtin">{{ $t('label.builtin') }}</span>
@@ -816,179 +699,60 @@ function buildAiContext(): string {
         </div>
         <div v-if="pipelinesApi.pipelinesPath.value" class="pl-source">
           <span>{{ $t('label.pipeline-definition-file') }}</span>
-          <span class="pl-source-path" :title="pipelinesApi.pipelinesPath.value">{{ pipelinesApi.pipelinesPath.value }}</span>
+          <span class="pl-source-path" v-truncate>{{ pipelinesApi.pipelinesPath.value }}</span>
         </div>
       </template>
 
       <!-- Detail view: pipeline header + stage editor -->
       <template v-else>
-        <div class="pl-detail-header">
-          <button class="ghost back-btn nv-btn" @click="plBackToList">← {{ $t('action.back') }}</button>
-          <template v-if="plRenamingId === plEditingId">
-            <input
-              v-model="plRenameText" class="pl-input pl-rename" spellcheck="false"
-              @keyup.enter="plConfirmRename" @keyup.escape="plRenamingId = ''" />
-            <button class="ghost tiny" :disabled="plBusy" @click="plConfirmRename">✓</button>
-            <button class="ghost tiny" @click="plRenamingId = ''">✕</button>
-          </template>
-          <template v-else>
-            <h2 class="pl-detail-title">
-              {{ plCurrentPipeline?.name ?? plEditingId }}
+        <p v-if="sError" class="err-msg pad">{{ sError }}</p>
+        <PipelineEditor
+          ref="editorRef"
+          class="pl-editor"
+          :backend="backend"
+          :pipeline-id="plEditingId"
+          :roles="rolesApi.roles.value"
+          :workspace-path="workspacePath"
+          :run="runState.run.value"
+          :locked="plLocked"
+          @leave="emit('close')"
+        >
+          <template #lead>
+            <button class="icon-btn back-btn" :title="$t('action.back')" :aria-label="$t('action.back')" @click="plBackToList">←</button>
+            <template v-if="plRenamingId === plEditingId">
+              <input
+                v-model="plRenameText" class="pl-input pl-rename" spellcheck="false"
+                @keyup.enter="plConfirmRename" @keyup.escape="plRenamingId = ''" />
+              <button class="ghost tiny" :disabled="plBusy" @click="plConfirmRename">✓</button>
+              <button class="ghost tiny" @click="plRenamingId = ''">✕</button>
+            </template>
+            <h2 v-else class="pl-detail-title">
+              <span class="pl-detail-name" v-truncate>{{ plCurrentPipeline?.name ?? plEditingId }}</span>
               <button
                 class="icon-btn" :disabled="plBusy" :title="$t('action.rename')"
                 @click="plStartRename(plEditingId, plCurrentPipeline?.name ?? '')">✎</button>
             </h2>
-          </template>
-          <div class="pl-detail-actions">
             <span v-if="plEditingId === pipelinesApi.activePipelineId.value" class="pl-badge">{{ $t('label.default') }}</span>
-            <button
-              v-else class="ghost" :disabled="plBusy"
-              @click="plSetActive(plEditingId)">{{ $t('action.set-as-default') }}</button>
-            <button
-              class="icon-btn danger-icon"
-              :disabled="plBusy || pipelinesApi.pipelines.value.length <= 1"
-              :title="pipelinesApi.pipelines.value.length <= 1 ? $t('hint.at-least-one-pipeline') : $t('action.delete-pipeline')"
-              @click="plDelete(plEditingId, plCurrentPipeline?.name ?? '')">🗑</button>
-          </div>
-        </div>
-
-        <div v-if="stagesApi.loading.value" class="hint pad">{{ $t('label.loading-stages') }}</div>
-        <template v-else>
-          <div class="toolbar">
-            <button class="ghost" :disabled="sExportBusy" @click="sExport">{{ sExportBusy ? '…' : $t('settings.roles.export-json') }}</button>
-            <button class="ghost" :disabled="sImporting" @click="sImport">{{ sImporting ? '…' : $t('settings.roles.import-json') }}</button>
-            <button class="ghost danger-link" @click="sConfirmReset = true">↺ {{ $t('action.reset-defaults') }}</button>
-            <span v-if="sSummary" class="summary-ok">{{ sSummary }}</span>
-          </div>
-          <div class="split">
-            <aside class="split-list">
-              <button class="primary new-btn nv-btn nv-btn--primary" @click="sStartNew">{{ $t('action.add-stage') }}</button>
-              <ul>
-                <li
-                  v-for="(s, idx) in sActiveStages" :key="s.id"
-                  :class="{ active: sSelectedId === s.id && !sIsNew }"
-                  @click="sSelectStage(s.id)">
-                  <div class="row-g spread">
-                    <span class="mono-key">{{ s.id }}</span>
-                    <div class="row-g gap">
-                      <button class="icon-btn" :disabled="idx === 0" :title="$t('action.move-up')" @click.stop="sMoveUp(idx)">▲</button>
-                      <button class="icon-btn" :disabled="idx === sActiveStages.length - 1" :title="$t('action.move-down')" @click.stop="sMoveDown(idx)">▼</button>
-                    </div>
-                  </div>
-                  <div class="item-label">
-                    {{ s.shortTitle }}
-                    <span v-if="s.slots.some(sl => sl.isCommander)" class="manager-badge" :title="$t('label.manager-slot', { label: s.slots.find(sl => sl.isCommander)?.label })">🎯</span>
-                  </div>
-                  <div class="item-sub">
-                    {{ s.slots.length === 1 ? `${s.slots[0].agentKey} · ${s.slots[0].roleKey}` : $t('label.parallel-slots', { count: s.slots.length }) }}
-                  </div>
-                </li>
-              </ul>
-            </aside>
-            <section v-if="sDraft" class="split-detail">
-              <div class="detail-head">
-                <h3>{{ sIsNew ? $t('label.new-stage') : $t('label.edit-stage') }}</h3>
-                <div class="row-g gap">
-                  <button v-if="!sIsNew" class="danger nv-btn nv-btn--danger" @click="sConfirmDelete = true">{{ $t('settings.roles.delete') }}</button>
-                  <button class="primary nv-btn nv-btn--primary" :disabled="!sCanSave || sSaving" @click="sSave">{{ sSaving ? $t('label.saving') : sIsNew ? $t('action.create') : $t('settings.roles.save') }}</button>
-                </div>
-              </div>
-              <p v-if="sError" class="err-msg">{{ sError }}</p>
-              <div class="two-col">
-                <div class="field">
-                  <label class="lbl">{{ $t('label.id') }}</label>
-                  <input v-model="sDraft.id" type="text" placeholder="e.g. 04.5" spellcheck="false" :disabled="!sIsNew" />
-                  <p v-if="sIsNew && sDraft.id && sActiveStages.find(s => s.id === sDraft!.id.trim())" class="warn-msg">{{ $t('error.id-exists') }}</p>
-                </div>
-                <div class="field">
-                  <label class="lbl">{{ $t('label.short-title') }}</label>
-                  <input v-model="sDraft.shortTitle" type="text" :placeholder="$t('label.stage-short-title-placeholder')" spellcheck="false" />
-                </div>
-              </div>
-              <div class="field">
-                <label class="lbl">{{ $t('label.title') }}</label>
-                <input v-model="sDraft.title" type="text" spellcheck="false" />
-              </div>
-              <div class="two-col">
-                <div class="field">
-                  <label class="lbl">{{ $t('label.sentinel') }}</label>
-                  <input v-model="sDraft.sentinel" type="text" placeholder="---DONE---" spellcheck="false" />
-                </div>
-                <div class="field">
-                  <label class="lbl">{{ $t('label.allow-questions') }}</label>
-                  <label class="check-row"><input v-model="sDraft.allowQuestions" type="checkbox" /><span>{{ $t('hint.pause-for-user-answers') }}</span></label>
-                </div>
-              </div>
-              <div class="field">
-                <label class="lbl">{{ $t('label.context7-doc-query') }}</label>
-                <input v-model="sDraft.docQuery" type="text" :placeholder="$t('label.doc-query-placeholder')" spellcheck="false" />
-              </div>
-              <div class="slots-section">
-                <div class="row-g spread">
-                  <label class="lbl">{{ $t('label.slots') }} <span class="slot-required">{{ $t('hint.at-least-one-slot-required') }}</span></label>
-                  <button class="ghost small" @click="sStartAddSlot">{{ $t('action.add-slot') }}</button>
-                </div>
-                <p v-if="!sDraft.slots?.length" class="warn-msg">{{ $t('hint.add-slot-before-saving') }}</p>
-                <template v-for="(slot, i) in sDraft.slots" :key="i">
-                  <div v-if="sEditingSlotIndex !== i" class="slot-item" @click="sStartEditSlot(i)">
-                    <div class="row-g spread">
-                      <span class="item-label">{{ slot.label }}<span v-if="slot.isCommander" class="manager-badge">{{ $t('label.manager-badge') }}</span></span>
-                      <button class="icon-btn danger-icon" :disabled="sDraft.slots.length <= 1" :title="$t('hint.cannot-delete-last-slot')" @click.stop="sRemoveSlot(i)">✕</button>
-                    </div>
-                    <div class="item-sub">{{ slot.agentKey }} · {{ slot.roleKey }}</div>
-                  </div>
-                  <div v-else class="slot-form">
-                    <div class="two-col">
-                      <div class="field"><label class="lbl">{{ $t('label.label') }}</label><input v-model="sSlotDraft.label" type="text" spellcheck="false" /></div>
-                      <div class="field"><label class="lbl">{{ $t('label.agent') }}</label><select v-model="sSlotDraft.agentKey"><option v-for="a in AGENT_OPTIONS" :key="a.key" :value="a.key">{{ a.label }}</option></select></div>
-                    </div>
-                    <div class="field">
-                      <label class="lbl">{{ $t('label.role-key') }}</label>
-                      <select v-model="sSlotDraft.roleKey">
-                        <option value="">{{ $t('label.unassigned') }}</option>
-                        <option v-for="r in rolesApi.roles.value" :key="r.key" :value="r.key">{{ r.label }} ({{ r.key }})</option>
-                      </select>
-                    </div>
-                    <label class="check-row manager-toggle">
-                      <input v-model="sSlotDraft.isCommander" type="checkbox" />
-                      <span><strong>{{ $t('label.designate-global-manager') }}</strong> {{ $t('hint.global-manager-desc-1') }} <code>---MANAGER-READY---</code>{{ $t('hint.global-manager-desc-2') }}</span>
-                    </label>
-                    <div class="field"><label class="lbl">{{ $t('label.kickoff-body') }}</label><textarea v-model="sSlotDraft.kickoffBody" rows="4" spellcheck="false" class="mono"></textarea></div>
-                    <div class="row-g gap">
-                      <button class="ghost" @click="sCancelAddSlot">{{ $t('action.cancel') }}</button>
-                      <button class="primary nv-btn nv-btn--primary" :disabled="!sSlotDraft.label.trim()" @click="sSaveEditSlot">{{ $t('action.save-slot') }}</button>
-                    </div>
-                  </div>
-                </template>
-                <div v-if="sAddingSlot" class="slot-form">
-                  <div class="two-col">
-                    <div class="field"><label class="lbl">{{ $t('label.label') }}</label><input v-model="sSlotDraft.label" type="text" spellcheck="false" /></div>
-                    <div class="field"><label class="lbl">{{ $t('label.agent') }}</label><select v-model="sSlotDraft.agentKey"><option v-for="a in AGENT_OPTIONS" :key="a.key" :value="a.key">{{ a.label }}</option></select></div>
-                  </div>
-                  <div class="field">
-                    <label class="lbl">{{ $t('label.role-key') }}</label>
-                    <select v-model="sSlotDraft.roleKey">
-                      <option value="">{{ $t('label.unassigned') }}</option>
-                      <option v-for="r in rolesApi.roles.value" :key="r.key" :value="r.key">{{ r.label }} ({{ r.key }})</option>
-                    </select>
-                  </div>
-                  <label class="check-row manager-toggle">
-                    <input v-model="sSlotDraft.isCommander" type="checkbox" />
-                    <span><strong>{{ $t('label.designate-global-manager') }}</strong> {{ $t('hint.global-manager-desc-short') }}</span>
-                  </label>
-                  <div class="field"><label class="lbl">{{ $t('label.kickoff-body') }}</label><textarea v-model="sSlotDraft.kickoffBody" rows="4" spellcheck="false" class="mono"></textarea></div>
-                  <div class="row-g gap">
-                    <button class="ghost" @click="sCancelAddSlot">{{ $t('action.cancel') }}</button>
-                    <button class="primary nv-btn nv-btn--primary" :disabled="!sSlotDraft.label.trim()" @click="sConfirmAddSlot">{{ $t('action.add') }}</button>
-                  </div>
-                </div>
-              </div>
-            </section>
-            <section v-else class="split-detail empty-detail">
-              <p>{{ $t('hint.select-stage-or-create') }}</p>
-            </section>
-          </div>
-        </template>
+          </template>
+          <template #trail>
+            <div class="toolbar">
+              <button class="ghost" :disabled="sExportBusy" @click="sExport">{{ sExportBusy ? '…' : $t('settings.roles.export-json') }}</button>
+              <button class="ghost" :disabled="sImporting || plLocked" @click="sImport">{{ sImporting ? '…' : $t('settings.roles.import-json') }}</button>
+              <button class="ghost danger-link" :disabled="plLocked" @click="sConfirmReset = true">↺ {{ $t('action.reset-defaults') }}</button>
+              <span v-if="sSummary" class="summary-ok">{{ sSummary }}</span>
+            </div>
+            <div class="pl-detail-actions">
+              <button
+                v-if="plEditingId !== pipelinesApi.activePipelineId.value" class="ghost" :disabled="plBusy"
+                @click="plSetActive(plEditingId)">{{ $t('action.set-as-default') }}</button>
+              <button
+                class="icon-btn danger-icon"
+                :disabled="plBusy || pipelinesApi.pipelines.value.length <= 1"
+                :title="pipelinesApi.pipelines.value.length <= 1 ? $t('hint.at-least-one-pipeline') : $t('action.delete-pipeline')"
+                @click="plDelete(plEditingId, plCurrentPipeline?.name ?? '')">🗑</button>
+            </div>
+          </template>
+        </PipelineEditor>
       </template>
     </div>
 
@@ -1000,6 +764,9 @@ function buildAiContext(): string {
         <button class="ghost danger-link" @click="rConfirmReset = true">↺ {{ $t('action.reset-defaults') }}</button>
         <span v-if="rSummary" class="summary-ok">{{ rSummary }}</span>
       </div>
+      <!-- Toolbar actions (import/export) can fail with no role open; the
+           detail pane's error line would then never render. -->
+      <p v-if="rError && !rDraft" class="err-msg pad">{{ rError }}</p>
       <div class="split">
         <aside class="split-list">
           <button class="primary new-btn nv-btn nv-btn--primary" @click="rStartNew">{{ $t('settings.roles.new-role') }}</button>
@@ -1010,7 +777,7 @@ function buildAiContext(): string {
               @click="rSelectKey(r.key)">
               <div class="row-g"><span class="mono-key">{{ r.key }}</span><span v-if="r.is_default" class="badge">{{ $t('label.default') }}</span></div>
               <div class="item-label">{{ r.label }}</div>
-              <div class="item-sub">{{ r.one_line }}</div>
+              <div class="item-sub" v-truncate>{{ r.one_line }}</div>
             </li>
           </ul>
         </aside>
@@ -1055,6 +822,7 @@ function buildAiContext(): string {
             <textarea v-model="rDraft.system_prompt" rows="14" spellcheck="false"></textarea>
             <p class="hint">{{ $t('hint.prompt-chars-new-spawns', { count: rDraft.system_prompt.length }) }}</p>
           </div>
+          <RolePropertiesEditor v-model="rDraft.properties" class="role-fields" />
         </section>
         <section v-else class="split-detail empty-detail">
           <p>{{ $t('hint.select-role-or-create') }}</p>
@@ -1077,16 +845,6 @@ function buildAiContext(): string {
     </div><!-- end main-row -->
 
     <!-- ── Confirm dialogs ───────────────────────────────────────────────── -->
-    <div v-if="sConfirmDelete" class="modal" @click.self="sConfirmDelete = false">
-      <div class="modal-card">
-        <h3>{{ $t('hint.delete-stage-title') }}</h3>
-        <p>{{ $t('hint.delete-stage-warning') }}</p>
-        <div class="modal-actions">
-          <button class="ghost" @click="sConfirmDelete = false">{{ $t('action.cancel') }}</button>
-          <button class="danger nv-btn nv-btn--danger" @click="sDoDelete">{{ $t('action.delete') }}</button>
-        </div>
-      </div>
-    </div>
     <div v-if="sConfirmReset" class="modal" @click.self="sConfirmReset = false">
       <div class="modal-card">
         <h3>{{ $t('hint.reset-stages-title') }}</h3>
@@ -1124,26 +882,27 @@ function buildAiContext(): string {
 </template>
 
 <style scoped>
+/* A full-window workspace, not a dialog: a pipeline graph needs the room.
+   It sits under the titlebar (window controls stay reachable) and covers
+   the rest of the main window; Esc and ✕ still return to it. */
 .pm-overlay {
   position: fixed;
-  inset: 0;
-  background: var(--modal-backdrop);
-  backdrop-filter: blur(var(--modal-backdrop-blur));
-  -webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
+  inset: var(--titlebar-height, 0px) 0 0 0;
+  background: var(--bg-base);
   z-index: calc(var(--z-modal) + 120);
   display: flex;
-  align-items: center;
-  justify-content: center;
   -webkit-app-region: no-drag;
+  animation: pm-enter var(--motion-base) var(--ease-out) both;
 }
 .pm-modal {
-  width: min(var(--modal-w-wide), 92vw);
-  height: 88vh;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-lg);
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border-top: 1px solid var(--border-muted);
   overflow: hidden;
-  box-shadow: var(--shadow-modal);
 }
+@keyframes pm-enter { from { opacity: 0; transform: translateY(6px); } }
+@media (prefers-reduced-motion: reduce) { .pm-overlay { animation: none; } }
 .pm-close {
   border: none;
   background: transparent;
@@ -1426,16 +1185,17 @@ function buildAiContext(): string {
 }
 
 /* ── Pipeline detail header ───────────────────────────────────────────────── */
-.pl-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px 0;
-  flex-shrink: 0;
+.role-fields {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-muted);
+}
+.pl-editor {
+  flex: 1;
+  min-height: 0;
 }
 .back-btn {
-  font-size: var(--font-2xs);
-  padding: 3px 8px;
+  font-size: var(--font-md);
   color: var(--text-secondary);
 }
 .back-btn:hover {
@@ -1443,17 +1203,25 @@ function buildAiContext(): string {
 }
 .pl-detail-title {
   margin: 0;
-  font-size: var(--font-row-title);
+  font-size: var(--font-md);
   font-weight: 600;
-  color: var(--accent-bright);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pl-detail-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Inside the editor's single toolbar row the stage actions sit inline. */
+.pl-editor .toolbar {
+  padding: 0;
 }
 .pl-rename {
   flex: 0 1 260px;
@@ -1541,10 +1309,6 @@ function buildAiContext(): string {
 .row-g.gap {
   gap: 8px;
 }
-.row-g.spread {
-  justify-content: space-between;
-  width: 100%;
-}
 .mono-key {
   font-family: Menlo, Monaco, monospace;
   font-size: var(--font-3xs);
@@ -1571,10 +1335,6 @@ function buildAiContext(): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.manager-badge {
-  margin-left: 4px;
-  font-size: var(--font-3xs);
 }
 
 /* ── Fields ───────────────────────────────────────────────────────────────── */
@@ -1627,26 +1387,6 @@ input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.check-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--font-xs);
-  cursor: pointer;
-}
-.check-row input[type='checkbox'] {
-  width: 14px;
-  height: 14px;
-  accent-color: var(--attention-fg);
-}
-.manager-toggle {
-  align-items: flex-start;
-  line-height: var(--lh-base);
-}
-.manager-toggle input[type='checkbox'] {
-  margin-top: 2px;
-  flex-shrink: 0;
-}
 
 /* ── Buttons ──────────────────────────────────────────────────────────────── */
 button {
@@ -1690,10 +1430,6 @@ button.ghost {
 button.ghost:hover:not(:disabled) {
   background: var(--bg-muted);
 }
-button.small {
-  font-size: var(--font-2xs);
-  padding: 4px 10px;
-}
 /* 24px square: the house click target (--icon-btn-md). It used to be
    `padding: 2px 4px`, far under the minimum. */
 .icon-btn {
@@ -1736,40 +1472,6 @@ button.small {
 }
 
 /* ── Slots ────────────────────────────────────────────────────────────────── */
-.slots-section {
-  margin-top: 8px;
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.slot-required {
-  font-weight: 400;
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--text-muted);
-}
-.slot-item {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-xs);
-  padding: 8px 10px;
-  cursor: pointer;
-}
-.slot-item:hover {
-  border-color: var(--border-default);
-}
-.slot-form {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
-  padding: 10px;
-  background: var(--bg-base);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
 
 /* ── Messages ─────────────────────────────────────────────────────────────── */
 .hint {

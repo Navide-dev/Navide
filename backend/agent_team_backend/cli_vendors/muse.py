@@ -131,6 +131,7 @@ from ..log_readers.base import (
     set_activity_high_water,
     user_prompt_text,
 )
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -750,7 +751,16 @@ def identity_from_secret(secret):
     return {"email": None, "signedIn": signed_in}
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("cli-json", type_label="Muse plugin", list_argv=("muse", "plugins", "list", "--json"),
+        section=("plugins",), native_consent="capability-approve"),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="muse",
     # Login/usage observations do not establish Muse's CLI service host set.
     expected_hosts=(),

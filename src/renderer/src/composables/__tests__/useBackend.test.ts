@@ -218,6 +218,46 @@ describe('useBackend applyBackendChanged', () => {
     scope.stop()
     expect(systemResumedCb).toBeUndefined()
   })
+
+  // Drop the live socket, then fail `n - 1` reconnects to the same url: `n`
+  // consecutive closes in all, each followed by its backoff.
+  async function failReconnects(n: number): Promise<void> {
+    for (let i = 0; i < n; i++) {
+      const sock = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+      if (i > 0) sock.fire('error', {})
+      sock.close()
+      await vi.advanceTimersByTimeAsync(30_000)
+    }
+  }
+
+  it('asks main again after repeated reconnect failures and follows a moved backend', async () => {
+    // 2026-10-08: the backend stopped listening without exiting, so main never
+    // broadcast a change; this window retried the dead port forever.
+    const { backend } = await setupConnected()
+    const moved = { ...READY_INFO, wsUrl: 'ws://127.0.0.1:9999/ws', httpUrl: 'http://127.0.0.1:9999', port: 9999, pid: 5151 }
+    const getBackendInfo = (window as unknown as { agentTeam: { getBackendInfo: ReturnType<typeof vi.fn> } })
+      .agentTeam.getBackendInfo
+    getBackendInfo.mockResolvedValue(moved)
+
+    await failReconnects(2)
+    expect(getBackendInfo).toHaveBeenCalledTimes(1) // only init() so far
+    expect(FakeWebSocket.instances.at(-1)!.url).toBe(READY_INFO.wsUrl)
+
+    await failReconnects(1)
+    expect(getBackendInfo).toHaveBeenCalledTimes(2)
+    expect(FakeWebSocket.instances.at(-1)!.url).toBe(moved.wsUrl)
+    FakeWebSocket.instances.at(-1)!.open()
+    expect(backend.status.value).toBe('connected')
+    expect(backend.port.value).toBe(9999)
+    expect(backend.httpUrl.value).toBe(moved.httpUrl)
+  })
+
+  it('keeps retrying the same url when main still reports it', async () => {
+    await setupConnected()
+    await failReconnects(4)
+    const urls = FakeWebSocket.instances.map((s) => s.url)
+    expect(new Set(urls)).toEqual(new Set([READY_INFO.wsUrl]))
+  })
 })
 
 describe('useBackend init() deadline', () => {
@@ -303,5 +343,86 @@ describe('useBackend init() deadline', () => {
     } finally {
       setPlatformId(original)
     }
+  })
+})
+
+
+describe('useBackend window challenge (R3-M2)', () => {
+  let scope: EffectScope
+  const proveWindow = vi.fn()
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    FakeWebSocket.instances = []
+    proveWindow.mockReset()
+    vi.stubGlobal('WebSocket', FakeWebSocket)
+    vi.stubGlobal('agentTeam', {
+      getBackendInfo: vi.fn().mockResolvedValue(READY_INFO),
+      proveWindow,
+      onBackendChanged: () => {},
+      onSystemResumed: () => () => {},
+    })
+  })
+
+  afterEach(() => {
+    scope?.stop()
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  function welcome(socket: FakeWebSocket, nonce: string): void {
+    socket.fire('message', {
+      data: JSON.stringify({ id: 'w', type: 'ws.welcome', payload: { windowChallenge: nonce } }),
+    })
+  }
+
+  function proves(socket: FakeWebSocket): unknown[] {
+    return socket.sent.map((raw) => JSON.parse(raw)).filter((m) => m.type === 'window.prove').map((m) => m.payload)
+  }
+
+  async function connected(): Promise<FakeWebSocket> {
+    scope = effectScope()
+    scope.run(() => {
+      useBackend()
+    })
+    await vi.advanceTimersByTimeAsync(0)
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    return socket
+  }
+
+  it('answers the welcome challenge with the proof main computes for it', async () => {
+    proveWindow.mockResolvedValue('proof-for-n1')
+    const socket = await connected()
+    // Nothing in the URL any more: the proof is per connection.
+    expect(socket.url).not.toContain('&w=')
+    welcome(socket, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proveWindow).toHaveBeenCalledWith('n1')
+    expect(proves(socket)).toEqual([{ proof: 'proof-for-n1' }])
+  })
+
+  it('proves again with the fresh nonce after a reconnect', async () => {
+    proveWindow.mockImplementation(async (nonce: string) => `proof-for-${nonce}`)
+    const first = await connected()
+    welcome(first, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    first.close()
+    await vi.advanceTimersByTimeAsync(30_000)
+    const second = FakeWebSocket.instances.at(-1)!
+    expect(second).not.toBe(first)
+    second.open()
+    welcome(second, 'n2')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proves(second)).toEqual([{ proof: 'proof-for-n2' }])
+  })
+
+  it('sends nothing when main refuses to prove this window', async () => {
+    proveWindow.mockResolvedValue(null)
+    const socket = await connected()
+    welcome(socket, 'n1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(proves(socket)).toEqual([])
   })
 })

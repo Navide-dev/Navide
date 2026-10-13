@@ -1,0 +1,16 @@
+{
+  "id": "advance",
+  "icon": "advance",
+  "category": "dev",
+  "prompt": "啟動持續開發推進的Loop直到完成度超過100%，確保開發完成之後建立對應的HTML報告書，檢查這個功能是否都正常運作，並且不要影響到原本正常的程式碼",
+  "name": {
+    "zh-TW": "開發推進",
+    "en-US": "Keep building",
+    "ja-JP": "実装を続ける"
+  },
+  "description": {
+    "zh-TW": "持續推進到完成度 100%，完成後產出 HTML 報告書。",
+    "en-US": "Keep going until it is 100% complete, then produce an HTML report.",
+    "ja-JP": "100% 完了するまで作業を続け、最後に HTML レポートを作成します。"
+  }
+}

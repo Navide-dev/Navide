@@ -11,6 +11,7 @@
 // swatches render their real resolved colour under the current theme by binding
 // the palette's token expressions straight into the button.
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 import { paneStatusLabelKey, type PaneStatusValue } from '../lib/paneStatusLabel'
 import {
@@ -95,13 +96,13 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
         <span class="sb-preview" :style="previewStyle(status)">
           {{ previewLabel(status, locale) }}
         </span>
-        <span class="sb-key">
+        <span class="sb-key" v-truncate>
           {{ status }}
           <em v-if="ROW_ONLY.includes(status)" class="sb-rowonly">
             {{ $t('statusBadges.row-only') }}
           </em>
         </span>
-        <span class="sb-when">{{ $t(`statusBadges.when.${status}`) }}</span>
+        <span class="sb-when" v-truncate>{{ $t(`statusBadges.when.${status}`) }}</span>
       </div>
 
       <label class="sb-field">
@@ -179,9 +180,14 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 
 <style scoped>
 .sb {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(80px, 1fr)) max-content max-content;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+.sb-intro,
+.sb-foot {
+  grid-column: 1 / -1;
 }
 .sb-intro {
   margin: 0 0 14px;
@@ -191,14 +197,15 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
   max-width: 68ch;
 }
 
-/* One grid template shared by the header and every row, so the columns line up
- * without either knowing the other's widths. */
+/* The header and every row are subgrids of .sb, so the auto-sized colour and
+ * reset columns take one width for all of them and the headers sit over their
+ * own column. */
 .sb-head,
 .sb-row {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(190px, 1.4fr) repeat(3, minmax(96px, 1fr)) auto auto;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: 12px;
   padding: 8px 10px;
 }
 .sb-head {
@@ -253,7 +260,7 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 .sb-rowonly {
   font-family: inherit;
   font-style: normal;
-  font-size: 9px;
+  font-size: var(--font-3xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -278,6 +285,25 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 .sb-field input {
   width: 100%;
   box-sizing: border-box;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-sm);
+  line-height: var(--lh-base);
+  padding: 4px 8px;
+  transition: border-color var(--motion-fast) var(--ease-out);
+}
+.sb-field input::placeholder {
+  color: var(--text-muted);
+}
+.sb-field input:hover {
+  border-color: var(--border-strong);
+}
+.sb-field input:focus {
+  outline: none;
+  border-color: var(--accent-focus);
 }
 /* Visually hidden but read aloud: each input needs its own name, and a visible
  * one would repeat the column header nine times. */
@@ -290,13 +316,16 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
   white-space: nowrap;
 }
 
+/* Two rows of five keep the column narrow enough that the reset button stays
+ * inside the card in every locale, and leave each swatch a 24px target. */
 .sb-colors {
-  display: flex;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: repeat(5, 24px);
+  gap: 4px;
 }
 .sb-swatch {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   border: 1px solid var(--border-muted);
   padding: 0;
@@ -357,6 +386,10 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 /* Below the three-input width the grid stops being a table and becomes stacked
  * cards, which is the only way nine rows of six columns stay usable. */
 @media (max-width: 920px) {
+  .sb {
+    display: flex;
+    flex-direction: column;
+  }
   .sb-head {
     display: none;
   }

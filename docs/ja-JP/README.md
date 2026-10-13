@@ -37,7 +37,7 @@ Navide は Agent 時代のエンジニアリングツールです。一人の人
 | [Contributing — English](../../CONTRIBUTING.md) | 開発環境を構築し、変更を提出する |
 | [Architecture — English](../en-US/architecture.md) | Process Boundary、State Ownership、主要 Service を理解する |
 | [Adding a CLI Vendor — English](../adding-a-cli-vendor.md) | AI Coding CLI を追加する：2 つの Spec ファイル、登録、CI が強制するチェック |
-| [CLI Extension Guide — English](../en-US/cli-extension-guide.md) | ベンダーごとの統合記録：インストール経路、Resume 構文、Session 保存形式 |
+| [CLI Integration Records — English](../en-US/cli-extension-guide.md) | ベンダーごとの統合記録：インストール経路、Resume 構文、Session 保存形式 |
 | [CLI Vendor Matrix — English](../en-US/cli-vendor-matrix.md) | 対応済み CLI の一覧：実際に実行されるコマンドと、各 spec が宣言する機能 |
 | [Plugin Development — English](../en-US/plugin-development.md) | フロントエンド View プラグインまたはバックエンドプラグインを開発し、パッケージ化して署名する |
 | [Plugin Development v2 — English](../en-US/plugin-development-v2.md) | 公開 Contracts、SDK、UI Package、外部 Frontend Package Workflow を使用する |

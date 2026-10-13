@@ -235,6 +235,44 @@ class TestPaths:
         assert _linux.paths.home_env_var() == "HOME"
         assert _windows.paths.home_env_var() == "USERPROFILE"
 
+    # Folders a chat attachment may never come from (channels/media.py).
+    def test_system_dirs_name_each_platforms_own(self, monkeypatch):
+        from agent_team_backend.osplat import _darwin, _linux, _windows
+
+        assert Path("/etc") in _darwin.paths.system_dirs() and Path("/System") in _darwin.paths.system_dirs()
+        assert Path("/etc") in _linux.paths.system_dirs() and Path("/boot") in _linux.paths.system_dirs()
+        home = Path.home()
+        for rel in ("Library/Keychains", "Library/Cookies", "Library/Application Support/Google/Chrome",
+                    "Library/Safari", "Library/Messages", "Library/Mail"):
+            assert home / rel in _darwin.paths.system_dirs(), rel
+        assert Path("/var/root") in _darwin.paths.system_dirs()
+        for rel in ("Library/Application Support/Slack", "Library/Application Support/discord",
+                    "Library/Application Support/Code/User/globalStorage", "Library/Preferences", "snap"):
+            assert home / rel in _linux.paths.system_dirs(), rel
+        assert Path("/run") in _linux.paths.system_dirs()
+        # Credential and browser-profile dot folders: hidden paths are sendable now.
+        for rel in (".ssh", ".aws", ".config/gh", ".gnupg", ".kube", ".docker", ".mozilla",
+                    ".config/google-chrome", ".local/share/keyrings", ".password-store", ".navide"):
+            assert home / rel in _linux.paths.system_dirs(), rel
+            assert home / rel in _darwin.paths.system_dirs(), rel
+        monkeypatch.setenv("SystemRoot", r"D:\Win")
+        monkeypatch.setenv("ProgramData", r"D:\PD")
+        monkeypatch.delenv("ProgramFiles", raising=False)
+        monkeypatch.setenv("APPDATA", r"D:\Users\me\AppData\Roaming")
+        monkeypatch.setenv("LOCALAPPDATA", r"D:\Users\me\AppData\Local")
+        found = _windows.paths.system_dirs()
+        assert Path(r"D:\Win") in found and Path(r"D:\PD") in found
+        assert Path(r"C:\Program Files") in found  # the documented default when unset
+        assert Path(r"D:\Users\me\AppData\Roaming") / "Microsoft" / "Credentials" in found
+        assert Path(r"D:\Users\me\AppData\Local") / "Google" / "Chrome" / "User Data" in found
+        # An overridden variable adds its folder; it never removes the documented default.
+        assert Path(r"C:\Windows") in found and Path(r"C:\ProgramData") in found
+        assert Path.home() / "AppData" / "Roaming" / "Microsoft" / "Credentials" in found
+        for rel in (".ssh", ".aws", ".config/gh", ".docker", ".kube", ".navide", ".codex-panes"):
+            assert home.joinpath(*rel.split("/")) in found, rel
+        assert Path(r"D:\Users\me\AppData\Roaming") / "GitHub CLI" in found
+        assert Path(r"D:\Users\me\AppData\Local") / "Chromium" / "User Data" in found
+
     # A quoted path reaches a program through the platform's own shell
     # convention: POSIX apostrophes are literal characters to cmd.exe.
     def test_quote_arg_follows_each_platforms_shell(self):
@@ -997,6 +1035,74 @@ class TestScripts:
         )
         assert "-o NUL" not in command
 
+    def test_windows_kept_body_reaches_stdout_as_the_raw_bytes(self):
+        """The Stop hook's decision carries an inter-CLI message as UTF-8, and
+        PowerShell's native-output capture re-coded it through the console
+        code page (cp950 on zh-TW) -- the #147 garbling on the Stop path. curl
+        writes to a temp file whose bytes go to the raw stdout stream."""
+        from agent_team_backend.osplat import _windows
+
+        command = _windows.scripts.hook_post_json(
+            port_file="p",
+            header_file="h",
+            url_path="/hooks/claude",
+            event="stop",
+            timeout_s=4,
+            keep_body=True,
+        )
+        assert "\n" not in command
+        assert "if (-not $TMP) { [Console]::Error.Write(" in command
+        assert "& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 4 -o $TMP -X POST" in command
+        assert "[IO.File]::ReadAllBytes($TMP)" in command
+        assert "Remove-Item -LiteralPath $TMP" in command
+        assert "[Console]::OpenStandardOutput()" in command
+        assert "OutputEncoding" not in command
+        assert command.endswith("exit 0")
+
+    def test_windows_temp_files_never_run_out_and_a_missing_one_says_why(self):
+        """GetTempFileName creates tmpXXXX.tmp and fails once 65535 are left
+        behind (each hook killed mid-wait leaves one), after which every hook
+        exited 0 without a word. A random name under TEMP has no such ceiling,
+        and a temp path that cannot be made is reported on stderr."""
+        from agent_team_backend.osplat import _windows
+
+        commands = [
+            _windows.scripts.hook_post_json(
+                port_file="p", header_file="h", url_path="/hooks/claude",
+                event="stop", timeout_s=4, keep_body=True,
+            ),
+            _windows.scripts.hook_rewake(
+                port_file="p", header_file="h", url_path="/hooks/claude/rewake", timeout_s=1860
+            ),
+        ]
+        for command in commands:
+            assert "GetTempFileName" not in command
+            assert "$TMP = Join-Path $env:TEMP ([IO.Path]::GetRandomFileName())" in command
+            assert "if (-not $TMP) { [Console]::Error.Write('navide hook: no temp file: '" in command
+            assert "[Console]::Error.WriteLine" not in command  # see #147 below
+
+    def test_windows_discarded_body_keeps_the_exact_command_text(self):
+        # Only the kept-body branch changed for the Stop-path garbling; every
+        # installed settings.json holds this text for the other events.
+        from agent_team_backend.osplat import _windows
+
+        command = _windows.scripts.hook_post_json(
+            port_file="p",
+            header_file="h",
+            url_path="/hooks/claude",
+            event="pre_tool_use",
+            timeout_s=2,
+        )
+        assert command == (
+            "$PORT = Get-Content -ErrorAction SilentlyContinue 'p'; "
+            "if ($PORT) { & ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 2 -o NUL -X POST "
+            "-H 'Content-Type: application/json' "
+            "-H 'X-Agent-Team-Event: pre_tool_use' "
+            "-H '@h' "
+            "--data-binary '@-' "
+            '"http://127.0.0.1:$PORT/hooks/claude" }; exit 0'
+        )
+
     def test_windows_rewake_writes_the_body_to_stderr_and_exits_two(self):
         from agent_team_backend.osplat import _windows
 
@@ -1005,9 +1111,59 @@ class TestScripts:
         )
         assert "\n" not in command
         assert "if (-not $PORT) { exit 0 }" in command
-        assert "$BODY = & ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 1860 -X POST" in command
-        assert command.endswith(
-            "if ($BODY) { [Console]::Error.WriteLine($BODY); exit 2 }; exit 0"
+        assert "& ($env:SystemRoot + '\\System32\\curl.exe') -fsS -m 1860 -o $TMP -X POST" in command
+        assert command.endswith("exit 2 }; exit 0")
+
+    def test_windows_rewake_hands_the_body_over_as_one_utf8_string(self):
+        """#147: PowerShell captures a multi-line curl output as object[], and
+        `[Console]::Error.WriteLine` printed that as `System.Object[]`; it also
+        decodes curl's UTF-8 with the console code page (cp950 on zh-TW), which
+        turned CJK into `?`. The body goes through a temp file read back as
+        UTF-8 and leaves as UTF-8 bytes on the raw stderr stream."""
+        from agent_team_backend.osplat import _windows
+
+        command = _windows.scripts.hook_rewake(
+            port_file="p", header_file="h", url_path="/hooks/claude/rewake", timeout_s=1860
+        )
+        assert "$BODY = &" not in command
+        assert "[Console]::Error.WriteLine" not in command
+        assert "[IO.File]::ReadAllLines($TMP, [Text.Encoding]::UTF8)" in command
+        assert "($BODY -join [Environment]::NewLine)" in command
+        assert "[Text.Encoding]::UTF8.GetBytes(" in command
+        assert "[Console]::OpenStandardError()" in command
+        # Setting the console's encoding and restoring it afterwards still left
+        # the parent console on 65001 when two hooks interleaved or one was
+        # killed mid-wait (#147), so the hook never touches it.
+        assert "OutputEncoding" not in command
+        assert "Remove-Item -LiteralPath $TMP" in command
+        # No temp file, no wakeup to deliver; a blank body wakes nobody.
+        assert "if (-not $TMP) { [Console]::Error.Write(" in command
+        assert "if (($BODY -join '').Trim()) {" in command
+
+    def test_posix_rewake_keeps_the_exact_command_text(self, monkeypatch):
+        # #147 is a Windows fix; every installed POSIX settings.json holds this
+        # text and a changed one would rewrite them all on the next start.
+        from agent_team_backend.osplat import _posix_paths
+
+        monkeypatch.setattr(_posix_paths, "resolve_program", lambda name, *, path=None: "/usr/bin/curl")
+        command = _posix_paths.scripts.hook_rewake(
+            port_file="/tmp/navide.port",
+            header_file="/tmp/hook.header",
+            url_path="/hooks/claude/rewake",
+            timeout_s=1860,
+        )
+        assert command == (
+            "PORT=$(cat /tmp/navide.port 2>/dev/null); "
+            '[ -n "$PORT" ] || exit 0\n'
+            "BODY=$(curl -fsS -m 1860 -X POST "
+            "-H 'Content-Type: application/json' "
+            "-H 'X-Agent-Team-Event: rewake' "
+            "-H @/tmp/hook.header "
+            "--data-binary @- "
+            '"http://127.0.0.1:$PORT/hooks/claude/rewake" || true)\n'
+            '[ -n "$BODY" ] || exit 0\n'
+            "printf '%s\\n' \"$BODY\" >&2\n"
+            "exit 2"
         )
 
     def test_posix_confirm_then_run_asks_before_running(self):
@@ -1042,3 +1198,72 @@ class TestScripts:
 
         script = _windows.scripts.confirm_then_run("Remove o'brien's cli", "npm x")
         assert "Write-Host 'Remove o''brien''s cli'" in script
+
+
+def test_a_folder_created_again_has_another_birth_time(tmp_path: Path) -> None:
+    """The convenience gate tells a reset config folder from the user's
+    removal by the folder's identity. Linux hands a recreated folder the same
+    inode back, so only its birth time can say it is another one."""
+    import time
+
+    folder = tmp_path / "cfg"
+    folder.mkdir()
+    first = osplat.folder_birth_time(folder)
+    assert first is not None
+    folder.rmdir()
+    time.sleep(0.02)
+    folder.mkdir()
+
+    again = osplat.folder_birth_time(folder)
+    assert again is not None and again != first
+    assert osplat.folder_birth_time(tmp_path / "missing") is None
+
+
+def test_folder_birth_time_on_linux_falls_back_to_none_never_raising(tmp_path: Path, monkeypatch) -> None:
+    """No statx (old glibc, musl), a kernel without it (ENOSYS), a filesystem
+    without birth times (no STATX_BTIME in the mask) or a call ctypes cannot
+    make: the folder identity then stands on device and inode, as before."""
+    from agent_team_backend.osplat import folder_birth
+
+    monkeypatch.setattr(folder_birth, "_statx", None)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    monkeypatch.setattr(folder_birth, "_statx", lambda *_args: -1)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def no_btime(_dirfd, _path, _flags, _mask, buf) -> int:
+        buf._obj.stx_mask = 0x7FF  # STATX_BASIC_STATS, no STATX_BTIME
+        return 0
+
+    monkeypatch.setattr(folder_birth, "_statx", no_btime)
+    assert folder_birth.from_statx(tmp_path) is None
+
+    def unconvertible(*_args) -> int:
+        raise ctypes.ArgumentError("argument 2: wrong type")
+
+    import ctypes
+
+    monkeypatch.setattr(folder_birth, "_statx", unconvertible)
+    assert folder_birth.from_statx(tmp_path) is None
+
+
+def test_folder_birth_never_loads_libc_at_import() -> None:
+    """ctypes.CDLL(None) raises TypeError on Windows: loading libc when the
+    module is imported took the whole backend down there. It is loaded on
+    the first Linux lookup only, and a failure to load is no birth time."""
+    import ctypes
+    import importlib
+
+    from agent_team_backend.osplat import folder_birth
+
+    def windows_cdll(name, *_args, **_kwargs):
+        raise TypeError("argument of type 'NoneType' is not iterable")
+
+    # Its own MonkeyPatch: undoing the test's own would undo conftest's too.
+    try:
+        with pytest.MonkeyPatch.context() as m:
+            m.setattr(ctypes, "CDLL", windows_cdll)
+            importlib.reload(folder_birth)  # must not raise
+            assert folder_birth.from_statx(Path.cwd()) is None
+    finally:
+        importlib.reload(folder_birth)

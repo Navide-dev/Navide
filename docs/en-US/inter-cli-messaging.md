@@ -461,6 +461,27 @@ the head: a turn that was going to be a report ends with its conclusion.
 None of this makes the report a completion signal. To be sure a spawned pane has
 finished, check its state yourself with `cli_get_status` / `cli_wait_idle`.
 
+### Releasing a finished pane
+
+Once a child has reported and its work is done, the parent can free its memory
+without taking it away from the user:
+
+```
+cli_reclaim_agent(target="<child name>")
+```
+
+It takes the same `target` / `pane_id` as `cli_close_agent` and reaches the
+child in whichever window holds it. To release several at once, use
+`ui_invoke(action="ui.pane.reclaim", args={"paneId": [...]})` in your own
+window. Each CLI process ends and the pane stays where it
+was as a click-to-resume card with its conversation intact — the same "reclaim
+now" the status bar offers, so the user can open it and check the work. The
+status bar's guards apply: a pane that is busy or awaiting an answer, the one
+the user has focused, one with unsent input or queued messages, and one whose
+session cannot be resumed are refused. The answer lists
+`{reclaimed, refused: [{paneId, reason, detail}]}`. Prefer this to
+`cli_close_agent`, which ends the conversation for good.
+
 ---
 
 ## How delivery actually works
@@ -831,7 +852,19 @@ it would be told about a failure.
 | `paused` | Delivery is paused for the window |
 | `gone` | Target pane no longer exists |
 | `remote-ack` | Sent to another window; awaiting its report |
+| `remote-busy` | Sent to another device, unanswered for over a minute, and its target pane is mid-turn (`cli_check_message` only) |
+| `remote-unreported` | Sent to another device, unanswered for over a minute, and its target pane is not working (`cli_check_message` only) |
 | `cancelling` | Withdrawal asked of another window; awaiting its answer |
+
+A message to another device is always answered. The receiving backend acks
+every message it was handed — including one it failed to handle
+(`receiver-error`) — and retries an ack its connection lost on the next
+connection. The sending backend settles the sending window's row from that ack
+(a message from a printed block included), and asks the server with
+`messages.get` about any message still unanswered: once when its own connection
+comes back, and every minute for messages older than a minute. Failed or
+refused remote messages carry the far side's reason as `<state>: <reason>`, for
+example `rejected: not-paired`.
 
 A message that came in through `cli_send` reports its hold back to the backend
 as well, so the agent that sent it can read the same reason without a Messages
@@ -850,8 +883,10 @@ still never persisted.
 | `rate-limit` / `queue-full` | A guard rail above |
 | `pane-closed` | The target closed before delivery |
 | `inject-failed` / `inject-error` | Typing it into the pane did not take |
+| `delivery-unconfirmed` | Not a failure: typed and submitted into a just-resumed CLI that has not shown it received it. The row reads delivered with this caveat; check the pane before resending. Cleared when the transcript shows the message |
 | `window-reloaded` | The window reloaded while it was in flight |
 | `no-report` | The other window never reported an outcome |
+| `receiver-error` | Another device received it but failed while handling it; its backend log has the traceback. Retrying may succeed |
 | `unknown-workspace` / `ambiguous-workspace` | A `<folder>/<pane>` address that matched no open workspace, or several |
 | `unknown-target-in-workspace` / `ambiguous-target` | The workspace resolved, but the pane name did not — or matched twice |
 | `unknown-pane-id` | A `pane_id` that names no pane on this machine — read a fresh one from `cli_list_targets` |

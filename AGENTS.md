@@ -11,6 +11,7 @@ This file is a router — read the referenced file BEFORE doing the matching wor
 | Process boundaries, ownership, persistence and trust boundaries | `docs/en-US/architecture.md` |
 | Adding or changing an agent CLI integration | `docs/en-US/cli-extension-guide.md` |
 | Building or changing a plugin | `docs/en-US/plugin-development.md` |
+| Naming anything plugin-, extension- or marketplace-like in UI text or docs | `docs/en-US/glossary.md` |
 | Editor, diff, or plan surfaces | `docs/en-US/editor-design.md` |
 | Keyboard shortcuts and the key resolver | `docs/en-US/keybindings.md` |
 

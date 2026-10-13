@@ -1496,7 +1496,7 @@ def test_an_unreadable_document_is_listed_not_dropped(
     assert sorted(by_path) == [".agent-team/plans/locked_111111.html", ".agent-team/plans/open_222222.html"]
     locked = by_path[".agent-team/plans/locked_111111.html"]
     assert locked["kind"] == "unreadable"
-    assert locked["reason"] == "could not be read (BACKEND_UNAVAILABLE)"
+    assert locked["reason"] == "could not be read (WORKSPACE_SCOPE_VIOLATION)"
     assert locked["meta"] is None and locked["name"] == "locked_111111.html"
     assert by_path[".agent-team/plans/open_222222.html"]["kind"] == "plan"
 

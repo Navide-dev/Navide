@@ -13,7 +13,7 @@ import { useBackend } from './composables/useBackend'
 import { resolvePlanRoot as resolvePlanRootOperation } from '../plugins/plans/resolvePlanRoot'
 import { createHostGitSettingsPort, createHostKeybindingsPort, createHostTerminalDockPort } from './composables/hostSurfacePorts'
 import { initSettingsBackend, onSettingsChanged, seedSettings, settingsGet } from '@navide/plugin-ui/shared'
-import { i18n, useTheme } from '@navide/plugin-ui/foundation'
+import { i18n, useTheme, vTruncate } from '@navide/plugin-ui/foundation'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { resolvePlanStore, type PlanCtx, type WriteResult } from './composables/planStore'
 import { sanitizePlanSectionHtml } from './editor/planRuntime'
@@ -496,7 +496,7 @@ onUnmounted(() => {
          window's own controls at the right, like the main and editor windows. -->
     <div v-if="drawsOwnTitleBar" class="plan-titlebar">
       <WindowControls />
-      <span class="plan-titlebar-name">{{ workspaceTitleName }}</span>
+      <span class="plan-titlebar-name" v-truncate>{{ workspaceTitleName }}</span>
     </div>
     <!-- The list, the document and the AI dock are one row; the bar above is
          the column's other child. NotificationHost stays outside both — it is

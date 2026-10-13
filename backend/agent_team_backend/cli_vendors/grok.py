@@ -58,6 +58,7 @@ from urllib.parse import quote, unquote
 from uuid import UUID
 
 from .. import osplat
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, PlatformInstall, McpServerConfig, McpValue, McpWiring, SkillsWiring, VendorSpec, simple_command_args
 from ..usage_common import _num, _snapshot, _window
 from ..log_readers.base import (
@@ -762,7 +763,15 @@ async def fetch_grok(home: Path, env: dict | None = None) -> dict:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("plugin-dirs", (".grok", "installed-plugins"), "Grok plugin"),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="grok",
     # auth.x.ai proves login routing only; grok-build service hosts unverified.
     expected_hosts=(),

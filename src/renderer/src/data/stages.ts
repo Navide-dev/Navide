@@ -26,6 +26,9 @@ export interface StageSlot {
    *  Configured in the stage editor; frontend derives pipeline.globalManager from it.
    *  At most one Commander across all stages. */
   isCommander?: boolean
+  /** Values of the slot role's declarative properties (RoleProperty.name →
+   *  value). Absent on slots written before properties existed. */
+  params?: Record<string, string | number | boolean>
 }
 
 export interface Stage {
@@ -219,6 +222,9 @@ export function stageDefToFrontend(raw: Record<string, unknown>): Stage {
     label: s.label as string,
     kickoffBody: s.kickoff_body as string,
     isCommander: (s.is_commander ?? false) as boolean,
+    ...(s.params && typeof s.params === 'object'
+      ? { params: s.params as Record<string, string | number | boolean> }
+      : {}),
   }))
 
   // Backward compat: old format had default_agent + kickoff_prompt instead of slots
@@ -264,6 +270,7 @@ export function stageToBackend(s: Stage): Record<string, unknown> {
       label: slot.label,
       kickoff_body: slot.kickoffBody,
       is_commander: slot.isCommander ?? false,
+      ...(slot.params ? { params: slot.params } : {}),
     })),
   }
 }

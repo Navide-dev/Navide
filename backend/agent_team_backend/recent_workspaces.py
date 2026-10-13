@@ -2,8 +2,17 @@
 
 Tracks the workspaces a user has opened so the Welcome screen can offer a
 "recent" list (à la VS Code's Open Recent). Persisted as a single JSON file
-under the macOS app-data dir. Capped at ``max_size`` entries — the oldest
-*unpinned* entry is dropped first; pinned entries never drop.
+under the macOS app-data dir.
+
+History is kept, not rotated: an entry leaves only when the user removes it.
+``limit`` is a storage safety bound (default 1000, ``None`` turns it off). When
+it bites, the oldest entries that are neither pinned nor open in a window go
+first, and the count is recorded so the UI can say something was trimmed.
+
+Documents written before ``limit`` existed carry ``max_size: 20``. That was a
+default nobody could change, so it is ignored rather than honoured — honouring
+it would keep silently dropping the entries this exists to protect. It is still
+written, as a mirror of ``limit``, because those older builds read it.
 """
 
 from __future__ import annotations
@@ -14,6 +23,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Iterable
 from typing import Any
 
 from .applog import app_data_dir
@@ -23,7 +33,8 @@ log = logging.getLogger("agent_team_backend.recent_workspaces")
 
 RECENT_FILE = "recent-workspaces.json"
 _KV_KEY = "recent_workspaces"
-DEFAULT_MAX_SIZE = 20
+DEFAULT_MAX_SIZE = 20  # legacy default; the stored max_size is never read back
+DEFAULT_LIMIT = 1000
 
 
 def _now_iso() -> str:
@@ -65,6 +76,9 @@ class RecentWorkspacesStore:
         return data
 
     def _write(self, doc: dict[str, Any]) -> None:
+        # Older builds cap at the stored max_size and know no "off"; mirror the
+        # limit there so a downgrade does not cut the list back to 20.
+        doc["max_size"] = self._limit(doc) or DEFAULT_LIMIT
         self._db.kv_set(_KV_KEY, doc, now=int(time.time()))
 
     @staticmethod
@@ -76,22 +90,36 @@ class RecentWorkspacesStore:
         """Folder name shown when the workspace has no user-set alias."""
         return os.path.basename(norm.rstrip("/")) or norm
 
-    def _cap(self, recent: list[dict[str, Any]], max_size: int) -> list[dict[str, Any]]:
-        """Drop oldest *unpinned* entries until len <= max_size.
+    @staticmethod
+    def _limit(doc: dict[str, Any]) -> int | None:
+        return doc["limit"] if "limit" in doc else DEFAULT_LIMIT
 
-        ``recent`` is assumed to be ordered most-recent-first. Pinned entries
-        are kept regardless of position (they never count against the cap by
-        being dropped — but they still occupy a slot).
+    def _cap(
+        self, recent: list[dict[str, Any]], limit: int | None, keep: Iterable[str] = ()
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Drop the oldest unprotected entries until len <= limit.
+
+        ``recent`` is most-recent-first. Pinned entries and entries in ``keep``
+        (workspaces open in a window) are never dropped, but still occupy a
+        slot, so the list may stay above ``limit``. Returns the kept list and
+        how many were dropped.
         """
-        if len(recent) <= max_size:
-            return recent
-        pinned = [e for e in recent if e.get("pinned")]
-        unpinned = [e for e in recent if not e.get("pinned")]
-        keep_unpinned = max(0, max_size - len(pinned))
-        unpinned = unpinned[:keep_unpinned]
+        if limit is None or len(recent) <= limit:
+            return recent, 0
+        open_paths = {self._normalize(p) for p in keep}
+        protected = [e for e in recent if e.get("pinned") or e["path"] in open_paths]
+        others = [e for e in recent if not (e.get("pinned") or e["path"] in open_paths)]
+        others = others[: max(0, limit - len(protected))]
         # Re-merge preserving original most-recent-first order.
-        kept = {id(e) for e in pinned} | {id(e) for e in unpinned}
-        return [e for e in recent if id(e) in kept]
+        kept = {id(e) for e in protected} | {id(e) for e in others}
+        result = [e for e in recent if id(e) in kept]
+        return result, len(recent) - len(result)
+
+    def _apply_cap(self, doc: dict[str, Any], keep: Iterable[str]) -> None:
+        doc["recent"], dropped = self._cap(doc["recent"], self._limit(doc), keep)
+        if dropped:
+            doc["trimmed"] = int(doc.get("trimmed", 0)) + dropped
+            log.info("recent workspaces: trimmed %d entries over the limit", dropped)
 
     # ---- public API ----
 
@@ -104,8 +132,30 @@ class RecentWorkspacesStore:
         recent = self._read()["recent"]
         return [{**e, "exists": os.path.isdir(e["path"])} for e in recent]
 
-    def touch(self, path: str, *, state: str = "", task: str = "") -> dict[str, Any]:
-        """Record that ``path`` was just opened; move it to the front."""
+    def info(self) -> dict[str, Any]:
+        """The safety bound and how many entries it has ever trimmed."""
+        doc = self._read()
+        return {"limit": self._limit(doc), "trimmed": int(doc.get("trimmed", 0))}
+
+    def set_limit(self, limit: int | None, *, keep: Iterable[str] = ()) -> None:
+        """Set the safety bound (``None`` = off) and apply it now."""
+        if limit is not None and (
+            isinstance(limit, bool) or not isinstance(limit, int) or limit < 1
+        ):
+            raise ValueError(f"limit must be a positive integer or None, got {limit!r}")
+        with self._lock:
+            doc = self._read()
+            doc["limit"] = limit
+            self._apply_cap(doc, keep)
+            self._write(doc)
+
+    def touch(
+        self, path: str, *, state: str = "", task: str = "", keep: Iterable[str] = ()
+    ) -> dict[str, Any]:
+        """Record that ``path`` was just opened; move it to the front.
+
+        ``keep`` names workspaces open in a window, which the limit never drops.
+        """
         norm = self._normalize(path)
         with self._lock:
             doc = self._read()
@@ -130,7 +180,7 @@ class RecentWorkspacesStore:
                     "last_known_task": task,
                 }
             recent.insert(0, entry)
-            doc["recent"] = self._cap(recent, doc.get("max_size", DEFAULT_MAX_SIZE))
+            self._apply_cap(doc, [norm, *keep])
             self._write(doc)
             return entry
 

@@ -141,6 +141,69 @@ describe('GuidedTour', () => {
     expect(stepId()).toBe('three')
   })
 
+  it('does not wait for an anchor on a step with no prepare: a missing one shows at once', async () => {
+    // No prepare means the window is already as the step expects it, so the
+    // anchor is either there now or not at all — the 2s budget is for prepare.
+    wrapper = mount(GuidedTour, {
+      props: {
+        steps: [
+          { id: 'here', anchor: '#nowhere', titleKey: 'tour.next', bodyKey: 'tour.back', missingKey: 'tour.skip' },
+        ],
+        anchorTimeoutMs: 2000,
+      },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(100)
+    await flushPromises()
+    expect(stepId()).toBe('here')
+    expect(card()?.classList.contains('centred')).toBe(true)
+    expect(document.body.querySelector('[data-testid="tour-missing"]')).not.toBeNull()
+  })
+
+  it('still waits up to the budget for an anchor that a step’s prepare brings in', async () => {
+    start(STEPS, () => {
+      setTimeout(addTarget, 200) // Settings takes a moment to render its page
+    })
+    await settle()
+    click('tour-next')
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(260)
+    await flushPromises()
+    expect(stepId()).toBe('two')
+    expect(document.body.querySelector('[data-testid="tour-hole"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="tour-missing"]')).toBeNull()
+  })
+
+  it('draws a prepare step’s card at once, centred, while its prepare runs', async () => {
+    start(STEPS, () => new Promise<void>(() => {}))
+    await settle()
+    click('tour-next')
+    await flushPromises()
+    expect(stepId()).toBe('two')
+    expect(card()?.classList.contains('centred')).toBe(true)
+    // Not "missing" yet: the lookup has not finished.
+    expect(document.body.querySelector('[data-testid="tour-missing"]')).toBeNull()
+  })
+
+  it('keeps the previous card on screen while the next step looks for its anchor', async () => {
+    addTarget()
+    start([
+      { id: 'first', titleKey: 'tour.next', bodyKey: 'tour.back' },
+      { id: 'second', anchor: '#target', titleKey: 'tour.back', bodyKey: 'tour.next', missingKey: 'tour.skip' },
+    ])
+    await settle()
+    expect(stepId()).toBe('first')
+    click('tour-next')
+    await flushPromises()
+    // Never an empty dimmed window between two cards.
+    expect(card()).not.toBeNull()
+    await vi.advanceTimersByTimeAsync(100)
+    await flushPromises()
+    expect(stepId()).toBe('second')
+    expect(document.body.querySelector('[data-testid="tour-hole"]')).not.toBeNull()
+  })
+
   it('keeps going when a step’s prepare throws', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     start(STEPS, () => {

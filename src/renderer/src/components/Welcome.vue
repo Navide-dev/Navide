@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { NEW_WORKSPACE_ERROR_KEYS } from '../../../shared/workspaceCreate'
 import type { useBackend } from '../composables/useBackend'
 import { useEditorTargets } from '../composables/useEditorTargets'
@@ -30,7 +31,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => document.removeEventListener('keydown', onDismissKey))
 
-const { recent, loaded, error, touch, pin, unpin, remove } = useRecentWorkspaces(props.backend)
+const { recent, loaded, error, trimmed, touch, pin, unpin, remove } = useRecentWorkspaces(props.backend)
 
 const { t } = useI18n()
 
@@ -67,12 +68,41 @@ function isOpenElsewhere(path: string): boolean {
   return openWorkspaces.value.some((ws) => norm(ws) === target)
 }
 
-// Pinned first, then most-recent-first (backend already orders by recency).
-const ordered = computed<RecentWorkspace[]>(() => {
-  const pinned = recent.value.filter((r) => r.pinned)
-  const rest = recent.value.filter((r) => !r.pinned)
-  return [...pinned, ...rest]
+// Recent keeps every workspace ever opened, so the list is long: pinned and
+// open workspaces sit in their own group on top, the rest page in PAGE_SIZE at
+// a time. The search runs over the whole list, loaded page or not.
+const PAGE_SIZE = 10
+const query = ref('')
+const shown = ref(PAGE_SIZE)
+watch(query, () => { shown.value = PAGE_SIZE })
+
+const matches = computed<RecentWorkspace[]>(() => {
+  const q = query.value.trim().toLowerCase()
+  if (!q) return recent.value
+  return recent.value.filter((r) => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q))
 })
+// Pinned first, then open; each most-recent-first (the backend's order).
+const headItems = computed<RecentWorkspace[]>(() => [
+  ...matches.value.filter((r) => r.pinned),
+  ...matches.value.filter((r) => !r.pinned && isOpenElsewhere(r.path)),
+])
+const restItems = computed<RecentWorkspace[]>(() =>
+  matches.value.filter((r) => !r.pinned && !isOpenElsewhere(r.path))
+)
+const remaining = computed(() => Math.max(0, restItems.value.length - shown.value))
+const groups = computed(() => [
+  { key: 'open', label: t('recentWorkspaces.group-open'), items: headItems.value },
+  {
+    key: 'recent',
+    // Only worth a heading when there is a group above it to tell apart from.
+    label: headItems.value.length ? t('recentWorkspaces.group-recent') : '',
+    items: restItems.value.slice(0, shown.value),
+  },
+].filter((g) => g.items.length))
+
+function showMore(): void {
+  shown.value += PAGE_SIZE
+}
 
 // How the workspace's last pipeline run ended, mirrored onto the recent entry
 // by the backend's pipeline handlers. Folders that never ran one ('' from older
@@ -113,7 +143,7 @@ async function openWorkspace(path: string): Promise<void> {
   // Already open in another window → focus that window instead of opening a
   // duplicate (two windows on one folder means conflicting PTY/git operations).
   if (await window.agentTeam?.focusWorkspaceWindow?.(path)) return
-  await touch(path)
+  await touch(path, '', '', openWorkspaces.value)
   emit('select', path)
 }
 
@@ -242,7 +272,7 @@ function ctxCopyPath(): void {
 
       <section class="w-open">
         <h2>{{ $t('label.open-workspace') }}</h2>
-        <div class="w-open-btns">
+        <div class="w-open-btns" data-tour="welcome-open-buttons">
           <button class="primary" :disabled="picking" @click="browse">
             {{ picking ? '…' : $t('action.browse') }}
           </button>
@@ -260,52 +290,73 @@ function ctxCopyPath(): void {
         <h2>{{ $t('label.recent') }}</h2>
 
         <p v-if="error" class="w-error">{{ error }}</p>
+        <p v-if="trimmed > 0" class="r-trimmed">{{ $t('recentWorkspaces.trimmed', { count: trimmed }) }}</p>
 
-        <ul v-if="ordered.length" class="recent-list">
-          <li
-            v-for="item in ordered"
-            :key="item.path"
-            class="recent-item"
-            :class="{ stale: !item.exists }"
-            @click="openWorkspace(item.path)"
-            @contextmenu="openCtxMenu($event, item)"
-          >
-            <button
-              class="pin"
-              :class="{ on: item.pinned }"
-              :title="item.pinned ? $t('label.unpin') : $t('label.pin')"
-              @click="togglePin(item, $event)"
+        <input
+          v-if="recent.length"
+          v-model="query"
+          class="r-search"
+          type="search"
+          :placeholder="$t('recentWorkspaces.search-placeholder')"
+          :aria-label="$t('recentWorkspaces.search-placeholder')"
+        />
+
+        <div v-for="group in groups" :key="group.key" class="recent-group" :class="`recent-group--${group.key}`">
+          <h3 v-if="group.label" class="r-group-label">{{ group.label }}</h3>
+          <ul class="recent-list">
+            <li
+              v-for="item in group.items"
+              :key="item.path"
+              class="recent-item"
+              :class="{ stale: !item.exists }"
+              tabindex="0"
+              @click="openWorkspace(item.path)"
+              @keydown.enter.self="openWorkspace(item.path)"
+              @contextmenu="openCtxMenu($event, item)"
             >
-              {{ item.pinned ? '★' : '☆' }}
-            </button>
-            <div class="r-body">
-              <div class="r-top">
-                <span class="r-name">{{ item.name }}</span>
-                <span v-if="isOpenElsewhere(item.path)" class="r-open" :title="$t('label.already-open')">{{ $t('label.already-open') }}</span>
-                <span
-                  v-if="stateBadge(item.last_known_state)"
-                  class="r-badge"
-                  :class="stateBadge(item.last_known_state)?.cls"
-                >
-                  {{ stateBadge(item.last_known_state)?.icon }}
-                  {{ stateBadge(item.last_known_state)?.label }}
-                </span>
-                <span v-if="!item.exists" class="r-missing" title="Folder not found">{{ $t('label.missing') }}</span>
-                <span class="r-time">{{ timeAgo(item.last_opened_at) }}</span>
+              <button
+                class="pin"
+                :class="{ on: item.pinned }"
+                :title="item.pinned ? $t('label.unpin') : $t('label.pin')"
+                @click="togglePin(item, $event)"
+              >
+                {{ item.pinned ? '★' : '☆' }}
+              </button>
+              <div class="r-body">
+                <div class="r-top">
+                  <span class="r-name">{{ item.name }}</span>
+                  <span v-if="isOpenElsewhere(item.path)" class="r-open" :title="$t('label.already-open')">{{ $t('label.already-open') }}</span>
+                  <span
+                    v-if="stateBadge(item.last_known_state)"
+                    class="r-badge"
+                    :class="stateBadge(item.last_known_state)?.cls"
+                  >
+                    {{ stateBadge(item.last_known_state)?.icon }}
+                    {{ stateBadge(item.last_known_state)?.label }}
+                  </span>
+                  <span v-if="!item.exists" class="r-missing" title="Folder not found">{{ $t('label.missing') }}</span>
+                  <span class="r-time">{{ timeAgo(item.last_opened_at) }}</span>
+                </div>
+                <div class="r-path" v-truncate>{{ item.path }}</div>
+                <div v-if="item.last_known_task" class="r-task">"{{ item.last_known_task }}"</div>
               </div>
-              <div class="r-path">{{ item.path }}</div>
-              <div v-if="item.last_known_task" class="r-task">"{{ item.last_known_task }}"</div>
-            </div>
-            <button
-              v-if="!isOpenElsewhere(item.path)"
-              class="r-delete"
-              :title="$t('action.remove-from-history')"
-              @click="removeItem(item, $event)"
-            >✕</button>
-          </li>
-        </ul>
+              <button
+                class="r-delete"
+                :title="$t('action.remove-from-history')"
+                :aria-label="$t('action.remove-from-history')"
+                @click="removeItem(item, $event)"
+              >✕</button>
+            </li>
+          </ul>
+        </div>
 
-        <p v-else-if="loaded" class="w-empty" v-html="$t('label.no-recent-workspaces')"></p>
+        <button v-if="remaining > 0" class="r-more" @click="showMore">
+          {{ $t('recentWorkspaces.show-more', { count: remaining }) }}
+        </button>
+        <p v-if="query && recent.length && !matches.length" class="r-nomatch">
+          {{ $t('recentWorkspaces.no-match', { query: query.trim() }) }}
+        </p>
+        <p v-else-if="loaded && !recent.length" class="w-empty" v-html="$t('label.no-recent-workspaces')"></p>
       </section>
 
       <footer class="w-foot">
@@ -454,6 +505,54 @@ button.ghost:hover:not(:disabled) {
 button:disabled {
   opacity: 0.5;
   cursor: default;
+}
+/* The card scrolls once the list grows; macOS hides overlay scrollbars until
+   you scroll, which made the rows below the fold look like they did not exist. */
+.welcome-card::-webkit-scrollbar { width: 8px; }
+.welcome-card::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+.r-search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+}
+.recent-group + .recent-group { margin-top: 12px; }
+.r-group-label {
+  margin: 0 0 6px;
+  font-size: var(--font-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.r-more {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--font-sm);
+}
+.r-more:hover { background: var(--bg-subtle); }
+.r-more:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 2px;
+}
+.r-trimmed,
+.r-nomatch {
+  margin: 0 0 10px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
 }
 .recent-list {
   list-style: none;

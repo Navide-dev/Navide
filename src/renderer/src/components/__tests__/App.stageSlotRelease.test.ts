@@ -303,9 +303,10 @@ describe('a pre-spawn that already aborted the run does not then start it', () =
     // Falling straight into activateStage(0) re-registered the stage, spawned
     // the same missing agents again, and armed the global router on a dead run.
     const fn = body('async function onPipelineStart(', '\n/** Before firing 🎉')
-    const preSpawn = fn.indexOf('preSpawnStage(0)')
-    const guard = fn.indexOf("if (pipeline.state !== 'running') return")
-    const activate = fn.indexOf('await activateStage(0)')
+    // startIndex is 0 for a normal start, a later stage for restart-from-node.
+    const preSpawn = fn.indexOf('preSpawnStage(startIndex)')
+    const guard = fn.indexOf("if (pipeline.state !== 'running') return", preSpawn)
+    const activate = fn.indexOf('await activateStage(startIndex)')
     expect(preSpawn, 'pre-spawn').toBeGreaterThan(-1)
     expect(activate, 'stage 01 activation').toBeGreaterThan(-1)
     expect(guard, 'state re-check after pre-spawn').toBeGreaterThan(preSpawn)

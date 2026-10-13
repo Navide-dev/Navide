@@ -109,3 +109,16 @@ def test_skips_when_copilot_is_not_configured(tmp_path, monkeypatch) -> None:
     assert result["installed"] is False
     assert result["reason"] == "copilot not configured"
     assert not (tmp_path / ".copilot").exists()
+
+
+def test_uninstall_removes_only_our_hook_file(tmp_path) -> None:
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    (hooks / "mine.json").write_text("{}")
+    copilot_hooks.install_hooks("/tmp/port-file", hooks_directory=hooks)
+
+    result = copilot_hooks.uninstall_hooks(hooks_directory=hooks)
+
+    assert result["removed"] is True
+    assert sorted(p.name for p in hooks.iterdir()) == ["mine.json"]
+    assert copilot_hooks.uninstall_hooks(hooks_directory=hooks)["removed"] is False

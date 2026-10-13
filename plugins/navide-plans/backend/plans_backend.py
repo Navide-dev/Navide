@@ -16,6 +16,7 @@ import math
 import os
 import queue
 import re
+import stat
 import sys
 import threading
 import uuid
@@ -27,6 +28,7 @@ from typing import Any
 import yaml
 from agent_team_backend.fs_write import (
     _WRITE_PART_MAX_BYTES,
+    _resolve_mutation_safe,
     write_abort,
     write_commit,
     write_file,
@@ -577,8 +579,9 @@ def _guarded_path(origin: dict[str, Any], rel_path: str, **options: bool) -> Pat
     """
     try:
         return _resolve_safe(_plan_root(origin), rel_path, **options)
-    except FsError:
-        raise BridgeFailure("BACKEND_UNAVAILABLE") from None
+    except FsError as exc:
+        _log(f"path {rel_path} refused: {exc}")
+        raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
 
 
 def _read_bytes(
@@ -597,7 +600,8 @@ def _read_bytes(
             st = os.fstat(handle.fileno())
             handle.seek(start)
             data = handle.read() if want is None else handle.read(want)
-    except OSError:
+    except OSError as exc:
+        _log(f"read {rel_path}: {exc}")
         raise BridgeFailure("BACKEND_UNAVAILABLE") from None
     return data, st.st_size, st.st_mtime, start + len(data) >= st.st_size
 
@@ -607,7 +611,8 @@ def _read_text(origin: dict[str, Any], rel_path: str) -> tuple[str, float | None
     data, _size, mtime, _eof = _read_bytes(origin, rel_path, 0, None)
     try:
         return data.decode("utf-8"), mtime
-    except UnicodeDecodeError:
+    except UnicodeDecodeError as exc:
+        _log(f"read {rel_path}: {exc}")
         raise BridgeFailure("BACKEND_UNAVAILABLE") from None
 
 
@@ -639,9 +644,13 @@ def _list_names(origin: dict[str, Any], rel_path: str, *, discovery: bool = Fals
                 )
             else:
                 entries = sorted(it, key=lambda e: (not e.is_dir(), e.name.lower()))
-    except OSError:
+    except OSError as exc:
+        _log(f"list {rel_path}: {exc}")
         raise BridgeFailure("BACKEND_UNAVAILABLE") from None
-    return [e.name for e in entries[:_MAX_DIRECTORY_ENTRIES] if not e.name.startswith(".")]
+    names = [e.name for e in entries if not e.name.startswith(".")]
+    if len(names) > _MAX_DIRECTORY_ENTRIES:
+        _log(f"list {rel_path}: {len(names)} entries, only the first {_MAX_DIRECTORY_ENTRIES} are used")
+    return names[:_MAX_DIRECTORY_ENTRIES]
 
 
 def _decode_chunk(data: bytes, final: bool) -> tuple[str, int]:
@@ -676,12 +685,15 @@ def _read_text_chunk(origin: dict[str, Any], rel_path: str, offset: int) -> dict
     }
 
 
-def _write_failure(result: Any) -> BridgeFailure:
-    """The failure the Host's filesystem service reported for a write."""
+def _write_failure(result: Any, *, rel_path: str | None = None) -> BridgeFailure:
+    """The failure the Host's filesystem service reported for a write.
+
+    Classified from the write itself, never from the wording of its message.
+    """
     if _is_record(result) and result.get("conflict") is True:
         return BridgeFailure("CONFLICT")
-    if _is_record(result) and isinstance(result.get("error"), str) and "too large" in result["error"].lower():
-        return BridgeFailure("RESULT_TOO_LARGE")
+    reason = result.get("error") if _is_record(result) else None
+    _log(f"write {rel_path}: {reason if isinstance(reason, str) else 'malformed write result'}")
     return BridgeFailure("BACKEND_UNAVAILABLE")
 
 
@@ -692,14 +704,22 @@ def _write(origin: dict[str, Any], rel_path: str, content: str, expected_mtime: 
     atomic replace, and the ``expected_mtime`` conflict check. A document past
     SINGLE_WRITE_MAX_BYTES is staged in parts and swapped in, as before.
     """
+    # Plans writes deliberately have no size cap (user decision 2026-09-29:
+    # plans are never skipped or capped), which is why a large document goes
+    # through the staged path, and why no failure here is a size limit.
     root = _plan_root(origin)
+    try:
+        _resolve_mutation_safe(root, rel_path)
+    except FsError as exc:
+        _log(f"write {rel_path} refused: {exc}")
+        raise BridgeFailure("WORKSPACE_SCOPE_VIOLATION") from None
     data = content.encode("utf-8")
     if len(data) > SINGLE_WRITE_MAX_BYTES:
         result = _write_staged(root, rel_path, data, expected_mtime)
     else:
         result = write_file(root, rel_path, content, expected_mtime=expected_mtime)
     if not _is_record(result) or result.get("ok") is not True:
-        raise _write_failure(result)
+        raise _write_failure(result, rel_path=rel_path)
     mtime = result.get("mtime")
     return float(mtime) if isinstance(mtime, (int, float)) and not isinstance(mtime, bool) else None
 
@@ -1115,15 +1135,49 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     seen: set[str] = set()
 
+    def _unreadable_dir(rel_dir: str, code: str, detail: Any) -> None:
+        # Listed in the shape of an unreadable document, so a plan directory
+        # the user cannot see into is not silently missing from the list.
+        _log(f"plan directory {rel_dir} could not be read: {detail}")
+        entries.append(
+            {
+                "rel_path": rel_dir,
+                "name": rel_dir.rsplit("/", 1)[-1],
+                "stage": None,
+                "overview": "",
+                "todos": {"total": 0, "by_status": {}},
+                "mtime": None,
+                "kind": "unreadable",
+                "meta": None,
+                "reason": f"plan directory could not be read ({code})",
+            }
+        )
+
     def _scan_dir(rel_dir: str) -> None:
+        # Only a directory that does not exist is skipped quietly.
         try:
-            if not _stat(origin, rel_dir)[0]:
-                return
-            names = _list_names(origin, rel_dir)
+            target = _guarded_path(origin, rel_dir, allow_internal_root=True, allow_mockups=True)
         except BridgeFailure as error:
-            if error.code == "BACKEND_UNAVAILABLE":
+            # A path the guard refuses does not exist for us; the guard logged it.
+            if error.code == "WORKSPACE_SCOPE_VIOLATION":
                 return
             raise
+        try:
+            mode = target.stat().st_mode
+        except (FileNotFoundError, NotADirectoryError):
+            return
+        except OSError as exc:
+            _unreadable_dir(rel_dir, "BACKEND_UNAVAILABLE", exc)
+            return
+        if not stat.S_ISDIR(mode):
+            return
+        try:
+            names = _list_names(origin, rel_dir)
+        except BridgeFailure as error:
+            if error.code == "USER_CANCELLED" or _closing:
+                raise
+            _unreadable_dir(rel_dir, error.code, error.code)
+            return
         for name in sorted((n for n in names if isinstance(n, str)), key=lambda s: s.lower()):
             if not is_plan_doc_name(name):
                 continue

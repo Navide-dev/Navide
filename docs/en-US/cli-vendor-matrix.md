@@ -12,7 +12,7 @@ that reproduce each table, so a stale entry is always cheap to catch.
 
 - To **add** a vendor, follow [Adding a CLI vendor](../adding-a-cli-vendor.md).
 - For the **research and traps** behind an individual integration, see the
-  [CLI extension guide](cli-extension-guide.md).
+  [CLI integration records](cli-extension-guide.md).
 
 ---
 

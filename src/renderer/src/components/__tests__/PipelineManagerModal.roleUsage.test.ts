@@ -10,6 +10,8 @@ import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { useRoles, type Role } from '../../composables/useRoles'
 import { usePipelines, type PipelineSummary } from '../../composables/usePipelines'
 import { createTerminalDockStub } from '../../ports/__tests__/terminalDock.stub'
+import { deriveGraphFromStages } from '../../lib/pipelineGraph'
+import { stageDefToFrontend } from '../../data/stages'
 
 vi.mock('@navide/plugin-shell', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@navide/plugin-shell')>()),
@@ -181,18 +183,26 @@ describe('PipelineManagerModal — ROLE_IN_USE usage list', () => {
 
   it('jumps to the offending stage when a usage is clicked', async () => {
     const { wrapper: w, mock } = await open()
+    // The editor opens the pipeline as a graph; stage 02's "Lead" slot is the
+    // node n-02-0 (deriveGraphFromStages' naming).
+    mock.setResponse('pipelines.graph.get', {
+      pipeline_id: 'default',
+      graph: deriveGraphFromStages([stage('01', 'Spec', 'Second'), stage('02', 'Build', 'Lead')].map(stageDefToFrontend)),
+      derived: true,
+      stages: [],
+    })
     rejectDelete(mock)
     await deleteQa(w)
 
     await tab(w).findAll('.role-usage-list button')[0].trigger('click')
     await flushPromises()
 
-    // Landed on the pipelines tab, in Default's detail view, on stage 02.
+    // Landed on the pipelines tab, in Default's editor, on stage 02's slot.
     expect(w.findAll('.tabs button')[0].classes()).toContain('active')
     const pipelinesTab = w.findAll('.tab-body')[0]
     expect(pipelinesTab.find('.pl-detail-title').text()).toContain('Default')
-    const selected = pipelinesTab.find('.split-list li.active .mono-key')
-    expect(selected.text()).toBe('02')
+    expect(pipelinesTab.find('.lane-card.is-selected').attributes('data-node-id')).toBe('n-02-0')
+    expect(pipelinesTab.find('.pi-title').text()).toBe('Lead')
     expect(mock.sent.filter((s) => s.type === 'stages.list').at(-1)?.payload).toEqual({
       pipeline_id: 'default',
     })

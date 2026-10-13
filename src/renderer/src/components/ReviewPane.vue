@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useReview } from '../composables/useReview'
 import type { ReviewFinding } from '../composables/useReview'
 import type { useBackend } from '../composables/useBackend'
@@ -298,7 +299,7 @@ const verdictMeta = computed(() =>
               {{ f.severity === 'critical' ? '🔴' : f.severity === 'warning' ? '🟡' : '🔵' }}
             </span>
             <span
-              class="finding-file"
+              class="finding-file" v-truncate
               :class="{ 'finding-file--link': !!f.file }"
               :title="f.file ? 'Open file' : undefined"
               @click="openFindingFile(f)"

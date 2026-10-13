@@ -156,6 +156,25 @@ export function focusedForReclaim(
   return requested === paneId || effective === paneId
 }
 
+/** reclaimBlockedBy for the timed sweep, with Settings → Resource limits'
+ *  "also reclaim the focused pane after N hours".
+ *
+ *  Each workspace window keeps one pane focused, and the focus guard keeps that
+ *  pane forever — commander panes sat idle for 12+ hours. `focusedThresholdMs`
+ *  0 (the default) is today's rule. Otherwise a focused pane nobody has touched
+ *  for that long is judged as if unfocused: only the focus guard is lifted, so
+ *  a pane awaiting an answer, holding a draft or not resumable is still kept,
+ *  and a pane with no signal at all is never taken as old. */
+export function focusedReclaimBlockedBy(
+  pane: ReclaimCandidate,
+  thresholdMs: number,
+  focusedThresholdMs: number,
+  now: number
+): ReclaimBlock | null {
+  const stale = focusedThresholdMs > 0 && pane.lastTouchedAt > 0 && now - pane.lastTouchedAt >= focusedThresholdMs
+  return reclaimBlockedBy(pane.focused && stale ? { ...pane, focused: false } : pane, thresholdMs, now)
+}
+
 /** Threshold for a reclaim the user asked for by name.
  *
  *  Every other guard still applies — the focused pane, one awaiting an answer,

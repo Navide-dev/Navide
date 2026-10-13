@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import AgentHistoryModal from '../AgentHistoryModal.vue'
 import type { SpawnHistoryEntry } from '../../lib/spawnHistory'
 import { AI_PANEL_ICON_PATH } from '@navide/plugin-ui'
+import { i18n } from '@navide/plugin-ui/foundation'
 
 function entry(overrides: Partial<SpawnHistoryEntry> = {}): SpawnHistoryEntry {
   return {
@@ -138,8 +139,24 @@ describe('AgentHistoryModal — entries of an embedded panel', () => {
       expect(wrapper.find('.ah-window').exists()).toBe(false)
       expect(wrapper.find('.ah-open-window').exists()).toBe(false)
       // `<!--v-if-->` is Vue's invisible placeholder for an untaken branch;
-      // everything a user or an accessibility tree can see is compared.
-      const dom = (sel: string) => wrapper.find(sel).element.outerHTML.replace(/<!--v-if-->/g, '')
+      // everything a user or an accessibility tree can see is compared — except
+      // the timestamps, which render in the machine's time zone and locale (CI
+      // runs in UTC). They are swapped for tokens computed with the same
+      // formatters the modal uses, so the snapshot holds on any machine while
+      // still proving each timestamp sits exactly where it did.
+      const loc = i18n.global.locale.value
+      const stamps: Array<[string | undefined, string]> = [[e.spawnedAt, '{spawnedAt}'], [e.removedAt, '{removedAt}']]
+      const dom = (sel: string) => {
+        let html = wrapper.find(sel).element.outerHTML.replace(/<!--v-if-->/g, '')
+        // Whole timestamps first, then the date-only and time-only forms the
+        // row uses: two stamps on the same day share their date part.
+        for (const format of ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString'] as const) {
+          for (const [iso, token] of stamps) {
+            if (iso) html = html.split(new Date(iso)[format](loc)).join(token)
+          }
+        }
+        return html
+      }
       expect(dom('.agent-history-row')).toMatchSnapshot()
       expect(dom('.history-detail')).toMatchSnapshot()
     }

@@ -4,6 +4,7 @@ import {
   IDLE_RECLAIM_MIN_MINUTES,
   IDLE_RECLAIM_NEVER,
   focusedForReclaim,
+  focusedReclaimBlockedBy,
   idleReclaimDisabled,
   idleReclaimThresholdMs,
   namedReclaimBlockedBy,
@@ -309,5 +310,46 @@ describe('never', () => {
   it('leaves manual reclaim working', () => {
     const justIdle = idleForHours({ lastTouchedAt: NOW - 1_000 })
     expect(reclaimBlockedBy(justIdle, RECLAIM_NOW_THRESHOLD_MS, NOW)).toBeNull()
+  })
+})
+
+// Settings → Resource limits: "also reclaim the focused pane after N hours".
+// Each workspace window keeps one pane focused, so with the guard above that
+// pane is never reclaimed however long it sits — commander panes stayed up for
+// 12+ hours. The option is off by default (today's behavior), and when on it
+// lifts only the focus guard: every other reason still holds.
+describe('focusedReclaimBlockedBy', () => {
+  const HOUR = 60 * 60_000
+
+  it('keeps the focused pane when the option is off', () => {
+    const pane = idleForHours({ focused: true, lastTouchedAt: NOW - 99 * HOUR })
+    expect(focusedReclaimBlockedBy(pane, THRESHOLD, 0, NOW)).toBe('focused')
+  })
+
+  it('reclaims a focused pane untouched for longer than the option', () => {
+    const pane = idleForHours({ focused: true, lastTouchedAt: NOW - 4 * HOUR })
+    expect(focusedReclaimBlockedBy(pane, THRESHOLD, 2 * HOUR, NOW)).toBeNull()
+  })
+
+  it('keeps a focused pane touched more recently than the option', () => {
+    const pane = idleForHours({ focused: true, lastTouchedAt: NOW - 1 * HOUR })
+    expect(focusedReclaimBlockedBy(pane, THRESHOLD, 2 * HOUR, NOW)).toBe('focused')
+  })
+
+  it('still refuses for every other reason', () => {
+    const awaiting = idleForHours({ focused: true, displayStatus: 'awaiting', lastTouchedAt: NOW - 9 * HOUR })
+    expect(focusedReclaimBlockedBy(awaiting, THRESHOLD, 2 * HOUR, NOW)).toBe('not-idle')
+    const draft = idleForHours({ focused: true, hasDraft: true, lastTouchedAt: NOW - 9 * HOUR })
+    expect(focusedReclaimBlockedBy(draft, THRESHOLD, 2 * HOUR, NOW)).toBe('has-draft')
+  })
+
+  it('treats no signal at all as not old', () => {
+    const pane = idleForHours({ focused: true, lastTouchedAt: 0 })
+    expect(focusedReclaimBlockedBy(pane, THRESHOLD, 2 * HOUR, NOW)).toBe('focused')
+  })
+
+  it('leaves unfocused panes to the normal rule', () => {
+    const pane = idleForHours({ lastTouchedAt: NOW - 3 * HOUR })
+    expect(focusedReclaimBlockedBy(pane, THRESHOLD, 0, NOW)).toBe(reclaimBlockedBy(pane, THRESHOLD, NOW))
   })
 })

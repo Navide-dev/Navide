@@ -43,10 +43,30 @@ const emitManifest: Plugin = {
   },
 }
 
+// Monaco's language worker managers carry a fallback
+// `createWorker: () => new Worker(new URL('<x>.worker.js', import.meta.url))`,
+// used only when MonacoEnvironment.getWorker is absent. @navide/plugin-ui always
+// installs getWorker, and its packed dist ships those workers already bundled,
+// so Vite would emit every language worker twice (the TypeScript one is ~7MB)
+// for a fallback that never runs. Drop the fallback; fail the build if Monaco
+// changes shape so the duplicate cannot silently return.
+const monacoWorkerFallback = /createWorker: \(\) => new Worker\(new URL\('(?:css|ts|html|json)\.worker\.js', import\.meta\.url\), \{ type: "module" \}\),/
+const dropMonacoWorkerFallbacks: Plugin = {
+  name: 'drop-monaco-worker-fallbacks',
+  enforce: 'pre',
+  transform(code, id) {
+    // Match the file, not the request: an id can carry `?v=<hash>` or another query.
+    const file = id.split('?', 1)[0]
+    if (!/[/\\]monaco-editor[/\\]esm[/\\]vs[/\\]language[/\\](?:css|typescript|html|json)[/\\]workerManager\.js$/.test(file)) return null
+    if (!monacoWorkerFallback.test(code)) throw new Error(`Monaco worker fallback not found in ${id}`)
+    return { code: code.replace(monacoWorkerFallback, 'createWorker: undefined,'), map: null }
+  },
+}
+
 export default defineConfig({
   root: frontendRoot,
   base: './',
-  plugins: [vue(), emitManifest],
+  plugins: [vue(), emitManifest, dropMonacoWorkerFallbacks],
   build: {
     outDir: resolve(outputRoot, 'frontend'),
     emptyOutDir: true,

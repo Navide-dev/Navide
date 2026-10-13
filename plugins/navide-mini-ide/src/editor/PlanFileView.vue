@@ -176,7 +176,7 @@ const MermaidBlock = defineComponent({
         const id = ++seq
         try {
           const mermaid = (await import('mermaid')).default
-          mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', fontFamily: 'inherit' })
+          mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'strict', fontFamily: 'inherit', layout: 'dagre', look: 'classic' })
           const { svg: out } = await mermaid.render(`pfv-mermaid-${Math.random().toString(36).slice(2, 9)}`, code)
           if (id === seq) svg.value = out
         } catch {

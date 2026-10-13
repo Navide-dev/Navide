@@ -329,7 +329,7 @@ describe('backendErrorMessage localization', () => {
         t: (k, params) => i18n.global.t(k, params ?? {}),
         te: (k) => i18n.global.te(k),
       }),
-    ).toBe('後端外掛程式執行失敗。')
+    ).toBe('Navide 外掛後端執行失敗。')
 
     i18n.global.locale.value = 'en-US'
     expect(
@@ -337,7 +337,7 @@ describe('backendErrorMessage localization', () => {
         t: (k, params) => i18n.global.t(k, params ?? {}),
         te: (k) => i18n.global.te(k),
       }),
-    ).toBe('Backend plugin request failed.')
+    ).toBe('Navide plugin backend request failed.')
   })
 
   it('translates BACKEND_UNAVAILABLE to localized message', () => {

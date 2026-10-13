@@ -10,6 +10,7 @@
 // or rescan re-reads the transcript, which is why an old session still adds
 // up as long as its file exists.
 import { computed, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import type { useBackend } from '../composables/useBackend'
 import type { useCliProfiles } from '../composables/useCliProfiles'
@@ -480,8 +481,8 @@ defineExpose({ buildCsv })
 <template>
   <div class="ts-view">
     <div class="ts-toolbar">
-      <span v-if="pane" class="ts-pane-name" data-part="pane-name" :title="pane.agentLabel">{{ pane.agentLabel }}</span>
-      <span v-if="shortSession" class="ts-session" data-part="session" :title="result?.session_id">
+      <span v-if="pane" class="ts-pane-name" v-truncate data-part="pane-name">{{ pane.agentLabel }}</span>
+      <span v-if="shortSession" class="ts-session" v-truncate="result?.session_id" data-part="session">
         {{ t('turn-stats.session') }} {{ shortSession }}
       </span>
       <span class="ts-spacer" />
@@ -632,9 +633,9 @@ defineExpose({ buildCsv })
           <tr>
             <th class="c-idx">#</th>
             <th class="c-time">{{ t('turn-stats.col-time') }}</th>
-            <th v-if="hasAccounts" class="c-account">{{ t('turn-stats.col-account') }}</th>
+            <th v-if="hasAccounts" class="c-account" v-truncate>{{ t('turn-stats.col-account') }}</th>
             <th v-if="showVersion" class="c-version">{{ t('turn-stats.col-version') }}</th>
-            <th class="c-prompt">{{ t('turn-stats.col-prompt') }}</th>
+            <th class="c-prompt" v-truncate>{{ t('turn-stats.col-prompt') }}</th>
             <th class="c-num">{{ t('turn-stats.col-input') }}</th>
             <th class="c-num">{{ t('turn-stats.col-cache-read') }}</th>
             <th class="c-num">{{ t('turn-stats.col-cache-write') }}</th>
@@ -661,11 +662,11 @@ defineExpose({ buildCsv })
                 <span v-if="limitHitTurn === r.turn_index" class="ts-limit-mark" data-part="limit-mark" :title="limitHitTitle">⛔</span>{{ r.turn_index }}
               </td>
               <td class="c-time">{{ clock(r.started_at) }}</td>
-              <td v-if="hasAccounts" class="c-account" data-part="account" :class="{ unknown: turnAccount(r) === UNKNOWN_PROFILE_ID }" :title="turnAccount(r)">
+              <td v-if="hasAccounts" class="c-account" v-truncate data-part="account" :class="{ unknown: turnAccount(r) === UNKNOWN_PROFILE_ID }" :title="turnAccount(r)">
                 {{ accountLabel(r.profile_id) }}
               </td>
               <td v-if="showVersion" class="c-version" data-part="version">{{ r.cli_version || '—' }}</td>
-              <td class="c-prompt" :title="r.prompt_excerpt">
+              <td class="c-prompt" v-truncate>
                 <span :class="{ 'ts-no-prompt': !r.prompt_excerpt }">
                   {{ r.prompt_excerpt || t('turn-stats.no-prompt') }}
                 </span>
@@ -709,7 +710,7 @@ defineExpose({ buildCsv })
             <td class="c-time" />
             <td class="c-account" :title="sub.id" />
             <td v-if="showVersion" class="c-version" />
-            <td class="c-prompt">{{ t('turn-stats.row-subtotal', { account: sub.label, turns: sub.sum.turns }) }}</td>
+            <td class="c-prompt" v-truncate>{{ t('turn-stats.row-subtotal', { account: sub.label, turns: sub.sum.turns }) }}</td>
             <td class="c-num" data-part="input">{{ num(sub.sum.input) }}</td>
             <td class="c-num" data-part="cache-read">{{ num(sub.sum.cache_read) }}</td>
             <td class="c-num" data-part="cache-write">{{ num(sub.sum.cache_creation) }}</td>
@@ -722,7 +723,7 @@ defineExpose({ buildCsv })
             <td class="c-time" />
             <td v-if="hasAccounts" class="c-account" />
             <td v-if="showVersion" class="c-version" />
-            <td class="c-prompt">{{ t('turn-stats.row-total') }} ({{ t('turn-stats.account-turns', { turns: visibleTotals.turns }) }})</td>
+            <td class="c-prompt" v-truncate>{{ t('turn-stats.row-total') }} ({{ t('turn-stats.account-turns', { turns: visibleTotals.turns }) }})</td>
             <td class="c-num" data-part="input">{{ num(visibleTotals.input) }}</td>
             <td class="c-num" data-part="cache-read">{{ num(visibleTotals.cache_read) }}</td>
             <td class="c-num" data-part="cache-write">{{ num(visibleTotals.cache_creation) }}</td>

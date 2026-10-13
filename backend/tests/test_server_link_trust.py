@@ -53,6 +53,14 @@ from .test_server_link import (  # noqa: F401 - broadcasts is a fixture
     make_link,
 )
 
+
+@pytest.fixture(autouse=True)
+def _keychain_store(monkeypatch):
+    """These pin down the record kept in its Keychain item — the store before
+    the sealed file, and still the one used when the move cannot happen. The
+    sealed file's own cases are in test_trust_store_file_mode."""
+    monkeypatch.setattr(trust_store, "FILE_STORE", False)
+
 DENY_ALL = {"version": 1, "default": "deny", "rules": []}
 
 #: A well-formed X25519 public key for pins these tests write by hand. The
@@ -698,7 +706,19 @@ def test_the_state_document_is_written_on_one_line():
     assert raw and "\n" not in raw
 
 
-def test_the_device_cap_denies_rather_than_evicting():
+@pytest.fixture
+def file_vault(tmp_path, monkeypatch):
+    """The caps below are about the store's logic, not its backing. A macOS
+    Keychain item holds about eighteen pins before `security -i`'s line limit
+    refuses the write, so these run on the file vault Linux and Windows use."""
+    from agent_team_backend.credential_vault import CredentialVault
+
+    monkeypatch.setattr(app, "credential_vault", CredentialVault(
+        root=tmp_path / "file-vault", real_home=tmp_path / "file-home", platform="linux",
+    ))
+
+
+def test_the_device_cap_denies_rather_than_evicting(file_vault):
     """An evicted pin is a protection that disappears with nothing going wrong
     on screen — the exact shape this module treats as an error. Refusing the new
     one denies a device instead, which is visible."""
@@ -766,7 +786,7 @@ def test_device_identity_is_the_one_this_process_signs_as():
     assert device_identity.device_id()
 
 
-def test_a_flood_of_first_sightings_cannot_bury_a_key_change():
+def test_a_flood_of_first_sightings_cannot_bury_a_key_change(file_vault):
     """The relay chooses device ids, so it chooses how many first sightings get
     recorded. If the notice cap evicted whichever was oldest it could push a
     key-change warning off the end — the refusal would stand, but the only thing

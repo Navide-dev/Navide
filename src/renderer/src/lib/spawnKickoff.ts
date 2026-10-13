@@ -126,6 +126,12 @@ export interface KickoffLoopDeps {
     echo: EchoEvidence | null
     submit: SubmitEvidence | null
   }) => void
+  /** Press Enter on the copy the composer is holding, and answer whether it
+   *  left the box. Asked only when an attempt stopped on a held copy: a retype
+   *  there would ride along with the first copy, but Enter is the one
+   *  keystroke still missing. Optional — without it a held copy stays
+   *  'unverified', as it always has. */
+  resubmit?: () => Promise<boolean>
 }
 
 export type KickoffLoopResult =
@@ -141,6 +147,9 @@ export type KickoffLoopResult =
        *  and the pane had printed nothing. The caller's resend is the right
        *  cure here — nothing is in the composer to double. */
       untyped?: boolean
+      /** Sent only because `resubmit` pressed Enter on a copy the composer
+       *  was holding after the attempt itself could not be verified. */
+      resubmitted?: true
     }
 
 /** Type a new pane's task, and type it again if the first copy cannot be
@@ -175,6 +184,24 @@ export async function runKickoffAttempts(deps: KickoffLoopDeps): Promise<Kickoff
       attempt,
       maxAttempts: deps.maxAttempts,
     })
+    // Stopped on a copy the composer is holding (the only 'unverified' stop):
+    // observed 10-07 as "[Pasted text #1 +31 lines]" sitting unsent while the
+    // verdict went back to the caller, whose cli_send then reached the CLI
+    // through its hook and left the task stranded in the box. Enter is what
+    // that copy is missing, and it is ours on a pane we just spawned.
+    if (verdict.next === 'stop' && verdict.outcome === 'unverified' && deps.resubmit) {
+      if (!deps.paneAlive()) return { settled: false }
+      if (await deps.resubmit()) {
+        return {
+          settled: true,
+          outcome: 'sent',
+          retriedOut: false,
+          echo: last.echo,
+          submit: last.submit,
+          resubmitted: true,
+        }
+      }
+    }
     if (verdict.next === 'stop') {
       return {
         settled: true,
@@ -194,6 +221,65 @@ export async function runKickoffAttempts(deps: KickoffLoopDeps): Promise<Kickoff
   // attempt. Kept so a future change to that rule cannot silently fall out of
   // the loop with no verdict at all.
   return { settled: true, outcome: 'failed', retriedOut: true, echo: last.echo, submit: last.submit }
+}
+
+/** Press Enter on a kickoff copy held unsent in the composer, and watch it
+ *  leave — runKickoffAttempts' `resubmit`.
+ *
+ *  `held` reads the FRAMED box (injectEcho.framedComposerHolds): true holds our
+ *  copy, false is released, null has no frame to judge by. Only a true is ever
+ *  pressed on, before every Enter: a box that is already empty, or a screen
+ *  we cannot locate the box on, gets no keystroke. Up to `maxEnters` Enters,
+ *  each watched for `confirmMs` — an Enter sent right after a collapsed paste
+ *  appeared has been seen not to take, and the next one did. */
+export async function submitHeldCopy(deps: {
+  held: () => boolean | null
+  /** False when the keystroke could not be written. */
+  pressEnter: () => Promise<boolean>
+  sleep: (ms: number) => Promise<void>
+  now: () => number
+  confirmMs: number
+  maxEnters?: number
+  pollMs?: number
+}): Promise<boolean> {
+  const maxEnters = deps.maxEnters ?? 3
+  const pollMs = deps.pollMs ?? 200
+  for (let enter = 1; enter <= maxEnters; enter++) {
+    if (deps.held() !== true) return false
+    if (!(await deps.pressEnter())) return false
+    const deadline = deps.now() + deps.confirmMs
+    while (deps.now() < deadline) {
+      await deps.sleep(pollMs)
+      if (deps.held() === false) return true
+    }
+  }
+  return false
+}
+
+/** The prompt-ready gate's per-poll answer (waitForPromptReady, App.vue).
+ *
+ *  `idle` alone is not enough: the status machine leaves 'starting' on any raw
+ *  byte, and a Claude Code running its SessionStart hooks has printed only a
+ *  cursor save/restore — no clean byte at all — so it reads idle, nothing
+ *  grows, and two quiet seconds opened the gate on a CLI that had drawn
+ *  nothing (10-07: one kickoff flushed, one left as an unsent collapsed
+ *  paste). A pane at its prompt has drawn that prompt. */
+export function promptReadyNow(input: {
+  status: string | undefined
+  cleanBytes: number
+  quietMs: number
+  quietNeededMs: number
+}): boolean {
+  return input.status === 'idle' && input.cleanBytes > 0 && input.quietMs >= input.quietNeededMs
+}
+
+/** Whether a pane the gate gave up on is still initialising — the
+ *  `paneStarting` runKickoffAttempts leaves untyped. The status machine's
+ *  'starting' covers a pane that has printed no byte; a pane whose bytes were
+ *  all control sequences (zero clean output) has not drawn anything either,
+ *  and typing into it is typing into a CLI that may flush or misread it. */
+export function paneStillStarting(input: { status: string | undefined; cleanBytes: number }): boolean {
+  return input.status === 'starting' || input.cleanBytes <= 0
 }
 
 /** One-shot reporter for the `agent_spawn.kickoff` event.

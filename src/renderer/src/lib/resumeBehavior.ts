@@ -29,6 +29,71 @@ export function normalizeAutoResumeOnReconnect(v: unknown): boolean {
   return v !== false
 }
 
+/** Whether a manual relaunch brings back, by itself, the panes that were
+ *  working when the app closed (and the parents waiting on them). */
+export const RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY = 'agentTeam.resumeInterruptedOnLaunch'
+
+/** At most this many interrupted panes (parents included) come back on their
+ *  own after a relaunch; the rest stay placeholders, marked. Each CLI costs
+ *  real memory the moment it starts. */
+export const INTERRUPTED_RESUME_LIMIT = 6
+
+/** Guard for the resume-interrupted-on-launch setting. Default ON.
+ *
+ *  Not folded into autoResumeOnReconnect: that one answers a backend crash
+ *  inside a running app; this one answers a relaunch the user chose to do. */
+export function normalizeResumeInterruptedOnLaunch(v: unknown): boolean {
+  return v !== false
+}
+
+/** The persisted turn state for a pane's badge word. A running turn and a pane
+ *  parked on a permission box or a question ('awaiting') are both work the
+ *  relaunch interrupted. Null for every state that says nothing about a turn —
+ *  a placeholder (''), a booting CLI, a dead one — so nothing is written and
+ *  the last real state stands. */
+export function turnStateForStatus(status: string): 'working' | 'idle' | null {
+  if (status === 'running' || status === 'awaiting') return 'working'
+  if (status === 'idle') return 'idle'
+  return null
+}
+
+/** Whether a saved pane was interrupted by the app closing: it was working, or
+ *  it still owed its parent a report — its first turn never ended, even if it
+ *  went quiet long enough for the badge to read idle. */
+export function wasInterruptedAtLaunch(saved: {
+  last_turn_state?: string
+  report_pending?: boolean
+}): boolean {
+  return saved.last_turn_state === 'working' || saved.report_pending === true
+}
+
+/** Pick the placeholders a relaunch resumes by itself: interrupted panes,
+ *  visible ones first, each followed by its parent when that parent is also
+ *  still a placeholder (it is the one waiting on the report). Stops at `limit`,
+ *  parents counted. */
+export function interruptedRestoreTargetIds(opts: {
+  pending: readonly { id: string; interrupted: boolean; spawnedBy?: string }[]
+  visibleIds: readonly string[]
+  limit: number
+}): string[] {
+  const pendingIds = new Set(opts.pending.map((p) => p.id))
+  const visible = new Set(opts.visibleIds)
+  const interrupted = opts.pending.filter((p) => p.interrupted)
+  const ordered = [
+    ...interrupted.filter((p) => visible.has(p.id)),
+    ...interrupted.filter((p) => !visible.has(p.id)),
+  ]
+  const out: string[] = []
+  const add = (id: string): void => {
+    if (out.length < opts.limit && !out.includes(id)) out.push(id)
+  }
+  for (const p of ordered) {
+    add(p.id)
+    if (p.spawnedBy && pendingIds.has(p.spawnedBy)) add(p.spawnedBy)
+  }
+  return out
+}
+
 /** Guard for values read from the settings store: anything but a known
  *  behavior falls back to 'always' (the pre-preference behavior). */
 export function normalizeResumeBehavior(v: unknown): ResumeBehavior {

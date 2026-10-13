@@ -59,6 +59,9 @@ class _LoopWatchdog:
         self._thread.start()
 
     async def stop(self) -> None:
+        # stop() runs on the loop, so the loop is turning: stamp that before
+        # the tick task is cancelled, for the watcher's last look.
+        self._last_tick = time.monotonic()
         self._stop_requested.set()
         task, thread = self._task, self._thread
         self._task, self._thread = None, None
@@ -89,6 +92,10 @@ class _LoopWatchdog:
         while not self._stop_requested.wait(TICK_INTERVAL_S):
             last_tick = self._last_tick
             stalled_for = time.monotonic() - last_tick
+            if self._stop_requested.is_set():
+                # stop() landed after the poll timed out: the tick task is
+                # cancelled and the stamp ages without the loop stalling.
+                break
             if stalled_for >= STALL_THRESHOLD_S:
                 if stall_started_at is None:
                     stall_started_at = last_tick
@@ -103,9 +110,11 @@ class _LoopWatchdog:
                 stall_started_at = None
         # A stop can land between the loop turning again and the next poll, so
         # settle a pending stall here rather than dropping the recovery report.
+        # Any stamp newer than the stall means the loop turned again; the
+        # stamp's age says only how late this thread woke up.
         if stall_started_at is not None:
             last_tick = self._last_tick
-            if time.monotonic() - last_tick < STALL_THRESHOLD_S:
+            if last_tick > stall_started_at:
                 log.warning(
                     "event loop recovered after %.1fs stalled", last_tick - stall_started_at
                 )

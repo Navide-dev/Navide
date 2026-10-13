@@ -158,6 +158,13 @@ class FakeVault:
     def identity(self, agent_key: str, slot_id: str | None = None) -> dict[str, Any]:
         return {"email": None, "signedIn": False}
 
+    # No claude account has signed in inside its own config dir.
+    def account_dir_signed_in(self, slot_id: str) -> bool:
+        return False
+
+    def account_dir_identity(self, slot_id: str) -> dict | None:
+        return None
+
     # Claude slot snapshots — the switch reads the slot about to become live to
     # decide whether it can authenticate. Empty by default, so tests that do
     # not opt in see a signed-out slot.

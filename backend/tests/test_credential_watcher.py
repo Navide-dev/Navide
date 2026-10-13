@@ -336,6 +336,27 @@ async def test_reconcile_registers_an_unknown_account(
     assert [p["id"] for p in payload["profiles"]] == [work["id"], new_id]
 
 
+async def test_registering_an_unknown_account_never_logs_its_email(
+    store: CliProfilesStore,
+    events: list[dict[str, Any]],
+    codex_live,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A11: the backend log names the profile, never the account's email."""
+    work = store.create(agent_key="codex", name="Work")
+    store.set_default("codex", work["id"])
+    _write_slot("codex", work["id"], _codex_auth("work@example.com"))
+    codex_live("stranger@example.com")
+    caplog.set_level("DEBUG")
+
+    await reconcile_live_account("codex")
+
+    new_id = store.list()["defaults"]["codex"]
+    assert new_id in caplog.text
+    assert "stranger@example.com" not in caplog.text
+
+
 async def test_registration_failure_leaves_no_credential_less_profile(
     store: CliProfilesStore,
     events: list[dict[str, Any]],

@@ -1,7 +1,7 @@
 // happy-dom: promptSkills now pulls in the i18n instance, whose module
 // evaluation reads navigator.language for the initial locale.
 // @vitest-environment happy-dom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // vi.hoisted: the mock factory below is hoisted above this file's body, and
 // i18n calls settingsGet while the import graph is still evaluating — so the
@@ -23,6 +23,7 @@ import {
   isLoopSkill,
   loadPromptSkills,
   nextSkillId,
+  newSkillId,
   normalizePromptSkills,
   resolvePromptSkill,
   normalizeCustomIcon,
@@ -38,6 +39,8 @@ import {
   RING_SLOT_GAP,
   type PromptSkill,
 } from '../promptSkills'
+import { PROMPT_SKILL_SEED, seedText } from '../promptSkillSeed'
+import { i18n } from '@navide/plugin-ui/foundation'
 
 function skill(over: Partial<PromptSkill> = {}): PromptSkill {
   return {
@@ -181,9 +184,40 @@ describe('nextSkillId', () => {
   })
 })
 
+describe('newSkillId', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('adds a 6-hex random suffix to the slug, so two devices do not collide', () => {
+    expect(newSkillId([], 'Fix Until Green')).toMatch(/^fix-until-green-[0-9a-f]{6}$/)
+    expect(newSkillId([], '修到全綠')).toMatch(/^skill-[0-9a-f]{6}$/)
+    const seen = new Set(Array.from({ length: 50 }, () => newSkillId([], '修到全綠')))
+    expect(seen.size).toBe(50)
+  })
+
+  it('draws again when the suffix is already taken here', () => {
+    const bytes = [
+      [0xaa, 0xbb, 0xcc],
+      [0x01, 0x02, 0x03],
+    ]
+    vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(arr: T): T => {
+      ;(arr as unknown as Uint8Array).set(bytes.shift()!)
+      return arr
+    })
+    expect(newSkillId(['skill-aabbcc'], '修到全綠')).toBe('skill-010203')
+  })
+})
+
 describe('builtinPromptSkills', () => {
   it('carries the legacy default prompt verbatim', () => {
     expect(builtinPromptSkills()[0].prompt).toBe(DEFAULT_LOOP_PROMPT)
+  })
+
+  it('takes its id, prompt and localized name from the seed the backend reads too', () => {
+    const [skill] = builtinPromptSkills()
+    expect(skill.id).toBe(PROMPT_SKILL_SEED.id)
+    expect(DEFAULT_LOOP_PROMPT).toBe(PROMPT_SKILL_SEED.prompt)
+    expect(skill.name).toBe(seedText('name', i18n.global.locale.value))
+    expect(seedText('name', 'fr')).toBe(PROMPT_SKILL_SEED.name['zh-TW'])
   })
 })
 

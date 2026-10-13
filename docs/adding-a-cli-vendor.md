@@ -86,6 +86,17 @@ You never need to read or modify the shared orchestration code.
    and `test_quota_failover_login_contract.py` exercise the switch and sign-in
    flows through the real handlers — add your vendor to their vendor lists
    when you declare `account_switch`.
+10. Set `extensions` to say where the CLI keeps the CLI extensions it installs
+    for itself (plugins, extensions, hooks; see the [glossary](en-US/glossary.md)),
+    for the read-only inventory on Settings → CLI Extensions. Declare an
+    `ExtensionsSpec` of `ExtensionsSource` rows, each naming a reader in
+    `backend/agent_team_backend/cli_extensions.py`, a path under the user's
+    home and the vendor's own type label ("Codex hook"). A CLI with an
+    extension system whose location you have not verified declares
+    `ExtensionsSpec(supported=False, note=...)` rather than a guess; only a CLI
+    with no extension system at all leaves it `None`, which hides it from the
+    page. `backend/tests/test_cli_extensions.py` fails for a vendor that
+    declares nothing.
 
 ## Frontend
 

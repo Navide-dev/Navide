@@ -59,6 +59,47 @@ def test_host_token_matching_uses_the_private_copy_not_child_environment(
 
 
 @pytest.mark.asyncio
+async def test_without_a_stdin_host_token_host_register_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """R3-M2: a backend nobody handed a token on stdin (tests, run by hand)
+    refuses host.register; the token set from stdin is accepted."""
+    monkeypatch.setattr(app, "_HOST_SESSION_TOKEN", "")
+    session = _session()
+    await app.handle_message(session, {
+        "id": "none", "type": "host.register", "payload": {"token": ""},
+    })
+    assert session.host_authenticated is False
+
+    app.set_host_session_token("from-stdin")
+    await app.handle_message(session, {
+        "id": "stdin", "type": "host.register", "payload": {"token": "from-stdin"},
+    })
+    assert session.host_authenticated is True
+
+
+def test_the_spawn_environment_is_never_a_source_of_the_host_token() -> None:
+    """R3-M2: the variable is only scrubbed. A fresh interpreter importing app
+    with NAVIDE_BACKEND_HOST_TOKEN set must neither adopt it nor keep it."""
+    import os
+    import subprocess
+    import sys
+
+    script = (
+        "import os\n"
+        "from agent_team_backend import app\n"
+        "print(repr(app._HOST_SESSION_TOKEN), 'NAVIDE_BACKEND_HOST_TOKEN' in os.environ)\n"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", script],
+        env={**os.environ, "NAVIDE_BACKEND_HOST_TOKEN": "env-visible"},
+        capture_output=True, text=True, timeout=120,
+    )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == "'' False"
+
+
+@pytest.mark.asyncio
 async def test_unicast_host_skips_unauthenticated_sessions() -> None:
     unauthenticated = _session()
     authenticated = _session()

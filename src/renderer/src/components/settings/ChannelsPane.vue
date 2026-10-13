@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { isMacPlatform } from '@navide/plugin-ui/shared'
 import type { useBackend } from '../../composables/useBackend'
 import {
@@ -10,6 +11,7 @@ import {
   type ChannelAccountState,
   type ChannelLinkInvite,
   type ChannelManagedCreatedEvent,
+  type ChannelOverviewChat,
   type ChannelPlatform,
 } from '../../composables/useChannels'
 import {
@@ -19,6 +21,7 @@ import {
   type RegisteredChannelPlatform,
 } from '../../platform/channels'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
+import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsSection from './SettingsSection.vue'
 import SettingsCard from './SettingsCard.vue'
 import SettingRow from './SettingRow.vue'
@@ -34,6 +37,9 @@ import ToggleSwitch from './ToggleSwitch.vue'
  * the chat app with a fresh code. A Telegram bot in Bot Management Mode can also
  * create a new bot: Telegram opens a prefilled creation screen, and the bot it makes
  * arrives through the backend's quick add, then goes to its link guide the same way.
+ * Under each bot are the chats it knows and the panes bound to each (from
+ * channels.overview): jump to one, unbind one or several, clear orphans. The bot's
+ * less used actions sit in its ⋯ menu.
  */
 const props = defineProps<{
   backend: Pick<ReturnType<typeof useBackend>, 'send' | 'on' | 'status'>
@@ -325,7 +331,7 @@ function quickOpened(key: string, copied: boolean): void {
 function botLinked(key: string): void {
   delete quickAdded[key]
   if (quickStep[key]) quickStep[key] = 'done'
-  void loadChatCounts()
+  loadOverview()
 }
 
 function stepState(key: string, step: QuickStep): string {
@@ -354,7 +360,9 @@ async function createManaged(bot: BotRow): Promise<void> {
   try {
     const res = await store.managedCreate(bot.account)
     if (!res.ok || !res.data) {
-      managedError[bot.key] = res.error ?? t('channels.error.generic')
+      managedError[bot.key] = res.reason === 'manager_not_linked'
+        ? t('channels.managed.manager-not-linked')
+        : res.error ?? t('channels.error.generic')
       return
     }
     managedWaiting[bot.key] = res.data.request_id
@@ -368,10 +376,13 @@ function managedFailureText(ev: ChannelManagedCreatedEvent): string {
   // Only a request that ran out has no bot in Telegram; a quick add can time out too.
   if (ev.reason === 'timeout' && !ev.created) return t('channels.managed.timeout')
   if (ev.reason === 'token_unavailable') return t('channels.managed.token-unavailable')
+  if (ev.reason === 'creator_not_linked') return t('channels.managed.creator-not-linked')
   const error = ev.error || t('channels.error.generic')
-  return ev.reason === 'rejected' || ev.reason === 'timeout'
+  const text = ev.reason === 'rejected' || ev.reason === 'timeout'
     ? t(`channels.quick.${ev.reason}`, { platform: platformName('telegram'), error })
     : error
+  // The bot exists in Telegram even though it was not added: a blind retry makes a second one.
+  return ev.created ? `${text} ${t('channels.managed.created-note')}` : text
 }
 
 /** The created bot is added (or failed): hand its invite to its link guide, as quick add does. */
@@ -430,50 +441,98 @@ function isConnected(bot: BotRow): boolean {
   return bot.configured && bot.enabled && bot.status.connected && store.enabled.value
 }
 
-// Chats each connected bot knows: none yet means the row shows the linking
-// guide as the next step; some collapse it to a one-line summary.
-const chatCounts = reactive<Record<string, number>>({})
-// Why a count could not be read: the row shows it with a retry instead of
-// silently dropping the linking guide.
-const chatCountErrors = reactive<Record<string, string>>({})
+// The chats each bot knows and who is bound to each (channels.overview). A connected
+// bot with none shows the linking guide as the next step; otherwise its chats.
 const linkOpen = ref<string | null>(null)
 const connectedBots = computed(() =>
   specs.value.flatMap((s) => botsOf(s.id).filter(isConnected).map((b) => ({ platform: s.id, bot: b })))
 )
 const connectedKey = computed(() => connectedBots.value.map((c) => c.bot.key).join(','))
 
-// Loads overlap (every status patch re-runs this); only the latest may write.
-let chatCountLoad = 0
-
-async function loadChatCounts(): Promise<void> {
-  const load = ++chatCountLoad
-  await Promise.all(
-    connectedBots.value.map(async ({ platform, bot }) => {
-      const res = await store.locations(platform, bot.account)
-      if (load !== chatCountLoad) return
-      if (res.ok) {
-        chatCounts[bot.key] = res.data?.locations?.length ?? 0
-        delete chatCountErrors[bot.key]
-      } else {
-        chatCountErrors[bot.key] = res.error ?? t('channels.error.generic')
-      }
-    })
-  )
+function chatsOf(platform: ChannelPlatform, bot: BotRow): ChannelOverviewChat[] {
+  return store.overviewFor(platform, bot.account)?.chats ?? []
 }
 
-watch(
-  () => [store.platforms.value, store.lastLinked.value, connectedKey.value],
-  () => void loadChatCounts(),
-  { immediate: true }
-)
+function loadOverview(): void {
+  void store.loadOverview()
+}
+
+// Pane names and states change without channels.changed: fetch afresh whenever the page shows.
+onMounted(loadOverview)
+onMounted(() => void store.loadShareOpenNotify())
+onBeforeUnmount(() => store.releaseShareOpenNotify())
+watch(() => [store.lastLinked.value, connectedKey.value], loadOverview)
 
 // An invite waiting for the link guide, on a bot whose guide will not show
 // (its chats failed to load, or it is no longer connected), must not hold the steps at "opening".
 watch(
   () => Object.keys(quickStep).filter((k) => quickStep[k] === 'opening'
-    && (chatCountErrors[k] !== undefined || !connectedBots.value.some((c) => c.bot.key === k))),
+    && (!!store.overviewError.value || !connectedBots.value.some((c) => c.bot.key === k))),
   (stuck) => stuck.forEach(endQuickSteps)
 )
+
+/** "3 bots · 4 chats · 3 panes bound" for a configured platform. */
+function platformSummary(platform: ChannelPlatform): string {
+  const bots = store.platformState(platform)?.accounts.length ?? 0
+  const known = store.overview.value.filter((b) => b.platform === platform)
+  const chats = known.reduce((n, b) => n + b.chats.length, 0)
+  const panes = known.reduce((n, b) => n + b.chats.reduce((m, c) => m + c.bindings.filter((x) => x.pane.exists).length, 0), 0)
+  return t('channels.platform-summary', { bots, chats, panes })
+}
+
+// The ⋯ menu of one bot at a time; it closes on a pick, a click elsewhere, or Esc.
+const menuOpen = ref<string | null>(null)
+
+function closeMenu(e?: Event): void {
+  if (e instanceof KeyboardEvent && e.key !== 'Escape') return
+  if (e instanceof MouseEvent && (e.target as Element | null)?.closest?.('.ch-menu-wrap')) return
+  menuOpen.value = null
+}
+
+onMounted(() => {
+  document.addEventListener('mousedown', closeMenu)
+  document.addEventListener('keydown', closeMenu)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', closeMenu)
+  document.removeEventListener('keydown', closeMenu)
+})
+
+function menuPick(action: () => void): void {
+  menuOpen.value = null
+  action()
+}
+
+function askRemove(spec: RegisteredChannelPlatform, bot: BotRow): void {
+  if (expanded.value !== bot.key) openForm(spec, bot)
+  confirmingRemove.value = bot.key
+}
+
+// Bot Management Mode: one hint per platform for the connected bots that lack it,
+// until the user dismisses it on this machine.
+const MANAGED_HINT_KEY = 'navide.channels.managedHintDismissed'
+function readHintDismissed(): boolean {
+  try {
+    return localStorage.getItem(MANAGED_HINT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+const managedHintDismissed = ref(readHintDismissed())
+
+function dismissManagedHint(): void {
+  managedHintDismissed.value = true
+  try {
+    localStorage.setItem(MANAGED_HINT_KEY, '1')
+  } catch {
+    // Not remembered: it hides for this session only.
+  }
+}
+
+function botsWithoutManageMode(platform: ChannelPlatform): number {
+  if (platform !== 'telegram') return 0
+  return botsOf(platform).filter((b) => isConnected(b) && !b.status.can_manage_bots).length
+}
 
 function formatTime(ts: number | null | undefined): string {
   if (!ts) return ''
@@ -493,6 +552,21 @@ function formatTime(ts: number | null | undefined): string {
             :disabled="busy"
             :aria-label="t('channels.global.title')"
             @update:model-value="(v: boolean) => run(null, () => store.setGlobalEnabled(v))"
+          />
+        </template>
+      </SettingRow>
+      <SettingRow
+        v-if="store.shareOpenNotify.value !== null"
+        :title="t('channels.shareOpenNotify.title')"
+        :description="t('channels.shareOpenNotify.desc')"
+      >
+        <template #control>
+          <ToggleSwitch
+            data-testid="channels-share-open-notify-toggle"
+            :model-value="store.shareOpenNotify.value"
+            :disabled="busy"
+            :aria-label="t('channels.shareOpenNotify.title')"
+            @update:model-value="(v: boolean) => run(null, () => store.setShareOpenNotify(v))"
           />
         </template>
       </SettingRow>
@@ -520,6 +594,7 @@ function formatTime(ts: number | null | undefined): string {
                 >{{ t('channels.pending-count', { n: pendingCount(spec.id) }) }}</span>
               </div>
               <div class="ch-row-desc">{{ t(`channels.desc.${spec.id}`) }}</div>
+              <div v-if="isConfigured(spec.id) && store.overviewLoaded.value" class="ch-row-summary" data-testid="channel-platform-summary">{{ platformSummary(spec.id) }}</div>
             </div>
             <div class="ch-row-actions">
               <button
@@ -532,6 +607,18 @@ function formatTime(ts: number | null | undefined): string {
               >{{ t('channels.bot.add') }}</button>
             </div>
           </div>
+
+          <p v-if="botsWithoutManageMode(spec.id) && !managedHintDismissed" class="ch-platform-hint" data-testid="channel-managed-enable">
+            <span aria-hidden="true">ⓘ</span>
+            <span>{{ t('channels.managed.enable-hint', { n: botsWithoutManageMode(spec.id) }) }}</span>
+            <a
+              class="ch-setup-link"
+              :href="BOTFATHER_APP_URL"
+              data-testid="channel-managed-botfather"
+              @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
+            >{{ t('channels.managed.open-botfather') }}</a>
+            <button type="button" class="ch-link-btn" data-testid="channel-managed-dismiss" @click="dismissManagedHint">{{ t('channels.managed.dismiss') }}</button>
+          </p>
 
           <div v-for="bot in botsOf(spec.id)" :key="bot.key" class="ch-bot" :data-account="bot.account" data-testid="channel-bot">
             <div class="ch-bot-head">
@@ -551,10 +638,7 @@ function formatTime(ts: number | null | undefined): string {
                       <button type="submit" class="ch-btn primary sm" :disabled="busy" data-testid="channel-rename-save">{{ t('channels.save') }}</button>
                       <button type="button" class="ch-btn ghost sm" :disabled="busy" @click="renaming = null">{{ t('channels.cancel') }}</button>
                     </form>
-                    <template v-else>
-                      <span class="ch-bot-name" data-testid="channel-bot-name">{{ botLabel(bot) }}</span>
-                      <button type="button" class="ch-link-btn" :disabled="busy" data-testid="channel-rename" @click="startRename(bot)">{{ t('channels.bot.rename') }}</button>
-                    </template>
+                    <span v-else class="ch-bot-name" data-testid="channel-bot-name">{{ botLabel(bot) }}</span>
                   </template>
                   <span v-else-if="bot.isNew" class="ch-bot-name">{{ t('channels.bot.new') }}</span>
                   <span class="ch-pill" :class="statusTone(bot)" data-testid="channel-status">{{ statusText(bot) }}</span>
@@ -562,8 +646,8 @@ function formatTime(ts: number | null | undefined): string {
                 <div
                   v-if="bot.status.last_error"
                   class="ch-row-error"
+                  v-truncate
                   :class="statusTone(bot)"
-                  :title="bot.status.last_error"
                   data-testid="channel-last-error"
                 >{{ bot.status.last_error }}</div>
               </div>
@@ -575,9 +659,41 @@ function formatTime(ts: number | null | undefined): string {
                   :aria-label="t('channels.enable-platform', { platform: `${platformName(spec.id)} ${botLabel(bot)}` })"
                   @update:model-value="(v: boolean) => run(bot.key, () => store.setEnabled(spec.id, v, bot.account))"
                 />
-                <button v-if="!bot.isNew" type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
-                  {{ bot.configured ? t('channels.manage') : t('channels.connect') }}
+                <button v-if="!bot.isNew && !bot.configured" type="button" class="ch-btn ghost sm" data-testid="channel-manage" @click="toggleExpanded(spec, bot)">
+                  {{ t('channels.connect') }}
                 </button>
+                <div v-if="bot.configured" class="ch-menu-wrap">
+                  <button
+                    type="button"
+                    class="ch-btn ghost sm ch-menu-btn"
+                    data-testid="channel-bot-menu"
+                    aria-haspopup="menu"
+                    :aria-expanded="menuOpen === bot.key"
+                    :aria-label="t('channels.menu.label', { bot: botLabel(bot) })"
+                    @click="menuOpen = menuOpen === bot.key ? null : bot.key"
+                  >⋯</button>
+                  <div v-show="menuOpen === bot.key" class="ch-menu" role="menu" data-testid="channel-bot-menu-list">
+                    <button type="button" role="menuitem" :disabled="busy" data-testid="channel-rename" @click="menuPick(() => startRename(bot))">{{ t('channels.bot.rename') }}</button>
+                    <button type="button" role="menuitem" data-testid="channel-manage" @click="menuPick(() => toggleExpanded(spec, bot))">{{ t('channels.menu.connection') }}</button>
+                    <button
+                      v-if="spec.id === 'telegram' && isConnected(bot) && !managedWaiting[bot.key]"
+                      type="button"
+                      role="menuitem"
+                      :disabled="busy || !bot.status.can_manage_bots"
+                      data-testid="channel-managed-create"
+                      @click="menuPick(() => { managedAsk = bot.key })"
+                    >{{ t('channels.managed.create') }}<small v-if="!bot.status.can_manage_bots" class="ch-menu-note">{{ t('channels.menu.create-off') }}</small></button>
+                    <button
+                      v-if="isConnected(bot)"
+                      type="button"
+                      role="menuitem"
+                      data-testid="channel-link-account"
+                      :aria-expanded="linkOpen === bot.key"
+                      @click="menuPick(() => { linkOpen = linkOpen === bot.key ? null : bot.key })"
+                    >{{ t('channels.link.link-account') }}</button>
+                    <button type="button" role="menuitem" class="danger" :disabled="busy" data-testid="channel-remove-bot" @click="menuPick(() => askRemove(spec, bot))">{{ t('channels.menu.remove') }}</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -593,72 +709,47 @@ function formatTime(ts: number | null | undefined): string {
             </template>
             <p v-else-if="quickAdded[bot.key]" class="ch-form-hint" data-testid="channel-quick-added">{{ t('channels.quick.added') }}</p>
 
-            <div v-if="spec.id === 'telegram' && isConnected(bot)" class="ch-managed">
-              <template v-if="bot.status.can_manage_bots">
-                <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
-                <template v-else-if="managedAsk === bot.key">
-                  <p class="ch-form-hint" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
-                  <div class="ch-form-actions">
-                    <button type="button" class="ch-btn ghost sm" data-testid="channel-managed-cancel" @click="managedAsk = null">{{ t('channels.cancel') }}</button>
-                    <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.create') }}</button>
-                  </div>
-                </template>
-                <button
-                  v-else
-                  type="button"
-                  class="ch-btn ghost sm"
-                  :disabled="busy"
-                  data-testid="channel-managed-create"
-                  @click="managedAsk = bot.key"
-                >{{ t('channels.managed.create') }}</button>
+            <div
+              v-if="spec.id === 'telegram' && isConnected(bot) && (managedWaiting[bot.key] || managedAsk === bot.key || managedError[bot.key])"
+              class="ch-managed"
+            >
+              <p v-if="managedWaiting[bot.key]" class="ch-form-hint" data-testid="channel-managed-waiting">{{ t('channels.managed.waiting') }}</p>
+              <template v-else-if="managedAsk === bot.key && bot.status.can_manage_bots">
+                <p class="ch-form-hint" data-testid="channel-managed-disclose">{{ t('channels.managed.disclose', { manager: bot.status.identity }) }}</p>
+                <div class="ch-form-actions">
+                  <button type="button" class="ch-btn ghost sm" data-testid="channel-managed-cancel" @click="managedAsk = null">{{ t('channels.cancel') }}</button>
+                  <button type="button" class="ch-btn primary sm" :disabled="busy" data-testid="channel-managed-confirm" @click="createManaged(bot)">{{ t('channels.managed.create') }}</button>
+                </div>
               </template>
-              <p v-else class="ch-form-hint" data-testid="channel-managed-enable">
-                {{ t('channels.managed.enable-mode') }}
-                <a
-                  class="ch-setup-link"
-                  :href="BOTFATHER_APP_URL"
-                  data-testid="channel-managed-botfather"
-                  @click.prevent="openSetupLink(BOTFATHER_APP_URL)"
-                >BotFather</a>
-              </p>
               <p v-if="managedError[bot.key]" class="ch-error" role="alert" data-testid="channel-managed-error">{{ managedError[bot.key] }}</p>
             </div>
 
+            <div v-if="isConnected(bot) && store.overviewError.value" class="ch-link" data-testid="channel-link-block">
+              <div class="ch-link-summary">
+                <span class="ch-link-error" role="alert">{{ t('channels.link.count-failed', { error: store.overviewError.value }) }}</span>
+                <button type="button" class="ch-btn ghost sm" data-testid="channel-link-retry" @click="loadOverview">{{ t('action.retry') }}</button>
+              </div>
+            </div>
             <div
-              v-if="isConnected(bot) && (chatCounts[bot.key] !== undefined || chatCountErrors[bot.key])"
-              class="ch-link"
-              :class="{ next: !chatCounts[bot.key] }"
+              v-else-if="isConnected(bot) && store.overviewLoaded.value
+                && (!chatsOf(spec.id, bot).length || (quickStep[bot.key] && quickStep[bot.key] !== 'done'))"
+              class="ch-link next"
               data-testid="channel-link-block"
             >
-              <div v-if="chatCountErrors[bot.key]" class="ch-link-summary">
-                <span class="ch-link-error" role="alert">{{ t('channels.link.count-failed', { error: chatCountErrors[bot.key] }) }}</span>
-                <button type="button" class="ch-btn ghost sm" data-testid="channel-link-retry" @click="loadChatCounts">{{ t('action.retry') }}</button>
-              </div>
-              <template v-else-if="!chatCounts[bot.key] || (quickStep[bot.key] && quickStep[bot.key] !== 'done')">
-                <div class="ch-link-title" data-testid="channel-next-step">{{ t('channels.link.next-step') }}</div>
-                <p class="ch-link-desc">{{ t('channels.link.next-step-desc', { platform: platformName(spec.id) }) }}</p>
-                <ChannelLinkGuide
-                  :store="store"
-                  :platform="spec.id"
-                  :account="bot.account"
-                  :initial-invite="quickInvite[bot.key] ?? null"
-                  @opened="(copied) => quickOpened(bot.key, copied)"
-                  @linked="botLinked(bot.key)"
-                />
-              </template>
-              <template v-else>
-                <div class="ch-link-summary">
-                  <span data-testid="channel-linked-summary">{{ t('channels.link.linked-summary', { n: chatCounts[bot.key] }) }}</span>
-                  <button
-                    type="button"
-                    class="ch-btn ghost sm"
-                    data-testid="channel-link-account"
-                    :aria-expanded="linkOpen === bot.key"
-                    @click="linkOpen = linkOpen === bot.key ? null : bot.key"
-                  >{{ t('channels.link.link-account') }}</button>
-                </div>
-                <ChannelLinkGuide v-if="linkOpen === bot.key" :store="store" :platform="spec.id" :account="bot.account" @linked="loadChatCounts" />
-              </template>
+              <div class="ch-link-title" data-testid="channel-next-step">{{ t('channels.link.next-step') }}</div>
+              <p class="ch-link-desc">{{ t('channels.link.next-step-desc', { platform: platformName(spec.id) }) }}</p>
+              <ChannelLinkGuide
+                :store="store"
+                :platform="spec.id"
+                :account="bot.account"
+                :initial-invite="quickInvite[bot.key] ?? null"
+                @opened="(copied) => quickOpened(bot.key, copied)"
+                @linked="botLinked(bot.key)"
+              />
+            </div>
+            <div v-else-if="chatsOf(spec.id, bot).length" class="ch-link" data-testid="channel-link-block">
+              <ChannelChatBindings :store="store" :chats="chatsOf(spec.id, bot)" :busy="busy" />
+              <ChannelLinkGuide v-if="linkOpen === bot.key && isConnected(bot)" :store="store" :platform="spec.id" :account="bot.account" @linked="loadOverview" />
             </div>
 
             <form v-if="expanded === bot.key" class="ch-form" @submit.prevent="usesQuickAdd(spec, bot) ? quickAdd(spec, bot) : save(spec, bot)">
@@ -741,8 +832,8 @@ function formatTime(ts: number | null | undefined): string {
         <div v-for="req in store.pairing.value" :key="`${req.platform}:${req.code}`" class="ch-item" data-testid="pairing-row">
           <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(req.platform) }}</span>
           <div class="ch-item-text">
-            <span class="ch-item-name">{{ req.sender_name || req.sender_id }}</span>
-            <span class="ch-item-meta">{{ platformName(req.platform) }}<template v-if="entryBot(req.platform, req.account)"> · <span data-testid="pairing-bot">{{ entryBot(req.platform, req.account) }}</span></template> · {{ formatTime(req.created_at) }}</span>
+            <span class="ch-item-name" v-truncate>{{ req.sender_name || req.sender_id }}</span>
+            <span class="ch-item-meta" v-truncate>{{ platformName(req.platform) }}<template v-if="entryBot(req.platform, req.account)"> · <span data-testid="pairing-bot">{{ entryBot(req.platform, req.account) }}</span></template> · {{ formatTime(req.created_at) }}</span>
           </div>
           <code class="ch-code">{{ req.code }}</code>
           <div class="ch-row-actions">
@@ -758,8 +849,8 @@ function formatTime(ts: number | null | undefined): string {
         <div v-for="entry in store.allow.value" :key="`${entry.platform}:${entry.account}:${entry.sender_id}`" class="ch-item" data-testid="allow-row">
           <span class="ch-mark sm" aria-hidden="true">{{ badgeOf(entry.platform) }}</span>
           <div class="ch-item-text">
-            <span class="ch-item-name">{{ entry.sender_name || entry.sender_id }}</span>
-            <span class="ch-item-meta">{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }}</span>
+            <span class="ch-item-name" v-truncate>{{ entry.sender_name || entry.sender_id }}</span>
+            <span class="ch-item-meta" v-truncate>{{ platformName(entry.platform) }}<template v-if="entryBot(entry.platform, entry.account)"> · <span data-testid="allow-bot">{{ entryBot(entry.platform, entry.account) }}</span></template> · {{ entry.sender_id }}</span>
           </div>
           <div class="ch-row-actions">
             <button type="button" class="ch-btn ghost sm" :disabled="busy" data-testid="allow-remove" @click="run(null, () => store.removeAllow(entry.platform, entry.sender_id, entry.account))">{{ t('channels.allow.remove') }}</button>
@@ -800,6 +891,58 @@ function formatTime(ts: number | null | undefined): string {
 .ch-row-title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .ch-row-name { font-size: var(--font-row-title); font-weight: 600; color: var(--text-bright); }
 .ch-row-desc { font-size: var(--font-row-desc); color: var(--text-secondary); }
+.ch-row-summary { font-size: var(--font-2xs); color: var(--text-muted); }
+.ch-platform-hint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  font-size: var(--font-row-desc);
+  color: var(--text-secondary);
+}
+.ch-platform-hint .ch-setup-link { align-self: auto; }
+
+/* A bot's ⋯ menu: the actions used less often than its switch. */
+.ch-menu-wrap { position: relative; }
+.ch-menu-btn { min-width: 28px; font-weight: 700; letter-spacing: 0.08em; }
+.ch-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-overlay, var(--bg-base));
+  box-shadow: var(--shadow-popover);
+}
+.ch-menu > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  font: inherit;
+  font-size: var(--font-xs);
+  text-align: left;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.ch-menu > button:hover:not(:disabled) { background: var(--bg-muted); }
+.ch-menu > button:disabled { opacity: 0.55; cursor: not-allowed; }
+.ch-menu > button.danger { color: var(--danger-fg); }
+.ch-menu-note { font-size: var(--font-3xs); color: var(--text-secondary); }
 .ch-row-error {
   font-size: var(--font-row-desc);
   color: var(--text-secondary);

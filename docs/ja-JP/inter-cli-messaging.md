@@ -443,6 +443,26 @@ task: Review the diff on this branch and report blocking issues.
 完了したことを確かめるには、`cli_get_status` / `cli_wait_idle` で自分で状態を確認して
 ください。
 
+### 作業を終えた Pane の回収
+
+子 Pane が報告を終え作業が完了したら、親 Pane はユーザーから取り上げずにそのリソー
+スを解放できます：
+
+```
+cli_reclaim_agent(target="<子の名前>")
+```
+
+`cli_close_agent` と同じ `target` / `pane_id` を受け付け、子 Pane を持つウィンドウに
+届きます。複数をまとめて回収するには、自分のウィンドウで
+`ui_invoke(action="ui.pane.reclaim", args={"paneId": [...]})` を使ってください。各 CLI
+プロセスは終了し、Pane はその場に会話を保った
+ままクリックで再開できるカードとして残ります — ステータスバーの「今すぐ回収」と同じ
+動作なので、ユーザーは開いて成果を確認できます。ステータスバーのガードはそのまま適用
+され、ビジーまたは回答待ちの Pane、ユーザーがフォーカスしている Pane、未送信の入力や
+キュー中のメッセージがある Pane、セッションを再開できない Pane は拒否されます。戻り値は
+`{reclaimed, refused: [{paneId, reason, detail}]}` です。会話を完全に終わらせる
+`cli_close_agent` よりこちらを優先してください。
+
 ---
 
 ## 配信の実際の仕組み
@@ -810,7 +830,17 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `paused` | この Window の配信が一時停止中 |
 | `gone` | 対象 Pane がもう存在しない |
 | `remote-ack` | 別の Window へ送信済みで、その報告を待っている |
+| `remote-busy` | 別のデバイスへ送信済みで 1 分以上応答がなく、対象 Pane は Turn の途中（`cli_check_message` のみ） |
+| `remote-unreported` | 別のデバイスへ送信済みで 1 分以上応答がなく、対象 Pane は作業中ではない（`cli_check_message` のみ） |
 | `cancelling` | 別の Window に取り消しを要求し、その答えを待っている |
+
+別のデバイスへのメッセージには必ず応答があります。受信側の Backend は渡されたすべての
+メッセージに Ack を返し（処理に失敗したものも `receiver-error` として）、接続が失われて
+送れなかった Ack は次の接続で再送します。送信側の Backend はその Ack で送信元 Window の
+行を確定させ（出力したブロックから送ったものも同様）、まだ応答のないメッセージを
+`messages.get` で Server に問い合わせます。自分の接続が戻ったときに 1 回、その後は
+1 分を超えたメッセージについて毎分です。失敗または拒否されたリモートメッセージには、
+相手の理由が `<state>: <reason>`（例：`rejected: not-paired`）の形で付きます。
 
 `cli_send` を通じて入ってきたメッセージは、その Hold を Backend にも報告します。
 そのため送信元の Agent は、見るべき Messages パネルがなくても同じ理由を読み取れます
@@ -829,8 +859,10 @@ MCP の `cli_send` から、あるいは別の Machine から中継されたも�
 | `rate-limit` / `queue-full` | 上記の Guard Rail |
 | `pane-closed` | 配信前に対象が閉じた |
 | `inject-failed` / `inject-error` | Pane への入力が通らなかった |
+| `delivery-unconfirmed` | 失敗ではない：Resume 直後の CLI に入力・送信したが、受信がまだ示されていない。行は delivered にこの注記付きで表示される。再送前に Pane を確認すること。Transcript にメッセージが現れると注記は消える |
 | `window-reloaded` | In-flight の間に Window が Reload した |
 | `no-report` | 相手の Window が結果を報告しなかった |
+| `receiver-error` | 別のデバイスが受け取ったが、処理中に失敗した。トレースバックはその Backend の Log にある。再試行で成功する可能性がある |
 | `unknown-workspace` / `ambiguous-workspace` | `<folder>/<pane>` アドレスが、開いている Workspace のどれにも一致しなかった、または複数に一致した |
 | `unknown-target-in-workspace` / `ambiguous-target` | Workspace は解決したが、Pane 名が一致しなかった、または 2 つに一致した |
 | `unknown-pane-id` | このマシンのどの Pane も指さない `pane_id` — `cli_list_targets` から新しいものを読み直す |

@@ -265,6 +265,23 @@ describe('TerminalStorageOwnerService', () => {
     }
   })
 
+  it('survives an owner view whose webContents is gone during an app quit', async () => {
+    const service = new TerminalStorageOwnerService({
+      preloadPath: '/app/terminal-owner-preload.js',
+      entry: () => ({ filePath: '/app/legacy-mini-ide/index.html' }),
+    })
+    const first = service.execute('legacy-mini-ide', request())
+    void first.catch(() => {})
+    const stale = electron.FakeWebContentsView.instances[0] as unknown as { webContents: unknown }
+    // Electron leaves view.webContents undefined once the view is torn down.
+    stale.webContents = undefined
+    expect(() => electron.emit('terminal-owner:ready', readyEvent(new electron.FakeWebContents()))).not.toThrow()
+    const second = service.execute('legacy-mini-ide', request())
+    void second.catch(() => {})
+    expect(electron.FakeWebContentsView.instances).toHaveLength(2)
+    expect(() => service.dispose()).not.toThrow()
+  })
+
   it('checks canDispatch before creating an owner and again after readiness', async () => {
     const service = new TerminalStorageOwnerService({
       preloadPath: '/app/terminal-owner-preload.js',

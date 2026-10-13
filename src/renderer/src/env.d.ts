@@ -78,6 +78,7 @@ declare global {
         onMaximizeChanged: (cb: (maximized: boolean) => void) => () => void
       }
       getBackendInfo: () => Promise<BackendInfo>
+      proveWindow?: (nonce: string) => Promise<string | null>
       restartBackend: () => Promise<BackendInfo>
       stopBackend: () => Promise<{ ok: boolean }>
       onBackendChanged: (cb: (info: BackendInfo) => void) => void
@@ -86,6 +87,7 @@ declare global {
       repairPlansStorageRecord: () => Promise<{ ok: boolean; repaired: boolean; reason?: string }>
       onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
+      onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void
@@ -93,6 +95,7 @@ declare global {
       pickWorkspace: (defaultPath?: string) => Promise<string | null>
       newWorkspace: () => Promise<NewWorkspaceResult>
       getHomeDir: () => Promise<string>
+      dockSurfaceProvided?: (surface: string) => Promise<boolean>
       listOpenWorkspaces: () => Promise<string[]>
       focusWorkspaceWindow: (workspacePath: string) => Promise<boolean>
       reportAdoptedWorkspaces: (paths: string[]) => void
@@ -213,6 +216,7 @@ declare global {
         subject?: string,
       ) => Promise<{ nonce: string; expires: string; mac: string } | null>
       openLegal: (route: LegalRoute) => Promise<{ ok: boolean; error?: string }>
+      openSpotlightSettings: () => Promise<{ ok: boolean; error?: string }>
       onSwitchEditorSidebar: (cb: (sidebar: string) => void) => void
       onOpenEditorDiff: (cb: (params: Record<string, string>) => void) => void
       readKeybindings: () => Promise<{ ok: boolean; content?: string; error?: string }>
@@ -228,9 +232,12 @@ declare global {
         quitLabel: string
         cancelLabel: string
         dontShowLabel: string
+        cancelledMessage: string
+        cancelledDetail: string
+        cancelledUnknownWindow: string
       }) => void
       onQuitConfirmDisabled: (cb: () => void) => () => void
-      onQuitProgress: (cb: (stage: 'saving' | 'stopping' | 'closing') => void) => () => void
+      onQuitProgress: (cb: (stage: 'saving' | 'stopping' | 'closing' | 'cancelled') => void) => () => void
       onWindowVisibility: (cb: (visible: boolean) => void) => () => void
       readHealthCheckTimeout: () => Promise<{ ok: boolean; timeoutSec?: number }>
       writeHealthCheckTimeout: (timeoutSec: number) => Promise<{ ok: boolean; error?: string }>

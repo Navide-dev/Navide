@@ -47,7 +47,9 @@ def _self_check_conpty() -> int:
 if len(sys.argv) > 2 and sys.argv[1] == "--self-check" and sys.argv[2] == "conpty":
     raise SystemExit(_self_check_conpty())
 
+import faulthandler  # noqa: E402
 import os  # noqa: E402
+import signal  # noqa: E402
 import socket  # noqa: E402
 
 import threading  # noqa: E402
@@ -57,26 +59,54 @@ import uvicorn  # noqa: E402
 
 from . import __version__, osplat  # noqa: E402
 from .app import app as _fastapi_app, cli_risk_service  # noqa: E402
+from . import app as _app_module  # noqa: E402
 from . import confirm_token, ws_auth  # noqa: E402
 from .applog import backend_port_file, setup_file_logging  # noqa: E402
 
 
-def _read_confirm_key() -> str:
+def _read_confirm_key(stream=None) -> str:
     """The first line of stdin, or "" when there is nothing there.
 
     Never blocks a backend started by hand: the app closes the pipe straight
     after writing, so EOF is the ordinary answer for every other caller, and a
     terminal that is a tty is not read from at all.
     """
+    stream = sys.stdin if stream is None else stream
     try:
-        if sys.stdin is None or sys.stdin.closed or sys.stdin.isatty():
+        if stream is None or stream.closed or stream.isatty():
             return ""
-        return sys.stdin.readline().strip()
+        return stream.readline().strip()
     except Exception:  # noqa: BLE001 - startup must not die over a missing pipe
         return ""
 
 
+def _read_handover(stream=None) -> tuple[str, str]:
+    """``(confirm key, host token)`` from the first line of stdin.
+
+    Main writes both on that one line, separated by a space. One line, not
+    two: a launcher that writes a single line and keeps the pipe open for the
+    `shutdown` line (Windows, the cli_regression harness) must not leave the
+    backend waiting on a second one. No host token on the line means none.
+    """
+    confirm, _, host = _read_confirm_key(stream).partition(" ")
+    return confirm, host.strip()
+
+
 SHUTDOWN_LINE = "shutdown"
+
+# Set only by the cli_regression harness: a backend that does not exit after
+# the shutdown line gets SIGUSR1 before it is killed, and this dumps every
+# thread's stack to stderr so the step it hung in is on record. Unset (every
+# real launch) nothing is registered. Windows has no SIGUSR1.
+SHUTDOWN_DIAG_ENV = "NAVIDE_SHUTDOWN_DIAG"
+
+
+def _register_shutdown_diag(environ=None) -> bool:
+    environ = os.environ if environ is None else environ
+    if environ.get(SHUTDOWN_DIAG_ENV) != "1" or not hasattr(signal, "SIGUSR1"):
+        return False
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
+    return True
 
 
 def _watch_stdin_for_shutdown(server: "uvicorn.Server", stream=None) -> None:
@@ -101,6 +131,14 @@ def _watch_stdin_for_shutdown(server: "uvicorn.Server", stream=None) -> None:
         return
 
 
+# How long uvicorn waits on in-flight requests after SIGTERM before the
+# lifespan teardown (and with it the PTY sweep) starts. See the call site.
+# Parked rewake long-polls always use all of it, and the sweep after it waits
+# out the largest vendor SIGTERM grace — both must fit inside main's SIGKILL
+# timer (tests/test_shutdown_budget.py), so this stays short.
+_GRACEFUL_SHUTDOWN_S = 0.5
+
+
 def _watch_parent_for_shutdown(
     server: "uvicorn.Server", pid: int, *, interval_s: float = 2.0, is_alive=None, identity=None
 ) -> None:
@@ -122,13 +160,23 @@ def _watch_parent_for_shutdown(
     """
     alive = is_alive or osplat.process_tree.is_alive
     identity_of = identity or osplat.process_tree.identity
-    # "" means the identity could not be read (e.g. the parent already exited):
-    # fall back to the liveness check alone rather than exit on an empty match.
+    log = logging.getLogger("agent_team_backend.main")
+    # "" means the probe could not read the identity (a `ps` that timed out on a
+    # loaded machine): that is "unknown", never "gone". An unread original is
+    # captured on a later poll; until then liveness is the only check.
     original_identity = identity_of(pid)
     while not server.should_exit:
-        if not alive(pid) or (original_identity and identity_of(pid) != original_identity):
-            logging.getLogger("agent_team_backend.main").info(
-                "parent process %d is gone; shutting down", pid
+        if not alive(pid):
+            log.info("parent process %d is gone (no such process); shutting down", pid)
+            server.should_exit = True
+            return
+        current = identity_of(pid)
+        if current and not original_identity:
+            original_identity = current
+        elif current and current != original_identity:
+            log.info(
+                "parent process %d is gone (identity changed %r -> %r); shutting down",
+                pid, original_identity, current,
             )
             server.should_exit = True
             return
@@ -148,6 +196,7 @@ def main() -> int:
     )
     log = logging.getLogger("agent_team_backend")
     log_file = setup_file_logging(args.log_level)
+    _register_shutdown_diag()
     log.info("starting backend version=%s", __version__)
     log.info("backend log file: %s", log_file)
     print(f"AGENT_TEAM_BACKEND_LOG path={log_file}", flush=True)
@@ -192,13 +241,22 @@ def main() -> int:
     # Absent is normal for a backend nobody spawned from the app (the tests, a
     # developer running this by hand); it means the six trust-changing actions
     # refuse rather than that they stop being checked.
-    if confirm_token.set_key(_read_confirm_key()):
+    confirm_key, host_token = _read_handover()
+    if confirm_token.set_key(confirm_key):
         log.info("adopted the trust-confirmation key from the parent process")
     else:
         log.info(
             "no trust-confirmation key on stdin; actions that change device "
             "trust will be refused on this backend"
         )
+
+    # The host token rides on the same line, for the same reason: the
+    # environment it used to travel in is readable with `ps -E`. Absent means
+    # host.register refuses and every connection is an ordinary ws client.
+    if _app_module.set_host_session_token(host_token):
+        log.info("adopted the host token from the parent process")
+    else:
+        log.info("no host token on stdin; host.register will be refused on this backend")
 
     # Use the already-imported app object so PyInstaller can detect this
     # dependency statically (string-based import is invisible to the bundler).
@@ -219,6 +277,13 @@ def main() -> int:
         # tight server-side timeout closes connections that are busy, not dead.
         ws_ping_interval=20.0,
         ws_ping_timeout=60.0,
+        # Every idle Claude pane parks a rewake long-poll here (curl -m 1860).
+        # Unbounded, shutdown closes the listener and then waits on all of them,
+        # leaving a process with no port that the app never sees exit — so it
+        # never respawns it. Bounded, the parked requests are cancelled (the
+        # hook reads a dropped connection as "nothing to report") and the
+        # lifespan teardown runs.
+        timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_S,
     )
     server = uvicorn.Server(config)
     threading.Thread(
@@ -234,6 +299,7 @@ def main() -> int:
     print(f"AGENT_TEAM_BACKEND_LISTEN host={args.host} port={resolved_port}", flush=True)
 
     server.run()
+    log.info("shutdown: server stopped")
     return 0
 
 

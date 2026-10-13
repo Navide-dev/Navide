@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import statistics
 import sys
 import threading
 import time
@@ -211,12 +212,25 @@ def test_commits_are_not_blocked_by_a_reader_holding_the_journal(db, tmp_path):
     # handle an antivirus or indexer scan leaves on a freshly written file.
     journal = tmp_path / "navide.db-journal"
     db.kv_set("seed", 0, now=0)
-    journal.touch()  # DELETE mode has no journal between commits
-    started = time.monotonic()
-    with open(journal, "rb"):
-        for i in range(50):
+    # Each commit under the reader is paired with one just before it without:
+    # a runner's disk speed drifts within a single test (a writer test with no
+    # reader ran 3s on one run and 24s on another, and the CI failure saw its
+    # baseline phase at 5.4s and the held phase at 19s), so only neighbours
+    # are comparable. A reader stalling deletes costs ~1.4s of SQLite retry
+    # sleeps per commit or fails it outright; the median pair shrugs off a
+    # one-off hiccup but not a cost every commit pays.
+    extra = []
+    for i in range(50):
+        started = time.perf_counter()
+        db.kv_set(f"base{i}", i, now=i)
+        free = time.perf_counter() - started
+        journal.touch()  # DELETE mode has no journal between commits
+        with open(journal, "rb"):
+            started = time.perf_counter()
             db.kv_set(f"k{i}", i, now=i)
-    assert time.monotonic() - started < 10
+            held = time.perf_counter() - started
+        extra.append(held - free)
+    assert statistics.median(extra) < 0.1
     assert db.kv_get("k49") == 49
 
 

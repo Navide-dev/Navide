@@ -429,12 +429,22 @@ async def _speak(session: _Session, sid: str, blocks: range, pause: float = 0.06
         await asyncio.sleep(pause)
 
 
+@pytest.fixture
+def no_partial_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Partials are never cancelled for running long. A cancelled partial
+    applies no hypothesis, so the next one hears twice the new audio and the
+    window can pass the cap by that much: on a loaded machine (CI) a decode
+    can outrun the 2 s budget at any step. The budget has its own tests."""
+    monkeypatch.setattr(voice_handlers, "_PARTIAL_BUDGET_MIN_S", float("inf"))
+
+
 async def _speak_in_step(session: _Session, sid: str, blocks: range, timeout: float = 5.0) -> None:
     """Like _speak, but each partial hears the same amount of new audio: two
     blocks (the least a partial waits for) go in, then nothing more until the
     partials have caught up. _speak's pace is wall-clock, so how much audio a
     partial takes in depends on the machine (and on Windows' 15.6 ms clock);
-    the window size scales with it."""
+    the window size scales with it. Tests using it also need
+    no_partial_budget, or a partial cancelled under load breaks the step."""
     for i in blocks:
         await _speak(session, sid, range(i, i + 1), pause=0.0)
         if (i - blocks.start) % 2 == 0:
@@ -527,6 +537,7 @@ async def test_missing_or_unknown_script_sends_none(stream: Path, script: Any) -
     assert {r["script"] for r in _requests(stream)} == {None}
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_streaming_dedup_compares_converted_text(stream: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Every other run hears the "Simplified" forms; the sidecar converts them
     # all to Traditional, so the overlap still matches and no word repeats.
@@ -559,6 +570,7 @@ async def test_unstable_tail_is_never_committed(stream: Path, monkeypatch: pytes
     assert stop["text"][:-1] == _text(12) and stop["text"][-1].isdigit()
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_window_advances_so_each_partial_stays_bounded(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -716,6 +728,7 @@ def test_strip_overlap() -> None:
     assert voice_handlers._strip_overlap("最後,", ["當你放開按鍵,"])[1] is False
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_force_trim_when_no_agreement_at_cap(stream: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Every segment ends in a digit that changes per request, so no two
     # hypotheses agree: only the cap moves the window. Fed in step with the
@@ -741,6 +754,7 @@ async def test_force_trim_when_no_agreement_at_cap(stream: Path, monkeypatch: py
     assert all(ch in heard for ch in _text(40)), stop["text"]
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_late_boundaries_step_back_but_never_past_the_cap(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -822,6 +836,7 @@ def test_a_forced_cut_on_collapsed_timestamps_is_not_placed_late() -> None:
     assert rec.committed_until < 9000 * ms
 
 
+@pytest.mark.usefixtures("no_partial_budget")
 async def test_stop_after_an_unverified_advance_transcribes_only_the_short_tail(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -862,19 +877,34 @@ async def test_busy_partials_are_skipped_not_queued(stream: Path, monkeypatch: p
 async def test_a_partial_after_a_slow_one_does_not_wait_for_the_next_second(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Each partial takes 1.2 s of a 1 s interval: the next one starts right
-    # after it, not at the following whole-second tick (0.8 s later).
-    monkeypatch.setattr(voice_handlers, "PARTIAL_INTERVAL_S", 1.0)
-    monkeypatch.setenv("FAKE_STT_DELAY_S", "1.2")
+    # A partial that outlasts the interval is followed as soon as it is done,
+    # not at the next interval tick. The interval is one no test lasts long
+    # enough to wait out, and the slow partial is made slow by moving its start
+    # back past the interval: a loop that waits for the clock never starts the
+    # second partial, however fast this machine is. Timing the gap between
+    # sidecar requests instead measured the machine (CI's loaded macOS runner
+    # took over 0.5 s to turn one partial into the next).
+    monkeypatch.setattr(voice_handlers, "PARTIAL_INTERVAL_S", 600.0)
     session = _Session()
     sid = (await _send(session, "voice.start", {}))["sessionId"]
-    await _speak(session, sid, range(16), pause=0.2)
-    await _settle(session)
-    requests = [r for r in _requests(stream) if r["segments"]]
-    assert len(requests) >= 2, requests
-    # Serial, one at a time, and back to back (timed by the sidecar's clock).
-    assert all(0 <= b["start"] - a["end"] < 0.5 for a, b in zip(requests, requests[1:])), requests
+    rec = voice_handlers._active
+    rec.partial_started = time.monotonic() - voice_handlers.PARTIAL_INTERVAL_S
+    await _speak(session, sid, range(4), pause=0.0)
+    first = await _next_partial(rec, None)
+    rec.partial_started -= voice_handlers.PARTIAL_INTERVAL_S  # it outlasted the interval
+    await _speak(session, sid, range(4, 8), pause=0.0)
+    await _next_partial(rec, first)
+    assert first.done()  # serial: never started beside the previous one
     await _send(session, "voice.cancel", {"sessionId": sid})
+
+
+async def _next_partial(rec: voice_handlers._Recording, previous: asyncio.Task | None, timeout: float = 5.0) -> asyncio.Task:
+    """Wait for a partial other than ``previous`` to start."""
+    deadline = time.monotonic() + timeout
+    while rec.partial is None or rec.partial is previous:
+        assert time.monotonic() < deadline, "no partial started"
+        await asyncio.sleep(0.01)
+    return rec.partial
 
 
 async def test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on(
@@ -1000,6 +1030,67 @@ async def test_cancel_deletes_audio_the_sidecar_still_holds_open(
     with pytest.raises(asyncio.CancelledError):
         await partial
     assert not list(voice.glob("navide-voice-*.pcm"))
+
+
+async def test_cancel_still_deletes_audio_when_the_budget_expires_mid_cleanup(
+    stream: Path, voice: Path, windows_delete: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The partial's budget timeout fires while its cleanup is still waiting
+    # for the sidecar to let go (a cold sidecar eats most of the budget): the
+    # partial must not end before the audio is gone.
+    monkeypatch.setenv("FAKE_STT_DELAY_S", "5")
+    monkeypatch.setenv("FAKE_STT_HOLD_S", "1.0")
+    removing = threading.Event()
+    remove = voice_handlers._remove
+
+    def flag_remove(path: Path) -> None:
+        removing.set()
+        remove(path)
+
+    monkeypatch.setattr(voice_handlers, "_remove", flag_remove)
+    session = _Session()
+    sid = (await _send(session, "voice.start", {}))["sessionId"]
+    await _speak(session, sid, range(8), pause=0.0)
+    deadline = time.monotonic() + 30
+    while not list(voice.glob("navide-voice-*.pcm.held")):
+        if time.monotonic() > deadline:
+            pytest.fail("the sidecar never opened a partial's audio")
+        await asyncio.sleep(0.005)
+    partial = voice_handlers._active.partial
+    await _send(session, "voice.cancel", {"sessionId": sid})
+    assert await asyncio.to_thread(removing.wait, 10)
+    partial.cancel()  # what the budget's asyncio.timeout does when it expires
+    with pytest.raises(asyncio.CancelledError):
+        await partial
+    assert not list(voice.glob("navide-voice-*.pcm"))
+
+
+async def test_audio_held_past_the_retry_window_is_deleted_once_released(
+    stream: Path, voice: Path, windows_delete: None, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Something holds the file longer than _remove retries for: the speech
+    # must still go once it is released, not wait for a sweep of old files.
+    monkeypatch.setenv("FAKE_STT_DELAY_S", "5")
+    monkeypatch.setenv("FAKE_STT_HOLD_S", "1.0")
+    monkeypatch.setattr(voice_handlers, "_REMOVE_RETRY_S", 0.1)
+    session = _Session()
+    sid = (await _send(session, "voice.start", {}))["sessionId"]
+    await _speak(session, sid, range(8), pause=0.0)
+    deadline = time.monotonic() + 30
+    while not list(voice.glob("navide-voice-*.pcm.held")):
+        if time.monotonic() > deadline:
+            pytest.fail("the sidecar never opened a partial's audio")
+        await asyncio.sleep(0.005)
+    partial = voice_handlers._active.partial
+    await _send(session, "voice.cancel", {"sessionId": sid})
+    with pytest.raises(asyncio.CancelledError):
+        await partial
+    deadline = time.monotonic() + 30
+    while list(voice.glob("navide-voice-*.pcm")):
+        if time.monotonic() > deadline:
+            pytest.fail("the audio stayed on disk after the sidecar let go of it")
+        await asyncio.sleep(0.05)
+    assert not list(voice.glob("navide-voice-*.pcm.held"))
 
 
 async def test_start_sweeps_audio_a_failed_delete_left_behind(voice: Path) -> None:

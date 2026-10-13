@@ -90,6 +90,8 @@ export interface AppMenuHooks {
   onShowShortcuts?: () => void
   /** Help menu: reopen the What's New announcement (and its guided tour). */
   onShowWhatsNew?: () => void
+  /** Help menu: replay the first-run welcome tour. */
+  onShowWelcomeTour?: () => void
   /** Help menu: open one of the legal pages on navide.dev (see shared/legalLinks). */
   onOpenLegal?: (route: LegalRoute) => void
   /** View menu: route Reload Window through the native close preparation. */
@@ -363,6 +365,7 @@ export function installApplicationMenu(
         { type: 'separator' },
         { label: s.shortcuts, click: () => hooks.onShowShortcuts?.() },
         { label: s.whatsNew, click: () => hooks.onShowWhatsNew?.() },
+        { label: s.welcomeTour, click: () => hooks.onShowWelcomeTour?.() },
         { type: 'separator' },
         // One entry per page, in the table's order, so the menu and the site
         // can only disagree by editing the table.

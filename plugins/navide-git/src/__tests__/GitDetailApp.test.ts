@@ -43,6 +43,7 @@ vi.mock('@navide/plugin-sdk', () => ({
 }))
 
 vi.mock('@navide/plugin-ui/foundation', () => ({
+  vTruncate: {},
   useNotify: () => notify,
   i18n: { global: { t: (key: string) => key } },
 }))

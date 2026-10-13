@@ -14,8 +14,11 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import { formatBytes } from '../../lib/formatBytes'
+import SyncRecordSummary from '../SyncRecordSummary.vue'
+import { visible } from '../../lib/syncVisible'
 import {
   SHARE_SCOPES,
   bundleItemCount,
@@ -54,6 +57,14 @@ const bundleDescription = ref('')
 /** The document being imported, held only between preview and apply. */
 const incoming = ref<Record<string, unknown> | null>(null)
 const previewRows = ref<ImportPreviewRow[]>([])
+
+/** What an MCP overwrite would replace here: url, command and args (JSON). */
+function localLine(local: Record<string, unknown>): string {
+  return ['url', 'command', 'args']
+    .filter((key) => local[key] !== undefined)
+    .map((key) => key + ' ' + visible(typeof local[key] === 'string' ? local[key] : JSON.stringify(local[key])))
+    .join(' · ')
+}
 const previewPicked = ref<Set<string>>(new Set())
 const resultRows = ref<ImportResultRow[]>([])
 const stripped = ref<Set<string>>(new Set())
@@ -341,7 +352,7 @@ onMounted(load)
           />
           <label class="sh-item-body" :for="'sh-' + scope + '-' + item.id">
             <span class="sh-item-line">
-              <span class="sh-item-label">{{ item.label }}</span>
+              <span class="sh-item-label" v-truncate>{{ item.label }}</span>
               <span class="sh-item-size">{{ formatBytes(item.size) }}</span>
               <span v-if="item.hasSecrets" class="sh-tag sh-tag--secret">
                 {{ t('settings.sharing.bundle.has-secrets') }}
@@ -427,7 +438,7 @@ onMounted(load)
           <label class="sh-item-body" :for="'shp-' + row.scope + '-' + row.id">
             <span class="sh-item-line">
               <span class="sh-item-scope">{{ t('settings.sync.scope-' + row.scope) }}</span>
-              <span class="sh-item-label">{{ row.id }}</span>
+              <span class="sh-item-label" v-truncate>{{ row.id }}</span>
               <span class="sh-tag" :class="'sh-tag--' + row.action">
                 {{ t('settings.sharing.bundle.action-' + row.action) }}
               </span>
@@ -439,6 +450,12 @@ onMounted(load)
             <span v-if="needsCredentials(row)" class="sh-item-reason">
               {{ t('settings.sharing.bundle.needs-credentials-hint', { fields: missingFields(row) }) }}
             </span>
+            <!-- What this row would write, whole: the same view a sync
+                 approval gives, so ticking it is a decision about it. -->
+            <span v-if="row.local" class="sh-item-reason sh-item-local">
+              {{ t('settings.sharing.bundle.replaces-here', { what: localLine(row.local) }) }}
+            </span>
+            <SyncRecordSummary v-if="row.summary" :summary="row.summary" />
           </label>
         </li>
       </ul>
@@ -468,7 +485,7 @@ onMounted(load)
           <span class="sh-item-body">
             <span class="sh-item-line">
               <span class="sh-item-scope">{{ t('settings.sync.scope-' + row.scope) }}</span>
-              <span class="sh-item-label">{{ row.id }}</span>
+              <span class="sh-item-label" v-truncate>{{ row.id }}</span>
               <span class="sh-tag" :class="'sh-tag--' + row.action">
                 {{ t('settings.sharing.bundle.action-' + row.action) }}
               </span>

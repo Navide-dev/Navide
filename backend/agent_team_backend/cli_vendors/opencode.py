@@ -40,6 +40,7 @@ from pathlib import Path
 
 import re
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -732,7 +733,17 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("code-files", (".config", "opencode", "plugins"), "opencode plugin"),
+    ExtensionsSource("npm-list", (".config", "opencode", "opencode.json"), "opencode plugin", section=("plugin",)),
+    ExtensionsSource("npm-list", (".config", "opencode", "opencode.jsonc"), "opencode plugin", section=("plugin",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="opencode",
     # Arbitrary provider config; a selected quota provider is not a CLI host set.
     expected_hosts=(),

@@ -261,3 +261,85 @@ async def test_a_bot_that_did_not_start_is_not_reported_added(env: Env, monkeypa
     res = await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT)
     assert not res["ok"] and res["reason"] == "invalid"
     _no_trace(env)
+
+
+async def test_a_held_channels_lock_ends_in_a_timeout_before_the_window_gives_up(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", 0.3)
+    _login_as(env, "ready")
+    await env.m._lock.acquire()  # another channels operation that never finishes
+    try:
+        res = await asyncio.wait_for(env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT), 3)
+    finally:
+        env.m._lock.release()
+    assert not res["ok"] and res["reason"] == "timeout"
+    await asyncio.sleep(0.05)
+    _no_trace(env)
+    # Nothing is left half-added: the same bot can be added again.
+    assert (await env.m.quick_add("telegram", {}, {"token": "tok-Q"}, ACCOUNT))["ok"]
+
+
+async def test_a_login_past_the_deadline_is_undone(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_TIMEOUT_S", 5.0)
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", 0.3)
+    _login_as(env, "silent")
+    res = await asyncio.wait_for(env.m.quick_add("telegram", {}, {"token": "tok-slow"}, ACCOUNT), 3)
+    assert not res["ok"] and res["reason"] == "timeout"
+    for _ in range(100):
+        if ("telegram", ACCOUNT) not in env.store.accounts() and env.m.adapter_for("telegram", ACCOUNT) is None:
+            break
+        await asyncio.sleep(0.02)
+    _no_trace(env)
+
+
+async def test_a_lock_held_while_the_login_waits_does_not_stretch_the_deadline(env: Env, monkeypatch) -> None:
+    # The undo needs the channels lock; waiting for it inline kept quick add
+    # past its deadline whenever another operation held that lock.
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_TIMEOUT_S", 5.0)
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", 0.3)
+    _login_as(env, "silent")
+    adding = asyncio.ensure_future(env.m.quick_add("telegram", {}, {"token": "tok-slow"}, ACCOUNT))
+    for _ in range(100):
+        if ("telegram", ACCOUNT) in env.store.accounts():
+            break
+        await asyncio.sleep(0.01)
+    await env.m._lock.acquire()  # another channels operation, mid-way
+    try:
+        done, _ = await asyncio.wait({adding}, timeout=1.0)
+        assert done, "quick add waited for the lock past its deadline"
+        res = adding.result()
+        assert not res["ok"] and res["reason"] == "timeout"
+    finally:
+        env.m._lock.release()
+        if not adding.done():
+            await adding
+    for _ in range(100):
+        if ("telegram", ACCOUNT) not in env.store.accounts() and env.m.adapter_for("telegram", ACCOUNT) is None:
+            break
+        await asyncio.sleep(0.02)
+    _no_trace(env)
+
+
+async def test_a_credential_still_being_stored_at_the_deadline_is_removed_too(env: Env, monkeypatch) -> None:
+    # The Keychain write runs in a thread: cancelled at the deadline, the call
+    # stops waiting but the write still lands, after the undo found nothing
+    # stored. That left the credential in the vault with no bot behind it.
+    import time
+
+    monkeypatch.setattr(mgr_mod, "QUICK_ADD_DEADLINE_S", 0.1)
+    _login_as(env, "ready")
+
+    async def slow_write(name: str, secret: str | None) -> None:
+        def work() -> None:
+            time.sleep(0.4)
+            env.fake.secrets[name] = secret
+
+        await asyncio.to_thread(work)
+
+    monkeypatch.setattr(env.m._seams, "write_secret", slow_write)
+    res = await asyncio.wait_for(env.m.quick_add("telegram", {}, {"token": "tok-K"}, ACCOUNT), 3)
+    assert not res["ok"] and res["reason"] == "timeout"
+    for _ in range(150):
+        if env.fake.secrets.get(f"channel-telegram-{ACCOUNT}", "") is None:
+            break
+        await asyncio.sleep(0.02)
+    _no_trace(env)

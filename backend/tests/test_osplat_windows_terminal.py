@@ -426,7 +426,8 @@ class TestIdentity:
         assert _windows.process_tree.start_time(55) == "1700000000.25"
         assert _windows.process_tree.identity(55) == "55:1700000000.25"
         assert _windows.process_tree.start_time(404) == ""
-        assert _windows.process_tree.identity(404) == "404:"
+        # A failed read is "unknown", not an identity to compare against.
+        assert _windows.process_tree.identity(404) == ""
 
     def test_snapshot_uses_pid_as_group_and_orphans_stale_parents(self, monkeypatch):
         rows = {

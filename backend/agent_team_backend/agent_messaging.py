@@ -433,6 +433,13 @@ def resolve_alias(pane_id: str) -> str:
     return alias.pane_id if alias is not None else ""
 
 
+def former_ids(pane_id: str) -> list[str]:
+    """Every former id that now resolves to this pane (the inverse of
+    resolve_alias). Chains are flattened as they grow, so one pass finds them
+    all."""
+    return [former for former, alias in _ALIASES.items() if alias.pane_id == pane_id]
+
+
 def owner_of(pane_id: str) -> Any:
     """The WS connection currently mirroring ``pane_id``, or None when no live
     window holds it (never registered, or its window disconnected)."""

@@ -130,8 +130,8 @@ def test_the_inventory_flags_a_server_that_carries_secrets(settings, mcp_store, 
     assert rows["bare"]["hasSecrets"] is False
 
 
-def test_importing_keeps_the_key_this_machine_already_had(settings, mcp_store, skills):
-    """A colleague's bundle must not blank out the token you are using."""
+def test_importing_a_changed_server_does_not_hand_it_this_machines_key(settings, mcp_store, skills):
+    """A colleague's bundle that changes what the server runs gets no token of yours."""
     mcp_store.replace_servers(
         [{"name": "keyed", "transport": "stdio", "command": "npx", "env": {"API_KEY": "mine"}}]
     )
@@ -156,9 +156,24 @@ def test_importing_keeps_the_key_this_machine_already_had(settings, mcp_store, s
     assert outcome["mcp_changed"] is True
     stored = {s["name"]: s for s in mcp_store.list_servers()}["keyed"]
     assert stored["args"] == ["--new"]  # the bundle's record did land
-    assert stored["env"]["API_KEY"] == "mine"  # ... without losing the local key
+    # It runs something else than this machine's record (new args), so this
+    # machine's key is not handed to it (security review R9-2).
+    assert stored["env"]["API_KEY"] == ""
     # A key with nothing local stays visible and unset, so the user can fill it.
     assert stored["env"]["NEW_ONE"] == ""
+
+
+def test_importing_the_same_server_keeps_the_key_this_machine_already_had(settings, mcp_store, skills):
+    """A colleague's bundle for the very same server must not blank out the
+    token you are using."""
+    mcp_store.replace_servers(
+        [{"name": "keyed", "transport": "stdio", "command": "npx", "args": ["--x"], "env": {"API_KEY": "mine"}}]
+    )
+    bundle = _bundle({"mcp": {"keyed": {"name": "keyed", "transport": "stdio", "command": "npx",
+                                         "args": ["--x"], "env": {"API_KEY": ""}, "enabled": False}}})
+    settings_bundle.apply_import(bundle, {"mcp": ["keyed"]})
+    stored = {s["name"]: s for s in mcp_store.list_servers()}["keyed"]
+    assert stored["env"] == {"API_KEY": "mine"} and stored["enabled"] is False
 
 
 def test_the_preview_names_the_values_the_importer_has_to_supply(settings, mcp_store, skills):
@@ -378,25 +393,30 @@ def test_a_refused_record_leaves_the_others_alone_and_says_so(settings, mcp_stor
 
 # ── memory ───────────────────────────────────────────────────────────────────
 def test_project_scope_instruction_files_are_never_collected(
-    settings, mcp_store, skills, monkeypatch
+    settings, mcp_store, skills, monkeypatch, tmp_path
 ):
     """Repository files belong to git; two systems writing one file is how both
     of them end up wrong."""
+    (tmp_path / "home.md").write_text("home\n")
+    (tmp_path / "repo.md").write_text("repo\n")
 
     class FakeFile:
         def __init__(self, scope, relative, path):
             self.scope, self.relative, self.path = scope, relative, path
             self.exists, self.error = True, ""
+            self.readers = ("claude",)
 
     monkeypatch.setattr(
         native_memory,
         "scan",
         lambda *a, **k: [
-            FakeFile(native_memory.USER_SCOPE, ".claude/CLAUDE.md", "/home/u/.claude/CLAUDE.md"),
-            FakeFile(native_memory.PROJECT_SCOPE, "CLAUDE.md", "/repo/CLAUDE.md"),
+            FakeFile(native_memory.USER_SCOPE, ".claude/CLAUDE.md", str(tmp_path / "home.md")),
+            FakeFile(native_memory.PROJECT_SCOPE, "CLAUDE.md", str(tmp_path / "repo.md")),
         ],
     )
-    monkeypatch.setattr(native_memory, "read", lambda path, *a, **k: {"text": f"text of {path}"})
+    monkeypatch.setattr(
+        native_memory, "read", lambda path, *a, **k: {"text": f"text of {path}", "exists": True}
+    )
 
     listed = {row["id"] for row in settings_bundle.inventory()["memory"]}
     assert listed == {".claude/CLAUDE.md"}

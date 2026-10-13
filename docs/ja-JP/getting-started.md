@@ -2,7 +2,7 @@
 
 [English](../en-US/getting-started.md) | [繁體中文](../zh-TW/getting-started.md) | 日本語 | [ドキュメント](README.md)
 
-Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。[最新の GitHub Release](https://github.com/nt-nerdtechnic/Navide/releases/latest) では、Developer ID で署名され Apple の Notarization を通過した macOS 向けの DMG と ZIP、Windows x64 および Arm64 向けの NSIS Installer、Linux x64 向けの AppImage と `.deb` を提供しています。GitHub からのダウンロードが遅い、または失敗する場合は、同じファイルを dl.navide.dev のミラーからも配信しています。README のダウンロード一覧には各ファイルの隣に「ミラー」リンクがあり、navide.dev はミラーに到達できるとき自動的にそちらへ切り替えます。
+Navide は Apple silicon 上の macOS 13 以降、Linux x64、x64 および Arm 版 Windows をサポートします。[最新の GitHub Release](https://github.com/Navide-dev/Navide/releases/latest) では、Developer ID で署名され Apple の Notarization を通過した macOS 向けの DMG と ZIP、Windows x64 および Arm64 向けの NSIS Installer、Linux x64 向けの AppImage と `.deb` を提供しています。GitHub からのダウンロードが遅い、または失敗する場合は、同じファイルを dl.navide.dev のミラーからも配信しています。README のダウンロード一覧には各ファイルの隣に「ミラー」リンクがあり、navide.dev はミラーに到達できるとき自動的にそちらへ切り替えます。
 
 macOS にインストールするには、DMG をダウンロードして Navide を Applications にコピーし、そのまま開きます。Gatekeeper の回避は不要です。
 
@@ -35,7 +35,7 @@ x64 向けに 2 種類のパッケージを配布しています。
 ## Source からインストール
 
 ```bash
-git clone https://github.com/nt-nerdtechnic/Navide.git
+git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 pnpm install
 uv --project backend sync

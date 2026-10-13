@@ -14,6 +14,7 @@ import contextlib
 import logging
 import random
 import time
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import httpx
@@ -24,6 +25,7 @@ from .base import (
     AdapterStatus,
     ChannelAuthError,
     ChannelSendError,
+    MediaTooLarge,
     backoff_delay,
 )
 
@@ -42,6 +44,10 @@ SEND_MAX_RETRIES = 3
 # off, or a server that accepts and closes would be retried at the first step
 # forever.
 READY_STABLE_S = 60.0
+
+# How long a reconnect the server asked for waits when the previous one also
+# ended in such a request without a stable session in between.
+RECONNECT_NOW_MIN_S = 1.0
 
 # How long a stop waits for a cancelled receive task before cancelling it again.
 CANCEL_RETRY_S = 0.5
@@ -150,8 +156,12 @@ class ReceiveLoop:
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await inner
 
+    def _was_stable(self) -> bool:
+        return self._ready_at is not None and time.monotonic() - self._ready_at >= self.stable_s
+
     async def _run(self) -> None:
         attempt = 0
+        reconnects_in_row = 0
         while not self._stopping:
             self._ready_at = None
             try:
@@ -168,16 +178,23 @@ class ReceiveLoop:
                 log.warning("channel %s blocked: %s", self.name, self.status.last_error)
                 return
             except ReconnectNow as exc:
+                # A stable session ends any backoff series, as a drop after one would.
+                if self._was_stable():
+                    attempt = 0
+                    reconnects_in_row = 0
+                reconnects_in_row += 1
                 self.status.connected = False
                 self.status.lifecycle = "recovering"
                 log.info("channel %s reconnecting: %s", self.name, exc)
+                if reconnects_in_row > 1:
+                    await asyncio.sleep(RECONNECT_NOW_MIN_S)
                 continue
             except Exception as exc:  # noqa: BLE001 - every drop reconnects
                 if self._stopping:
                     break
+                reconnects_in_row = 0
                 # Only a connection that stayed ready starts a fresh backoff series.
-                stable = self._ready_at is not None and time.monotonic() - self._ready_at >= self.stable_s
-                attempt = 1 if stable else attempt + 1
+                attempt = 1 if self._was_stable() else attempt + 1
                 self.status.connected = False
                 self.status.lifecycle = "recovering"
                 self.status.reconnect_attempts = attempt
@@ -285,3 +302,71 @@ def error_text(resp: httpx.Response) -> str:
             if body.get(key):
                 return f"HTTP {resp.status_code}: {body[key]}"
     return f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+
+# A whole download, not one read: a server dripping bytes under the read timeout would
+# otherwise hold the chat's worker for as long as it likes.
+DOWNLOAD_TOTAL_S = 300.0
+# How much of a failed download's error body is read to explain it.
+ERROR_BODY_MAX_BYTES = 4096
+
+
+async def download_to(
+    client: httpx.AsyncClient, url: str, dest: Path, max_bytes: int, *,
+    headers: dict[str, str] | None = None,
+) -> int:
+    """Stream ``url`` into ``dest`` and return its size. Past ``max_bytes`` (declared or
+    counted) raise ``MediaTooLarge``; any status but 200, or the whole transfer taking
+    past ``DOWNLOAD_TOTAL_S``, raises ``ChannelSendError``. A redirect is not followed (it
+    could carry a credential header to another host). ``dest`` is removed whenever no
+    complete file was written."""
+    try:
+        return await asyncio.wait_for(_download(client, url, dest, max_bytes, headers),
+                                      DOWNLOAD_TOTAL_S)
+    except TimeoutError as exc:
+        dest.unlink(missing_ok=True)
+        raise ChannelSendError(f"download timed out after {DOWNLOAD_TOTAL_S:g}s") from exc
+
+
+async def _error_head(resp: httpx.Response) -> httpx.Response:
+    """``resp`` with only the first ``ERROR_BODY_MAX_BYTES`` of its body, for error_text."""
+    head = b""
+    async for chunk in resp.aiter_bytes():
+        head += chunk
+        if len(head) >= ERROR_BODY_MAX_BYTES:
+            break
+    return httpx.Response(resp.status_code, headers=resp.headers, content=head[:ERROR_BODY_MAX_BYTES])
+
+
+async def _download(
+    client: httpx.AsyncClient, url: str, dest: Path, max_bytes: int, headers: dict[str, str] | None,
+) -> int:
+    try:
+        async with client.stream("GET", url, headers=headers, follow_redirects=False) as resp:
+            if resp.status_code != 200:
+                raise ChannelSendError(error_text(await _error_head(resp)))
+            declared = resp.headers.get("content-length", "")
+            if declared.isdigit() and int(declared) > max_bytes:
+                raise MediaTooLarge(f"{declared} bytes")
+            size = 0
+            fh = await asyncio.to_thread(open, dest, "wb")
+            try:
+                async for chunk in resp.aiter_bytes():
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise MediaTooLarge(f"over {max_bytes} bytes")
+                    await asyncio.to_thread(fh.write, chunk)
+            finally:
+                await asyncio.to_thread(fh.close)
+        return size
+    except httpx.HTTPError as exc:
+        dest.unlink(missing_ok=True)
+        raise ChannelSendError(f"download failed: {exc}") from exc
+    except BaseException:
+        dest.unlink(missing_ok=True)
+        raise
+
+
+def media_client(transport: httpx.AsyncBaseTransport | None = None) -> httpx.AsyncClient:
+    """A bare client for file transfers: no platform auth header, long read timeout."""
+    return httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(120.0, connect=10.0))

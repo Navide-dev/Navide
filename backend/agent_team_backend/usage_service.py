@@ -154,6 +154,7 @@ from .usage_common import (  # noqa: E402,F401
 from .cli_vendors.claude import (  # noqa: E402,F401
     CLAUDE_KEYCHAIN_SERVICE,
     fetch_claude,
+    fetch_claude_account_dir,
     parse_claude_credentials,
     read_claude_credentials,
     read_claude_credentials_file,
@@ -395,6 +396,7 @@ def _dedupe_harvested_login(vault, agent_key: str, profile_id: str) -> str | Non
     if keep_id is None:
         return None
     vault.write_slot(agent_key, keep_id, vault.read_slot(agent_key, profile_id))
+    vault.move_sign_in_pending_live(agent_key, profile_id, keep_id)
     if store.list()["defaults"].get(agent_key) == profile_id:
         store.set_default(agent_key, keep_id)
     vault.delete_slot_secrets(agent_key, profile_id)
@@ -461,6 +463,7 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
     was harvested."""
     if _login_pane_running(agent_key, profile_id):
         return False
+    followed = None
     async with vault.switch_lock(agent_key):
         # Read before the harvest fills it: an empty slot is what tells the
         # de-duplication that this profile was created for this login. Signing
@@ -472,6 +475,14 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
                 **_scope_kwargs(vault.slot_is_empty, agent_key, profile_id),
             )
         )
+        # The slot's secret before the harvest replaces it: a live login
+        # without an identity that still carries it is this account's own.
+        slot_before = None if slot_was_empty else await vault_to_thread(
+            _slot_secret, vault, agent_key, profile_id
+        )
+        # A sign-in against the live store (no login isolation) puts the
+        # login it replaced back live: that copy is this account's own.
+        pre_login = await vault_to_thread(_pre_login_secret, vault, agent_key, profile_id)
         harvested = await vault_to_thread(
             functools.partial(
                 vault.harvest_login_home, agent_key, profile_id,
@@ -489,11 +500,152 @@ async def _harvest_login_home_locked(vault, agent_key: str, profile_id: str) -> 
             except Exception as err:  # noqa: BLE001 — both profiles stay usable
                 log.warning("de-duplicating the %s login failed: %s", agent_key, err)
         if _active_profile_id(agent_key) == slot_id:
-            await vault_to_thread(functools.partial(
-                vault.restore, agent_key, slot_id,
-                **_scope_kwargs(vault.restore, agent_key, slot_id),
+            # The convenience feature credentials.auto-repair (D7): announced,
+            # skipped when off, and never over an account the user signed
+            # into outside Navide — that becomes a prompt.
+            from .convenience_wiring import repair_live_login
+
+            try:
+                live_email, slot_email, other = await vault_to_thread(
+                    _compare_live_to_slot, vault, agent_key, slot_id, slot_before, pre_login
+                )
+            except Exception as err:  # noqa: BLE001 — unread is not signed out
+                log.warning(
+                    "reading the live %s login failed; left it as is: %s", agent_key, err
+                )
+                return True
+            fingerprint = await vault_to_thread(
+                _live_fingerprint, vault, agent_key, slot_id
+            ) if other else ""
+            written = await vault_to_thread(functools.partial(
+                repair_live_login, agent_key, slot_id,
+                functools.partial(
+                    vault.restore, agent_key, slot_id,
+                    **_scope_kwargs(vault.restore, agent_key, slot_id),
+                ),
+                reason="signed in through Navide",
+                live_email=live_email, slot_email=slot_email,
+                slot_label=_profile_name(slot_id), other_account=other,
+                live_fingerprint=fingerprint, requested=True,
             ))
-        return True
+            if other and not written:
+                # Navide's active account must follow the login that stays
+                # live, or the next switch captures it into this slot.
+                followed = await vault_to_thread(
+                    _follow_live_account, agent_key, slot_id, live_email,
+                    _scope_kwargs(vault.identity, agent_key, slot_id).get("scope"),
+                )
+    if followed is not None:
+        from .ws_handlers import _broadcast_profiles_changed
+
+        try:
+            await _broadcast_profiles_changed("live_credentials", agent_key=agent_key, forced=False)
+        except Exception as err:  # noqa: BLE001 — the ledger already moved
+            log.warning("announcing the realigned %s account failed: %s", agent_key, err)
+    return True
+
+
+def _slot_secret(vault, agent_key: str, slot_id: str) -> str | None:
+    """A slot's secret, None when unreadable. Blocking."""
+    try:
+        return vault.read_slot(
+            agent_key, slot_id, **_scope_kwargs(vault.read_slot, agent_key, slot_id)
+        ).secret
+    except Exception:  # noqa: BLE001 — no proof the live login is this account's
+        return None
+
+
+def _live_fingerprint(vault, agent_key: str, slot_id: str) -> str:
+    """``login_fingerprint`` of the live login in ``slot_id``'s scope; ''
+    when it cannot be read. Blocking."""
+    from .convenience_wiring import login_fingerprint
+
+    try:
+        live = vault.read_live(
+            agent_key, strict=True, **_scope_kwargs(vault.read_live, agent_key, slot_id)
+        )
+    except Exception:  # noqa: BLE001 — the switch-back then refuses, never guesses
+        return ""
+    return login_fingerprint(live.secret)
+
+
+def _pre_login_secret(vault, agent_key: str, slot_id: str) -> str | None:
+    """The live secret a sign-in against the live store replaced (its
+    pre-login snapshot), None when there is none. Blocking."""
+    snapshot = getattr(vault, "_pre_login_snapshot", None)
+    if not callable(snapshot):
+        return None
+    try:
+        present, before, _scope = snapshot(agent_key, slot_id)
+    except Exception:  # noqa: BLE001 — no proof the live login is this account's
+        return None
+    return before if present else None
+
+
+def _compare_live_to_slot(
+    vault, agent_key: str, slot_id: str, slot_before: str | None,
+    pre_login: str | None = None,
+) -> tuple[str | None, str | None, bool]:
+    """``(live email, slot email, other account)``: is the live login an
+    account other than ``slot_id``'s? Emails decide when both are known.
+    With neither one (kimi, the per-provider stores) nothing can tell an
+    account apart, so it is the same account and the login is restored, as
+    before the prompt existed. With one, only the slot's own secret (now,
+    before the harvest, or the pre-login copy a live-store sign-in put back)
+    proves it is the same account. An empty live login is no other account.
+    Raises when the live login cannot be read. Blocking (Keychain for
+    claude)."""
+    kw = _scope_kwargs(vault.identity, agent_key, slot_id)
+    live = vault.identity(agent_key, strict=True, **kw)
+    if not live.get("signedIn"):
+        return None, None, False
+    slot_email = vault.identity(agent_key, slot_id, **kw).get("email") or None
+    live_email = live.get("email") or None
+    if live_email and slot_email:
+        return live_email, slot_email, live_email.casefold() != slot_email.casefold()
+    if not live_email and not slot_email:
+        return None, None, False
+    kw = _scope_kwargs(vault.read_live, agent_key, slot_id)
+    live_secret = vault.read_live(agent_key, strict=True, **kw).secret
+    own = {_slot_secret(vault, agent_key, slot_id), slot_before, pre_login} - {None}
+    return live_email, slot_email, live_secret not in own
+
+
+def _profile_name(profile_id: str) -> str:
+    store = _get_profiles_store()
+    try:
+        profile = store.get(profile_id) if store is not None else None
+    except Exception:  # noqa: BLE001 — the prompt falls back to the email
+        return ""
+    return str((profile or {}).get("name") or "")
+
+
+def _follow_live_account(
+    agent_key: str, slot_id: str, live_email: str | None, scope: str | None = None
+) -> str | None:
+    """Point Navide's active account at the live login after a prompt left
+    it live: the profile holding it (by email, else by its exact secret),
+    else a new one registered for it in ``scope`` (see
+    ``credential_watcher``). Never writes the live login. Call inside
+    ``switch_lock``. Blocking."""
+    from .credential_watcher import (
+        _adopt_unregistered_live_account,
+        align_default_to_live,
+        point_at_profile_holding_live,
+    )
+
+    try:
+        moved = align_default_to_live(agent_key, scope=scope)
+        if moved is None and _active_profile_id(agent_key) == slot_id and not live_email:
+            moved = point_at_profile_holding_live(agent_key, scope=scope)
+        if moved is None and _active_profile_id(agent_key) == slot_id:
+            moved = _adopt_unregistered_live_account(
+                agent_key, live_email or "Signed in outside Navide", scope=scope
+            )
+    except Exception as err:  # noqa: BLE001
+        log.warning("following the live %s account failed: %s", agent_key, err)
+        return None
+    return moved
 
 
 async def _harvest_pending_login_homes(store, vault) -> list[str]:
@@ -579,6 +731,53 @@ async def _kill_completed_login_panes(agent_key: str, profile_id: str) -> None:
             pass
 
 
+def start_account_dir_login_watch(profile_id: str) -> None:
+    """Watch a claude sign-in into the account's own config dir and announce
+    it as a completed login (idempotent per profile)."""
+    key = ("claude-account-dir", profile_id)
+    task = _login_watches.get(key)
+    if task is not None and not task.done():
+        return
+    task = asyncio.create_task(_account_dir_login_watch(profile_id))
+    _login_watches[key] = task
+    task.add_done_callback(
+        lambda t, key=key: _login_watches.pop(key, None)
+        if _login_watches.get(key) is t
+        else None
+    )
+
+
+async def _account_dir_login_watch(profile_id: str) -> None:
+    """Poll until the account dir holds a login, then broadcast the same
+    ``login-harvest`` event an isolated login sends, so the window that
+    opened the sign-in closes its pane and confirms the identity. Nothing is
+    read from or copied out of the dir: Claude Code owns that credential."""
+    deadline = time.monotonic() + LOGIN_WATCH_TIMEOUT_SEC
+    while time.monotonic() < deadline:
+        await asyncio.sleep(LOGIN_WATCH_INTERVAL_SEC)
+        vault = _get_credential_vault()
+        if vault is None:
+            continue
+        try:
+            signed_in = await vault_to_thread(vault.account_dir_signed_in, profile_id)
+            identity = await vault_to_thread(vault.account_dir_identity, profile_id)
+        except Exception:  # noqa: BLE001 — retry on the next tick
+            continue
+        # The Keychain item can appear a moment before Claude Code records
+        # the account; wait for both so the confirmation can name it.
+        if not signed_in or identity is None:
+            continue
+        try:
+            from .ws_handlers import _broadcast_profiles_changed
+
+            await _broadcast_profiles_changed(
+                "login-harvest", harvested_profile_ids=[profile_id]
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        return
+
+
 async def _login_watch(agent_key: str, profile_id: str) -> None:
     deadline = time.monotonic() + LOGIN_WATCH_TIMEOUT_SEC
     while time.monotonic() < deadline:
@@ -651,6 +850,8 @@ class UsageService:
         # shutdown must still propagate.
         self._claude_reads: dict[str, asyncio.Task] = {}
         self._reads_cancelled: set[str] = set()
+        # Account-dir /usage reads run one at a time (each boots a Claude Code).
+        self._account_dir_read_lock = asyncio.Lock()
         self._cache_path = cache_path
         from .token_monitor import QuotaHistory
 
@@ -1103,6 +1304,34 @@ class UsageService:
             except Exception:  # noqa: BLE001
                 pass
 
+    async def _claude_account_dirs(self, slot_ids: list[str]) -> list[tuple[str, Path]]:
+        """``(slot, config dir)`` for every one of ``slot_ids`` whose account
+        signed in inside its own config dir. A vault without account dirs, or
+        a failed lookup, reads as none — the slot stays not-measured."""
+        vault = _get_credential_vault()
+        signed_in = getattr(vault, "account_dir_signed_in", None)
+        path_of = getattr(vault, "account_dir_path", None)
+        if not callable(signed_in) or not callable(path_of):
+            return []
+
+        def _lookup() -> list[tuple[str, Path]]:
+            found: list[tuple[str, Path]] = []
+            for slot_id in slot_ids:
+                if slot_id == "__default__":
+                    continue
+                try:
+                    if signed_in(slot_id):
+                        found.append((slot_id, path_of(slot_id)))
+                except Exception as err:  # noqa: BLE001 — one account must not sink the rest
+                    log.warning("claude account dir lookup failed for %s: %s", slot_id, err)
+            return found
+
+        return await asyncio.to_thread(_lookup)
+
+    async def _read_account_dir(self, directory: Path) -> dict:
+        async with self._account_dir_read_lock:
+            return await fetch_claude_account_dir(directory)
+
     async def poll_once(self, home: Path | None = None) -> dict:
         home = home or Path.home()
         codex_home = Path(os.environ["CODEX_HOME"]) if os.environ.get("CODEX_HOME") \
@@ -1129,6 +1358,12 @@ class UsageService:
             claude_active, credentials = claude_accounts
             parked_slots = [s for s in credentials if s != claude_active]
         claude_coros = {claude_active: lambda: fetch_claude(home)}
+        # A parked account that signed in inside its own config dir is not
+        # parked for measuring: its /usage read runs on that dir. One at a
+        # time — each read boots a whole Claude Code.
+        for slot_id, directory in await self._claude_account_dirs(parked_slots):
+            claude_coros[slot_id] = functools.partial(self._read_account_dir, directory)
+        parked_slots = [s for s in parked_slots if s not in claude_coros]
         if self._switch_epoch == switch_epoch:
             for slot_id in parked_slots:
                 self._record_parked_claude_slot(slot_id)
@@ -1168,6 +1403,15 @@ class UsageService:
                     unverified = asyncio.get_running_loop().create_future()
                     unverified.set_exception(err)
                     tasks[provider] = unverified
+                    continue
+                except Exception as err:  # noqa: BLE001 — one provider must not sink the rest
+                    # A store that cannot be read (a locked database, a bad
+                    # row) fails only this vendor; raising here would abandon
+                    # the reads already started for the others. Logged with
+                    # the other fetch failures below.
+                    failed = asyncio.get_running_loop().create_future()
+                    failed.set_exception(err)
+                    tasks[provider] = failed
                     continue
                 async def bound_fetch(ctx=context, adapter=spec):
                     return await adapter.fetch_usage_from_context(ctx)

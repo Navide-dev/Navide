@@ -25,8 +25,10 @@ lifespan task — safe for the anyio task group inside.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import re
 import secrets
 import time
@@ -36,7 +38,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape as html_escape
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -50,6 +52,7 @@ from agent_team_backend.pending_registry import TIMEOUT, PendingRegistry
 # Workspace normalisation, not a plan dependency: preview_* resolves a
 # workspace the same way plans do, and both must agree on what one root means.
 from agent_team_backend.plan_index import resolve_plan_root
+from agent_team_backend.stages_store import GraphNonLinearError
 from agent_team_backend.preview_log import MAX_INLINE_CHARS, MAX_ROWS
 
 #: Where this server is mounted. Baked into every pane config file already
@@ -1217,6 +1220,21 @@ async def cli_open_agent(
         )
         if refused:
             return refused
+    # The spawn request is a broadcast only the window holding the workspace
+    # answers, and it is not replayed: sent before that window is up (a
+    # workspace_open a moment ago) or with no such window at all, nobody would
+    # answer and the call would sit out the whole verdict deadline. Make sure
+    # someone is listening first, and say so plainly when nobody is.
+    if target_workspace and not await _wait_window_ready(target_workspace):
+        return {
+            "ok": False,
+            "error": (
+                f"no Navide window holds {target_workspace} (none answered within "
+                f"{_WINDOW_READY_TIMEOUT_S:.0f}s). Open it with workspace_open and "
+                "retry once workspace_list shows window_ready for it; no pane was opened"
+            ),
+            "error_code": "window_not_ready",
+        }
     request_id = f"{me or caller.kind}:spawn:{secrets.token_hex(8)}"
     loop = asyncio.get_running_loop()
     future: asyncio.Future[dict[str, Any]] = loop.create_future()
@@ -2034,6 +2052,12 @@ async def cli_send(
         the receiving window refused it. `ok` stays TRUE: the send itself
         happened and `msg_key` is real, so re-sending on this would dispatch
         the work twice. Read the reason and decide.
+      - `status: "unconfirmed"` and `reason: "delivery-unconfirmed"` — it was
+        typed and submitted into a CLI that had just been resumed, and that
+        CLI has not shown it received it. It may well be running. Do NOT
+        resend on this alone: check cli_get_status (is the pane busy?) or
+        cli_read_log (is the message in its output?) first. The status turns
+        "delivered" if the CLI shows it later.
       - `status: "queued"` with `waited_s`, plus `hold` and `held_for_s` when
         the receiving window said why — the message is still waiting. `hold.key`
         is "typing" (someone is at that keyboard), "mid-turn" (the agent is
@@ -2472,6 +2496,11 @@ def record_delivery_result(msg_key: str, ok: bool, reason: str) -> bool:
     # to prevent — the same reason "read" is reported as delivered.
     if not ok and decoded == "cancelled":
         entry["status"] = "cancelled"
+    elif not ok and decoded == "delivery-unconfirmed":
+        # Typed and submitted into a resumed CLI that has not shown it yet. Not
+        # a failure either: resending on it may dispatch the work twice. The
+        # window reports again, ok, if the transcript shows it later.
+        entry["status"] = "unconfirmed"
     else:
         entry["status"] = "delivered" if ok else "failed"
     entry["reason"] = decoded
@@ -2586,6 +2615,12 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
                       actually injected.
       - "delivered" — the receiving window injected and submitted it.
       - "failed"    — the receiving window refused or lost it; see `reason`.
+      - "unconfirmed" — typed and submitted into a just-resumed CLI that has
+                      not shown it received it (`reason`
+                      "delivery-unconfirmed"). Sent, not lost: it may be
+                      running. Check cli_get_status or cli_read_log before
+                      resending, or the work may run twice. Becomes
+                      "delivered" if the CLI shows it later.
       - "rejected"  — only for a message sent to another device: that device's
                       pane policy refuses this sender. Re-sending refuses
                       again; this is a permission question for a human, not
@@ -2610,6 +2645,15 @@ async def cli_check_message(msg_key: str, ctx: Context) -> dict[str, Any]:
     "starting", "settling", "not-ready", "gone", "paused" or "remote-ack". Both
     keys are absent once the message settles, and while no window has reported
     a hold at all — a message queued with no hold is simply on its way in.
+
+    A message to another device that has gone a minute without an answer is
+    asked about through the server, and its hold then says which silence it is:
+    "remote-busy" (the target pane is mid-turn by the roster, so the message is
+    waiting for that turn to end — wait, or ask whoever runs that machine to
+    let it finish) or "remote-unreported" (the pane is not working and the far
+    side has still said nothing — waiting longer is unlikely to help). An answer
+    the far side gave while this machine was disconnected is picked up the same
+    way, so a message never stays "queued" just because its ack was missed.
 
     `stale` is true once a queued message has been waiting more than two
     minutes. It is not a failure and nothing has given up on it — it is the
@@ -2657,7 +2701,8 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
 
     Takes no arguments and asks about no one but you: it returns the sends made
     from this caller — this pane, or this external client — that are currently
-    stale (queued more than two minutes) or failed. Everything that was
+    stale (queued more than two minutes), failed, or unconfirmed (see
+    cli_check_message — check the pane before resending one of those). Everything that was
     delivered, and everything still on its way in, is left out.
 
     This is the pull half of delivery feedback, and it exists for the agent the
@@ -2698,7 +2743,7 @@ async def cli_inbox_summary(ctx: Context) -> dict[str, Any]:
             continue
         tracked += 1
         stale = _is_stale(entry, now)
-        if not stale and entry["status"] not in ("failed", "rejected"):
+        if not stale and entry["status"] not in ("failed", "rejected", "unconfirmed"):
             continue
         row: dict[str, Any] = {
             "msg_key": key,
@@ -3517,7 +3562,7 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
 
     `target` uses the same addressing as cli_send, and `pane_id` names one
     exact pane instead. Returns {ok, name,
-    agent_key, busy, last_activity?, usage?, git?, ui?}. `last_activity`, when known,
+    agent_key, busy, last_activity?, usage?, git?, ui?, prompt_fingerprint?}. `last_activity`, when known,
     is {type: "agent_active"|"turn_complete", text? (turn_complete only),
     age_seconds}. `ui`, when the owning Navide window answers in time, is
     {status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?,
@@ -3554,6 +3599,13 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
     cli_list_targets gives it: branch, worktree, dirty count and drift against
     origin/main, cached for up to ~30 s. Absent outside a repository, when git
     did not answer in time, and for a remote target.
+
+    While `ui.status` is "awaiting", `ui` also carries what the pane is
+    waiting on, read off its screen: `awaitingPrompt` (the prompt text) and,
+    when the screen shows a numbered menu, `awaitingOptions` (its rows, option
+    1 first). The reply then has a top-level `prompt_fingerprint` naming that
+    exact prompt; pass it to cli_answer_prompt to answer the pane, which
+    refuses when the screen has moved on.
 
     `ui.kickoff` is how this pane's spawn-time task injection ended, and it is
     the authoritative answer to "did cli_open_agent's task actually arrive":
@@ -3632,6 +3684,11 @@ async def cli_get_status(target: str, ctx: Context, pane_id: str = "") -> dict[s
         # One answer, not two that disagree: the badge only ever ADDS busy.
         if ui_result["result"].get("status") in ("running", "starting"):
             status["busy"] = True
+        prompt = ui_result["result"].get("awaitingPrompt")
+        if ui_result["result"].get("status") == "awaiting" and isinstance(prompt, str) and prompt.strip():
+            options = ui_result["result"].get("awaitingOptions")
+            status["prompt_fingerprint"] = _prompt_fingerprint(
+                prompt, [str(o) for o in options] if isinstance(options, list) else [])
     return status
 
 
@@ -4117,6 +4174,207 @@ async def cli_interrupt(target: str, ctx: Context, pane_id: str = "") -> dict[st
     return answer
 
 
+# ── Answering another pane's prompt ──────────────────────────────────────
+#: The answer words cli_answer_prompt takes besides an option number, as the
+#: chat relay's choice letters (channels/relay.py).
+_ANSWER_WORDS = {"allow": "y", "deny": "n"}
+
+
+def _prompt_fingerprint(prompt: str, options: list[str]) -> str:
+    """A short id for what a pane is waiting on: its prompt text and its menu,
+    equal up to whitespace — the same rule the chat relay binds an answer to
+    its prompt with (relay.same_prompt), since a re-rendered screen re-wraps."""
+    text = " ".join((prompt or "").split()) + "\n" + "\n".join(" ".join(str(o).split()) for o in options)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _caller_label(caller: _Caller) -> str:
+    from agent_team_backend import agent_messaging
+
+    if caller.kind == "pane":
+        entry = agent_messaging.current(caller.pane_id)
+        return entry.qualified_name if entry is not None else caller.pane_id
+    return caller.kind
+
+
+def _record_agent_answer(pane: Any, who: str, what: str, decision: Any, action: str) -> None:
+    """Write an agent's answer into the pane's Navide Guard audit trail — who
+    answered, what it pressed, and Guard's verdict — so it can be traced back
+    to an agent rather than passing for the user's own keypress."""
+    from agent_team_backend.guard import runtime as guard_runtime
+
+    try:
+        guard_runtime.store().audit_add({
+            "ts": time.time(), "pane_id": pane.pane_id, "vendor": pane.agent_key or "",
+            "source": "agent", "tool": "answer_prompt",
+            "excerpt": f"answered by agent {who} via MCP: {what}"[:500],
+            "level": decision.level if decision is not None else "normal",
+            "action": action,
+            "rule_ids": list(decision.rule_ids) if decision is not None else [],
+            "tainted": bool(decision.tainted) if decision is not None else False,
+        })
+    except Exception:  # noqa: BLE001 — the answer itself already stands
+        _log.warning("cli_answer_prompt: audit write failed", exc_info=True)
+
+
+def _answer_refusal(pane: Any, code: str, error: str, **extra: Any) -> dict[str, Any]:
+    return {"ok": False, "target": pane.qualified_name, "sent": False,
+            "error": error, "error_code": code, **extra}
+
+
+@server.tool()
+async def cli_answer_prompt(
+    target: str, answer: str, prompt_fingerprint: str, ctx: Context, pane_id: str = ""
+) -> dict[str, Any]:
+    """Answer another CLI pane's permission prompt or option menu, as an agent.
+
+    For a pane parked on "awaiting" — claude's permission box or
+    AskUserQuestion menu, codex's approval menu, aider's (Y)es/(N)o line —
+    this presses the CLI's own key for one choice, instead of cli_send typing
+    prose the menu would not take. Read the prompt first: cli_get_status
+    returns it as `ui.awaitingPrompt` and `ui.awaitingOptions` (the numbered
+    menu rows), and `prompt_fingerprint` identifies exactly that screen.
+
+    `answer` is "allow" (the menu's "Yes", option 1), "deny" (its "No"), or
+    an option number "1".."9" from `ui.awaitingOptions`. aider takes only
+    allow / deny. `prompt_fingerprint` must be the one cli_get_status gave
+    for the prompt you decided on; when the screen has moved on since, the
+    answer is refused with `error_code` "prompt-changed" and the reply
+    carries the current `prompt`, `options` and `prompt_fingerprint` to
+    decide again with.
+
+    THIS IS DISCLOSED, NOT HIDDEN. Every answer is written to that pane's
+    Navide Guard audit trail (source "agent", tool "answer_prompt": who
+    answered, what was pressed, Guard's verdict), and the reply carries
+    `answered_by_agent: true` with a `disclosure` line to pass on to the
+    user. Approving a prompt is approving that pane's action on the user's
+    behalf.
+
+    Refused, each with its own `error_code` and nothing pressed:
+      - "permanent-allow-refused" — a "don't ask again" / "always allow" /
+        "for this session" option, or "allow" when option 1 is one: that
+        choice is the user's, at the computer.
+      - "guard-veto" — Navide Guard rates the prompt high or critical (or
+        cannot screen it); approving needs the user. `guard` says why.
+        Refusing ("deny", or a "No …" option) is never vetoed.
+      - "computer-only" — a multi-select menu or a free-text row.
+      - "unsupported-cli" — only claude, codex and aider have mapped keys.
+      - "not-awaiting", "prompt-changed", "invalid-answer".
+      - "answer-local-only" — a pane on another device: there is no relay.
+    The raw key action (ui_invoke "ui.pane.sendKeys") stays refused for
+    agents; this tool is the fenced way to the same keys.
+
+    Returns {ok, target, sent, answer, chosen?, answered_by_agent,
+    disclosure, guard?}. The window re-reads its screen right before pressing
+    and refuses with "prompt-changed" when the prompt checked here (and
+    screened by Guard) is no longer the one showing. `sent` true means the
+    keys were written into the pane; it is not a receipt from the CLI —
+    cli_get_status or cli_wait_idle tells you what happened next.
+    """
+    from agent_team_backend import message_routing
+    from agent_team_backend.channels import relay
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    me = caller.pane_id if caller.kind == "pane" else ""
+    result, failure = _resolve_pane_target(caller, me, target, pane_id)
+    if failure is not None:
+        if not (pane_id or "").strip() and message_routing.route(me, target).remote is not None:
+            return {
+                "ok": False,
+                "error": (
+                    f'cannot answer "{target}": it names a pane on another device, and '
+                    f"an answer is keys written into a local PTY — there is no relay "
+                    f"for one. Only panes on this machine can be answered from here."
+                ),
+                "error_code": "answer-local-only",
+            }
+        return failure
+    pane = result.pane
+
+    word = (answer or "").strip().lower()
+    choice = _ANSWER_WORDS.get(word) or (word if len(word) == 1 and word in "123456789" else "")
+    if not choice:
+        return _answer_refusal(pane, "invalid-answer",
+                               f'answer must be "allow", "deny" or an option number 1-9, not {answer!r}')
+    if pane.agent_key not in relay.ANSWERABLE_AGENTS:
+        return _answer_refusal(
+            pane, "unsupported-cli",
+            f"Navide has no answer keys for {pane.agent_key or 'this CLI'}; only "
+            f"{', '.join(sorted(relay.ANSWERABLE_AGENTS))} can be answered. Answer it at the computer.")
+
+    reply = await _ui_request(pane.workspace_path, "invoke", caller=_pane_caller(pane.pane_id),
+                              action="ui.pane.getStatus", args={"paneId": pane.pane_id})
+    if not reply.get("ok") or not isinstance(reply.get("result"), dict):
+        return _answer_refusal(pane, str(reply.get("error_code") or "ui_action_failed"),
+                               str(reply.get("error") or "the window owning this pane did not answer"))
+    screen = reply["result"]
+    if screen.get("status") != "awaiting":
+        return _answer_refusal(pane, "not-awaiting",
+                               f"the pane is {screen.get('status') or 'not awaiting'}, not waiting on a prompt")
+    prompt = str(screen.get("awaitingPrompt") or "")
+    raw_options = screen.get("awaitingOptions")
+    options = [str(o) for o in raw_options] if isinstance(raw_options, list) else []
+    current = _prompt_fingerprint(prompt, options)
+    if (prompt_fingerprint or "").strip() != current:
+        return _answer_refusal(
+            pane, "prompt-changed",
+            "the prompt on screen is not the one prompt_fingerprint names; read it and decide again",
+            prompt=prompt, options=options, prompt_fingerprint=current)
+
+    request = relay.RelayRequest(
+        id="", pane_id=pane.pane_id, kind="question" if choice.isdigit() else "permission",
+        options=options, loc=relay.Location("mcp", "", ""), prompt=prompt)
+    if any(relay.is_multi_select(o) for o in options):
+        return _answer_refusal(pane, "computer-only", relay.COMPUTER_ONLY)
+    if relay.refuses_permanent(request, choice):
+        return _answer_refusal(pane, "permanent-allow-refused",
+                               "that choice allows more than this one prompt; only the user can make it")
+    if choice.isdigit() and int(choice) <= len(options) and relay.is_free_text(options[int(choice) - 1]):
+        return _answer_refusal(pane, "computer-only", relay.COMPUTER_ONLY)
+    payload = relay.answer_payload(request, choice)
+    if payload is None:
+        return _answer_refusal(pane, "invalid-answer",
+                               f"option {choice} is not on the menu (1-{len(options)})", options=options)
+    chosen = options[int(choice) - 1] if choice.isdigit() and options else ""
+    what = (f"option {choice} — {chosen}" if chosen else f"option {choice}") if choice.isdigit() else word
+    who = _caller_label(caller)
+
+    decision = None
+    if not relay.is_deny(request, payload):
+        decision = relay.screen_approval(pane.pane_id, prompt, pane.workspace_path)
+        if decision.action != "allow":
+            _record_agent_answer(pane, who, f"{what} (refused by Navide Guard)", decision, "deny")
+            return _answer_refusal(
+                pane, "guard-veto", "Navide Guard: approving this prompt needs the user at the computer",
+                guard={"level": decision.level, "reason": decision.reason, "rule_ids": list(decision.rule_ids)})
+
+    sent_reply = await _ui_request(pane.workspace_path, "invoke", caller=_pane_caller(pane.pane_id),
+                                   action="ui.pane.sendKeys",
+                                   # The window presses only while this same prompt is on screen: Guard
+                                   # screened it, and one that has replaced it since must not be answered.
+                                   args={"paneId": pane.pane_id, "answer": payload,
+                                         "expected": {"prompt": prompt, "options": options}})
+    keys = sent_reply.get("result") if isinstance(sent_reply.get("result"), dict) else {}
+    sent = bool(sent_reply.get("ok")) and keys.get("ok", True) is not False and bool(keys.get("sent"))
+    _record_agent_answer(pane, who, what if sent else f"{what} (not sent)", decision, "allow" if sent else "error")
+    out: dict[str, Any] = {
+        "ok": sent, "target": pane.qualified_name, "sent": sent, "answer": payload,
+        "answered_by_agent": True,
+        "disclosure": f"{pane.qualified_name}'s prompt was answered by agent {who}, not the user: {what}",
+    }
+    if chosen:
+        out["chosen"] = chosen
+    if decision is not None:
+        out["guard"] = {"level": decision.level, "reason": decision.reason}
+    if not sent:
+        out["error"] = str(keys.get("error") or sent_reply.get("error") or "not sent")
+        out["error_code"] = str(keys.get("error_code") or sent_reply.get("error_code") or "not-sent")
+    return out
+
+
 @server.tool()
 async def cli_place_pane(
     target: str,
@@ -4400,8 +4658,9 @@ async def cli_send_and_wait(
       - "not_delivered" — the message never got into the pane, so there was no
         turn to wait for. `delivery_status` is "queued" (still waiting, with
         `hold` and `held_for_s` saying what for — typically someone typing in
-        that pane, or a queue ahead of it), or "failed"/"rejected" with
-        `reason`. A queued message is not lost: it goes in when the pane frees
+        that pane, or a queue ahead of it), "failed"/"rejected" with
+        `reason`, or "unconfirmed" (typed into a just-resumed CLI that has not
+        shown it — check cli_get_status or cli_read_log before resending). A queued message is not lost: it goes in when the pane frees
         up, and cli_check_message picks the story up. Do NOT resend on this.
 
     On timeout returns {ok: true, idle: false, source: "timeout", reason,
@@ -4781,6 +5040,11 @@ _UI_INVOKE_SLOW_ACTIONS = frozenset({
     "ui.pipeline.next",
     "ui.pipeline.resume",
     "ui.pipeline.restart",
+    # Passing a gate hands off to the next stage; a reject re-runs a stage;
+    # restart_from re-enters onPipelineStart. All three spawn panes.
+    "ui.pipeline.gate_pass",
+    "ui.pipeline.gate_reject",
+    "ui.pipeline.restart_from",
 })
 _ui_invoke_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 
@@ -4838,7 +5102,9 @@ def _caller_window(caller: "_Caller | None", workspace_path: str) -> Any | None:
     return None if session is None or getattr(session, "dead", False) else session
 
 
-def _ui_timeout_error(workspace_path: str, timeout: float, *, addressed: bool) -> dict[str, Any]:
+def _ui_timeout_error(
+    workspace_path: str, timeout: float, *, addressed: bool, global_action: str | None = None
+) -> dict[str, Any]:
     """Explain an unanswered ui.invoke.request as one of three failures.
 
     The fixes are opposite — inspect a stuck window vs. check the path — so a
@@ -4861,6 +5127,19 @@ def _ui_timeout_error(workspace_path: str, timeout: float, *, addressed: bool) -
     """
     from agent_team_backend import agent_messaging
 
+    if global_action is not None:
+        # A global request went to one window that announced it runs the UI
+        # bus; workspace_path played no part in choosing it (it is often empty).
+        return {
+            "ok": False,
+            "result": None,
+            "error": (
+                f"a Navide window received {global_action} but did not answer within "
+                f"{timeout:.0f}s — it may still be running there, or the window is "
+                "blocked (a native dialog freezes it). Retry, or check the window"
+            ),
+            "error_code": "ui_action_timeout",
+        }
     if addressed:
         return {
             "ok": False,
@@ -4964,8 +5243,67 @@ async def _ui_request(
     timeout = _UI_INVOKE_SLOW_TIMEOUT_S if action in _UI_INVOKE_SLOW_ACTIONS else _UI_INVOKE_TIMEOUT_S
     result = await _ui_invoke_pending.wait(request_id, fut, timeout=timeout)
     if result is TIMEOUT:
-        return _ui_timeout_error(workspace_path, timeout, addressed=bool(payload["addressed"]))
+        return _ui_timeout_error(
+            workspace_path,
+            timeout,
+            addressed=bool(payload["addressed"]),
+            global_action=(action or op) if is_global else None,
+        )
     return result
+
+
+#: How long workspace_open and cli_open_agent wait for a window to hold a
+#: workspace. A new window loads its renderer and connects to the backend
+#: before it answers anything; until then a broadcast for its workspace is
+#: answered by nobody and is never replayed.
+_WINDOW_READY_TIMEOUT_S = 15.0
+#: One probe's wait. Short, because a probe sent before the window subscribed
+#: is simply lost — the next one is what reaches it.
+_WINDOW_PROBE_TIMEOUT_S = 1.0
+#: Paths workspace_open has opened in this backend's lifetime, oldest first,
+#: with when. workspace_list lists the ones Recent does not already hold.
+_mcp_opened_workspaces: dict[str, str] = {}
+
+
+async def _probe_window(workspace_path: str, timeout: float) -> bool:
+    """Is a window holding *workspace_path* up and answering right now?
+
+    A broadcast list_actions: the renderer answers it under the same ownership
+    test (isLocalWorkspace) that agent_spawn.request uses, so an answer means
+    a spawn request for that workspace would be picked up too.
+    """
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    request_id = secrets.token_hex(16)
+    fut = _ui_invoke_pending.register(request_id)
+    payload: dict[str, Any] = {
+        "request_id": request_id,
+        "workspace_path": workspace_path,
+        "op": "list_actions",
+        "action": None,
+        "args": None,
+        "global": False,
+        "addressed": False,
+        "caller_pane_id": "",
+    }
+    try:
+        await app.broadcast(make_event("ui.invoke.request", payload))
+    except BaseException:
+        _ui_invoke_pending.discard(request_id)
+        raise
+    return await _ui_invoke_pending.wait(request_id, fut, timeout=timeout) is not TIMEOUT
+
+
+async def _wait_window_ready(workspace_path: str) -> bool:
+    """Probe until a window holds *workspace_path*, for at most
+    _WINDOW_READY_TIMEOUT_S. False means no window answered in that time."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + _WINDOW_READY_TIMEOUT_S
+    while (remaining := deadline - loop.time()) > 0:
+        if await _probe_window(workspace_path, min(_WINDOW_PROBE_TIMEOUT_S, remaining)):
+            return True
+    return False
 
 
 @server.tool()
@@ -5015,6 +5353,19 @@ async def ui_invoke(
     ui.pane.sendKeys, and ui.settings.yolo with yolo true, are refused with
     error_code "ui_human_only": answering a pane's prompt and switching the
     permission bypass on are the user's to do.
+
+    ui.pane.reclaim frees a finished pane's resources without closing it — the
+    same "reclaim now" the status bar and Resource Manager offer; cli_reclaim_agent
+    does the same for one pane addressed by name, in whichever window has it. args
+    {"paneId": id} or {"paneId": [id, ...]} (pane ids from cli_list_targets).
+    Each CLI process ends and the pane stays as a click-to-resume card holding
+    its conversation; the user resumes it by clicking. Use it from a parent pane
+    on the children it opened once their work is reported. The status bar's
+    guards apply unchanged, so a pane that is busy or awaiting an answer, the
+    one the user has focused, one with unsent input, one with queued messages
+    or a running pipeline/loop, and one whose session cannot be resumed are
+    refused. Returns {reclaimed: [paneId], refused: [{paneId, reason, detail}]}
+    with ok true even when every pane was refused.
     """
     caller = _resolve_caller(ctx)
     refusal = _human_only_refusal(action, args)
@@ -5396,6 +5747,9 @@ _PIPELINE_STAGE_FIELDS = (
 )
 _PIPELINE_SLOT_FIELDS = ("agent_key", "role_key", "label", "is_commander")
 _ROLE_FIELDS = ("key", "label", "one_line", "is_default")
+# NodeRunState (src/renderer/src/lib/pipelineGraph.ts) minus `summary`, which
+# is a whole output tail.
+_NODE_STATE_FIELDS = ("status", "startedAt", "endedAt", "tokens", "paneId", "attempts", "pinned")
 
 #: Execution state of a project: the run, not the window it is drawn in.
 #: workspace_path is left out on purpose — the resolved one is reported instead.
@@ -5551,6 +5905,28 @@ def _recent_workspace_rows() -> dict[str, Any]:
         }
         for entry in _app.recent_workspaces_store.list()
     ]
+    # Opened through workspace_open but never recorded in Recent: such a
+    # window boots with duplicate=1, which (on purpose, for cloned windows)
+    # keeps it out of Recent. Listed here instead, so the path a caller just
+    # opened is one it can find again, without the MCP call reordering the
+    # user's Recent list.
+    listed = {_norm_workspace(str(entry.get("path") or "")) for entry in workspaces}
+    for path, opened_at in reversed(list(_mcp_opened_workspaces.items())):
+        norm = _norm_workspace(path)
+        if norm in listed:
+            continue
+        listed.add(norm)
+        workspaces.append(
+            {
+                "path": path,
+                "name": Path(path).name or path,
+                "last_opened_at": opened_at,
+                "pinned": False,
+                "exists": Path(path).is_dir(),
+                "has_live_panes": norm in live,
+                "opened_by_mcp": True,
+            }
+        )
     return {"workspaces": workspaces, "live_pane_workspaces": sorted(live)}
 
 
@@ -5573,9 +5949,22 @@ async def workspace_list(ctx: Context) -> dict[str, Any]:
     `live_pane_workspaces` is that live set on its own, resolved. A pane can be
     running in a project the user never opened from the welcome screen, which
     is a perfectly legal workspace_path that the recent list does not mention.
+
+    Each workspace also carries window_ready: true when a Navide window holds
+    it right now and would take a cli_open_agent for it — the readiness
+    workspace_open reports, asked again. `window_ready_workspaces` lists those
+    paths. Asking costs up to about a second.
     """
     _resolve_caller(ctx)
-    return await asyncio.to_thread(_recent_workspace_rows)
+    rows = await asyncio.to_thread(_recent_workspace_rows)
+    paths = [str(entry.get("path") or "") for entry in rows["workspaces"]]
+    ready = await asyncio.gather(
+        *(_probe_window(path, _WINDOW_PROBE_TIMEOUT_S) for path in paths)
+    )
+    for entry, is_ready in zip(rows["workspaces"], ready):
+        entry["window_ready"] = is_ready
+    rows["window_ready_workspaces"] = [path for path, is_ready in zip(paths, ready) if is_ready]
+    return rows
 
 
 @server.tool()
@@ -5590,12 +5979,27 @@ async def workspace_open(path: str, ctx: Context) -> dict[str, Any]:
     workspace may not have a window yet), so it errors only when no Navide
     window is open at all.
 
-    Returns {ok: true, path} once the window has handled the request, or the
-    error the window (or the routing) reported.
+    A leading "~" is expanded; the `path` returned is the expanded one.
+
+    Returns {ok: true, path, ready} once the window has handled the request,
+    or the error the window (or the routing) reported. A new window takes a
+    moment to load, so this waits (up to about 15s) for the window holding
+    `path` to answer: ready true means cli_open_agent(workspace_path=path)
+    will be picked up now. ready false comes with a hint — the window may
+    still be loading; workspace_list reports window_ready for it later. The
+    workspace is in workspace_list as soon as this returns either way.
     """
     caller = _resolve_caller(ctx)
     if not path:
         return {"ok": False, "result": None, "error": "workspace_open requires path"}
+    # Expanded here, once: the window keeps whatever string it is handed as its
+    # workspace and never expands "~", so an unexpanded path would be held
+    # under a key that the probe, workspace_list (Recent stores expanded paths)
+    # and a later cli_open_agent with the absolute path all fail to match.
+    # normpath too, only then: on Windows the expansion leaves the separators
+    # mixed (C:\Users\me/Desktop/x), unlike the form Recent stores.
+    if path.startswith("~"):
+        path = os.path.normpath(os.path.expanduser(path))
     result = await _ui_request(
         "",
         "invoke",
@@ -5606,7 +6010,21 @@ async def workspace_open(path: str, ctx: Context) -> dict[str, Any]:
     )
     if not result.get("ok"):
         return result
-    return {"ok": True, "path": path}
+    # The window opens with duplicate=1 and so stays out of Recent; this is
+    # what puts the path in workspace_list (see _recent_workspace_rows).
+    _mcp_opened_workspaces.pop(path, None)
+    _mcp_opened_workspaces[path] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(
+        "+00:00", "Z"
+    )
+    ready = await _wait_window_ready(path)
+    reply: dict[str, Any] = {"ok": True, "path": path, "ready": ready}
+    if not ready:
+        reply["hint"] = (
+            f"no Navide window answered for {path} within {_WINDOW_READY_TIMEOUT_S:.0f}s — "
+            "it may still be loading. Check window_ready in workspace_list before "
+            "cli_open_agent; do not open the workspace again"
+        )
+    return reply
 
 
 @server.tool()
@@ -5735,6 +6153,14 @@ def _pipeline_status_of(workspace_path: str) -> dict[str, Any]:
         for pane in stored.get("panes") or []
         if pane.get("origin") == "pipeline"
     ]
+    # Per graph node (pipeline_graph op "get" names them): the run engine's
+    # reported state, and the gate the run is paused on ({} when none).
+    status["nodes"] = {
+        node_id: _pick(state, _NODE_STATE_FIELDS)
+        for node_id, state in (stored.get("node_states") or {}).items()
+        if isinstance(state, dict)
+    }
+    status["gate"] = stored.get("node_gate") or {}
     return status
 
 
@@ -5761,6 +6187,14 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     slot_label, spawn_status, kickoff_status}. Panes the user or an agent
     opened by hand are not pipeline slots and are left out; cli_list_targets is
     where every pane is listed.
+
+    Per graph node it also carries `nodes` — {node_id: {status, startedAt,
+    endedAt, tokens, paneId, attempts, pinned}}, status one of pending /
+    running / done / awaiting / rejected / failed / skipped / aborted — and
+    `gate`, the gate the run is paused on ({gateId, label, prompt, nextIndex},
+    or {} when it is not paused). Node ids are the ones pipeline_graph op
+    "get" returns; a pipeline without a stored graph uses n-<stage_id>-<slot
+    index>. A paused gate is resolved with pipeline_gate.
 
     workspace_path defaults to your own pane's workspace; pass it only to ask
     about another project.
@@ -6263,13 +6697,139 @@ async def mcp_list(ctx: Context) -> dict[str, Any]:
     return {"servers": servers, **reflected}
 
 
+@server.tool()
+async def cli_extensions_list(ctx: Context) -> dict[str, Any]:
+    """List the CLI extensions each AI CLI installed for itself.
+
+    These are the CLIs' own add-ons, not Navide plugins (see
+    docs/en-US/glossary.md): Claude plugins and mods, Codex plugins and
+    hooks, Copilot and Droid plugins, opencode and Kilo plugins, Pi
+    extensions, Qwen extensions, and every CLI's hooks. The same inventory
+    Settings → CLI Extensions shows. Read it before telling the user a CLI
+    has, or lacks, an add-on. Read-only: installing, enabling or removing a
+    CLI extension is the user's decision and there is no tool here for it.
+
+    Returns {vendors, items}. `vendors` is every CLI with an extension system
+    ({cli, label, supported, note, count}); `supported: false` means Navide
+    cannot read where that CLI keeps them yet. Each item is {cli, id, name,
+    version, kind (plugin / mod / extension / hook / package), type_label
+    (the vendor's own name), scope, enabled, exec_tier (L1 text assets, L2
+    subprocess such as hooks and MCP, L3 code inside the CLI's own process),
+    capabilities, native_consent (what the CLI itself asks before running
+    it), owner (navide when Navide installed it), evidence (inferred when
+    capabilities were read off source text)}.
+
+    Items of kind `navide-change` are what Navide itself wrote into a CLI's
+    world for a convenience feature (name = the feature id, enabled = the
+    feature is allowed); their id ends with a hash of the file Navide changed
+    — the file itself is named on Settings → CLI Extensions, where the user
+    can see exactly what was touched.
+
+    Names and metadata only: no paths and no hook command lines, which can
+    name scripts, hosts and tokens. A global inventory: it does not vary by
+    workspace.
+    """
+    from agent_team_backend import app as _app
+    from agent_team_backend import cli_extensions
+
+    _resolve_caller(ctx)
+    inventory = await asyncio.to_thread(cli_extensions.scan)
+    listing = await asyncio.to_thread(_app.convenience_gate.listing)
+    inventory.items.extend(cli_extensions.navide_changes(listing["features"]))
+    return inventory.public_dict()
+
+
+async def _credentials_scan_result() -> dict[str, Any]:
+    from agent_team_backend import credentials_scan
+
+    try:
+        return await credentials_scan.service().scan(force=False)
+    except Exception as err:  # noqa: BLE001 - report, never log details
+        _log.warning("credentials scan failed (%s)", type(err).__name__)
+        return {"ok": False, "error": "credentials scan failed", "error_code": "internal-error"}
+
+
+@server.tool()
+async def credentials_list(ctx: Context) -> dict[str, Any]:
+    """List this machine's credentials and keys by name and metadata only.
+
+    What the user sees in Settings → Credentials & keys: git credential
+    helpers, gh / glab accounts, SSH private keys, OS keyring item metadata,
+    remotes whose URL carries userinfo, token-looking environment variable
+    names, and plaintext credential files. Read it to tell the user which
+    identity or key exists before suggesting a push or a fix.
+
+    Values are never returned — no token, password, private key or
+    passphrase, and no prefix, length or hash of one. The scan is read-only:
+    it never writes git config, the keychain, ~/.ssh or a remote, and it
+    runs no command that prints a secret. Results are cached for 60 seconds.
+
+    Returns {ok, scanned_at, platform, keyring: {available, backend,
+    reason?}, items: [{id, kind, label, detail}]}. Keyring items carry only
+    their class and dates: no service, server or account (the lookup keys of
+    a keychain query).
+    """
+    caller = _resolve_caller(ctx)
+    _log.info("credentials_list called by %s", getattr(caller, "kind", "unknown"))
+    result = await _credentials_scan_result()
+    if not result.get("ok"):
+        return result
+    items = []
+    for item in result["items"]:
+        if item.get("kind") == "keychain-item":
+            detail = {k: v for k, v in item.get("detail", {}).items()
+                      if k not in {"service", "server", "account"}}
+            item = {**item, "label": str(detail.get("class", "keychain-item")), "detail": detail}
+        items.append(item)
+    return {"ok": True, "scanned_at": result["scanned_at"], "platform": result["platform"],
+            "keyring": result["keyring"], "items": items}
+
+
+@server.tool()
+async def credentials_findings(ctx: Context) -> dict[str, Any]:
+    """Risk findings from the read-only credentials and keys scan.
+
+    Each finding is {id, code, severity (high/medium/low), kind, location,
+    params, links, actions, manual_fix, reminder}. `location` is already
+    redacted (a URL token shows as removed, never as a value).
+    `reminder.state` is active, snoozed or dismissed as the user set it in
+    Navide. `manual_fix` true means no safe command exists and the user has
+    to fix it by hand. `actions` are fix action names
+    (remote-set-url, ssh-add-passphrase, chmod-600, gh-auth-switch,
+    gh-login-keyring, glab-login-keyring, inspect-helper-config,
+    inspect-url-rewrite, manual-fix); no shell command is returned here.
+    Codes include url-token,
+    ssh-no-passphrase-default-host, ssh-no-passphrase, ssh-key-unreferenced,
+    ssh-key-mode, cli-token-plaintext, gh-active-account-only,
+    helper-duplicate, helper-shadowed, env-token-in-shell-rc, env-token-set,
+    plaintext-credential-file and keyring-unavailable.
+
+    Values are never returned, and nothing here changes anything: report a
+    finding to the user; fixing it (and snoozing or dismissing it) is the
+    user's decision, made in Navide. Returns {ok, scanned_at, summary:
+    {high, medium, low, active_reminders}, findings}.
+    """
+    caller = _resolve_caller(ctx)
+    _log.info("credentials_findings called by %s", getattr(caller, "kind", "unknown"))
+    result = await _credentials_scan_result()
+    if not result.get("ok"):
+        return result
+    findings = [{k: v for k, v in finding.items() if k != "steps"} for finding in result["findings"]]
+    return {"ok": True, "scanned_at": result["scanned_at"], "summary": result["summary"],
+            "findings": findings}
+
+
 def _prompt_skills_inventory(skill_id: str) -> dict[str, Any]:
     """The Prompts page's saved skills, as a summary or one of them in full."""
     from agent_team_backend import app as _app
 
+    from agent_team_backend import prompt_skills
+
     settings = _app.ui_settings_store.get()
     raw = settings.get(_PROMPT_SKILLS_SETTING_KEY)
     rows = [row for row in raw if isinstance(row, dict)] if isinstance(raw, list) else []
+    if _PROMPT_SKILLS_SETTING_KEY not in settings:
+        rows = prompt_skills.builtin(settings)
     if skill_id:
         skill = next((row for row in rows if row.get("id") == skill_id), None)
         if skill is None:
@@ -6280,9 +6840,7 @@ def _prompt_skills_inventory(skill_id: str) -> dict[str, Any]:
         "default_id": next((str(row.get("id", "")) for row in rows if row.get("isDefault")), ""),
     }
     if _PROMPT_SKILLS_SETTING_KEY not in settings:
-        # Never saved: the page seeds a builtin skill on first use, and its
-        # text lives in the renderer, so the backend cannot list it here.
-        result["note"] = "no prompt skills saved yet; the app seeds a builtin one on first use"
+        result["note"] = "no prompt skills saved yet; this is the builtin skill the app starts with"
     return result
 
 
@@ -6300,8 +6858,8 @@ async def prompt_list(ctx: Context, id: str = "") -> dict[str, Any]:
     Called with no id this lists metadata only — {skills, default_id}. Each
     skill is {id, name, icon, description, category, enabled, isDefault,
     maxTurns}; `default_id` is the id of the skill marked default, or "" when
-    none is. A `note` is added when the user has never saved any: the app then
-    seeds a builtin skill on first use, which is not visible from here.
+    none is. A `note` is added when the user has never saved any: the list is
+    then the builtin skill the app starts with.
 
     Called with an id it returns that one skill in full — {skill}, carrying
     `prompt` and `resumePrompt` as well. An id the list does not contain
@@ -6326,7 +6884,9 @@ async def cli_close_agent(target: str, ctx: Context, pane_id: str = "") -> dict[
 
     Use it to clean up a pane you opened with cli_open_agent and no longer
     need. Panes the user opened are the user's; closing one takes their work
-    away with no warning they will see first.
+    away with no warning they will see first. To free a finished pane's memory
+    but leave it for the user to check, use cli_reclaim_agent instead: the CLI
+    process ends and the pane stays as a click-to-resume card.
 
     `target` uses the same addressing as cli_send and `pane_id` names one exact
     pane instead. Panes on this machine only: closing one is an action taken by
@@ -6410,6 +6970,118 @@ async def cli_close_agent(target: str, ctx: Context, pane_id: str = "") -> dict[
     if advisories:
         answer["advisories"] = advisories
     return answer
+
+
+# ── Reclaiming another pane ──────────────────────────────────────────────────
+@server.tool()
+async def cli_reclaim_agent(target: str, ctx: Context, pane_id: str = "") -> dict[str, Any]:
+    """Reclaim a finished CLI pane: end its CLI process, keep the pane.
+
+    The pane stays where it is as a click-to-resume card holding its
+    conversation — the same "reclaim now" the status bar and Resource Manager
+    offer (ui_invoke "ui.pane.reclaim"). Use it on a pane whose work is done
+    and reported, to free its memory while leaving it for the user to check or
+    resume. cli_close_agent is the permanent version: it removes the pane.
+
+    The status bar's guards apply unchanged, so a pane that is busy or awaiting
+    an answer, the one the user has focused, one with unsent input, one with
+    queued messages or a running pipeline/loop, and one whose session cannot be
+    resumed are refused rather than reclaimed.
+
+    `target` uses the same addressing as cli_send and `pane_id` names one exact
+    pane instead. Panes on this machine only: a `<device>/<workspace>/<pane>`
+    address fails with "reclaim-local-only", and your own pane with
+    "self-reclaim".
+
+    Returns {ok, target, name, reclaimed}. A refused pane answers ok false,
+    reclaimed false, `reason` (the guard's code, e.g. "focused", "not-idle")
+    and `error` saying why, with error_code "reclaim-refused". A Navide window
+    older than v0.2.16 cannot reclaim and answers error_code
+    "reclaim-unsupported": the app needs updating — do not fall back to
+    cli_close_agent, which ends the session instead of parking it.
+    """
+    from agent_team_backend import message_routing
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    me = caller.pane_id if caller.kind == "pane" else ""
+    result, failure = _resolve_pane_target(caller, me, target, pane_id)
+    if failure is not None:
+        # Same re-read as cli_close_agent: a remote address is not a bad one.
+        if not (pane_id or "").strip():
+            routed = message_routing.route(me, target)
+            if routed.remote is not None:
+                return {
+                    "ok": False,
+                    "error": (
+                        f'cannot reclaim "{target}": it names a pane on another '
+                        f"device, and reclaiming one is an action taken by the "
+                        f"window that owns it — there is no relay for that. Only "
+                        f"panes on this machine can be reclaimed from here."
+                    ),
+                    "error_code": "reclaim-local-only",
+                }
+        return failure
+    pane = result.pane
+    if caller.kind == "pane" and pane.pane_id == caller.pane_id:
+        return {
+            "ok": False,
+            "target": pane.qualified_name,
+            "error": (
+                "that is your own pane — reclaiming it would end the CLI making "
+                "this call, so you would never see the answer."
+            ),
+            "error_code": "self-reclaim",
+        }
+
+    reply = await _ui_request(
+        pane.workspace_path,
+        "invoke",
+        caller=_pane_caller(pane.pane_id),
+        action="ui.pane.reclaim",
+        args={"paneId": pane.pane_id},
+    )
+    if not reply.get("ok"):
+        error = str(reply.get("error") or "the window owning this pane did not answer")
+        # A window before v0.2.16 has no such command; its wording reads like
+        # a typo when the real answer is the app's version.
+        if "unknown command: ui.pane.reclaim" in error:
+            return {
+                "ok": False,
+                "target": pane.qualified_name,
+                "error": (
+                    "the Navide window holding this pane is older than v0.2.16 "
+                    "and cannot reclaim panes; update the app. Do not use "
+                    "cli_close_agent instead — it ends the session for good."
+                ),
+                "error_code": "reclaim-unsupported",
+            }
+        return {
+            "ok": False,
+            "target": pane.qualified_name,
+            "error": error,
+            "error_code": str(reply.get("error_code") or "ui_action_failed"),
+        }
+    # The window answers for a batch; one pane was asked about, so its entry
+    # is the answer.
+    payload = reply.get("result") or {}
+    answer: dict[str, Any] = {"target": pane.qualified_name, "name": pane.name}
+    if pane.pane_id in (payload.get("reclaimed") or []):
+        return {"ok": True, **answer, "reclaimed": True}
+    refused = next(
+        (r for r in (payload.get("refused") or []) if r.get("paneId") == pane.pane_id),
+        {},
+    )
+    return {
+        "ok": False,
+        **answer,
+        "reclaimed": False,
+        "reason": str(refused.get("reason") or "unknown"),
+        "error": str(refused.get("detail") or "the window did not reclaim this pane"),
+        "error_code": "reclaim-refused",
+    }
 
 
 # ── Pipelines: starting and aborting a run ──────────────────────────────────
@@ -6825,10 +7497,15 @@ async def stage_define(
     unrunnable, and there is no undo. Read it out of pipeline_list first if you
     might want it back.
 
+    A pipeline whose graph has gates, reject loops or cross-layer edges cannot
+    be expressed as a stage list: "upsert", "delete" and "reorder" are refused
+    for it (error_code "graph_nonlinear") — edit it with pipeline_graph. On a
+    pipeline whose graph is still linear they work and the graph follows.
+
     Returns {ok, op, stages, pipeline_id, pipelines, active_pipeline_id}, plus
     `stage` for "upsert". ok false carries `error` and `error_code` — one of
-    "bad_op", "missing_argument", "pipeline_running", "not_found", "invalid" —
-    and nothing was written.
+    "bad_op", "missing_argument", "pipeline_running", "graph_nonlinear",
+    "not_found", "invalid" — and nothing was written.
     """
     caller = _resolve_caller(ctx)
     op = str(op or "").strip()
@@ -6867,6 +7544,8 @@ async def stage_define(
         else:
             await asyncio.to_thread(_app.stages_store.reset, pipeline_id or None)
             written = None
+    except GraphNonLinearError as exc:
+        return {"ok": False, "error": str(exc), "error_code": "graph_nonlinear"}
     except (KeyError, ValueError) as exc:
         return _store_refused(exc)
 
@@ -6888,6 +7567,7 @@ async def role_define(
     label: str = "",
     one_line: str = "",
     system_prompt: str = "",
+    properties: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Create, edit, rename, delete or re-seed the ROLES pipeline slots cast from.
 
@@ -6927,6 +7607,15 @@ async def role_define(
                  rather than left dangling, so pipelines survive but those
                  slots lose their role and must be re-cast. There is no undo.
 
+    `properties` (optional, "upsert" and "rename") declares the settings form a
+    slot of this role shows: a list of {name, type, label?, description?,
+    default?, options?, required?, displayOptions?}, type one of string / text
+    / template / number / boolean / options ("options" needs `options`, a list
+    of {value, label?}), displayOptions {show?, hide?} mapping another
+    property's name to the values that show or hide this one. Omitted, a
+    role's existing properties are kept; [] clears them. A slot stores its
+    values in `params`.
+
     Roles have no run guard: unlike stages, editing one is allowed while a
     pipeline runs. A pane already started keeps the prompt it was given — the
     change reaches the next pane opened for that slot, not the ones on screen.
@@ -6964,6 +7653,7 @@ async def role_define(
                     label=label,
                     one_line=one_line,
                     system_prompt=system_prompt,
+                    properties=properties,
                 )
             )
         except (KeyError, ValueError) as exc:
@@ -6994,6 +7684,7 @@ async def role_define(
         next_label = label.strip() or str(existing.get("label", ""))
         next_one_line = one_line.strip() or str(existing.get("one_line", ""))
         next_prompt = system_prompt.strip() or str(existing.get("system_prompt", ""))
+        next_properties = properties if properties is not None else existing.get("properties")
 
         def _rename() -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
             role = _app.roles_store.upsert(
@@ -7001,6 +7692,7 @@ async def role_define(
                 label=next_label,
                 one_line=next_one_line,
                 system_prompt=next_prompt,
+                properties=next_properties,
             )
             # The stores' locks are taken one after the other, never nested —
             # the same ordering ws_handlers.roles_rename keeps.
@@ -7056,6 +7748,100 @@ async def role_define(
 
     await _publish_role_stage_changes(await asyncio.to_thread(_clear_dangling), "roles_reset")
     return {"ok": True, "op": op, "roles": roles}
+
+
+_PIPELINE_GRAPH_OPS = ("get", "apply", "set")
+
+
+@server.tool()
+async def pipeline_graph(
+    ctx: Context,
+    op: str,
+    pipeline_id: str = "",
+    ops: list[dict[str, Any]] | None = None,
+    graph: dict[str, Any] | None = None,
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Read or edit a pipeline TEMPLATE as a graph: nodes, edges, gates, loops.
+
+    A pipeline's shape is a graph — slot nodes (one CLI pane each, carrying the
+    same agentKey / roleKey / label / kickoffBody / isCommander a stage slot
+    has, plus optional `params`), gate nodes (the run pauses there until
+    pipeline_gate passes or rejects it) and a trigger — joined by edges keyed
+    by id. Its stages (what stage_define and pipeline_list show) are derived
+    from it: each longest-path layer of slot nodes is one stage, run in order,
+    so a node waits for every node upstream of it. A pipeline that has never
+    been edited as a graph answers "get" with the graph its stages imply
+    (derived: true) and is unchanged until you write one.
+
+    `op`:
+    - "get"   — returns {graph, derived, stages}.
+    - "apply" — needs `ops`, a list applied all-or-nothing:
+        {op:"add_node", node:{id, kind:"slot"|"gate"|"trigger", label?,
+           position:{x,y}, slot?:{agentKey, roleKey, label, kickoffBody,
+           isCommander?, params?}, gate?:{prompt?}}, after?:[ids], before?:[ids]}
+           (after/before wire main edges; an edge after→before is replaced,
+           i.e. inserting on an edge)
+        {op:"remove_node", id, reconnect?:true}  (upstream rewired to downstream)
+        {op:"update_node", id, label?, slot?:{...partial}, gate?:{prompt?}}
+        {op:"move_node", id, position:{x,y}}
+        {op:"add_edge", edge:{id?, from, to, kind?:"main"|"reject", maxLoops?}}
+        {op:"remove_edge", id}
+        {op:"set_gate", id, prompt?}
+        {op:"set_pin", id, pinned}   (a pinned slot is skipped on later runs and
+           its last output reused)
+        {op:"set_stage_meta", stageId, title?, shortTitle?, question?,
+           description?, sentinel?, allowQuestions?, docQuery?,
+           recommendedRoles?}  (metadata of the stage a layer derives to)
+    - "set"   — needs `graph` ({version:1, nodes, edges}); replaces it whole.
+
+    Rules a write must satisfy: main edges form no cycle; the only loops are
+    "reject" edges, which must point to an upstream node and carry maxLoops
+    1..10 (default 2) — a rejected gate follows its reject edge back and re-runs
+    from there at most that many times, then the run fails.
+
+    Refused while the workspace's run is using this pipeline (error_code
+    "pipeline_running"), like stage_define. `pipeline_id` empty means the
+    active pipeline; name it. Returns {ok, op, pipeline_id, graph, stages}
+    (+ derived for "get"); ok false carries `error`, `error_code` ("bad_op",
+    "missing_argument", "pipeline_running", "not_found", "invalid") and, for
+    an invalid graph, `errors` — nothing was written.
+    """
+    caller = _resolve_caller(ctx)
+    op = str(op or "").strip()
+    if op not in _PIPELINE_GRAPH_OPS:
+        return _bad_op(op, _PIPELINE_GRAPH_OPS)
+    pipeline_id = str(pipeline_id or "").strip()
+    if op == "apply" and not isinstance(ops, list):
+        return _missing_arg(op, "ops (a list of graph ops)")
+    if op == "set" and not isinstance(graph, dict):
+        return _missing_arg(op, "graph (an object with nodes and edges)")
+
+    from agent_team_backend import app as _app
+    from agent_team_backend.pipeline_graph import GraphError
+
+    try:
+        if op == "get":
+            out = await asyncio.to_thread(_app.stages_store.get_graph, pipeline_id or None)
+            return {"ok": True, "op": op, **out}
+        workspace_path = await _definition_workspace(caller, workspace_path)
+        if await asyncio.to_thread(_stage_edit_blocked, workspace_path, pipeline_id):
+            return _run_in_progress("edit the pipeline graph")
+        if op == "apply":
+            out = await asyncio.to_thread(
+                _app.stages_store.apply_graph_ops, pipeline_id or None, list(ops or [])
+            )
+        else:
+            out = await asyncio.to_thread(_app.stages_store.set_graph, pipeline_id or None, graph)
+    except GraphError as exc:
+        return {"ok": False, "error": str(exc), "error_code": "invalid", "errors": exc.errors}
+    except (KeyError, ValueError) as exc:
+        return _store_refused(exc)
+    # The same three events the pipelines.graph.* ws handlers send.
+    from agent_team_backend.ws_handlers import _broadcast_graph_change
+
+    await _broadcast_graph_change(out, f"graph_{op}")
+    return {"ok": True, "op": op, **out}
 
 
 # ── Pipelines: driving a run that is already going ──────────────────────────
@@ -7175,6 +7961,87 @@ async def pipeline_restart(ctx: Context, workspace_path: str = "") -> dict[str, 
     workspace_path = await _plan_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.restart", args={}
+    )
+
+
+_PIPELINE_GATE_OPS = ("pass", "reject")
+
+
+@server.tool()
+async def pipeline_gate(
+    ctx: Context,
+    op: str,
+    node_id: str = "",
+    comment: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Pass or reject the gate a running pipeline is paused on.
+
+    A gate node stops the run between two stages until someone decides.
+    pipeline_status shows it in `gate` ({gateId, label, prompt, ...}) — read
+    that prompt and look at the work before deciding.
+
+    - "pass"   — the run carries on with the next stage. THIS OPENS CLI PANES
+                 AND SPENDS THEIR QUOTA.
+    - "reject" — the gate's reject edge is followed back and the stages from
+                 its target on run again, with `comment` put in front of their
+                 kickoffs so the agents know what to fix. Each reject edge has
+                 a loop budget; once it is spent, or when the gate has no
+                 reject edge, rejecting ends the run as failed.
+
+    `node_id` is optional: given, it must be the gate the run is waiting on,
+    which guards against deciding a different gate than the one you read.
+
+    Returns the window's own reply — {ok, result, error}; ok false means no
+    run is waiting on a gate (or on that one) and nothing changed.
+    """
+    caller = _resolve_caller(ctx)
+    op = str(op or "").strip()
+    if op not in _PIPELINE_GATE_OPS:
+        return _bad_op(op, _PIPELINE_GATE_OPS)
+    workspace_path = await _plan_workspace(caller, workspace_path)
+    args: dict[str, Any] = {}
+    if node_id:
+        args["nodeId"] = str(node_id)
+    if op == "reject" and comment:
+        args["comment"] = str(comment)
+    return await _ui_request(
+        workspace_path, "invoke", caller=caller,
+        action="ui.pipeline.gate_pass" if op == "pass" else "ui.pipeline.gate_reject",
+        args=args,
+    )
+
+
+@server.tool()
+async def pipeline_restart_from(
+    ctx: Context,
+    node_id: str,
+    task: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Start a new run of the pipeline at one node instead of stage one.
+
+    THIS CLOSES THE PIPELINE'S PANES, OPENS NEW ONES AND SPENDS THEIR QUOTA.
+    The stages before the node's stage are not run again: their last recorded
+    output is reused as context (the same as a pinned node). Use it when an
+    early stage's work is good and only a later one needs redoing — cheaper
+    than pipeline_restart, which re-runs everything. Refused while a run is in
+    progress (pipeline_abort first).
+
+    `node_id` comes from pipeline_graph op "get" (or pipeline_status `nodes`).
+    `task` defaults to the recorded run's task.
+
+    Returns the window's own reply — {ok, result, error}.
+    """
+    caller = _resolve_caller(ctx)
+    if not str(node_id or "").strip():
+        return _missing_arg("restart_from", "node_id")
+    workspace_path = await _plan_workspace(caller, workspace_path)
+    args: dict[str, Any] = {"nodeId": str(node_id).strip()}
+    if task:
+        args["task"] = str(task)
+    return await _ui_request(
+        workspace_path, "invoke", caller=caller, action="ui.pipeline.restart_from", args=args
     )
 
 
@@ -7435,6 +8302,45 @@ async def scheduler_runs(id: str, ctx: Context, limit: int = 20) -> dict[str, An
     return await _scheduler_service().runs(str(id or ""), limit)
 
 
+@server.tool()
+async def evolve_report(
+    run_id: str,
+    status: str,
+    summary: str,
+    ctx: Context,
+    commits: list[dict[str, Any]] | None = None,
+    proposals: list[dict[str, Any]] | None = None,
+    panes: list[str] | None = None,
+    tokens: int | None = None,
+    run_token: str = "",
+) -> dict[str, Any]:
+    """Finish a Navide self-evolution run. Only for a pane Navide opened (or
+    sent) a self-evolution task to: its task names the run_id.
+
+    Call it exactly once, as the last step, with the run_id and run_token
+    your task gave you — a report without the matching token is refused.
+    `status` is "ok" or "error";
+    `summary` 3–8 lines for the user (mask secrets first); `commits` is
+    [{hash, title}] of fixes now on the main branch; `proposals` is
+    [{rel_path, name}] of plans created; `panes` the names of panes you opened;
+    `tokens` your estimate of tokens used. Navide records it in the workspace's
+    self-evolution history and then reclaims the run's pane. Only the run's own
+    pane, or a pane it opened, may report it. Returns {ok, run_id, status}.
+    """
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if caller.kind != "pane":
+        return {"ok": False, "error": "evolve_report must come from the run's own Navide pane"}
+    from agent_team_backend import evolve_service
+
+    return await evolve_service.get_service().report(caller.pane_id, {
+        "run_id": run_id, "status": status, "summary": summary, "commits": commits,
+        "proposals": proposals, "panes": panes, "tokens": tokens, "run_token": run_token,
+    })
+
+
 # ── The CLI permission switch ───────────────────────────────────────────────
 # Global, not per project and not per pipeline: yolo feeds skipFlagFor() in the
 # renderer, which every spawn / resume / restore path calls, and it persists in
@@ -7663,6 +8569,155 @@ def review_plan(rel_path: str) -> str:
         f"telling me here. Then summarise for me what you left on it, and say "
         f"whether the plan is ready to approve as it stands."
     )
+
+
+# ── Share links (requires Navide Cloud) ────────────────────────────────────
+# Registered for everyone — the server has no conditional tools — so each one
+# first checks the link and, without Navide Cloud, answers one sentence and
+# does nothing: no request, no vault, no log line, no announcement. These are
+# registered last so every existing tool keeps its place in the list.
+
+_SHARE_NEEDS_CLOUD = "Navide Cloud is not connected on this machine, so share links are not available; nothing was shared."
+_SHARE_UNSUPPORTED = "The Navide Cloud server this machine is connected to does not offer share links; nothing was shared."
+
+
+def _share_cloud_ready() -> bool:
+    from agent_team_backend import server_link
+
+    return server_link.link_state() == server_link.STATE_CONNECTED
+
+
+async def _share_run(call: Callable[[Any], Awaitable[dict]]) -> dict:
+    from agent_team_backend import share_links, sync_keyring
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        return {"ok": True, **await call(share_links.ServerLinksClient())}
+    except share_links.ShareRefused as err:
+        return {"ok": False, "error": str(err), "reason": err.code}
+    except share_links.ShareRemoteError as err:
+        if err.code in share_links.UNAVAILABLE_CODES:
+            return {"ok": False, "error": _SHARE_UNSUPPORTED, "code": "UNSUPPORTED"}
+        return {"ok": False, "error": str(err), "code": err.code}
+    except sync_keyring.KeyringError as err:
+        return {"ok": False, "error": f"this machine cannot open the account key: {err}", "code": "NO_SYNC_KEY"}
+    except share_links.ShareError as err:
+        return {"ok": False, "error": str(err), "code": "SHARE_FAILED"}
+
+
+@server.tool()
+async def share_create(
+    path: str,
+    ctx: Context,
+    kind: str = "plan",
+    ttl_days: int = 7,
+    require_login: bool = False,
+    send_to_chat: bool = False,
+) -> dict:
+    """Publish a plan or report as an encrypted, read-only share link (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected on this machine; otherwise it
+    answers that and does nothing. `path` is the absolute path of a plan
+    (.agent-team/plans/*.html) or report; key, credential and memory files are
+    refused with the reason. Secrets in the content are masked before upload
+    and the answer lists where (line and kind, never the value). The link is
+    marked as created by your pane and the user is told it exists.
+    send_to_chat=true also posts the link to the direct-message chat bound to
+    your pane, and to nothing else (no group, no other chat); only set it when
+    the user asked for that. Returns
+    {ok, linkId, url, expiresAt, masked} — the url carries the only key, so
+    hand it only to the user — or {ok: false, error, reason?}.
+    """
+    from agent_team_backend import agent_messaging, app, share_links
+    from agent_team_backend.ipc import make_event
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    me = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+    pane = getattr(me, "name", "") or ""
+    agent = getattr(me, "agent_key", "") or ""
+
+    async def call(client: Any) -> dict:
+        created = await share_links.create_share(
+            client,
+            path,
+            kind,
+            ttl_seconds=ttl_days * 86400,
+            require_login=require_login,
+            created_by="agent",
+            pane=pane,
+            agent=agent,
+            pane_id=caller.pane_id,
+        )
+        masked = [{"line": f.line, "category": f.category, "action": f.action} for f in created.findings]
+        await app.broadcast(
+            make_event(
+                "share.created",
+                {
+                    "linkId": created.link_id,
+                    "expiresAt": created.expires_at,
+                    "createdBy": "agent",
+                    "pane": pane,
+                    "agent": agent,
+                    "masked": masked,
+                },
+            )
+        )
+        if send_to_chat:
+            await share_links.announce_to_chat(created, created_by="agent", pane_id=caller.pane_id)
+        return {"linkId": created.link_id, "url": created.url, "expiresAt": created.expires_at, "masked": masked}
+
+    return await _share_run(call)
+
+
+@server.tool()
+async def share_list(ctx: Context) -> dict:
+    """List this account's share links (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected; otherwise it answers that and
+    does nothing. Each link: {linkId, kind, title, createdBy, pane, active,
+    expiresAt, openCount, lastOpenedAt, ...}. No URL or key is listed.
+    """
+    from agent_team_backend import share_links
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+
+    async def call(client: Any) -> dict:
+        return {"links": await share_links.list_links(client)}
+
+    return await _share_run(call)
+
+
+@server.tool()
+async def share_revoke(link_id: str, ctx: Context) -> dict:
+    """Revoke one share link of this account (requires Navide Cloud).
+
+    Only works while Navide Cloud is connected; otherwise it answers that and
+    does nothing. The link stops opening at once and its stored copy is deleted.
+    """
+    from agent_team_backend import share_links
+
+    if not _share_cloud_ready():
+        return {"ok": False, "error": _SHARE_NEEDS_CLOUD}
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+
+    async def call(client: Any) -> dict:
+        return await share_links.revoke(client, link_id)
+
+    return await _share_run(call)
 
 
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────

@@ -432,3 +432,32 @@ describe('both ends of the flag answer to the same freshness bar', () => {
     expect(raise).toContain('if (!readingIsCurrent(snap)) return')
   })
 })
+
+describe('pane health watcher – a dead login on an account\'s own config dir', () => {
+  function handlerBody(): string {
+    const start = appSource.indexOf('function onAccountDirLoginExpired(')
+    expect(start).toBeGreaterThan(-1)
+    const end = appSource.indexOf('\n}\n', start)
+    return appSource.slice(start, end)
+  }
+
+  it('hands the expiry to the account-dir handler right after lighting the badge', () => {
+    const body = paneHealthWatcherBody()
+    const lit = body.indexOf('pane.loginExpired = true')
+    const handled = body.indexOf('onAccountDirLoginExpired(pane)')
+    expect(lit).toBeGreaterThan(-1)
+    expect(handled).toBeGreaterThan(lit)
+  })
+
+  it('reports only a claude pane whose account runs on its own signed-in dir', () => {
+    const body = handlerBody()
+    expect(body).toContain("pane.agentKey !== 'claude'")
+    expect(body).toContain('accountDirFor')
+    expect(body).toContain('signedIn')
+    expect(body).toContain('reportAccountDirExpired(')
+  })
+
+  it('tells the user which account must sign in again', () => {
+    expect(handlerBody()).toContain("'pane.terminal.login-expired-account-dir-notify-body'")
+  })
+})

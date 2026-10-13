@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import { DEFAULT_ACCOUNT, type ChannelLinkInvite, type ChannelPlatform, type ChannelsStore } from '../composables/useChannels'
 import { channelPlatform, type ChannelLinkTarget } from '../platform/channels'
 
@@ -182,13 +182,13 @@ watch(
       <span v-if="noDeepLink" class="clg-hint">{{ t('channels.link.no-deep-link', { platform: platformName }) }}</span>
       <span class="clg-hint">{{ sendHint }}</span>
       <span class="clg-code-row">
-        <code class="clg-code" data-testid="channel-link-code">{{ command }}</code>
+        <code class="clg-code" v-truncate data-testid="channel-link-code">{{ command }}</code>
         <button type="button" class="clg-btn sm" data-testid="channel-link-copy" @click="copy">{{ copied ? t('channels.link.copied') : t('channels.link.copy') }}</button>
       </span>
       <span class="clg-hint">{{ t('channels.link.expires') }}</span>
     </div>
     <div v-for="req in pending" :key="req.code" class="clg-pair" data-testid="channel-link-pairing">
-      <span class="clg-pair-name">{{ t('channels.link.pairing', { name: req.sender_name || req.sender_id }) }}</span>
+      <span class="clg-pair-name" v-truncate>{{ t('channels.link.pairing', { name: req.sender_name || req.sender_id }) }}</span>
       <button type="button" class="clg-btn sm primary" :disabled="busy" data-testid="channel-link-approve" @click="approve(req.code)">{{ t('channels.pairing.approve') }}</button>
     </div>
     <p v-if="error" class="clg-error" role="alert">{{ error }}</p>

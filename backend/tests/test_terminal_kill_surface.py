@@ -232,3 +232,38 @@ async def test_without_a_workspace_ends_that_surface_everywhere(tmp_path: Path, 
     assert terminals.killed == ["t-git-a", "t-git-b"]
     assert [p.spawn_status for p in store.load_or_create(ws_a).panes] == ["removed"]
     assert [p.spawn_status for p in store.load_or_create(ws_b).panes] == ["removed"]
+
+
+@pytest.mark.asyncio
+async def test_one_failing_kill_does_not_stop_the_others(tmp_path: Path, store: ProjectStore) -> None:
+    """A kill that raises is logged and skipped: the remaining panels still go
+    down, have their records retired, and the reply still goes out."""
+    ws_a = str(tmp_path / "a")
+    ws_b = str(tmp_path / "b")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    store.record_manual_pane_spawn(ws_a, pane_id="git-a", agent="claude", origin="git-window", surface="git")
+    store.record_manual_pane_spawn(ws_b, pane_id="git-b", agent="claude", origin="git-window", surface="git")
+
+    class FailingFirstKill(FakeTerminals):
+        async def kill(self, session_id: str, force: bool = False) -> None:
+            if session_id == "t-git-a":
+                raise OSError("kill failed")
+            await super().kill(session_id, force)
+
+    terminals = FailingFirstKill([
+        _term("t-git-a", "git-a", _dock_meta(ws_a, "git")),
+        _term("t-git-b", "git-b", _dock_meta(ws_b, "git")),
+    ])
+    session = _session(terminals)
+
+    reply = await _kill_surface(session, {"surface": "git"})
+
+    assert reply["type"] == "terminal.kill_surface.result"
+    assert reply["payload"]["pane_ids"] == ["git-b"]
+    assert terminals.killed == ["t-git-b"]
+    # The caller learns which panel is still running, and why.
+    assert reply["payload"]["failed"] == [
+        {"pane_id": "git-a", "terminal_session_id": "t-git-a", "error": "kill failed"}
+    ]
+    assert [p.spawn_status for p in store.load_or_create(ws_b).panes] == ["removed"]

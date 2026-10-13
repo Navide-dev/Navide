@@ -118,7 +118,7 @@ __all__ = ["paths", "process_tree", "resource_probe", "terminal_backend"]
 # A subclass rather than edits to `DarwinPaths` above, so this lands as a pure
 # append; `paths` is rebound below to the complete implementation.
 
-from . import _posix_paths, _posix_secrets  # noqa: E402
+from . import _posix_durable, _posix_paths, _posix_secrets  # noqa: E402
 
 
 class DarwinLayout(DarwinPaths):
@@ -127,6 +127,9 @@ class DarwinLayout(DarwinPaths):
 
     def config_home(self, home: Path) -> Path:
         return home / "Library" / "Application Support"
+
+    def system_dirs(self) -> list[Path]:
+        return _posix_paths.system_dirs()
 
     def roaming_app_data(self) -> Path | None:
         return _posix_paths.roaming_app_data()
@@ -198,6 +201,9 @@ class DarwinLayout(DarwinPaths):
     def enforces_posix_modes(self) -> bool:
         return _posix_paths.enforces_posix_modes()
 
+    def file_name_refused(self, name: str) -> bool:
+        return _posix_paths.file_name_refused(name)
+
     def symlinks_available(self) -> bool:
         return _posix_paths.symlinks_available()
 
@@ -227,6 +233,7 @@ class DarwinLayout(DarwinPaths):
 
 paths = DarwinLayout()
 secret_files = _posix_secrets.secret_files
+durable_secret_files = _posix_durable.durable_secret_files
 scripts = _posix_paths.scripts
 
 from . import _posix_scheduler  # noqa: E402

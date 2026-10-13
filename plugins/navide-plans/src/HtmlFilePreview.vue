@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { createPluginCapabilityClient } from '@navide/plugin-sdk'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{ path: string; name: string }>()
 const capabilities = createPluginCapabilityClient().capabilities
@@ -40,7 +41,7 @@ onUnmounted(() => { generation++ })
 <template>
   <div class="fpv">
     <div class="fpv-toolbar">
-      <span class="fpv-name" :title="path">{{ name }}</span>
+      <span class="fpv-name" v-truncate :title="path">{{ name }}</span>
       <span class="fpv-meta">{{ extension }}</span>
       <span class="fpv-hint">{{ t('preview.html-scripts-disabled') }}</span>
       <span class="fpv-spacer" />

@@ -10,7 +10,7 @@ const stagedDir = resolve(fileURLToPath(new URL('../../../dist-plugins/navide-mi
 const expectedMarketplace = {
   description: 'Edit workspace files, review changes and run AI CLI sessions in an independent IDE window.',
   license: 'MIT',
-  repository: 'https://github.com/nt-nerdtechnic/Navide',
+  repository: 'https://github.com/Navide-dev/Navide',
   categories: ['productivity', 'development'],
 }
 

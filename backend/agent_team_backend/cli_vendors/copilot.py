@@ -112,6 +112,7 @@ import sys
 import time
 
 from .. import osplat
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     PlatformInstall,
     AccountSwitchSpec,
@@ -1447,7 +1448,16 @@ def _install_hooks(port_file: str) -> Any:
     return install_hooks(port_file)
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("plugin-dirs", (".copilot", "installed-plugins"), "Copilot plugin", settings=(".copilot", "settings.json")),
+    ExtensionsSource("hooks-dir", (".copilot", "hooks"), "Copilot hook"),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="copilot",
     # Enterprise hosts/model routing have no verified default CLI host set here.
     expected_hosts=(),

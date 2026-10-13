@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { computeGraph, laneColor } from '../lib/git-graph'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { GitCommit, GitCommitDetail, DiffBlameHunk } from '../composables/useGit'
 
 // The full-history dialog reuses the parent GitPane's single useGit instance
@@ -320,10 +320,10 @@ watch(() => props.show, (visible) => {
               </div>
               <div class="col-desc desc-cell">
                 <span v-for="(p, pi) in rowRefs(c)" :key="pi" class="ref-pill" :class="p.kind">{{ p.label }}</span>
-                <span class="desc-msg">{{ c.message }}</span>
+                <span class="desc-msg" v-truncate>{{ c.message }}</span>
               </div>
-              <div class="col-author cell-ellip">{{ authorName(c) }}</div>
-              <div class="col-date cell-ellip">{{ c.date ?? '' }}</div>
+              <div class="col-author cell-ellip" v-truncate>{{ authorName(c) }}</div>
+              <div class="col-date cell-ellip" v-truncate>{{ c.date ?? '' }}</div>
               <div class="col-commit"><code class="chash">{{ c.short_hash }}</code></div>
             </div>
           </div>
@@ -357,9 +357,9 @@ watch(() => props.show, (visible) => {
                   <div
                     v-for="f in commitDetailData.files"
                     :key="f"
+                    v-truncate
                     class="dl-file"
                     :class="{ active: commitDiffFile === f }"
-                    :title="f"
                     @click="selectFile(f)"
                   >{{ f }}</div>
                 </div>

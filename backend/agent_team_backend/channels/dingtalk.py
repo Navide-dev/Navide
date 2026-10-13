@@ -52,6 +52,7 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
@@ -207,7 +208,10 @@ class DingTalkAdapter:
 
     async def _on_bot_message(self, d: dict[str, Any]) -> None:
         text = _message_text(d)
-        if not text or self._emit is None:
+        # A file is reported, not fetched: this adapter has no media support yet.
+        kind = MEDIA_MSGTYPES.get(str(d.get("msgtype") or ""))
+        files = [InboundAttachment(kind, "", None, "", "")] if kind else []
+        if not (text or files) or self._emit is None:
             return
         is_direct = str(d.get("conversationType") or "") == "1"
         sender_id = str(d.get("senderStaffId") or d.get("senderId") or "")
@@ -231,6 +235,7 @@ class DingTalkAdapter:
             sender_id=sender_id, sender_name=sender_name, text=text,
             message_id=str(d.get("msgId") or ""), is_direct=is_direct,
             ts=float(created) / 1000.0 if isinstance(created, (int, float)) else time.time(),
+            attachments=files,
         ))
 
     # --- outbound -------------------------------------------------------------
@@ -292,6 +297,9 @@ class DingTalkAdapter:
 
     async def create_location(self, chat_id: str, title: str) -> Location:
         raise NotImplementedError("DingTalk bots cannot create groups; bind an existing group")
+
+
+MEDIA_MSGTYPES = {"picture": "photo", "file": "document", "video": "video", "audio": "audio"}
 
 
 def _message_text(d: dict[str, Any]) -> str:

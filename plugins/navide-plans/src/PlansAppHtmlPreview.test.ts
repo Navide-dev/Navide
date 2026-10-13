@@ -23,6 +23,7 @@ beforeAll(async () => {
   vi.doMock('@navide/plugin-ui/foundation', () => ({
     useNotify: () => ({ toast: vi.fn(), confirm: vi.fn(async () => true), dialog: { value: null } }),
     useTheme: () => ({ loadTheme: vi.fn() }),
+    vTruncate: {},
   }))
   vi.doMock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key, te: () => false }) }))
   vi.doMock('@navide/plugin-sdk', () => ({

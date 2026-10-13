@@ -194,7 +194,7 @@ def _wired(tmp_path, monkeypatch):
 
     monkeypatch.setattr(app, "broadcast", broadcast)
     monkeypatch.setattr(ws_handlers, "_profile_account_view",
-                        lambda: {"identities": {}, "duplicates": {}})
+                        lambda: {"identities": {}, "duplicates": {}, "accountDirs": {}})
     monkeypatch.setattr(app, "attribution", FakeAttribution())
     monkeypatch.setattr(app, "_register_workspace_and_backfill", lambda _ws: None)
     monkeypatch.setattr(

@@ -6,9 +6,10 @@ import type { useBackend } from '../composables/useBackend'
 import { useEditorTargets } from '../composables/useEditorTargets'
 import { useExplorer, type FsEntry } from '../composables/useExplorer'
 import { revealPath } from '../composables/native'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
+import { placeSubmenu } from '../lib/submenuPlacement'
 
 const props = defineProps<{
   workspacePath: string
@@ -589,7 +590,7 @@ defineExpose({ revealFile, focusTree })
   <div class="explorer" @click="closeCtx(); clearSelection()">
     <!-- Header -->
     <div class="exp-header">
-      <span class="exp-ws" :title="workspacePath">{{ wsName || $t('label.no-workspace') }}</span>
+      <span class="exp-ws" v-truncate :title="workspacePath">{{ wsName || $t('label.no-workspace') }}</span>
       <div class="exp-actions">
         <button
           class="exp-icon-btn"
@@ -648,12 +649,12 @@ defineExpose({ revealFile, focusTree })
             <svg v-if="row.entry.is_dir" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M1.75 2A1.75 1.75 0 0 0 0 3.75v8.5C0 13.216.784 14 1.75 14h12.5A1.75 1.75 0 0 0 16 12.25v-7.5A1.75 1.75 0 0 0 14.25 3H7.5L6.2 1.7A1.75 1.75 0 0 0 4.96 1H1.75Z"/></svg>
             <svg v-else width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M3.75 1A1.75 1.75 0 0 0 2 2.75v10.5c0 .966.784 1.75 1.75 1.75h8.5A1.75 1.75 0 0 0 14 13.25V5.5L9.5 1H3.75ZM9 2.5 12.5 6H9V2.5Z"/></svg>
           </span>
-          <span class="exp-name">{{ row.entry.name }}</span>
+          <span class="exp-name" v-truncate>{{ row.entry.name }}</span>
         </div>
         <div
           v-for="note in treeView.notes.get(row.entry.rel_path) ?? []"
           :key="`${note.kind}:${note.dirRel}`"
-          class="exp-note"
+          class="exp-note" v-truncate
           :class="note.kind"
           :style="{ paddingLeft: 20 + note.depth * 12 + 'px' }"
         >
@@ -717,7 +718,7 @@ defineExpose({ revealFile, focusTree })
           <button v-if="!ctx.entry.is_dir && props.onAskAiAboutFile" class="exp-ctx-item" @click="props.onAskAiAboutFile!(ctx.entry!.rel_path); closeCtx()">{{ $t('action.ask-ai-about-file') }}</button>
           <template v-if="ctx.entry.is_dir && canOpenFolderInEditor()">
             <button class="exp-ctx-item" @click="openFolderInEditor(ctx.entry!); closeCtx()">{{ $t('action.open-in-default-editor') }}</button>
-            <div class="exp-ctx-item has-sub">
+            <div class="exp-ctx-item has-sub" @mouseenter="placeSubmenu($event, '.exp-ctx-submenu')">
               <span>{{ $t('action.open-with') }}</span><span class="exp-ctx-caret">▸</span>
               <div class="exp-ctx-submenu">
                 <button
@@ -941,6 +942,8 @@ defineExpose({ revealFile, focusTree })
   box-shadow: 0 8px 28px var(--shadow-overlay);
 }
 .exp-ctx-item.has-sub:hover .exp-ctx-submenu { display: block; }
+.exp-ctx-item.has-sub[data-sub-place="left"] .exp-ctx-submenu { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+.exp-ctx-item.has-sub[data-sub-place="below"] .exp-ctx-submenu { top: 100%; left: 0; margin-left: 0; }
 
 /* Multi-select */
 .exp-row.row-selected { background: color-mix(in srgb, var(--accent-fg) 12%, transparent); }

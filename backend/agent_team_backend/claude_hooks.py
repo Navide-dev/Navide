@@ -32,6 +32,7 @@ import logging
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -312,7 +313,9 @@ def _refresh_claude_version(port_file: str) -> None:
         log.warning("could not record the Claude Code version: %s", err)
         return
     log.info("Claude Code version %s: reinstalling hooks", version)
-    install_hooks(port_file)
+    from .convenience_wiring import install_hooks_gated
+
+    install_hooks_gated("claude", install_hooks, port_file)
 
 
 def _build_rewake_command(port_file: str) -> str:
@@ -382,6 +385,13 @@ def _hook_text(hook: dict) -> str:
     return " ".join([str(hook.get("command", "")), *map(str, hook.get("args") or [])])
 
 
+def _owned(hook: Any, dev_only: bool) -> bool:
+    """Ours, and for a dev backend (``dev_only``) aimed at a dev backend: the
+    installed app's entries are never a dev backend's to take out, or the
+    user's installed Navide would silently lose its hooks."""
+    return _hook_is_ours(hook) and (not dev_only or "-dev" in _hook_text(hook))
+
+
 def _read_settings(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
@@ -405,16 +415,32 @@ def _write_settings(path: Path, data: dict[str, Any]) -> None:
             log.info("backed up CLI settings → %s", backup)
         except OSError as err:
             log.warning("backup failed (%s); proceeding without backup", err)
-    tmp = path.with_suffix(path.suffix + ".tmp")
+    # The file a symlink points at is the one rewritten (a dotfiles-managed
+    # settings.json stays a link), and its mode is kept: the temp file starts
+    # 0600 and takes the original's mode before it replaces it, so a file
+    # that may hold an API key is never left wider than the user made it.
+    target = path.resolve()
     try:
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, path)
+        mode: int | None = stat.S_IMODE(target.stat().st_mode)
+    except OSError:
+        mode = None
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    try:
+        tmp.unlink(missing_ok=True)  # a leftover keeps its own mode
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False))
+        if mode is not None:
+            os.chmod(tmp, mode)
+        os.replace(tmp, target)
     except Exception:
         tmp.unlink(missing_ok=True)
         raise
 
 
-def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str, Any]:
+def install_hooks(
+    port_file: str, settings_file: Path | None = None, *, skip: frozenset[str] = frozenset()
+) -> dict[str, Any]:
     """Idempotent merge: ensure our hooks are present for each event.
 
     `port_file` is the absolute path to a small text file containing the
@@ -428,8 +454,23 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
     serve claude's push channel, so a user who switched that channel off gets
     it stripped here and not written back. The signal hooks are unaffected —
     they feed activity detection, which has nothing to do with push delivery.
+
+    ``skip`` names hooks (``hook_parts`` keys) the user deleted by hand: they
+    are not written back, and the others are installed as usual.
     """
     path = settings_file or settings_path()
+    # Refuse to write over a file that is not a JSON object. _read_settings
+    # reports it as an empty dict, and merging into that would replace every
+    # setting the user has with nothing but our hooks.
+    if path.is_file():
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            parsed = err
+        if not isinstance(parsed, dict):
+            log.warning("claude settings.json unparseable (%s); leaving it alone", parsed)
+            return {"installed": False, "path": str(path), "reason": "settings.json unparseable"}
+
     settings = _read_settings(path)
     hooks_section = settings.get("hooks")
     if not isinstance(hooks_section, dict):
@@ -486,11 +527,11 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
         # is backgrounded and only its exit code matters, and a single event
         # (Stop) wants both.
         ours: list[dict[str, Any]] = []
-        if event_kind:
+        if event_kind and f"{event_name}:{event_kind}" not in skip:
             ours.append(osplat.scripts.hook_entry(_build_curl_command(port_file, event_kind)))
-        if event_name == GUARD_EVENT:
+        if event_name == GUARD_EVENT and f"{event_name}:guard" not in skip:
             ours.append(guard_hook_entry(port_file))
-        if event_name in _REWAKE_EVENTS and rewake_wanted:
+        if event_name in _REWAKE_EVENTS and rewake_wanted and f"{event_name}:rewake" not in skip:
             ours.append({
                 **osplat.scripts.hook_entry(_build_rewake_command(port_file)),
                 "asyncRewake": True,
@@ -518,17 +559,148 @@ def install_hooks(port_file: str, settings_file: Path | None = None) -> dict[str
              path, added, port_file)
     # Only for the real settings file: the probe serves what Claude Code will
     # read, and runs once per backend.
+    if settings_file is None:
+        _start_version_probe(port_file)
+    return {"installed": True, "path": str(path), "events": added, "port_file": port_file}
+
+
+def _start_version_probe(port_file: str) -> None:
     global _version_refresh_started
-    if settings_file is None and osplat.platform_id == "win32" and not _version_refresh_started:
+    if osplat.platform_id == "win32" and not _version_refresh_started:
         _version_refresh_started = True
         threading.Thread(
             target=_refresh_claude_version, args=(port_file,), name="claude-version-probe", daemon=True
         ).start()
-    return {"installed": True, "path": str(path), "events": added, "port_file": port_file}
 
 
-def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:
-    """Remove all agent-team hook entries; leave everything else alone."""
+# ── Phase 3: the hooks ride on the panes Navide starts ──────────────────────
+
+#: The flag a carried pane is started with; Claude Code merges the file's
+#: hooks with the user's own settings rather than replacing them.
+SETTINGS_FLAG = "--settings"
+
+#: The (port_file, skip) the pane file was last prepared with, so a file that
+#: went missing while the panes carry the hooks can be written again at spawn.
+_prepared_with: tuple[str, frozenset[str]] | None = None
+
+
+def pane_settings_path() -> Path:
+    """The settings file a carried pane gets through ``--settings``: Navide's
+    hooks alone, inside Navide's own data."""
+    from .push_delivery import runtime_dir
+
+    return runtime_dir("claude") / "settings.json"
+
+
+def prepare_pane_settings(port_file: str, skip: frozenset[str]) -> Path:
+    """Write the pane-side copy of Navide's hooks: exactly what
+    ``install_hooks`` merges into the shared file (rewake per the push-channel
+    switch, minus ``skip``), alone in a 0600 file of Navide's. Built beside
+    it and moved into place, so a pane starting meanwhile reads the old copy
+    or the new one, never half of one. Raises when it cannot be written."""
+    from .osplat import secret_files
+
+    target = pane_settings_path()
+    secret_files.make_private_dir(target.parent)
+    staging = target.with_name(f".{target.name}.new")
+    # Starts from nothing: install_hooks would merge into (and back up) a
+    # leftover from an interrupted write.
+    staging.unlink(missing_ok=True)
+    result = install_hooks(port_file, settings_file=staging, skip=skip)
+    if not result.get("installed"):
+        staging.unlink(missing_ok=True)
+        raise OSError(f"could not write {staging}: {result}")
+    os.replace(staging, target)
+    global _prepared_with
+    _prepared_with = (port_file, skip)
+    # What the probe decides (the exec-form guard) is in this file now.
+    _start_version_probe(port_file)
+    return target
+
+
+def wire_spawn(command: Any) -> Any:
+    """``command`` with ``--settings <pane file>`` appended, once. A command
+    that already names a settings file is left alone: whoever wrote it chose
+    that file, and Claude Code reads only one. A pane file gone missing is
+    written again first; when it cannot be, the pane starts without it rather
+    than not at all."""
+    from .push_delivery import _append_to_command, _command_text, _has_flag
+
+    if _has_flag(_command_text(command), SETTINGS_FLAG):
+        if str(pane_settings_path()) not in _command_text(command):
+            log.warning("claude pane names its own %s; Navide's hooks are not added", SETTINGS_FLAG)
+        return command
+    if not pane_settings_path().is_file():
+        try:
+            if _prepared_with is None:
+                raise FileNotFoundError(pane_settings_path())
+            prepare_pane_settings(*_prepared_with)
+        except Exception as err:  # noqa: BLE001 — a spawn is never broken over this
+            log.warning("claude pane settings missing and not written again; pane starts without hooks: %s", err)
+            return command
+    return _append_to_command(command, f"{SETTINGS_FLAG} {osplat.paths.quote_arg(str(pane_settings_path()))}")
+
+
+def hooks_present(settings_file: Path | None = None, *, dev_only: bool = False) -> bool:
+    """Whether the settings file still carries any hook Navide wrote (a dev
+    backend's own only, with ``dev_only``).
+
+    Raises when the file exists but cannot be read as a JSON object: an
+    unreadable file says nothing about whether the user removed our hooks.
+    So does a link that leads nowhere (a dotfiles checkout mid-switch).
+    """
+    path = settings_file or settings_path()
+    if not path.is_file():
+        if path.is_symlink():
+            raise FileNotFoundError(f"{path} is a link that leads nowhere")
+        return False
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    hooks_section = data.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return False
+    return any(
+        _owned(hook, dev_only)
+        for entries in hooks_section.values() if isinstance(entries, list)
+        for entry in entries if isinstance(entry, dict)
+        for hook in (entry.get("hooks") if isinstance(entry.get("hooks"), list) else [])
+    )
+
+
+_KIND_RE = re.compile(re.escape(_AGENT_TEAM_MARKER) + r" kind=(\w+)")
+
+
+def hook_parts(settings_file: Path | None = None) -> set[str]:
+    """Each Navide hook in the settings file, as "<event>:<kind>" (kind is
+    the marker's: stop, guard, rewake …). One the user deleted by hand is
+    missing here while the rest are not. Raises like ``hooks_present``."""
+    path = settings_file or settings_path()
+    if not path.is_file():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    hooks_section = data.get("hooks")
+    if not isinstance(hooks_section, dict):
+        return set()
+    parts: set[str] = set()
+    for event_name, entries in hooks_section.items():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            inner = entry.get("hooks") if isinstance(entry, dict) else None
+            for hook in inner if isinstance(inner, list) else []:
+                if _hook_is_ours(hook):
+                    # The exec-form guard runs a script and carries no marker.
+                    match = _KIND_RE.search(str(hook.get("command", "")))
+                    parts.add(f"{event_name}:{match.group(1) if match else 'guard'}")
+    return parts
+
+
+def uninstall_hooks(settings_file: Path | None = None, *, dev_only: bool = False) -> dict[str, Any]:
+    """Remove all agent-team hook entries (a dev backend's own only, with
+    ``dev_only``); leave everything else alone."""
     path = settings_file or settings_path()
     if not path.is_file():
         return {"removed": False, "reason": "settings.json absent"}
@@ -550,7 +722,7 @@ def uninstall_hooks(settings_file: Path | None = None) -> dict[str, Any]:
             if isinstance(inner_hooks, list):
                 filtered = [
                     h for h in inner_hooks
-                    if not _hook_is_ours(h)
+                    if not _owned(h, dev_only)
                 ]
                 if filtered:
                     cleaned.append({**entry, "hooks": filtered})

@@ -16,7 +16,7 @@
 # using GitHub on their own, but the mirror job should be re-run.
 set -Eeuo pipefail
 
-REPO=nt-nerdtechnic/Navide
+REPO=Navide-dev/Navide
 MIRROR=https://dl.navide.dev/releases
 
 tag="${1:-}"

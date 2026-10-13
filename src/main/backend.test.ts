@@ -21,6 +21,7 @@ import {
   pathEnvKey,
   stopBackendProcess,
   waitForHealth,
+  proveWindow,
 } from './backend'
 
 // The platform to restore after a test that switched it: whatever this file
@@ -115,7 +116,7 @@ describe('waitForHealth', () => {
 describe('the trust-confirmation key', () => {
   afterEach(() => setPlatformId(BASELINE))
 
-  it('goes over stdin once and closes the pipe', () => {
+  it('goes over stdin once, followed by the host token, and closes the pipe', () => {
     // Not a file and not an environment variable, deliberately: `cat` and
     // `ps -E` are the two things a CLI agent on this machine does without
     // trying, and this key is the only thing telling that agent apart from the
@@ -124,10 +125,10 @@ describe('the trust-confirmation key', () => {
     const writes: string[] = []
     let ended = false
     const proc = { stdin: { write: (s: string) => writes.push(s), end: () => { ended = true } } }
-    handConfirmKey(proc as unknown as Parameters<typeof handConfirmKey>[0])
+    handConfirmKey(proc as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
 
     expect(writes).toHaveLength(1)
-    expect(writes[0]).toMatch(/^[0-9a-f]{64}\n$/)
+    expect(writes[0]).toMatch(/^[0-9a-f]{64} host-token\n$/)
     expect(ended).toBe(true)
   })
 
@@ -136,7 +137,7 @@ describe('the trust-confirmation key', () => {
     const writes: string[] = []
     let ended = false
     const proc = { stdin: { write: (s: string) => writes.push(s), end: () => { ended = true } } }
-    handConfirmKey(proc as unknown as Parameters<typeof handConfirmKey>[0])
+    handConfirmKey(proc as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
 
     expect(writes).toHaveLength(1)
     expect(ended).toBe(false)
@@ -149,8 +150,8 @@ describe('the trust-confirmation key', () => {
       ({ stdin: { write: (s: string) => into.push(s), end: () => {} } }) as unknown as Parameters<
         typeof handConfirmKey
       >[0]
-    handConfirmKey(proc(first))
-    handConfirmKey(proc(second))
+    handConfirmKey(proc(first), 'host-token')
+    handConfirmKey(proc(second), 'host-token')
     expect(first[0]).not.toEqual(second[0])
   })
 
@@ -174,8 +175,8 @@ describe('the trust-confirmation key', () => {
     const writes: string[] = []
     handConfirmKey({
       stdin: { write: (s: string) => writes.push(s), end: () => {} },
-    } as unknown as Parameters<typeof handConfirmKey>[0])
-    const key = writes[0].trim()
+    } as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
+    const key = writes[0].split('\n')[0].split(' ')[0]
 
     const token = mintTrustConfirmation('p2p.trust.device.approve', 'dev-1', 'subject-1')
     expect(token).not.toBeNull()
@@ -193,7 +194,7 @@ describe('the trust-confirmation key', () => {
   it('binds the action and the device, so one token cannot stand in for another', () => {
     handConfirmKey({
       stdin: { write: () => {}, end: () => {} },
-    } as unknown as Parameters<typeof handConfirmKey>[0])
+    } as unknown as Parameters<typeof handConfirmKey>[0], 'host-token')
     const approve = mintTrustConfirmation('p2p.trust.device.approve', 'dev-1')!
     const block = mintTrustConfirmation('p2p.trust.block', 'dev-1')!
     const other = mintTrustConfirmation('p2p.trust.device.approve', 'dev-2')!
@@ -345,5 +346,15 @@ describe('backend spawn options', () => {
   it('never splits or joins PATH on a literal colon', () => {
     const source = readFileSync(resolve(__dirname, 'backend.ts'), 'utf8')
     expect(source).not.toMatch(/split\(':'\)|join\(':'\)/)
+  })
+})
+
+describe('proveWindow', () => {
+  it('matches the vector the backend checks (test_ws_auth WINDOW_PROOF_VECTOR)', () => {
+    expect(proveWindow('host-secret', 'nonce-1')).toBe('a4c453f892421e367a36312ee518ccbca38a442e010fc441ed351d433ec3d0f6')
+  })
+
+  it('binds the per-connection nonce, so one proof cannot answer another challenge', () => {
+    expect(proveWindow('host-secret', 'nonce-1')).not.toBe(proveWindow('host-secret', 'nonce-2'))
   })
 })

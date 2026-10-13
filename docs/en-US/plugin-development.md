@@ -8,6 +8,10 @@
 > [Plugin Developer Spec v2 draft](plugin-development-v2.md). Do not use the v2
 > examples until the migration plan marks that contract as implemented.
 
+This guide is about **Navide plugins**, which extend Navide itself, not the
+CLI extensions an AI CLI installs for itself. See the [glossary](glossary.md)
+for the terms user-facing text must use.
+
 Navide plugins extend the app with new surfaces and new backend behavior. This
 guide covers both plugin kinds, the manifest schema, the capability permission
 model, and the packaging and signing rules.
@@ -33,7 +37,7 @@ Worth knowing before you invest time:
   its own.
 
 **If you want to build a plugin, please get in touch first** — open a thread in
-[GitHub Discussions](https://github.com/nt-nerdtechnic/Navide/discussions)
+[GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)
 (use **Ideas**). Tell us what surface you want to extend and which capabilities
 it needs. That is also the route for requesting a new capability namespace. We
 would rather shape the API around a real plugin than have you build against

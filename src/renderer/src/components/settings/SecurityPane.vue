@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import type { useBackend } from '../../composables/useBackend'
 import { useAgentMessaging } from '../../composables/useAgentMessaging'
@@ -208,7 +209,7 @@ async function runTest(): Promise<void> {
       <p class="gd-hint">{{ t('guard.vendors.hint') }}</p>
       <SettingsCard>
         <div v-for="v in vendors" :key="v.key" class="gd-item" data-testid="guard-vendor-row" :data-vendor="v.key">
-          <span class="gd-item-name">{{ v.label }}</span>
+          <span class="gd-item-name" v-truncate>{{ v.label }}</span>
           <span
             class="gd-pill"
             :class="v.support === 'block' ? 'ok' : v.support === 'none' ? 'warn' : 'muted'"
@@ -224,7 +225,7 @@ async function runTest(): Promise<void> {
         <SettingsCard>
           <div v-for="rule in g.rules" :key="rule.id" class="gd-item" data-testid="guard-builtin-row" :data-rule="rule.id">
             <div class="gd-item-text">
-              <span class="gd-item-name">{{ ruleTitle(rule) }}</span>
+              <span class="gd-item-name" v-truncate>{{ ruleTitle(rule) }}</span>
               <code class="gd-code">{{ rule.example }}</code>
               <span class="gd-item-meta">{{ t('guard.builtin.default', { level: t(`guard.level.${rule.default_level}`) }) }}<template v-if="rule.floor"> · {{ t('guard.builtin.floor') }}</template></span>
             </div>
@@ -324,7 +325,7 @@ async function runTest(): Promise<void> {
         <div v-if="!store.taint.value.length" class="gd-item gd-empty">{{ t('guard.taint.empty') }}</div>
         <div v-for="entry in store.taint.value" :key="entry.pane_id" class="gd-item" data-testid="guard-taint-row">
           <div class="gd-item-text">
-            <span class="gd-item-name">{{ paneLabel(entry.pane_id) }}</span>
+            <span class="gd-item-name" v-truncate>{{ paneLabel(entry.pane_id) }}</span>
             <span class="gd-item-meta">{{ (entry.sources ?? []).map(sourceText).join(', ') }} · {{ formatTime(entry.since) }}<template v-if="entry.detail"> · {{ entry.detail }}</template></span>
           </div>
           <button type="button" class="gd-btn ghost sm" :disabled="busy" data-testid="guard-taint-clear-row" @click="run(() => store.clearTaint(entry.pane_id))">{{ t('guard.pane.clear') }}</button>

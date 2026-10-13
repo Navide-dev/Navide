@@ -9,7 +9,8 @@ sessions would fall out of view and the credentials would be stranded.
 For every legacy home (detected by a ``projects/`` directory):
 
 1. merge its session logs into the real ``~/.claude/projects`` tree
-   (per encoded-cwd directory; a same-name collision keeps the larger file),
+   (per encoded-cwd directory; a same-name collision keeps the larger file,
+   and a real file it replaces is kept under ``replaced-projects/``),
 2. harvest its credentials into the profile's vault slot (best effort), and
 3. archive the home as ``<id>.migrated-<ns>`` — never delete.
 
@@ -31,7 +32,8 @@ from .profiles_store import CliProfilesStore
 log = logging.getLogger("agent_team_backend.profile_migration")
 
 
-def _merge_projects(src_projects: Path, dst_projects: Path) -> None:
+def _merge_projects(src_projects: Path, dst_projects: Path, replaced: Path) -> None:
+    """``replaced`` receives each real file a larger legacy copy replaces."""
     for proj_dir in src_projects.iterdir():
         if not proj_dir.is_dir():
             continue
@@ -45,6 +47,11 @@ def _merge_projects(src_projects: Path, dst_projects: Path) -> None:
             # session was written in both homes — keep the larger record.
             if dst.exists() and dst.stat().st_size >= src.stat().st_size:
                 continue
+            if dst.exists():
+                # The copies may have diverged: keep the one being replaced.
+                kept = replaced / proj_dir.name / src.name
+                kept.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dst, kept)
             shutil.copy2(src, dst)
 
 
@@ -79,7 +86,7 @@ def migrate_legacy_claude_homes(
         if not (home / "projects").is_dir():
             continue  # already slot-only (or empty) — nothing legacy here
         try:
-            _merge_projects(home / "projects", real_home / ".claude" / "projects")
+            _merge_projects(home / "projects", real_home / ".claude" / "projects", home / "replaced-projects")
             try:
                 vault.harvest_legacy_claude_home(home.name, home)
             except Exception as err:  # noqa: BLE001 — slot stays empty, home is archived anyway

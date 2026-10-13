@@ -323,6 +323,7 @@ def pane_auth_scope(
     agent_key: str, profile: dict[str, Any] | None, *,
     env: dict[str, str] | None = None, env_remove: list[str] | tuple[str, ...] = (),
     portable_slot_id: str | None = None,
+    account_dir: bool = False,
 ) -> dict[str, Any]:
     """Launch provenance recorded on a pane's terminal metadata at spawn:
     which profile it started on, that profile's provider scope, the
@@ -330,7 +331,9 @@ def pane_auth_scope(
     credential from — ``vault`` (the file / Keychain a switch swaps),
     ``portable`` (a pasted credential injected into the environment) or
     ``env-override`` (a credential variable the CLI ranks above the file
-    reached the pane). Only the variable's *name* is recorded, never a value.
+    reached the pane) or ``account-dir`` (a claude account's own config dir,
+    whose login the CLI keeps itself). Only the variable's *name* is
+    recorded, never a value.
     A pane not on ``vault`` does not change account when the vault swaps, so
     the transaction must not count it as switched — nor let auto pretend it
     did. The transaction reads only this record — never the default profile of
@@ -343,6 +346,8 @@ def pane_auth_scope(
     preflight = switch_preflight(agent_key, env_names=env_names, scope=scope)
     if portable_slot_id:
         source = "portable"
+    elif account_dir:
+        source = "account-dir"
     else:
         for name in credential_env_vars(agent_key):
             if name in env_names:

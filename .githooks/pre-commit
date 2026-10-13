@@ -8,18 +8,69 @@
 set -u
 
 missing=""
+
+# Prints the relative module specifiers a TS/Vue source (stdin) really imports.
+# Strings, template literals and comments are skipped; for .vue only <script>
+# blocks are read, so template text is never taken for an import.
+read -r -d '' RELATIVE_IMPORTS_PY <<'PY'
+import re, sys
+src = sys.stdin.read()
+if sys.argv[1].endswith(".vue"):
+    src = "\n".join(re.findall(r"<script\b[^>]*>(.*?)</script>", src, re.S))
+code = []  # the source with every string/comment body blanked out
+lits = {}  # offset in `code` of a blanked string -> its text
+i, n = 0, len(src)
+while i < n:
+    c = src[i]
+    if src.startswith("//", i):
+        j = src.find("\n", i)
+        j = n if j < 0 else j
+        code.append(" " * (j - i)); i = j
+    elif src.startswith("/*", i):
+        j = src.find("*/", i + 2)
+        j = n if j < 0 else j + 2
+        code.append(re.sub(r"[^\n]", " ", src[i:j])); i = j
+    elif c in "'\"`":
+        j = i + 1
+        while j < n and src[j] != c and not (c != "`" and src[j] == "\n"):
+            j += 2 if src[j] == "\\" else 1
+        j = min(j + 1, n)
+        lits[sum(map(len, code))] = src[i + 1:j - 1]
+        code.append("'" + re.sub(r"[^\n]", " ", src[i + 1:j - 1]) + "'"); i = j
+    else:
+        code.append(c); i += 1
+code = "".join(code)
+pats = [
+    r"(?m)^[ \t]*(?:import|export)\b[^;'`\"]*?\bfrom[ \t]*(?=')",
+    r"(?m)^[ \t]*import[ \t]*(?=')",
+    r"(?<![\w.$])import[ \t]*\([ \t]*(?=')",
+]
+for pat in pats:
+    for m in re.finditer(pat, code):
+        spec = lits.get(m.end(), "")
+        if spec.startswith(("./", "../")):
+            print(spec)
+PY
 while IFS= read -r file; do
   case "$file" in
     *.ts|*.vue|*.mts|*.cts)
       dir=$(dirname "$file")
-      # `from './x'`, `import './x'`, `import('./x')` — single or double quotes.
-      specs=$(git show ":$file" | grep -oE "(from|import)[[:space:]]*\(?[[:space:]]*['\"]\.\.?/[^'\"]+['\"]" | grep -oE "['\"][^'\"]+['\"]" | tr -d "'\"" | sort -u)
+      # `from './x'`, `import './x'`, `import('./x')`, `export … from './x'`:
+      # import statements only, never text inside a string or comment (a test
+      # asserting on source with toContain("… from '../lib/y'") imports nothing).
+      specs=$(git show ":$file" | python3 -c "$RELATIVE_IMPORTS_PY" "$file" | sort -u)
       for spec in $specs; do
         base="$dir/$spec"
         # Normalise ./ and ../ so the index lookup sees the same path git stores.
         norm=$(python3 -c 'import os,sys; print(os.path.normpath(sys.argv[1]))' "$base" 2>/dev/null || echo "$base")
         found=0
-        for cand in "$norm" "$norm.ts" "$norm.tsx" "$norm.mts" "$norm.vue" "$norm.d.ts" "$norm/index.ts" "$norm/index.vue" "$norm.js" "$norm.mjs" "$norm.json"; do
+        # ESM-style specifiers name the emitted file: './x.js' is './x.ts' in source.
+        case "$norm" in
+          *.js) esm="${norm%.js}.ts ${norm%.js}.tsx" ;;
+          *.mjs) esm="${norm%.mjs}.mts" ;;
+          *) esm="" ;;
+        esac
+        for cand in "$norm" "$norm.ts" "$norm.tsx" "$norm.mts" "$norm.vue" "$norm.d.ts" "$norm/index.ts" "$norm/index.vue" "$norm.js" "$norm.mjs" "$norm.json" $esm; do
           if git cat-file -e ":$cand" 2>/dev/null; then found=1; break; fi
         done
         [ $found = 1 ] || missing="$missing
@@ -55,5 +106,25 @@ if [ -n "$missing" ]; then
   echo "Stage the missing files too, or drop the import; the working tree has them" >&2
   echo "but the commit will not, and CI will fail typecheck/import. --no-verify bypasses." >&2
   exit 1
+fi
+
+# Run the same secret scan CI runs (Secret scan / Gitleaks) on the staged
+# changes, so a finding stops the commit here instead of failing on GitHub
+# after the push. False positives go in .gitleaksignore, as CI reads it too.
+if command -v gitleaks >/dev/null 2>&1; then
+  # A finding exits 3; any other failure is gitleaks not running (an old
+  # version without `gitleaks git`, a bad config), which CI still catches.
+  gitleaks git --pre-commit --staged --config .gitleaks.toml --redact --no-banner --log-level warn --exit-code 3
+  scan=$?
+  if [ $scan -eq 3 ]; then
+    echo "" >&2
+    echo "pre-commit: gitleaks found a possible secret in the staged changes (see above)." >&2
+    echo "Remove it, or add its fingerprint to .gitleaksignore if it is not a secret." >&2
+    exit 1
+  elif [ $scan -ne 0 ]; then
+    echo "pre-commit: the secret scan could not run (gitleaks exited $scan, see above), so it was skipped; CI still runs it." >&2
+  fi
+else
+  echo "pre-commit: gitleaks is not installed, so the secret scan was skipped (brew install gitleaks)." >&2
 fi
 exit 0

@@ -215,28 +215,32 @@ else:
     assert refusal["boundary"] == ("real CLI" if boundary == "popen" else "real native CLI")
 
 
-def test_shards_partition_real_collection_without_omission(tmp_path):
+@pytest.mark.parametrize("n", [2, 3, 4])
+def test_shards_partition_real_collection_without_omission(tmp_path, n):
     backend_root = Path(__file__).resolve().parents[2]
     reports = []
-    for shard in ("1/2", "2/2"):
-        report = tmp_path / f"collection-{shard[0]}.json"
-        env = isolated_environment(tmp_path / f"collector-{shard[0]}")
+    for k in range(1, n + 1):
+        report = tmp_path / f"collection-{k}.json"
+        env = isolated_environment(tmp_path / f"collector-{k}")
         subprocess.run(
+            # Two files, so every one of four shards gets at least one test.
             [sys.executable, "-m", "pytest", "tests/cli_regression/test_shared.py",
-             "--collect-only", "-q", "--shard", shard, "--collection-report", str(report)],
+             "tests/cli_regression/test_catalog.py", "--collect-only", "-q", "--shard", f"{k}/{n}", "--collection-report", str(report)],
             cwd=backend_root, env=env, capture_output=True, text=True, check=True,
         )
         reports.append(json.loads(report.read_text()))
-    assert reports[0]["collected"] == reports[1]["collected"]
-    first, second = (set(report["selected"]) for report in reports)
-    assert first and second
-    assert first.isdisjoint(second)
-    assert first | second == set(reports[0]["collected"])
+    assert all(report["collected"] == reports[0]["collected"] for report in reports)
+    selected = [set(report["selected"]) for report in reports]
+    assert all(selected)
+    assert sum(len(part) for part in selected) == len(set().union(*selected))
+    assert set().union(*selected) == set(reports[0]["collected"])
 
 
 def test_failure_cleanup_reaps_a_tracked_orphan(tmp_path):
     backend = BackendProcess(tmp_path)
-    child = subprocess.Popen([sys.executable, "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
+    # The real interpreter: a Windows venv's python.exe is a launcher that runs
+    # it as a child, which track_child rightly adds to the owned tree.
+    child = subprocess.Popen([base_python_executable(), "-c", "import sys; sys.stdin.read()"], stdin=subprocess.PIPE)
     try:
         backend.track_child(child.pid)
         # Model a backend that has exited without reaping this known child.
@@ -263,7 +267,8 @@ def test_a_child_that_outlives_the_reap_window_is_still_reported(tmp_path):
     child, not merely the shell.
     """
     backend = BackendProcess(tmp_path)
-    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(2)"])
+    # One process, not a venv launcher and its interpreter (see above).
+    child = subprocess.Popen([base_python_executable(), "-c", "import time; time.sleep(2)"])
     try:
         backend.track_child(child.pid)
         assert backend.process is None

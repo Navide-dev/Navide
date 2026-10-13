@@ -2,7 +2,223 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.21] — 2026-10-13 — signed release
+
+### Added
+
+- **One click switches every following Claude pane** (main window): clicking another account in a pane's account badge list swaps the live sign-in, and every following pane uses the new account from its next turn, without a restart and with one sign-in per account. New panes follow by default. The pin beside a pane's account badge fixes it to its account (the pane reopens once in that account's own folder and resumes its conversation, signing that folder in first if needed); clicking it again makes the pane follow (it reopens once on the live sign-in). "Make all follow" in the account list reopens every fixed pane on the live sign-in, asking once about panes that are working (move when finished, skip, or cancel). The account list is titled "Default account" and says how many panes follow. Following or fixed is remembered per pane in this computer's app storage and kept consistent across windows. "Move pinned panes along when switching Claude accounts" (0.2.20) is unchanged and still covers only fixed panes. Without any account folder sign-in, switching behaves as in 0.2.20.
+- Cross-device pairing: a waiting pairing has a "Cancel request" button, and a pairing still in progress says about how many minutes are left.
+
+### Changed
+
+- Navide Guard: on a pane that has received external content, a command Guard cannot analyse is released only by an allow pattern with wildcards that matches the whole command (for example `python3 -c *`); other allow patterns do not release it. The release is written to the audit log, and the custom rules hint says so. Anything written in a way Guard cannot read is always left for you to confirm, so on such a pane a command like `find -exec … \;` may ask once more.
+- Windows: Ctrl+V pastes in the terminal, and on Windows and Linux Ctrl+Shift+V does too; plain Ctrl+V on Linux still goes to the program, and macOS is unchanged. A plain shell on Windows no longer receives Ctrl+V as a key.
+- Windows and Linux: right-clicking in a program that has mouse reporting on (Claude Code, vim, htop, …) is left to that program and no longer opens Navide's Copy/Paste menu; Shift+right-click opens it.
+- Settings → Keyboard Shortcuts lists the application menu with the keys each platform uses: Ctrl chords on Windows and Linux, without the macOS-only Hide and Reload rows.
+- Settings: the status badges, keyboard shortcuts and analyzer pages are tidied up; the analyzer uses line icons instead of emoji.
+- CI: the Windows backend suite runs in four shards, the release workflow runs the Windows backend gates as sharded jobs beside the macOS build, and three tests that timed out on loaded runners now check order or wait longer instead (#185, #186, #187, #198, #200).
+
+### Fixed
+
+- A refused cross-device pairing ends at once, on either side, and the pairing card and the account window say why and what to do next, instead of showing "waiting" until the five-minute deadline. Starting a pairing while this machine's trust record cannot be read is refused up front with the reason.
+- With several workspace windows open, a quit that was cancelled part-way (a refused close, the quit timer, or an update install that never started) no longer leaves the windows it had already closed out of the next launch. A window saved on a display that is no longer connected opens on the main display. Window restores, cancelled quits and abandoned update installs are written to `main.log`.
+- Right-click submenus in the Git panel and the file explorer open to the left, or below, when opening to the right would be cut off at the view's edge.
+- The channel menu in a pane header shows a chat connected to a pane in another window as "Connected to …" and does not offer it.
+- A one-time schedule that came due while Navide was closed is no longer sent twice when the restart catch-up and the regular tick reach it together.
+- The account switch dialog stays inside its card when a pane's status is long, shows out-of-quota accounts in grey instead of red, and tells you to switch to the built-in Default first instead of asking it to sign in inside a folder it does not have.
+
+### Known limitations
+
+- Cross-device messages without the send-time signature are still accepted in 0.2.21, with one notice per device. Refusing them from devices that already sign it was planned for this release and is not turned on yet.
+- Panes that were running in an account folder before the update stay fixed; choose "Make all follow" in the account list to have them switch with the account.
+
+## [0.2.20] — 2026-10-12 — signed release
+
+### Added
+
+- **Convenience features overview**: Settings → Agent Assets → Extensions → "Convenience features and what Navide changes on your computer" lists every place outside its own data folder that Navide writes to (CLI hooks and hook trust, the Codex sign-in, Cursor project MCP and skills, sign-in repair), why, and the cost of turning each off. Every such write goes through one gate, is announced in the Announcements panel and logged with the path of its backup (the latest five per target are kept). Turning a feature off backs up each target and removes Navide's entries; if a removal fails the switch stays on and says so. Anything you delete yourself is not added back: the feature is switched off with a notice and an "Allow again" button (a single deleted hook entry is skipped on its own, and deleted skill links are remembered). A folder that was deleted and re-created counts as a reset and gets its entry back, with a notice. Features already in use stay on after the update.
+- **Account sign-in auto-repair**, allowed by default: when a CLI's live sign-in goes missing after an account switch, Navide writes the account you chose back. A live sign-in that is a different account, changed outside Navide, is never overwritten: you are asked to keep it or switch back. A sign-out outside Navide is reported once and not undone. Turned off, Navide does not touch the live sign-in at all and shows none of these prompts; signing in through Navide still applies.
+- **Codex sign-in made in a pane**, allowed by default: when `~/.codex/auth.json` does not exist, the newest sign-in made inside a pane becomes this computer's Codex sign-in, with a notice. If that file existed and was removed outside Navide, you are told instead and nothing is promoted.
+- **Move pinned panes along when switching Claude accounts** (Settings → General, off by default): switching accounts lists the Claude panes running on their own account's sign-in; the ones you tick reopen on the new account and resume their conversation. Panes on the old account and panes out of quota come pre-ticked, a busy pane is waited for and never interrupted, and an out-of-quota pane gets a "Switch account ›" button beside its badge. Off, switching behaves as in 0.2.19.
+- **Share links** (Navide Cloud, when the server reports the `links` capability): Settings → Navide Cloud gains Sync / Share / Devices sub-tabs, and the Plans view a "Share link" button that turns a plan or report into a read-only link, encrypted on this computer with the key only in the link, for 1, 3, 7 or 30 days, optionally requiring sign-in and optionally sent to a direct chat. Secrets are masked before upload and key, credential and memory files are refused. The Share tab lists each link with its creator, expiry and opens, and copies, extends by 7 days, renews (the old link stops opening) or revokes one or all. Approvals and review notes left on a shared page come back to the plan, refused if the plan changed since. Agents get `share_create`, `share_list` and `share_revoke` over MCP, and Channels `/shares` and `/revoke`. Without the capability the page is the same as in 0.2.19 and the Share link button is hidden.
+- **Sync version history** (Navide Cloud): Settings → Navide Cloud → Sync has a Version history card that keeps the last 10 versions or 30 days and can restore the previous version; a restored MCP server or skill waits for approval like any synced item. On a server that supports it, item bodies go to object storage directly, so large items are no longer held back by the message size limit.
+
+### Changed
+
+- Navide's hooks travel with each pane: Claude panes get them through `--settings` pointing at a file in Navide's data folder, Codex panes through command-line config, and Copilot panes through the pane's own hooks folder, instead of Navide writing them into `~/.claude/settings.json`, `~/.codex/config.toml` or `~/.copilot/hooks`. Entries older versions wrote there are backed up and taken back at startup, with a notice; if they cannot be taken back, they stay in use and nothing is added, so hooks never run twice.
+- The cross-device pairing record lives in an encrypted file in Navide's data folder (AES-256-GCM, its key the only thing left in the Keychain), together with its notices and delivered-message ledger. An existing record moves over by itself on first start with every pairing kept, and a copy stays in the Keychain while it fits so an older build still reads current pairings. The device limit is back to 200.
+- Navide Cloud: a device still on the account-wide token, or one older than 30 days, swaps it once for its own token on servers that issue them; a swap that fails part-way keeps the working token. Signing out revokes this device's token on the server, and a session ended elsewhere (password change, sign-out, revoked from another device, device removed, account deleted, replaced by a newer sign-in) says which. The desktop reports its version when it connects.
+- Cross-device messages are signed with their send time too; in this release a message without that signature is still accepted, with one notice per device.
+- Settings: Credentials & keys and the CLI extensions page (now named "Extensions") moved under Agent Assets; Navide Plugins and Navide Marketplace have their own group between Agent Assets and System.
+- CI: longer backend suite timeouts on Linux and macOS, the Windows backend suite split into three shards, Electron downloaded before every artifact run, and more room for the pre-hello connect wait on slow Windows machines (#171, #172, #176, #177).
+
+### Fixed
+
+- Cross-device pairing no longer breaks after a restart: the pairing record outgrew the one macOS Keychain line it was written through, was saved cut off, and locked the machine out until it paired again. A record that would not fit is now refused before anything is written. A record 0.2.19 already saved cut off is recovered when every pin and block in it was written whole: the devices keep their keys and wait under "Needs you" in the account window for you to approve them again. One cut off earlier still reports itself as damaged and offers Start over.
+- A block stays in force when this machine's copy of it cannot be saved, and the account window says so.
+- Sync records from a device blocked on this machine are refused.
+- Answering a legacy-row sync conflict with "keep local" pushes the kept copy again instead of raising the same conflict.
+- Messages to a pane that is resuming its conversation wait until the CLI has started (up to 90 seconds) instead of being typed into its reload and lost; delivery is no longer reported from screen growth alone, and a message that went out but could not be confirmed is shown as unconfirmed, without Resend, until the transcript confirms it.
+- The Extensions page has margins, scrolls and has clearer cards; a cut-off badge shows its full text on hover.
+
+### Known limitations
+
+- Navide's Claude hooks, Navide Guard included, apply only to Claude panes Navide opens, and not to one whose Claude command already passes its own `--settings`.
+- Going back to an older Navide and then updating again can bring back skill links you removed.
+- Going back to 0.2.19 loses the pairing notices, keeps only the pairings and blocks that still fit in the Keychain copy, and a device unblocked while on 0.2.19 is blocked again after updating.
+- A block whose local copy could not be saved holds only until Navide restarts; block the device again afterwards.
+- Moving pinned panes along an account switch: a pane waiting for your answer, or stuck while starting, can hold the move for up to 30 minutes; a pane that fails to resume gets only a summary message, so rebuild it from the pane; one long pane status can push the dialog's right side out of view; if one conversation is open in two panes, the wrong pane may be resumed.
+- Share links cover plans and reports only, up to 32 MiB each, and "Send to the chat" goes to direct chats only.
+- Sync version history: after a declined restore a conflict card may describe the declined version, two devices moving an account to the new storage at once may each ask about the same conflict, and one damaged item holds back its page of sync until it is repaired. Once an account has moved, a 0.2.19 device on it stops syncing until it is updated.
+
+## [0.2.19] — 2026-10-11 — signed release
+
+### Added
+
+- **CLI extensions inventory**: Settings → CLI Extensions lists the CLI extensions each AI CLI installed for itself (Claude plugins and mods, Codex plugins and hooks, Copilot, Droid, Cursor, Grok, MiniMax Code, Muse, Qwen, opencode, Kilo and Pi plugins, extensions and hooks), with each one's execution tier (L1 text assets, L2 subprocess, L3 code inside the CLI's own process), the capabilities it can reach, whether the CLI asks before running it, and which hooks Navide installed. Read-only: it parses each CLI's files or runs a declared listing command with a timeout, and never installs, enables or changes anything. Agents get names and metadata through the new MCP tool `cli_extensions_list`.
+- **Recent workspaces that stay**: Recent keeps every workspace you opened until you remove it, instead of dropping the oldest past 20. Open and pinned workspaces sit in their own group on top, the rest show ten at a time with "show more", a search box matches the whole history, and missing folders stay listed and marked. Every row can be removed from the list. Settings → General sets a storage limit (1000 by default, or off) that never drops an open or pinned workspace and says when it trimmed anything; going back to an older build keeps the list.
+- **Settings → General → Resource limits**, every option off or unchanged until you set it: cap test-runner workers for new panes (`NAVIDE_TEST_MAX_WORKERS`); list servers that closed panes left running and stop one on a click (on by default; lists only when asked); also reclaim a focused pane untouched for N hours, as a click-to-resume card; reclaim a timed-out self-evolution run's pane after a grace period (30 minutes by default, 0 for never); and on macOS, a button that opens Spotlight's privacy settings so you can exclude build output.
+
+### Changed
+
+- Naming follows the new glossary (docs/en-US/glossary.md): Navide's own packages are "Navide plugins" in the "Navide Marketplace", an AI CLI's own add-ons are "CLI extensions". Settings: Integrations is now Agent Assets (MCP, skills, prompts, memory), Credentials & keys moved to Accounts & Agents, and Navide Plugins and Navide Marketplace moved to System; the old names still find them in Settings search.
+- The repository moved to [Navide-dev/Navide](https://github.com/Navide-dev/Navide). Updates still come from the download mirror first; the GitHub fallback, the Help menu's repository and issue links, and the first-party Navide plugins' repository field point at the new address.
+- The ✦ self-evolution badge on a workspace heading is display-only; open the panel from the heading's ⋯ menu or right-click menu.
+- Plans diagrams render with mermaid 12 and keep their current layout and classic look. Also updated: Electron 44.6, electron-builder, ws, koffi, mammoth, and on the backend fastapi, anthropic, websockets and tzdata.
+- The backend's `/health` reports event-loop lag and the shared thread pool's backlog.
+
+### Fixed
+
+- Closed panes no longer leave CLI processes running: a refused terminal kill is treated as a failure and swept, a reattached pane's PTYs are found under its earlier ids, quitting finishes its sweep within main's kill timer so Claude can shut down cleanly, and a timed-out `shell.run` stops its whole process group.
+- A scheduled job that missed runs while the app was closed no longer fires twice when the catch-up and the regular tick reach it together.
+- The channel chip on a pane shows the bound chat's name instead of repeating the pane's.
+- Navide no longer overwrites a Claude `settings.json` it cannot parse, no longer moves files a tool wrote into the Muse pane home into your real home folder, stops adding a hook trust block to `~/.codex/config.toml` for every pane (and keeps that file's permissions), no longer hides your own Cursor skills from `git status`, keeps the real session file when a legacy copy replaces it during migration, and reads only plain names from the Cursor skills links manifest so a crafted entry cannot remove a link elsewhere on disk.
+- When Navide is started from inside a pane, it no longer mistakes your real home folder for a project: the skills git-exclude walk and the MCP project config both check the real home, not the pane's `$HOME`.
+- Settings → CLI Extensions masks credentials in hook command lines and recognises Navide's Windows Guard hook as Navide's.
+- Pipeline graph: undo and redo wait for a pending save, and an unknown pipeline is reported as not found.
+
+## [0.2.18] — 2026-10-09 — signed release
+
+### Added
+
+- **Approve what other devices sync**: a synced MCP server, skill or prompt that is new on this machine, or changes what would run here, is held until you approve it in Settings → Sync. The card shows the whole record: command, args, url, env and header names, the skill's frontmatter apart from its body, every file and which would be executable, and what changed. A large skill is downloaded into a sealed holding area for review first and lands exactly the copies shown; one over 64 MiB, or whose download failed, says why and cannot be approved. A remote delete of the default (loop) prompt is held too. A rejection stands until a newer record arrives, and a local edit while waiting ends the hold. A settings-bundle import previews each MCP server, skill, prompt and memory row the same way, whole.
+- **Secret warnings**: Settings → Sync names prompts and MCP args or urls that look like they carry a credential, saying where, never what. Nothing is blocked; Dismiss holds until the item changes.
+- **Credentials & keys**: Settings → Credentials & keys scans this machine's git credential helpers, gh and glab accounts, SSH keys and keychain items, and flags risks such as a token inside a remote URL, a key without a passphrase, or a token stored in plain text. It never shows a value and never changes anything; where it is safe, a finding offers a fix command to copy. Agents can query the names and findings over MCP.
+- Channels: an `.html` file a pane attaches is sent as an A4 PDF, and every attachment goes with a report card (title and one-line summary); a reply to a card tells the pane which report you mean. A pane can send its workspace's plan documents.
+- Channels: a reply longer than three messages goes as one preview plus the whole text as a Markdown file, where the platform takes files.
+- Settings → Channels lists each bot's chats and the panes bound to each: jump to a pane, unbind one or several after one confirmation, and clear bindings whose pane is gone. In a group without topics each child pane's name carries a colour square, and the chat is told once that turning topics on gives each child its own.
+- MCP: `cli_reclaim_agent` releases a finished pane by the same targets `cli_close_agent` takes, and reports the guard's reason when it refuses.
+- Text cut off with an ellipsis shows in full on hover or focus across the app.
+
+### Changed
+
+- Memory (CLAUDE.md, AGENTS.md and other instruction files) is no longer synced; cloud sync covers prompts, skills and MCP. Local files and copies already on the server are left untouched, and settings bundles still export and import memory. A memory or credentials switch left on by an older build can only be turned off.
+- Saving a prompt, MCP server or skill now syncs it shortly afterwards instead of on the next connect.
+- A pane can attach hidden files and files outside its workspace, including files you dropped into Navide. Credential folders and files stay refused on every platform: `~/.ssh`, `~/.aws`, `~/.config/gh`, GnuPG, Kubernetes, Docker, keyrings, `.git-credentials`, the CLIs' `auth.json` and `.credentials*`, Navide's account slots, and Navide's own data folder apart from received attachments, PDFs and dropped files.
+- `workspace_open` waits up to 15 s for its window and reports `ready`; `cli_open_agent` aimed at a workspace whose window is not ready answers `window_not_ready` at once instead of waiting 40 s; a `~/…` path is expanded first. `workspace_list` includes workspaces opened this way.
+- The memory advisory shown when opening a pane counts only running CLI panes, not restore placeholders.
+
+### Fixed
+
+- Cloud sync: a replayed older record can no longer roll an item back or delete one re-created since; a different account starts every scope over (also when switched while Navide was closed) and a locked keychain is not mistaken for a sign-out; a record's origin is checked before it is applied; one item that cannot land no longer holds back its whole scope; skills keep their executable bit and new prompts get ids that cannot collide across devices.
+- Settings → Sync names the account it syncs with, lists each scope's outcome after Sync now, and in an MCP conflict says which hidden env and header values differ.
+- Unattended self-evolution runs no longer stop to ask a question; an idle run is nudged after 10 minutes and always reports back.
+- A Claude pane that finished its turn stays finished: the idle notification Claude sends about a minute later no longer makes `cli_get_status` report it as active, or holds its queued messages for up to 2 minutes.
+- Windows: a synced skill can no longer place files outside itself through drive paths, alternate data streams or device names (including `COM¹` and `con .txt`); ordinary names such as `aux.c` still install on macOS and Linux. A `~` workspace path resolves the same way as an absolute one.
+- Saving an instruction file kept as a symlink (for example into a dotfiles repo) writes through the link instead of replacing it; a dangling link is refused.
+- The Plans view is no longer withdrawn when one of its calls fails while the view itself is closing.
+
+## [0.2.17] — 2026-10-08 — signed release
+
+### Fixed
+
+- The backend no longer stops itself when a check on Navide's process fails momentarily; an unreadable process identity is treated as unknown, not as Navide having quit.
+- Backend shutdown is bounded to 3 seconds, so long-polling hook connections can no longer keep a stopped backend alive without a listener.
+- After 3 failed reconnects the window asks Navide for the backend's current address and reconnects there instead of retrying a dead port.
+- Backend lifecycle events (ready, failed to start, crash, automatic and manual restarts) are written to main.log.
+
+### Changed
+
+- The sidebar's self-evolution badge shows only ✦, coloured by state, with the state in its tooltip and accessible label.
+
+## [0.2.16] — 2026-10-08 — signed release
+
+### Added
+
+- **Pipeline graph editor**: the Pipeline Manager is a full-window workspace, and a pipeline's detail view edits it as swimlanes (layers as columns) or on a free canvas, sharing one undo history. Steps can run side by side and join, approval gates hold the hand-off until passed or rejected, a reject loop goes back at most its retry limit (editable on the canvas, 1–10), a pinned step reuses its frozen output, and a run can restart from any node. The palette, inspector (step settings, upstream outputs, `{{prev.summary}}`, live view, pin and rerun), executions view, zoom controls and a run-coloured minimap come with it, and every view shows the live run with a direct Review for a waiting gate. MCP gains `pipeline_graph`, `pipeline_gate` and `pipeline_restart_from`.
+- **Role step fields**: the Roles tab edits the settings fields a role shows in a pipeline step (names, types, defaults, choices and show/hide rules), with problems shown beside the field before Save.
+- **Files in chats**: Telegram, Discord and Slack attachments sent to a pane are downloaded into the workspace's media folder and announced to the pane with their path; a pane can send files back with `---ATTACH--- <path>` lines in its MSG block, limited to its workspace or the attachments it received, never hidden files or keys. Files over 20 MB are refused, a failed download is reported and the text is still delivered. Matrix, Mattermost, Feishu, DingTalk and iMessage reply that media is not supported yet.
+- **Reply quotes**: replying to a message in Telegram or Discord shows the pane the quoted message and its sender above your text, only for trusted authors, cut at 500 characters.
+- **Resume interrupted panes on relaunch**: panes that were running a turn or waiting on a prompt, and the parents waiting on them, come back by themselves after a restart (up to 6, two at a time) without continuing on their own, and each parent is told which children came back. The rest are marked "Working at restart". Settings → General can turn it off.
+- **Claude accounts on their own config dir**: a Claude account can sign in once inside its own config folder, so panes can run on different accounts at once. The quota badge picks the account new panes start on, Continue moves one pane onto another account with `--resume`, and these accounts are measured individually. Navide never reads or copies the token.
+- **Workspace self-evolution** (off by default): a per-workspace panel, opened from a badge on the sidebar's workspace heading, runs a daily job that opens a pane to review the repository, fix small bugs in a worktree and commit them to the local main branch without pushing, and write everything else as proposals. Runs per day, time and token budget are capped, and every step is announced. System-owned jobs show read-only in the Schedule panel.
+- **`cli_answer_prompt`**: an agent can answer another pane's permission prompt or menu, bound to the exact prompt `cli_get_status` reported. Navide Guard vetoes approving high/critical prompts, and every answer is disclosed and audited.
+- **`ui.pane.reclaim`**: an agent can release finished panes through `ui_invoke`, with the status bar's guards, and is told why any pane was refused.
+- Stage tabs show their pane count as live / total.
+- Skills can be dragged into order in Settings → Prompts.
+
+### Changed
+
+- `workspace_open` and other global UI requests go to the most recently focused main window that can answer them, and report at once when there is none, instead of timing out after 15 s.
+- A main, detached-group, Plans or Token Monitor window whose page process dies is logged and reloaded (at most 3 times a minute), reconnecting its panes instead of staying blank.
+
+### Fixed
+
+- A relaunch no longer files other workspaces' tab groups into the workspace on screen as empty `Run N` tabs.
+- A Claude account-dir login that a pane found expired stops counting as signed in, so new panes fall back to the current account; deleting an account removes its config-dir login and is refused while panes still use it.
+- A message relayed to another device is always answered and settled on the sending side, instead of sitting on queued or failing after 30 minutes.
+- Pipelines: a run aborted at a gate resumes by waiting on that gate, a run that loses every slot closes its nodes, a gate before the first stage is waited on, failed node output reports are resent, and a refused graph edit rolls back to the saved graph.
+- Chat attachments: path rules hold on Windows and case-insensitively, a file is rechecked while open, and a download's error body and total time are capped.
+- A new pane's first instruction is not sent before the CLI has drawn its screen, and a kickoff left unsent in the composer is submitted.
+- Windows: already-correct shared and skills links are recognized instead of rebuilt, and window focus order no longer ties on the coarse clock.
+- The mini-IDE ships each Monaco language worker once, and public `glab` runs no longer check for updates.
+
+## [0.2.15] — 2026-10-06 — signed release
+
+### Added
+
+- **First-run tour**: a fresh install is walked through its first steps by a small bubble beside the real control, one action at a time: pick a workspace folder on Welcome, press + to open an agent, give it a first instruction, hand another pane a task with @, drag one pane into another, and check the account and quota on the quota badge. A grey mask covers the rest of the window so a stray click cannot end it; each bubble stays until its step is done or you press Next, and the last step always shows and waits for Done. Existing installs never get it on their own; Help → First-Run Tour… replays it, also from Welcome.
+- **Chat quick menu**: `/menu` (or a bare `/start`) in a bound Telegram, Discord or Slack chat shows the pane's prompts and skills as buttons; a press sends that item to the pane once. Unbound chats, offline panes and expired menus get a reply saying why.
+- **Create a Telegram bot in one step**: a connected Telegram bot with Bot Management Mode on gets "Create a new bot" in Settings → Channels. After you confirm what it does, a prefilled Telegram link opens; once you create the bot there, Navide adds it and opens its link guide. Other Telegram bots explain how to turn the mode on.
+- **Quick add a bot**: adding a new bot in Settings → Channels checks its credential, starts it and opens its link guide in one go, and keeps the bot only once the platform accepts the credential. A button fills the token from the clipboard when it matches the expected shape, and the Slack form links an app manifest template.
+- **Embedded AI panels act like panes**: the AI panel in the Pipeline Manager, Plan, Git and Editor windows records its history, can be messaged by other panes (where its window can deliver messages), and shows which window it lives in, in the @-mention menu, Agent History, the close-workspace confirmation and its own header. Closing the window ends its panel, and a panel resumes its session after Navide quits and restarts. `cli_list_targets` and `cli_whoami` report a panel's `surface` and `window_kind`.
+- Settings → Extensions lists the bundled Plans extension and shows the files each extension declares it reads and writes; Plans also says that its backend runs without a sandbox and which plan folders it reaches. Extension manifests can declare these file scopes (`permissions.scopes.fs`) as a disclosure; they never grant or limit access.
+
+### Changed
+
+- **Plans reads and writes plan files itself**: the Plans backend opens and saves plan files directly, under the same path checks Navide applies, instead of relaying every file through the app. Every access is still authorized by Navide per request, so an agent's Execution Policy and the Plans grant keep applying. The Plans list sends only the fields the view shows, so large libraries load faster.
+- The builtin prompt a fresh install starts with is known to the backend from the start, so agents and `/menu` see it before the Prompts page is saved.
+- Chat connections retry 5 s after a drop instead of 30 s; Telegram restarts its backoff after a successful poll, and a connection that drops right after it connects keeps backing off instead of retrying at the shortest delay.
+- The running status message in a chat no longer counts seconds; the final "done" message keeps them.
+- A message delivered to a busy embedded AI panel is reported as delivered while busy, and the message log notes it.
+- Repository hooks run the CI secret scan (gitleaks) before a commit and before a push.
+
+### Fixed
+
+- **Chat confirmation buttons finish cleanly**: a prompt answered at the computer or in the chat, replaced by a newer one, outlived by its turn, timed out, or left by a pane that went offline is edited to say so and loses its buttons, instead of answering "this confirmation has expired" when pressed.
+- **Schedules follow a rebuilt pane**: a job aimed at a pane that was rebuilt into the same session moves to the new pane. A job whose target stays gone for three runs in a row is turned off, shown in red in the Schedule panel, and you are told about it. "Retarget" is now "Rebind".
+- A CLI whose credential store no pane has verified yet (kilo, opencode) shows "open a pane" instead of an error, and is no longer polled or warned about every five minutes.
+- A first-party extension backend that fails restarts with backoff instead of staying down, with its own restart budget per window. Plans is marked available again once its backend is back, and when a workspace's agent Plans backend gives up, a notice names the folder and says how to restart it (open Plans there, or restart Navide).
+- Plans keeps the reason a file operation failed instead of showing "Plugin request failed.", lists a plan folder it cannot read as unreadable instead of dropping its plans, and a retry is no longer undone by a call still running on the discarded backend.
+- Concurrent writes to one file are serialised across processes, a held write lock fails the write after 10 s instead of hanging, and a failed upload part reports its real error.
+- **Quitting**: a quit cancelled while windows close, or refused by a window, brings the backend, extension backends and window services back and lifts the shutdown screen; an abandoned update install no longer leaves the app thinking it is quitting; and closing a window again ends its embedded AI panels afterwards.
+- Embedded AI panels: Stop or a clean `/exit` retires the panel's restore record instead of relaunching it next time, a panel whose extension was removed is ended, a refused roster registration is retried and explained, and one failed kill no longer leaves a window's other panels running.
+- MCP calls into an extension backend wait past the Host's own deadline, so you see the Host's timeout error instead of a generic "did not answer", and requests the Host cannot serve are answered right away instead of timing out after 30 s.
+- **Windows: messages in Chinese reach Claude panes intact**: a multi-line message to an idle Claude pane no longer arrives as `System.Object[]`, and non-ASCII text sent to an idle or busy pane is no longer garbled on a non-UTF-8 console (#147).
+- **Git keeps working on partial status**: a failed or truncated status read no longer shows a clean repo, a fake "not a repo", or reports an unstage as done; discarding changes refuses instead of acting on an incomplete list, and the Git pane says when its list is truncated (#144).
+- Account detection retries an unreadable or half-written identity instead of recording you as signed out, and the credential and Git watchers keep running after a failure and log it (#144).
+- Plans: a plan too large to fit one list page keeps its archive state and actions instead of being offered "Upgrade".
+- Quick add removes a bot it could not finish adding, including when the window closes mid-way or the 30 s limit runs out, and refuses a second quick add for the same bot. Creating a managed Telegram bot is refused up front when nobody is linked to the managing bot, and answered at once when its creator is not linked.
+- A Telegram group that is not a forum is no longer asked for child topics on every new child pane; it is asked again after 30 minutes, so turning topics on later takes effect without restarting Navide. Channels also applies its reconnect backoff to reconnect requests and logs a failing background task.
+- A schedule rebound to a rebuilt pane clears its red "target gone" marks, and asks to be switched back on only while it is still off.
+- Usage polling fails only the vendor whose credential store cannot be read, instead of stopping the whole cycle.
+- Windows hooks use a random temp file name, so leftover files can no longer silence every hook.
+- Quitting Navide no longer hangs at 100% CPU while it closes the terminals.
+- When a CLI exits on its own, its child processes, such as MCP servers, are cleaned up even when its terminal closes before the CLI has finished exiting.
+- A pane whose session the server already dropped is no longer retried and warned about on every sweep.
+- Security updates: tinypool, vue (@vue/server-renderer), source-map-js, dompurify and katex.
+- `cli_send` to a chat sender tells the agent to reply with an MSG block instead of failing with an unknown target.
+- Help covers voice input, Channels, Guard, the CLI Agents card grid and the other surfaces added since 0.2.10.
 
 ## [0.2.14] — 2026-10-02 — signed release
 

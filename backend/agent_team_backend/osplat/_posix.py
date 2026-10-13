@@ -112,7 +112,8 @@ class PosixProcessTree:
         return _ps(pid, "lstart=") or ""
 
     def identity(self, pid: int) -> str:
-        return f"{pid}:{self.start_time(pid)}"
+        start = self.start_time(pid)
+        return f"{pid}:{start}" if start else ""
 
     def command_of(self, pid: int) -> str | None:
         return _ps(pid, "command=")

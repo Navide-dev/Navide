@@ -16,7 +16,7 @@ import type {
 import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import { confirmUninstall, ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
@@ -291,7 +291,7 @@ watch(installed, () => void refreshPacks())
           <div class="ext-row-head">
             <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="32" />
             <div class="ext-row-title">
-              <span class="ext-id">{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
+              <span class="ext-id" v-truncate>{{ p.id === 'navide.git' ? $t('settings.extensions.bundledGit') : p.id }}</span>
               <span v-if="p.installed?.packageVersion ?? p.version" class="ext-requires">
                 {{ p.installed?.packageVersion ?? p.version }}
               </span>
@@ -369,7 +369,7 @@ watch(installed, () => void refreshPacks())
           <MarketplaceIcon v-bind="idParts(pack.id)" :label="pack.displayName || idParts(pack.id).name" :size="36" />
           <div class="ext-card-main">
             <div class="ext-card-title">
-              <span class="ext-id">{{ pack.displayName || pack.id }}</span>
+              <span class="ext-id" v-truncate>{{ pack.displayName || pack.id }}</span>
               <span class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: pack.version }) }}</span>
               <span class="ext-badge ext-pack-badge">{{ $t('settings.extensions.pack.membersBadge', { count: pack.members.length }) }}</span>
             </div>
@@ -392,7 +392,7 @@ watch(installed, () => void refreshPacks())
           <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="36" />
           <div class="ext-card-main">
             <div class="ext-card-title">
-              <span class="ext-id">{{ p.id }}</span>
+              <span class="ext-id" v-truncate>{{ p.id }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}

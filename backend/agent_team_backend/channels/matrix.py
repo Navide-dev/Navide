@@ -40,6 +40,7 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
@@ -200,7 +201,10 @@ class MatrixAdapter:
             return
         sender = str(event.get("sender") or "")
         content = event.get("content") or {}
-        if not sender or sender == self._user_id or content.get("msgtype") != "m.text":
+        msgtype = content.get("msgtype")
+        # A file is reported, not fetched: this adapter has no media support yet.
+        files = [_media_placeholder(content)] if msgtype in MEDIA_MSGTYPES else []
+        if not sender or sender == self._user_id or (msgtype != "m.text" and not files):
             return
         rel = content.get("m.relates_to") or {}
         if rel.get("rel_type") == "m.replace":
@@ -210,9 +214,10 @@ class MatrixAdapter:
         await self._emit(InboundMessage(
             platform=self.platform, account=self.account, chat_id=room_id, thread_id=thread_id,
             sender_id=sender, sender_name=await self._display_name(sender),
-            text=str(content.get("body") or ""), message_id=str(event.get("event_id") or ""),
+            # A media event's body is its file name, not something the sender wrote.
+            text="" if files else str(content.get("body") or ""), message_id=str(event.get("event_id") or ""),
             is_direct=self._member_counts.get(room_id) == 2, ts=time.time(),
-            reply_to_id=_reply_target(rel),
+            reply_to_id=_reply_target(rel), attachments=files,
         ))
 
     def known_locations(self) -> list[dict[str, Any]]:
@@ -286,3 +291,12 @@ def create_adapter(config: dict[str, Any], secret: dict[str, Any], *, store: Any
         raise ValueError("missing access token")
     return MatrixAdapter(homeserver, token, account=str(config.get("account") or "default"),
                          auto_join=bool(config.get("auto_join", True)))
+
+
+MEDIA_MSGTYPES = {"m.image": "photo", "m.file": "document", "m.video": "video", "m.audio": "audio"}
+
+
+def _media_placeholder(content: dict[str, Any]) -> InboundAttachment:
+    info = content.get("info") or {}
+    return InboundAttachment(MEDIA_MSGTYPES[str(content.get("msgtype"))], str(content.get("body") or ""),
+                             info.get("size"), str(info.get("mimetype") or ""), "")

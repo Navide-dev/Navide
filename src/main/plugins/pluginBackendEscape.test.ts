@@ -131,18 +131,29 @@ describe.runIf(canRun)('escaped grandchild: resource watchdog (macOS, live)', ()
     const { child, grandchild, identity, dataDir } = await launch('cpu')
     try {
       const limits = {
-        // Low threshold: a loaded test machine may give the spinner well under a core.
-        ...DEFAULT_BACKEND_RESOURCE_LIMITS, maxCpuCores: 0.2, cpuKillAfterMs: 0, dataSampleEvery: 1000,
+        // The spinner only gets its fair share of a loaded machine: 0.12 of a
+        // core with 80 busy processes on 10 cores, which a 0.2 limit missed in
+        // every window. 0.02 holds until ~500 runnable processes on 10 cores.
+        // Two-second windows keep one 10ms `ps` tick on the idle root (0.005)
+        // well under it, and the blind watch below proves the root alone never
+        // reaches it - only the escapee's CPU does.
+        ...DEFAULT_BACKEND_RESOURCE_LIMITS, maxCpuCores: 0.02, cpuKillAfterMs: 0, dataSampleEvery: 1000,
+        // Only this test samples: the watch's own timer must not take the
+        // violation (and dispose the watch) between two of the test's samples.
+        sampleIntervalMs: 60 * 60_000,
       }
+      const blind = watchBackendResources(child.pid!, dataDir, () => undefined, limits, createHostWatchdogDeps())
       const watch = watchBackendResources(child.pid!, dataDir, () => undefined, limits, createHostWatchdogDeps(), identity)
+      expect(await blind.sample()).toBeNull()
       expect(await watch.sample()).toBeNull()
-      // A heavily loaded machine may starve the spinner in one window, so
-      // take up to ten one-second windows; any one over the limit counts.
       let violation: string | null = null
-      for (let window = 0; window < 10 && violation === null; window += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1_000))
+      for (let window = 0; window < 5 && violation === null; window += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2_000))
+        // Without the sandbox identity the same window is idle: nothing to report.
+        expect(await blind.sample()).toBeNull()
         violation = await watch.sample()
       }
+      blind.dispose()
       expect(violation).toBe('cpu')
       await waitFor(() => !alive(grandchild))
     } finally {

@@ -6,6 +6,7 @@ import {
   resolveManualSpawnGroupId,
   resolveSpawnGroupId,
   runGroupCreatedAt,
+  savedGroupToRecreate,
 } from '../runGroups'
 
 describe('resolveActiveTab', () => {
@@ -181,5 +182,29 @@ describe('groupPeers', () => {
   it('answers null when the sender is not here at all', () => {
     // Distinct from an empty group: the caller reports the two differently.
     expect(groupPeers([pane('someone')], 'ghost')).toBeNull()
+  })
+})
+
+describe('savedGroupToRecreate', () => {
+  const viewed = [{ id: 'rg-1791251453915' }]
+
+  it('rebuilds a missing group of the workspace on screen under the same id', () => {
+    expect(savedGroupToRecreate(viewed, 'rg-1788161983083', '/ws/a', '/ws/a/', 42)).toEqual({
+      id: 'rg-1788161983083',
+      name: 'Run 2',
+      createdAt: 42,
+    })
+  })
+
+  it('adds nothing when the group is already listed', () => {
+    expect(savedGroupToRecreate(viewed, 'rg-1791251453915', '/ws/a', '/ws/a')).toBeNull()
+  })
+
+  it("never files another workspace's group into the list on screen", () => {
+    // A relaunch restores every held workspace, while the list on screen is
+    // the viewed one's. Recreating there put an empty `Run N` tab into the
+    // viewed project for each group the others' panes carried — once per
+    // relaunch, for every new id.
+    expect(savedGroupToRecreate(viewed, 'rg-default', '/ws/other', '/ws/a')).toBeNull()
   })
 })

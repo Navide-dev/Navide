@@ -48,6 +48,9 @@ export interface WsClientOptions {
   onStatus?: (status: WsClientStatus) => void
   /** Called with a human message when the socket raises an error event. */
   onError?: (message: string) => void
+  /** Called each time a reconnect is scheduled, with how many closes in a row
+   *  there have been since the last successful open. */
+  onReconnectScheduled?: (consecutiveFailures: number) => void
   /** WebSocket constructor override; defaults to `globalThis.WebSocket`. */
   WebSocketImpl?: WsCtor
   /** Bound on the reconnect send queue. Default 200. */
@@ -377,6 +380,7 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
       const delay = Math.min(reconnectBaseMs * Math.pow(2, reconnectAttempts), reconnectMaxMs)
       reconnectAttempts++
       reconnectTimer = setTimeout(() => connect(), delay)
+      opts.onReconnectScheduled?.(reconnectAttempts)
     })
 
     sock.addEventListener('error', () => {

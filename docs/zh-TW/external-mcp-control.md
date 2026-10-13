@@ -98,6 +98,7 @@ Tool 都回傳單一物件，因此這個問題只會在 `plan_list` 上出現�
 | `cli_send_and_wait` | `to`、`text`、`timeout_s=60`（上限 120）、`pane_id?` | `cli_send` 再加上等待該回合結束；回傳 `cli_wait_idle` 的結果，外加 `{ok, target, msg_key}`  **遠端 Pane**：送出與送達閘門與本機相同（`rejected` 仍與 `failed` 分開）；等待那半用名冊狀態字，弱點與 `cli_wait_idle` 相同。 |
 | `cli_open_agent` | `agent`、`name`、`task`、`workspace_path`（非 Pane 呼叫端必填）、`model`、`effort`、`pane_id?`、`session_id?`、`run_group_id?` | 帶著一項任務 Spawn 新的 CLI Pane；回傳 `{ok, name, address, pane_id}`，若該次 Spawn 跨過 Advisory 門檻則另附 `advisories`。**派工原則**（server instructions 也有同一句）：會改檔案、跑超過幾分鐘、或使用者可能想看、中斷或接手的工作，要派給這裡開出的 Pane —— 不是 Agent 自己的 subagent 機制（Claude Code 的 `Agent`／`Task` 工具）。Pane 在 Navide 裡看得到、跑到一半可以打開、比呼叫端的 Session 活得久；subagent 是只交回一段摘要的黑盒。純唯讀、整個結果只有一段話的短查詢仍適合用 subagent。`model` 與 `effort` 為選填，該 CLI 不支援時會「拒絕」而非忽略，Pane 不會悄悄用別的模型啟動。多數 CLI 接受 model；接受獨立 effort 的較少，其餘把 effort 編在 model id 裡（`gpt-5.3-codex-high`）。model id 不做驗證（每次改版都會變），effort 則會對照該 CLI 的合法值檢查。**`agent: "terminal"`** 會開一個一般登入 shell Pane：`task` 可省略 —— 是提示字元出現後打進去一次的指令列，後面不附加任何東西（沒有回報說明；shell 無法回報）—— 而 `model`、`effort`、`session_id` 會被拒絕。指令絕不重打，所以無法確認的 kickoff 會回 `unverified`；重送前先讀 `cli_read_log`，因為重送會讓指令再跑一次 |
 | `cli_close_agent` | `target`、`pane_id?` | 關掉一個 Pane —— `cli_open_agent` 的另一半。**這會直接終結對方的工作**：Pane 與它的 PTY 一併消失，正在跑的回合跟著死掉，排給它的訊息永遠不會送達，而且無法復原 —— 關掉的 Pane 是 Session 沒了，不是暫存起來。動手前先用 `cli_get_status` 看它是不是正在做事；`cli_interrupt` 是比較軟的一階，`cli_send` 更軟（它會等回合做完）。回傳 `{ok, target, name, closed, advisories?}`，`advisories` 說明這次關閉的代價，而且是別人不會回報的那些：Pane 正在回合中、有訊息排在它的佇列裡、它底下有子 Pane 現在變成孤兒。這些都在 Kill 之前先蒐集，因為事後就再也問不到了。僅限本機 Pane：`<device>/<workspace>/<pane>` 這種位址會以 `close-local-only` 失敗，那是這個 Tool 的限制，不是位址寫錯 |
+| `cli_reclaim_agent` | `target`、`pane_id?` | 回收一個做完的 Pane —— `cli_close_agent` 可復原的那一版。CLI 行程結束，Pane 留成可點擊接續的卡片、對話完整保留；等同狀態列的「立即回收」（`ui.pane.reclaim`），但用 `cli_send` 的位址指定單一 Pane，送到持有它的那個視窗。狀態列的守衛照樣適用：忙碌、被聚焦、無法接續，或有未送出輸入、排隊訊息的 Pane 會被拒絕。回傳 `{ok, target, name, reclaimed}`；被拒時是 `ok: false`、`reclaimed: false`、守衛的 `reason`，`error_code` 為 `reclaim-refused`。僅限本機 Pane（`reclaim-local-only`），不能回收自己（`self-reclaim`）；早於 v0.2.16 的視窗回 `reclaim-unsupported` —— 請更新 App，不要改用 `cli_close_agent` 代替 |
 
 **Choosing a tab group when opening a pane.** `cli_open_agent` accepts optional
 `run_group_id` for a fresh pane or a new pane opened with `session_id`:
@@ -139,6 +140,11 @@ group ID below with values returned for the target workspace:
 佇列已滿）、`inject-failed`（輸入到該 Pane 沒有生效）、`pane-closed`（目標在
 遞送前就消失了），或 `no-report`（該次嘗試從未回報結果）。
 
+`unconfirmed`（reason 為 `delivery-unconfirmed`）兩者都不是：文字和 Enter 已送進
+一個剛 resume 的 CLI，但該 CLI 還沒顯示收到。訊息已送出，可能正在執行，所以不要
+只憑這個狀態就重送 —— 先用 `cli_get_status` 或 `cli_read_log` 看一下該 Pane。
+若之後 CLI 的 transcript 出現這則訊息，狀態會改成 `delivered`。
+
 失敗也會在未被主動查詢的情況下推送到寄件 Pane：Navide 會在該 Pane 進入 Idle 後，
 透過與一般訊息相同的佇列與注入路徑，寫入一則 `[Navide MSG] delivery failed`
 通知，指出目標與原因。這是給從不輪詢的 Agent 的提醒 —— `cli_check_message`
@@ -163,7 +169,9 @@ group ID below with values returned for the target workspace:
 **訊息為何仍在佇列中。** `hold` 就是 Messages 面板顯示的同一個原因 —— `{key, n?}`，
 其中 `key` 可能是 `typing`、`mid-turn`、`behind`、`starting`、`settling`、
 `not-ready`、`gone`、`paused` 或 `remote-ack` —— 而 `held_for_s` 是它維持這個狀態
-多久了。它會出現在 `cli_check_message`，以及逾時的 `cli_send` 等待上；一旦訊息塵埃
+多久了。送往另一台裝置、超過一分鐘沒有回應的訊息，會透過 Server 查詢，之後顯示為
+`remote-busy`（目標 Pane 正在執行中）或 `remote-unreported`（沒有在執行，對方也仍然
+沒有任何回應）。它會出現在 `cli_check_message`，以及逾時的 `cli_send` 等待上；一旦訊息塵埃
 落定，或在還沒有任何視窗回報過原因時，它就不存在。`cli_list_targets` 以
 `hold_reason` 逐 Pane 呈現同一件事，那正是讓 `busy` 變得可以解釋的東西 —— 但只在
 從這裡送出的某則訊息正為那個 Pane 排隊時才有，所以它不存在並不說明任何事。
@@ -338,6 +346,7 @@ Action —— `ui.pane.create`、`ui.preview.show`、`ui.window.openGit` —— 
 | `ui.pane.open` | `{paneId}` | 打開一個還原用的 placeholder（`cli_list_targets` 列出 `realized: false` 的 Pane）並等它開完。回傳 `{realized, reason, paneId}`——`paneId` 是開完後這個 Pane 的 id，`reason` 是 `opened`、`fresh`（全新 session，不記得先前對話）、`already-open`，或它沒開起來的原因。Resume 行為設為 `ask` 時不會彈出 modal |
 | `ui.pane.getStatus` | `{paneId}` | 回傳該 Pane 的 `{status, buffer, logPath?, awaitingKind?, kickoff?, agentLabel?, model?, effort?, profileId?, loginExpired?, usageLimitUntil?}`——身分類欄位只在該 Pane 有值時出現 |
 | `ui.pane.interrupt` | `{paneId}` | 對該 Pane 按下它的中斷鍵。回傳 `{sent, status, advisories?}` —— `status` 是在按下**之前**讀的，因為這一按會改變它自己要回報的那個狀態 |
+| `ui.pane.reclaim` | `{paneId}`（單一 id 或陣列） | 回收做完的 Pane 的資源：CLI 行程結束、Pane 留成可點擊接續的卡片，等同狀態列的「立即回收」。忙碌或等待回答、被聚焦、有未送出輸入、有排隊訊息、無法接續的 Pane 會被拒絕。回傳 `{reclaimed, refused: [{paneId, reason, detail}]}` |
 | `ui.tab.switch` | `{tabId}` | 切換作用中的 Stage／Run-group 分頁 |
 | `ui.preview.show` | `{kind, …}` | 在右側 rail 的預覽面板顯示檔案、diff 或內嵌片段 |
 | `ui.window.openPlans` | `{rel_path?}` | 開啟 Plan 視窗；帶 `rel_path`（`.agent-team/plans/<name>.html`，相對路徑、不含 `..`）則聚焦開啟該份 plan |

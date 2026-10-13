@@ -698,6 +698,14 @@ async def test_a_host_request_carries_an_empty_caller_pane_id(
 # addressed to the caller's own window — the only window "switch" can mean.
 
 
+@pytest.fixture
+def _no_window_comes_up(monkeypatch: pytest.MonkeyPatch) -> None:
+    """workspace_open waits for the new window; none ever answers here."""
+    monkeypatch.setattr(plan_mcp, "_WINDOW_READY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(plan_mcp, "_WINDOW_PROBE_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(plan_mcp, "_mcp_opened_workspaces", {})
+
+
 async def _answer_with(result: dict[str, Any]) -> None:
     for _ in range(200):
         keys = list(plan_mcp._ui_invoke_pending.pending)
@@ -713,13 +721,17 @@ async def test_workspace_open_sends_ui_workspace_open_to_any_window(
     broadcasts: list[dict[str, Any]],
     addressed: list[tuple[Any, dict[str, Any]]],
     unicasts: list[dict[str, Any]],
+    _no_window_comes_up: None,
 ) -> None:
     task = asyncio.create_task(_answer("open"))
     result = await plan_mcp.workspace_open("/ws/beta", _ctx())
     await task
 
-    assert result == {"ok": True, "path": "/ws/beta"}
-    assert broadcasts == []
+    assert result["ok"] is True
+    assert result["path"] == "/ws/beta"
+    # Only the readiness probes are broadcast — never the open itself.
+    assert broadcasts
+    assert all(e["payload"]["op"] == "list_actions" for e in broadcasts)
     assert addressed == []
     assert len(unicasts) == 1
     payload = unicasts[0]["payload"]
@@ -733,7 +745,9 @@ async def test_workspace_open_sends_ui_workspace_open_to_any_window(
 
 @pytest.mark.asyncio
 async def test_workspace_open_from_a_pane_is_still_global_not_addressed_home(
-    addressed: list[tuple[Any, dict[str, Any]]], unicasts: list[dict[str, Any]]
+    addressed: list[tuple[Any, dict[str, Any]]],
+    unicasts: list[dict[str, Any]],
+    _no_window_comes_up: None,
 ) -> None:
     """The pane's own window is not the one being asked for: the target
     workspace may belong to no window yet."""

@@ -82,7 +82,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-from . import device_crypto
+from . import cloud_secrets, device_crypto
 
 log = logging.getLogger("agent_team_backend.sync_keyring")
 
@@ -304,8 +304,18 @@ def _load_ring() -> dict[str, Any] | None:
 
 
 def _store_ring(ring: dict[str, Any]) -> None:
+    """Write *ring* as the bound account's. A ring only ever gains keys: one
+    that lacks a key held now is refused, because records, blob names and
+    hashed item ids (``hashed_item_id``, whose key the account fixed once
+    and for good) were all made under keys that must keep opening. Only
+    ``forget_account_key`` lets a ring go, and it lets all of it go."""
     with _op_lock:
-        _vault().write_app_secret(_secret_name(), _serialise(ring))
+        held = _load_ring()
+        if held is not None:
+            lost = set(held["keys"]) - set(ring["keys"])
+            if lost:
+                raise KeyringError(f"refusing to drop sync keys {sorted(lost)} from the ring")
+        cloud_secrets.write(_vault(), _secret_name(), _serialise(ring))
         _remember(ring)
 
 
@@ -346,7 +356,7 @@ def adopt_legacy_ring() -> bytes:
             raise KeyringError("there is no legacy sync key to adopt")
         ring = _parse_ring(stored, "the legacy sync key")
         _store_ring(ring)
-        _vault().write_app_secret(ACCOUNT_KEY_SECRET, None)
+        cloud_secrets.write(_vault(), ACCOUNT_KEY_SECRET, None)
     log.info("adopted the sync key from before accounts were bound")
     return ring["keys"][ring["active"]]
 
@@ -449,7 +459,7 @@ def forget_account_key() -> None:
     and for the same reason it is never reached from a routine path.
     """
     with _op_lock:
-        _vault().write_app_secret(_secret_name(), None)
+        cloud_secrets.write(_vault(), _secret_name(), None)
         _remember(None)
 
 
@@ -502,6 +512,15 @@ def _v2_key_id(raw: bytes) -> str | None:
     if len(raw) < 1 + _KID_LEN + _NONCE_LEN + 16 or raw[:1] != _ENVELOPE_V2:
         return None
     return raw[1 : 1 + _KID_LEN].hex()
+
+
+def envelope_kid(wire: str) -> str | None:
+    """The key id a sealed body names (a v2 envelope), or None — a v1 body,
+    or something that is not an envelope. No key is needed to read it."""
+    try:
+        return _v2_key_id(_decode(wire))
+    except (ValueError, TypeError):
+        return None
 
 
 def decrypt(wire: str, *, scope: str, item_id: str) -> str:
@@ -567,6 +586,53 @@ def resealed(wire: str, *, scope: str, item_id: str) -> str:
     return encrypt(decrypt(wire, scope=scope, item_id=item_id), scope=scope, item_id=item_id)
 
 
+# ---- auxiliary data --------------------------------------------------------------
+#
+# Small values that are not sync records but must open on every device of the
+# account and nowhere else — a share link's key and its encrypted metadata.
+# Same key ring, its own envelope byte and AEAD prefix, so an aux value never
+# opens as a record or a record as an aux value. The label is bound in as AEAD
+# data the way scope and item are for records.
+
+_ENVELOPE_AUX = b"\x03"
+_AAD_PREFIX_AUX = b"navide/aux/v1"
+
+
+def _aad_aux(kid: str, label: str) -> bytes:
+    return b"\x00".join((_AAD_PREFIX_AUX, kid.encode("ascii"), label.encode("utf-8")))
+
+
+def wrap_aux(label: str, data: bytes) -> str:
+    """Seal *data* under the active key for *label*. Wire form, base64:
+    ``0x03 ‖ key id (8) ‖ nonce (12) ‖ ciphertext``."""
+    held = _load_ring()
+    if held is None:
+        raise KeyringError("this machine has no sync key yet")
+    kid = held["active"]
+    nonce = os.urandom(_NONCE_LEN)
+    sealed = AESGCM(held["keys"][kid]).encrypt(nonce, data, _aad_aux(kid, label))
+    return _encode(_ENVELOPE_AUX + bytes.fromhex(kid) + nonce + sealed)
+
+
+def unwrap_aux(label: str, wire: str) -> bytes:
+    """Open a value sealed by ``wrap_aux`` for the same *label*. Raises
+    ``UnknownKeyId`` when it names a key this machine lacks, ``KeyringError``
+    for anything else that does not open."""
+    try:
+        raw = _decode(wire)
+    except (ValueError, TypeError) as err:
+        raise KeyringError("the wrapped value is not valid base64") from err
+    if len(raw) < 1 + _KID_LEN + _NONCE_LEN + 16 or raw[:1] != _ENVELOPE_AUX:
+        raise KeyringError("the wrapped value is not an auxiliary envelope")
+    kid = raw[1 : 1 + _KID_LEN].hex()
+    key = _held_key(kid, "wrapped value")
+    start = 1 + _KID_LEN
+    try:
+        return AESGCM(key).decrypt(raw[start : start + _NONCE_LEN], raw[start + _NONCE_LEN :], _aad_aux(kid, label))
+    except Exception as err:  # noqa: BLE001 - cryptography raises a bare InvalidTag
+        raise KeyringError("the wrapped value did not open with this account key") from err
+
+
 # ---- handing the ring to another device ----------------------------------------
 
 
@@ -588,12 +654,12 @@ _BLOB_ID_CONTEXT = b"navide/blob-id/v1"
 BLOB_SEGMENT_OVERHEAD = _NONCE_LEN + 16
 
 
-def _held_key(kid: str) -> bytes:
+def _held_key(kid: str, noun: str = "blob") -> bytes:
     held = _load_ring()
     if held is None:
         raise KeyringError("this machine has no sync key yet")
     if kid not in held["keys"]:
-        raise UnknownKeyId(f"the blob is sealed under key {kid}, which this machine does not hold")
+        raise UnknownKeyId(f"the {noun} is sealed under key {kid}, which this machine does not hold")
     return held["keys"][kid]
 
 
@@ -613,6 +679,37 @@ def blob_hasher(kid: str | None = None) -> tuple[str, hmac.HMAC]:
         _held_key(kid)
     )
     return kid, hmac.new(derived, digestmod=hashlib.sha256)
+
+
+#: D3: hashed item ids. See ``hashed_item_id``.
+_ITEM_ID_CONTEXT = b"navide/item-id/v1"
+HASHED_ITEM_ID_PREFIX = "h1."
+
+
+def hashed_item_id(scope: str, name: str, kid: str) -> str:
+    """The id the server knows item *name* of *scope* by, once the account
+    has adopted hashed ids: ``h1.`` + HMAC-SHA256(K, scope ‖ 0 ‖ name) with
+    K = HKDF-SHA256(ring key *kid*, info="navide/item-id/v1").
+
+    *kid* is the account's ``itemIdKid``, fixed once on the server — never
+    the active key, which a rotation changes. Raises ``UnknownKeyId`` when
+    this ring lacks it; a caller must stop then rather than name items
+    under any other key.
+    """
+    derived = HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=_ITEM_ID_CONTEXT).derive(
+        _held_key(kid)
+    )
+    mac = hmac.new(derived, scope.encode("utf-8") + b"\x00" + name.encode("utf-8"), hashlib.sha256)
+    return HASHED_ITEM_ID_PREFIX + mac.hexdigest()
+
+
+def is_hashed_item_id(item_id: str) -> bool:
+    rest = item_id[len(HASHED_ITEM_ID_PREFIX):]
+    return (
+        item_id.startswith(HASHED_ITEM_ID_PREFIX)
+        and len(rest) == 64
+        and all(c in "0123456789abcdef" for c in rest)
+    )
 
 
 def _blob_aad(kid: str, blob_id: str, index: int, count: int) -> bytes:

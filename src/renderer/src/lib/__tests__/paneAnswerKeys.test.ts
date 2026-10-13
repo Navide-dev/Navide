@@ -146,3 +146,34 @@ describe('isPermanentAllow', () => {
     }
   })
 })
+
+describe('resolveAnswerKeys with the prompt the caller checked', () => {
+  const SAFE = ['Bash command', '  npm test', 'Do you want to proceed?', '❯ 1. Yes', '  2. No (esc)'].join('\n')
+  const RISKY = ['Bash command', '  rm -rf ~', 'Do you want to proceed?', '❯ 1. Yes', '  2. No (esc)'].join('\n')
+  const checked = (screen: string) => ({ prompt: awaitingPromptText(screen), options: parseMenuOptions(screen) })
+  const press = (screen: string, expected: { prompt: string; options: string[] }) =>
+    resolveAnswerKeys({
+      agentKey: 'claude', displayStatus: 'awaiting', awaitingKind: 'permission', screen,
+      answer: { kind: 'permission', choice: 'allow' }, expected,
+    })
+
+  it('presses the keys while the checked prompt is still on screen', () => {
+    expect(press(SAFE, checked(SAFE))).toEqual({ ok: true, keys: '1' })
+  })
+
+  it('ignores a re-wrap that only moves whitespace', () => {
+    const rewrapped = { prompt: checked(SAFE).prompt.replace(/\n/g, '\n  '), options: checked(SAFE).options }
+    expect(press(SAFE, rewrapped)).toEqual({ ok: true, keys: '1' })
+  })
+
+  it('refuses when a different prompt replaced the checked one', () => {
+    const result = press(RISKY, checked(SAFE))
+    expect(result.ok).toBe(false)
+    expect(result).toMatchObject({ errorCode: 'prompt-changed' })
+  })
+
+  it('refuses when only the menu changed', () => {
+    const other = ['Bash command', '  npm test', 'Do you want to proceed?', '❯ 1. Yes', '  2. Yes, always', '  3. No (esc)'].join('\n')
+    expect(press(other, checked(SAFE))).toMatchObject({ ok: false, errorCode: 'prompt-changed' })
+  })
+})

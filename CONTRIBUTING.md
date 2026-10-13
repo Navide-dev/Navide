@@ -19,27 +19,27 @@ Thank you for your interest in contributing!
 
 ## Asking Questions / 提問
 
-Usage questions and open-ended ideas belong in [GitHub Discussions](https://github.com/nt-nerdtechnic/Navide/discussions) — use **Q&A** for help and **Ideas** for early proposals. Issues are reserved for confirmed bugs and concrete feature requests.
+Usage questions and open-ended ideas belong in [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions) — use **Q&A** for help and **Ideas** for early proposals. Issues are reserved for confirmed bugs and concrete feature requests.
 
-> 使用問題與尚未成形的想法請到 [GitHub Discussions](https://github.com/nt-nerdtechnic/Navide/discussions)（Q&A 提問、Ideas 討論構想）；Issue 保留給已確認的 bug 與具體的功能需求。
+> 使用問題與尚未成形的想法請到 [GitHub Discussions](https://github.com/Navide-dev/Navide/discussions)（Q&A 提問、Ideas 討論構想）；Issue 保留給已確認的 bug 與具體的功能需求。
 
 ---
 
 ## Reporting Bugs / 回報 Bug
 
-Please open a [GitHub Issue](https://github.com/nt-nerdtechnic/Navide/issues/new?template=bug_report.yml) using the bug report template.
+Please open a [GitHub Issue](https://github.com/Navide-dev/Navide/issues/new?template=bug_report.yml) using the bug report template.
 Include a clear description, steps to reproduce, and any relevant logs or screenshots.
 
-> 請開 [GitHub Issue](https://github.com/nt-nerdtechnic/Navide/issues/new?template=bug_report.yml) 並填寫 bug 回報模板，包含重現步驟與相關 log。
+> 請開 [GitHub Issue](https://github.com/Navide-dev/Navide/issues/new?template=bug_report.yml) 並填寫 bug 回報模板，包含重現步驟與相關 log。
 
 ---
 
 ## Requesting Features / 功能建議
 
-Open a [GitHub Issue](https://github.com/nt-nerdtechnic/Navide/issues/new?template=feature_request.yml) with the feature request template.
+Open a [GitHub Issue](https://github.com/Navide-dev/Navide/issues/new?template=feature_request.yml) with the feature request template.
 Describe the problem you are trying to solve and the solution you have in mind.
 
-> 請開 [GitHub Issue](https://github.com/nt-nerdtechnic/Navide/issues/new?template=feature_request.yml) 並描述你想解決的問題與建議的解法。
+> 請開 [GitHub Issue](https://github.com/Navide-dev/Navide/issues/new?template=feature_request.yml) 並描述你想解決的問題與建議的解法。
 
 ---
 
@@ -49,7 +49,7 @@ Describe the problem you are trying to solve and the solution you have in mind.
 for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64
 
 ```bash
-git clone https://github.com/nt-nerdtechnic/Navide.git
+git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 
 pnpm install
@@ -103,9 +103,17 @@ unstaged or untracked; the local typecheck passes because the file is on disk,
 and only CI fails. Stage the missing file too or drop the import; `--no-verify`
 bypasses the check when you know what you are doing.
 
+Both `.githooks/pre-commit` (staged changes) and `.githooks/pre-push` (every
+commit about to be pushed) also run the secret scan CI runs, gitleaks with
+`.gitleaks.toml`, so a finding stops you locally instead of failing the
+`Secret scan` workflow after the push. Install it with `brew install gitleaks`;
+without it the hooks print a warning and skip the scan. Record a false positive
+by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
+
 > 每個 clone 執行一次 `git config core.hooksPath .githooks`。pre-commit 會擋下
 > 「staged 的檔 import 了還沒進 index 的相對模組」——本機 typecheck 看得到工作樹的檔所以會過，
-> 只有 CI 會紅。
+> 只有 CI 會紅。pre-commit 與 pre-push 也會跑和 CI 相同的 gitleaks 密鑰掃描；誤判請把
+> fingerprint 加進 `.gitleaksignore`。
 
 ---
 
@@ -164,6 +172,12 @@ for suite ownership, provider isolation, contract coverage and diagnostics.
 **Python**
 - Follow PEP 8.
 - Run `uv --project backend run pytest backend/tests` before committing.
+
+**UI text and docs**
+- Follow the [glossary](docs/en-US/glossary.md): "Navide plugin" and "Navide
+  Marketplace" for Navide's own packages, "CLI extension" for an AI CLI's own,
+  "Agent Assets" for skills, MCP, prompts and memory. Never write plugin,
+  extension or marketplace bare; a locale test fails the build if you do.
 
 **Adding a CLI agent**
 - Follow [`docs/adding-a-cli-vendor.md`](docs/adding-a-cli-vendor.md). An

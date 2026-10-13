@@ -9,8 +9,8 @@ import StageTabBar, { type TabItem } from '../StageTabBar.vue'
 // exposes renameTab so that menu can start the tab's inline rename.
 
 const tabs: TabItem[] = [
-  { key: 'rg-1', label: 'Claude', count: 2, type: 'stage', status: 'active' },
-  { key: 'manual', label: 'manual', count: 1, type: 'manual', status: 'idle' }
+  { key: 'rg-1', label: 'Claude', count: 2, live: 2, type: 'stage', status: 'active' },
+  { key: 'manual', label: 'manual', count: 1, live: 1, type: 'manual', status: 'idle' }
 ]
 
 describe('StageTabBar – tab right-click', () => {

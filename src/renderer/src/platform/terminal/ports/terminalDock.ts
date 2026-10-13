@@ -27,6 +27,9 @@ export interface TerminalSpawnOptions {
    *  `loginProfileId`, which only chooses an isolated home: a live login
    *  (signing in to the already-active account) sets this and not that. */
   isLogin?: boolean
+  /** A claude sign-in inside the pane's account's own config dir (the
+   *  account is the pane's `metadata.profile_id`). */
+  accountDirLogin?: boolean
 }
 
 export interface TerminalCreateRequest {
@@ -44,6 +47,7 @@ export interface TerminalCreateRequest {
   outputLogFile: string | null
   loginProfileId: string | null
   isLogin: boolean
+  accountDirLogin?: boolean
   replacesTerminalId: string | null
 }
 
@@ -126,7 +130,9 @@ export interface TerminalDockPort {
   reattach(sessionIds: string[], cols: number, rows: number): Promise<PortResponse<{ alive: string[]; dead: string[]; logs?: Record<string, string> }>>
   resize(sessionId: string, cols: number, rows: number): Promise<PortResponse>
   interrupt(sessionId: string): Promise<PortResponse>
-  kill(sessionId: string, force: boolean): Promise<PortResponse>
+  /** `retireRestore`: the user stopped this CLI (an embedded panel's Stop), so
+   *  the backend retires the panel's restore record. Every other kill keeps it. */
+  kill(sessionId: string, force: boolean, options?: { retireRestore?: boolean }): Promise<PortResponse>
   redraw(sessionId: string, cols: number, rows: number): Promise<PortResponse>
 
   onOutput(callback: (payload: TerminalOutputEvent) => void): () => void
@@ -165,6 +171,11 @@ export interface TerminalDockPort {
    *  closing the panel's window retires it); null otherwise. Optional: without
    *  it the panel never resumes on its own and shows Start, as before. */
   readDockRestore?(workspacePath: string, paneId: string): Promise<{ agentKey: string; sessionId: string } | null>
+  /** Retire the panel's restore record when no plugin provides its surface any
+   *  more (a built-in panel whose plugin was removed), resolving true; false
+   *  while one does. Optional: a plugin's own port never needs it — its window
+   *  exists only while the plugin does. */
+  dockSurfaceRetired?(workspacePath: string, paneId: string, surface: string): Promise<boolean>
   statPath(path: string, timeoutMs?: number): Promise<PortResponse<{ exists: boolean }>>
   getHomeDirectory?(): Promise<string>
   /** `false` means the host could not open the file; `void` (older ports)

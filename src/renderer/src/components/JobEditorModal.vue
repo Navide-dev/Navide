@@ -26,6 +26,7 @@ import {
   type SchedulerJob,
 } from '../lib/schedulerJobs'
 import { weekdayKey, type Translate } from '../lib/cronDescribe'
+import { blockTourWhile } from '../composables/useTourBlockers'
 
 const props = defineProps<{
   open: boolean
@@ -34,6 +35,8 @@ const props = defineProps<{
   backend: ReturnType<typeof useBackend>
 }>()
 const emit = defineEmits<{ close: []; saved: [job: SchedulerJob]; removed: [id: string] }>()
+// The welcome tour steps aside while the editor is open.
+blockTourWhile(() => props.open)
 
 const { t } = useI18n()
 const tr: Translate = (key, params) => (params ? t(key, params) : t(key))

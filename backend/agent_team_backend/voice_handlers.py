@@ -441,13 +441,37 @@ def _remove(path: Path) -> None:
             return
         except PermissionError:
             if time.monotonic() >= deadline:
-                log.warning("voice: cannot delete %s; it is swept later", path.name)
+                log.warning("voice: cannot delete %s yet; retrying in the background", path.name)
+                threading.Thread(target=_remove_later, args=(path,), name="voice-remove", daemon=True).start()
                 return
         except OSError as err:
             log.warning("voice: cannot delete %s: %s", path.name, err)
             return
         time.sleep(delay)
         delay = min(delay * 2, 0.2)
+
+
+_REMOVE_LATER_POLL_S = 0.5
+
+
+def _remove_later(path: Path) -> None:
+    """Keep retrying a delete _remove gave up on, on its own thread so the
+    voice pool is not tied up. Whatever holds the file lets go eventually (the
+    sidecar reads it for at most a request's timeout); _sweep_stale_pcm only
+    catches what is still there after that, at the next take or exit."""
+    deadline = time.monotonic() + stt_service.REQUEST_TIMEOUT_S
+    while time.monotonic() < deadline:
+        time.sleep(_REMOVE_LATER_POLL_S)
+        try:
+            with _pcm_io_lock:
+                path.unlink(missing_ok=True)
+            return
+        except PermissionError:
+            continue
+        except OSError as err:
+            log.warning("voice: cannot delete %s: %s", path.name, err)
+            return
+    log.warning("voice: cannot delete %s; it is swept later", path.name)
 
 
 def _sweep_stale_pcm() -> None:
@@ -666,7 +690,24 @@ async def _transcribe_window(rec: _Recording, end: int, pad: bool, segments: boo
             path, rec.language, _prompt_for(rec), segments=segments, script=rec.script,
         )
     finally:
-        await stt_service.run_blocking(_remove, path)
+        await _remove_before_returning(path)
+
+
+async def _remove_before_returning(path: Path) -> None:
+    """Run _remove and wait for it even through another cancel. A partial is
+    cancelled by voice.cancel/voice.stop and, separately, by its own budget
+    timeout; if the second lands while the delete is still retrying, a plain
+    await ends the task with the speech still on disk."""
+    removal = asyncio.ensure_future(stt_service.run_blocking(_remove, path))
+    cancelled = False
+    while not removal.done():
+        try:
+            await asyncio.shield(removal)
+        except asyncio.CancelledError:
+            cancelled = True
+    if cancelled:
+        raise asyncio.CancelledError
+    removal.result()
 
 
 def _partial_due(rec: _Recording) -> bool:

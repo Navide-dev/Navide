@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import terminals
+from agent_team_backend import osplat, terminals
 from agent_team_backend.osplat import _posix
 from agent_team_backend.terminals import (
     TerminalService,
@@ -37,6 +37,14 @@ from agent_team_backend.terminals import (
 
 async def _noop_emit(event: dict[str, Any]) -> None:
     return None
+
+
+def _fake_base(*real: int) -> int:
+    """A base for fake pids that can never be one of the real pids a test
+    mixes them with. A hardcoded fake (900) once matched the spawned child's
+    pid on a Windows runner: the fake entry overwrote the child's own row and
+    the test saw no descendants at all."""
+    return max(real) + 1_000_000
 
 
 # ---- _ps_snapshot: parsing ----
@@ -72,20 +80,22 @@ async def test_refresh_updates_sessions_and_returns_detached_only_payload():
     session = svc.create(pane_id="p1", agent_key=None, command=["sleep", "30"], cwd="/")
     try:
         pid = session.proc.pid
-        # tree: child -> 900 (detached, own group) -> 901 (900's group),
-        # child -> 902 (same group as child: transient helper), unrelated 999
+        base = _fake_base(pid, os.getpid())
+        a, b, c, other = base + 900, base + 901, base + 902, base + 999
+        # tree: child -> a (detached, own group) -> b (a's group),
+        # child -> c (same group as child: transient helper), unrelated other
         snap = {
             pid: (os.getpid(), pid, "L-child"),
-            900: (pid, 900, "L900"),
-            901: (900, 900, "L901"),
-            902: (pid, pid, "L902"),
-            999: (1, 999, "L999"),
+            a: (pid, a, "L900"),
+            b: (a, a, "L901"),
+            c: (pid, pid, "L902"),
+            other: (1, other, "L999"),
         }
         payload = svc._refresh_descendants(snap)
         # In-memory snapshot keeps the whole tree (runtime reaper needs it)…
-        assert session.descendants == {900: "L900", 901: "L901", 902: "L902"}
+        assert session.descendants == {a: "L900", b: "L901", c: "L902"}
         # …but only descendants outside the root's group are registry-worthy.
-        assert payload == {pid: {900: "L900", 901: "L901"}}
+        assert payload == {pid: {a: "L900", b: "L901"}}
     finally:
         await svc.kill_all(grace=0.3)
 
@@ -95,14 +105,16 @@ async def test_refresh_keeps_last_snapshot_on_ps_failure_or_missing_root():
     session = svc.create(pane_id="p1", agent_key=None, command=["sleep", "30"], cwd="/")
     try:
         pid = session.proc.pid
-        svc._refresh_descendants({pid: (os.getpid(), pid, "L"), 900: (pid, 900, "L900")})
-        assert session.descendants == {900: "L900"}
+        base = _fake_base(pid, os.getpid())
+        a, other = base + 900, base + 999
+        svc._refresh_descendants({pid: (os.getpid(), pid, "L"), a: (pid, a, "L900")})
+        assert session.descendants == {a: "L900"}
         # ps failure ({}) must not wipe the good snapshot.
         assert svc._refresh_descendants({}) == {}
-        assert session.descendants == {900: "L900"}
+        assert session.descendants == {a: "L900"}
         # Child absent from the table (death racing EOF) — keep the snapshot.
-        svc._refresh_descendants({999: (1, 999, "L999")})
-        assert session.descendants == {900: "L900"}
+        svc._refresh_descendants({other: (1, other, "L999")})
+        assert session.descendants == {a: "L900"}
     finally:
         await svc.kill_all(grace=0.3)
 
@@ -116,22 +128,24 @@ async def test_snapshot_loop_persists_descendants_to_registry(monkeypatch):
     svc = TerminalService(emit=_noop_emit)
     session = svc.create(pane_id="p1", agent_key=None, command=["sleep", "30"], cwd="/")
     pid = session.proc.pid
+    a = _fake_base(pid, os.getpid()) + 900
     persisted: list[dict[int, dict[int, str]]] = []
     monkeypatch.setattr(
         terminals.pty_registry, "update_descendants", persisted.append
     )
     monkeypatch.setattr(
         terminals, "_ps_snapshot",
-        lambda: {pid: (os.getpid(), pid, "L-child"), 900: (pid, 900, "L900")},
+        lambda: {pid: (os.getpid(), pid, "L-child"), a: (pid, a, "L900")},
     )
     # The fake table is still in force when kill_all runs below, so its
-    # breakaway sweep would take pid 900 for a verified grandchild and SIGKILL
+    # breakaway sweep would take the fake pid for a verified grandchild and SIGKILL
     # whatever real process holds that pid on the host (on a CI runner: the
     # runner itself). Stub the kill; the sweep is not what this test is about.
     monkeypatch.setattr(terminals, "_kill_breakaway", lambda pids: None)
     try:
-        await asyncio.sleep(0.2)  # first snapshot tick runs on the fake table
-        assert persisted and persisted[-1] == {pid: {900: "L900"}}
+        # The first snapshot tick runs on the fake table: a ps read off the
+        # loop, then a registry write. Wait for the write, not a fixed time.
+        assert await _until(lambda: persisted and persisted[-1] == {pid: {a: "L900"}}), persisted
     finally:
         await svc.kill_all(grace=0.3)
 
@@ -139,16 +153,18 @@ async def test_snapshot_loop_persists_descendants_to_registry(monkeypatch):
 async def test_reap_kills_orphaned_snapshot_pids_and_their_subtree(monkeypatch):
     svc = TerminalService(emit=_noop_emit)
     me = os.getpid()
+    base = _fake_base(me)
+    p200, p250, p300, p400, p555, p999 = (base + n for n in (200, 250, 300, 400, 555, 999))
     # Snapshot was {200, 300, 400}. Now: 200 reparented to launchd with a
     # fresh child 250; 300 reparented to this backend; 400 still has a live
     # parent (555) — must be spared, as must unrelated 999.
     snap = {
-        200: (1, 200, "L200"),
-        250: (200, 200, "L250"),
-        300: (me, 300, "L300"),
-        400: (555, 400, "L400"),
-        555: (1, 555, "L555"),
-        999: (1, 999, "L999"),
+        p200: (1, p200, "L200"),
+        p250: (p200, p200, "L250"),
+        p300: (me, p300, "L300"),
+        p400: (p555, p400, "L400"),
+        p555: (1, p555, "L555"),
+        p999: (1, p999, "L999"),
     }
     monkeypatch.setattr(terminals, "_ps_snapshot", lambda: snap)
     # The table above is POSIX-shaped (launchd is ppid 1); pin the seam to
@@ -161,8 +177,8 @@ async def test_reap_kills_orphaned_snapshot_pids_and_their_subtree(monkeypatch):
     monkeypatch.setattr(
         terminals, "_kill_breakaway", lambda pids: killed.extend(pids)
     )
-    await svc._reap_exit_orphans({200: "L200", 300: "L300", 400: "L400"})
-    assert sorted(killed) == [200, 250, 300]
+    await svc._reap_exit_orphans({p200: "L200", p300: "L300", p400: "L400"})
+    assert sorted(killed) == [p200, p250, p300]
 
 
 # Which ppid marks an orphan is the tree's call (Windows normalises a stale
@@ -259,8 +275,9 @@ async def test_close_schedules_reap_on_exit_but_not_on_kill(monkeypatch, tmp_pat
             break
         await asyncio.sleep(0.05)
     assert s1.closed
-    await asyncio.sleep(0.1)  # let the batch sweeper's grace elapse and run
-    assert reaped == [[111]]
+    # The sweep runs once the child is confirmed dead and the batch grace has
+    # elapsed; wait for it rather than for a fixed time a loaded runner misses.
+    assert await _until(lambda: reaped == [[111]]), reaped
 
     # kill() path: must NOT queue for the exit reaper (it sweeps on its own).
     s2 = svc.create(
@@ -274,6 +291,139 @@ async def test_close_schedules_reap_on_exit_but_not_on_kill(monkeypatch, tmp_pat
     await asyncio.sleep(0.2)
     assert reaped == [[111]]
     await svc.kill_all(grace=0.3)
+
+
+#: A child that lives until it is told otherwise. The base interpreter, not
+#: a Windows venv's python.exe: that is a launcher with the real interpreter
+#: as its own child, which killing the launcher's pid would leave running.
+_SLEEPER = [getattr(sys, "_base_executable", None) or sys.executable, "-c", "import time; time.sleep(30)"]
+
+
+class _NotYetReapable:
+    """A child the PTY reported EOF for before it could be reaped: poll()
+    says it is alive while ``held``, whatever the real process is doing. A
+    real child that outlives its PTY closing would need POSIX (a HUP trap)
+    and would still race; this holds the window open on every platform."""
+
+    def __init__(self, proc: Any) -> None:
+        self._proc = proc
+        self.held = True
+
+    def poll(self) -> int | None:
+        return None if self.held else self._proc.poll()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._proc, name)
+
+
+def _end(pid: int) -> None:
+    """Put the real child down through the platform seam (SIGKILL, or
+    TerminateProcess on Windows)."""
+    try:
+        osplat.process_tree.kill(pid, force=True)
+    except OSError:
+        pass  # already gone: closing its PTY (HUP, or the job on Windows) may have ended it
+
+
+async def _until(predicate: Any, timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        if time.monotonic() >= deadline:
+            return False
+        await asyncio.sleep(0.01)
+    return True
+
+
+async def test_an_eof_before_the_child_is_reapable_still_sweeps_and_unregisters(
+    monkeypatch, tmp_path
+):
+    """The PTY can report EOF while the child is still finishing its exit:
+    it has closed its end of the tty but cannot be reaped yet. Its orphans
+    (MCP servers and the like) must still be swept and its crash-recovery
+    record dropped once it is confirmed dead."""
+    monkeypatch.setattr(terminals, "_EXIT_ORPHAN_GRACE_S", 1.0)
+    reaped: list[list[int]] = []
+    unregistered: list[int] = []
+
+    async def fake_reap(self, descendants):
+        reaped.append(sorted(descendants))
+
+    monkeypatch.setattr(TerminalService, "_reap_exit_orphans", fake_reap)
+    monkeypatch.setattr(terminals, "_ps_snapshot", lambda: {})
+    monkeypatch.setattr(terminals.pty_registry, "unregister", unregistered.append)
+
+    svc = TerminalService(emit=_noop_emit)
+    session = svc.create(pane_id="p1", agent_key=None, command=_SLEEPER, cwd=str(tmp_path))
+    session.descendants = {111: ""}
+    session.proc = gate = _NotYetReapable(session.proc)
+    svc._close(session, reason="exit")  # EOF first; the child is not reapable yet
+    _end(session.proc.pid)
+    gate.held = False  # ...and finishes exiting just after
+
+    assert await _until(
+        lambda: reaped == [[111]] and session.proc.pid in unregistered
+    ), (reaped, unregistered)
+    await svc.kill_all(grace=0.3)
+
+
+async def test_an_eof_whose_child_keeps_running_is_left_alone(
+    monkeypatch, tmp_path, caplog
+):
+    """A child that closed its PTY but is still alive when the settle window
+    ends is not ours to sweep under: its descendants are not orphans, and its
+    record must stay for the next start's reap_stale."""
+    monkeypatch.setattr(terminals, "_EXIT_ORPHAN_GRACE_S", 0.3)
+    reaped: list[list[int]] = []
+    unregistered: list[int] = []
+
+    async def fake_reap(self, descendants):
+        reaped.append(sorted(descendants))
+
+    monkeypatch.setattr(TerminalService, "_reap_exit_orphans", fake_reap)
+    monkeypatch.setattr(terminals, "_ps_snapshot", lambda: {})
+    monkeypatch.setattr(terminals.pty_registry, "unregister", unregistered.append)
+
+    svc = TerminalService(emit=_noop_emit)
+    session = svc.create(pane_id="p1", agent_key=None, command=_SLEEPER, cwd=str(tmp_path))
+    session.descendants = {111: ""}
+    session.proc = gate = _NotYetReapable(session.proc)
+    try:
+        svc._close(session, reason="exit")
+        settling = list(svc._exit_settles)
+        assert settling, "an EOF with a live child must wait for it"
+        await asyncio.gather(*settling)
+        await asyncio.sleep(0.1)  # nothing may follow the settle either
+        assert reaped == []
+        assert session.proc.pid not in unregistered
+        assert "still alive" in caplog.text
+    finally:
+        gate.held = False
+        _end(session.proc.pid)
+        session.proc.wait(timeout=5)
+
+
+async def test_kill_all_waits_for_an_eof_still_settling(monkeypatch, tmp_path):
+    """Shutdown right after such an EOF: the app closes the database once
+    kill_all returns, so the settle's registry write must be done by then."""
+    monkeypatch.setattr(terminals, "_EXIT_ORPHAN_GRACE_S", 3.0)
+    unregistered: list[int] = []
+    monkeypatch.setattr(terminals, "_ps_snapshot", lambda: {})
+    monkeypatch.setattr(terminals.pty_registry, "unregister", unregistered.append)
+
+    svc = TerminalService(emit=_noop_emit)
+    session = svc.create(pane_id="p1", agent_key=None, command=_SLEEPER, cwd=str(tmp_path))
+    session.proc = gate = _NotYetReapable(session.proc)
+    svc._close(session, reason="exit")
+    _end(session.proc.pid)
+
+    def exited() -> None:
+        gate.held = False
+
+    # The child becomes reapable only once kill_all is under way, so a
+    # kill_all that does not wait for the settle returns without the write.
+    asyncio.get_running_loop().call_later(1.0, exited)
+    await svc.kill_all(grace=0.3)
+    assert session.proc.pid in unregistered
 
 
 async def test_queued_deaths_share_one_sweep(monkeypatch):

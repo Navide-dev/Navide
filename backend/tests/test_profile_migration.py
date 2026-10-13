@@ -151,3 +151,22 @@ def test_skips_slot_only_and_archived_dirs(tmp_path: Path) -> None:
 def test_missing_root_is_noop(tmp_path: Path) -> None:
     store, vault, _sec, real_home = _setup(tmp_path)
     assert migrate_legacy_claude_homes(store, vault, real_home=real_home) == 0
+
+
+def test_a_replaced_real_session_is_kept_in_the_archive(tmp_path: Path) -> None:
+    """Keeping the larger record must not destroy the smaller real one.
+
+    The two copies may have diverged, so the real file that gets replaced is
+    kept beside the archived legacy home, inside Navide's own data.
+    """
+    store, vault, _sec, real_home = _setup(tmp_path)
+    projects = real_home / ".claude" / "projects" / "-Users-me-proj"
+    projects.mkdir(parents=True)
+    (projects / "s.jsonl").write_text("real", encoding="utf-8")
+    _legacy_home(store.profiles_root, "37a6f4f2", {"-Users-me-proj": {"s.jsonl": "legacy is longer"}})
+
+    migrate_legacy_claude_homes(store, vault, real_home=real_home)
+
+    assert (projects / "s.jsonl").read_text(encoding="utf-8") == "legacy is longer"
+    kept = list((store.profiles_root / "claude").glob("37a6f4f2.migrated-*/replaced-projects/-Users-me-proj/s.jsonl"))
+    assert [p.read_text(encoding="utf-8") for p in kept] == ["real"]

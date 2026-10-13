@@ -236,3 +236,53 @@ async def test_usage_poll_waits_quietly_for_an_unverified_store_then_resumes(sto
     result = await service.poll_once(vault._real_home)
     assert result["providers"][vendor]["status"] == "no-credentials"
     assert len(calls) == 1
+
+
+async def test_usage_poll_isolates_a_store_that_fails_to_read(monkeypatch, tmp_path, caplog):
+    import dataclasses
+    import sqlite3
+
+    from agent_team_backend import usage_service as usage
+    from agent_team_backend.cli_vendors.registry import VENDORS
+
+    class Stores:
+        def enabled(self, _provider):
+            return True
+
+        def context(self, provider):
+            if provider == "kilo":
+                raise sqlite3.OperationalError("database is locked")
+            return provider
+
+    class Vault:
+        stores = Stores()
+
+    read = []
+
+    async def from_context(ctx):
+        read.append(ctx)
+        return usage._snapshot(ctx, "no-credentials")
+
+    async def empty(_home):
+        return usage._snapshot("claude", "no-credentials")
+
+    # The failing store sits between two healthy ones: a task is already
+    # running for the first when the second is asked for its context.
+    vendors = {
+        name: dataclasses.replace(VENDORS[spec], fetch_usage_from_context=from_context)
+        for name, spec in (("opencode", "opencode"), ("kilo", "kilo"), ("pi", "opencode"))
+    }
+    monkeypatch.setattr(usage, "_get_profiles_store", lambda: None)
+    monkeypatch.setattr(usage, "_get_credential_vault", lambda: Vault())
+    monkeypatch.setattr(usage, "_CLI_VENDORS", vendors)
+    monkeypatch.setattr(usage, "fetch_claude", empty)
+
+    with caplog.at_level("WARNING", logger=usage.log.name):
+        result = await usage.UsageService(cache_path=tmp_path / "usage.json").poll_once(tmp_path)
+
+    assert sorted(read) == ["opencode", "pi"]
+    assert result["providers"]["opencode"]["status"] == "no-credentials"
+    assert result["providers"]["pi"]["status"] == "no-credentials"
+    assert result["providers"]["kilo"]["status"] == "error"
+    assert "database is locked" in result["providers"]["kilo"]["error"]
+    assert [r for r in caplog.records if "kilo" in r.getMessage()]

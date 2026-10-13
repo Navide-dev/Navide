@@ -96,11 +96,29 @@ export function runTerminalDockContract(createHarness: () => TerminalDockContrac
       ])
     })
 
+    it('flags only a Stop kill to retire the panel restore record', async () => {
+      const harness = createHarness()
+      await harness.port.kill('session-1', true, { retireRestore: true })
+      await harness.port.kill('session-2', false, { retireRestore: false })
+      expect(harness.sent).toEqual([
+        { type: 'terminal.kill', payload: { terminal_session_id: 'session-1', force: true, retire_restore: true } },
+        { type: 'terminal.kill', payload: { terminal_session_id: 'session-2', force: false } },
+      ])
+    })
+
     it('sends quota lineage as top-level claims without using replacement-kill semantics', async () => {
       const harness = createHarness()
       await harness.port.create({ ...createRequest(), replacesTerminalId: null, quotaTransactionId: 'tx-1', quotaOriginalPaneId: 'original-pane' }, 22)
       expect(harness.sent[0].payload).toMatchObject({ quota_transaction_id: 'tx-1', quota_original_pane_id: 'original-pane', replaces_terminal_id: null })
       expect(harness.sent[0].payload.metadata).toEqual({ origin: 'contract' })
+    })
+
+    it('sends an account-dir sign-in as a top-level flag, and nothing when unset', async () => {
+      const harness = createHarness()
+      await harness.port.create({ ...createRequest(), accountDirLogin: true }, 22)
+      await harness.port.create(createRequest(), 22)
+      expect(harness.sent[0].payload).toMatchObject({ account_dir_login: true, is_login: true })
+      expect(harness.sent[1].payload).not.toHaveProperty('account_dir_login')
     })
 
     it('registers the embedded panel only through the panel-only roster handlers', async () => {

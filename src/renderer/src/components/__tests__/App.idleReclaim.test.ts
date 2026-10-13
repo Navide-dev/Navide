@@ -169,7 +169,8 @@ describe('idle reclaim wiring', () => {
     const fn = block('async function reclaimPanesNow(', 'onMounted(() => {')
     expect(fn).toContain(': reclaimBlockedBy(reclaimCandidate(pane), RECLAIM_NOW_THRESHOLD_MS, Date.now())')
     expect(fn).toContain('? namedReclaimBlockedBy(reclaimCandidate(pane), Date.now())')
-    expect(fn).toContain('if (blocked !== null) continue')
+    // A blocked pane is skipped (and, when a caller collects outcomes, recorded).
+    expect(fn).toMatch(/if \(blocked !== null\) \{\n[^\n]*\n\s*continue\n/)
   })
 
   it('offers the same candidate list to every reclaim-now control', () => {
@@ -290,5 +291,16 @@ describe('reclaim a whole workspace from the sidebar', () => {
     expect(controlPane).toContain("wsMoreAction('reclaim')")
     expect(controlPane).toContain('wsReclaimableCount(wsMenu.path) === 0')
     expect(controlPane).toContain('wsReclaimableCount(wsMoreMenuPath) === 0')
+  })
+})
+
+// Settings → Resource limits: the timed sweep honors "also reclaim the focused
+// pane after N hours" (focusedReclaimBlockedBy), read from the shared limits
+// composable so a change in Settings takes effect on the next sweep.
+describe('the timed sweep and the focused-pane option', () => {
+  it('judges panes with the focused-pane threshold from Settings', () => {
+    const fn = block('function paneReclaimable(', '/** The saved record a placeholder needs')
+    expect(fn).toContain('focusedReclaimBlockedBy(')
+    expect(fn).toContain('focusedReclaimHours.value * 3_600_000')
   })
 })

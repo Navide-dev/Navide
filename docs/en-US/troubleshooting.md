@@ -123,4 +123,4 @@ Include:
 - Expected and actual behavior
 - Redacted logs or screenshots
 
-Use the repository's [bug report template](https://github.com/nt-nerdtechnic/Navide/issues/new?template=bug_report.yml). Report vulnerabilities privately according to the [Security Policy](../../SECURITY.md).
+Use the repository's [bug report template](https://github.com/Navide-dev/Navide/issues/new?template=bug_report.yml). Report vulnerabilities privately according to the [Security Policy](../../SECURITY.md).

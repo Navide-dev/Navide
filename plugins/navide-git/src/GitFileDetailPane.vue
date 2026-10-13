@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import DiffPane from './editor/DiffPane.vue'
 import type { GitTransport } from '#git-feature'
 import type { GitFileAccessPort } from './ports/gitSurface'
@@ -113,7 +114,7 @@ async function selectCommit(commit: string): Promise<void> {
 <template>
   <section class="git-file-detail">
     <header class="detail-header">
-      <span class="detail-path">{{ target.resource.filepath }}</span>
+      <span class="detail-path" v-truncate>{{ target.resource.filepath }}</span>
       <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('diff')">Diff</button>
       <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('history')">History</button>
       <button v-if="target.resource.kind === 'file-diff'" class="detail-open" :disabled="closePrepared || diffBusy" @click="setLocalMode('blame')">Blame</button>

@@ -5,8 +5,14 @@
 // Purely prop/emit driven: the feed and the updater actions live in App.vue, so
 // this component only decides layout, expansion and which button a row offers.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
-import type { Announcement, AnnouncementActionSpec, QuotaAnnouncementAction } from '../composables/useAnnouncements'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
+import type {
+  Announcement,
+  AnnouncementActionSpec,
+  ConvenienceAnnouncementAction,
+  EvolveAnnouncementAction,
+  QuotaAnnouncementAction,
+} from '../composables/useAnnouncements'
 import { WHATS_NEW_CHROME, pickText } from '../lib/whatsNew'
 
 const props = defineProps<{ items: Announcement[] }>()
@@ -21,6 +27,12 @@ const emit = defineEmits<{
   'quota-action': [action: QuotaAnnouncementAction]
   /** A release row's "Take the tour": the version whose tour to start. */
   tour: [version: string]
+  /** A workspace self-evolution row's button, for App.vue to map onto the
+   *  existing pane actions or the evolve panel. */
+  'evolve-action': [action: EvolveAnnouncementAction]
+  /** A convenience-feature row's button, for App.vue to map onto the
+   *  overview, the convenience.* RPCs or the account switch. */
+  'convenience-action': [action: ConvenienceAnnouncementAction]
 }>()
 
 /** Buttons of a row: the typed list, else the single update action. */
@@ -33,6 +45,8 @@ function onAction(action: AnnouncementActionSpec): void {
   if (action.kind === 'download') emit('download')
   else if (action.kind === 'install') emit('install')
   else if (action.kind === 'tour') emit('tour', action.version)
+  else if (action.kind.startsWith('evolve-')) emit('evolve-action', action as EvolveAnnouncementAction)
+  else if (action.kind.startsWith('convenience-')) emit('convenience-action', action as ConvenienceAnnouncementAction)
   else emit('quota-action', action as QuotaAnnouncementAction)
 }
 
@@ -62,6 +76,21 @@ function actionLabel(action: AnnouncementActionSpec): string {
       return action.liveSlotId === null
         ? tq('announce.quota.reconcile', 'Complete reconciliation')
         : tq('announce.quota.reconcile-as', 'The live account is {label}', { label: action.label })
+    case 'evolve-open-pane':
+    case 'evolve-resume-pane':
+    case 'evolve-interrupt':
+    case 'evolve-reclaim':
+    case 'evolve-panel':
+    case 'evolve-result':
+      return i18n.global.t(`evolve.notice.action.${action.kind.slice('evolve-'.length)}`)
+    case 'convenience-switch-back':
+      return i18n.global.t('convenience.notice.button.switch-back', { label: action.label })
+    case 'convenience-overview':
+    case 'convenience-reallow':
+    case 'convenience-keep-login':
+    case 'convenience-dismiss':
+    case 'convenience-upgrade-ack':
+      return i18n.global.t(`convenience.notice.button.${action.kind.slice('convenience-'.length)}`)
   }
 }
 
@@ -74,6 +103,8 @@ function iconOf(item: Announcement): string {
   if (item.kind === 'release') return '🏷'
   if (item.kind === 'quota') return '◔'
   if (item.kind === 'scheduler') return '⏲'
+  if (item.kind === 'evolve') return '✦'
+  if (item.kind === 'convenience') return '⚙'
   return '⬆'
 }
 
@@ -116,7 +147,7 @@ function fmtTime(ts: number): string {
   <div class="an-backdrop" @click="emit('close')" />
   <div class="an-pop nv-popover" @click.stop>
     <div class="an-head">
-      <span class="an-head-title">{{ $t('announce.title') }}</span>
+      <span class="an-head-title" v-truncate>{{ $t('announce.title') }}</span>
       <button class="an-btn" data-act="mark-all" @click="emit('mark-all-read')">
         {{ $t('announce.mark-all-read') }}
       </button>

@@ -21,7 +21,7 @@ export type PaneAnswer =
   | { kind: 'permission'; choice: 'allow' | 'deny' }
   | { kind: 'question'; option: number }
 
-export type AnswerKeys = { ok: true; keys: string } | { ok: false; error: string }
+export type AnswerKeys = { ok: true; keys: string } | { ok: false; error: string; errorCode?: 'prompt-changed' }
 
 const MENU_VENDORS = new Set(['claude', 'codex'])
 const LINE_PROMPT_VENDORS = new Set(['aider'])
@@ -81,15 +81,35 @@ export function awaitingPromptText(screen: string): string {
   return text.length > 800 ? text.slice(-800) : text
 }
 
+// Equal up to whitespace, as relay.same_prompt and the MCP prompt fingerprint
+// compare: a re-rendered screen re-wraps the same prompt.
+const squash = (text: string) => text.split(/\s+/).filter(Boolean).join(' ')
+
+function samePrompt(expected: { prompt: string; options: string[] }, screen: string): boolean {
+  const options = parseMenuOptions(screen)
+  return (
+    squash(expected.prompt) === squash(awaitingPromptText(screen)) &&
+    expected.options.length === options.length &&
+    expected.options.every((o, i) => squash(o) === squash(options[i]))
+  )
+}
+
 export function resolveAnswerKeys(input: {
   agentKey: string
   displayStatus: string | undefined
   awaitingKind: string | null | undefined
   screen: string
   answer: PaneAnswer
+  /** The prompt and menu the caller checked the answer against (the MCP
+   *  path's Guard screen); when given, the keys go in only while the same
+   *  prompt is still on screen, so a prompt that replaced it is never answered. */
+  expected?: { prompt: string; options: string[] }
 }): AnswerKeys {
   const { agentKey, answer } = input
   if (input.displayStatus !== 'awaiting') return { ok: false, error: 'pane is not awaiting' }
+  if (input.expected && !samePrompt(input.expected, input.screen)) {
+    return { ok: false, error: 'the prompt on screen changed since it was checked', errorCode: 'prompt-changed' }
+  }
   // A question answer only needs the menu on screen: claude's AskUserQuestion
   // box reports awaitingKind 'permission', so the kinds cannot be matched.
   if (answer.kind === 'permission' && input.awaitingKind !== 'permission') {

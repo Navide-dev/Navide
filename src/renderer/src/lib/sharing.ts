@@ -15,6 +15,9 @@
 
 export const SHARE_SCOPES = ['prompts', 'mcp', 'skills', 'memory'] as const
 export type ShareScope = (typeof SHARE_SCOPES)[number]
+/** The scopes cloud sync covers (2026-10-09: memory is no longer synced; a
+ *  bundle still carries it, being a copy the user makes, not sync). */
+export const CLOUD_SCOPES: readonly ShareScope[] = SHARE_SCOPES.filter((scope) => scope !== 'memory')
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -74,6 +77,10 @@ export interface ImportPreviewRow {
   id: string
   action: ImportAction
   reason: string
+  /** The whole record, as a sync approval shows it (MCP servers and skills). */
+  summary?: Record<string, unknown>
+  /** For an MCP overwrite: the url / command / args it would replace here. */
+  local?: Record<string, unknown>
 }
 
 function readAction(value: unknown): ImportAction {
@@ -89,6 +96,8 @@ export function readPreviewRows(payload: unknown): ImportPreviewRow[] {
       id: str(row.id),
       action: readAction(row.action),
       reason: str(row.reason),
+      ...(isRecord(row.summary) ? { summary: row.summary } : {}),
+      ...(isRecord(row.local) ? { local: row.local } : {}),
     }))
     .filter((row) => row.scope !== '' && row.id !== '')
 }

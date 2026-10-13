@@ -5,6 +5,7 @@ import { createPluginCapabilityClient } from '@navide/plugin-sdk'
 import { SafeAiCliPanel, createAiCliSessionController, createAiCliTerminalView, createAiCliTerminalResources, type SafeAiCliPanelHandle } from '@navide/plugin-ui'
 import { settingsGet, settingsSet } from '@navide/plugin-ui/shared'
 import { useBackend } from '../composables/useBackend'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = withDefaults(defineProps<{
   widthKey: string
@@ -81,7 +82,7 @@ defineExpose({
   <div v-show="open" ref="panelRef" class="ai-dock-panel" :style="{ width: width + 'px' }">
     <div class="ai-cli-head">
       <span class="ai-cli-title">{{ t('pane.ai-terminal.title') }}</span>
-      <span v-if="workspacePath" class="ai-cli-ws" :title="workspacePath">{{ workspaceName }}</span>
+      <span v-if="workspacePath" class="ai-cli-ws" v-truncate :title="workspacePath">{{ workspaceName }}</span>
     </div>
     <div v-if="!active" class="ai-cli-controls">
       <select class="ai-cli-agent-select" :value="panel?.profileId" @change="panel?.selectProfile(($event.target as HTMLSelectElement).value)">
@@ -90,7 +91,7 @@ defineExpose({
       <button class="ai-cli-btn primary" :disabled="!workspacePath || !panel || panel.initializing || backend.status.value !== 'connected'" @click="panel?.start()">{{ panel?.initializing ? 'Reattaching…' : 'Start' }}</button>
     </div>
     <div v-else class="ai-cli-controls">
-      <span class="ai-cli-running-label">{{ profileLabel }}</span>
+      <span class="ai-cli-running-label" v-truncate>{{ profileLabel }}</span>
       <button class="ai-cli-btn ghost" title="Send Ctrl+C to the CLI" @click="panel?.interrupt()">Interrupt</button>
       <button class="ai-cli-btn danger" title="Kill the CLI process" @click="panel?.stop()">Stop</button>
     </div>

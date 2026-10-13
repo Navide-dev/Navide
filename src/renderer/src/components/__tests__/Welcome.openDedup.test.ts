@@ -68,19 +68,21 @@ describe('Welcome open-workspace dedup', () => {
     expect(items[1].find('.r-open').exists()).toBe(false)
   })
 
-  it('hides the remove button while the workspace is open', async () => {
+  // Removing is the only way an entry leaves Recent, so every row offers it —
+  // an open workspace keeps running; only its history row goes.
+  it('keeps the remove button on open workspaces too', async () => {
     await mountWelcome()
     const items = wrapper!.findAll('.recent-item')
-    expect(items[0].find('.r-delete').exists()).toBe(false)
+    expect(items[0].find('.r-delete').exists()).toBe(true)
     expect(items[1].find('.r-delete').exists()).toBe(true)
   })
 
   it('treats trailing-slash paths as the same workspace', async () => {
     listOpenWorkspaces.mockResolvedValue(['/Users/test/proj-b/'])
     await mountWelcome()
-    const items = wrapper!.findAll('.recent-item')
-    expect(items[0].find('.r-open').exists()).toBe(false)
-    expect(items[1].find('.r-open').exists()).toBe(true)
+    const byName = (n: string) => wrapper!.findAll('.recent-item').find((i) => i.find('.r-name').text() === n)!
+    expect(byName('proj-a').find('.r-open').exists()).toBe(false)
+    expect(byName('proj-b').find('.r-open').exists()).toBe(true)
   })
 
   it('re-queries the open list when main broadcasts workspace:openChanged', async () => {

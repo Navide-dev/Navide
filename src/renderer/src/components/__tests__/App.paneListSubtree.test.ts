@@ -146,7 +146,7 @@ describe('the location hint on a carried row', () => {
   })
 
   it('renders on every list with the full text on hover', () => {
-    const hints = appSource.match(/v-if="paneListLocation\.has\(p\.id\)"\s+class="pane-list-location"\s+:title="paneListLocation\.get\(p\.id\)\?\.join\(' · '\)"/g) ?? []
+    const hints = appSource.match(/v-if="paneListLocation\.has\(p\.id\)"\s+class="pane-list-location"\s+v-truncate\s*>/g) ?? []
     expect(hints).toHaveLength(3)
   })
 })

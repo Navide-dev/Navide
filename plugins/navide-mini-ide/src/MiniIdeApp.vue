@@ -22,7 +22,7 @@ import FilePreviewPane from './editor/FilePreviewPane.vue'
 import { previewKind, isMarkdownFile } from './editor/previewTypes'
 import { rebindTabs } from './editor/tabRebind'
 import { initKeybindingsPort, useKeybindings, registerCommand, setContext, executeCommand } from '@navide/plugin-ui/shared'
-import { useTheme, BUILTIN_THEMES, i18n } from '@navide/plugin-ui/foundation'
+import { useTheme, BUILTIN_THEMES, i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import { initSettingsBackend, settingsGet, settingsSet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { allDiagnosticsSorted, setDiagnostics, diagnosticsKey } from './editor/diagnostics'
@@ -2554,7 +2554,7 @@ if (workspacePath && initialRel) openFile({ filepath: initialRel, name: initialN
     <!-- Titlebar -->
     <div v-show="!zenMode" class="ide-titlebar">
       <WindowControls />
-      <span class="ide-titlebar-name">{{ workspaceTitleName }}</span>
+      <span class="ide-titlebar-name" v-truncate>{{ workspaceTitleName }}</span>
     </div>
     <div class="ide-body">
     <!-- Activity bar -->
@@ -3099,7 +3099,7 @@ if (workspacePath && initialRel) openFile({ filepath: initialRel, name: initialN
           <svg v-else-if="!item.line" width="12" height="14" viewBox="0 0 12 16" fill="currentColor"><path d="M6 5H2V4h4v1zM2 8h7V7H2v1zm0 2h7V9H2v1zm0 2h7v-1H2v1zm10-7.5V14c0 .55-.45 1-1 1H1c-.55 0-1-.45-1-1V2c0-.55.45-1 1-1h7.5L12 4.5zM11 5L8 2H1v12h10V5z"/></svg>
           <span v-else class="ide-bc-dd-sym-badge" :data-kind="item.kind">{{ item.kind === 'function' ? 'ƒ' : item.kind === 'class' ? 'C' : item.kind === 'interface' ? 'I' : item.kind === 'type' ? 'T' : '·' }}</span>
         </span>
-        <span class="ide-bc-dd-name">{{ item.name }}</span>
+        <span class="ide-bc-dd-name" v-truncate>{{ item.name }}</span>
         <span v-if="item.line" class="ide-bc-dd-line">L{{ item.line }}</span>
       </div>
     </div>

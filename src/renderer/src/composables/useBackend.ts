@@ -31,6 +31,9 @@ export interface AutoRestartInfo {
   reason: string
 }
 
+/** Consecutive failed reconnects before asking main whether the backend moved. */
+const RECHECK_AFTER_FAILURES = 3
+
 export function useBackend() {
   const status = ref<BackendStatus>('starting')
   const wsUrl = ref<string>('')
@@ -60,10 +63,49 @@ export function useBackend() {
     onError: () => {
       lastError.value = 'WebSocket error'
     },
+    onReconnectScheduled: (failures) => {
+      if (failures >= RECHECK_AFTER_FAILURES) void recheckBackendInfo()
+    },
   })
+
+  // Main only broadcasts a change when the backend process exits. One that
+  // stops listening without exiting left every window retrying its dead port
+  // forever (2026-10-08), so after a few failed reconnects ask main directly
+  // and follow the backend if it now lives somewhere else.
+  let recheckInFlight = false
+  async function recheckBackendInfo(): Promise<void> {
+    if (recheckInFlight) return
+    recheckInFlight = true
+    try {
+      const info = await window.agentTeam?.getBackendInfo?.()
+      if (info?.status === 'ready' && info.wsUrl && info.wsUrl !== client.currentUrl()) {
+        applyBackendChanged(info)
+      }
+    } catch { /* main unreachable — the backoff keeps retrying */ } finally {
+      recheckInFlight = false
+    }
+  }
 
   const send = client.send
   const on = client.on
+
+  // Every connection opens with a challenge (ws.welcome). Main signs it for a
+  // main window only; the answer marks this connection as a Navide window, as
+  // opposed to any other client holding the token. A reconnect brings a fresh
+  // nonce and proves again. Anything else main refuses stays a ws client.
+  on('ws.welcome', (payload) => {
+    const nonce = (payload as { windowChallenge?: unknown } | null)?.windowChallenge
+    if (typeof nonce !== 'string') return
+    void (async () => {
+      let proof: string | null | undefined
+      try {
+        proof = await window.agentTeam?.proveWindow?.(nonce)
+      } catch {
+        return
+      }
+      if (typeof proof === 'string' && proof) send('window.prove', { proof }).catch(() => {})
+    })()
+  })
 
   // Applied when the main process restarts/stops the backend: the port changes
   // on restart, so tear down the old socket and reconnect to the new wsUrl (or

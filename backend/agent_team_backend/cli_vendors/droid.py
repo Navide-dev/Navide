@@ -47,6 +47,7 @@ import os
 import re
 from pathlib import Path
 
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import AccountSwitchSpec, Dep, PlatformInstall, VendorSpec, command_text
 from ..osplat import platform_id as _platform_id
 from ..log_readers.base import (
@@ -529,7 +530,16 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
     return any(p.is_file() for p in candidates)
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("plugin-dirs", (".factory", "plugins"), "Droid plugin", settings=(".factory", "settings.json")),
+    ExtensionsSource("hooks", (".factory", "settings.json"), "Droid hook", section=("hooks",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="droid",
     # Factory/custom model service destinations have not been verified here.
     expected_hosts=(),

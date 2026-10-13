@@ -100,10 +100,10 @@ before the tag push, except in the one case below.
   jobs it skipped — the mirror and publish jobs — run after it. A fix that
   needs new code needs a new patch version, not a moved tag.
 - **Mirror fixed separately**: if you re-ran the mirror by hand
-  (`gh workflow run mirror.yml -R nt-nerdtechnic/Navide --ref main -f
+  (`gh workflow run mirror.yml -R Navide-dev/Navide --ref main -f
   tag=vX.Y.Z -f refresh_latest=true`, which can read the draft), publish with
-  `gh release edit vX.Y.Z -R nt-nerdtechnic/Navide --draft=false --latest`.
-- **Abandon it**: `gh release delete vX.Y.Z -R nt-nerdtechnic/Navide --yes`
+  `gh release edit vX.Y.Z -R Navide-dev/Navide --draft=false --latest`.
+- **Abandon it**: `gh release delete vX.Y.Z -R Navide-dev/Navide --yes`
   removes the draft and its assets and keeps the tag; add `--cleanup-tag` to
   delete the tag as well. If the mirror job had already passed, also re-point
   the mirror's `releases/latest/` at the previous release (see "Rollback").

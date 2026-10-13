@@ -338,6 +338,7 @@ import {
   closeGitLeftPluginView,
   GIT_PLUGIN_ID,
   PLANS_PLUGIN_ID,
+  PLANS_BACKEND_STOPPED_MESSAGE,
   MINI_IDE_PLUGIN_ID,
   bundledMiniIdeDir,
   bundledPlansDir,
@@ -354,7 +355,7 @@ import {
   type PluginLaunchDescriptor,
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
-import { PluginBackendHost } from './pluginBackendHost'
+import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
 import type { PlansBridgeContext } from './plansBridge'
@@ -644,6 +645,216 @@ describe('backend Host session registration', () => {
     expect(mgr.isPlansBackendAvailable()).toBe(true)
     mgr.markPlansBackendUnavailable('child-crash')
     expect(mgr.isPlansBackendAvailable()).toBe(false)
+  })
+
+  function plansManagerWithHostObservers(packageVersion = '1.0.0'): {
+    mgr: FrontendPluginManager
+    childFailed: (instanceId: string) => void
+    childRestarted: (instanceId: string, version?: string) => void
+    childUnbound: (instanceId: string) => void
+    childBudgetSpent: (instanceId: string) => void
+  } {
+    const mgr = new FrontendPluginManager()
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/index.html',
+      views: [],
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    const host = (mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost
+    const observers = host as unknown as {
+      onBackendFailure?: (runtime: unknown, error: BackendPluginError) => void
+      onBackendRestarted?: (runtime: unknown) => void
+      onBackendUnbound?: (runtime: unknown) => void
+    }
+    return {
+      mgr,
+      childFailed: (instanceId) => observers.onBackendFailure?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId },
+        new BackendPluginError('BACKEND_UNAVAILABLE'),
+      ),
+      childRestarted: (instanceId, version = packageVersion) => observers.onBackendRestarted?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion: version, instanceId },
+      ),
+      childUnbound: (instanceId) => observers.onBackendUnbound?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId },
+      ),
+      childBudgetSpent: (instanceId) => observers.onBackendFailure?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId },
+        new BackendPluginError('BACKEND_UNAVAILABLE', BACKEND_RESTART_BUDGET_SPENT_MESSAGE),
+      ),
+    }
+  }
+
+  it('restores Plans support when a failed child comes back after an automatic restart', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted } = plansManagerWithHostObservers()
+
+      childFailed('headless-1')
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+      childRestarted('headless-1')
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+      expect(mgr.plansBackendFallbackAllowed()).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('keeps Plans withdrawn when a child comes back during legacy recovery', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // The child dies, then the Host enters legacy recovery (enterPlansRecovery
+      // withdraws v2 with its own reason): the recovered session stays legacy.
+      const failedFirst = plansManagerWithHostObservers()
+      failedFirst.childFailed('headless-1')
+      failedFirst.mgr.markPlansBackendUnavailable('Backend plugin is unavailable.')
+      failedFirst.childRestarted('headless-1')
+      expect(failedFirst.mgr.isPlansBackendAvailable()).toBe(false)
+      expect(failedFirst.mgr.plansBackendFallbackAllowed()).toBe(true)
+
+      // Recovery first, then a child failure while in it.
+      const recoveredFirst = plansManagerWithHostObservers()
+      recoveredFirst.mgr.markPlansBackendUnavailable('package-recovery')
+      recoveredFirst.childFailed('headless-1')
+      recoveredFirst.childRestarted('headless-1')
+      expect(recoveredFirst.mgr.isPlansBackendAvailable()).toBe(false)
+      expect(recoveredFirst.mgr.plansBackendFallbackAllowed()).toBe(true)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('keeps Plans withdrawn until every child that died has come back', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted } = plansManagerWithHostObservers()
+
+      childFailed('headless-a')
+      childFailed('headless-b')
+      childRestarted('headless-a')
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+      expect(mgr.plansBackendFallbackAllowed()).toBe(true)
+      childRestarted('headless-b')
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+      expect(mgr.plansBackendFallbackAllowed()).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('stops waiting for a dead child once its view is unbound', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted, childUnbound } = plansManagerWithHostObservers()
+
+      childFailed('headless-a')
+      childFailed('headless-b')
+      childUnbound('headless-b')
+      // Unbinding alone is no proof the backend works; the restart is.
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+      childRestarted('headless-a')
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('forgets the dead children when the user re-arms Plans', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted } = plansManagerWithHostObservers()
+
+      childFailed('headless-a')
+      expect(mgr.clearPlansBackendUnavailable()).toBe(true)
+      childFailed('headless-c')
+      childRestarted('headless-c')
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('keeps Plans withdrawn for another cause even after every dead child came back', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted } = plansManagerWithHostObservers()
+
+      childFailed('headless-a')
+      childFailed('headless-b')
+      mgr.markPlansBackendUnavailable('storage-unavailable')
+      childRestarted('headless-a')
+      childRestarted('headless-b')
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('does not let a child whose restart budget is spent hold Plans withdrawn', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      // Another child is still dead: the spent one stops counting, the other
+      // one's restart brings Plans back.
+      const twoDead = plansManagerWithHostObservers()
+      twoDead.childFailed('headless-a')
+      twoDead.childFailed('headless-b')
+      twoDead.childBudgetSpent('headless-b')
+      expect(twoDead.mgr.isPlansBackendAvailable()).toBe(false)
+      twoDead.childRestarted('headless-a')
+      expect(twoDead.mgr.isPlansBackendAvailable()).toBe(true)
+
+      // The spent child was the last dead one: nothing will restart it, so
+      // Plans comes back at once instead of staying withdrawn for everyone.
+      const lastDead = plansManagerWithHostObservers()
+      lastDead.childFailed('headless-b')
+      lastDead.childBudgetSpent('headless-b')
+      expect(lastDead.mgr.isPlansBackendAvailable()).toBe(true)
+
+      // Spent while Plans was ready: the failure does not withdraw it.
+      const whileReady = plansManagerWithHostObservers()
+      whileReady.childBudgetSpent('headless-b')
+      expect(whileReady.mgr.isPlansBackendAvailable()).toBe(true)
+
+      // Another cause still keeps it withdrawn.
+      const otherCause = plansManagerWithHostObservers()
+      otherCause.childFailed('headless-b')
+      otherCause.mgr.markPlansBackendUnavailable('storage-unavailable')
+      otherCause.childBudgetSpent('headless-b')
+      expect(otherCause.mgr.isPlansBackendAvailable()).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('keeps Plans withdrawn when the child that came back is another package version', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const { mgr, childFailed, childRestarted } = plansManagerWithHostObservers()
+
+      childFailed('headless-1')
+      childRestarted('headless-1', '0.9.0')
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 
   it('rejects an unadmitted iframe while preserving the exact Host frame admission seam', async () => {
@@ -2665,6 +2876,404 @@ describe('Plans private filesystem grant revalidation', () => {
     }
   })
 
+  // Re-arm after legacy recovery used to keep a dead headless MCP child cached.
+  // The next agent call hit it, withdrew v2 again, and every filesystem Bridge
+  // request of the live Plans view was then denied - the Plans list showed
+  // "Plugin capability was denied." moments after the retry.
+  it('re-arms Plans v2 without a dead headless child withdrawing it under a live view', async () => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '2.0.0'
+    const workspacePath = process.cwd()
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/frontend/window/index.html',
+      views: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] },
+      revision: 1,
+      state: 'user',
+    }))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace')
+      .mockResolvedValueOnce('headless-dead')
+      .mockResolvedValueOnce('headless-fresh')
+    const unbind = vi.spyOn(PluginBackendHost.prototype, 'unbindView').mockResolvedValue(undefined)
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockImplementation(async (instanceId) => {
+      if (instanceId === 'headless-dead') throw new BackendPluginError('BACKEND_UNAVAILABLE')
+      return [] as never
+    })
+    const service = vi
+      .spyOn(
+        mgr as unknown as {
+          sendPublicBackend: (wsType: string, payload: Record<string, unknown>) => Promise<unknown>
+        },
+        'sendPublicBackend',
+      )
+      .mockResolvedValue({ entries: [] })
+    const internals = mgr as unknown as {
+      sendPlansFilesystemService: (
+        operation: string,
+        payload: Record<string, unknown>,
+        context: PlansBridgeContext,
+      ) => Promise<unknown>
+    }
+    const viewContext: PlansBridgeContext = {
+      runtime: {
+        pluginId: PLANS_PLUGIN_ID,
+        packageVersion,
+        workspaceId: mgr.workspaceIdForPath(workspacePath),
+        instanceId: 'plans-left-1',
+        contributionKey: 'navide.plans.left',
+        hostWindowId: 'window-1',
+        initiator: { kind: 'user', id: 'user-1' },
+      },
+      workspacePath,
+      authorizedPlanRoot: workspacePath,
+      requestId: 'bridge-rearm-1',
+      signal: new AbortController().signal,
+      emit: () => undefined,
+    }
+    try {
+      // The headless child dies; the agent call withdraws v2 (legacy recovery).
+      await expect(mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID,
+        workspacePath,
+        { reqId: 'agent-list-dead', name: 'plans.list', args: {} },
+      )).resolves.toMatchObject({ ok: false })
+      expect(mgr.isPlansBackendAvailable()).toBe(false)
+
+      // The user retries v2.
+      expect(mgr.clearPlansBackendUnavailable()).toBe(true)
+      expect(unbind).toHaveBeenCalledWith('headless-dead')
+
+      // An agent call right after the retry must reach a fresh child ...
+      await expect(mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID,
+        workspacePath,
+        { reqId: 'agent-list-fresh', name: 'plans.list', args: {} },
+      )).resolves.toMatchObject({ ok: true })
+      expect(call).toHaveBeenLastCalledWith('headless-fresh', 'plans.list', {}, expect.anything())
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+
+      // ... so the live view's list keeps its filesystem access.
+      await expect(internals.sendPlansFilesystemService(
+        'fs.read_file',
+        { rel_path: 'draft.html' },
+        viewContext,
+      )).resolves.toEqual({ entries: [] })
+    } finally {
+      service.mockRestore()
+      call.mockRestore()
+      unbind.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
+  it('does not let a call on a headless child the retry discarded withdraw Plans v2 again', async () => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '2.0.0'
+    const workspacePath = process.cwd()
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/frontend/window/index.html',
+      views: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] },
+      revision: 1,
+      state: 'user',
+    }))
+    let stopInFlight: (error: unknown) => void = () => undefined
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace').mockResolvedValue('headless-old')
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockImplementation(
+      () => new Promise((_resolve, reject) => { stopInFlight = reject }),
+    )
+    // Unbinding a child rejects its in-flight calls, as the Host does.
+    const unbind = vi.spyOn(PluginBackendHost.prototype, 'unbindView').mockImplementation(async () => {
+      stopInFlight(new BackendPluginError('PLUGIN_STOPPING'))
+    })
+    try {
+      // An agent runs a long plans call on the headless child ...
+      const inFlight = mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID,
+        workspacePath,
+        { reqId: 'agent-list-long', name: 'plans.list', args: {} },
+      )
+      await vi.waitFor(() => expect(call).toHaveBeenCalledOnce())
+
+      // ... while v2 is withdrawn for another reason and the user retries it.
+      mgr.markPlansBackendUnavailable('view-failure')
+      expect(mgr.clearPlansBackendUnavailable()).toBe(true)
+      expect(unbind).toHaveBeenCalledWith('headless-old')
+
+      // The discarded child's stop fails that call, but is not a sign that
+      // the backend is unavailable: the retry stays in effect.
+      await expect(inFlight).resolves.toMatchObject({ ok: false, error: { code: 'PLUGIN_STOPPING' } })
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+    } finally {
+      call.mockRestore()
+      unbind.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
+  // A child that spent its restart budget is never restarted. Its workspace's
+  // agent calls must fail before dispatch with the recovery steps, and the other
+  // workspaces must keep using v2.
+  it('refuses agent calls for a workspace whose child is given up, before dispatch and without withdrawing Plans', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '2.0.0'
+    const spentWorkspace = process.cwd()
+    const otherWorkspace = mkdtempSync(join(tmpdir(), 'navide-plans-other-'))
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/frontend/window/index.html',
+      views: [],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] },
+      revision: 1,
+      state: 'user',
+    }))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace')
+      .mockImplementation(async (_runtime, _packageDir, workspacePath) =>
+        workspacePath === spentWorkspace ? 'headless-spent' : 'headless-other')
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockResolvedValue([] as never)
+    const host = (mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost
+    const observers = host as unknown as {
+      onBackendFailure?: (runtime: unknown, error: BackendPluginError) => void
+      onBackendUnbound?: (runtime: unknown) => void
+    }
+    const agentList = (workspacePath: string, reqId: string) =>
+      mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID, workspacePath, { reqId, name: 'plans.list', args: {} },
+      )
+    const stopped = vi.fn()
+    mgr.setPlansBackendStoppedHandler(stopped)
+    try {
+      await expect(agentList(spentWorkspace, 'spent-1')).resolves.toMatchObject({ ok: true })
+      await expect(agentList(otherWorkspace, 'other-1')).resolves.toMatchObject({ ok: true })
+
+      // A failure that will be restarted is not reported to the user.
+      observers.onBackendFailure?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId: 'headless-spent' },
+        new BackendPluginError('BACKEND_UNAVAILABLE'),
+      )
+      expect(stopped).not.toHaveBeenCalled()
+      const giveUp = () => observers.onBackendFailure?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId: 'headless-spent' },
+        new BackendPluginError('BACKEND_UNAVAILABLE', BACKEND_RESTART_BUDGET_SPENT_MESSAGE),
+      )
+      giveUp()
+      expect(stopped).toHaveBeenCalledTimes(1)
+      expect(stopped).toHaveBeenCalledWith({ workspacePath: spentWorkspace })
+      // Reported once per instance, however often it is seen again.
+      giveUp()
+      expect(stopped).toHaveBeenCalledTimes(1)
+      call.mockClear()
+
+      await expect(agentList(spentWorkspace, 'spent-2')).resolves.toMatchObject({
+        ok: false,
+        error: { code: 'BACKEND_UNAVAILABLE', message: PLANS_BACKEND_STOPPED_MESSAGE },
+      })
+      expect(call).not.toHaveBeenCalled()
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+
+      await expect(agentList(otherWorkspace, 'other-2')).resolves.toMatchObject({ ok: true })
+      expect(call).toHaveBeenLastCalledWith('headless-other', 'plans.list', {}, expect.anything())
+      // Refused calls do not report it again.
+      expect(stopped).toHaveBeenCalledTimes(1)
+
+      // Once its view is unbound the instance is no longer refused.
+      observers.onBackendUnbound?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId: 'headless-spent' },
+      )
+      await expect(agentList(spentWorkspace, 'spent-3')).resolves.toMatchObject({ ok: true })
+    } finally {
+      call.mockRestore()
+      bind.mockRestore()
+      warnSpy.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(otherWorkspace, { recursive: true, force: true })
+    }
+  })
+
+  // Opening Plans for the workspace is how the user brings a given-up child
+  // back: the next agent call binds a fresh one, once per open.
+  it('replaces a given-up headless child when Plans is opened for its workspace', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '2.0.0'
+    const spentWorkspace = process.cwd()
+    const otherWorkspace = mkdtempSync(join(tmpdir(), 'navide-plans-other-'))
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'window',
+      contributionKey: `${PLANS_PLUGIN_ID}.window`,
+      kind: 'custom',
+      location: 'window',
+      title: 'Plans',
+      entryFile: '/plugins/navide.plans/index.html',
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      devUrl: '',
+      entryFile: view.entryFile,
+      views: [view],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+    }
+    mgr.registerDescriptor(descriptor, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] },
+      revision: 1,
+      state: 'user',
+    }))
+    let spentBinds = 0
+    const bindWorkspace = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace')
+      .mockImplementation(async (_runtime, _packageDir, workspacePath) =>
+        workspacePath === spentWorkspace ? `headless-spent-${++spentBinds}` : 'headless-other')
+    const bindView = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue()
+    const unbind = vi.spyOn(PluginBackendHost.prototype, 'unbindView').mockResolvedValue(undefined)
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockResolvedValue([] as never)
+    const host = (mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost
+    const observers = host as unknown as {
+      onBackendFailure?: (runtime: unknown, error: BackendPluginError) => void
+    }
+    const agentList = (workspacePath: string, reqId: string) =>
+      mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID, workspacePath, { reqId, name: 'plans.list', args: {} },
+      )
+    const openPlans = async (workspacePath: string): Promise<void> => {
+      const handle = await mgr.openView(descriptor, view, {
+        hostWindow: asHost(new FakeBrowserWindow()),
+        bounds: 'fill',
+        workspacePath,
+        capabilityContext: {
+          publisherEligible: false,
+          userGrant: { packageVersion, system: ['fs'], storage: true },
+          runtimeBinding: {
+            pluginId: PLANS_PLUGIN_ID,
+            packageVersion,
+            workspaceId: mgr.workspaceIdForPath(workspacePath),
+            instanceId: null,
+            audience: view.contributionKey,
+          },
+        },
+      })
+      await mgr.waitForBackendBinding(handle.instanceId)
+    }
+    try {
+      await expect(agentList(spentWorkspace, 'spent-1')).resolves.toMatchObject({ ok: true })
+      await expect(agentList(otherWorkspace, 'other-1')).resolves.toMatchObject({ ok: true })
+      observers.onBackendFailure?.(
+        { pluginId: PLANS_PLUGIN_ID, packageVersion, instanceId: 'headless-spent-1' },
+        new BackendPluginError('BACKEND_UNAVAILABLE', BACKEND_RESTART_BUDGET_SPENT_MESSAGE),
+      )
+      await expect(agentList(spentWorkspace, 'spent-2')).resolves.toMatchObject({ ok: false })
+
+      // Opening Plans for another workspace leaves both children alone.
+      await openPlans(otherWorkspace)
+      expect(bindView).toHaveBeenCalledTimes(1)
+      expect(unbind).not.toHaveBeenCalled()
+      await expect(agentList(spentWorkspace, 'spent-3')).resolves.toMatchObject({ ok: false })
+
+      // Opening it for the given-up workspace replaces that child once.
+      await openPlans(spentWorkspace)
+      expect(unbind).toHaveBeenCalledTimes(1)
+      expect(unbind).toHaveBeenCalledWith('headless-spent-1')
+      call.mockClear()
+      await expect(agentList(spentWorkspace, 'spent-4')).resolves.toMatchObject({ ok: true })
+      expect(call).toHaveBeenLastCalledWith('headless-spent-2', 'plans.list', {}, expect.anything())
+
+      // Opening it again does not replace the fresh child.
+      await openPlans(spentWorkspace)
+      expect(unbind).toHaveBeenCalledTimes(1)
+      expect(spentBinds).toBe(2)
+      await expect(agentList(otherWorkspace, 'other-2')).resolves.toMatchObject({ ok: true })
+      expect(call).toHaveBeenLastCalledWith('headless-other', 'plans.list', {}, expect.anything())
+    } finally {
+      call.mockRestore()
+      unbind.mockRestore()
+      bindView.mockRestore()
+      bindWorkspace.mockRestore()
+      warnSpy.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(otherWorkspace, { recursive: true, force: true })
+    }
+  })
+
   // The child reads and writes its plan files itself and asks for the root
   // before each request, so resolve_root is where the Grant and an agent's
   // Execution Policy are enforced for those accesses.
@@ -3102,6 +3711,81 @@ describe('devPlansPluginDescriptor', () => {
       expect(warning).toHaveBeenCalledWith(expect.stringContaining('could not bind'))
     } finally {
       warning.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
+  // The quit teardown closes every package backend; a quit cancelled after it
+  // leaves the app running, so the backends must come back: the activations
+  // re-registered and every still-open backend view bound again.
+  it('reopens the package backends after a cancelled quit closed them', async () => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '1.0.0'
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'window',
+      contributionKey: `${PLANS_PLUGIN_ID}.window`,
+      kind: 'custom',
+      location: 'window',
+      title: 'Plans',
+      entryFile: '/plugins/navide.plans/index.html',
+    }
+    const context: HostCapabilityContext = {
+      publisherEligible: false,
+      userGrant: { packageVersion, system: ['fs'], storage: true },
+      runtimeBinding: {
+        pluginId: PLANS_PLUGIN_ID,
+        packageVersion,
+        workspaceId: 'bound-workspace',
+        instanceId: null,
+        audience: view.contributionKey,
+      },
+    }
+    const packageDescriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: [],
+      devUrl: '',
+      entryFile: view.entryFile,
+      views: [view],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      capabilityContext: context,
+    }
+    mgr.registerDescriptor(packageDescriptor, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.resolve_root'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue()
+    const host = new FakeBrowserWindow()
+    try {
+      const handle = await mgr.openView(packageDescriptor, view, {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        workspacePath: '/workspace',
+        query: '?workspace_path=%2Fworkspace',
+        capabilityContext: context,
+      })
+      expect(bind).toHaveBeenCalledOnce()
+
+      await mgr.closeBackendPlugins()
+      expect(mgr.hasBackendActivation(PLANS_PLUGIN_ID, packageVersion)).toBe(false)
+
+      mgr.reopenBackendPlugins()
+      expect(mgr.hasBackendActivation(PLANS_PLUGIN_ID, packageVersion)).toBe(true)
+      await vi.waitFor(() => expect(bind).toHaveBeenCalledTimes(2))
+      expect(bind.mock.calls[1][0]).toMatchObject({ pluginId: PLANS_PLUGIN_ID, instanceId: handle.instanceId })
+      mgr.destroyInstance(handle.instanceId)
+    } finally {
       bind.mockRestore()
       await mgr.closeBackendPlugins()
     }
@@ -3868,6 +4552,65 @@ describe('devPlansPluginDescriptor', () => {
 })
 
 describe('production Plans agent backend routing', () => {
+  it.each([
+    ['torn down mid-call', 'PLUGIN_STOPPING', true, true],
+    ['live instance', 'BACKEND_UNAVAILABLE', false, false],
+  ] as const)('withdraws Plans for a failed view call only when the child failed: %s', async (_label, code, tearDown, available) => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '1.0.0'
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'window', contributionKey: `${PLANS_PLUGIN_ID}.window`, kind: 'custom', location: 'window',
+      title: 'Plans', entryFile: '/plugins/navide.plans/index.html',
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID, packageVersion, packageDir: process.cwd(), requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      devUrl: '', entryFile: view.entryFile, views: [view],
+    }
+    mgr.registerDescriptor(descriptor, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID, packageVersion, packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend', protocolVersion: 1, activation: 'startup',
+      approvedMethods: ['plans.list'], approvedEvents: [], approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue()
+    const unbind = vi.spyOn(PluginBackendHost.prototype, 'unbindView').mockResolvedValue()
+    const host = new FakeBrowserWindow()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let instanceId = ''
+    const hostCall = vi.spyOn(PluginBackendHost.prototype, 'call').mockImplementation(async () => {
+      // Closing the view drains its child, which rejects the call in flight.
+      if (tearDown) mgr.destroyInstance(instanceId)
+      throw new BackendPluginError(code)
+    })
+    try {
+      const handle = await mgr.openView(descriptor, view, {
+        hostWindow: asHost(host), bounds: 'fill', workspacePath: '/workspace',
+        capabilityContext: mgr.plansCapabilityContext(packageVersion, '/workspace', view.contributionKey)!,
+      })
+      instanceId = handle.instanceId
+      expect(mgr.isPlansBackendAvailable()).toBe(true)
+      const response = await ipcHandlers.get('plugin:backend:call')!(
+        { sender: { id: (host.children[0] as FakeViewLike).webContents.id } },
+        { reqId: 'teardown-call', name: 'plans.list', args: {} },
+      )
+      expect(response).toMatchObject({ ok: false, error: { code } })
+      expect(mgr.isPlansBackendAvailable()).toBe(available)
+      if (!available) {
+        // The withdrawal names the call and the code that caused it.
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`plans.list failed with ${code}`))
+      }
+      if (!tearDown) mgr.destroyInstance(handle.instanceId)
+    } finally {
+      warn.mockRestore()
+      hostCall.mockRestore()
+      unbind.mockRestore()
+      bind.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
   it.each(['ready', 'failed', 'revoked'] as const)('gates renderer and agent storage writes on migration: %s', async (outcome) => {
     const mgr = new FrontendPluginManager()
     const packageVersion = '1.0.0'
@@ -4080,6 +4823,23 @@ describe('production Plans agent backend routing', () => {
         reqId: 'agent-denied-child-1',
         ok: false,
         error: { code: 'CAPABILITY_DENIED' },
+      })
+
+      // A write past the child's size limit keeps its meaning instead of
+      // collapsing into the generic plugin failure.
+      call.mockRejectedValueOnce(new BackendPluginError(
+        'PLUGIN_ERROR',
+        'child limit',
+        { pluginCode: 'RESOURCE_LIMIT' },
+      ))
+      await expect(mgr.executeAgentBackendCallForWorkspace(
+        PLANS_PLUGIN_ID,
+        '/workspace',
+        { reqId: 'agent-limit-child-1', name: 'plans.list', args: {} },
+      )).resolves.toMatchObject({
+        reqId: 'agent-limit-child-1',
+        ok: false,
+        error: { code: 'RESOURCE_LIMIT', message: 'Backend resource limit reached.' },
       })
     } finally {
       provision.mockRestore()
@@ -10994,6 +11754,161 @@ describe('first-party Git private bridge', () => {
     }])
   })
 
+  it('bridges navide.plans ui.shareCaps and ui.shareCreate to share.* with codes as values', async () => {
+    const mgr = new FrontendPluginManager()
+    const workspacePath = '/workspace'
+    const packageVersion = '0.1.0'
+    const viewWindow = {
+      id: 'window',
+      contributionKey: 'navide.plans.window',
+      kind: 'custom' as const,
+      location: 'window' as const,
+      title: 'Plans',
+      entryFile: '/path/to/plans/window.html',
+    }
+    const descriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: '/path/to/plans',
+      requires: ['fs', 'ui', 'plans', 'terminal'],
+      capabilityPolicy: { kind: 'manifest-v2', system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', grants: [] },
+      devUrl: '',
+      entryFile: viewWindow.entryFile,
+      views: [viewWindow],
+    }
+    mgr.registerDescriptor(descriptor, { builtin: true })
+    mgr.setCapabilityGrantResolver((pluginId, version) => (
+      pluginId === PLANS_PLUGIN_ID && version === packageVersion
+        ? { packageVersion, system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', storage: true }
+        : null
+    ))
+    const capabilityContext = mgr.plansCapabilityContext(packageVersion, workspacePath, 'plans-window')
+    const host = new FakeBrowserWindow()
+    await mgr.openView(descriptor, viewWindow, { hostWindow: asHost(host), bounds: 'fill', workspacePath, capabilityContext })
+    const view = host.children[0] as FakeViewLike
+    mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+
+    const sent: Array<{ type: string; payload: Record<string, unknown> }> = []
+    let reply: { ok: boolean; payload: unknown; error: { code: string; message: string; details?: Record<string, unknown> } | null }
+    ;(mgr as unknown as { ensureBackend: () => unknown }).ensureBackend = () => ({
+      send: async (type: string, payload: Record<string, unknown>) => {
+        sent.push({ type, payload })
+        return reply
+      },
+    })
+    const handler = ipcHandlers.get(CAPABILITY_CALL)!
+    const call = (method: string, args: Record<string, unknown>) => handler(
+      { sender: { id: view.webContents.id } },
+      { reqId: method, ns: 'ui', method, args },
+    )
+
+    reply = { ok: true, payload: { links: true }, error: null }
+    expect(await call('shareCaps', {})).toEqual({ reqId: 'shareCaps', ok: true, result: { ok: true } })
+    reply = { ok: false, payload: null, error: { code: 'NOT_CONFIGURED', message: 'not linked' } }
+    expect(await call('shareCaps', {})).toEqual({
+      reqId: 'shareCaps', ok: true, result: { ok: false, code: 'NOT_CONFIGURED', message: 'not linked' },
+    })
+
+    const link = {
+      linkId: 'l1', url: 'https://share.example/l/l1#k', expiresAt: '2026-10-14T00:00:00Z', createdBy: 'user',
+      pane: '', agent: '', masked: [{ line: 132, category: 'github-token', action: 'masked' }],
+    }
+    reply = { ok: true, payload: link, error: null }
+    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html', ttlSeconds: 259200, requireLogin: true, sendToChat: true, chatId: 'tg:111' })).toEqual({
+      reqId: 'shareCreate',
+      ok: true,
+      result: {
+        ok: true,
+        link: { linkId: 'l1', url: link.url, expiresAt: link.expiresAt, masked: link.masked },
+      },
+    })
+    expect(sent.slice(0, 3)).toEqual([
+      { type: 'share.caps', payload: {} },
+      { type: 'share.caps', payload: {} },
+      {
+        type: 'share.create',
+        payload: { path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan', ttlSeconds: 259200, requireLogin: true, sendToChat: true, chatId: 'tg:111' },
+      },
+    ])
+
+    reply = { ok: false, payload: null, error: { code: 'SHARE_REFUSED', message: 'never shared', details: { reason: 'memory' } } }
+    expect(await call('shareCreate', { path: '.agent-team/plans/feature.html' })).toEqual({
+      reqId: 'shareCreate', ok: true, result: { ok: false, code: 'SHARE_REFUSED', message: 'never shared', reason: 'memory' },
+    })
+    expect(sent[3].payload).toEqual({ path: resolve(workspacePath, '.agent-team', 'plans', 'feature.html'), kind: 'plan' })
+
+    const outside = await call('shareCreate', { path: '../secrets.html' }) as { ok: boolean }
+    expect(outside.ok).toBe(false)
+    expect(sent).toHaveLength(4)
+    // Inside the workspace but not a plan document: refused before any send.
+    const notPlan = await call('shareCreate', { path: 'top_abc123.html' }) as { ok: boolean }
+    expect(notPlan.ok).toBe(false)
+    expect(sent).toHaveLength(4)
+
+    reply = { ok: true, payload: { ok: true, chats: [{ chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' }] }, error: null }
+    expect(await call('shareChatTargets', {})).toEqual({
+      reqId: 'shareChatTargets', ok: true, result: { ok: true, chats: [{ chatId: 'tg:111', platform: 'telegram', name: 'Neil DM' }] },
+    })
+    expect(sent[4]).toEqual({ type: 'channels.share_targets', payload: {} })
+    reply = { ok: false, payload: null, error: { code: 'UNKNOWN_TYPE', message: 'old backend' } }
+    expect(await call('shareChatTargets', {})).toEqual({
+      reqId: 'shareChatTargets', ok: true, result: { ok: false, code: 'UNKNOWN_TYPE', message: 'old backend' },
+    })
+  })
+
+  it('sends ui.shareCreate the canonical plan path, not the raw string it checked', async () => {
+    const real = mkdtempSync(join(tmpdir(), 'navide-share-canonical-'))
+    const linkParent = mkdtempSync(join(tmpdir(), 'navide-share-link-'))
+    try {
+      mkdirSync(join(real, '.agent-team', 'plans'), { recursive: true })
+      writeFileSync(join(real, '.agent-team', 'plans', 'doc_abc123.html'), '<html></html>')
+      const workspacePath = join(linkParent, 'ws')
+      symlinkSync(real, workspacePath, 'dir')
+
+      const mgr = new FrontendPluginManager()
+      const packageVersion = '0.1.0'
+      const viewWindow = {
+        id: 'window', contributionKey: 'navide.plans.window', kind: 'custom' as const,
+        location: 'window' as const, title: 'Plans', entryFile: '/path/to/plans/window.html',
+      }
+      const descriptor: PluginLaunchDescriptor = {
+        id: PLANS_PLUGIN_ID, packageVersion, packageDir: '/path/to/plans',
+        requires: ['fs', 'ui', 'plans', 'terminal'],
+        capabilityPolicy: { kind: 'manifest-v2', system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', grants: [] },
+        devUrl: '', entryFile: viewWindow.entryFile, views: [viewWindow],
+      }
+      mgr.registerDescriptor(descriptor, { builtin: true })
+      mgr.setCapabilityGrantResolver((pluginId, version) => (
+        pluginId === PLANS_PLUGIN_ID && version === packageVersion
+          ? { packageVersion, system: ['fs', 'ui', 'aiCli'], shell: 'allowlist', storage: true }
+          : null
+      ))
+      const capabilityContext = mgr.plansCapabilityContext(packageVersion, workspacePath, 'plans-window')
+      const host = new FakeBrowserWindow()
+      await mgr.openView(descriptor, viewWindow, { hostWindow: asHost(host), bounds: 'fill', workspacePath, capabilityContext })
+      const view = host.children[0] as FakeViewLike
+      mgr.setPublicCapabilityHandler((plan) => mgr.executePublicCapability(plan))
+      const sent: Array<Record<string, unknown>> = []
+      ;(mgr as unknown as { ensureBackend: () => unknown }).ensureBackend = () => ({
+        send: async (_type: string, payload: Record<string, unknown>) => {
+          sent.push(payload)
+          return { ok: false, payload: null, error: { code: 'SHARE_FAILED', message: 'stop' } }
+        },
+      })
+
+      await ipcHandlers.get(CAPABILITY_CALL)!(
+        { sender: { id: view.webContents.id } },
+        { reqId: 'share', ns: 'ui', method: 'shareCreate', args: { path: '.agent-team/plans/./doc_abc123.html' } },
+      )
+
+      expect(sent).toHaveLength(1)
+      expect(sent[0].path).toBe(join(realpathSync(real), '.agent-team', 'plans', 'doc_abc123.html'))
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true })
+      rmSync(real, { recursive: true, force: true })
+    }
+  })
+
   it('routes ui.openPlansWindow for nested repos strictly with .git directory and blocks .git file/symlink escape', async () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'navide-open-plans-test-'))
     const extDir = mkdtempSync(join(tmpdir(), 'navide-open-ext-test-'))
@@ -13039,6 +13954,32 @@ describe('first-party Git private bridge', () => {
     expect(ownerCalls).toHaveLength(0)
   })
 
+  it('skips the AI terminal owner release while the app is quitting', async () => {
+    const opened = await openGitView('/workspace', 'git-window')
+    const operations: string[] = []
+    opened.mgr.setTerminalStorageHandler(async (_origin, request) => {
+      operations.push(request.operation)
+      return null
+    })
+    const internal = opened.mgr as unknown as {
+      running: Map<string, unknown>
+      terminalStorageIdentity(plugin: unknown): unknown
+      releaseAiTerminalOwner(plugin: unknown, identity: unknown): void
+    }
+    const plugin = internal.running.get(opened.instanceId)!
+    const identity = internal.terminalStorageIdentity(plugin)
+    expect(identity).toBeTruthy()
+    let quitting = true
+    opened.mgr.setAppQuittingProbe(() => quitting)
+    internal.releaseAiTerminalOwner(plugin, identity)
+    await Promise.resolve()
+    expect(operations).toEqual([])
+    quitting = false
+    internal.releaseAiTerminalOwner(plugin, identity)
+    await Promise.resolve()
+    expect(operations).toEqual(['release'])
+  })
+
   it('allows selection reporting after exit without a session id while retaining session checks when supplied', async () => {
     const opened = await openGitView('/workspace', 'git-window')
     opened.mgr.setPublicCapabilityHandler((plan) => opened.mgr.executePublicCapability(plan))
@@ -14285,6 +15226,106 @@ describe('agent capability requests the Host cannot serve', () => {
     }
   })
 
+  it('keeps the registration through a Plans call that re-marks an already withdrawn backend', async () => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '1.0.0'
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID, packageVersion, packageDir: process.cwd(), requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      devUrl: '', entryFile: '/plugins/navide.plans/frontend/window/index.html', views: [],
+    }, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID, packageVersion, packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans', protocolVersion: 1, activation: 'startup',
+      approvedMethods: ['plans.list'], agentMethods: ['plans.list'], approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem'],
+    })
+    mgr.setCapabilityGrantResolver(() => ({ packageVersion, system: ['fs'], storage: true }))
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { schemaVersion: 1, mode: 'allowlist', system: ['fs'], shell: [] }, revision: 1, state: 'user',
+    }))
+    // Legacy recovery: storage readiness stays false for the rest of the session.
+    mgr.setPlansStorageReadinessHandler(async () => false)
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { id: 'acme.agent-plans-recovery', requires: ['terminal'], devUrl: '', entryFile: '/plugins/acme.agent-plans-recovery/index.html' },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl('ws://acme.agent-plans-recovery')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const answered = new Set<string>()
+    const answerRegistrations = (): void => {
+      for (const message of sentOf(socket)) {
+        if (message.type !== 'host.register' || answered.has(message.id)) continue
+        answered.add(message.id)
+        socket.receive({
+          id: message.id, type: 'host.register', ok: true,
+          payload: { registered: true }, error: null, timestamp: '',
+        })
+      }
+    }
+    answerRegistrations()
+    await flush()
+    // The child dies once; the withdrawn feature is re-advertised and accepted.
+    mgr.markPlansBackendUnavailable('child-unavailable')
+    await flush()
+    answerRegistrations()
+    await flush()
+    const registrationsBefore = sentOf(socket).filter((message) => message.type === 'host.register').length
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      request(socket, {
+        request_id: 'req-plans-recovery',
+        target: { plugin_id: PLANS_PLUGIN_ID, workspace_path: '/workspace' },
+        operation: 'backend',
+        payload: { reqId: 'mcp:1', name: 'plans.list', args: {} },
+      })
+      await flush()
+
+      const results = resultsOf(socket)
+      expect(results).toHaveLength(1)
+      // The legacy fallback verdict reaches the MCP caller instead of
+      // "Host backend session lapsed while the request ran".
+      expect(results[0].payload).toEqual({
+        request_id: 'req-plans-recovery',
+        response: expect.objectContaining({
+          ok: false,
+          error: expect.objectContaining({ code: 'BACKEND_UNAVAILABLE', message: 'Plans storage is unavailable' }),
+          recoveryDisposition: 'legacy-safe-before-dispatch',
+        }),
+      })
+      // Nothing about the advertised features changed, so nothing is re-sent.
+      expect(sentOf(socket).filter((message) => message.type === 'host.register')).toHaveLength(registrationsBefore)
+    } finally {
+      warn.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
+  it('answers BACKEND_ERROR when executing the request throws', async () => {
+    const { mgr, socket } = connectHost('acme.agent-throws', true)
+    await flush()
+    const execute = vi.spyOn(mgr, 'executeAgentCapability').mockRejectedValue(new Error('boom'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      request(socket, legacyRequest('req-throws'))
+      await flush()
+
+      const results = resultsOf(socket)
+      expect(results).toHaveLength(1)
+      expect(results[0].payload).toEqual({
+        request_id: 'req-throws',
+        response: expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'BACKEND_ERROR' }) }),
+      })
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('req-throws'))
+    } finally {
+      warn.mockRestore()
+      execute.mockRestore()
+    }
+  })
+
   it('still answers a well-formed request on the current client exactly once', async () => {
     const { socket } = connectHost('acme.agent-normal', true)
     await flush()
@@ -14373,5 +15414,83 @@ describe('FrontendPluginManager — ending a closed window\'s AI panels', () => 
   it('does nothing before a backend is known', () => {
     const mgr = new FrontendPluginManager()
     expect(() => mgr.endDockSurface('plans', '/ws/a')).not.toThrow()
+  })
+
+  it('warns about panels the backend could not end', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      const mgr = new FrontendPluginManager()
+      mgr.setBackendWsUrl('ws://dock-close-failed-test')
+      mgr.endDockSurface('git', '/ws/a')
+      const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+      socket.open()
+      const request = socket.sent
+        .map((raw) => JSON.parse(raw) as { id: string; type: string })
+        .find((sent) => sent.type === 'terminal.kill_surface')!
+      socket.receive({
+        id: request.id,
+        type: 'terminal.kill_surface',
+        ok: true,
+        payload: {
+          ok: true,
+          pane_ids: ['git-b'],
+          failed: [{ pane_id: 'git-a', terminal_session_id: 't-git-a', error: 'kill failed' }],
+        },
+        error: null,
+        timestamp: '',
+      })
+      await vi.waitFor(() => {
+        expect(warn.mock.calls.map((call) => String(call[0])).join('\n'))
+          .toContain('git-a (t-git-a): kill failed')
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  // Removing a built-in plugin with nothing to take over ends its panels: their
+  // PTYs are not in the AI-session ledger, so no other removal step reaches them.
+  it('ends the panels of a removed built-in plugin that no fallback replaces', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setBackendWsUrl('ws://dock-removal-test')
+    mgr.registerInstalledPackage({ id: PLANS_PLUGIN_ID, requires: [] }, undefined, { official: true })
+    mgr.removeInstalledPlugin(PLANS_PLUGIN_ID)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    expect(socket.url).toBe('ws://dock-removal-test')
+    socket.open()
+    expect(sentOfType(socket, 'terminal.kill_surface')).toEqual([{ surface: 'plans', workspace_path: '' }])
+  })
+
+  it('leaves the panels running when a built-in fallback takes over', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setBackendWsUrl('ws://dock-removal-fallback-test')
+    const before = wsMock.FakeNodeWebSocket.instances.length
+    mgr.registerBuiltin(devPlansPluginDescriptor())
+    mgr.registerInstalledPackage({ id: PLANS_PLUGIN_ID, requires: [] }, undefined, { official: true })
+    mgr.removeInstalledPlugin(PLANS_PLUGIN_ID)
+    expect(wsMock.FakeNodeWebSocket.instances.length).toBe(before)
+  })
+
+  it('ends no panel for a plugin without a panel surface', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setBackendWsUrl('ws://dock-removal-thirdparty-test')
+    const before = wsMock.FakeNodeWebSocket.instances.length
+    mgr.registerInstalledPackage({ id: 'acme.demo', requires: [] })
+    mgr.removeInstalledPlugin('acme.demo')
+    expect(wsMock.FakeNodeWebSocket.instances.length).toBe(before)
+  })
+
+  it('warns when the backend refuses the kill', async () => {
+    const mgr = new FrontendPluginManager()
+    const send = vi.fn(() => Promise.reject(new Error('backend down')))
+    ;(mgr as unknown as { ensureBackend: () => unknown }).ensureBackend = () => ({ send })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      mgr.endDockSurface('plans', '/ws/a')
+      await vi.waitFor(() => expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('terminal.kill_surface'), expect.any(Error)))
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

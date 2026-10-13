@@ -21,9 +21,10 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../../composables/useBackend'
 import {
-  SHARE_SCOPES,
+  CLOUD_SCOPES,
   deviceLabel,
   displayState,
   isActionable,
@@ -86,6 +87,13 @@ function deviceFor(row: SyncRow): string {
   return deviceLabel(row.deviceId, known?.deviceName ?? '')
 }
 
+/** What deviceFor() would say without cutting the id short, for its hover. */
+function deviceFullFor(row: SyncRow): string | undefined {
+  if (!row.deviceId) return undefined
+  const known = devices.value.find((d) => d.deviceId === row.deviceId)
+  return known?.deviceName?.trim() || row.deviceId
+}
+
 function isPicked(scope: string, itemId: string): boolean {
   return picked.value.has(rowKey(scope, itemId))
 }
@@ -115,7 +123,7 @@ async function load(): Promise<void> {
     }
     view.value = readSyncInventory(resp.payload)
     const live = new Set<string>()
-    for (const scope of SHARE_SCOPES) {
+    for (const scope of CLOUD_SCOPES) {
       for (const row of rowsFor(scope)) live.add(rowKey(scope, row.itemId))
     }
     picked.value = new Set([...picked.value].filter((key) => live.has(key)))
@@ -183,7 +191,7 @@ onMounted(load)
     </div>
 
     <template v-else-if="view">
-      <div v-for="scope in SHARE_SCOPES" :key="scope" class="sc-scope">
+      <div v-for="scope in CLOUD_SCOPES" :key="scope" class="sc-scope">
         <div class="sc-scope-head">
           <span class="sc-scope-name">{{ t('settings.sync.scope-' + scope) }}</span>
           <span v-if="!view.scopeEnabled[scope]" class="sc-off-tag">
@@ -201,11 +209,11 @@ onMounted(load)
         <div v-if="rowsFor(scope).length" class="sc-table" role="table">
           <div class="sc-row sc-row--head" role="row">
             <span class="sc-cell sc-cell--check" role="columnheader"></span>
-            <span class="sc-cell" role="columnheader">{{ t('settings.sharing.cloud.col-item') }}</span>
-            <span class="sc-cell" role="columnheader">{{ t('settings.sharing.cloud.col-local') }}</span>
-            <span class="sc-cell" role="columnheader">{{ t('settings.sharing.cloud.col-remote') }}</span>
-            <span class="sc-cell" role="columnheader">{{ t('settings.sharing.cloud.col-device') }}</span>
-            <span class="sc-cell" role="columnheader">{{ t('settings.sharing.cloud.col-state') }}</span>
+            <span class="sc-cell" v-truncate role="columnheader">{{ t('settings.sharing.cloud.col-item') }}</span>
+            <span class="sc-cell" v-truncate role="columnheader">{{ t('settings.sharing.cloud.col-local') }}</span>
+            <span class="sc-cell" v-truncate role="columnheader">{{ t('settings.sharing.cloud.col-remote') }}</span>
+            <span class="sc-cell" v-truncate role="columnheader">{{ t('settings.sharing.cloud.col-device') }}</span>
+            <span class="sc-cell" v-truncate role="columnheader">{{ t('settings.sharing.cloud.col-state') }}</span>
           </div>
           <div v-for="row in rowsFor(scope)" :key="row.itemId" class="sc-row" role="row">
             <span class="sc-cell sc-cell--check" role="cell">
@@ -217,17 +225,17 @@ onMounted(load)
                 @change="togglePick(scope, row.itemId, ($event.target as HTMLInputElement).checked)"
               />
             </span>
-            <span class="sc-cell sc-cell--item" role="cell" :title="row.itemId">{{ row.itemId }}</span>
-            <span class="sc-cell" role="cell">
+            <span class="sc-cell sc-cell--item" v-truncate role="cell">{{ row.itemId }}</span>
+            <span class="sc-cell" v-truncate role="cell">
               {{ row.localPresent ? t('settings.sharing.cloud.here') : t('settings.sharing.cloud.absent') }}
             </span>
-            <span class="sc-cell" role="cell">
+            <span class="sc-cell" v-truncate role="cell">
               {{ row.remotePresent ? t('settings.sharing.cloud.here') : t('settings.sharing.cloud.absent') }}
             </span>
-            <span class="sc-cell sc-cell--device" role="cell">
+            <span class="sc-cell sc-cell--device" v-truncate="deviceFullFor(row)" role="cell">
               {{ deviceFor(row) || t('settings.sharing.cloud.no-device') }}
             </span>
-            <span class="sc-cell" role="cell">
+            <span class="sc-cell" v-truncate role="cell">
               <!-- Mark + word together: the colour is the third signal, never
                    the only one. -->
               <span class="sc-badge" :class="'sc-badge--' + shownState(row)">
@@ -272,7 +280,7 @@ onMounted(load)
         <p v-if="!devices.length" class="sc-notice">{{ t('settings.sharing.cloud.no-devices') }}</p>
         <ul v-else class="sc-device-list">
           <li v-for="device in devices" :key="device.deviceId" class="sc-device">
-            <span class="sc-device-name">{{ deviceLabel(device.deviceId, device.deviceName) }}</span>
+            <span class="sc-device-name" v-truncate="device.deviceName?.trim() || device.deviceId">{{ deviceLabel(device.deviceId, device.deviceName) }}</span>
             <span class="sc-device-when">
               {{ t('settings.sharing.cloud.last-write', { when: device.lastWriteAt || '—' }) }}
             </span>

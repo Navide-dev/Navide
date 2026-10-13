@@ -8,7 +8,7 @@ const notify = vi.hoisted(() => ({ toast: vi.fn(), alert: vi.fn(), confirm: vi.f
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string, params?: Record<string, unknown>) => params ? `${key} ${JSON.stringify(params)}` : key }),
 }))
-vi.mock('@navide/plugin-ui/foundation', () => ({ useNotify: () => notify }))
+vi.mock('@navide/plugin-ui/foundation', () => ({ useNotify: () => notify, vTruncate: {} }))
 
 import GitPane from '../GitPane.vue'
 

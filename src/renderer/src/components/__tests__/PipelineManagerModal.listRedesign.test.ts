@@ -266,7 +266,7 @@ describe('PipelineManagerModal — list view redesign', () => {
 
     await row.trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(tab(w).find('.pl-detail-header').exists()).toBe(true)
+    expect(tab(w).find('.pl-detail-title').text()).toContain('Custom')
   })
 
   it('labels the two row affordances instead of shipping bare glyphs', async () => {

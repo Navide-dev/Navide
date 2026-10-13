@@ -15,7 +15,7 @@ from typing import Any
 
 import pytest
 
-from agent_team_backend import agent_messaging, app
+from agent_team_backend import agent_messaging, app, ws_handlers
 from agent_team_backend.projects import PaneRecord, Project, ProjectStore
 from agent_team_backend.spawn_history import SpawnHistoryStore
 
@@ -166,6 +166,54 @@ async def test_a_dock_respawn_updates_the_same_record_and_entry(tmp_path: Path, 
     page, total = history_store.read_page(ws)
     assert total == 1
     assert page[0]["sessionId"] == "99999999-2222-3333-4444-555555555555"
+
+
+@pytest.mark.asyncio
+async def test_a_dock_cli_failing_right_after_its_create_retires_the_record(tmp_path: Path, stores: Any) -> None:
+    """A restore resuming a session the vendor no longer has exits non-zero
+    within seconds; left 'spawned', every window open would retry it."""
+    project_store, _ = stores
+    ws = str(tmp_path)
+    await _create(_session(), ws, _dock_metadata())
+    try:
+        await app._active_emit({"type": "terminal.exit", "payload": {
+            "terminal_session_id": "term-1", "pane_id": _DOCK_PANE,
+            "reason": "exit", "exit_code": 1, "uptime_ms": 1500,
+        }})
+        [record] = [p for p in project_store.load_or_create(ws).panes if p.pane_id == _DOCK_PANE]
+        assert record.spawn_status == "removed"
+    finally:
+        ws_handlers._DOCK_PTYS.clear()
+
+
+@pytest.mark.asyncio
+async def test_a_dock_cli_dying_during_its_create_retires_the_previous_record(
+    tmp_path: Path, stores: Any,
+) -> None:
+    project_store, _ = stores
+    ws = str(tmp_path)
+    project_store.record_manual_pane_spawn(
+        ws, pane_id=_DOCK_PANE, agent="claude", session_id="11111111-2222-3333-4444-555555555555",
+        origin="plan-window", surface="plans",
+    )
+
+    class DyingTerminals(FakeTerminals):
+        def create(self, **kwargs: Any) -> SimpleNamespace:
+            term = super().create(**kwargs)
+            term.closed = True
+            term.close_reason = "exit"
+            term.exit_code = 1
+            term.exit_signal = None
+            term.uptime_ms = 900
+            return term
+
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    session.terminals = DyingTerminals()  # type: ignore[assignment]
+    resp = await _create(session, ws, _dock_metadata())
+
+    assert resp.get("ok") is False, resp
+    [record] = [p for p in project_store.load_or_create(ws).panes if p.pane_id == _DOCK_PANE]
+    assert record.spawn_status == "removed"
 
 
 @pytest.mark.asyncio

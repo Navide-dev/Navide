@@ -29,7 +29,7 @@ describe('plain terminal panes over MCP', () => {
     for (const marker of ['function spawnGateContextFor(', 'function standaloneSpawnGateContext(']) {
       const fn = block(marker, '\n}\n')
       expect(fn).toContain('validAgentKeys: agentSpecs.map((s) => s.agentKey)')
-      expect(fn).toContain("cliPaneCount: panes.value.filter((p) => p.agentKey !== 'terminal').length")
+      expect(fn).toContain("cliPaneCount: panes.value.filter((p) => p.realized && p.agentKey !== 'terminal').length")
     }
   })
 

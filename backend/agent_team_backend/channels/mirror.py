@@ -47,10 +47,13 @@ ECHO_MARKER_CHARS = 40
 ROW_SEEN_MAX = 2000
 DELEGATION_DEDUP_S = 60.0
 TOPIC_GRACE_S = 5.0  # a re-keyed (rebuilt/detached) pane re-registers within this
+NO_TOPIC_RETRY_S = 30 * 60.0  # a chat that is not a forum may turn topics on later
 DEFAULT_RATE_PER_MIN = 60
 DEFAULT_BURST = 5
 
 MSG_CHILD_OPENED = "🤖 {parent} 開了子視窗「{child}」"
+MSG_NO_TOPICS = ("💡 這個群組沒有開啟「主題」功能，子視窗的訊息會以「↳ 色塊 名稱」標在這裡。"
+                 "到群組設定開啟「主題」（Topics）後，之後開的子視窗會各有一個話題。")
 MSG_CHILD_TOPIC = "🔗 這個話題連接子視窗「{child}」（{parent} 開的），在這裡傳的訊息會送進該 pane；傳 stop 可以中斷。"
 MSG_CHILD_CLOSED = "🔌 ↳ {child} 已關閉，話題已釋放"
 MSG_CHILD_GONE = "🔌 子視窗「{child}」已關閉。"
@@ -90,8 +93,18 @@ def source_pane(name: str) -> str:
     return f"🤖 {name}"
 
 
+# One colour a child keeps, so panes riding a chat without topics can be told apart.
+CHILD_COLOURS = ("🟦", "🟩", "🟧", "🟪", "🟥", "🟨", "🟫", "⬛")
+
+
+def child_tag(name: str) -> str:
+    """``↳ <colour> <name>``: the prefix of a child's message in its ancestor's chat."""
+    colour = CHILD_COLOURS[hashlib.sha256(name.encode()).digest()[0] % len(CHILD_COLOURS)]
+    return f"↳ {colour} {name}"
+
+
 def result_text(source: str, text: str, child: str = "") -> str:
-    head = f"{'↳ ' + child + ' ' if child else ''}✅ 完成 · {source}"
+    head = f"{child_tag(child) + ' ' if child else ''}✅ 完成 · {source}"
     return f"{head}\n{text}" if text else head
 
 
@@ -225,6 +238,34 @@ class OwnerMap:
                     table[mid] = new
 
 
+class ReportMap:
+    """message id -> the report a card announced (its title, the path the pane named),
+    bounded, per chat. Keyed by chat, not topic: a Slack reply in a card's thread
+    arrives with that thread as its location."""
+
+    def __init__(self) -> None:
+        self._by_chat: dict[str, OrderedDict[str, tuple[str, str]]] = {}
+
+    @staticmethod
+    def _chat(platform: str, account: str, chat_id: str) -> str:
+        return f"{platform}:{account}:{chat_id}"
+
+    def remember(self, loc: Any, message_ids: list[str], title: str, path: str) -> None:
+        table = self._by_chat.setdefault(self._chat(loc.platform, loc.account, loc.chat_id), OrderedDict())
+        for mid in message_ids:
+            if mid:
+                table[str(mid)] = (title, path)
+                table.move_to_end(str(mid))
+        while len(table) > OWNER_MAP_MAX:
+            table.popitem(last=False)
+
+    def get(self, msg: Any) -> tuple[str, str] | None:
+        """The report ``msg`` replies to, if it replies to a card."""
+        if not msg.reply_to_id:
+            return None
+        return self._by_chat.get(self._chat(msg.platform, msg.account, msg.chat_id), {}).get(str(msg.reply_to_id))
+
+
 # --- outbound pacing -----------------------------------------------------------
 
 
@@ -355,9 +396,14 @@ class Mirror:
         self.m = manager
         self.echo = EchoGuard(manager._clock)
         self.owners = OwnerMap()
+        self.reports = ReportMap()
         self._outboxes: dict[str, Outbox] = {}
         self._seen_children: set[str] = set()
         self._topic_failed: set[str] = set()
+        # Chats that said they cannot have topics (a Telegram group that is not a
+        # forum), mapped to when they may be asked again.
+        self._no_topic_chats: dict[str, float] = {}
+        self._told_no_topics: set[str] = set()
         self._rows_seen: OrderedDict[str, None] = OrderedDict()
         self._delegations: OrderedDict[str, float] = OrderedDict()
         self._sync_task: asyncio.Task[None] | None = None
@@ -439,6 +485,7 @@ class Mirror:
         box = self._outbox(loc)
         if box is None or not text.strip():
             return
+        text = self.m._for_chat(loc, text)
         box.post("", owner, chunks=chunk_for(loc.platform, redact.redact_text(text)))
 
     async def send(self, loc: Location, text: str, *, owner: str = "",
@@ -448,10 +495,10 @@ class Mirror:
         box = self._outbox(loc)
         if box is None:
             raise RuntimeError(f"{loc.platform} is not connected")
-        return await box.submit(redact.redact_text(text), owner, buttons)
+        return await box.submit(redact.redact_text(self.m._for_chat(loc, text)), owner, buttons)
 
     def label(self, route: Route, text: str) -> str:
-        return f"↳ {route.child} {text}" if route.child else text
+        return f"{child_tag(route.child)} {text}" if route.child else text
 
     # --- prompts and delegation -----------------------------------------------------
 
@@ -626,16 +673,34 @@ class Mirror:
         if adapter is None:
             return
         opened = MSG_CHILD_OPENED.format(parent=parent["name"], child=cname)
+        chat = f"{root.platform}:{root.account}:{root.chat_id}"
+        now = self.m._clock()
         if adapter.capabilities.threads and adapter.capabilities.create_location \
-                and cid not in self._topic_failed and not any(b.pane_id == cid for b in self.m.store.bindings()):
+                and cid not in self._topic_failed and now >= self._no_topic_chats.get(chat, now) \
+                and not any(b.pane_id == cid for b in self.m.store.bindings()):
             try:
                 loc = await adapter.create_location(root.chat_id, f"↳ {cname}")
                 self.m.store.bind(cid, loc, verbosity=root.verbosity,
                                   parent_pane_id=str(parent.get("pane_id") or root.pane_id), auto=True)
             except Exception as exc:  # noqa: BLE001 — falls back to prefixed messages in the parent chat
-                log.warning("channels: child topic for %s failed: %s", cname, exc)
                 self._topic_failed.add(cid)
+                if "not a forum" in str(exc).lower() and chat in self._no_topic_chats:
+                    # The retry after NO_TOPIC_RETRY_S: one quiet line per chat per window.
+                    self._no_topic_chats[chat] = now + NO_TOPIC_RETRY_S
+                    log.info("channels: child topic for %s failed again: %s", cname, exc)
+                elif "not a forum" in str(exc).lower():
+                    self._no_topic_chats[chat] = now + NO_TOPIC_RETRY_S
+                    if chat not in self._told_no_topics:
+                        # Once a backend run: the chat learns why its children share it.
+                        self._told_no_topics.add(chat)
+                        self.post(root.location(), MSG_NO_TOPICS, root.pane_id)
+                    log.warning("channels: child topic for %s failed: %s; children of this chat use "
+                                "prefixed messages; topics are tried again in %d minutes",
+                                cname, exc, NO_TOPIC_RETRY_S // 60)
+                else:
+                    log.warning("channels: child topic for %s failed: %s", cname, exc)
             else:
+                self._no_topic_chats.pop(chat, None)
                 await self.m._changed()
                 if shows(root.verbosity, "standard"):
                     self.post(root.location(), opened, root.pane_id)

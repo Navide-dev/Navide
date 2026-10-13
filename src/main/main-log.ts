@@ -257,3 +257,16 @@ export function warnMain(line: string): void {
   console.warn(line)
   logMain(line)
 }
+
+/** `console.log` plus a durable line — for lifecycle events worth keeping. */
+export function infoMain(line: string): void {
+  console.log(line)
+  logMain(line)
+}
+
+/** `console.error` plus a durable line, with the error's text appended. */
+export function errorMain(line: string, err?: unknown): void {
+  if (err === undefined) console.error(line)
+  else console.error(line, err)
+  logMain(err === undefined ? line : `${line}: ${String(err)}`)
+}

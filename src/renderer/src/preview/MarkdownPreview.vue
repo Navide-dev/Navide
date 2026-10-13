@@ -26,6 +26,8 @@ const MermaidBlock = defineComponent({
           theme: 'neutral',
           securityLevel: 'strict',
           fontFamily: 'inherit',
+          layout: 'dagre',
+          look: 'classic',
         })
         const id = `mp-mermaid-${Math.random().toString(36).slice(2, 9)}`
         const { svg: out } = await mermaid.render(id, blockProps.code)

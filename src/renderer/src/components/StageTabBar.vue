@@ -9,6 +9,9 @@ export interface TabItem {
   key: string
   label: string
   count: number
+  /** Panes in this tab that are not waiting placeholders — shown as
+   *  "live / count", the same tally as the sidebar's workspace heading. */
+  live: number
   type: 'stage' | 'manual'
   /** Rolled-up state of the panes in this tab, shown as the leading dot.
    *  Required rather than optional so the compiler points at every caller
@@ -208,7 +211,7 @@ function onRenameKeydown(e: KeyboardEvent, key: string): void {
         </template>
         <template v-else>
           <span class="tab-label">{{ tab.label }}</span>
-          <span class="tab-count">{{ tab.count }}</span>
+          <span class="tab-count">{{ tab.live }} / {{ tab.count }}</span>
           <span
             v-if="tab.type !== 'manual' || tabs.length > 1"
             class="tab-close"

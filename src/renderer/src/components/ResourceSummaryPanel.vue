@@ -10,6 +10,7 @@
 // Everything is derived from props: the owner runs the sampling loop and owns
 // the panes, this only renders and re-emits.
 import { computed, onMounted, onUnmounted } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import { formatBytes } from '../lib/formatBytes'
 import { formatCpuPercent } from '../lib/resourceSampling'
@@ -127,13 +128,13 @@ function rowTitle(row: ResourceSummaryRow): string {
         <span class="rs-k">{{ t('resource.cpu') }}</span>
         <span class="rs-v" data-part="value">{{ cpuText(totalCpuPercent) }}</span>
         <span class="rs-bar"><i :style="{ width: barWidth(cpuShare) }" /></span>
-        <span class="rs-sub">{{ cpuAvailable ? shareText(cpuShare) : t('resource.cpu-unavailable') }}</span>
+        <span class="rs-sub" v-truncate>{{ cpuAvailable ? shareText(cpuShare) : t('resource.cpu-unavailable') }}</span>
       </div>
       <div class="rs-card" data-card="memory">
         <span class="rs-k">{{ t('resource.memory') }}</span>
         <span class="rs-v" data-part="value">{{ sizeText(totalBytes) }}</span>
         <span class="rs-bar"><i :style="{ width: barWidth(memoryShare) }" /></span>
-        <span class="rs-sub">{{ shareText(memoryShare) }}</span>
+        <span class="rs-sub" v-truncate>{{ shareText(memoryShare) }}</span>
       </div>
     </div>
 
@@ -152,7 +153,7 @@ function rowTitle(row: ResourceSummaryRow): string {
         @click="emit('jump', row.paneId)"
       >
         <span class="rs-dot" :title="statusLabel(row.status)" />
-        <span class="rs-name">{{ row.name }}</span>
+        <span class="rs-name" v-truncate>{{ row.name }}</span>
         <span class="rs-cpu" data-part="cpu">{{ cpuText(row.cpuPercent) }}</span>
         <span class="rs-mem" data-part="memory">{{ sizeText(row.bytes) }}</span>
       </button>

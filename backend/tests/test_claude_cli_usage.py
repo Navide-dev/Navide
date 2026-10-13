@@ -289,3 +289,11 @@ async def test_a_missing_binary_is_its_own_status(monkeypatch, tmp_path, caplog)
     assert snap["status"] == "cli-missing"
     assert "no claude binary" in caplog.text
     assert "/nowhere/bin" in caplog.text
+
+
+def test_an_account_dir_probe_runs_on_that_dir(monkeypatch) -> None:
+    """The live probe drops any inherited CLAUDE_CONFIG_DIR; an account-dir
+    probe sets its own, so it asks that account and nobody else."""
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/inherited")
+    assert "CLAUDE_CONFIG_DIR" not in cu._panel_probe_env()
+    assert cu._panel_probe_env("/acct/config-dir")["CLAUDE_CONFIG_DIR"] == "/acct/config-dir"

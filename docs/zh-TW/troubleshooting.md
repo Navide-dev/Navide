@@ -123,4 +123,4 @@ Documentation Injection 採用 Best-effort。檢查 MCP Configuration、Package 
 - Expected Behavior 與 Actual Behavior
 - 經過遮蔽的 Log 或 Screenshot
 
-使用 Repository 的 [Bug Report Template](https://github.com/nt-nerdtechnic/Navide/issues/new?template=bug_report.yml)。Vulnerability 請依照英文版 [Security Policy](../../SECURITY.md) 私下回報。
+使用 Repository 的 [Bug Report Template](https://github.com/Navide-dev/Navide/issues/new?template=bug_report.yml)。Vulnerability 請依照英文版 [Security Policy](../../SECURITY.md) 私下回報。

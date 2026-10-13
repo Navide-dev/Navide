@@ -9,6 +9,7 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
+import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale } from '../hostLocale'
 import { composePluginFrameQuery } from './pluginContributionQuery'
 import { systemFrameUnlessMac } from '../window-controls'
@@ -100,6 +101,7 @@ import {
   type PluginContributionCatalogEntry,
 } from './pluginContributionCatalog'
 import {
+  BACKEND_RESTART_BUDGET_SPENT_MESSAGE,
   canonicalBackendPackageDir,
   PluginBackendHost,
   type ThirdPartyAdmitter,
@@ -164,6 +166,7 @@ import {
 } from './pluginFrameAssetProtocol'
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
+import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 
 /** Everything the manager needs to launch one plugin view. */
 export interface PluginLaunchDescriptor {
@@ -1253,6 +1256,8 @@ export class FrontendPluginManager {
     }
   }
 
+  /** What {@link closeBackendPlugins} unregistered, for {@link reopenBackendPlugins}. */
+  private activationsBeforeClose: BackendPluginLaunchSpec[] = []
   /** Package-local Backend Wire children receive only Host-approved temp paths. */
   private readonly pluginBackendHost = new PluginBackendHost({
     environment: createPluginBackendChildEnvironment(),
@@ -1270,7 +1275,30 @@ export class FrontendPluginManager {
         this.emitHostBackendFailureDiagnostic(runtime.pluginId, error)
       }
       if (runtime.pluginId === PLANS_PLUGIN_ID && this.isPlansBackendAvailabilityError(error)) {
-        this.markPlansBackendUnavailable('child-unavailable')
+        if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE && runtime.instanceId) {
+          // A given-up child is never restarted, so it must not hold Plans
+          // withdrawn for every workspace: only its own workspace is refused
+          // (before dispatch). Unlike an unbind, giving up does mark Plans
+          // ready when it was the last dead child - nothing else would ever
+          // bring the mark back, and every other child is known to be alive.
+          const firstReport = !this.plansAbandonedBackendInstances.has(runtime.instanceId)
+          this.plansDeadBackendInstances.delete(runtime.instanceId)
+          this.plansAbandonedBackendInstances.add(runtime.instanceId)
+          this.markPlansBackendReadyIfChildrenRecovered(runtime.packageVersion)
+          // A view's failure is shown by legacy recovery; a headless child has
+          // no surface, so tell the user once how to bring it back.
+          const workspacePath = this.headlessPlansWorkspacePaths.get(runtime.instanceId)
+          if (firstReport && workspacePath) {
+            try {
+              this.plansBackendStoppedHandler?.({ workspacePath })
+            } catch {
+              // A notice observer must not change the child failure result.
+            }
+          }
+        } else {
+          if (runtime.instanceId) this.plansDeadBackendInstances.add(runtime.instanceId)
+          this.markPlansBackendUnavailable('child-unavailable')
+        }
         const plugin = runtime.instanceId ? this.running.get(runtime.instanceId) : undefined
         if (plugin?.id === PLANS_PLUGIN_ID && plugin.workspacePath) {
           try {
@@ -1287,6 +1315,19 @@ export class FrontendPluginManager {
           }
         }
       }
+    },
+    onBackendRestarted: (runtime) => {
+      if (runtime.pluginId !== PLANS_PLUGIN_ID) return
+      if (runtime.instanceId) this.plansDeadBackendInstances.delete(runtime.instanceId)
+      this.markPlansBackendReadyIfChildrenRecovered(runtime.packageVersion)
+    },
+    onBackendUnbound: (runtime) => {
+      if (runtime.pluginId !== PLANS_PLUGIN_ID || !runtime.instanceId) return
+      // A gone view no longer blocks, but its going proves nothing about the
+      // backend: the next restart or bind marks Plans ready.
+      this.plansDeadBackendInstances.delete(runtime.instanceId)
+      this.plansAbandonedBackendInstances.delete(runtime.instanceId)
+      this.headlessPlansWorkspacePaths.delete(runtime.instanceId)
     },
   })
   private readonly pendingBackendCalls = new Map<string, Map<string, AbortController>>()
@@ -1306,6 +1347,9 @@ export class FrontendPluginManager {
    *  callers never receive the generated instance id. */
   private readonly headlessBackendInstances = new Map<string, string>()
   private readonly pendingHeadlessBackendBinds = new Map<string, Promise<string>>()
+  /** Headless Plans instance id → its workspace, to tell the user which
+   *  workspace's backend stopped. */
+  private readonly headlessPlansWorkspacePaths = new Map<string, string>()
   /** webContents.id → opaque instance id, so a call's origin can be trusted,
    *  not the payload. */
   private readonly bySender = new Map<number, string>()
@@ -1329,6 +1373,8 @@ export class FrontendPluginManager {
   /** Main-process-only bearer used to authenticate this Host WS session. */
   private backendHostToken: string | null = null
   private hostSessionRegistered = false
+  /** The `plans_backend_v2` feature the current registration advertised. */
+  private hostSessionPlansBackendV2: boolean | null = null
   private hostRegistrationTask: Promise<void> | null = null
   /** Lazily-created shared transport to the backend plugin host. */
   private wsClient: WsClient | null = null
@@ -1450,7 +1496,10 @@ export class FrontendPluginManager {
       this.running.get(plugin.instanceId) !== plugin ||
       !binding || !sameRuntimeBinding(binding, plugin.capabilityContext?.runtimeBinding) ||
       !this.plansCapabilityContext(binding.packageVersion, plugin.workspacePath ?? '', binding.audience ?? undefined)
-    ) return buildError(reqId, 'CAPABILITY_DENIED', 'Plans runtime Grant is unavailable')
+    ) {
+      warnMain(`[plugin-backend] ${PLANS_PLUGIN_ID} call denied for ${plugin.instanceId}: runtime Grant is unavailable`)
+      return buildError(reqId, 'CAPABILITY_DENIED', 'Plans runtime Grant is unavailable')
+    }
     return ready ? null : buildError(reqId, 'BACKEND_UNAVAILABLE', 'Plans storage is unavailable')
   }
   private activationFailureHandler:
@@ -1466,11 +1515,27 @@ export class FrontendPluginManager {
         reason: string
       }) => void)
     | null = null
+  private plansBackendStoppedHandler: ((stopped: { workspacePath: string }) => void) | null = null
   /** Host-only liveness for the exact selected Plans descriptor/activation.
    *  An unavailable child must withdraw the MCP feature until a later bind
    *  succeeds; otherwise MCP keeps selecting the broken v2 adapter. */
   private plansBackendHealth: PlansBackendHealth = 'unknown'
   private plansBackendHealthIdentity: { packageVersion: string; packageDir: string } | null = null
+  /** Whether the current unavailable mark comes only from child deaths, which
+   *  a child coming back through an automatic restart may undo. Any other
+   *  cause (legacy recovery, storage, a failed bind or view) keeps the mark
+   *  until its own path clears it. */
+  private plansUnavailableByChildDeath = false
+  /** Bound Plans instances whose child died and has not come back yet. Plans
+   *  is marked ready again only once none is left. */
+  private readonly plansDeadBackendInstances = new Set<string>()
+  /** Bound Plans instances whose child spent its restart budget. Agent calls
+   *  for them are refused before dispatch until they are unbound. */
+  private readonly plansAbandonedBackendInstances = new Set<string>()
+  /** Headless Plans instances a user retry unbound. Their in-flight calls fail
+   *  because of that unbind, not because the backend is unavailable, so they
+   *  must not withdraw v2 again. Instance ids are never reused. */
+  private readonly plansDiscardedBackendInstances = new Set<string>()
   private readonly pendingActivations = new Map<
     string,
     ReturnType<typeof setTimeout> | null
@@ -2030,13 +2095,18 @@ export class FrontendPluginManager {
 
   /** Withdraw the v2 availability bit after a bind/child/recovery failure.
    *  The descriptor remains installed so recovery can retry it explicitly. */
-  markPlansBackendUnavailable(_reason = 'child-unavailable'): void {
+  markPlansBackendUnavailable(reason = 'child-unavailable'): void {
     const descriptor = this.descriptors.get(PLANS_PLUGIN_ID)
     if (
       descriptor?.capabilityPolicy?.kind !== 'manifest-v2' ||
       !nonEmptyString(descriptor.packageVersion) ||
       !nonEmptyString(descriptor.packageDir)
     ) return
+    if (this.plansBackendHealth !== 'unavailable') {
+      warnMain(`[plugin-backend] ${PLANS_PLUGIN_ID} v2 backend withdrawn (${reason})`)
+    }
+    this.plansUnavailableByChildDeath = reason === 'child-unavailable' &&
+      (this.plansBackendHealth !== 'unavailable' || this.plansUnavailableByChildDeath)
     this.plansBackendHealth = 'unavailable'
     this.plansBackendHealthIdentity = {
       packageVersion: descriptor.packageVersion,
@@ -2053,14 +2123,85 @@ export class FrontendPluginManager {
     if (this.plansBackendHealth !== 'unavailable') return false
     this.plansBackendHealth = 'unknown'
     this.plansBackendHealthIdentity = null
+    this.plansDeadBackendInstances.clear()
+    this.discardHeadlessPlansBackends()
     this.refreshHostSessionRegistration()
     return true
+  }
+
+  /** A failed headless MCP child stays cached under its workspace key and
+   *  answers every later agent call with the same availability error. After a
+   *  re-arm that error withdraws v2 again under a live Plans view, whose
+   *  in-flight filesystem Bridge requests are then denied. The retry must give
+   *  the MCP route a fresh child, as it does the views. */
+  private discardHeadlessPlansBackends(): void {
+    for (const [key, instanceId] of this.headlessBackendInstances) {
+      if (!key.startsWith(`${PLANS_PLUGIN_ID}\u0000`)) continue
+      this.headlessBackendInstances.delete(key)
+      this.plansDiscardedBackendInstances.add(instanceId)
+      void this.pluginBackendHost.unbindView(instanceId).catch((error: unknown) => {
+        warnMain(
+          `[plugin-backend] unbind for ${instanceId} failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      })
+    }
+  }
+
+  /** Opening Plans for a workspace is how the user brings back its given-up
+   *  headless child: drop it so the next agent call binds a fresh one. Only a
+   *  given-up child is replaced, so each open replaces at most one. */
+  private replaceAbandonedHeadlessPlansBackend(packageVersion: string, workspacePath: string): void {
+    const key = this.headlessPlansKey(packageVersion, workspacePath)
+    const instanceId = this.headlessBackendInstances.get(key)
+    if (!instanceId || !this.plansAbandonedBackendInstances.has(instanceId)) return
+    this.headlessBackendInstances.delete(key)
+    this.plansAbandonedBackendInstances.delete(instanceId)
+    void this.pluginBackendHost.unbindView(instanceId).catch((error: unknown) => {
+      warnMain(
+        `[plugin-backend] unbind for ${instanceId} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    })
+  }
+
+  /** Undo a mark that came only from child deaths once every dead child has
+   *  come back or stopped counting, for the same package version. */
+  private markPlansBackendReadyIfChildrenRecovered(packageVersion: string): void {
+    const identity = this.plansBackendHealthIdentity
+    if (
+      this.plansBackendHealth !== 'unavailable' ||
+      !this.plansUnavailableByChildDeath ||
+      this.plansDeadBackendInstances.size > 0 ||
+      identity?.packageVersion !== packageVersion
+    ) return
+    this.markPlansBackendReady(identity.packageVersion, identity.packageDir)
   }
 
   private markPlansBackendReady(packageVersion: string, packageDir: string): void {
     this.plansBackendHealth = 'ready'
     this.plansBackendHealthIdentity = { packageVersion, packageDir }
     this.refreshHostSessionRegistration()
+  }
+
+  /** Whether a failed Plans view call proves the backend unavailable. A call
+   *  rejected because its own instance is being closed or restarted says
+   *  nothing about the child - closing a Plans window, or a remount, used to
+   *  withdraw Plans into legacy recovery for the whole session. Every
+   *  withdrawal is logged with the call and code: none of these failures
+   *  carries a cause, so main.log otherwise said only "withdrawn". */
+  private plansCallFailureWithdraws(plugin: RunningPlugin, method: string, error: unknown): boolean {
+    if (!this.isPlansBackendAvailabilityError(error)) return false
+    if (plugin.releasing || this.running.get(plugin.instanceId) !== plugin || this.isPluginStopping(plugin)) {
+      return false
+    }
+    warnMain(
+      `[plugin-backend] ${PLANS_PLUGIN_ID} ${method} failed with ${(error as BackendPluginError).code} ` +
+      `for ${plugin.instanceId}`,
+    )
+    return true
   }
 
   private isPlansBackendAvailabilityError(error: unknown): boolean {
@@ -2247,6 +2388,14 @@ export class FrontendPluginManager {
     }) => void) | null,
   ): void {
     this.plansBackendFailureHandler = handler
+  }
+
+  /** Observe a headless Plans child that stopped for good (its restart budget
+   *  is spent), once per child. */
+  setPlansBackendStoppedHandler(
+    handler: ((stopped: { workspacePath: string }) => void) | null,
+  ): void {
+    this.plansBackendStoppedHandler = handler
   }
 
   /** Wait for the initial backend/root bind of one exact view. This is used by
@@ -4531,6 +4680,9 @@ export class FrontendPluginManager {
         if (error.pluginCode === 'INVALID_ARGUMENT') {
           return buildError(reqId, 'INVALID_ARGUMENT', 'Backend call arguments are invalid.')
         }
+        if (error.pluginCode === 'RESOURCE_LIMIT') {
+          return buildError(reqId, 'RESOURCE_LIMIT', 'Backend resource limit reached.')
+        }
         return buildError(reqId, 'BACKEND_ERROR', 'Plugin request failed.')
       default:
         return buildError(reqId, 'BACKEND_UNAVAILABLE', 'Backend plugin is unavailable.')
@@ -5341,10 +5493,14 @@ export class FrontendPluginManager {
         )
         return buildSuccess(record.reqId, result)
       } catch (error) {
-        if (plugin.id === PLANS_PLUGIN_ID && this.isPlansBackendAvailabilityError(error)) {
+        if (plugin.id === PLANS_PLUGIN_ID && this.plansCallFailureWithdraws(plugin, record.name, error)) {
           this.markPlansBackendUnavailable('child-unavailable')
         }
-        return this.backendError(record.reqId, error)
+        const response = this.backendError(record.reqId, error)
+        if (plugin.id === PLANS_PLUGIN_ID && response.error?.code === 'CAPABILITY_DENIED') {
+          warnMain(`[plugin-backend] ${PLANS_PLUGIN_ID} ${record.name} denied for ${plugin.instanceId}`)
+        }
+        return response
       } finally {
         if (timeoutTimer !== undefined) clearTimeout(timeoutTimer)
         if (abortListener) controller.signal.removeEventListener('abort', abortListener)
@@ -5631,6 +5787,7 @@ export class FrontendPluginManager {
       resolveRoot: async (arguments_, context) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
         if (!this.plansBridgeCanDispatch(context)) {
+          this.warnPlansFilesystemDenied('resolve_root', context)
           throw new PlansBridgeError('CAPABILITY_DENIED', 'Filesystem capability is denied.')
         }
         return port.resolveRoot(arguments_, context)
@@ -5995,6 +6152,10 @@ export class FrontendPluginManager {
       return { opened }
     }
 
+    if (plan.address === 'ui.shareCaps' || plan.address === 'ui.shareCreate' || plan.address === 'ui.shareChatTargets') {
+      return this.executeShareCapability(plan, plugin, workspacePath)
+    }
+
     if (plan.address === 'ui.openInEditor') {
       if (!workspacePath) throw new Error('editor capability requires a workspace')
       const path = typeof plan.args.path === 'string' ? plan.args.path : ''
@@ -6205,6 +6366,7 @@ export class FrontendPluginManager {
       }
       this.markPlansBackendReady(packageVersion, packageDir)
       this.headlessBackendInstances.set(key, instanceId)
+      this.headlessPlansWorkspacePaths.set(instanceId, workspacePath)
       return instanceId
     }).catch((error: unknown) => {
       if (this.isPlansBackendAvailabilityError(error)) {
@@ -6385,12 +6547,19 @@ export class FrontendPluginManager {
         initiator,
       )
     }
+    const cachedInstanceId = this.headlessBackendInstances.get(
+      this.headlessPlansKey(packageVersion, workspacePath),
+    )
+    if (cachedInstanceId && this.plansAbandonedBackendInstances.has(cachedInstanceId)) {
+      return buildError(record.reqId, 'BACKEND_UNAVAILABLE', PLANS_BACKEND_STOPPED_MESSAGE)
+    }
     if (record.name === 'plans.create' && !(await this.provisionPlansAssets(workspacePath))) {
       return buildError(record.reqId, 'BACKEND_UNAVAILABLE', 'Plans assets are unavailable')
     }
     let dispatched = false
+    let instanceId: string | undefined
     try {
-      const instanceId = await this.bindHeadlessPlansBackend(descriptor, activation, workspacePath)
+      instanceId = await this.bindHeadlessPlansBackend(descriptor, activation, workspacePath)
       const remainingTimeout = deadline - Date.now()
       if (remainingTimeout <= 0) return buildError(record.reqId, 'TIMEOUT', 'Plans request timed out')
       // Calling into the Host child marks a request as dispatched even if the
@@ -6409,7 +6578,10 @@ export class FrontendPluginManager {
       )
       return buildSuccess(record.reqId, result)
     } catch (error) {
-      if (this.isPlansBackendAvailabilityError(error)) {
+      if (
+        this.isPlansBackendAvailabilityError(error) &&
+        !(instanceId && this.plansDiscardedBackendInstances.has(instanceId))
+      ) {
         this.markPlansBackendUnavailable('child-unavailable')
       }
       if (!dispatched) {
@@ -6494,7 +6666,7 @@ export class FrontendPluginManager {
       )
       return buildSuccess(record.reqId, result)
     } catch (error) {
-      if (plugin.id === PLANS_PLUGIN_ID && this.isPlansBackendAvailabilityError(error)) {
+      if (plugin.id === PLANS_PLUGIN_ID && this.plansCallFailureWithdraws(plugin, record.name, error)) {
         this.markPlansBackendUnavailable('child-unavailable')
       }
       return this.backendError(record.reqId, error)
@@ -6602,6 +6774,22 @@ export class FrontendPluginManager {
     )
   }
 
+  /** Name why a Plans filesystem Bridge request was refused. The child only
+   *  forwards the bare code, so this line is the only record of the cause. */
+  private warnPlansFilesystemDenied(operation: string, context: PlansBridgeContext): void {
+    const selection = this.plansBackendSelection()
+    const cause = context.signal.aborted ? 'request aborted'
+      : !selection ? 'no exact Plans activation'
+      : selection.activation.packageVersion !== context.runtime.packageVersion ? 'package version changed'
+      : !this.isPlansBackendAvailable() ? 'v2 backend withdrawn'
+      : 'Grant or execution policy mismatch'
+    warnMain(
+      `[plugin-backend] ${PLANS_PLUGIN_ID} filesystem ${operation} denied for ${
+        context.runtime.contributionKey ?? 'unknown view'
+      }: ${cause}`,
+    )
+  }
+
   private plansBridgeCanDispatch(context: PlansBridgeContext): boolean {
     if (context.signal.aborted) return false
     if (!nonEmptyString(context.workspacePath)) return false
@@ -6620,6 +6808,7 @@ export class FrontendPluginManager {
   ): Promise<JsonValue> {
     if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
     if (!this.plansBridgeCanDispatch(context)) {
+      this.warnPlansFilesystemDenied(operation, context)
       throw new PlansBridgeError('CAPABILITY_DENIED', 'Filesystem capability is denied.')
     }
     try {
@@ -6636,6 +6825,7 @@ export class FrontendPluginManager {
       if (error instanceof PlansBridgeError) throw error
       if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
       if (error instanceof Error && error.message === 'request denied before dispatch') {
+        this.warnPlansFilesystemDenied(operation, context)
         throw new PlansBridgeError('CAPABILITY_DENIED', 'Filesystem capability is denied.')
       }
       throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Filesystem service is unavailable.')
@@ -6793,7 +6983,8 @@ export class FrontendPluginManager {
   }
 
   private releaseAiTerminalOwner(plugin: RunningPlugin, identity: AiTerminalStorageIdentity): void {
-    if (!this.terminalStorageHandler) return
+    // During an app quit the owner views are already being torn down.
+    if (!this.terminalStorageHandler || this.appQuitting()) return
     const hasSibling = [...this.running.values()].some((candidate) =>
       candidate !== plugin && this.terminalStorageIdentity(candidate)?.resumeKey === identity.resumeKey)
     if (hasSibling) return
@@ -6812,6 +7003,83 @@ export class FrontendPluginManager {
     this.aiSessions.delete(sessionId)
     this.setAiBindings(plugin, sessions, plugin.capabilityContext?.pendingStartBindings ?? new Map())
     if (clean && entry) this.clearAiTerminalPersistence(plugin, entry)
+  }
+
+  /** Share links for the Plans view. The backend's share.* error codes
+   *  (SHARE_REFUSED with a reason, NO_SYNC_KEY, NOT_CONFIGURED, server codes)
+   *  come back as values: a thrown error reaches the plugin collapsed into a
+   *  generic capability code. The plugin names a plan by its relative path;
+   *  the Host resolves it inside the plans root, as for ui.openPlansWindow. */
+  private async executeShareCapability(
+    plan: PublicCapabilityExecutionPlan,
+    plugin: RunningPlugin,
+    workspacePath: string | null | undefined
+  ): Promise<Record<string, unknown>> {
+    let type = 'share.caps'
+    let payload: Record<string, unknown> = {}
+    if (plan.address === 'ui.shareCreate') {
+      if (!workspacePath) throw new Error('share capability requires a workspace')
+      const path = typeof plan.args.path === 'string' ? plan.args.path : ''
+      if (!path || isAbsolute(path)) throw new Error('share path must be relative')
+      const root = resolve(resolvePlansRootPath(workspacePath))
+      const relativePath = relative(root, resolve(root, path))
+      if (!isAllowedPlanDocumentPath(relativePath, root)) {
+        throw new Error('share path is outside the plans directory')
+      }
+      // The document the check accepted, symlinks resolved: the backend
+      // must open that file, not re-resolve the string it was checked by.
+      const canonicalDoc = resolveWorkspaceRelativePath(root, relativePath.replace(/\\/g, '/'), false)
+      if (!canonicalDoc) throw new Error('share path is outside the plans directory')
+      type = 'share.create'
+      payload = {
+        path: canonicalDoc,
+        kind: 'plan',
+        ...(typeof plan.args.ttlSeconds === 'number' ? { ttlSeconds: plan.args.ttlSeconds } : {}),
+        ...(typeof plan.args.requireLogin === 'boolean' ? { requireLogin: plan.args.requireLogin } : {}),
+        ...(typeof plan.args.sendToChat === 'boolean' ? { sendToChat: plan.args.sendToChat } : {}),
+        ...(typeof plan.args.chatId === 'string' ? { chatId: plan.args.chatId } : {}),
+      }
+    }
+    if (plan.address === 'ui.shareChatTargets') type = 'channels.share_targets'
+    const client = this.ensureBackend()
+    if (!client) return { ok: false, code: 'BACKEND_UNAVAILABLE', message: 'backend not connected' }
+    const response = await client.send(type, payload, 60_000, {
+      beforeDispatch: () => this.publicPlanCanDispatch(plan, plugin),
+    })
+    if (!response.ok) {
+      const reason = response.error?.details?.reason
+      return {
+        ok: false,
+        code: response.error?.code ?? 'BACKEND_ERROR',
+        message: response.error?.message ?? '',
+        ...(typeof reason === 'string' ? { reason } : {}),
+      }
+    }
+    if (type === 'share.caps') return { ok: true }
+    if (type === 'channels.share_targets') {
+      const chats = toPayload(response.payload).chats
+      return {
+        ok: true,
+        chats: Array.isArray(chats)
+          ? chats.flatMap((chat) => {
+              const { chatId, platform, name } = toPayload(chat)
+              return typeof chatId === 'string' && typeof platform === 'string' && typeof name === 'string'
+                ? [{ chatId, platform, name }]
+                : []
+            })
+          : [],
+      }
+    }
+    const created = toPayload(response.payload)
+    return {
+      ok: true,
+      link: {
+        linkId: created.linkId,
+        url: created.url,
+        expiresAt: created.expiresAt,
+        masked: Array.isArray(created.masked) ? created.masked : [],
+      },
+    }
   }
 
   private async executeAiCliCapability(
@@ -7532,8 +7800,21 @@ export class FrontendPluginManager {
     if (this.appQuitting()) return
     const client = this.ensureBackend()
     if (!client) return
-    void client.send('terminal.kill_surface', { surface, workspace_path: workspacePath }).catch(() => {
+    void client.send('terminal.kill_surface', { surface, workspace_path: workspacePath }).then((response) => {
+      // A panel whose kill failed is still running; nothing here can retry it,
+      // but the log says which one outlived its window.
+      const failed = toPayload(response.payload).failed
+      if (!Array.isArray(failed)) return
+      for (const entry of failed) {
+        const item = toPayload(entry)
+        warnMain(
+          `[plugins] terminal.kill_surface for ${surface} could not end panel ` +
+          `${String(item.pane_id)} (${String(item.terminal_session_id)}): ${String(item.error)}`,
+        )
+      }
+    }, (error) => {
       // Nothing to undo: the panels linger until the backend's ownerless sweep.
+      console.warn(`[plugins] terminal.kill_surface for ${surface} failed`, error)
     })
   }
 
@@ -7566,6 +7847,10 @@ export class FrontendPluginManager {
       }
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
+      })
+      client.on(PDF_RENDER_REQUEST, (payload) => {
+        // Only the live client answers: a replaced one's backend is gone.
+        if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
       })
       client.connect(this.backendWsUrl)
     }
@@ -7657,6 +7942,14 @@ export class FrontendPluginManager {
       !client.isHealthyFor(url) ||
       this.hostRegistrationTask
     ) return
+    // Re-registering only re-advertises the features. Dropping a registration
+    // that already advertises the current value would fail every agent request
+    // in flight as "lapsed" - and in Plans legacy recovery each Plans request
+    // re-marks the backend unavailable, so every one of them lapsed.
+    if (
+      this.hostSessionRegistered &&
+      this.hostSessionPlansBackendV2 === this.hasActivePlansBackend()
+    ) return
     this.hostSessionRegistered = false
     this.registerHostSession(client)
   }
@@ -7680,6 +7973,7 @@ export class FrontendPluginManager {
           this.backendHostToken === token
         ) {
           this.hostSessionRegistered = response.ok && response.payload?.registered === true
+          this.hostSessionPlansBackendV2 = plansBackendV2
           if (!this.hostSessionRegistered) {
             console.warn('[plugin-backend] Host session registration was rejected')
           }
@@ -7767,15 +8061,20 @@ export class FrontendPluginManager {
       return refuse('BAD_REQUEST', 'agent capability request is malformed')
     }
 
-    const response = legacyRequest
-      ? record.operation === 'capability'
-        ? await this.executeAgentCapability(record.instance_id as string, record.payload)
-        : await this.executeAgentBackendCall(record.instance_id as string, record.payload)
-      : await this.executeAgentBackendCallForWorkspace(
-        (record.target as Record<string, unknown>).plugin_id as string,
-        (record.target as Record<string, unknown>).workspace_path as string,
-        record.payload,
-      )
+    let response: CapabilityResponse
+    try {
+      response = legacyRequest
+        ? record.operation === 'capability'
+          ? await this.executeAgentCapability(record.instance_id as string, record.payload)
+          : await this.executeAgentBackendCall(record.instance_id as string, record.payload)
+        : await this.executeAgentBackendCallForWorkspace(
+          (record.target as Record<string, unknown>).plugin_id as string,
+          (record.target as Record<string, unknown>).workspace_path as string,
+          record.payload,
+        )
+    } catch (error) {
+      return refuse('BACKEND_ERROR', error instanceof Error ? error.message : String(error))
+    }
     if (this.wsClient !== client || !this.hostSessionRegistered) {
       return refuse('BACKEND_UNAVAILABLE', 'Host backend session lapsed while the request ran')
     }
@@ -9061,37 +9360,15 @@ export class FrontendPluginManager {
     }
   }
 
-  private wireSurface(
+  /** Bind a view's package backend: the Plans window's, or a third-party
+   *  view's. Runs when the view mounts, and again for a still-open view when
+   *  the backends come back after a cancelled quit. */
+  private bindViewBackend(
     instanceId: string,
     record: RunningPlugin,
     hostWindow: BrowserWindow,
     descriptor: PluginLaunchDescriptor,
-    isV2Identity: boolean,
-    openedViaLegacyAdapter: boolean,
-    preflight = false,
   ): void {
-    const contents = record.view.webContents
-    this.running.set(instanceId, record)
-    const onReceiverNavigation = (): void => {
-      // did-navigate fires only after a new main-frame document commits. A
-      // cancelled navigation must leave the still-live receiver authoritative.
-      this.revokeReceiverFrames(instanceId)
-      const current = this.running.get(instanceId)
-      if (current?.view.webContents === contents) current.documentGeneration += 1
-    }
-    contents.on('did-navigate', onReceiverNavigation)
-    record.detachReceiverFrames = () => {
-      if (!contents.isDestroyed()) contents.removeListener('did-navigate', onReceiverNavigation)
-    }
-    if (isV2Identity && this.activationFailureHandler && !preflight) {
-      // Register the activation immediately so load failure / renderer death
-      // remain observable, but do not spend the readiness budget while the
-      // entry document itself is still loading.
-      this.pendingActivations.set(instanceId, null)
-    }
-    if (openedViaLegacyAdapter) this.legacyInstances.set(descriptor.id, instanceId)
-    if (record.carrier === 'surface') this.bySender.set(record.senderId, instanceId)
-
     const activation = nonEmptyString(descriptor.packageVersion) && nonEmptyString(descriptor.packageDir)
       ? this.pluginBackendHost.activationFor(
           descriptor.id,
@@ -9119,6 +9396,7 @@ export class FrontendPluginManager {
         record.backendBindingTask = binding.then(() => {
             if (this.running.get(instanceId) === record) record.backendWorkspaceId = workspaceId
             this.markPlansBackendReady(activation.packageVersion, descriptor.packageDir!)
+            this.replaceAbandonedHeadlessPlansBackend(activation.packageVersion, workspacePath)
           }).catch((error: unknown) => {
             if (this.isPlansBackendAvailabilityError(error)) {
               this.markPlansBackendUnavailable('bind-failure')
@@ -9200,6 +9478,40 @@ export class FrontendPluginManager {
         void record.backendBindingTask.catch(() => undefined)
       }
     }
+  }
+
+  private wireSurface(
+    instanceId: string,
+    record: RunningPlugin,
+    hostWindow: BrowserWindow,
+    descriptor: PluginLaunchDescriptor,
+    isV2Identity: boolean,
+    openedViaLegacyAdapter: boolean,
+    preflight = false,
+  ): void {
+    const contents = record.view.webContents
+    this.running.set(instanceId, record)
+    const onReceiverNavigation = (): void => {
+      // did-navigate fires only after a new main-frame document commits. A
+      // cancelled navigation must leave the still-live receiver authoritative.
+      this.revokeReceiverFrames(instanceId)
+      const current = this.running.get(instanceId)
+      if (current?.view.webContents === contents) current.documentGeneration += 1
+    }
+    contents.on('did-navigate', onReceiverNavigation)
+    record.detachReceiverFrames = () => {
+      if (!contents.isDestroyed()) contents.removeListener('did-navigate', onReceiverNavigation)
+    }
+    if (isV2Identity && this.activationFailureHandler && !preflight) {
+      // Register the activation immediately so load failure / renderer death
+      // remain observable, but do not spend the readiness budget while the
+      // entry document itself is still loading.
+      this.pendingActivations.set(instanceId, null)
+    }
+    if (openedViaLegacyAdapter) this.legacyInstances.set(descriptor.id, instanceId)
+    if (record.carrier === 'surface') this.bySender.set(record.senderId, instanceId)
+
+    this.bindViewBackend(instanceId, record, hostWindow, descriptor)
 
     // A plugin needing the backend gets the shared transport connected now (if
     // the backend url is already known) so server-push events reach it without
@@ -9867,7 +10179,37 @@ export class FrontendPluginManager {
     this.pendingHeadlessBackendBinds.clear()
     this.plansBackendHealth = 'unknown'
     this.plansBackendHealthIdentity = null
+    this.plansDeadBackendInstances.clear()
+    this.plansAbandonedBackendInstances.clear()
+    this.headlessPlansWorkspacePaths.clear()
+    this.activationsBeforeClose = this.pluginBackendHost.registeredActivations()
     await this.pluginBackendHost.close()
+  }
+
+  /** Undo {@link closeBackendPlugins} for an app that keeps running (a quit
+   *  cancelled after its teardown): register the activations again and bind
+   *  every still-open view that had a backend. Children start on first call,
+   *  as after a launch. */
+  reopenBackendPlugins(): void {
+    const activations = this.activationsBeforeClose
+    this.activationsBeforeClose = []
+    for (const activation of activations) {
+      try {
+        this.registerBackendActivation(activation)
+      } catch (error) {
+        warnMain(`[plugin-backend] ${activation.pluginId} could not be registered again: ${
+          error instanceof Error ? error.message : String(error)
+        }`)
+      }
+    }
+    for (const [instanceId, record] of this.running) {
+      if (!record.backendBindingTask || record.hostWindow.isDestroyed()) continue
+      const descriptor = this.descriptors.get(record.id)
+      if (!descriptor) continue
+      record.backendWorkspaceId = null
+      record.backendBindingTask = null
+      this.bindViewBackend(instanceId, record, record.hostWindow, descriptor)
+    }
   }
 
   /**
@@ -11385,6 +11727,11 @@ export class FrontendPluginManager {
       this.revokePackageVersionInBackground(id, packageVersion)
     }
     this.stopAiSessionsForPlugin(id)
+    // Its embedded AI panels are not in the AI-session ledger, so nothing above
+    // ends them. A built-in fallback taking over keeps them (it serves the same
+    // surface); otherwise they end as when their window closes.
+    const surface = dockSurfaceForPlugin(id)
+    if (surface && !this.builtinFallbacks.has(id)) this.endDockSurface(surface)
     this.destroyPluginInstances(id)
     this.clearTerminalRoutes(id)
   }
@@ -12049,6 +12396,12 @@ export async function openMiniIdePluginView(
 
 /** Id of the Plans extension (the plan review surface). */
 export const PLANS_PLUGIN_ID = 'navide.plans'
+
+/** What an agent call gets for a workspace whose Plans child failed too often
+ *  to be restarted, including how the user brings it back. */
+export const PLANS_BACKEND_STOPPED_MESSAGE =
+  'The Plans backend for this workspace stopped after repeated failures. ' +
+  'Open Plans for this workspace to restart it, or restart Navide.'
 
 /** The production Plans package owns both the embedded left surface and the
  * dedicated window. A v2 descriptor with only one is an incomplete cutover

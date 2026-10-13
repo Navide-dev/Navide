@@ -9,6 +9,7 @@
 // usage badge's own snapshot (useUsage, per agent). Everything on the right
 // is TurnStatsView; this file is the shell and the picker.
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { useI18n } from 'vue-i18n'
 import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import type { useBackend } from '../composables/useBackend'
@@ -284,16 +285,16 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
           <div class="s-ws-header">
             <div class="s-ws-avatar" aria-hidden="true">≡</div>
             <div class="s-ws-meta">
-              <span class="s-ws-name">{{ t('turn-stats.title') }}</span>
+              <span class="s-ws-name" v-truncate>{{ t('turn-stats.title') }}</span>
             </div>
           </div>
 
           <nav class="s-nav" :aria-label="t('turn-stats.pane')">
-            <div class="s-nav-group-title">{{ t('quota-cycles.pane-usage') }}</div>
+            <div class="s-nav-group-title" v-truncate>{{ t('quota-cycles.pane-usage') }}</div>
             <button v-if="accountHistoryError" type="button" class="ts-nav-item" data-act="retry-accounts" @click="loadAccounts">{{ t('quota-cycles.retry-history') }}</button>
             <p v-if="cliPanes.length === 0" class="ts-nav-empty" data-state="no-panes">{{ t('turn-stats.empty-panes') }}</p>
             <div v-for="g in groups" :key="g.label" class="s-nav-group" data-part="group" :data-workspace="g.label">
-              <div class="s-nav-group-title">{{ g.label }}</div>
+              <div class="s-nav-group-title" v-truncate>{{ g.label }}</div>
               <button
                 v-for="p in g.panes"
                 :key="p.id"
@@ -308,8 +309,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
                 @click="pickPane(p.id)"
               >
                 <span class="ts-nav-main">
-                  <span class="ts-nav-label">{{ p.agentLabel }}</span>
-                  <span class="ts-nav-sub" data-part="pane-sub">
+                  <span class="ts-nav-label" v-truncate>{{ p.agentLabel }}</span>
+                  <span class="ts-nav-sub" v-truncate data-part="pane-sub">
                     {{ paneSub(p) }}<template v-if="isPlaceholder(p)"> · {{ t('turn-stats.pane-placeholder') }}</template>
                   </span>
                 </span>
@@ -329,7 +330,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
 
             <!-- Accounts: one row per (vendor, account); picking one shows its quota cycles. -->
             <div v-if="accountRows.length" class="s-nav-group" data-part="accounts">
-              <div class="s-nav-group-title">{{ t('quota-cycles.account-quota') }}</div>
+              <div class="s-nav-group-title" v-truncate>{{ t('quota-cycles.account-quota') }}</div>
               <button
                 v-for="a in accountRows"
                 :key="a.key"
@@ -345,8 +346,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKeyDown))
                 @click="pickAccount(a.key)"
               >
                 <span class="ts-nav-main">
-                  <span class="ts-nav-label">{{ a.label }}<template v-if="a.removed"> · {{ t('quota-cycles.removed') }}</template></span>
-                  <span class="ts-nav-sub">
+                  <span class="ts-nav-label" v-truncate>{{ a.label }}<template v-if="a.removed"> · {{ t('quota-cycles.removed') }}</template></span>
+                  <span class="ts-nav-sub" v-truncate>
                     {{ vendorLabel(a.agentKey) }}<template v-if="a.profileId === activeProfileId(a.agentKey)"> · {{ t('account-dim.active') }}</template>
                   </span>
                 </span>

@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 60
     environment:
       name: production
-      url: https://github.com/nt-nerdtechnic/Navide/releases/latest
+      url: https://github.com/Navide-dev/Navide/releases/latest
 
     steps:
       - name: Check out tagged source
@@ -78,6 +78,10 @@ jobs:
         run: pnpm release:check "${GITHUB_REF_NAME}"
 
       - name: Run release gates
+        env:
+          # vue-tsc on tsconfig.web.json outgrew Node's default ~2 GB heap and
+          # aborted here (OOM, exit 134); CI's test jobs already run with 4 GB.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           uv --project backend run ruff check backend
           pnpm typecheck
@@ -240,7 +244,7 @@ jobs:
     timeout-minutes: 45
     environment:
       name: production
-      url: https://github.com/nt-nerdtechnic/Navide/releases/latest
+      url: https://github.com/Navide-dev/Navide/releases/latest
 
     steps:
       - name: Check out tagged source
@@ -457,7 +461,7 @@ jobs:
     timeout-minutes: 45
     environment:
       name: production
-      url: https://github.com/nt-nerdtechnic/Navide/releases/latest
+      url: https://github.com/Navide-dev/Navide/releases/latest
 
     steps:
       - name: Check out tagged source
@@ -597,17 +601,84 @@ jobs:
             dist-release/Navide-*.deb
             dist-release/latest-linux-arm64.yml
 
+  release-windows-gates:
+    if: github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
+    name: Windows release gates (${{ matrix.arch }}, ${{ matrix.shard }})
+    # The complete backend suite on each Windows kernel a release ships for,
+    # split with the same `--shard K/N` CI uses: the K/N shards partition the
+    # collected suite, so the four legs of one arch together run all of it.
+    # Unsplit inside the packaging job it took 64 min on x64 in v0.2.20 and
+    # grows with every test; four legs that start with the run, beside the
+    # macOS job, keep each one far from its timeout and off the serial chain.
+    # No secrets and no environment: nothing here builds or publishes.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-latest, shard: 1/4, timeout: 45 }
+          - { arch: x64, runner: windows-latest, shard: 2/4, timeout: 45 }
+          - { arch: x64, runner: windows-latest, shard: 3/4, timeout: 45 }
+          - { arch: x64, runner: windows-latest, shard: 4/4, timeout: 45 }
+          # arm64 compiles httptools and watchdog from their sdists first.
+          - { arch: arm64, runner: windows-11-arm, shard: 1/4, timeout: 60 }
+          - { arch: arm64, runner: windows-11-arm, shard: 2/4, timeout: 60 }
+          - { arch: arm64, runner: windows-11-arm, shard: 3/4, timeout: 60 }
+          - { arch: arm64, runner: windows-11-arm, shard: 4/4, timeout: 60 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-suffix: release-windows-gates-${{ matrix.arch }}
+
+      - name: Install dependencies
+        run: uv --project backend sync --locked
+
+      - name: Run Windows release gates
+        # The platform-independent frontend gates run in the macOS job; what is
+        # worth repeating is the backend suite on this kernel, where the
+        # process, path and signal seams differ most — and on arm64, the first
+        # thing that would notice a dependency that only pretends to have an
+        # arm64 build. Run bare, as before: the watchdog flags CI adds are what
+        # hung the step there (see backend/ci_windows_tests.py).
+        run: |
+          uv --project backend run ruff check backend
+          uv --project backend run pytest backend/tests --shard ${{ matrix.shard }}
+
   release-windows-x64:
     if: github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
     name: Package and release Windows x64
     # Serialised behind macOS for the same reason the Linux job is: the
     # release is created once and joined by the other platforms' assets.
-    needs: release-macos-arm64
+    # Nothing is packaged until every Windows gate shard, x64 and arm64, passed.
+    needs: [release-macos-arm64, release-windows-gates]
     runs-on: windows-latest
-    timeout-minutes: 45
+    # Dry runs take 38-40 min; v0.2.18 was cancelled at 45 while still
+    # building, and v0.2.20 at 75 after its unsharded backend gate alone took
+    # 64 min, so leave real headroom.
+    timeout-minutes: 120
     environment:
       name: production
-      url: https://github.com/nt-nerdtechnic/Navide/releases/latest
+      url: https://github.com/Navide-dev/Navide/releases/latest
     # Git-for-Windows bash on every step, so the Linux job's shell idioms
     # (find/wc/test, arrays, process substitution) carry over unchanged.
     defaults:
@@ -654,14 +725,6 @@ jobs:
       - name: Verify tag and version sources
         if: github.event_name == 'push'
         run: pnpm release:check "${GITHUB_REF_NAME}"
-
-      - name: Run Windows release gates
-        # The platform-independent frontend gates already passed in the macOS
-        # job this depends on; what is worth repeating is the backend suite on
-        # this kernel, where the process, path and signal seams differ most.
-        run: |
-          uv --project backend run ruff check backend
-          uv --project backend run pytest backend/tests
 
       - name: Provision Antigravity usage secrets
         env:
@@ -772,13 +835,14 @@ jobs:
     # publishing a second file of the same name over the top.
     needs: release-windows-x64
     runs-on: windows-11-arm
-    # Longer than the x64 job's 45: two of the backend's dependencies publish
+    # Longer than the x64 job's: two of the backend's dependencies publish
     # no win_arm64 wheel (httptools, watchdog) and are compiled from their
-    # sdists here.
-    timeout-minutes: 60
+    # sdists here. Dry runs take 46-54 min, too close to the old 60; the
+    # backend gate grew past an hour on x64 in v0.2.20, so this one gets more.
+    timeout-minutes: 150
     environment:
       name: production
-      url: https://github.com/nt-nerdtechnic/Navide/releases/latest
+      url: https://github.com/Navide-dev/Navide/releases/latest
     defaults:
       run:
         shell: bash
@@ -823,15 +887,6 @@ jobs:
       - name: Verify tag and version sources
         if: github.event_name == 'push'
         run: pnpm release:check "${GITHUB_REF_NAME}"
-
-      - name: Run Windows release gates
-        # Same reasoning as the x64 job: the frontend gates already passed in
-        # the macOS job, and what is worth repeating here is the backend suite
-        # on this kernel — which on arm64 is also the first thing that would
-        # notice a dependency that only pretends to have an arm64 build.
-        run: |
-          uv --project backend run ruff check backend
-          uv --project backend run pytest backend/tests
 
       - name: Provision Antigravity usage secrets
         env:
@@ -982,7 +1037,7 @@ jobs:
     # Any failure upstream skips this job and leaves the release a draft; a
     # "Re-run failed jobs" on the run finishes it once the cause is fixed.
     if: github.event_name == 'push' && github.ref_name != 'v0.1.40' && github.ref_name != 'v0.1.41' && github.ref_name != 'v0.1.49'
-    needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-x64, release-windows-arm64, mirror-release]
+    needs: [release-macos-arm64, release-linux-x64, smoke-linux-x64, release-windows-gates, release-windows-x64, release-windows-arm64, mirror-release]
     name: Publish the GitHub Release
     runs-on: ubuntu-22.04
     timeout-minutes: 10

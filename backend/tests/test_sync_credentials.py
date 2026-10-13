@@ -29,6 +29,11 @@ SECRET_B = "sk-ant-oat01-SYNTHETIC-bravo-9876543210"
 SECRET_C = "sk-ant-oat01-SYNTHETIC-charlie-5555555555"
 
 
+
+def _counts(result: dict) -> dict:
+    """The part of a round's result these tests pin down: its counts."""
+    return {k: result[k] for k in ("scope", "pulled", "pushed", "conflicts")}
+
 class LocalVault:
     """What this device's user pasted: the seam the adapter reads through."""
 
@@ -126,7 +131,7 @@ async def test_pasted_credential_reaches_the_other_device_and_settles(tmp_path, 
 
     first = await a.sync()
     assert first["pushed"] == 1 and first["conflicts"] == 0
-    assert await b.sync() == {"scope": "credentials", "pulled": 1, "pushed": 0, "conflicts": 0}
+    assert _counts(await b.sync()) == {"scope": "credentials", "pulled": 1, "pushed": 0, "conflicts": 0}
 
     assert b.adapter.imported_value("claude", "default") == SECRET_A
     assert b.vault.values == {}  # nothing was written into B's own store
@@ -141,8 +146,8 @@ async def test_pasted_credential_reaches_the_other_device_and_settles(tmp_path, 
 
     # A second round on each side moves nothing.
     pushes = server.pushes
-    assert await a.sync() == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
-    assert await b.sync() == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(await a.sync()) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(await b.sync()) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
     assert server.pushes == pushes
 
 
@@ -219,7 +224,7 @@ async def test_removing_a_credential_locally_never_tombstones_the_cloud(tmp_path
     assert _row_for(a, "claude", "default", "local")["disabled"] is True
 
     # B still has it and still says nothing needs sending.
-    assert await b.sync() == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(await b.sync()) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
     assert b.adapter.imported_value("claude", "default") == SECRET_A
 
 
@@ -265,7 +270,7 @@ async def test_an_update_to_a_disabled_credential_is_neither_taken_nor_a_conflic
     a.vault.values[("claude", "default")] = SECRET_B  # A replaces the token
     await a.sync()
     result = await b.sync()
-    assert result == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(result) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
     assert b.adapter.imported_value("claude", "default") is None
     assert SECRET_B.encode() not in b.disk_bytes()
     # The row is not re-read every round: its rev was recorded even though
@@ -354,7 +359,7 @@ async def test_conflict_rows_are_sealed_and_listed_as_metadata(tmp_path, account
     assert b.adapter.imported_value("claude", "default") == SECRET_B
     assert b.vault.forgotten == [("claude", "default")]
     assert b.store.conflicts("credentials") == []
-    assert await b.sync() == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(await b.sync()) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
 
 
 @pytest.mark.asyncio
@@ -691,7 +696,7 @@ async def test_a_removed_local_paste_can_be_brought_back_by_an_explicit_pull(tmp
     assert a.adapter.imported_value("claude", "default") == SECRET_A
     row = _row_for(a, "claude", "default", "imported")
     assert row["itemId"] == item_id and row["disabled"] is False
-    assert await a.sync() == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(await a.sync()) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
 
 
 @pytest.mark.asyncio
@@ -705,7 +710,7 @@ async def test_an_own_write_echoed_back_does_not_trigger_a_re_push(tmp_path, acc
 
     a.store.set_cursor("credentials", 0)  # the next pull re-reads our own row
     result = await a.sync()
-    assert result == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
+    assert _counts(result) == {"scope": "credentials", "pulled": 0, "pushed": 0, "conflicts": 0}
     assert a.store.state("credentials", item_id).sealed_kid == kid
 
 
@@ -740,7 +745,8 @@ def test_credentials_cannot_be_switched_on_while_a_legacy_pin_remains(monkeypatc
         sync_scopes.set_scope_enabled("credentials", True)
 
     monkeypatch.setattr(trust_store, "legacy_pinned_devices", lambda: [])
-    assert sync_scopes.set_scope_enabled("credentials", True)["credentials"] is True
+    with pytest.raises(sync_engine.SyncError, match="not synced any more"):
+        sync_scopes.set_scope_enabled("credentials", True)
 
 
 # ── the accounts listing ─────────────────────────────────────────────────────

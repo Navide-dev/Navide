@@ -26,7 +26,7 @@ import {
 import { dockWindowLabelKey } from '../lib/dockWindow'
 import { AI_PANEL_ICON_PATH } from '@navide/plugin-ui'
 import BrandLoader from './BrandLoader.vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 
 // Agent History modal, extracted from App.vue. Owns only presentation-local
 // state (search query, filters, selection, kill-all confirmation). Flows that
@@ -745,7 +745,7 @@ async function copyLogText(): Promise<void> {
                     @dblclick="!isHistoryEntryRemoved(entry) && !dockWindowLabelKey(entry.surface) && emit('focus-pane', entry)"
                   >
                     <span class="ah-dot" :class="isHistoryEntryRemoved(entry) ? 'removed' : 'active'"></span>
-                    <span class="ah-badge">{{ historyEntryLabel(entry) }}</span>
+                    <span class="ah-badge" v-truncate>{{ historyEntryLabel(entry) }}</span>
                     <span
                       v-if="dockWindowLabelKey(entry.surface)"
                       class="ah-window ah-window--mark"
@@ -780,7 +780,7 @@ async function copyLogText(): Promise<void> {
             <div v-else class="history-detail">
               <div class="detail-title-row">
                 <template v-if="!renameEditing">
-                  <span class="ah-badge detail-name">{{ historyEntryLabel(selectedEntry) }}</span>
+                  <span class="ah-badge detail-name" v-truncate>{{ historyEntryLabel(selectedEntry) }}</span>
                   <span v-if="panelWindowKey" class="ah-window"><svg class="ah-window-icon" viewBox="0 0 16 16" aria-hidden="true"><path :d="AI_PANEL_ICON_PATH" /></svg>{{ $t(panelWindowKey) }}</span>
                   <button
                     class="ah-icon-btn"

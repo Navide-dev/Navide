@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { parseHunks, toSideBySide, type Hunk, type SideRow } from '../lib/git-diff'
 import type { GitTransport } from '../../../shared/gitCompatibility'
 import type { GitBranchDiffPort, GitCredentialPort } from '../ports/gitSurface'
@@ -245,7 +246,7 @@ function cellClass(cell: SideRow['left']): string {
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="bdp-file-ic">
             <path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.56v2.19c0 .138.112.25.25.25h2.19Z"/>
           </svg>
-          <span class="bdp-fname">{{ f.filename }}</span>
+          <span class="bdp-fname" v-truncate>{{ f.filename }}</span>
           <span v-if="f.addCount" class="bdp-add">+{{ f.addCount }}</span>
           <span v-if="f.delCount" class="bdp-del">-{{ f.delCount }}</span>
           <button class="bdp-open-btn" title="Open file" @click.stop="openFile(f.filename)">
@@ -277,13 +278,13 @@ function cellClass(cell: SideRow['left']): string {
                 <div class="bdp-side bdp-left" :class="cellClass(row.left)">
                   <span class="bdp-no">{{ row.left?.lineNo ?? '' }}</span>
                   <span class="bdp-sign">{{ row.left ? (row.left.kind === ' ' ? '' : row.left.kind) : '' }}</span>
-                  <span class="bdp-code">{{ row.left?.text ?? '' }}</span>
+                  <span class="bdp-code" v-truncate>{{ row.left?.text ?? '' }}</span>
                 </div>
                 <!-- Right (new) -->
                 <div class="bdp-side bdp-right" :class="cellClass(row.right)">
                   <span class="bdp-no">{{ row.right?.lineNo ?? '' }}</span>
                   <span class="bdp-sign">{{ row.right ? (row.right.kind === ' ' ? '' : row.right.kind) : '' }}</span>
-                  <span class="bdp-code">{{ row.right?.text ?? '' }}</span>
+                  <span class="bdp-code" v-truncate>{{ row.right?.text ?? '' }}</span>
                 </div>
               </template>
             </div>

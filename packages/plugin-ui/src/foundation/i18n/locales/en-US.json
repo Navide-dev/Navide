@@ -1,4 +1,162 @@
 {
+  "convenience": {
+    "notice": {
+      "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
+      "repair-note": "This put back or repaired what Navide wrote earlier.",
+      "reset": "Re-added after a reset: wrote {target} again under the convenience feature \"{feature}\" you allowed, so that {purpose}",
+      "reset-note": "Its folder was deleted or created again, which is a reset, not you removing it. To stop this, turn the feature off on the overview.",
+      "removed": "You removed {target}, so the convenience feature \"{feature}\" is now off; Navide will not add it back",
+      "prompt": "{agent}'s sign-in was changed outside Navide",
+      "prompt-accounts": "Signed in now: {live} · Navide would restore: {slot}",
+      "prompt-note": "Navide did not overwrite it. Keep the current sign-in, or switch back to the account Navide would restore.",
+      "prompt-logout": "You signed out of {agent} outside Navide. Navide did not sign you back in.",
+      "prompt-logout-note": "To use {agent} again, sign in again or switch accounts in Settings → Accounts.",
+      "upgrade": "These convenience features stay on, as before",
+      "upgrade-note": "They stay allowed. You can turn any of them off on the overview.",
+      "action": {
+        "off": "The convenience feature \"{feature}\" was turned off",
+        "allowed": "The convenience feature \"{feature}\" was allowed",
+        "cleanup": "Removed {target} for the convenience feature \"{feature}\"",
+        "removed-entry": "You removed {target}. Navide will not add that entry back; the rest of the convenience feature \"{feature}\" keeps working. Turn the feature off and on again to restore it",
+        "cleanup-failed": "Could not remove {target}, so the convenience feature \"{feature}\" is still on. Fix the file by hand (it may not be valid JSON), then turn the feature off again",
+        "refused-unsafe": "The .cursor folder holding {target} leads outside the project folder, so for safety Navide did not set up the convenience feature \"{feature}\" here. To use it, make .cursor a plain folder inside the project",
+        "refused-name": "The skill \"{name}\" has the same name as Navide's list file .navide-links, so Navide did not link it in {target}. Rename it and it will appear",
+        "retract": "Navide moved its entry for the convenience feature \"{feature}\" out of {target}: the panes Navide starts now carry it themselves, and your file no longer holds it (a backup was kept)",
+        "retract-failed": "Could not take Navide's entry for the convenience feature \"{feature}\" out of {target}, so panes keep using the one in that file. Fix the file by hand (it may not be valid JSON) and restart Navide",
+        "refused-exclude": "The .git folder or .git/info/exclude of the repository holding {target} is a link or a second name for another file, so for safety Navide did not write the git exclude; the links the convenience feature \"{feature}\" made will show in git status"
+      },
+      "button": {
+        "overview": "Open overview",
+        "reallow": "Allow again",
+        "keep-login": "Keep the current sign-in",
+        "dismiss": "Got it",
+        "switch-back": "Switch back to {label}",
+        "upgrade-ack": "Got it"
+      }
+    },
+    "action": {
+      "first": "First write",
+      "repair": "Put back or repaired",
+      "reset": "Re-added after a reset",
+      "removed": "Removed by you",
+      "off": "Turned off",
+      "allowed": "Allowed",
+      "cleanup": "Cleaned up",
+      "removed-entry": "Entry removed by you",
+      "cleanup-failed": "Could not clean up",
+      "prompt": "Sign-in changed outside Navide",
+      "refused-unsafe": "Not set up, for safety",
+      "refused-name": "Not linked, because of its name",
+      "retract": "Moved into Navide's panes",
+      "retract-failed": "Could not move into Navide's panes",
+      "refused-exclude": "git exclude not written, for safety"
+    },
+    "overview": {
+      "title": "Convenience features and what Navide changes on your computer",
+      "intro": "Navide writes outside its own folder only when a convenience feature you allowed needs it. Every write is announced and logged; once you turn a feature off or delete its entry, Navide does not add it back.",
+      "allClis": "All CLIs",
+      "required": "Required",
+      "requiredHint": "The panes it serves cannot run without it, so it has no switch. It is listed so you know about it.",
+      "allowed": "Allowed",
+      "off": "Off",
+      "reasonRemoved": "You removed what Navide wrote, so this is off. Use the switch to allow it again.",
+      "writes": "Writes",
+      "present": "Present",
+      "absent": "Not present",
+      "noTargets": "Navide has not written anywhere yet.",
+      "cost": "If turned off",
+      "confirmTitle": "Turn off \"{feature}\"?",
+      "confirmBody": "Navide will remove what it wrote here (only entries Navide marked as its own):",
+      "confirmBodyNone": "Nothing Navide wrote is present, so nothing will be removed.",
+      "confirmOff": "Turn off and remove",
+      "cancel": "Cancel",
+      "setFailed": "Could not change it: {error}",
+      "loadFailed": "Could not read convenience features: {error}",
+      "loading": "Loading…",
+      "history": "History",
+      "historyEmpty": "No entries yet.",
+      "backup": "Backup: {path}"
+    },
+    "feature": {
+      "claude_hooks": {
+        "name": "Claude hooks: turn detection, Navide Guard and wake-up",
+        "benefit": "Claude reports when each turn ends, Navide Guard checks Claude's tool calls, and the push channel can wake an idle Claude.",
+        "purpose": "Navide knows when Claude finishes a turn and Navide Guard can check its tool calls",
+        "writes": "Only in the Claude panes Navide starts: they start with the hooks (turn detection, Navide Guard, wake-up); your ~/.claude/settings.json is not changed. Entries earlier versions wrote there are taken back at startup, with a backup; if they cannot be, the hooks in that file stay in use",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Claude's tool calls; the push channel cannot wake an idle Claude."
+      },
+      "qwen_hooks": {
+        "name": "Qwen hooks: turn detection and Navide Guard",
+        "benefit": "Qwen reports when each turn ends and Navide Guard checks Qwen's tool calls.",
+        "purpose": "Navide knows when Qwen finishes a turn and Navide Guard can check its tool calls",
+        "writes": "Hooks in ~/.qwen/settings.json",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Qwen's tool calls."
+      },
+      "copilot_hooks": {
+        "name": "Copilot hooks: turn detection and Navide Guard",
+        "benefit": "Copilot reports when each turn ends and Navide Guard checks Copilot's tool calls.",
+        "purpose": "Navide knows when Copilot finishes a turn and Navide Guard can check its tool calls",
+        "writes": "Only in the Copilot panes Navide starts: each pane's own hooks folder carries Navide's hook file; your ~/.copilot is not changed. The ~/.copilot/hooks/agent-team.json earlier versions wrote is taken back at startup, with a backup; if it cannot be, that file stays in use",
+        "cost": "Turn ends are guessed from output instead of reported; Navide Guard does not check Copilot's tool calls."
+      },
+      "codex_hook-trust": {
+        "name": "Codex hook trust carried over",
+        "benefit": "Codex panes keep the trust you already gave your own hooks instead of asking again.",
+        "purpose": "Codex panes do not ask you to trust your own hooks again",
+        "writes": "Only in the Codex panes Navide starts: the hooks you already trust are passed on the command line; your ~/.codex/config.toml is not changed. The [hooks.state] rows earlier versions wrote there are taken back at startup, with a backup; if they cannot be (or in a development build of Navide), rows are written there as before",
+        "cost": "Every Codex pane asks you to trust your own hooks again."
+      },
+      "codex_login-promote": {
+        "name": "Share a Codex sign-in made in a pane",
+        "benefit": "A Codex sign-in you make inside a pane becomes Codex's sign-in everywhere.",
+        "purpose": "a sign-in made inside a pane works for Codex everywhere",
+        "writes": "~/.codex/auth.json (a hard link to the pane's sign-in)",
+        "cost": "A sign-in made inside a pane stays in that pane."
+      },
+      "cursor_project-mcp": {
+        "name": "Navide MCP tools for Cursor",
+        "benefit": "Cursor panes get Navide's MCP tools, such as messaging, plans and scheduling.",
+        "purpose": "Cursor panes can use Navide's tools",
+        "writes": "The workspace's .cursor/mcp.json and a line in .git/info/exclude",
+        "cost": "Cursor panes have no Navide tools."
+      },
+      "cursor_project-skills": {
+        "name": "Skills delivered to Cursor",
+        "benefit": "Skills you route to Cursor are linked into the workspace so Cursor panes can use them.",
+        "purpose": "Cursor panes can use the skills you routed to them",
+        "writes": "Links in the workspace's .cursor/skills/ and a line in .git/info/exclude",
+        "cost": "Cursor panes get no delivered skills."
+      },
+      "credentials_auto-repair": {
+        "name": "Account sign-in auto-repair",
+        "benefit": "When a CLI's live sign-in goes missing after an account switch, Navide restores the account you chose so panes do not start signed out.",
+        "purpose": "panes do not start signed out after an account switch",
+        "writes": "The CLI's live sign-in: Keychain, ~/.claude.json and the vendor's credential files",
+        "cost": "A pane can start signed out after an account switch went wrong."
+      },
+      "codex_pane-homes": {
+        "name": "Codex pane folders",
+        "benefit": "Each Codex pane gets a folder of its own so panes can use different accounts side by side.",
+        "purpose": "Codex panes can use different accounts side by side",
+        "writes": "~/.codex-panes/",
+        "cost": "Required: the panes it serves cannot run without it."
+      },
+      "pane-shims": {
+        "name": "Pane launch folders",
+        "benefit": "Kimi, Grok, Antigravity and Muse panes start from a folder of their own so each pane keeps its own account and settings.",
+        "purpose": "each pane keeps its own account and settings",
+        "writes": "~/.navide-panes/, plus entries a pane creates moved into the vendor's own folder (~/.kimi-code, ~/.grok, ~/.gemini, ~/.agents, ~/.copilot, ~/.qwen) and empty seed entries created there; each move or creation is logged",
+        "cost": "Required: the panes it serves cannot run without it."
+      },
+      "claude_account-homes": {
+        "name": "Claude account folders",
+        "benefit": "Each signed-in Claude account keeps a folder of its own, so sessions and settings follow the account.",
+        "purpose": "sessions and settings follow each Claude account",
+        "writes": "Links and moved files in ~/.claude for signed-in accounts",
+        "cost": "Required: the panes it serves cannot run without it."
+      }
+    }
+  },
   "windowControls": {
     "group": "Window controls",
     "minimize": "Minimize",
@@ -201,6 +359,7 @@
     "reason-pane-closed": "The target pane closed before delivery",
     "reason-dropped": "Dropped from the log before it could be delivered",
     "reason-inject-failed": "Injection failed — the target CLI never echoed the message",
+    "reason-delivery-unconfirmed": "Sent, but the target CLI has not shown it received it yet — check the pane before resending",
     "reason-inject-error": "Injection error: {error}",
     "reason-push-stuck": "The CLI's input box would not clear after two pushes",
     "reason-route-error": "Routing error: {error}",
@@ -230,6 +389,7 @@
     "reply-badge": "reply",
     "notice-badge": "system notice",
     "ack-badge": "ack only",
+    "delivered-while-busy": "Recipient was busy; delivered anyway",
     "hook-badge": "via hook",
     "hook-badge-title": "Handed to the agent as its next instruction when its turn ended, instead of being typed into the pane",
     "push-badge": "via {kind}",
@@ -258,6 +418,9 @@
     "dont-show-again": "Don't show this reminder again",
     "quit-title": "Quit Navide?",
     "quit-body": "Are you sure you want to quit the entire app?",
+    "quit-cancelled-title": "Navide did not quit",
+    "quit-cancelled-body": "A window stopped the quit: {windows}. Navide keeps running. Finish or close what that window is doing, then quit again.",
+    "quit-cancelled-unknown-window": "a window that has closed since",
     "quit": "Quit",
     "setting-title": "Confirm before closing",
     "setting-hint": "Show a confirmation dialog before closing a workspace or quitting the app.",
@@ -321,7 +484,7 @@
       "tab-shortcut": "Problems (⌘⇧M)"
     },
     "pluginViews": {
-      "unavailable": "This view is provided by a plugin and could not be opened."
+      "unavailable": "This view is provided by a Navide plugin and could not be opened."
     },
     "plans": {
       "stage-in-review": "In Review",
@@ -513,17 +676,17 @@
         "markdown": "Markdown",
         "errors": {
           "generic": "Unknown backend error ({code})",
-          "backend-error": "Backend plugin request failed.",
+          "backend-error": "Navide plugin backend request failed.",
           "backend-unavailable": "Backend service is currently unavailable.",
           "invalid-argument": "Invalid request arguments.",
-          "invalid-activation": "Invalid plugin activation state.",
-          "invalid-runtime": "Invalid plugin runtime.",
-          "capability-denied": "Plugin capability was denied.",
-          "resource-limit": "Plugin exceeded resource limits.",
+          "invalid-activation": "Invalid Navide plugin activation state.",
+          "invalid-runtime": "Invalid Navide plugin runtime.",
+          "capability-denied": "Navide plugin capability was denied.",
+          "resource-limit": "Navide plugin exceeded resource limits.",
           "not-ready": "Backend is not ready yet.",
-          "plugin-error": "An error occurred in the plugin backend.",
+          "plugin-error": "An error occurred in the Navide plugin backend.",
           "timeout": "Operation timed out.",
-          "plugin-stopping": "Plugin is stopping.",
+          "plugin-stopping": "Navide plugin is stopping.",
           "user-cancelled": "Operation cancelled by user.",
           "protocol-error": "Protocol error occurred.",
           "conflict": "Conflict detected. Please reload and try again.",
@@ -553,6 +716,8 @@
       "open-file-failed": "Could not open {file} — the editor did not respond",
       "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click one to resume it",
       "click-to-resume": "Click to resume",
+      "interrupted-at-launch": "Working at restart",
+      "interrupted-at-launch-tooltip": "This pane was working when Navide restarted, and its turn was cut off. It was not resumed automatically (over the automatic-resume limit, or the resume failed). Click to resume it.",
       "resuming": "Resuming…",
       "rebuild-tooltip": "Rebuild (resume the conversation) ⌘R — close and reopen via --resume at the current size to clear ghosting/overlap that can't be repainted. Interrupts the in-progress turn and reprints the conversation.",
       "rebuild-tooltip-disabled": "Rebuild needs an existing session to resume. Send a message first — the conversation transcript is created after the first turn.",
@@ -619,6 +784,7 @@
       "login-expired-tooltip": "The CLI's login has expired — click to send its login command",
       "login-expired-notify-title": "CLI login expired",
       "login-expired-notify-body": "The CLI reported an expired login — click the pane's badge to re-login",
+      "login-expired-account-dir-notify-body": "{account} is no longer signed in inside its own folder. Click this pane's login badge to sign in again, or use Sign in in the usage badge's account list. Until then, new panes use the shared login.",
       "skill-picker": {
         "label": "Prompt skills",
         "hint": "Point at a skill to see exactly what it will send.",
@@ -644,7 +810,6 @@
     "go-to-stage": "Open this stage",
     "new-pipeline": "＋ New Pipeline",
     "set-as-default": "✓ Set as default",
-    "save-slot": "Save slot",
     "reset-factory-stages": "Reset to factory stages",
     "open-pipeline": "Open pipeline",
     "open-pipeline-named": "Open pipeline {name}",
@@ -726,10 +891,6 @@
     "close-to-right": "Close to the Right",
     "close-to-left": "Close to the Left",
     "close-all": "Close All",
-    "move-up": "Move up",
-    "move-down": "Move down",
-    "add-stage": "+ Add Stage",
-    "add-slot": "+ Add Slot",
     "remove-slot": "Remove slot",
     "create": "Create",
     "close-settings-run": "Close settings and go to run",
@@ -983,10 +1144,163 @@
       "file-history-blame": "File history + blame",
       "open-diff-in-editor": "Open diff in editor"
   },
+  "share": {
+    "notice": {
+      "created-user": "You shared a link ({id})",
+      "created-agent": "Pane {pane} shared a link ({id})",
+      "masked": "{count} possible secrets were masked before upload",
+      "opened-first": "Your share link ({id}) was opened",
+      "opened-new-viewer": "Your share link ({id}) was opened by a new viewer",
+      "open-count": "Opened {count} times so far",
+      "feedback-approved": "Approved from a phone: {title}",
+      "feedback-noted": "Review note from a phone: {title}",
+      "feedback-already": "Approval from a phone noted, stage unchanged: {title}",
+      "feedback-rejected": "Phone feedback not applied: {title}",
+      "reason-content-changed": "The plan changed since it was shared; open the link again and resend.",
+      "reason-other": "Reason: {reason}"
+    }
+  },
+  "plans": {
+    "share": {
+      "button": "Share link",
+      "title": "Share a read-only link",
+      "expiry": "Expires after",
+      "days": "{count} day | {count} days",
+      "require-login": "Require sign-in to open",
+      "send-to-chat": "Send to the chat",
+      "send-to-chat-note": "The link contains its decryption key and is sent through that chat platform (for example Telegram).",
+    "send-to-chat-direct-only": "It is sent only to a direct-message chat you have bound.",
+      "create": "Create link",
+      "creating": "Creating…",
+      "copy": "Copy",
+      "copied": "Link copied",
+      "close": "Close",
+      "expires-at": "Expires {date}",
+      "masked-title": "Masked before sharing",
+      "masked-line": "Line {line}: possible {category}, masked",
+      "warned-line": "Line {line}: possible {category}, not masked, check it",
+      "refused": "This plan cannot be shared: {reason}",
+      "failed": "Could not create the link ({code}): {message}",
+    "chat-target": "Chat",
+    "chat-pick": "Choose a chat",
+    "chat-none": "No direct-message chat is bound.",
+    "chat-loading": "Loading chats…",
+    "chat-targets-failed": "Could not load chats ({code}): {message}",
+    "reason": {
+      "memory": "Agent memory files (CLAUDE.md, AGENTS.md and the like) are never shared.",
+      "denied_name": "This file name looks like a key, credential or token file, which is never shared.",
+      "system": "Files in system, credential or Navide data folders are never shared.",
+      "hard_link": "A file with more than one name (a hard link) is never shared.",
+      "missing": "The file does not exist.",
+      "not_file": "Only a single file can be shared.",
+      "not_absolute": "Only an absolute path can be shared.",
+      "parent_ref": "A path with '..' cannot be shared.",
+      "changed": "The file changed or became unreadable while it was checked.",
+      "whitespace": "The path starts or ends with a space; name the file exactly.",
+      "unknown_kind": "This kind of file cannot be shared.",
+      "kind_source": "Only files in .agent-team/plans/ can be shared as a plan.",
+      "too_large": "Files over 32 MiB cannot be shared.",
+      "unreadable": "The file could not be read as UTF-8 text.",
+      "ttl": "A link lasts between 15 minutes and 30 days."
+    },
+    "category": {
+      "api-key": "API key",
+      "github-token": "GitHub token",
+      "slack-token": "Slack token",
+      "slack-app-token": "Slack app token",
+      "aws-access-key": "AWS access key",
+      "jwt": "JWT",
+      "bot-token": "bot token",
+      "telegram-bot-token": "Telegram bot token",
+      "discord-bot-token": "Discord bot token",
+      "authorization-header": "Authorization header",
+      "bearer-token": "bearer token",
+      "credential-assignment": "credential",
+      "credential-flag": "credential flag",
+      "url-credentials": "credentials in a URL",
+      "google-api-key": "Google API key",
+      "gitlab-token": "GitLab token",
+      "stripe-key": "Stripe key",
+      "npm-token": "npm token",
+      "huggingface-token": "Hugging Face token",
+      "sendgrid-key": "SendGrid key",
+      "pypi-token": "PyPI token",
+      "private-key": "private key",
+      "possible-secret": "secret"
+    }
+    }
+  },
   "settings": {
+    "cliExtensions": {
+      "tabInstalled": "Installed CLI extensions",
+      "intro": "Each AI CLI's own CLI extensions — Claude plugins and mods, Codex hooks, Pi extensions and the rest — and what they can reach. Navide only reads them: nothing here installs, enables or changes anything. Navide plugins have their own page.",
+      "summary": "{total} CLI extensions · {l3} with code inside the CLI's own process",
+      "machineWide": "One set per CLI for the whole machine: every Navide pane and account of that CLI loads the same ones.",
+      "rescan": "Rescan",
+      "loading": "Scanning…",
+      "loadFailed": "Could not read CLI extensions: {error}",
+      "empty": "No CLI extensions found.",
+      "unsupported": "Navide cannot read where this CLI keeps its CLI extensions yet.",
+      "invalid": "Could not read: {error}",
+      "disabled": "Disabled",
+      "ownerNavide": "Installed by Navide",
+      "inferred": "inferred",
+      "inferredHint": "Read off the source text; the CLI's manifest does not state these.",
+      "tier": {
+        "L1": "L1 text assets",
+        "L2": "L2 subprocess",
+        "L3": "L3 in-process code"
+      },
+      "tierHint": {
+        "L1": "Instructions and other text only; nothing runs on its own.",
+        "L2": "Runs commands as a subprocess (hooks, MCP, LSP) with your user's permissions.",
+        "L3": "Runs inside the CLI's own process with the CLI's permissions, and no permission prompt."
+      },
+      "capability": {
+        "exec": "Runs commands",
+        "network": "Network",
+        "fs": "Files",
+        "intercept-tools": "Intercepts tool calls",
+        "rewrite-prompt": "Rewrites prompts",
+        "ui": "Draws UI",
+        "telemetry": "Telemetry"
+      },
+      "consent": {
+        "none": "The CLI asks nothing before running it",
+        "hook-trust": "The CLI asks you to trust the hook first",
+        "capability-approve": "The CLI asks you to approve its capabilities first",
+        "hot-reload": "Asked once per session before hot reload"
+      }
+    },
+    "limits": {
+      "hint": "Optional limits that keep Navide and the agents it runs from overloading this machine. Each one is off, or at Navide's previous behavior, until you change it.",
+      "test-workers": "Cap test-runner workers in new panes",
+      "test-workers-hint": "New panes get NAVIDE_TEST_MAX_WORKERS. Repos that read it (this repo's vitest config does) run tests with at most that many workers, so several panes testing at once don't saturate the CPU. Panes already open keep their environment.",
+      "test-workers-value": "Maximum workers per test run",
+      "evolve-reclaim": "Reclaim self-evolution panes that time out",
+      "evolve-reclaim-hint": "When a self-evolution run passes its time limit without reporting, its pane is reclaimed (turned into a card you can resume with one click, never closed) once it is idle and this long has passed. Turn off to leave such panes running, as before.",
+      "evolve-reclaim-value": "Minutes after the timeout",
+      "detached": "Keep track of servers closed panes leave behind",
+      "detached-hint": "New panes get an inert NAVIDE_PANE_MARK variable. A dev server an agent started in the background inherits it, so after its pane is gone it can be listed here. Nothing is stopped unless you click Stop.",
+      "detached-find": "Find leftover servers",
+      "detached-empty": "No servers left behind by closed panes.",
+      "detached-stop": "Stop",
+      "detached-meta": "{cwd} · {size} · since {since}",
+      "detached-failed": "Could not complete the request.",
+      "focused-reclaim": "Also reclaim the focused pane when it sits untouched",
+      "focused-reclaim-hint": "Idle reclaim (above) never takes the pane each window has in focus, so that pane keeps its CLI running however long it sits. With this on, a focused pane nobody has typed in or received output in for this long is reclaimed too — turned into a card you can resume with one click, never closed. A pane waiting for an answer or holding unsent text is still kept.",
+      "focused-reclaim-value": "Hours untouched",
+      "spotlight": "Spotlight indexing",
+      "spotlight-hint": "Spotlight already skips node_modules and Navide's own hidden folders, but it indexes build output (dist, out, build) and extra worktrees in your repos, which can keep it busy while agents build and test. Navide does not change this for you: add those folders under Spotlight's search privacy list yourself.",
+      "spotlight-open": "Open Spotlight settings"
+    },
     "search": {
       "placeholder": "Search settings…",
       "item": {
+        "cliExtensions": {
+          "title": "Extensions",
+          "summary": "Each AI CLI's own CLI extensions and hooks, with execution tier and capabilities (read-only)."
+        },
         "cli-agents-list": {
           "title": "CLI Agents List",
           "summary": "Enable, disable and reorder the CLI agents, and read each one's install, permission, push and account state off its row."
@@ -1018,6 +1332,10 @@
         "mcp-agents": {
           "title": "Every CLI's MCP",
           "summary": "Read-only view of the MCP servers each CLI keeps in its own config, and where each server is set up."
+        },
+        "credentials": {
+          "title": "Credentials & keys",
+          "summary": "Read-only scan of where credentials and keys live on this machine, with reminders."
         },
         "skills": {
           "title": "Skills",
@@ -1107,6 +1425,10 @@
           "title": "Resume a loop right after switching when quota runs out",
           "summary": "Looping panes switch account and continue without waiting for the reset"
         },
+        "general-account-follow-switch": {
+          "title": "Move pinned panes along when switching Claude accounts",
+          "summary": "Offer to resume panes on another account's own folder after a switch or when quota runs out"
+        },
         "accounts": {
           "title": "Git Accounts",
           "summary": "Add, edit, and remove encrypted Git host credentials and tokens."
@@ -1132,8 +1454,8 @@
           "summary": "Edit the global agent policy, choose workspace sources, review repository recommendations, and recover corrupt policy storage."
         },
         "marketplace": {
-          "title": "Marketplace",
-          "summary": "Search the extension registry and install an extension, with publisher trust and capability confirmation."
+          "title": "Navide Marketplace",
+          "summary": "Search the Navide plugin registry and install a Navide plugin, with publisher trust and capability confirmation."
         },
         "help-mcp": {
           "title": "How Navide uses MCP",
@@ -1311,9 +1633,9 @@
       "devUnpacked": "Unsigned local folder — Developer Mode only",
       "nativeBackends": {
         "title": "Native backends",
-        "description": "Some extensions include native code. Navide runs it in a sandbox with no network access; it can read only the workspaces you open with it, and change files only where you allow. Nothing native runs until you turn the switch below on.",
-        "enable": "Allow third-party extensions to run native backends",
-        "empty": "No installed extension has a native backend.",
+        "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access; it can read only the workspaces you open with it, and change files only where you allow. Nothing native runs until you turn the switch below on.",
+        "enable": "Allow third-party Navide plugins to run native backends",
+        "empty": "No installed Navide plugin has a native backend.",
         "allow": "Allow",
         "disable": "Disable",
         "enable_plugin": "Enable",
@@ -1347,11 +1669,11 @@
       },
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
-      "restartPlugin": "Restart Plugin",
+      "restartPlugin": "Restart Navide plugin",
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",
-        "title": "Roll back extension",
+        "title": "Roll back Navide plugin",
         "confirm": "Roll back",
         "confirmFactory": "Return {id} to the version bundled with Navide? The package you installed stays staged, so you can restart back into it.",
         "confirmPrevious": "Roll {id} back to {version}? The current version stays staged, so you can restart back into it.",
@@ -1369,19 +1691,19 @@
       },
       "installed": "Installed",
       "sensitive": "sensitive",
-      "empty": "No extensions installed.",
+      "empty": "No Navide plugins installed.",
       "permissionDetails": "Permissions and grants",
-      "plansRiskNote": "This plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
-      "searchPlaceholder": "Search extensions",
+      "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
+      "searchPlaceholder": "Search Navide plugins",
       "search": "Search",
       "install": "Install",
       "marketplace": {
         "installing": "Installing…",
         "incompatibleInstalledDetail": "The installed {version} needs Navide {min} or newer (you have {current}), so it may not work until you update Navide.",
-        "loading": "Loading extensions…",
-        "loadFailed": "Could not load the marketplace: {error}",
-        "noExtensions": "No extensions are published yet.",
-        "noResults": "No extensions match \"{query}\".",
+        "loading": "Loading Navide plugins…",
+        "loadFailed": "Could not load the Navide Marketplace: {error}",
+        "noExtensions": "No Navide plugins are published yet.",
+        "noResults": "No Navide plugins match \"{query}\".",
         "sortLabel": "Sort by",
         "sort": {
           "downloads": "Most downloaded",
@@ -1395,40 +1717,40 @@
         "update": "Update",
         "updateTo": "Update to {version}",
         "uninstall": "Uninstall",
-        "back": "Back to marketplace",
+        "back": "Back to Navide Marketplace",
         "loadingDetail": "Loading details…",
-        "detailFailed": "Could not load this extension: {error}",
+        "detailFailed": "Could not load this Navide plugin: {error}",
         "publisher": "Publisher",
         "rating": "★ {average} ({count} ratings)",
         "noRating": "No ratings yet",
         "permissions": "Permissions",
         "noPermissions": "This version declares no permissions.",
         "readme": "Details",
-        "noReadme": "This extension has no README.",
+        "noReadme": "This Navide plugin has no README.",
         "versions": "Versions",
         "yanked": "Yanked",
         "unavailable": "Not available for this platform",
         "unavailableDetail": "Version {version} is not published for this platform ({host}); available for: {targets}.",
-        "uninstallConfirmTitle": "Uninstall extension?",
-        "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Marketplace.",
+        "uninstallConfirmTitle": "Uninstall Navide plugin?",
+        "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
         "featured": "Featured",
         "clearSearch": "Clear search",
         "showAllCategories": "Show all categories",
         "noResultsHint": "Try another word, or browse all categories.",
-        "noExtensionsHint": "Extensions appear here as soon as publishers release them.",
-        "loadFailedTitle": "Can't reach the Marketplace",
-        "loadFailedHint": "Check your connection and try again. Installed extensions keep working.",
+        "noExtensionsHint": "Navide plugins appear here as soon as publishers release them.",
+        "loadFailedTitle": "Can't reach the Navide Marketplace",
+        "loadFailedHint": "Check your connection and try again. Installed Navide plugins keep working.",
         "errorDetails": "Details",
         "info": "Information",
-        "detailTabs": "Extension details",
+        "detailTabs": "Navide plugin details",
         "installVersion": "Install {version}",
         "versionLabel": "Version {version}",
         "otherTarget": "Not for this platform ({target})",
         "updateAvailableVersion": "Update available: {version}",
         "openLinkTitle": "Open external link?",
-        "openLinkBody": "This link comes from the extension's publisher and opens in your browser:",
+        "openLinkBody": "This link comes from the Navide plugin's publisher and opens in your browser:",
         "openLink": "Open link",
         "repository": "Repository",
         "homepage": "Homepage",
@@ -1453,7 +1775,7 @@
           "themes": "Themes",
           "ai": "AI",
           "other": "Other",
-          "extension-packs": "Extension Packs"
+          "extension-packs": "Navide Plugin Packs"
         },
         "hideIncompatible": "Hide incompatible",
         "loadMore": "Load more",
@@ -1477,7 +1799,7 @@
         "publisherRiskUnsigned": "{publisher}'s package {id} is not signed by the Registry. Trusting this publisher lets Navide run its code.",
         "sensitiveHeading": "Sensitive capabilities",
         "publisherTitle": "Trust publisher",
-        "permissionsTitle": "Confirm plugin permissions",
+        "permissionsTitle": "Confirm Navide plugin permissions",
         "publisherRisk": "Trust publisher {publisher} for {id}. A valid Registry signature proves package integrity, not that you want to run this publisher's code.",
         "backendRisk": "{name} contains a native backend executable that can run with your user account's operating-system permissions.",
         "sensitiveRisk": "{name} requests sensitive capabilities: {capabilities}.",
@@ -1497,18 +1819,18 @@
       "incompatibleInstalled": "Needs Navide ≥ {version}",
       "incompatibleReason": "This version declares it needs Navide {version} or newer. It stays enabled, but may not work until you update Navide.",
       "pack": {
-        "countsLine": "{total} extensions · {ready} to install · {installed} already installed · {skipped} skipped",
-        "badge": "Extension Pack",
+        "countsLine": "{total} Navide plugins · {ready} to install · {installed} already installed · {skipped} skipped",
+        "badge": "Navide Plugin Pack",
         "install": "Install pack ({count})",
-        "membersTitle": "Extensions in this pack",
+        "membersTitle": "Navide plugins in this pack",
         "membersNote": "Each member is verified and confirmed on its own. Installing the pack never grants a permission you have not seen.",
         "membersBadge": "Pack · {count} members",
         "includes": "Includes: {members}",
-        "summaryTitle": "Install “{name}”: {total} extensions, {count} to review",
-        "summaryNote": "Each extension below is verified and confirmed on its own. The pack itself asks for no permissions.",
-        "review": "Review {count} extensions",
+        "summaryTitle": "Install “{name}”: {total} Navide plugins, {count} to review",
+        "summaryNote": "Each Navide plugin below is verified and confirmed on its own. The pack itself asks for no permissions.",
+        "review": "Review {count} Navide plugins",
         "finish": "Finish",
-        "reviewTitle": "Install “{name}”: review {count} extensions",
+        "reviewTitle": "Install “{name}”: review {count} Navide plugins",
         "verifying": "Verifying…",
         "noSensitive": "{name} requests no sensitive capabilities.",
         "confirmMember": "Confirm and install",
@@ -1516,12 +1838,12 @@
         "cancelPack": "Cancel pack",
         "partialNote": "Skipped or cancelled members are not installed; members already installed stay (they can be uninstalled individually).",
         "doneTitle": "“{name}”: done",
-        "restartNote": "Newly installed extensions are listed under Extensions, where they can be started.",
+        "restartNote": "Newly installed Navide plugins are listed under Navide Plugins, where they can be started.",
         "close": "Close",
         "status": {
           "ready": "Will be reviewed",
           "installed": "Already installed, kept as is",
-          "missing": "Not in the Marketplace, skipped",
+          "missing": "Not in the Navide Marketplace, skipped",
           "nested": "Is itself a pack, refused",
           "unavailable": "Not available for this platform, skipped",
           "incompatible": "Needs Navide ≥ {version}, skipped",
@@ -1534,11 +1856,11 @@
           "failed": "Failed"
         },
         "uninstallTitle": "Uninstall “{name}”?",
-        "uninstallBody": "This removes the pack. Its extensions stay installed unless you tick them below.",
+        "uninstallBody": "This removes the pack. Its Navide plugins stay installed unless you tick them below.",
         "uninstallMembersHint": "Installed only because of this pack:",
         "uninstallOnly": "Uninstall pack only",
-        "uninstallWithMembers": "Uninstall pack and {count} extension(s)",
-        "noPermissionsOfItsOwn": "This pack grants no permissions itself; each extension in it asks for its own when you install it."
+        "uninstallWithMembers": "Uninstall pack and {count} Navide plugin(s)",
+        "noPermissionsOfItsOwn": "This pack grants no permissions itself; each Navide plugin in it asks for its own when you install it."
       }
     },
     "extensionsPolicy": {
@@ -1677,6 +1999,7 @@
     },
     "general": {
       "auto-resume-reconnect": "Resume sessions after a backend restart",
+      "resume-interrupted-on-launch": "Resume working panes after restarting Navide",
       "system-notify": "System notifications",
       "system-notify-hint": "Show a desktop notification when a CLI finishes its turn or needs your input while Navide is in the background. The Dock badge keeps counting either way.",
       "notify-sound": "Notification sound",
@@ -1691,6 +2014,7 @@
         "not-applicable": "Not available on this platform."
       },
       "auto-resume-reconnect-hint": "When the backend crashes it takes every CLI process with it. Turn this on to resume the visible panes' conversations automatically once it comes back, instead of rebuilding each one by hand.",
+      "resume-interrupted-on-launch-hint": "When Navide restarts, panes that were running a turn or waiting on a permission prompt or a question, plus the parent panes waiting on their reports, resume automatically (up to 6; the rest are marked \"Working at restart\"). Nothing continues on its own: press Continue, or let the parent tell it to. The parent is told which of its panes were interrupted.",
       "confirm-close-pane": "Confirm before closing a pane",
       "confirm-close-pane-hint": "Ask before the close-pane shortcut closes a CLI pane. A pane with a turn in progress always asks, regardless of this setting.",
       "confirm-close-workspace": "Confirm before closing a workspace",
@@ -1787,7 +2111,7 @@
       "appearance": "🎨 Appearance",
       "accounts": "🔑 Accounts",
       "shortcuts": "⌨️ Keyboard Shortcuts",
-      "extensions": "🧩 Extensions",
+      "extensions": "🧩 Navide Plugins",
       "executionPolicy": "🛡️ Execution Policy"
     },
     "nav": {
@@ -1796,7 +2120,8 @@
       "group": {
         "general": "General",
         "accountsAgents": "Accounts & Agents",
-        "integration": "Integrations",
+        "integration": "Agent Assets",
+        "navidePlugins": "Navide Plugins",
         "system": "System"
       },
       "general": "General",
@@ -1807,16 +2132,18 @@
       "crossDevice": "Navide Cloud",
       "accounts": "Accounts",
       "cliAgents": "CLI Agents",
+      "cliExtensions": "Extensions",
       "roles": "Roles",
       "pipelines": "Pipelines",
       "mcp": "MCP",
+      "credentials": "Credentials & keys",
       "skills": "Skills",
       "prompts": "Prompts",
       "memory": "Memory",
       "sharing": "Sharing",
       "analyzer": "Analyzer",
-      "extensions": "Extensions",
-      "marketplace": "Marketplace",
+      "extensions": "Navide Plugins",
+      "marketplace": "Navide Marketplace",
       "executionPolicy": "Execution Policy",
       "statusBadges": "Status badges",
       "voice": "Voice Input",
@@ -1886,14 +2213,14 @@
         "intro": "What each of the nineteen settings tabs controls, how Navide Cloud links several machines into one private network, and the system surfaces that live outside the main screen — the menus, the standalone windows, the usage views and resource upkeep.",
         "s1": {
           "title": "Settings overview",
-          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into four groups, <strong>22 tabs</strong> in total.",
+          "p1": "The settings window opens with <kbd class=\"syh-kbd\">⌘,</kbd>; the gear button in the title bar is the same entry point. The left sidebar is split into five groups, <strong>24 tabs</strong> in total.",
           "h1": "The search field",
           "p2": "Below the sidebar heading is a search field with the placeholder <code>Search settings…</code>. It matches setting titles, their section and their keywords <strong>across tabs</strong> (using the current interface language and indexed keywords), listing at most 8 results; clicking one switches to that tab and scrolls to the section (with one exception: \"Storage\" closes settings and opens the Resource Manager directly). With no match it shows <code>No matching settings</code>. <kbd class=\"syh-kbd\">Esc</kbd> clears it.",
           "callout": {
             "title": "The search index is not exhaustive",
             "text": "The index is a hand-maintained list, and <strong>the {layout}, {notifications}, {security} and {channels} tabs have no entries at all</strong>, so nothing inside them is searchable — you have to open them yourself. A CLI Agents entry opens one CLI's settings drawer directly (see the \"CLI Agents & Accounts\" topic)."
           },
-          "h2": "The twenty-two tabs",
+          "h2": "The twenty-four tabs",
           "tabTable": {
             "group": "Group",
             "tab": "Tab",
@@ -1933,12 +2260,20 @@
               "what": "Cross-device link status, this machine's fingerprint, who may command this machine",
               "more": "section 5 of this page"
             },
+            "credentials": {
+              "what": "A read-only scan of the credential and key risks on this machine: findings, inventory, scan roots and reminders",
+              "more": "the page itself; it only scans and never changes a file"
+            },
             "accounts": {
               "what": "Git accounts and CLI accounts",
               "more": "the \"CLI agents & accounts\" topic"
             },
             "cliAgents": {
               "what": "Installation, launch arguments and permission mode for each CLI",
+              "more": "the \"CLI agents & accounts\" topic"
+            },
+            "cliExtensions": {
+              "what": "Each AI CLI's own CLI extensions and hooks (a read-only inventory)",
               "more": "the \"CLI agents & accounts\" topic"
             },
             "analyzer": {
@@ -1970,11 +2305,11 @@
               "more": "section 3 of this page"
             },
             "extensions": {
-              "what": "The execution policy plugins run under, plus the bundled and installed plugins",
+              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins",
               "more": "section 4 of this page"
             },
             "marketplace": {
-              "what": "Searching the extension registry and installing from it",
+              "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
             },
             "shortcuts": {
@@ -2033,6 +2368,10 @@
               "desc": "A backend crash takes every CLI process with it; with this on, the panes on screen resume automatically once it is back.",
               "fallback": "—"
             },
+            "resumeInterrupted": {
+              "desc": "After you restart Navide, panes that were working (and the parents waiting on them) resume automatically, up to 6, without continuing on their own; the parent is told which ones were interrupted.",
+              "fallback": "On"
+            },
             "concurrentResume": {
               "desc": "How many panes resume at once (1–10); the rest queue. Lower it if you see terminal.create timeout.",
               "fallback": "—"
@@ -2062,7 +2401,7 @@
           "appearance": {
             "theme": "<strong>Theme</strong> — five built in: Dark (GitHub), Midnight, Forest, Light and High Contrast, with Dark (GitHub) as the default.",
             "colors": "<strong>Custom Colors</strong> — eight overridable color tokens (background, surface, text, secondary text, border, accent, success, danger). Overrides sit on top of the current theme and are <strong>kept when you switch themes</strong>; <em>↺ Reset to defaults</em> restores them.",
-            "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
+            "uiScale": "<strong>Interface Scale</strong> — the first row of the <strong>Appearance ▸ Other</strong> block, and a <strong>dropdown</strong> rather than a slider: six steps (80%, 90%, 100%, 110%, 125%, 150%; 100% by default), on <kbd class=\"syh-kbd\">⇧⌘=</kbd> / <kbd class=\"syh-kbd\">⇧⌘-</kbd> / <kbd class=\"syh-kbd\">⇧⌘0</kbd>. It drives Electron's page zoom rather than a CSS variable, so text, icons, borders and spacing all move together, and the main process applies it to <strong>every window</strong>, Navide plugin windows included. It is a <strong>separate axis</strong> from pane font size: <kbd class=\"syh-kbd\">⌘=</kbd> / <kbd class=\"syh-kbd\">⌘-</kbd> / <kbd class=\"syh-kbd\">⌘0</kbd> change only the terminal <strong>content</strong> font size (one value shared by every CLI pane in the window), while Interface Scale changes the shell around it — and the two <strong>multiply</strong>, the way a browser's page zoom multiplies with a site's own font size.",
             "restore": "<strong>Restore Windows</strong> — reopen the workspace windows that were open when you last quit."
           },
           "callout": {
@@ -2186,7 +2525,7 @@
           }
         },
         "s4": {
-          "title": "Shortcuts, Updates, Analyzer, Extensions",
+          "title": "Shortcuts, Updates, Analyzer, Navide Plugins",
           "h1": "Shortcuts",
           "p1": "The table has four columns: <em>Command</em>, <em>Shortcut</em>, <em>Active when</em> (the context it applies in) and <em>Source</em>.",
           "shortcuts": {
@@ -2243,15 +2582,15 @@
             "models": "<strong>Model manager</strong> (Ollama mode) — type a model name and press <em>⬇ Download</em>, with a progress bar; below it the installed models are listed (name, parameter count, size) and can be deleted one by one.",
             "benchmark": "<strong>Model benchmark</strong> — runs four tasks against every local model: tech-stack detection (JSON output), a one-sentence workspace summary, picking the most relevant entry from a document list, and parsing CLI output into a question and its options. The results table ticks each item off with its duration, and <strong>at least three of the four (≥75%)</strong> must pass; models that do not pass are hidden from the model dropdown."
           },
-          "h4": "Extensions",
-          "p6": "Below the policy block sits the plugin inventory, in <strong>two parts</strong>: <strong>Bundled</strong> (packages shipped with the app, such as Bundled Git, which can be disabled and then <em>Restore</em>d) and <strong>Installed</strong> (ones you installed yourself, listing their sensitive capabilities and dependencies, with <em>Remove</em>). Every row in both parts carries an extra line with its <em>Manifest Permissions</em> and <em>Package-version Grant</em>, spelling out what this version was actually granted; with no matching grant it says so. <strong>Searching the registry and installing new packages is now its own tab, Marketplace</strong> — not here.",
-          "p7": "Installing takes <strong>up to two confirmations</strong>, each shown only when needed, and nothing is written to disk before them: if the publisher is not trusted yet, \"trust the publisher\" comes first — the screen says plainly that <em>a valid signature only proves the package was not tampered with, not that you are willing to run this publisher's code</em>; if the package carries a risk that needs confirming, \"confirm the plugin's permissions\" follows, listing the sensitive capabilities it asks for and warning specifically when it ships a native backend executable. When neither applies, it installs straight away.",
+          "h4": "Navide Plugins",
+          "p6": "Below the policy block sits the Navide plugin inventory, in <strong>two parts</strong>: <strong>Bundled</strong> (packages shipped with the app, such as Bundled Git, which can be disabled and then <em>Restore</em>d) and <strong>Installed</strong> (ones you installed yourself, listing their sensitive capabilities and dependencies, with <em>Remove</em>). Every row in both parts carries an extra line with its <em>Manifest Permissions</em> and <em>Package-version Grant</em>, spelling out what this version was actually granted; with no matching grant it says so. <strong>Searching the registry and installing new packages is now its own tab, Navide Marketplace</strong> — not here.",
+          "p7": "Installing takes <strong>up to two confirmations</strong>, each shown only when needed, and nothing is written to disk before them: if the publisher is not trusted yet, \"trust the publisher\" comes first — the screen says plainly that <em>a valid signature only proves the package was not tampered with, not that you are willing to run this publisher's code</em>; if the package carries a risk that needs confirming, \"confirm the Navide plugin's permissions\" follows, listing the sensitive capabilities it asks for and warning specifically when it ships a native backend executable. When neither applies, it installs straight away.",
           "extRollback": "When the host has a package to go back to, the row gains \"{toBundled}\" or \"{toVersion}\": after a confirmation it rolls back to the package it displaced, and \"{restart}\" finishes the switch. A refused or failed rollback shows the host's own reason, translated, and a failed one restores the views it took down.",
-          "extPrerelease": "Each extension's row has a \"{prerelease}\" box, so pre-releases are opted into per extension; the Marketplace's version list marks which versions are pre-releases and can install one directly.",
-          "extNative": "<strong>{native}</strong>: a third-party extension may ship its own backend program, which never runs by default. Turn on \"{nativeEnable}\", then press \"{allow}\" for that exact version of the extension. It runs in a sandbox with no network (Seatbelt on macOS, bubblewrap on Linux), can read only the workspace opened with it and write only where you allow; any change to the program or its permissions asks again. Windows is not supported yet.",
-          "marketplace": "The \"{marketplace}\" tab: search, filter by category, sort by downloads, last update or rating, hide incompatible entries, with up to three \"{featured}\" at the top. A detail page has the README, changelog and version list, with permissions and compatibility beside them; ratings are read-only here — rating or reporting an extension happens on the registry website after signing in. An entry badged \"{pack}\" installs a whole set with \"{packInstall}\"; removing a pack never removes a member another installed pack still uses. A <code>navide://</code> link only opens the extension's detail page; pressing Install is always left to you.",
+          "extPrerelease": "Each Navide plugin's row has a \"{prerelease}\" box, so pre-releases are opted into per Navide plugin; the Navide Marketplace's version list marks which versions are pre-releases and can install one directly.",
+          "extNative": "<strong>{native}</strong>: a third-party Navide plugin may ship its own backend program, which never runs by default. Turn on \"{nativeEnable}\", then press \"{allow}\" for that exact version of the Navide plugin. It runs in a sandbox with no network (Seatbelt on macOS, bubblewrap on Linux), can read only the workspace opened with it and write only where you allow; any change to the program or its permissions asks again. Windows is not supported yet.",
+          "marketplace": "The \"{marketplace}\" tab: search, filter by category, sort by downloads, last update or rating, hide incompatible entries, with up to three \"{featured}\" at the top. A detail page has the README, changelog and version list, with permissions and compatibility beside them; ratings are read-only here — rating or reporting a Navide plugin happens on the registry website after signing in. An entry badged \"{pack}\" installs a whole set with \"{packInstall}\"; removing a pack never removes a member another installed pack still uses. A <code>navide://</code> link only opens the Navide plugin's detail page; pressing Install is always left to you.",
           "mirror": "<strong>The download mirror</strong>: every release's files are published twice, on the GitHub Release and on <code>dl.navide.dev</code> — the same bytes, with sha256 sums to check them against. <strong>The mirror is the default update source</strong>: the app points its feed at <code>dl.navide.dev</code> on startup, and GitHub is the fallback. It falls back only on a <strong>network-shaped failure</strong> (unreachable host, timeout, 5xx/429), and once it has, it <strong>stays on GitHub for the rest of the session</strong> — only a restart goes back to the mirror. <strong>A 404 or a signature/checksum error never triggers the fallback</strong> — both hosts carry the same files, so it would fail the same way, and reporting the failure as it is helps more than hiding it.",
-          "policyIntro": "The <strong>execution policy</strong> decides what a plugin's backend may execute. It is <strong>not a tab of its own</strong>: it is the block at the top of the Extensions page, with its own scope badge (per user and per workspace) and policy file path. The top of it shows the <em>effective policy</em> — its source, its mode, and its status: <em>active</em>, <em>stale</em>, <em>unavailable</em> or <em>corrupt</em>.",
+          "policyIntro": "The <strong>execution policy</strong> decides what a Navide plugin's backend may execute. It is <strong>not a tab of its own</strong>: it is the block at the top of the Navide Plugins page, with its own scope badge (per user and per workspace) and policy file path. The top of it shows the <em>effective policy</em> — its source, its mode, and its status: <em>active</em>, <em>stale</em>, <em>unavailable</em> or <em>corrupt</em>.",
           "policy": {
             "hostDefault": "<strong>Host default</strong> — the built-in least-privilege baseline, marked <strong>read-only</strong>. It stays usable even if the user policy store is gone entirely, so there is always a way back.",
             "user": "<strong>User policy</strong> — the global one, used wherever a workspace selects the User source; it reads \"not created\" until you make it. Three modes: <em>full</em>, <em>allowlist</em>, <em>denylist</em>. You can set the system namespaces and the shell executables, and the latter takes <strong>top-level executable names only</strong> — no paths, no shell expressions.",
@@ -2261,7 +2600,7 @@
             "failClosed": "Every unhealthy state is <strong>fail-closed</strong>: nothing is permitted until you pick a usable source or repair the broken one. That includes an uncertain save — the message reads \"the result of the policy change could not be confirmed; the policy stays fail-closed, please re-check\"."
           },
           "policyNote": "To clear every repository source pin at once, use \"Reset all policy source selections\", also behind a confirmation checkbox. It <strong>does not</strong> modify or delete any repository policy file; it only makes each workspace resolve against the global host default or user policy again.",
-          "extNote": "Where a misbehaving plugin backend stops: <strong>only an overflow of protocol frames (request / response / cancel) is fatal to that backend</strong>. An overflow of host notifications is dropped and counted instead, so one noisy backend no longer takes the whole plugin down, and a backend that exits cleanly records why rather than vanishing silently."
+          "extNote": "Where a misbehaving Navide plugin backend stops: <strong>only an overflow of protocol frames (request / response / cancel) is fatal to that backend</strong>. An overflow of host notifications is dropped and counted instead, so one noisy backend no longer takes the whole Navide plugin down, and a backend that exits cleanly records why rather than vanishing silently."
         },
         "s5": {
           "title": "Navide Cloud",
@@ -2334,7 +2673,7 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Four scopes can be turned on</strong>: <em>Prompts</em> (prompt skills and the loop prompt), <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to — the skill files themselves are a later step), and <em>Memory</em> (global instruction files such as <code>~/.claude/CLAUDE.md</code>; the ones inside a project stay with git).",
+            "scopes": "<strong>Four scopes can be turned on</strong>: <em>Prompts</em> (prompt skills and the loop prompt), <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only), and <em>Memory</em> (global instruction files such as <code>~/.claude/CLAUDE.md</code>; the ones inside a project stay with git).",
             "credentials": "The <strong>Credentials</strong> row is <strong>listed but disabled</strong>, and its line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
@@ -3047,10 +3386,10 @@
         "s8": {
           "title": "File preview and the change record track",
           "h1": "Which files preview",
-          "p1": "Navide decides how to open a file <strong>from its extension alone</strong> (the decision has to be made before the content is read). Anything not in the table below opens in the text editor.",
+          "p1": "Navide decides how to open a file <strong>from its file extension alone</strong> (the decision has to be made before the content is read). Anything not in the table below opens in the text editor.",
           "previewTable": {
             "kind": "Kind",
-            "ext": "Extensions",
+            "ext": "File extensions",
             "how": "How it is shown"
           },
           "previewTypes": {
@@ -3207,13 +3546,13 @@
           }
         },
         "s10": {
-          "title": "Plans is a plugin — and what it looks like when it fails",
-          "p1": "Both the sidebar Plans tab and the Plan window are drawn by the bundled plugin <code>navide.plans</code>, listed under <em>Bundled</em> in <strong>Settings ▸ Extensions</strong> with its id, version, Active/Removed/Unavailable badge, manifest permissions and package version. Nothing in the interface calls it \"v2\" — the one exception is the recovery panel below.",
+          "title": "Plans is a Navide plugin — and what it looks like when it fails",
+          "p1": "Both the sidebar Plans tab and the Plan window are drawn by the bundled Navide plugin <code>navide.plans</code>, listed under <em>Bundled</em> in <strong>Settings ▸ Navide Plugins</strong> with its id, version, Active/Removed/Unavailable badge, manifest permissions and package version. Nothing in the interface calls it \"v2\" — the one exception is the recovery panel below.",
           "p2": "Switching the app theme repaints Plans immediately; no window needs reopening.",
           "h1": "When Plans cannot start: Legacy recovery",
-          "p3": "If the plugin fails to start this session, the Plans tab is replaced by a grey <strong>Legacy recovery</strong> label with the previous plan pane below it, and a line naming the cause: <em>Plans v2 was withdrawn this session ({'{'}reason{'}'}).</em> Reasons you are likely to see: <code>forced</code> (the environment variable <code>NAVIDE_PLANS_RECOVERY=legacy</code> asked for it), <code>storage-migration-failure</code> (the durable storage record could not be read or migrated), and the backend’s own start-up failure text.",
+          "p3": "If the Navide plugin fails to start this session, the Plans tab is replaced by a grey <strong>Legacy recovery</strong> label with the previous plan pane below it, and a line naming the cause: <em>Plans v2 was withdrawn this session ({'{'}reason{'}'}).</em> Reasons you are likely to see: <code>forced</code> (the environment variable <code>NAVIDE_PLANS_RECOVERY=legacy</code> asked for it), <code>storage-migration-failure</code> (the durable storage record could not be read or migrated), and the backend’s own start-up failure text.",
           "list": {
-            "retry": "<strong>Retry Plans v2</strong> re-arms the plugin so the next Plans open spawns its backend again. <strong>Two attempts per session, and the budget is spent up front</strong>: pressing it costs one whether or not it works. Once they are gone the session stays on the legacy pane until you restart the app.",
+            "retry": "<strong>Retry Plans v2</strong> re-arms the Navide plugin so the next Plans open spawns its backend again. <strong>Two attempts per session, and the budget is spent up front</strong>: pressing it costs one whether or not it works. Once they are gone the session stays on the legacy pane until you restart the app.",
             "repair": "<strong>Repair storage record</strong> appears only when the reason is <code>storage-migration-failure</code>. A successful repair <strong>leaves you in recovery</strong> and says <em>Storage record repaired. Restart Navide to leave legacy recovery.</em>; a record that was never broken answers <em>The storage record is readable — nothing to repair.</em>"
           },
           "p4": "When <code>NAVIDE_PLANS_RECOVERY=legacy</code> forced recovery, or no complete v2 package is registered this session, Retry refuses outright and prints why beside the button — no attempt is spent."
@@ -3772,7 +4111,7 @@
               "when": "The pane's process tree (the CLI itself, its MCP servers and tools) holds an <strong>established TCP connection</strong> to an IP outside that vendor's declared host set. The set is built by resolving the vendor's declared hostnames (cached for 5 minutes) plus anything you have allowed. <strong>Only Claude Code and Codex declare hosts today</strong>; every other vendor reads \"Unsupported\". Any proxy or base-URL environment variable disables the comparison outright. TCP only — no UDP/QUIC — and macOS and Linux only; Windows is unsupported."
             },
             "disk": {
-              "when": "A file appeared in that vendor's data directory (<code>~/.claude</code>, <code>~/.codex</code> and so on) that is <strong>larger than 100 MiB</strong> and whose first 64 KiB Navide <strong>cannot recognise</strong> (SQLite, archives, PDF, images, GGUF and plain text are all recognised; an extension alone never counts). Only files first seen within 24 hours, and only after a first baseline scan exists — anything already there is never flagged. Aider declares no data directory, so it is not scanned."
+              "when": "A file appeared in that vendor's data directory (<code>~/.claude</code>, <code>~/.codex</code> and so on) that is <strong>larger than 100 MiB</strong> and whose first 64 KiB Navide <strong>cannot recognise</strong> (SQLite, archives, PDF, images, GGUF and plain text are all recognised; a file extension alone never counts). Only files first seen within 24 hours, and only after a first baseline scan exists — anything already there is never flagged. Aider declares no data directory, so it is not scanned."
             },
             "diskAgain": {
               "when": "A path that was flagged before was <strong>confirmed absent</strong> and then <strong>observed again</strong> in the same 100 MiB size class. Once red, it stays red."
@@ -4372,11 +4711,11 @@
               "keys": "⌘5, ⌘⇧D"
             }
           },
-          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> collapses the whole sidebar. Installed plugins may add further tabs.",
+          "note": "<kbd class=\"wph-kbd\">⌘B</kbd> collapses the whole sidebar. Installed Navide plugins may add further tabs.",
           "h2": "The three levels of the Agents tab",
           "p1": "Top to bottom: <strong>workspace row → group row → pane row</strong>.",
           "rows": {
-            "workspace": "<strong>Workspace row</strong>: collapse arrow, fold button, project name and path, pane count (<code>live / total</code>; reclaimed panes and placeholders waiting to be restored do not count as live), and on the right <code>↻</code> (rebuild all), History, <code>⋯</code> and <code>＋</code>. The context menu has <em>Open this folder in Finder</em>, <em>Copy path</em>, <em>Reclaim this project's CLIs</em>, moving it into a workspace group, <em>Close workspace</em> (drops the row and leaves its CLIs running for a later reopen) and <em>Close workspace and its panes</em> (ends them). <code>⋯</code> opens the full version of the same set (rebuild all panes, History, Finder, copy path, rename project, open in its own window, reclaim, close); it <strong>flips upward near the bottom of the window</strong>, and when the menu itself is long, <strong>scrolling inside it no longer dismisses it</strong> — only scrolling elsewhere does.",
+            "workspace": "<strong>Workspace row</strong>: left to right, the collapse arrow, a folder icon, the project name, the pane count (<code>live / total</code>; reclaimed panes and placeholders waiting to be restored do not count as live), the path, the fold button, <code>＋</code> and <code>⋯</code> ({more}). The context menu has, in order, <em>{rename}</em>, <em>{finder}</em>, <em>{copyPath}</em>, <em>{moveToGroup}</em> (into a workspace group; only when workspace groups exist), <em>{reclaim}</em>, <em>{close}</em> (drops the row and leaves its CLIs running for a later reopen) and <em>{closePanes}</em> (ends them). <strong><code>↻</code> “{rebuildAll}” and “{history}” are not on the row; they are in the <code>⋯</code> menu</strong>: at the sidebar's narrowest width, one more button on the row would take its width from the project name, so they moved inside. <code>⋯</code> lists {rebuildAll}, {history}, {finder}, {copyPath}, {rename}, {detach} (when the workspace can be detached), {reclaim} and, when the workspace can be closed, both close actions; it <strong>flips upward near the bottom of the window</strong>, and when the menu itself is long, <strong>scrolling inside it no longer dismisses it</strong> — only scrolling elsewhere does.",
             "group": "<strong>Group row</strong>: sticks to the top while scrolling and shows a status dot, the group name, the member count, a fold button that only appears on hover, and a <code>＋</code> that opens an agent inside that group. Member rows carry a neutral-colored rail along their left edge to show they belong to one group.",
             "pane": "<strong>Pane row</strong>: name, status, the Docked label and so on."
           },
@@ -4571,7 +4910,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>59</strong> of them today (53 core, plus the 6 the plans plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>62</strong> of them today (56 core, plus the 6 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -4596,6 +4935,9 @@
             "pipeline_reset": "Clear the current run's progress and tear down every pane in that window (manually opened ones included); cannot be undone",
             "pipeline_restart": "Kill the existing pipeline panes and run the same task again from the top; cannot be undone",
             "pipeline_define": "Create / rename / delete a pipeline, set the active one, reset the built-ins; delete and set_active are refused while a run is in progress",
+            "pipeline_graph": "Read or edit a pipeline as a graph: steps, approval gates, branches, joins and bounded reject loops, all in one call that applies every edit or none; refused while a run is using that pipeline",
+            "pipeline_gate": "Pass or reject the approval gate a running pipeline is paused on; a rejection can carry a note that is handed to the steps it sends the work back to",
+            "pipeline_restart_from": "Start a new run at one step instead of the first stage, reusing the earlier stages' last output; closes the pipeline's panes and opens new ones, so it spends quota",
             "stage_define": "Add, edit, delete, reorder or reset stages; all four are refused while a run is using that pipeline",
             "role_define": "Add, edit, rename, delete or reset roles; a rename rewrites every slot referencing it, and a role still referenced cannot be deleted",
             "scheduler_list": "List Navide's scheduled jobs, including ones you may not change: each says who created it and whether you may edit it, and the answer reports the agent limits and how much of them is in use. Jobs fire only while Navide is running — nothing wakes the machine or the app",
@@ -4608,7 +4950,10 @@
             "workspace_open": "Open a project as a workspace in Navide; whether that is a new window or one that already has the project open is Navide's decision",
             "workspace_switch": "Switch my own window to another project it already holds; panes of the project being left keep running. Refused while a pipeline is running in that window, because switching would abort it",
             "prompt_list": "The prompt skills the user keeps in Settings → Prompts; read-only, since creating and editing them is the user's job",
-            "mcp_list": "Which MCP servers Navide connects to and which each CLI keeps in its own config, with live state and tool counts; read-only, and the same list Settings → MCP shows"
+            "mcp_list": "Which MCP servers Navide connects to and which each CLI keeps in its own config, with live state and tool counts; read-only, and the same list Settings → MCP shows",
+            "cli_extensions_list": "Each AI CLI's own CLI extensions and hooks: type, execution tier, capabilities and who installed them. Names and metadata only; read-only, the same inventory Settings → Extensions shows",
+            "credentials_list": "Credentials the scan inventoried, with kind and label only; never a value",
+            "credentials_findings": "Credential risk findings with severity and reminder state; read-only"
           },
           "note2": "These are the things an agent cannot do with its own tools — quota, pipeline state and skill delivery are known only to Navide. Git, file access and the shell are deliberately <strong>not</strong> wrapped as MCP tools: the agent already has those abilities, a wrapper only makes them harder to use, and every pane would pay the context cost of a longer tool list.",
           "h3": "Working with other CLIs",
@@ -4625,7 +4970,9 @@
             "cli_get_status": "Check whether another pane is busy and when it was last active, plus two more things: the identity it was <strong>launched with</strong> (which CLI, which model, which reasoning effort, whether its login has expired or it has hit a usage limit), and that CLI's quota snapshot. The quota is a <strong>cached read that is never refreshed</strong> — the returned fetch time and stale flag are exactly how old it is, and a fresh number needs the quota tool. The identity describes launch time: a model switched by typing inside the CLI is invisible here",
             "cli_wait_idle": "Wait until another pane goes idle or the wait times out (120 seconds at most); a timeout says whether it is stuck on a permission prompt, still working, or unreachable",
             "cli_interrupt": "Send that CLI's interrupt key to a local pane; this is not the same as stopping it — it may only clear the input box, so check the result yourself",
+            "cli_answer_prompt": "Answer a local pane's permission prompt or option menu by pressing one choice; refuses permanent allows, Guard-flagged approvals and a changed prompt, and records the answer in the pane's Guard audit",
             "cli_close_agent": "Close another pane, the other half of cli_open_agent; this kills whatever it was doing and cannot be undone, so check with cli_get_status that it is not busy first",
+            "cli_reclaim_agent": "Reclaim a finished pane: its CLI process ends and the pane stays as a click-to-resume card, the status bar's \"reclaim now\". A busy, focused or not-yet-resumable pane is refused with the reason; a window older than v0.2.16 answers reclaim-unsupported",
             "cli_message_log": "The history of messages I sent and received; once delivered a message disappears from inbox_summary and pending_incoming, and this is the only place left to find it",
             "cli_usage": "How much quota each CLI has left; check before handing out work, or the message lands on a CLI that has already run out",
             "cli_token_stats": "This workspace's current token usage",
@@ -4760,7 +5107,7 @@
             "legend": {
               "nav": {
                 "label": "Settings sidebar",
-                "text": "MCP sits under Integrations, alongside Skills, Prompts and Memory."
+                "text": "MCP sits under Agent Assets, alongside Skills, Prompts and Memory."
               },
               "actions": {
                 "label": "Top bar actions",
@@ -4822,9 +5169,9 @@
               "what": "Switch to the plan document list."
             },
             "plugin": {
-              "name": "Plugin-supplied",
+              "name": "Navide plugin-supplied",
               "where": "End of the tab strip",
-              "what": "A tab contributed by a plugin. When the plugin brings no icon of its own, this diamond stands in for it."
+              "what": "A tab contributed by a Navide plugin. When the Navide plugin brings no icon of its own, this diamond stands in for it."
             },
             "collapse": {
               "where": "Far right of the tab strip",
@@ -5919,7 +6266,7 @@
             "menubar": "On Windows and Linux the <strong>native menu bar is hidden by default</strong> — press <kbd class=\"cph-kbd\">Alt</kbd> to reveal it — so it does not stack a second bar on top of the drawn title bar.",
             "appMenu": "Neither platform has the macOS application menu, so <em>Settings…</em>, <em>Check for Updates…</em> and <em>Quit</em> live under <strong>File</strong> instead.",
             "closeItem": "The <strong>Window</strong> menu gains a <em>Close</em> item for closing the window. macOS has no such item, because there <kbd class=\"cph-kbd\">⌘W</kbd> is reserved for closing a pane.",
-            "pluginWindows": "Windows drawn by a plugin — the Git window among them — use the <strong>system's own frame</strong> on Windows and Linux rather than the drawn controls: what runs inside them is the plugin's own content, which has no bridge to the host and so cannot draw the buttons itself."
+            "pluginWindows": "Windows drawn by a Navide plugin — the Git window among them — use the <strong>system's own frame</strong> on Windows and Linux rather than the drawn controls: what runs inside them is the Navide plugin's own content, which has no bridge to the host and so cannot draw the buttons itself."
           },
           "h2": "Closing the last window asks first",
           "p2": "On Windows and Linux, closing the last window quits the whole application. So Navide asks <strong>before</strong> the window actually closes, which is the only moment Cancel can still do anything — asked afterwards, Cancel would leave a running process with no window to get back into. The dialog offers \"Don't show this reminder again\"; ticking it stops the question, and \"Confirm before closing\" in Settings brings it back.",
@@ -6078,9 +6425,156 @@
       "catalog-requires-env": "Requires env vars: {vars}",
       "catalog-empty": "No matching MCP servers found"
     },
+    "credentials": {
+      "title": "Credentials & keys",
+      "intro": "A read-only scan of where credentials and keys live on this machine. Nothing is changed, moved or sent anywhere.",
+      "meta": "Local only · values never shown · sync off",
+      "keyring-ok": "Keyring available: {backend}",
+      "keyring-ok-plain": "Keyring available",
+      "keyring-bad": "Keyring unavailable",
+      "keyring-bad-hint": "Without a system keyring, credentials tend to end up in plain files.",
+      "incomplete": "This scan is incomplete: it hit a time or folder limit, or skipped a repository it could not read safely, so findings in the folders below may be missing.",
+      "keyring-reason-unknown": "No reason was reported.",
+      "scan": "Scan",
+      "scanning": "Scanning…",
+      "scan-roots": "Scan roots…",
+      "scanned-at": "Scanned {time} · {ms} ms",
+      "banner-high": "{count} high-risk finding(s) need attention",
+      "banner-high-hint": "Open a card for plain advice. Nothing here changes anything for you.",
+      "filter-label": "Filter by kind",
+      "search": "Search label, location, host…",
+      "view-label": "View",
+      "view-findings": "Findings",
+      "view-inventory": "Inventory",
+      "all": "All",
+      "loading": "Scanning this machine…",
+      "error-load": "The scan failed.",
+      "empty-findings-title": "No findings",
+      "empty-findings-body": "Nothing risky matched the current filter.",
+      "empty-inventory-title": "Nothing inventoried",
+      "empty-inventory-body": "No credentials matched the current filter.",
+      "not-scanned": "Press Scan to look for credentials on this machine.",
+      "severity": {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "kind": {
+        "git-helper": "Git helper",
+        "cli-account": "CLI account",
+        "ssh-key": "SSH key",
+        "keychain-item": "Keychain item",
+        "remote": "Git remote",
+        "env-var": "Environment",
+        "plaintext-file": "Plain file",
+        "keyring": "Keyring"
+      },
+      "reminder": {
+        "title": "Reminder",
+        "active": "Active",
+        "snoozed": "Snoozed",
+        "dismissed": "Dismissed",
+        "until": "until {date}",
+        "snooze": "Snooze 7 days",
+        "dismiss": "Dismiss",
+        "reactivate": "Reactivate",
+        "error": "Could not update the reminder."
+      },
+      "drawer": {
+        "close": "Close details",
+        "location": "Where",
+        "why": "What this means",
+        "todo": "What to do",
+        "steps": "Commands you can run yourself",
+        "steps-note": "Copy only. Navide never runs these for you.",
+        "manual-fix": "This value contains shell characters, so no command is offered. Fix it by hand in the config file shown above.",
+        "links": "Provider pages",
+        "copy": "Copy",
+        "copied": "Copied",
+        "details": "Details",
+        "no-reveal": "Values are never shown here, and there is no reveal button. To see a value, open your system keychain app."
+      },
+      "roots": {
+        "title": "Scan roots",
+        "intro": "Folders searched for git repositories. Workspace roots come from your open workspaces; add more if you keep repos elsewhere.",
+        "placeholder": "/path/to/folder",
+        "add": "Add",
+        "browse": "Browse…",
+        "remove": "Remove",
+        "save": "Save and rescan",
+        "empty": "No extra roots yet.",
+        "scanned": "Searched in the last scan",
+        "source": {
+          "workspace": "workspace",
+          "user": "user"
+        },
+        "repos": "{count} repos",
+        "truncated": "partial",
+        "error": "Could not save the scan roots.",
+        "error-load": "Could not load the scan roots."
+      },
+      "code-unknown": {
+        "title": "Credential finding",
+        "body": "This finding type is not described in this version."
+      },
+      "code": {
+        "url-token": {
+          "title": "Token embedded in a remote URL",
+          "body": "Anyone who can read the repo config, a shell history or a log can see the token. Revoke the token at the provider first, then remove it from the remote URL so git uses the keychain."
+        },
+        "ssh-no-passphrase-default-host": {
+          "title": "Default SSH key has no passphrase",
+          "body": "This key is used for a host by default and anyone who copies the file can use it. Add a passphrase (ssh-keygen -p) and load it into the ssh-agent or keychain."
+        },
+        "ssh-no-passphrase": {
+          "title": "SSH key has no passphrase",
+          "body": "Anyone who copies this private key file can use it. Add a passphrase with ssh-keygen -p, or delete the key if you no longer use it."
+        },
+        "ssh-key-unreferenced": {
+          "title": "SSH key not referenced anywhere",
+          "body": "No ssh config entry or known host points at this key, so it may be left over. If you no longer need it, remove it from the provider account and delete the file."
+        },
+        "ssh-key-mode": {
+          "title": "SSH key file is readable by others",
+          "body": "Other users on this machine can read the private key. Run chmod 600 on the file so only you can access it."
+        },
+        "cli-token-plaintext": {
+          "title": "CLI token stored in a plain file",
+          "body": "The CLI keeps its login token in a readable file instead of the keychain. Log out and back in with the keychain option if the CLI has one, or restrict the file to your user."
+        },
+        "gh-active-account-only": {
+          "title": "Only the active gh account is usable",
+          "body": "The GitHub CLI serves one active account at a time, so repos tied to another account silently use the wrong identity. Run gh auth switch before pushing, or give each repo its own credential helper."
+        },
+        "helper-duplicate": {
+          "title": "Duplicate git credential helpers",
+          "body": "The same helper is configured more than once, so git may prompt or store a credential twice. Remove the extra credential.helper lines from your git config."
+        },
+        "helper-shadowed": {
+          "title": "A git credential helper is never reached",
+          "body": "An earlier helper answers first, so this one is never used. Check the order of credential.helper entries and keep only the one you want."
+        },
+        "env-token-in-shell-rc": {
+          "title": "Token exported in a shell startup file",
+          "body": "Every program you start inherits this token, and the file is easy to leak or commit. Revoke it at the provider, remove the export line, and load the secret from the keychain when needed."
+        },
+        "env-token-set": {
+          "title": "Token set in the environment",
+          "body": "A credential is present in this app's environment and is passed to every child process. Unset it where it is defined if you do not need it everywhere."
+        },
+        "plaintext-credential-file": {
+          "title": "Credentials in a plain file",
+          "body": "A file on disk holds credentials in readable text. Move them into the system keychain, restrict the file to your user, and rotate the credential if the file was ever shared or backed up."
+        },
+        "keyring-unavailable": {
+          "title": "No system keyring available",
+          "body": "Without a keyring, tools fall back to plain files. Install and unlock one (macOS Keychain, Windows Credential Manager or a Secret Service such as GNOME Keyring) and sign in again."
+        }
+      }
+    },
     "skills": {
       "title": "Managed Skills",
-      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. Nothing here moves or edits the skills your CLIs keep in their own folders.",
+      "intro": "One place to see every skill your CLIs have, decide who receives which, and create new ones in ~/.agents/skills. A skill in a CLI's own folder moves only when you choose “Move into shared library”, which leaves a link in its old place; “Restore” moves it back.",
       "new": "New skill",
       "search": "Search skills",
       "empty-title": "No managed skills yet",
@@ -6174,10 +6668,75 @@
       "enabled-hint": "Off means Navide delivers it nowhere; CLIs that read it on their own still see it.",
       "native-conflict-hint": "A CLI's own skill has this name and wins for that CLI."
     },
+    "cloud": {
+      "subtab": {
+        "aria": "Navide Cloud sections",
+        "sync": "Sync",
+        "share": "Share",
+        "devices": "Devices"
+      },
+      "inventory": {
+        "title": "This machine and the cloud",
+        "hint": "How many items each synced section holds here and in the cloud.",
+        "counts": "Here {local} · Cloud {cloud} · Matching {inSync} · Conflicts {conflict}",
+        "last-write": "Last written by {device} · {when}",
+        "no-writes": "Nothing written to the cloud yet",
+        "sync-off": "Sync off",
+        "notice-no-key": "This device does not hold the account's sync key yet, so the cloud is closed to it. Pair it with a device that holds the key and the numbers appear here.",
+        "notice-not-connected": "Sign in to Navide Cloud to compare this machine with the cloud.",
+        "notice-error": "The cloud could not be read.",
+        "row-error": "Could not read this section from the cloud.",
+        "row-no-key": "This device has no sync key yet.",
+        "row-not-connected": "Not connected.",
+        "refresh": "Refresh"
+      },
+      "devices": {
+        "title": "Devices that wrote to the cloud",
+        "hint": "Every device that has written a record to this account.",
+        "none": "No device has written to the cloud yet.",
+        "partial": "Some sections could not be read, so this list may be incomplete.",
+        "last-write": "Last write {when}",
+        "last-seen": "Last online {when}",
+        "refresh": "Refresh"
+      },
+      "share": {
+        "title": "Share links",
+        "hint": "Read-only links to a plan or report, encrypted on this machine. The key travels only inside the link; the server stores ciphertext it cannot open.",
+        "col-item": "Item",
+        "col-creator": "Created by",
+        "col-created": "Created",
+        "col-expires": "Expires",
+        "col-opens": "Opens",
+        "col-last-open": "Last opened",
+        "creator-user": "You",
+        "creator-agent": "Agent · {pane}",
+        "empty": "No share links yet.",
+        "unavailable": "Share links are not available in this version yet.",
+        "error": "Share links could not be loaded.",
+        "copy": "Copy link",
+        "extend": "+7 days",
+        "rekey": "New link",
+        "revoke": "Revoke",
+        "revoke-confirm": "Revoke now",
+        "cancel": "Cancel",
+        "revoke-all": "Revoke all",
+        "revoke-all-confirm": "Revoke every link",
+        "copied": "Link copied.",
+        "extended": "Extended by 7 days.",
+        "rekeyed": "New link copied; the old one no longer opens.",
+        "revoked": "Link revoked.",
+        "revoked-all": "All links revoked.",
+        "action-failed": "That did not work ({code}).",
+        "rekey-confirm": "Replace the link now",
+        "rekeyed-old-alive": "New link copied. The server did not confirm the old link stopped; revoke it if it must not open.",
+        "refresh": "Refresh"
+      }
+    },
     "sync": {
       "title": "Sync",
       "hint": "Turn on a section to keep it the same on every device signed in to this account. Records are encrypted on this machine; the server stores ciphertext it has no key for.",
       "not-yet": "Not syncable yet.",
+      "retired-memory": "Memory is not synced any more. Switch it off; your instruction files here and the copies in the cloud are left as they are.",
       "not-connected": "Not connected — synced sections catch up when the link is back.",
       "no-key": "This device has no sync key yet; nothing is uploaded until it has one.",
       "now": "Sync now",
@@ -6188,6 +6747,37 @@
       "keep-other": "Keep theirs",
       "conflicts-title": "Needs your decision ({count})",
       "conflicts-hint": "Two devices changed the same item. Nothing was overwritten — pick which one to keep.",
+      "approvals-title": "Waiting for your approval ({count})",
+      "approvals-hint": "Another device sent something that would run here. Nothing is written, enabled or sent to a CLI until you approve it.",
+      "approval-new": "new here",
+      "approval-changed": "what runs changed",
+      "approval-downloading": "approved — files downloading",
+      "approval-cwd": "runs in: {path}",
+      "approval-undisplayable": "This record cannot be displayed in full here, so it cannot be approved. Reject it.",
+      "approval-cut": "… preview cut here; the file goes on",
+      "approval-expand": "Show it whole",
+      "approval-deletes": "Would delete the prompt {name} here.",
+      "approval-new-loop": "{name} would become the loop prompt.",
+      "approval-text": "Incoming text, whole",
+      "approval-diff": "Changes against this device",
+      "approval-changes": "Changed fields",
+      "approval-change": "{field}: {from} → {to}",
+      "approval-frontmatter": "SKILL.md frontmatter (the CLIs act on it)",
+      "approval-frontmatter-flag": "{key}: makes a CLI run something or allow more — check it",
+      "approval-turn-on": "Would switch this skill on: it is off here.",
+      "approval-targets": "Would send it to: {to} (here: {from})",
+      "approval-all-clis": "every CLI",
+      "approvals-full": "Too many records are waiting in {scopes}: new ones are refused until you decide some.",
+      "approval-headers": "header names: {names}",
+      "approval-size": "{bytes} bytes",
+      "approval-executable": "executable: {files}",
+      "approve": "Approve",
+      "reject": "Reject",
+      "secret-warnings-title": "May contain a secret ({count})",
+      "secret-warnings-hint": "These items read like they hold a key or token. They still sync, encrypted; check them, then dismiss.",
+      "secret-warning-fields": "in {fields}",
+      "secret-warning-lines": "lines {lines}",
+      "secret-dismiss": "Dismiss",
       "scope-prompts": "Prompts",
       "scope-mcp": "MCP",
       "scope-skills": "Skills",
@@ -6195,7 +6785,7 @@
       "scope-hint-prompts": "Prompt skills and the loop prompt.",
       "error-load": "Sync settings could not be read.",
       "scope-hint-mcp": "MCP servers you added in Navide. Their secrets are encrypted before they leave.",
-      "scope-hint-skills": "Which skills are on and which CLIs each one goes to. Skill files themselves are a later step.",
+      "scope-hint-skills": "Which skills are on and which CLIs each one goes to, plus the files of skills created in Navide (large ones travel as encrypted blobs). Skills you put in the folder yourself sync their settings only.",
       "scope-hint-memory": "Global instruction files such as ~/.claude/CLAUDE.md. Files inside a project stay with git.",
       "scope-credentials": "Credentials",
       "scope-hint-credentials": "Portable CLI credentials you pasted in Accounts. Encrypted on this device before they leave; removing one here never removes it from the cloud or your other devices.",
@@ -6206,7 +6796,41 @@
       "rotate-cancel": "Cancel",
       "rotate-hint": "Rotating retires the current key: every synced record is re-sealed under a new one and your other devices receive it the next time they exchange keys. Use it if you suspect the key leaked.",
       "legacy-key": "A sync key from before accounts were bound is on this device. Adopt it for this account to keep reading what was synced with it.",
-      "legacy-key-adopt": "Adopt for this account"
+      "legacy-key-adopt": "Adopt for this account",
+      "scope-all": "All sections",
+      "result-ok": "Pulled {pulled}, pushed {pushed}.",
+      "result-conflicts": "{count} waiting for your decision.",
+      "result-error": "Failed: {error}",
+      "skipped-not-connected": "Skipped — not connected.",
+      "skipped-no-key": "Skipped — this device has no sync key.",
+      "skipped-unsupported": "Skipped — the server cannot store this section's files.",
+      "skipped-other": "Skipped ({reason}).",
+      "result-held": "Waiting, not applied yet: {items}",
+      "result-refused": "Could not be applied on this device: {items}",
+      "result-too-large": "Too large to sync: {items}",
+      "account": "Syncing with {email}",
+      "scope-skill-files": "Skill files",
+      "result-gave-up": "Stuck, still retrying: {items}",
+      "result-reset-throttled": "The server's state looks wrong, so re-syncing this section is paused; it retries in an hour.",
+      "secrets-title": "Hidden values — keeping a side changes the ones that differ:",
+      "secret-same": "same",
+      "secret-differs": "differs",
+      "secret-local-only": "only on this device",
+      "secret-remote-only": "only on the other device",
+      "history-title": "Version history",
+      "history-hint": "The cloud keeps each synced item's last 10 versions or 30 days of them, whichever ends first.",
+      "history-scope": "Section",
+      "history-item": "Item",
+      "history-show": "Show versions",
+      "history-no-items": "Nothing in this section is synced yet.",
+      "history-empty": "No earlier versions of this item.",
+      "history-restore-previous": "Restore previous version",
+      "history-restore": "Restore this version",
+      "history-device": "from {device}",
+      "history-restored": "Restored here. It reaches your other devices on the next sync.",
+      "history-held": "The restored version is waiting for your approval above.",
+      "history-error": "Version history could not be loaded.",
+      "history-not-applied": "Nothing changed here: this version was not applied (it may have been declined before)."
     },
     "sharing": {
       "intro": "Two ways to move these four sections between machines: a file you hand over, and the account they already share.",
@@ -6249,7 +6873,8 @@
         "results-title": "What was written",
         "applied": "{count} of {total} items were written.",
         "needs-credentials": "Needs credentials",
-        "needs-credentials-hint": "Its secret values were left out of the bundle and have to be filled in here: {fields}"
+        "needs-credentials-hint": "Its secret values were left out of the bundle: {fields}. They keep this machine's values only if the server runs the same command or URL as this machine's; otherwise they stay empty and must be filled in.",
+        "replaces-here": "Replaces here: {what}"
       },
       "cloud": {
         "title": "What is in the cloud",
@@ -6357,12 +6982,11 @@
       "advanced": "Advanced",
       "send-once": "Sends once",
       "send-once-hint": "Only the default skill runs as a loop; this one is sent once, with no resume or turn cap.",
-      "builtin-name": "Keep building",
-      "builtin-description": "Keep going until it is 100% complete, then produce an HTML report.",
       "untitled-name": "Untitled skill"
     },
     "section": {
       "general-behavior": "General behavior",
+      "resource-limits": "Resource limits",
       "notifications": "Notifications",
       "settings-management": "Settings management",
       "theme": "Theme",
@@ -6410,6 +7034,10 @@
         "paired": "Paired with {device}",
         "refused": "{device} refused the pairing",
         "revoked": "{device} unpaired from this device",
+        "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
+        "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
+        "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
+        "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
         "start-title": "Ask to pair with this device. Both screens show six digits to compare, and nothing changes until both sides confirm.",
@@ -6423,7 +7051,18 @@
         "with-device": "Pairing with {device}",
         "your-turn": "The digits are on both screens. Nothing is paired until you say they match.",
         "dismiss": "Dismiss",
-        "dismiss-title": "Hides this notice. The request keeps running, and the answer will appear here."
+        "dismiss-title": "Hides this notice. The request keeps running, and the answer will appear here.",
+        "failed-title": "Pairing with {device} ended",
+        "failed-local-trust-unavailable": "{device} answered, but this machine cannot read its trust record right now, so the answer was refused and this pairing has ended. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start over”), then press “Pair” again.",
+        "failed-local-pairing-refused": "The answer from {device} did not fit this pairing, so it was ended to be safe. Press “Pair” to try again.",
+        "failed-local-other": "This machine could not accept the answer from {device} ({reason}), so this pairing has ended. Press “Pair” to try again.",
+        "failed-remote-trust-unavailable": "{device} cannot read its trust record right now, so it refused this pairing and the pairing has ended. On {device}, deal with the “Navide Cloud is stopped” card in the account window (for example, press “Start over”), then press “Pair” again.",
+        "failed-remote-policy-denied": "{device} refused this pairing, so it has ended. This machine may be on the block list on {device}; check there in the account window, then press “Pair” again.",
+        "failed-remote-unauthenticated": "{device} could not verify this pairing’s signature, so it refused it and the pairing has ended. Make sure both machines run the latest Navide, then press “Pair” again.",
+        "failed-remote-pairing-refused": "{device} refused this pairing, so it has ended. Usually {device} already has a pairing in progress (for example, both sides pressed “Pair” at once). Wait for it to finish or cancel it on {device}, then press “Pair” again.",
+        "failed-remote-other": "{device} refused this pairing ({reason}), so it has ended. Press “Pair” to try again.",
+        "busy": "A pairing with {device} is still in progress and ends by itself in about {minutes} min. To start over now, press “Cancel request” in the Pairing section above, then press “Pair” again.",
+        "trust-unavailable-start": "This machine cannot read its trust record right now, so pairing cannot succeed. Deal with the “Navide Cloud is stopped” card below first (for example, press “Start over”), then press “Pair”."
       },
       "fingerprint-copy": "Copy",
       "fingerprint-copied": "Copied",
@@ -6539,6 +7178,9 @@
         "block": "Block",
         "blocked-title": "Blocked",
         "blocked-hint": "A block is refused ahead of every rule, including your own other devices.",
+        "block-full": "This machine's pairing record is full, so the block could not be saved. Unpair this device first, then block it.",
+        "block-not-saved-full": "Blocked on the server, but this machine's pairing record is full, so it did not save its own copy. This machine still refuses the device until it restarts. To save the copy, unpair this device, then block it again.",
+        "block-not-saved": "Blocked on the server, but this machine did not save its own copy. This machine still refuses the device until it restarts. Block it again later so this machine keeps a copy.",
         "unblock": "Unblock",
         "unpair": "Unpair",
         "unpair-title": "Forget this device. It is not blocked.",
@@ -6576,6 +7218,10 @@
         "policy-signed-default": "There were no rules to re-sign, so the default was signed: nothing is allowed yet.",
         "locked-title": "Navide Cloud is stopped",
         "locked-body": "This device had trust state and no longer does. Nothing is sent or accepted until that is clear.",
+        "full-body": "The trust record is full. Unpair a device below to make room; Navide Cloud reconnects on its own once there is.",
+        "damaged-body": "The pairing record is damaged — pair again. The record on this machine was saved incomplete (a Keychain write was cut off), so nothing in it can be trusted.",
+        "journal-problem": "The pairing notice record cannot be used right now. Pairing itself is unaffected, but notices and the record of messages already received may be incomplete for now. Reason:",
+        "damaged-rebuild-warn": "This erases the damaged pairing record on this machine. Each of your other devices must then be paired again, from both ends. The record is already damaged, so starting over is the fix.",
         "plaintext-refused": "Refused an unencrypted message from {device}",
         "plaintext-refused-body": "This device has always sent encrypted messages; this one arrived in the clear, so it was refused.",
         "plaintext-refused-what-to-do": "Nothing to do — it was refused. If that device is legitimate, unpair it and pair again.",
@@ -7031,6 +7677,7 @@
         "unsupported": "This agent does not support multiple accounts.",
         "active-error": "This account is currently active and cannot be deleted. Switch to another account first.",
         "login-in-progress-error": "A sign-in for this account is still running. Finish or close its login pane first.",
+        "account-dir-in-use-error": "{count} running pane(s) use this account's own folder. Close them before deleting the account.",
         "portable-label": "Portable credential",
         "portable-present": "Set",
         "portable-absent": "Not set",
@@ -7099,13 +7746,13 @@
       "model-manager-note": "Download · delete local models",
       "model-placeholder": "Model name, e.g. qwen2.5-coder, llama3.2, gemma3",
       "downloading": "Downloading…",
-      "download": "⬇ Download",
+      "download": "Download",
       "connecting": "Connecting…",
       "no-local-models": "No local models detected. Run ollama pull <model-name> or use the download field above.",
       "delete-local-title": "Delete locally",
       "model-benchmark": "Model Benchmark",
-      "running": "⏳ Running…",
-      "run-benchmark": "🧪 Run benchmark",
+      "running": "Running…",
+      "run-benchmark": "Run benchmark",
       "testing": "Testing:",
       "preparing": "Preparing…",
       "benchmark-hint": "Runs 4 standard tasks against all local models to determine which ones are suitable for pipeline intent detection:",
@@ -7164,12 +7811,7 @@
     "backend-state-disconnected": "disconnected",
     "backend-state-error": "error",
     "loading-stages": "Loading stages…",
-    "manager-slot": "Manager: {label}",
-    "parallel-slots": "{count} parallel slots",
-    "allow-questions": "Allow questions",
     "context7-doc-query": "Context7 doc query",
-    "slots": "Slots",
-    "manager-badge": "🎯 Manager",
     "unassigned": "(unassigned)",
     "designate-global-manager": "🎯 Designate as global manager",
     "created-name": "Created \"{name}\"",
@@ -7191,7 +7833,6 @@
     "imported-roles": "Imported {count} role(s)",
     "role-label-placeholder": "e.g. Tech Lead",
     "role-one-line-placeholder": "short hint shown in dropdown",
-    "stage-short-title-placeholder": "e.g. Review",
     "doc-query-placeholder": "e.g. security best practices, authentication",
     "current-branch": "Current Branch",
     "date-order": "Date Order",
@@ -7237,8 +7878,6 @@
     "unsaved": "Unsaved",
     "new-role": "New role",
     "edit-role": "Edit role",
-    "new-stage": "New Stage",
-    "edit-stage": "Edit Stage",
     "saving": "Saving…",
     "no-parallel-slots": "No parallel slots — stage runs with a single agent.",
     "workspace": "Workspace",
@@ -7289,6 +7928,7 @@
     "plans-retry-running": "Retrying…",
     "plans-retry-failed": "Retry failed: {reason}",
     "plans-recovery-reason": "Plans v2 was withdrawn this session ({reason}).",
+    "plans-backend-stopped": "The Plans backend for “{folder}” stopped after repeated failures. Open Plans for this workspace to restart it, or restart Navide.",
     "yolo-mode": "YOLO mode",
     "yolo-bypass": "— auto-bypass permission prompts",
     "default": "Default",
@@ -7457,13 +8097,11 @@
     "disabled": "Disabled",
     "mcp-command": "Command",
     "pipeline-completed-modal": "Pipeline complete!",
-    "id": "ID",
     "short-title": "Short Title",
     "title": "Title",
     "question": "Question",
     "description": "Description",
     "sentinel": "Sentinel",
-    "role-key": "Role Key",
     "kickoff-body": "Kickoff Body",
     "agent": "Agent",
     "label": "Label",
@@ -7763,7 +8401,6 @@
     "not-git-repo-desc": "This folder does not have a .git directory",
     "load-failed": "Failed to load",
     "initialize-repository": "Initialize Repository",
-    "id-exists": "ID already exists",
     "backend-start-failed": "Backend failed to start"
   },
   "stageTab": {
@@ -7800,11 +8437,6 @@
     "role-key-exists-recover": "A role with the key \"{key}\" already exists. If a half-finished rename left it behind, delete \"{key}\" from the list on the left first, then rename again.",
     "role-in-use-list": "Repoint or remove these stage slots first:",
     "pause-for-user-answers": "Pause for user answers",
-    "at-least-one-slot-required": "* at least one required",
-    "add-slot-before-saving": "Add at least one slot before saving.",
-    "cannot-delete-last-slot": "Cannot delete the last slot",
-    "global-manager-desc-1": "— This slot finishes its own work, prints",
-    "global-manager-desc-2": ", then coordinates across stages. Only one manager per pipeline.",
     "global-manager-desc-short": "— Only one per pipeline.",
     "prompt-chars-new-spawns": "{count} chars · Changes apply to new spawns only",
     "delete-pipeline-confirm": "Delete \"{name}\"? This cannot be undone.",
@@ -7816,8 +8448,6 @@
     "select-role-or-create": "Select a role on the left or click + New role.",
     "default-role-fallback": "`defaultRole` will fall back to whatever happens to match at runtime",
     "replace-all-roles": "Replace all — delete current roles NOT in the import file",
-    "select-stage-or-create": "Select a stage on the left or click + Add Stage.",
-    "delete-stage-warning": "This removes the stage from the persisted registry...",
     "reset-stages-warning": "All custom stages will be removed...",
     "completion-modal-body": "Every agent has delivered its results — check the panels on the right.",
     "git-credential-token": "Paste a Personal Access Token in the password field — not your login password.",
@@ -7832,7 +8462,6 @@
     "connection-failed": "Connection failed — check that the command is correct",
     "reset-roles-title": "Reset all roles to factory defaults?",
     "import-roles-title": "Import roles",
-    "delete-stage-title": "Delete stage",
     "reset-stages-title": "Reset all stages to factory defaults?",
     "at-least-one-pipeline": "At least one pipeline must remain",
     "delete-pipeline": "Delete this pipeline",
@@ -8108,7 +8737,9 @@
     "open-in": "Open in {window}",
     "resumes-in": "Resumes in {window}",
     "resumes-in-window": "This AI panel lives in {window}. It resumes there, not as a pane in this window.",
-    "address-title": "Other panes reach this panel at {'@'}{address}"
+    "address-title": "Other panes reach this panel at {'@'}{address}",
+    "roster-error": "Other panes cannot reach this panel, and its Navide tools are refused: {reason}",
+    "roster-error-unknown": "unknown error"
   },
   "paneStatus": {
     "running": "running",
@@ -8128,7 +8759,7 @@
       "zh": "Traditional Chinese",
       "en": "English",
       "ja": "Japanese",
-      "color": "Colour"
+      "color": "Color"
     },
     "row-only": "list only",
     "when": {
@@ -8303,6 +8934,7 @@
     "switch-title": "Switch account",
     "swap-failed": "Account switch failed — the previous account is still active.",
     "panes-running": "{count} running CLI pane(s) are using this account — close them before switching.",
+    "live-changed": "The signed-in {agent} account changed after this notice, so nothing was switched. Check Settings → Accounts.",
     "switch-rate-limited": "Too many account switches — try again in {seconds}s.",
     "switch-restart-confirm-title": "Restart running panes",
     "switch-restart-confirm-body": "Switching accounts will restart {count} running {agent} pane(s). Continue?",
@@ -8569,6 +9201,21 @@
     "exhausted-tooltip": "Out of quota — back in {time}. Not the same as \u201cunder 1% left\u201d: work sent now is refused",
     "exhausted-tooltip-no-reset": "Out of quota — reset time unknown",
     "switch-manage": "Add / manage accounts…",
+    "pane-default-title": "New panes use",
+    "follow-default-title": "Default account",
+    "follow-hint": "New panes and {count} following pane(s) use it",
+    "follow-hint-none": "New panes use it. Mark a pane to follow with the pin beside its account badge.",
+    "pinned-hint": "{count} pane(s) are fixed to an account's own folder and stay put when you switch.",
+    "unpin-all": "Make all follow",
+    "unpin-all-tooltip": "Reopen these panes on the current login so they move with every account switch. Each reopens once and picks up its conversation; one that is working is asked about first.",
+    "continue-with": "Continue ›",
+    "continue-with-tooltip": "Reopen this pane on {account} and resume its conversation",
+    "dir-sign-in": "Sign in",
+    "dir-sign-in-tooltip": "This account has not signed in inside its own folder yet, so it still runs on the shared login. Sign in once to run it alongside other accounts.",
+    "continue-with-confirm-title": "Continue this pane on {account}?",
+    "continue-with-confirm-body": "This pane reopens on {account} and resumes its conversation. A turn in progress stops. Other panes are not affected.",
+    "continue-with-confirm-confirm": "Reopen and continue",
+    "continue-with-confirm-cancel": "Cancel",
     "settings-title": "CLI quota badge",
     "settings-enabled": "Show remaining quota in CLI pane headers",
     "settings-refresh": "Refresh interval",
@@ -8577,6 +9224,8 @@
     "failover-hint": "What Navide does when a CLI account hits its quota: do nothing, list the accounts it could switch to (default), or switch automatically — at most 3 automatic switches per 5 hours per CLI, never back to the exhausted account on its own. The table shows what each CLI can do; the switch itself is decided by the backend.",
     "failover-loop-title": "Resume a loop right after switching when quota runs out",
     "failover-loop-hint": "When a pane running a loop runs out of quota, switch to an account that still has quota and send continue right away instead of waiting for the reset. Requires \"Switch automatically\" above.",
+    "follow-switch-title": "Move pinned panes along when switching Claude accounts",
+    "follow-switch-hint": "Claude panes running on an account's own sign-in folder do not follow an account switch. With this on, a switch lists them so you can move them along, and an out-of-quota pane gets a \"Switch account\" button. Each pane reopens on the new account and resumes its conversation. Off by default.",
     "failover-mode-off": "Off",
     "failover-mode-notify": "Notify me",
     "failover-mode-auto": "Switch automatically",
@@ -8619,7 +9268,7 @@
       "environment": "Navide drives real CLIs in real terminals — these tools are what it runs on.",
       "agents": "Every pane you open runs one of these agents. One is enough to start.",
       "permissions": "Grant the access Navide needs to drive your machine.",
-      "ready": "Everything checks out. Open the app and pick a workspace."
+      "ready": "Everything checks out. The first time through, a short tour you can skip at any point helps you pick a workspace and open your first agent."
     },
     "install": "Install",
     "installing": "Installing…",
@@ -8795,6 +9444,13 @@
     "weekday-6": "Saturday"
   },
   "scheduler": {
+    "system": {
+      "tag": "System",
+      "manage": "Manage in workspace →",
+      "locked-title": "A system job owned by the app: change it from that workspace's self-evolution panel",
+      "managed-by": "Managed by the workspace",
+      "name": "Self-evolution · {workspace}"
+    },
     "add": "+ New",
     "empty": "No scheduled jobs yet",
     "list-failed": "Could not load jobs: {message}",
@@ -8809,6 +9465,7 @@
     "target-with-id": "→ wake and send to pane \"{name}\" (#{id})",
     "retarget": "Rebind",
     "gone-disabled": "missing {n} runs in a row, disabled",
+    "rebound-reenable": "Rebound to the rebuilt pane, switch it back on",
     "every-minutes": "Every {n} min",
     "every-hours": "Every {n} h",
     "daily-at": "Daily at {time}",
@@ -9268,6 +9925,10 @@
     "token-linked": "Linked with a token"
   },
   "channels": {
+    "shareOpenNotify": {
+      "title": "Share link opened notices",
+      "desc": "When a new device opens a share link made on this computer, tell the bound chats (the link's URL is never sent). Requires Navide Cloud."
+    },
     "nav": "Channels",
     "platform": {
       "telegram": "Telegram",
@@ -9323,7 +9984,36 @@
       "rename": "Rename",
       "remove-ask": "Remove this bot? {n} pane(s) connected through it will be disconnected."
     },
-    "manage": "Manage",
+    "platform-summary": "{bots} bot(s) · {chats} chat(s) · {panes} pane(s) bound",
+    "menu": {
+      "label": "More actions for {bot}",
+      "connection": "Connection settings (token, permissions)",
+      "create-off": "Turn on Bot Management Mode in BotFather first",
+      "remove": "Remove bot…"
+    },
+    "bindings": {
+      "topics": "Topics",
+      "unbound": "No pane bound yet · pick this chat with the 💬 button in a pane's title bar",
+      "select": "Select {name}",
+      "topic": "Topic “{title}” →",
+      "gone": "Pane no longer exists",
+      "orphan-hint": "Closed without being unbound · messages from this chat go nowhere",
+      "clear": "Clear",
+      "focus": "Jump to pane ↗",
+      "unbind": "Unbind",
+      "unbind-confirm": "Unbind?",
+      "children": "{n} sub-agent topic(s)",
+      "auto": "Auto",
+      "follows-parent": "Released with its parent",
+      "selected": "{n} binding(s) selected",
+      "unbind-n": "Unbind {n}",
+      "batch-ask": "Unbind {n} binding(s)?",
+      "batch-note": "Each of the {n} chat(s) will be told it was disconnected.",
+      "partial": "{n} could not be unbound:",
+      "bound-at": "bound {at}",
+      "focus-no-window": "“{name}” is not open in any window.",
+      "focus-failed": "Could not jump to the pane: {error}"
+    },
     "quick": {
       "add": "Quick add",
       "verifying": "Verifying…",
@@ -9345,10 +10035,15 @@
     "managed": {
       "create": "Create a new bot",
       "disclose": "{manager} can read and replace the new bot's token at any time. Whoever holds {manager}'s token controls every bot it creates.",
-      "enable-mode": "To create bots with this bot, turn on \"Bot Management Mode\" in BotFather first.",
+      "enable-hint": "Want a bot to create new bots in one tap? Turn on “Bot Management Mode” in BotFather. {n} of your bots don't have it on yet.",
+      "open-botfather": "Open BotFather",
+      "dismiss": "Don't show again",
       "waiting": "Tap Create in Telegram…",
       "timeout": "No bot was created within 10 minutes. Try again.",
-      "token-unavailable": "The bot was created in Telegram, but its token could not be read. Check it in BotFather."
+      "token-unavailable": "The bot was created in Telegram, but its token could not be read. Check it in BotFather.",
+      "creator-not-linked": "The bot was created in Telegram, but by a Telegram account not linked to this bot, so it was not added. Link that account first, or delete the bot in BotFather.",
+      "manager-not-linked": "No user is linked to this bot yet. Link one before creating a new bot through it.",
+      "created-note": "The bot was already created in Telegram; check BotFather before trying again."
     },
     "connect": "Connect",
     "needs": "Needs: {fields}",
@@ -9427,7 +10122,6 @@
     "link": {
       "next-step": "Next: link your chat account",
       "next-step-desc": "Use a button below and finish in {platform}; Navide links it automatically, no pairing code to approve.",
-      "linked-summary": "{n} chat(s) linked · pick one with the chat button in a pane's title bar",
       "link-account": "Link my account",
       "open-telegram": "Open in Telegram (DM)",
       "add-group": "Add to a group",
@@ -9575,7 +10269,7 @@
     },
     "rules": {
       "title": "Custom rules",
-      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). Adding an allow or removing a deny needs confirmation.",
+      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). On a pane with external content, a command Guard cannot analyse is only released by a glob pattern that matches the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
       "kind": {
         "allow": "Allow",
         "deny": "Deny"
@@ -9681,6 +10375,19 @@
     "back": "Back",
     "skip": "Skip tour",
     "done": "Done",
+    "welcome": {
+      "pickFolder": "First, pick a folder for your agents to work in. Have a project? Click Browse…. Starting fresh? Click New…. Just trying it out? Click Home.",
+      "openAgent": "Click ＋ and pick a CLI to open your first agent.",
+      "firstCommand": "Type a sentence here and press Enter, then watch it answer.",
+      "talkMention": "Open one more pane, then type {'@'} in either pane and pick the other to give it a task.",
+      "talkDrag": "Or drag one pane’s title bar onto another pane’s terminal to bring its conversation along.",
+      "usageAccount": "Rest the pointer here to see the quota and account, and switch accounts right here if you need to.",
+      "usageAccountMissing": "The quota and account show up here, on the pane’s title bar. They are not there yet because this CLI’s quota has not been read (a new pane takes a moment; some CLIs have none). Once the badge appears, rest the pointer on it to see the quota and switch accounts.",
+      "next": "Next",
+      "doneFeedback": "✓ Done",
+      "finished": "Tour complete. You can see it again from Help → First-Run Tour….",
+      "missing": "What this step points at isn’t on screen right now. You can press Next to move on."
+    },
     "v0_2_10": {
       "welcome": {
         "title": "Two new things in 0.2.10",
@@ -9711,5 +10418,431 @@
         "body": "Reopen it any time from Help → What's New… — the tour button is there."
       }
     }
+  },
+  "pipelineEditor": {
+    "error": {
+      "pipeline-running": "This pipeline is running, so it cannot be changed right now. Abort or finish the run first.",
+      "pipeline-not-found": "This pipeline no longer exists. It may have been deleted elsewhere; pick another pipeline.",
+      "export-failed": "Export failed: {message}",
+      "role-entry-invalid": "{key}: entry has no key or system prompt",
+      "command-failed": "The run did not accept that command.",
+      "cycle": "That link would make the flow loop forever. Use a reject link from the gate or step instead — it has a retry limit.",
+      "duplicate-edge": "These two steps are already linked.",
+      "invalid": "That change would break the pipeline: {detail}",
+      "reject-upstream": "A reject link has to point back to an earlier step.",
+      "transport": "Could not reach the backend: {message}",
+      "unknown": "The backend refused the change without saying why."
+    },
+    "badge": {
+      "open-canvas": "Show this link on the canvas",
+      "reject": "↺ Back to layer {layer} (max {max})",
+      "skip": "⤳ Skips to layer {layer}"
+    },
+    "canvas": {
+      "insert-on-edge": "Insert a step here",
+      "loop-label": "↺ max {max}",
+      "minimap": "Overview of the whole pipeline",
+      "pass": "Continue when approved",
+      "reject-handle": "Drag to a step upstream to send work back",
+      "zoom-in": "Zoom in",
+      "zoom-out": "Zoom out",
+      "zoom-level": "Zoom level"
+    },
+    "exec": {
+      "abort": "Abort run",
+      "empty-body": "Runs appear here once this pipeline is started — from the sidebar, a command, or a CLI through MCP.",
+      "empty-title": "No runs yet",
+      "list": "Runs of this pipeline",
+      "live": "Running now",
+      "next": "Next stage",
+      "no-task": "No task description",
+      "outcome-running": "Running",
+      "outcome-completed": "Completed",
+      "outcome-aborted": "Aborted",
+      "outcome-failed": "Failed",
+      "outcome-ended": "Ended",
+      "outcome-unknown": "Unknown",
+      "outcome-idle": "Idle",
+      "pick": "Pick a run to replay it on the graph.",
+      "progress": "{done} of {total} steps",
+      "restart": "Start over",
+      "resume": "Resume",
+      "run-n": "Run {n}",
+      "title": "Executions",
+      "unattributed": "{count} older run(s) were recorded before runs named their pipeline and are not listed.",
+      "unreadable": "Could not read the run history."
+    },
+    "gate": {
+      "approve": "Approve and continue",
+      "awaiting": "Waiting for your approval",
+      "comment": "Note for the agents (optional)",
+      "default-prompt": "Check the work above before the pipeline continues.",
+      "reject": "Send back"
+    },
+    "history": {
+      "add": "Add {name}",
+      "edit-cli": "Change CLI",
+      "edit-field": "Edit {field}",
+      "edit-gate": "Edit gate message",
+      "edit-layer": "Edit layer settings",
+      "edit-manager": "Change manager",
+      "edit-prompt": "Edit prompt",
+      "edit-role": "Change role",
+      "link": "Link steps",
+      "loop": "Add reject loop",
+      "move": "Move {name}",
+      "pin": "Freeze output",
+      "position": "Move on canvas",
+      "remove": "Delete {name}",
+      "rename": "Rename",
+      "reorder": "Reorder layers",
+      "tidy": "Tidy up",
+      "unlink": "Remove link",
+      "unpin": "Unfreeze output",
+      "loop-budget": "Change retry limit"
+    },
+    "inspector": {
+      "aria": "Settings for {name}",
+      "attempts": "Attempts",
+      "elapsed": "Time",
+      "gate-help": "Shown to whoever approves. The run waits here until someone approves or sends it back.",
+      "gate-prompt": "What to check",
+      "inputs": "Comes from",
+      "kind-gate": "Approval gate",
+      "kind-slot": "Step",
+      "kind-trigger": "Start",
+      "layer": "Layer settings",
+      "live-empty": "The live view opens when this step is running. Start the pipeline, then come back here.",
+      "live-unavailable": "The pane's transcript is not readable right now.",
+      "locked": "This pipeline is running, so its settings are read-only until the run ends.",
+      "no-role-fields": "This role declares no extra fields.",
+      "not-run": "Not run yet",
+      "open-pane": "Open pane",
+      "output-empty": "No output yet. After this step runs, its summary shows here.",
+      "pin": "Freeze output",
+      "pin-help": "Reruns skip a frozen step and reuse its last output.",
+      "required": "Required",
+      "restart-from": "Rerun from here",
+      "restart-help": "Start a new run at this step, keeping what came before.",
+      "role": "Role",
+      "role-fields": "{role} settings",
+      "sentinel-help": "The line an agent prints when this layer is done.",
+      "status": "Status",
+      "tab-live": "Live",
+      "tab-output": "Output",
+      "tab-settings": "Settings",
+      "tokens": "Tokens",
+      "trigger-help": "Every run starts here — from the sidebar, a command, or a CLI through MCP. Link it to the first steps.",
+      "unpin": "Unfreeze output",
+      "variables": "Insert:",
+      "handoff": "Their output reaches this step as"
+    },
+    "lane": {
+      "add-parallel": "+ Run in parallel",
+      "append-layer": "Add layer",
+      "checkpoint": "Checkpoint",
+      "insert-layer": "Insert a layer before layer {n}",
+      "layer": "Layer {n}",
+      "move-left": "Move layer left",
+      "move-right": "Move layer right",
+      "parallel": "{n} in parallel",
+      "settings": "Layer settings",
+      "more": "{n} more layer | {n} more layers"
+    },
+    "node": {
+      "commander": "Pipeline manager",
+      "gate-sub": "Waits for approval",
+      "pinned": "Output frozen",
+      "tokens": "{n} tok",
+      "trigger-sub": "Manual, command or MCP"
+    },
+    "notice": {
+      "external-edit": "This pipeline was changed elsewhere. Showing the latest version; undo history was cleared.",
+      "reorder-on-canvas": "This pipeline has a gate, a loop or a custom link, so its order comes from the links. Change it on the canvas."
+    },
+    "palette": {
+      "agents": "Agents",
+      "branch-tip": "To branch, draw two links out of one step on the canvas; to join, draw two links into one.",
+      "flow": "Flow control",
+      "gate": "Approval gate",
+      "gate-desc": "Pause until someone approves",
+      "no-match": "Nothing matches “{q}”.",
+      "quick-add": "Add a step",
+      "search": "Search roles and nodes",
+      "title": "Nodes"
+    },
+    "state": {
+      "empty-body": "Drag a role from the left, or press +, to add the first step.",
+      "empty-title": "This pipeline has no steps yet",
+      "load-failed": "Could not open this pipeline"
+    },
+    "status": {
+      "pending": "Waiting",
+      "running": "Running",
+      "done": "Done",
+      "awaiting": "Needs approval",
+      "rejected": "Sent back",
+      "failed": "Failed",
+      "skipped": "Reused frozen output",
+      "aborted": "Aborted",
+      "pinned": "Output frozen"
+    },
+    "toolbar": {
+      "canvas": "Canvas",
+      "derived": "Opened from stages — your first edit saves it as a graph",
+      "executions": "Executions",
+      "fit": "Fit to screen",
+      "locked": "Running — read-only",
+      "redo": "Redo {what}",
+      "redo-none": "Nothing to redo",
+      "saved": "All changes saved",
+      "saving": "Saving…",
+      "swimlane": "Swimlane",
+      "tidy": "Tidy up",
+      "undo": "Undo {what}",
+      "undo-none": "Nothing to undo",
+      "view": "View",
+      "show-palette": "Show nodes panel",
+      "hide-palette": "Hide nodes panel"
+    },
+    "controlPane": {
+      "open-in-canvas": "Open in the pipeline canvas"
+    },
+    "edge": {
+      "title": "Reject loop",
+      "desc": "{from} sends work back to {to}",
+      "max": "at most {n}×",
+      "fewer": "Allow fewer retries",
+      "more": "Allow more retries",
+      "remove": "Remove loop"
+    },
+    "roleFields": {
+      "title": "Step settings fields",
+      "desc": "A pipeline step that uses this role shows these fields in its settings panel.",
+      "add": "+ Add field",
+      "empty": "No fields yet. Steps using this role show only the standard settings.",
+      "name": "Name",
+      "label": "Label",
+      "type": "Type",
+      "default": "Default",
+      "no-default": "No default",
+      "required": "Required",
+      "remove": "Remove {name}",
+      "move-up": "Move up",
+      "move-down": "Move down",
+      "options": "Choices",
+      "option-value": "Value",
+      "option-label": "Label",
+      "option-add": "+ Choice",
+      "option-remove": "Remove choice",
+      "conditions": "Visibility",
+      "condition-add": "Only show when…",
+      "condition-add-more": "+ Another condition",
+      "condition-mode": "Show or hide",
+      "condition-field": "Field",
+      "condition-remove": "Remove condition",
+      "show-when": "Show when",
+      "hide-when": "Hide when",
+      "is-one-of": "is one of",
+      "values-placeholder": "values, comma separated",
+      "always": "Always shown",
+      "type-string": "Short text",
+      "type-text": "Long text",
+      "type-template": "Template (with variables)",
+      "type-number": "Number",
+      "type-boolean": "On / off",
+      "type-options": "Choice list",
+      "problem-name-required": "Give this field a name.",
+      "problem-name-duplicate": "Another field already uses this name.",
+      "problem-name-invalid": "A name starts with a letter or _ and uses only letters, digits, _ and -.",
+      "problem-options-empty": "A choice list needs at least one choice.",
+      "problem-condition": "The visibility rule refers to “{field}”, which is not another field of this role."
+    },
+    "run": {
+      "running": "Running: {names}",
+      "gate": "Waiting for your approval at {name}",
+      "review": "Review"
+    }
+  },
+  "evolve": {
+    "badge": {
+      "tomorrow": "tomorrow {time}",
+      "running": "running {min}m",
+      "failed": "last run failed",
+      "on": "on",
+      "off": "Self-evolve off",
+      "title": "Self-evolution: {state}. Click to open the panel"
+    },
+    "menu": {
+      "open": "Self-evolution…",
+      "enabled": "On"
+    },
+    "panel": {
+      "title": "Self-evolution",
+      "close": "Close",
+      "not-git": "not a git repo",
+      "loading": "Loading…",
+      "enabled": "On",
+      "next": "next {time}",
+      "runs-today": "{n} / {max} runs today",
+      "only-this-workspace": "affects this workspace only",
+      "run-now": "Run once now",
+      "disable": "Turn off",
+      "one-click": "Turn on",
+      "one-click-hint": "Every field already has a default; one click turns it on for this workspace only.",
+      "run-started": "Started. The announcements centre will tell you when it finishes.",
+      "legacy-disabled": "Turned off {n} old scheduled job(s) (not deleted).",
+      "legacy-hint": "Turning this on turns off {n} old scheduled job(s) (not deleted):",
+      "disclose-title": "What this does:",
+      "disclose-git": "Every day an agent reads this workspace's logs, diagnostics and issues to find pain points; it fixes bugs in a separate worktree outside the repo and commits them to the local {branch} of {root}. It never pushes, releases or deletes features. Fixes take effect after the next release or in a dev build.",
+      "disclose-subdir": "This workspace is a subfolder of the repo ({subdir}); only files under it are changed.",
+      "disclose-no-git": "Every day an agent reads this workspace's logs, diagnostics and issues to find pain points. This workspace is not a git repo, so it only writes proposals to .agent-team/plans/ and changes no files.",
+      "last-result": "Last result",
+      "no-runs": "No runs yet",
+      "reclaimed": "(reclaimed, click to resume)",
+      "not-reclaimed": "(not reclaimed)",
+      "fix": "Fix",
+      "proposal": "Proposal",
+      "history": "History (last 30)",
+      "unsaved": "Unsaved changes",
+      "save": "Save",
+      "ledger-open-failed": "Could not open the ledger plan",
+      "pending-catch-up": "A missed run is waiting for this workspace to be opened.",
+      "system-pane": "✦ system",
+      "system-pane-title": "Opened by self-evolution"
+    },
+    "field": {
+      "time": "Time",
+      "daily": "Daily",
+      "catch-up-once": "Catch up once if missed",
+      "catch-up-skip": "Skip if missed",
+      "unit": "Runs in",
+      "unit-auto": "A new pane",
+      "unit-auto-hint": "Opens \"evolve-MMDD-HHMM\" each run and reclaims it after",
+      "unit-pane": "A chosen pane",
+      "pick-pane": "Pick a pane",
+      "pane-gone": "{name} (gone)",
+      "unit-pane-hint": "Sent to this pane; never reclaimed or closed. If the pane is gone, that run opens a new pane instead.",
+      "cli": "CLI & model",
+      "model-default": "Model (empty = CLI default)",
+      "model-unsupported": "This CLI cannot pick a model",
+      "effort-default": "effort (default)",
+      "effort-unsupported": "no effort setting",
+      "budget": "Budget",
+      "tokens-per-run": "tokens / run",
+      "runs-per-day": "runs / day",
+      "fixes-per-run": "bugs / run",
+      "minutes-cap": "minute cap",
+      "scope": "Permissions",
+      "scope-fix": "Fix bugs directly",
+      "scope-propose": "Propose only (no code changes)",
+      "scope-fix-no-git": "This workspace is not a git repo: there is no worktree or main branch to work with, so it can only propose.",
+      "scope-always-propose": "New features, design trade-offs, data deletion / migrations, push and release are always proposals (built-in rule).",
+      "rules": "Rules",
+      "rules-builtin": "Built-in v{version}",
+      "rules-view": "View full text",
+      "rules-hide": "Hide",
+      "extra-placeholder": "Extra instructions (this workspace only)…",
+      "ledger": "Ledger",
+      "ledger-placeholder": "Plan path, e.g. .agent-team/plans/xxx.html; empty = none"
+    },
+    "error": {
+      "at": "Use HH:MM",
+      "tz": "Unknown time zone",
+      "range": "Range {min}–{max}",
+      "budget": "Must be a positive integer",
+      "extra": "At most {max} characters",
+      "pane": "Pick a pane",
+      "fix-fields": "Fix the fields marked in red first"
+    },
+    "status": {
+      "running": "Running",
+      "ok": "Done",
+      "error": "Failed",
+      "timeout": "Timed out",
+      "skipped": "Skipped"
+    },
+    "history": {
+      "date": "Date",
+      "result": "Result",
+      "fixes": "Fixes",
+      "proposals": "Proposals"
+    },
+    "reason": {
+      "busy": "A run is already in progress for this workspace",
+      "budget": "Today's run limit is reached",
+      "workspace_gone": "The workspace folder no longer exists",
+      "workspace_not_open": "No window had this workspace open at the time; it catches up the next time it opens",
+      "not_git": "Not a git repo; ran as propose-only"
+    },
+    "notice": {
+      "started": "Self-evolution started · {workspace}",
+      "finished": "Self-evolution finished · {workspace}",
+      "timeout": "Self-evolution timed out · {workspace}",
+      "failed": "Self-evolution failed · {workspace}",
+      "skipped": "Self-evolution did not run · {workspace}",
+      "fallback_auto": "Self-evolution used a new pane · {workspace}",
+      "not_git": "Self-evolution is propose-only · {workspace}",
+      "started-body": "Opened pane \"{pane}\" ({agent}).",
+      "finished-body": "{fixes} bug(s) fixed · {proposals} proposal(s) · {tokens} tokens",
+      "reclaimed": "The pane was reclaimed.",
+      "timeout-body": "No result after the time cap. The pane is still running; the app never stops it on its own.",
+      "fallback-body": "The chosen pane \"{pane}\" is gone, so this run opened a new pane.",
+      "not-git-body": "This workspace is not a git repo, so it can only propose; proposals are written as usual and no files are changed.",
+      "action": {
+        "open-pane": "Open pane",
+        "resume-pane": "Resume pane",
+        "interrupt": "Interrupt",
+        "reclaim": "Reclaim",
+        "panel": "Open panel →",
+        "result": "See result"
+      },
+      "over_budget": "Self-evolution over budget · {workspace}",
+      "over-budget-body": "This run passed 1.5× its token budget; Navide sent one interrupt."
+    }
+  },
+  "recentWorkspaces": {
+    "search-placeholder": "Search recent workspaces",
+    "group-open": "Open & pinned",
+    "group-recent": "Earlier",
+    "show-more": "Show more ({count} left)",
+    "no-match": "No workspace matches “{query}”.",
+    "trimmed": "{count} older entries were removed by the history limit. You can change it in Settings → General.",
+    "limit-title": "Recent workspaces limit",
+    "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
+    "limit-off": "No limit",
+    "limit-on": "Keep up to"
+  },
+  "account-follow": {
+    "switch-title": "Switched to {account} — move these panes too?",
+    "switch-body": "These Claude panes run on another account's own folder, so the switch did not reach them. Ticked panes reopen on the new account and resume their conversation.",
+    "switch-skip": "Leave them",
+    "switch-confirm": "Move {count} pane(s)",
+    "quota-title": "{pane} is out of quota — resume on another account",
+    "quota-pick": "Reopen this pane on:",
+    "quota-peers": "Also move these panes that ran out on the same account:",
+    "quota-confirm": "Switch and resume {count} pane(s)",
+    "cancel": "Cancel",
+    "needs-dir-sign-in": "Sign in inside its own folder first",
+    "default-needs-switch": "Switch to it first",
+    "exhausted": "Out of quota",
+    "state-idle": "Idle — reopens now",
+    "state-running": "Busy — reopens once it is free",
+    "state-quota": "Out of quota — reopens now",
+    "note-window": "Only panes in this window are listed.",
+    "quota-button": "Switch account ›",
+    "quota-button-tooltip": "Reopen this pane on another account and resume its conversation",
+    "done-partial": "{failed} of {total} pane(s) could not be moved to the new account — see the log for details.",
+    "follow-title": "{count} following pane(s) running — move to {account}?",
+    "follow-body": "These following panes are mid-turn. They can move once they finish, or stay on their current account this time. The idle ones move now.",
+    "follow-wait": "Move when finished",
+    "follow-skip-running": "Skip running panes",
+    "toggle-label": "Fix this pane to its account",
+    "toggle-follow-tooltip": "Following: when you switch accounts, this pane uses the new one from its next turn — no restart. Click to fix it to the current account (it reopens once in that account’s own folder; you sign in there first if you have not).",
+    "toggle-fixed-tooltip": "Fixed: switching accounts does not move this pane; it keeps running in its account’s own folder. Click to make it follow again (it reopens once and picks up its conversation).",
+    "unpin-title": "{count} pane(s) to make follow are working",
+    "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
+    "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
+    "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   }
 }

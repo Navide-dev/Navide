@@ -133,6 +133,9 @@ class PaneRecord:
     collapsed: bool = False         # lineage subtree folded in the agent lists. Lives here, not in a Project-level id set: pane_id is regenerated every restart, so such a set would silently empty itself.
     surface: str = ""               # embedded AI panel (AiCliDock) host surface ("pm" / "plans" / "git" / "editor"); "" = a main-window pane, which is every record written before this field existed
     window_kind: str = ""           # the window that surface lives in ("main" for the Pipeline Manager modal); "" alongside surface
+    last_turn_state: str = ""       # "working" (running a turn, or parked on a permission / question prompt) / "idle"; "" = never reported. Read on a cold restore to bring back the panes a manual restart interrupted.
+    report_to: str = ""             # messaging handle of the parent this spawned pane owes a report to
+    report_pending: bool = False    # that report is still outstanding — persisted so a pane resumed after a restart still reports when its turn ends
 
 
 @dataclass
@@ -204,6 +207,15 @@ class Project:
     # recent-workspaces store keeps a `name` mirror for drawing lists without
     # opening every project's db.
     display_name: str = ""
+    # DAG run state reported by the renderer engine (pipeline.node_states):
+    # graph node id -> NodeRunState dict (src/renderer/src/lib/pipelineGraph.ts).
+    # Reset when a run starts. `node_gate` is the gate the run is paused on
+    # ({} = none).
+    node_states: dict[str, Any] = field(default_factory=dict)
+    node_gate: dict[str, Any] = field(default_factory=dict)
+    # Last output summary per graph node, kept ACROSS runs so a pinned node
+    # can hand its frozen output to downstream nodes ({{prev.summary}}).
+    node_outputs: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -540,7 +552,11 @@ class ProjectStore:
         stage_blueprint: list[dict[str, Any]],
         backend_version: str = "",
         pipeline_id: str = "",
+        start_index: int = 0,
     ) -> Project:
+        """start_index > 0 is a restart-from-node run: the stages before it
+        are not run again (their last output is reused) and are recorded as
+        completed, so a later resume does not walk back into them."""
         project = self.load_or_create(workspace_path, backend_version=backend_version)
         project.task_description = task_description
         project.total_stages = total_stages
@@ -563,8 +579,12 @@ class ProjectStore:
             )
             for s in stage_blueprint
         ]
+        for skipped in project.stages[: max(0, start_index)]:
+            skipped.status = "completed"
         # Clear stale pipeline panes from previous runs; preserve manual panes.
         project.panes = [p for p in project.panes if p.origin != "pipeline"]
+        project.node_states = {}
+        project.node_gate = {}
         # Each pipeline run gets its own log file.
         project.log_file_name = _make_log_filename(task_description)
         self.save(project)
@@ -1360,6 +1380,42 @@ class ProjectStore:
         self.save(project)
         return project
 
+    PANE_TURN_STATES = ("working", "idle")
+
+    def set_pane_resume_state(
+        self,
+        workspace_path: str,
+        *,
+        pane_id: str,
+        last_turn_state: str | None = None,
+        report_to: str | None = None,
+        report_pending: bool | None = None,
+    ) -> Project:
+        """Persist what a pane was doing and the report it owes its parent.
+
+        Only the fields passed are written. The renderer reports on every turn
+        transition, so an unchanged write skips the save rather than rewriting
+        the project on each one. An unknown turn state is ignored. No-op if
+        pane not found.
+        """
+        project = self.load_or_create(workspace_path)
+        pane = next((p for p in project.panes if p.pane_id == pane_id), None)
+        if pane is None:
+            return project
+        changed = False
+        if last_turn_state in self.PANE_TURN_STATES and pane.last_turn_state != last_turn_state:
+            pane.last_turn_state = last_turn_state
+            changed = True
+        if report_to is not None and pane.report_to != report_to:
+            pane.report_to = report_to
+            changed = True
+        if report_pending is not None and pane.report_pending != report_pending:
+            pane.report_pending = report_pending
+            changed = True
+        if changed:
+            self.save(project)
+        return project
+
     def set_pane_collapsed(
         self,
         workspace_path: str,
@@ -1524,6 +1580,29 @@ class ProjectStore:
         if pane:
             pane.kickoff_status = kickoff_status
             self.save(project)
+        return project
+
+    def record_node_states(
+        self,
+        workspace_path: str,
+        *,
+        nodes: dict[str, Any],
+        gate: dict[str, Any] | None = None,
+        outputs: dict[str, Any] | None = None,
+    ) -> Project:
+        """Merge per-node run states reported by the engine (a node absent from
+        `nodes` keeps its last state). gate=None leaves the paused gate as it
+        is; {} clears it. outputs merge into node_outputs."""
+        project = self.load_or_create(workspace_path)
+        for nid, state in nodes.items():
+            if isinstance(state, dict):
+                project.node_states[str(nid)] = state
+        if gate is not None:
+            project.node_gate = gate
+        for nid, out in (outputs or {}).items():
+            if isinstance(out, dict):
+                project.node_outputs[str(nid)] = out
+        self.save(project)
         return project
 
     def resume_pipeline(self, workspace_path: str) -> tuple[Project, int]:

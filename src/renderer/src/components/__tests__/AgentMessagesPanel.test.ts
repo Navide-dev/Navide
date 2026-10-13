@@ -351,6 +351,33 @@ describe('AgentMessagesPanel', () => {
     expect(badge.attributes('title')).toBe('/ws/alpha')
   })
 
+  it('notes a message that went in while the recipient was busy, and only that one', async () => {
+    const routedKeys: string[] = []
+    m.configureMessaging({
+      ...deps,
+      routeRemote: async (args) => {
+        routedKeys.push(args.msgKey)
+        return { ok: true, targetDisplay: 'beta/reviewer', targetWorkspacePath: '/ws/beta' }
+      },
+    })
+    m.registerPane('p1', 'claude', 'alpha')
+    const busy = m.sendMessage('alpha', 'beta/reviewer', 'mid-turn')
+    const plain = m.sendMessage('alpha', 'beta/reviewer', 'between turns')
+    await flushPromises()
+    expect(routedKeys).toHaveLength(2)
+
+    m.resolveRemoteDelivery(routedKeys[0], true, 'delivered-while-busy')
+    m.resolveRemoteDelivery(routedKeys[1], true, '')
+    wrapper = mountPanel()
+
+    const note = i18n.global.t('msg.delivered-while-busy')
+    expect(busy.status).toBe('delivered')
+    expect(wrapper.get(`[data-msg-id="${busy.id}"]`).text()).toContain(note)
+    expect(plain.status).toBe('delivered')
+    expect(wrapper.get(`[data-msg-id="${plain.id}"]`).text()).not.toContain(note)
+    expect(wrapper.html()).not.toContain('msg.')
+  })
+
   it('renders no untranslated i18n keys across every row state', async () => {
     m.registerPane('p1', 'claude', 'alpha')
     m.registerPane('p2', 'codex', 'beta')

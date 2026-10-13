@@ -9,6 +9,7 @@
 // process table up for no reason.
 import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { STALE_DAY_OPTIONS, type StorageGroup, type StorageItem, type useStorageUsage } from '../composables/useStorageUsage'
 import { formatBytes } from '../lib/formatBytes'
 
@@ -79,7 +80,7 @@ function groupShare(group: StorageGroup): string {
         <span class="su-caret" aria-hidden="true">{{ open ? '▾' : '▸' }}</span>
         <span class="su-title">{{ t('resource.storage.title') }}</span>
       </button>
-      <span class="su-sub" data-part="storage-summary" :class="{ 'su-sub-error': !storage.scanning.value && storage.scanError.value }">
+      <span class="su-sub" v-truncate data-part="storage-summary" :class="{ 'su-sub-error': !storage.scanning.value && storage.scanError.value }">
         {{ storage.scanning.value
           ? t('resource.storage.scanning')
           : storage.scanError.value

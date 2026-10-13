@@ -38,6 +38,7 @@ from ..log_readers.base import (
     user_prompt_text,
 )
 from ..log_readers.base import encode_claude_cwd
+from .base import ExtensionsSource, ExtensionsSpec  # noqa: F401
 from .base import (
     AccountSwitchSpec,
     Dep,
@@ -861,12 +862,12 @@ def _session_exists(workspace_path: str, session_id: str) -> bool:
 
 # ---- vendor spec -----------------------------------------------------------
 
-def _install_hooks(port_file: str) -> Any:
+def _install_hooks(port_file: str, *, skip: frozenset[str] = frozenset()) -> Any:
     # Qwen Code ships Claude's hook design, so the same mechanism gives its
     # panes the one signal the PTY cannot provide. Lazy import — see claude.py.
     from ..qwen_hooks import install_hooks
 
-    return install_hooks(port_file)
+    return install_hooks(port_file, skip=skip)
 
 
 def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:
@@ -886,7 +887,16 @@ def _risk_data_dirs(ctx: VendorRuntimeContext) -> tuple[Path, ...]:
     return tuple(dict.fromkeys((root, path(runtime)))) if runtime else (root,)
 
 
+# Where this CLI keeps the extensions it installed for itself (read-only
+# inventory, cli_extensions). Verified 2026-10-10 against the installed
+# binary's --help and the files on disk.
+_EXTENSIONS = ExtensionsSpec(sources=(
+    ExtensionsSource("qwen-extensions", (".qwen", "extensions"), "Qwen extension"),
+    ExtensionsSource("hooks", (".qwen", "settings.json"), "Qwen hook", section=("hooks",)),
+))
+
 SPEC = VendorSpec(
+    extensions=_EXTENSIONS,
     key="qwen",
     # OpenAI-compatible/custom providers; quota hosts cover another interface.
     expected_hosts=(),

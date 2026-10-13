@@ -17,6 +17,7 @@ import { paneStatusLabelText } from '../lib/paneStatusLabel'
 import { statusBadgeStyle } from '../composables/useStatusBadgePrefs'
 import { setBatchDragImage } from '../lib/batchDragImage'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import { invokeCommand, isMacPlatform } from '@navide/plugin-ui/shared'
 import RebuildIcon from './RebuildIcon.vue'
 import UsageBadge from './UsageBadge.vue'
@@ -84,12 +85,23 @@ interface Props {
    *  time it does not know). Not clickable: nothing here can grant quota. */
   usageLimitHit?: boolean
   usageLimitUntil?: number | null
+  /** Offer "switch account and resume" beside the quota badge. App.vue sets
+   *  it only with the follow-switch flag on, for a pane that can move. */
+  quotaSwitchOffered?: boolean
   /** Runtime-only continue affordance — lit when this pane came back from a
    *  restore with `--resume`: the CLI reloaded its transcript but is parked at
    *  the prompt, so whatever it was doing is never picked up on its own. */
   continueAvailable?: boolean
   terminalPort: TerminalDockPort
   cliProfiles: ReturnType<typeof useCliProfiles>
+  /** The CLI account this pane was started on (its restore pin). */
+  profileId?: string
+  /** Whether this pane follows the account (moves with an account switch) or
+   *  is fixed to its account's own config dir. Undefined hides the toggle:
+   *  App.vue offers it only to claude panes once some account runs on its own
+   *  config dir. A string, not a boolean: Vue reads an absent boolean prop as
+   *  false. */
+  accountFollow?: 'follow' | 'fixed'
   workspacePath?: string
   /** Resolves the addresses offered by this pane's @-mention menu (self
    *  excluded), with the group and status words already translated by the host.
@@ -136,6 +148,8 @@ const emit = defineEmits<{
   /** Quota badge clicked and the confirm accepted — App.vue clears the pane's
    *  quota flag and resumes a loop that was parked on that limit. */
   (e: 'usage-limit-dismiss'): void
+  /** Quota switch button clicked — App.vue asks which account to resume on. */
+  (e: 'quota-switch-account'): void
   /** Continue button clicked on a resumed pane — App.vue injects the resume
    *  prompt once so the interrupted work carries on. */
   (e: 'continue-resume'): void
@@ -149,6 +163,8 @@ const emit = defineEmits<{
   /** This pane's PTY did not survive a backend outage — App.vue resumes the
    *  CLI session so the conversation continues instead of leaving a dead pane. */
   (e: 'pty-lost'): void
+  /** Flip accountFollow; App.vue owns the flag. */
+  (e: 'toggle-account-follow'): void
 }>()
 const containerRef = ref<HTMLElement | null>(null)
 const isDragOver = ref(false)
@@ -352,6 +368,7 @@ defineExpose({
   lastCommand: terminal.lastCommand,
   cleanBuffer: terminal.cleanBuffer,
   cleanBytesSeen: terminal.cleanBytesSeen,
+  resumeSpawnedAt: terminal.resumeSpawnedAt,
   lastActivityAt: terminal.lastActivityAt,
   lastRawActivityAt: terminal.lastRawActivityAt,
   // The person at the keyboard, for App.vue's messaging idle gate.
@@ -422,7 +439,11 @@ const selectModifierLabel = isMacPlatform() ? '⌥ Option' : 'Shift'
 
 // xterm's selection lives outside the DOM, so main cannot read it from the
 // context-menu params — pass it along with the request.
-function onTerminalContextMenu(): void {
+function onTerminalContextMenu(e: MouseEvent): void {
+  // Off macOS, a CLI with mouse reporting on already received this click —
+  // Claude Code pastes or copies on it — so a menu would offer a second
+  // Paste. Shift keeps the click from the CLI and still opens the menu.
+  if (!isMacPlatform() && !e.shiftKey && terminal.isMouseTracking()) return
   props.terminalPort.showContextMenu?.(terminal.getSelection())
 }
 
@@ -605,6 +626,7 @@ onMounted(() => {
     <button class="minimize-btn" @click.stop="emit('minimize')" :title="$t('pane.terminal.minimize-tooltip')">⊟</button>
     <header
       :class="['pane-header', { 'drag-over': isReorderDragOver }]"
+      data-tour="pane-header"
       :draggable="!editingTitle"
       :title="skillMenuActive ? '' : $t('pane.terminal.drag-to-tab-tooltip')"
       @click="emit('set-focus', $event)"
@@ -685,6 +707,14 @@ onMounted(() => {
         >{{ usageLimitUntil != null
           ? $t('pane.terminal.usage-limit-badge', { time: formatLoopTime(usageLimitUntil) })
           : $t('pane.terminal.usage-limit-badge-unknown') }}</span>
+        <span
+          v-if="usageLimitHit && quotaSwitchOffered"
+          class="usage-limit-switch"
+          role="button"
+          data-testid="usage-limit-switch"
+          :title="$t('account-follow.quota-button-tooltip')"
+          @click.stop="emit('quota-switch-account')"
+        >{{ $t('account-follow.quota-button') }}</span>
         <CliRiskPill
           v-if="cliRisk && cliRiskState?.signals.length && !restoring && onScreen !== false"
           :pane-id="cliRiskPaneId"
@@ -703,10 +733,45 @@ onMounted(() => {
           :style="statusBadgeVars"
           :title="statusTooltipKey ? $t(statusTooltipKey) : ''"
         >{{ statusBadgeText }}</span>
-        <UsageBadge v-if="agentKey" :agent-key="agentKey" :cli-profiles="cliProfiles" />
+        <UsageBadge
+          v-if="agentKey"
+          data-tour="usage-badge"
+          :agent-key="agentKey"
+          :cli-profiles="cliProfiles"
+          :pane-id="paneId"
+          :pane-profile-id="profileId"
+        />
+        <button
+          v-if="accountFollow !== undefined"
+          type="button"
+          class="account-follow-toggle"
+          :class="{ on: accountFollow === 'follow' }"
+          data-testid="account-follow-toggle"
+          :aria-pressed="accountFollow === 'fixed' ? 'true' : 'false'"
+          :aria-label="$t('account-follow.toggle-label')"
+          :title="$t(accountFollow === 'follow' ? 'account-follow.toggle-follow-tooltip' : 'account-follow.toggle-fixed-tooltip')"
+          @click.stop="emit('toggle-account-follow')"
+        >
+          <!-- Following: a link to the default account. Fixed: a pin. -->
+          <svg v-if="accountFollow === 'follow'" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"
+            />
+          </svg>
+          <svg v-else viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M10.6 1.2a1 1 0 0 1 1.4 0l2.8 2.8a1 1 0 0 1 0 1.4l-1.1 1.1a1 1 0 0 1-1 .25l-2.2 2.2.2 2.4a1 1 0 0 1-.3.8l-.6.6a.6.6 0 0 1-.85 0L6.4 10.2l-3.6 3.6a.6.6 0 1 1-.85-.85l3.6-3.6-2.55-2.55a.6.6 0 0 1 0-.85l.6-.6a1 1 0 0 1 .8-.3l2.4.2 2.2-2.2a1 1 0 0 1 .25-1z"
+            />
+          </svg>
+        </button>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
       </div>
-      <div v-if="subtitle" class="header-sub">{{ subtitle }}</div>
+      <div v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
     </header>
     <div
       ref="containerRef"
@@ -726,7 +791,7 @@ onMounted(() => {
          selectable, since nothing about it stopped being true. -->
     <div v-if="disconnectedNotice" class="disconnected-banner" role="status" aria-live="polite">
       <span class="disconnected-dot" />
-      <span class="disconnected-text">{{ disconnectedNotice }}</span>
+      <span class="disconnected-text" v-truncate>{{ disconnectedNotice }}</span>
     </div>
     <!-- Optional-chained: the pane's tests stub useTerminal with partial objects. -->
     <div
@@ -751,7 +816,7 @@ onMounted(() => {
     <div v-if="isPreparing" class="prep-overlay" aria-live="polite">
       <div class="prep-panel">
         <div class="prep-spinner" />
-        <div class="prep-text">{{ preparingLabel || 'Preparing CLI' }}</div>
+        <div class="prep-text" v-truncate>{{ preparingLabel || 'Preparing CLI' }}</div>
       </div>
     </div>
     <RestoredPanePlaceholder
@@ -1005,6 +1070,45 @@ onMounted(() => {
   border-radius: var(--radius-xs);
   padding: 1px 6px;
   letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+/* Beside the account badge: following the account (accent link, the default)
+   or fixed to its account's own config dir (muted pin). The button is the
+   "fix" toggle, so it reads pressed when fixed. */
+.account-follow-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.account-follow-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-muted);
+}
+.account-follow-toggle.on {
+  color: var(--accent-fg);
+  background: var(--accent-subtle);
+  border-color: var(--accent-muted);
+}
+/* Beside the quota badge, with the follow-switch flag on: reopen the pane
+   on another account. Quieter than the badge it sits next to. */
+.usage-limit-switch {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--danger-fg);
+  border: 1px solid var(--danger-fg);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;

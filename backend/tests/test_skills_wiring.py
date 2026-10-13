@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -921,3 +922,284 @@ def test_every_shared_root_reader_is_declared() -> None:
     )
     # Verified 2026-08-15 against each binary / official docs.
     assert readers == ["codex", "copilot", "cursor", "grok", "muse", "opencode"]
+
+
+def test_a_home_level_shim_never_adopts_into_the_users_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shim that stands in for the whole $HOME (muse) adopts nothing.
+
+    Anything a tool in the pane writes to ``~`` — a cloned repo, a shell rc
+    file — lands in the shim; promoting it would reach the user's real home
+    and login shell.
+    """
+    muse = SkillsWiring(root_env="HOME", reads_shared_root=True, skills_rel=(".agents", "skills"))
+    (tmp_path / "home" / ".agents").mkdir(parents=True)
+    _skill(tmp_path / "managed", "alpha")
+    monkeypatch.setattr(skills_wiring, "panes_root", lambda: tmp_path / "panes")
+    root, _ = _root(tmp_path, muse, agent_key="muse")
+    (Path(root) / ".zshrc").write_text("pane", encoding="utf-8")
+    (Path(root) / ".agents" / "notes").mkdir()
+
+    _root(tmp_path, muse, agent_key="muse")
+
+    assert not (tmp_path / "home" / ".zshrc").exists()
+    assert not (tmp_path / "home" / ".agents" / "notes").exists()
+    assert (Path(root) / ".zshrc").read_text(encoding="utf-8") == "pane"
+
+
+def test_project_dir_never_hides_a_users_own_skills_directory_from_git(tmp_path: Path) -> None:
+    """Excluding the whole directory would hide the user's untracked skills.
+
+    When the directory was already there, only what Navide planted is
+    excluded.
+    """
+    _skill(tmp_path / "managed", "alpha")
+    cwd = tmp_path / "repo"
+    (cwd / ".git" / "info").mkdir(parents=True)
+    (cwd / ".cursor" / "skills" / "theirs").mkdir(parents=True)
+
+    _sync(tmp_path, cwd)
+
+    lines = (cwd / ".git" / "info" / "exclude").read_text(encoding="utf-8").splitlines()
+    assert "/.cursor/skills/" not in lines
+    assert sorted(lines) == ["/.cursor/skills/.navide-links", "/.cursor/skills/alpha"]
+
+
+def test_project_dir_never_writes_the_exclude_of_a_home_directory_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A home that is itself a dotfiles repo does not own the workspaces in it.
+
+    The home is the user's real one (``real_home``), not ``$HOME``: that is
+    ignored on Windows, where ``Path.home()`` reads USERPROFILE, and it is a
+    shim's home when Navide was launched from inside a shimmed pane.
+    """
+    _skill(tmp_path / "managed", "alpha")
+    home = tmp_path / "home"
+    (home / ".git" / "info").mkdir(parents=True)
+    monkeypatch.setattr(skills_wiring, "real_home", lambda: home)
+    monkeypatch.setenv("HOME", str(tmp_path / "inherited-shim-home"))
+    cwd = home / "work" / "project"
+    cwd.mkdir(parents=True)
+
+    _sync(tmp_path, cwd)
+
+    assert (cwd / ".cursor" / "skills" / "alpha").is_symlink()
+    assert not (home / ".git" / "info" / "exclude").exists()
+
+
+def test_a_manifest_name_can_never_reach_outside_the_skills_directory(tmp_path: Path) -> None:
+    """The manifest lives in the user's repo, so anyone can write it.
+
+    A name with a path separator or ``..`` must never be followed: dropping
+    "our" stale links would then unlink a symlink anywhere on disk.
+    """
+    cwd = tmp_path / "repo"
+    target = cwd / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside-link"
+    outside.symlink_to(tmp_path)
+    (target / skills_wiring.MANIFEST_FILE).write_text("../../../outside-link\n", encoding="utf-8")
+
+    _sync(tmp_path, cwd, _Store(tmp_path / "managed"))
+
+    assert outside.is_symlink()
+
+
+def test_taking_links_back_never_follows_a_manifest_name_outside_the_directory(tmp_path: Path) -> None:
+    """The manifest lives in the user's repo, so anyone can write it.
+
+    A name with a path separator or ``..`` must never be followed: removing
+    "our" links would then unlink a symlink anywhere on disk.
+    """
+    repo = tmp_path / "repo"
+    target = repo / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside-link"
+    outside.symlink_to(tmp_path)
+    (target / skills_wiring.MANIFEST_FILE).write_text(
+        "../../../outside-link\nsub/name\n..\nok\n", encoding="utf-8"
+    )
+    (target / "ok").symlink_to(tmp_path)
+
+    skills_wiring.remove_project_dir(target)
+
+    assert outside.is_symlink()
+    assert not (target / "ok").exists()
+
+
+_NO_SUCH_FOLDER_ON_WINDOWS = pytest.mark.skipif(
+    osplat.platform_id == "win32",
+    reason="Windows cannot create a folder of this name, so no skill can carry it",
+)
+
+
+@pytest.mark.parametrize("name", [
+    pytest.param("x:y", marks=_NO_SUCH_FOLDER_ON_WINDOWS), "#hash", " lead",
+    pytest.param("trail ", marks=_NO_SUCH_FOLDER_ON_WINDOWS),
+])
+def test_a_name_the_manifest_cannot_carry_is_never_planted(tmp_path: Path, name: str) -> None:
+    """C5: the manifest drops a name with ``:``, reads a leading ``#`` as a
+    comment and strips spaces, so a link planted under such a name would be
+    an orphan nothing ever takes back. It is never planted."""
+    odd, ok = _native(tmp_path, name), _native(tmp_path, "ok")
+    store = _Store(tmp_path / "managed", native=[odd, ok],
+                   native_targets={odd.real_path: ["cursor"], ok.real_path: ["cursor"]})
+    cwd = tmp_path / "repo"
+
+    _sync(tmp_path, cwd, store)
+
+    target = cwd / ".cursor" / "skills"
+    assert (target / "ok").is_symlink()
+    assert sorted(p.name for p in target.iterdir()) == sorted([skills_wiring.MANIFEST_FILE, "ok"])
+    assert skills_wiring._read_manifest(target) == {"ok"}
+
+
+@pytest.mark.parametrize("name", ["C:evil", "C:\\evil", "a:b", "..", ".", "a/b", "a\\b", "x\u2028y"])
+def test_only_plain_entry_names_are_read_from_the_manifest(tmp_path: Path, name: str) -> None:
+    """Windows drive-relative names (``C:evil``) and alternate data streams
+    (``a:b``) escape the directory on Windows even without a separator."""
+    target = tmp_path / "skills"
+    target.mkdir()
+    (target / skills_wiring.MANIFEST_FILE).write_text(f"{name}\nok\n", encoding="utf-8")
+
+    assert skills_wiring._read_manifest(target) == {"ok"}
+
+
+
+def _manifest_linked_to(tmp_path: Path, kind: str) -> tuple[Path, Path, str | None]:
+    """A cloned repo ships a real ``.cursor/skills`` whose manifest is a link
+    to a file outside the workspace (``kind`` "existing") or to a path there
+    that does not exist yet ("dangling")."""
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True, exist_ok=True)
+    if kind == "existing":
+        victim.write_text("export SECRET_PATH=1\nalias ll='ls -l'\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    target = cwd / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    (target / skills_wiring.MANIFEST_FILE).symlink_to(victim)
+    return cwd, victim, victim.read_text(encoding="utf-8") if victim.exists() else None
+
+
+@pytest.mark.parametrize("kind", ["existing", "dangling"])
+def test_a_manifest_linked_outside_the_workspace_is_never_written_through(tmp_path: Path, kind: str) -> None:
+    """R3-H1: the manifest is read and written only as a regular file."""
+    _skill(tmp_path / "managed", "alpha")
+    cwd, victim, before = _manifest_linked_to(tmp_path, kind)
+
+    assert _sync(tmp_path, cwd) is False
+
+    assert (victim.read_text(encoding="utf-8") if victim.exists() else None) == before
+    assert (cwd / ".cursor" / "skills" / skills_wiring.MANIFEST_FILE).is_symlink()
+    assert not (cwd / ".cursor" / "skills" / "alpha").exists()
+
+
+def test_a_manifest_linked_outside_is_never_read_cleaned_or_removed(tmp_path: Path) -> None:
+    cwd, victim, before = _manifest_linked_to(tmp_path, "existing")
+    target = cwd / ".cursor" / "skills"
+
+    assert skills_wiring.refuse_missing_links(target) == []
+    skills_wiring.clear_refused(target, root=cwd)
+    assert skills_wiring.remove_project_dir(target, root=cwd) == 0
+
+    assert victim.read_text(encoding="utf-8") == before
+    assert (target / skills_wiring.MANIFEST_FILE).is_symlink()
+
+
+@pytest.mark.parametrize("kind", ["unreadable", "undecodable"])
+def test_a_manifest_navide_cannot_read_is_never_reseeded_or_rewritten(tmp_path: Path, kind: str) -> None:
+    """An unreadable manifest is not an empty one: the link the user refused
+    stays out, nothing is planted or taken back, and the manifest is left as
+    it is (fail closed)."""
+    if kind == "unreadable" and not osplat.paths.enforces_posix_modes():
+        pytest.skip("mode 000 does not stop reading here")
+    _skill(tmp_path / "managed", "alpha")
+    cwd = tmp_path / "repo"
+    target = cwd / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    manifest = target / skills_wiring.MANIFEST_FILE
+    body = f"# links planted by Navide\n{skills_wiring._REFUSED_PREFIX}alpha\n".encode()
+    if kind == "undecodable":
+        body += b"\xff\xfe\n"
+    manifest.write_bytes(body)
+    if kind == "unreadable":
+        manifest.chmod(0)
+    try:
+        assert _sync(tmp_path, cwd) is False
+        assert skills_wiring.refuse_missing_links(target) == []
+        skills_wiring.clear_refused(target, root=cwd)
+        assert not (target / "alpha").exists()
+    finally:
+        manifest.chmod(0o644)
+
+    assert manifest.read_bytes() == body
+
+
+def test_a_git_exclude_linked_outside_the_workspace_is_never_written(tmp_path: Path) -> None:
+    """R3-H1: the ``.git/info/exclude`` append never follows a link either."""
+    _skill(tmp_path / "managed", "alpha")
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export A=1\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    (cwd / ".git" / "info").mkdir(parents=True)
+    (cwd / ".git" / "info" / "exclude").symlink_to(victim)
+
+    assert _sync(tmp_path, cwd) is True
+    assert (cwd / ".cursor" / "skills" / "alpha").is_symlink()
+    assert victim.read_text(encoding="utf-8") == "export A=1\n"
+    victim.write_text("export A=1\n/.cursor/skills/\n", encoding="utf-8")
+    skills_wiring.remove_project_dir(cwd / ".cursor" / "skills", root=cwd)
+
+    assert victim.read_text(encoding="utf-8") == "export A=1\n/.cursor/skills/\n"
+
+
+def test_a_git_folder_linked_outside_the_workspace_is_never_written(tmp_path: Path) -> None:
+    """R4-L3: .git itself may be a link to another repository's folder;
+    the exclude there is never written or rewritten."""
+    _skill(tmp_path / "managed", "alpha")
+    outside = tmp_path / "other" / ".git"
+    (outside / "info").mkdir(parents=True)
+    victim = outside / "info" / "exclude"
+    victim.write_text("keep\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    cwd.mkdir()
+    (cwd / ".git").symlink_to(outside)
+
+    assert _sync(tmp_path, cwd) is True
+    assert victim.read_text(encoding="utf-8") == "keep\n"
+    assert skills_wiring.exclude_safe(cwd / ".cursor" / "skills") is False
+    victim.write_text("keep\n/.cursor/skills/\n", encoding="utf-8")
+    skills_wiring.remove_project_dir(cwd / ".cursor" / "skills", root=cwd)
+    assert victim.read_text(encoding="utf-8") == "keep\n/.cursor/skills/\n"
+
+
+def test_a_git_exclude_hard_linked_to_another_file_is_never_written(tmp_path: Path) -> None:
+    """R4-L3: a hard link is a second name for someone else's file."""
+    _skill(tmp_path / "managed", "alpha")
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export A=1\n", encoding="utf-8")
+    cwd = tmp_path / "repo"
+    (cwd / ".git" / "info").mkdir(parents=True)
+    os.link(victim, cwd / ".git" / "info" / "exclude")
+
+    assert _sync(tmp_path, cwd) is True
+    assert victim.read_text(encoding="utf-8") == "export A=1\n"
+    assert skills_wiring.exclude_safe(cwd / ".cursor" / "skills") is False
+
+
+def test_a_manifest_hard_linked_to_another_file_is_not_safe(tmp_path: Path) -> None:
+    """R4-L2: a manifest with a second name is never read or written."""
+    victim = tmp_path / "home" / ".zshrc"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("export SECRET=1\n", encoding="utf-8")
+    target = tmp_path / "repo" / ".cursor" / "skills"
+    target.mkdir(parents=True)
+    os.link(victim, target / skills_wiring.MANIFEST_FILE)
+
+    assert skills_wiring.manifest_safe(target) is False
+    assert skills_wiring.has_manifest(target) is False
+

@@ -559,7 +559,7 @@ describe('PlansPane', () => {
     ])
   })
 
-  it('shows each plan file path in the row (with a full-path title for the ellipsis)', async () => {
+  it('shows each plan file path in the row (full path on hover when cut off)', async () => {
     const wrapper = mountPane(
       makeBackend({
         htmlEntries: [
@@ -574,7 +574,8 @@ describe('PlansPane', () => {
       .findAll('.plan-row-path')
       .find((p) => p.text() === '.agent-team/plans/review_a1b2c3.html')
     expect(path).toBeTruthy()
-    expect(path!.attributes('title')).toBe('.agent-team/plans/review_a1b2c3.html')
+    expect(path!.attributes('title')).toBeUndefined()
+    expect(path!.attributes('data-truncate')).toBe('')
   })
 
   it('collapses and expands a section when its header is clicked', async () => {

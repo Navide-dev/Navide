@@ -284,6 +284,7 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
       output_log_file: request.outputLogFile,
       login_profile_id: request.loginProfileId,
       is_login: request.isLogin,
+      ...(request.accountDirLogin ? { account_dir_login: true } : {}),
       replaces_terminal_id: request.replacesTerminalId,
       ...(request.quotaTransactionId ? { quota_transaction_id: request.quotaTransactionId } : {}),
       ...(request.quotaOriginalPaneId ? { quota_original_pane_id: request.quotaOriginalPaneId } : {}),
@@ -303,7 +304,11 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
       rows,
     }),
     interrupt: (sessionId) => send('terminal.interrupt', { terminal_session_id: sessionId }),
-    kill: (sessionId, force) => send('terminal.kill', { terminal_session_id: sessionId, force }),
+    kill: (sessionId, force, options) => send('terminal.kill', {
+      terminal_session_id: sessionId,
+      force,
+      ...(options?.retireRestore ? { retire_restore: true } : {}),
+    }),
     redraw: (sessionId, cols, rows) => send('terminal.redraw', {
       terminal_session_id: sessionId,
       cols,
@@ -361,6 +366,12 @@ export function createHostTerminalDockPort(backend: HostBackend): TerminalDockPo
       return dockRestoreFromResponse(await send<{ record?: { agent?: string; session_id?: string } | null }>(
         'terminal.dock_record', { workspace_path: workspacePath, pane_id: paneId },
       ))
+    },
+    async dockSurfaceRetired(workspacePath, paneId, surface) {
+      const provided = await window.agentTeam?.dockSurfaceProvided?.(surface)
+      if (provided !== false) return false
+      await send('terminal.dock_retire', { workspace_path: workspacePath, pane_id: paneId, surface })
+      return true
     },
     statPath: (path, timeoutMs) => send('fs.stat_path', { path }, timeoutMs),
     async getHomeDirectory(): Promise<string> {

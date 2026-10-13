@@ -1,4 +1,4 @@
-# CLI Extension Guide
+# CLI Integration Records
 
 Integration records for Navide's built-in CLI agents: the research behind
 each one and the traps found while wiring it.

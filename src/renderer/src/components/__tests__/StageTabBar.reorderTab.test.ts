@@ -11,9 +11,9 @@ import StageTabBar, { type TabItem } from '../StageTabBar.vue'
 // existing 'move-pane' behavior; self-drops are ignored.
 
 const tabs: TabItem[] = [
-  { key: 'rg-1', label: 'Claude', count: 2, type: 'stage', status: 'active' },
-  { key: 'rg-2', label: 'Codex', count: 1, type: 'stage', status: 'idle' },
-  { key: 'manual', label: '手動', count: 1, type: 'manual', status: 'idle' }
+  { key: 'rg-1', label: 'Claude', count: 2, live: 2, type: 'stage', status: 'active' },
+  { key: 'rg-2', label: 'Codex', count: 1, live: 1, type: 'stage', status: 'idle' },
+  { key: 'manual', label: '手動', count: 1, live: 1, type: 'manual', status: 'idle' }
 ]
 
 /** DragEvent stand-in: happy-dom has no DataTransfer, so dispatch a plain

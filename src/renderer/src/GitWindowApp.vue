@@ -33,7 +33,7 @@ import {
   type GitFileEntry
 } from './composables/useGit'
 import { useIssues } from './composables/useIssues'
-import { useNotify } from '@navide/plugin-ui/foundation'
+import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import { useTheme } from '@navide/plugin-ui/foundation'
 import { settingsGet, onSettingsChanged } from '@navide/plugin-ui/shared'
 import {
@@ -1517,7 +1517,7 @@ registerCommand('git.focusAgent', () => {
          `ui.window.*` capability instead — see the cross-platform plan. -->
     <header class="toolbar" :class="{ 'no-traffic-lights': !reserveTrafficLights }">
       <span class="wm">Navide Git</span>
-      <span class="crumb">
+      <span class="crumb" v-truncate>
         {{ repoName }}<template v-if="gitStatus.branch">
           <span class="crumb-sep">／</span><b class="mono">{{ gitStatus.branch }}</b>
           <span v-if="gitStatus.ahead" class="crumb-cnt">↑{{ gitStatus.ahead }}</span>
@@ -1631,7 +1631,7 @@ registerCommand('git.focusAgent', () => {
               @contextmenu.prevent="!b.is_current && openBranchCtxMenu($event, b.name)"
             >
               <span class="b-check">{{ b.is_current ? '✓' : '' }}</span>
-              <span class="b-name">{{ b.name }}</span>
+              <span class="b-name" v-truncate>{{ b.name }}</span>
               <span v-if="b.tracking" class="b-track">→ {{ b.tracking }}</span>
               <div class="spacer" />
               <template v-if="!b.is_current">
@@ -1652,7 +1652,7 @@ registerCommand('git.focusAgent', () => {
                 :class="{ 'remote-has-local': b.has_local }"
               >
                 <span class="b-check">{{ b.has_local ? '✓' : '' }}</span>
-                <span class="b-name remote">{{ b.name }}</span>
+                <span class="b-name remote" v-truncate>{{ b.name }}</span>
                 <div class="spacer" />
                 <button
                   v-if="!b.has_local"
@@ -1683,7 +1683,7 @@ registerCommand('git.focusAgent', () => {
             <div v-if="!gitStashes.length" class="empty-msg">{{ $t('label.no-stashes') }}</div>
             <div v-for="st in gitStashes" :key="st.ref" class="generic-row">
               <span class="stash-ref">{{ st.ref }}</span>
-              <span class="stash-msg">{{ st.message }}</span>
+              <span class="stash-msg" v-truncate>{{ st.message }}</span>
               <div class="row-actions always">
                 <button class="row-btn always" :title="$t('action.stash-apply')" @click.stop="onStashApply(st.index)">⎘</button>
                 <button class="row-btn always" :title="$t('action.stash-pop')" @click.stop="onStashPop(st.index)">↑</button>
@@ -1705,7 +1705,7 @@ registerCommand('git.focusAgent', () => {
             <div v-if="!gitRemotes.length" class="empty-msg">{{ $t('label.no-remotes') }}</div>
             <div v-for="r in gitRemotes" :key="r.name" class="generic-row">
               <span class="remote-name">{{ r.name }}</span>
-              <span class="remote-url" :title="r.fetch_url">{{ r.fetch_url }}</span>
+              <span class="remote-url" v-truncate>{{ r.fetch_url }}</span>
               <button class="row-btn always" :title="$t('action.open-remote-url')" @click.stop="openExternal(r.fetch_url)">↗</button>
               <button class="row-btn always danger" :title="$t('action.remove-remote')" @click.stop="onRemoveRemote(r.name)">✕</button>
             </div>
@@ -1728,7 +1728,7 @@ registerCommand('git.focusAgent', () => {
           <div v-if="tagsExpanded" class="card-body collapsible-body">
             <div v-if="!gitTags.length" class="empty-msg">{{ $t('label.no-tags') }}</div>
             <div v-for="t in gitTags" :key="t.name" class="generic-row">
-              <span class="b-name">{{ t.name }}</span>
+              <span class="b-name" v-truncate>{{ t.name }}</span>
               <code class="chash" style="margin-left: 4px">{{ t.commit_hash }}</code>
               <span v-if="t.message" class="b-track">{{ t.message }}</span>
               <div class="spacer" />
@@ -1759,7 +1759,7 @@ registerCommand('git.focusAgent', () => {
               <span class="wt-icon">{{ wt.is_main ? '✦' : '○' }}</span>
               <div style="flex: 1; min-width: 0">
                 <div class="wt-name-row">
-                  <span class="b-name" :title="wt.path">{{ wt.path.split('/').at(-1) }}</span>
+                  <span class="b-name" v-truncate :title="wt.path">{{ wt.path.split('/').at(-1) }}</span>
                   <span v-if="wt.bare" class="wt-badge">{{ $t('label.bare') }}</span>
                   <span v-if="wt.detached" class="wt-badge">{{ $t('label.detached') }}</span>
                   <span v-if="wt.locked" class="wt-badge warn" :title="wt.lock_reason">🔒 {{ $t('label.locked') }}</span>
@@ -1832,7 +1832,7 @@ registerCommand('git.focusAgent', () => {
                 <button class="btn-ghost sm" @click="saveInlineEdit">✓</button>
                 <button class="btn-ghost sm" @click="cancelInlineEdit">✕</button>
               </template>
-              <span v-else class="config-val clickable" @click="startInlineEdit(key)">{{ gitConfig[key] || '—' }}</span>
+              <span v-else class="config-val clickable" v-truncate @click="startInlineEdit(key)">{{ gitConfig[key] || '—' }}</span>
             </div>
             <p v-if="configError" class="err-text">{{ configError }}</p>
           </div>
@@ -1914,7 +1914,7 @@ registerCommand('git.focusAgent', () => {
               >
                 <span class="issue-state-dot" :class="it.state" />
                 <div style="flex: 1; min-width: 0">
-                  <div class="b-name" :title="it.title">#{{ it.number }} {{ it.title }}</div>
+                  <div class="b-name" v-truncate>#{{ it.number }} {{ it.title }}</div>
                   <div class="b-track">
                     {{ it.author }}
                     <span v-for="l in it.labels" :key="l" class="issue-label">{{ l }}</span>
@@ -2017,7 +2017,7 @@ registerCommand('git.focusAgent', () => {
               >
                 <span class="conflict-mark">⚠</span>
                 <span class="stag u">{{ $t('label.tag-conflict') }}</span>
-                <span class="fpath mono"><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
+                <span class="fpath mono" v-truncate><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
                 <span class="rowact">
                   <button class="linkbtn" @click.stop="onResolveOurs(f.path)">{{ $t('action.row-ours') }}</button>
                   <button class="linkbtn" @click.stop="onResolveTheirs(f.path)">{{ $t('action.row-theirs') }}</button>
@@ -2036,7 +2036,7 @@ registerCommand('git.focusAgent', () => {
               >
                 <button class="chk on" :title="$t('action.unstage')" @click.stop="toggleStage(f, true)" />
                 <span class="stag" :class="fileTag(f).cls">{{ fileTag(f).label }}</span>
-                <span class="fpath mono"><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
+                <span class="fpath mono" v-truncate><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
                 <span class="rowact"><button class="linkbtn" @click.stop="showWorkingDiff(f.path, true)">{{ $t('action.row-diff') }}</button></span>
               </div>
               <div
@@ -2050,7 +2050,7 @@ registerCommand('git.focusAgent', () => {
               >
                 <button class="chk" :title="$t('action.stage')" @click.stop="toggleStage(f, false)" />
                 <span class="stag" :class="fileTag(f).cls">{{ fileTag(f).label }}</span>
-                <span class="fpath mono"><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
+                <span class="fpath mono" v-truncate><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
                 <span class="rowact">
                   <button class="linkbtn" @click.stop="showWorkingDiff(f.path, false)">{{ $t('action.row-diff') }}</button>
                   <button class="linkbtn danger" @click.stop="onDiscard(f)">{{ $t('action.row-discard') }}</button>
@@ -2067,7 +2067,7 @@ registerCommand('git.focusAgent', () => {
               >
                 <button class="chk" :title="$t('action.stage')" @click.stop="toggleStage(f, false)" />
                 <span class="stag q">{{ $t('label.tag-new') }}</span>
-                <span class="fpath mono"><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
+                <span class="fpath mono" v-truncate><i>{{ splitPath(f.path).dir }}</i>{{ splitPath(f.path).base }}</span>
                 <span class="rowact"><button class="linkbtn" @click.stop="showWorkingDiff(f.path, false)">{{ $t('action.row-diff') }}</button></span>
               </div>
             </div>
@@ -2101,7 +2101,7 @@ registerCommand('git.focusAgent', () => {
           <!-- Bottom: per-file diff detail -->
           <div v-if="externalDiff" class="detail">
             <div class="detail-hdr">
-              <span class="dt-name mono">{{ externalDiff.name }}</span>
+              <span class="dt-name mono" v-truncate>{{ externalDiff.name }}</span>
               <span class="dt-kind">
                 {{
                   externalDiff.commit
@@ -2168,7 +2168,7 @@ registerCommand('git.focusAgent', () => {
                       class="db-line"
                       :class="hunkLineClass(l.kind)"
                     >
-                      <span class="bl-who">{{ l.committed ? l.author : $t('label.uncommitted') }}</span>
+                      <span class="bl-who" v-truncate>{{ l.committed ? l.author : $t('label.uncommitted') }}</span>
                       <span class="bl-date">{{ l.committed ? l.date : '' }}</span>
                       <span class="db-no">{{ l.new_no ?? l.old_no ?? '' }}</span>
                       <span class="db-sign">{{ l.kind === ' ' ? '' : l.kind }}</span>
@@ -2179,7 +2179,7 @@ registerCommand('git.focusAgent', () => {
                 <template v-else>
                   <div v-for="(b, bi) in blameEntries" :key="'b' + bi" class="blame-row">
                     <span class="chash">{{ b.short_hash }}</span>
-                    <span class="bl-who">{{ b.author }}</span>
+                    <span class="bl-who" v-truncate>{{ b.author }}</span>
                     <span class="bl-date">{{ b.date }}</span>
                     <span class="db-no">{{ b.line_no }}</span>
                     <code class="db-code">{{ b.content }}</code>
@@ -2200,8 +2200,8 @@ registerCommand('git.focusAgent', () => {
                     @click="selectHistoryCommit(c.hash)"
                   >
                     <span class="chash">{{ c.short_hash }}</span>
-                    <span class="hist-msg">{{ c.message }}</span>
-                    <span class="bl-who">{{ c.author }}</span>
+                    <span class="hist-msg" v-truncate>{{ c.message }}</span>
+                    <span class="bl-who" v-truncate>{{ c.author }}</span>
                     <span class="bl-date">{{ c.date }}</span>
                   </div>
                   <div v-if="historyDiffLoading" class="empty-msg">{{ $t('label.loading') }}</div>

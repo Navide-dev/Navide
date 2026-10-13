@@ -29,6 +29,24 @@ def _account(payload: dict) -> str:
     return _s(payload, "account") or DEFAULT_ACCOUNT
 
 
+async def _share_open_notify(m: ChannelManager) -> dict[str, Any]:
+    """The switch, whether Navide Cloud is connected and whether its server does share
+    links (the window shows the switch only when both hold). Without Cloud nothing is
+    asked of the server: the link state is the cheap read, never the Keychain; with it,
+    the server is asked once per connection (share_links.ensure_supported)."""
+    from .. import server_link, share_links, sync_keyring
+
+    connected = server_link.link_state() == server_link.STATE_CONNECTED
+    supported = False
+    if connected:
+        try:
+            supported = await share_links.ensure_supported(share_links.ServerLinksClient())
+        except (share_links.ShareError, sync_keyring.KeyringError) as exc:
+            log.info("channels: asking whether the server does share links failed: %s", exc)
+    return {"ok": True, "enabled": m.store.share_open_notify(), "cloudConnected": connected,
+            "shareSupported": supported}
+
+
 async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]:
     if msg_type == "channels.list":
         return {"ok": True, **m.list()}
@@ -80,6 +98,22 @@ async def _dispatch(m: ChannelManager, msg_type: str, p: dict) -> dict[str, Any]
         return await m.set_binding_options(_s(p, "pane_id"), _s(p, "verbosity"))
     if msg_type == "channels.bindings":
         return m.bindings()
+    if msg_type == "channels.overview":
+        return m.overview()
+    if msg_type == "channels.unbind_many":
+        pane_ids = p.get("pane_ids")
+        if not isinstance(pane_ids, list) or not all(isinstance(x, str) and x for x in pane_ids):
+            return {"ok": False, "error": "pane_ids must be a list of pane ids"}
+        return await m.unbind_many(pane_ids)
+    if msg_type == "channels.focus_pane":
+        return m.focus_pane(_s(p, "pane_id"))
+    if msg_type == "channels.get_share_open_notify":
+        return await _share_open_notify(m)
+    if msg_type == "channels.share_targets":
+        return m.share_targets()
+    if msg_type == "channels.set_share_open_notify":
+        m.store.set_share_open_notify(bool(p.get("enabled")))
+        return await _share_open_notify(m)
     return {"ok": False, "error": f"unknown request {msg_type}"}
 
 
@@ -89,6 +123,8 @@ MESSAGE_TYPES = (
     "channels.remove", "channels.pairing.list", "channels.pairing.approve", "channels.pairing.reject",
     "channels.link.create", "channels.allow.list", "channels.allow.remove", "channels.locations", "channels.bind",
     "channels.unbind", "channels.rebind", "channels.bindings", "channels.set_binding_options",
+    "channels.overview", "channels.unbind_many", "channels.focus_pane",
+    "channels.get_share_open_notify", "channels.set_share_open_notify", "channels.share_targets",
 )
 
 

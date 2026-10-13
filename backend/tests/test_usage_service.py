@@ -2160,11 +2160,18 @@ class _RecordingVault:
     def slot_is_empty(self, agent_key: str, slot_id: str) -> bool:
         return True  # this fake never stores a secret
 
-    def identity(self, agent_key: str, slot_id: str | None = None) -> dict:
+    def identity(self, agent_key: str, slot_id: str | None = None, *, strict: bool = False) -> dict:
         # An account the vault cannot name is never folded into another
         # profile, so these tests stay about the harvest bookkeeping alone
         # (de-duplication has its own suite: test_login_dedupe.py).
         return {"email": None, "signedIn": False}
+
+    # No claude account has signed in inside its own config dir.
+    def account_dir_signed_in(self, slot_id: str) -> bool:
+        return False
+
+    def account_dir_identity(self, slot_id: str) -> dict | None:
+        return None
 
     def restore(self, agent_key: str, slot_id: str) -> None:
         self.restored.append((agent_key, slot_id))
@@ -3543,3 +3550,524 @@ async def test_a_read_that_announces_its_own_switch_is_not_cancelled_by_it(
     await asyncio.wait_for(svc.poll_once(tmp_path), timeout=5)
 
     assert returned is True
+
+
+class _AccountDirVault(_SlotVault):
+    """Slots plus claude accounts that signed in inside their own config dir."""
+
+    def __init__(self, slots, signed_in_dirs):
+        super().__init__(slots)
+        self.signed_in_dirs = set(signed_in_dirs)
+
+    def account_dir_signed_in(self, slot_id: str) -> bool:
+        return slot_id in self.signed_in_dirs
+
+    def account_dir_path(self, slot_id: str) -> Path:
+        return Path("/account-dirs") / slot_id
+
+
+async def test_a_parked_account_with_its_own_config_dir_is_measured_live(
+    tmp_path, monkeypatch
+):
+    """An account that signed in inside its own config dir can be asked
+    directly — its /usage read runs on that dir, not the live login — so it
+    gets a current figure instead of its old one marked stale. An account
+    without one stays not-measured, exactly as before."""
+    store = _isolated_store(tmp_path)
+    active = store.create(agent_key="claude", name="Active")
+    with_dir = store.create(agent_key="claude", name="Dir")
+    without = store.create(agent_key="claude", name="NoDir")
+    store.set_default("claude", active["id"])
+    vault = _AccountDirVault({}, {with_dir["id"]})
+    monkeypatch.setattr(us, "_get_profiles_store", lambda: store)
+    monkeypatch.setattr(us, "_get_credential_vault", lambda: vault)
+
+    async def fake_claude(home):
+        return us._snapshot("claude", "ok",
+                            windows=[us._window("session", "Session", 10, None)])
+
+    read_dirs: list[Path] = []
+
+    async def fake_dir(directory):
+        read_dirs.append(directory)
+        return us._snapshot("claude", "ok",
+                            windows=[us._window("session", "Session", 70, None)])
+
+    monkeypatch.setattr(us, "fetch_claude", fake_claude)
+    monkeypatch.setattr(us, "fetch_claude_account_dir", fake_dir)
+    _stub_non_claude_fetchers(monkeypatch)
+
+    svc = us.UsageService(cache_path=tmp_path / "usage-cache.json")
+    payload = await svc.poll_once(tmp_path)
+
+    assert read_dirs == [Path("/account-dirs") / with_dir["id"]]
+    row = payload["accounts"]["claude"][with_dir["id"]]
+    assert row["status"] == "ok"
+    assert row["stale"] is False
+    assert row["windows"][0]["usedPercent"] == 70
+    assert payload["accounts"]["claude"][without["id"]]["status"] == "not-measured"
+    assert payload["accounts"]["claude"][active["id"]]["windows"][0]["usedPercent"] == 10
+
+
+class _IdentityVault(_RecordingVault):
+    def __init__(self, root: Path, live: str, slot: str) -> None:
+        super().__init__(root=root)
+        self._emails = {None: live, "slot": slot}
+
+    def identity(self, agent_key: str, slot_id: str | None = None, *, strict: bool = False) -> dict:
+        email = self._emails[None if slot_id is None else "slot"]
+        return {"signedIn": True, "email": email}
+
+    def restore(self, agent_key: str, slot_id: str) -> bool:
+        self.restored.append((agent_key, slot_id))
+        return True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("live", "restored"), [("me@example.com", True), ("other@example.com", False)])
+async def test_a_harvested_active_login_never_overrides_an_account_changed_outside_navide(
+    tmp_path, monkeypatch, _isolated_convenience_gate, live, restored
+) -> None:
+    """D7: restoring live is the auto-repair; a different signed-in account
+    is the user's own change, answered with a prompt instead."""
+    vault = _IdentityVault(tmp_path / "slots", live=live, slot="me@example.com")
+    monkeypatch.setattr(us, "_login_pane_running", lambda agent_key, profile_id: False)
+    monkeypatch.setattr(us, "_active_profile_id", lambda agent_key: "p1")
+    monkeypatch.setattr(us, "_dedupe_harvested_login", lambda vault, agent_key, profile_id: profile_id)
+
+    assert await us._harvest_login_home_locked(vault, "claude", "p1") is True
+
+    assert vault.restored == ([("claude", "p1")] if restored else [])
+    actions = [e["action"] for e in _isolated_convenience_gate.history()]
+    assert actions == (["repair"] if restored else ["prompt"])
+
+
+# ── Account prompt: switch-back and the active pointer (security review D3/D3b/D1) ──
+
+_SEC_A = '{"claudeAiOauth":{"accessToken":"tokA","refreshToken":"rA","expiresAt":9999999999999}}'
+_SEC_B = '{"claudeAiOauth":{"accessToken":"tokB","refreshToken":"rB","expiresAt":9999999999999}}'
+_SEC_C = '{"claudeAiOauth":{"accessToken":"tokC","refreshToken":"rC","expiresAt":9999999999999}}'
+
+
+def _prompt_setup(tmp_path, monkeypatch):
+    """A real vault and store behind ``app``: profiles A (active) and C."""
+    from agent_team_backend import app
+    from agent_team_backend.credential_vault import CredentialVault, LiveCredentials
+
+    store = CliProfilesStore(path=tmp_path / "p.json", profiles_root=tmp_path / "pr")
+    monkeypatch.setattr(app, "cli_profiles_store", store)
+    (tmp_path / "home").mkdir()
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    monkeypatch.setattr(app, "credential_vault", vault)
+
+    async def broadcast(event, *, exclude=None):
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    pa = store.create(agent_key="claude", name="A")["id"]
+    pc = store.create(agent_key="claude", name="C")["id"]
+    vault.write_slot("claude", pa, LiveCredentials(secret=_SEC_A, account={"emailAddress": "a@x.com"}))
+    vault.write_slot("claude", pc, LiveCredentials(secret=_SEC_C, account={"emailAddress": "c@x.com"}))
+    store.set_default("claude", pa)
+    monkeypatch.setattr(us, "_login_pane_running", lambda *a: False)
+    monkeypatch.setattr(vault, "harvest_login_home", lambda *a, **k: True)
+    real_slot_is_empty = vault.slot_is_empty
+    monkeypatch.setattr(vault, "slot_is_empty",
+                        lambda agent_key, slot_id, **k: slot_id != pa and real_slot_is_empty(agent_key, slot_id, **k))
+    return app, store, vault, pa, pc
+
+
+@pytest.mark.asyncio
+async def test_switching_back_from_the_account_prompt_restores_and_never_corrupts_the_slot(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D3/D3b: after the prompt Navide's active account follows the live
+    login, so "switch back" really switches (it used to answer ok with the
+    outside login still live) and a later switch captures that login into
+    its own profile, never into the prompt's slot."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account={"emailAddress": "b@x.com"}))
+
+    await us._harvest_login_home_locked(vault, "claude", pa)
+
+    [prompt] = [e for e in _isolated_convenience_gate.history() if e["action"] == "prompt"]
+    detail = json.loads(prompt["detail"])
+    assert detail["slotLabel"] == "A"  # X2
+    assert vault.read_live("claude").secret == _SEC_B
+    assert store.list()["defaults"]["claude"] != pa
+
+    s = _session()
+    await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
+        "agent_key": "claude", "profile_id": detail["slotId"], "restore_live": True,
+        "restore_live_fingerprint": detail["liveFingerprint"]}})
+    assert not s.websocket.sent[-1].get("error")
+    assert vault.read_live("claude").secret == _SEC_A
+
+    await app.handle_message(s, {"id": "2", "type": "cli_profiles.set_default", "payload": {
+        "agent_key": "claude", "profile_id": pc, "force": True}})
+    assert vault.read_slot("claude", pa).secret == _SEC_A
+    assert vault.read_live("claude").secret == _SEC_C
+
+
+@pytest.mark.asyncio
+async def test_switching_back_restores_the_slot_when_it_is_still_the_active_account(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D3: a prompt that left the active pointer on the slot (an outside
+    sign-out) still switches back for real — restore_live writes the slot
+    to live instead of answering "already active"."""
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    s = _session()
+    await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
+        "agent_key": "claude", "profile_id": pa, "restore_live": True,
+        "restore_live_fingerprint": ""}})
+
+    assert not s.websocket.sent[-1].get("error")
+    assert vault.read_live("claude").secret == _SEC_A
+    [entry] = _isolated_convenience_gate.history()
+    assert (entry["feature"], entry["action"]) == ("credentials.auto-repair", "repair")
+
+
+@pytest.mark.asyncio
+async def test_an_unidentified_outside_login_is_a_prompt_not_an_overwrite(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D1: a live login with no email (a long-lived token) that is not the
+    slot's own secret is the user's; it is never overwritten."""
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account=None))
+
+    assert await us._harvest_login_home_locked(vault, "claude", pa) is True
+
+    assert vault.read_live("claude").secret == _SEC_B
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["prompt"]
+    assert store.list()["defaults"]["claude"] != pa
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_live_login_is_left_alone(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D1/D2: a failed live read (a transient Keychain error) is not an
+    empty login: nothing is written and nothing claims a repair."""
+    from agent_team_backend.credential_vault import CredentialVaultError
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    restored: list[str] = []
+    monkeypatch.setattr(vault, "restore", lambda *a, **k: restored.append("x"))
+
+    def unreadable(agent_key, slot_id=None, *, scope=None, strict=False):
+        raise CredentialVaultError("keychain read failed (rc 36)")
+
+    monkeypatch.setattr(vault, "identity", unreadable)
+
+    assert await us._harvest_login_home_locked(vault, "claude", pa) is True
+
+    assert restored == []
+    assert _isolated_convenience_gate.history() == []
+
+
+# ── Account prompt: per-provider vendors and identity-less logins (round 2: D3/D3b, AC-N1) ──
+
+
+def _plain_vault_setup(tmp_path, monkeypatch):
+    """A real vault and store behind ``app``, with no profiles yet."""
+    from agent_team_backend import app
+    from agent_team_backend.credential_vault import CredentialVault
+
+    store = CliProfilesStore(path=tmp_path / "p.json", profiles_root=tmp_path / "pr")
+    monkeypatch.setattr(app, "cli_profiles_store", store)
+    (tmp_path / "home").mkdir()
+    vault = CredentialVault(root=tmp_path / "root", real_home=tmp_path / "home",
+                            security_runner=lambda a, i=None: (1, ""), platform="linux")
+    monkeypatch.setattr(app, "credential_vault", vault)
+
+    async def broadcast(event, *, exclude=None):
+        pass
+
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    monkeypatch.setattr(us, "_login_pane_running", lambda *a: False)
+    return app, store, vault
+
+
+@pytest.mark.asyncio
+async def test_re_signing_the_active_per_provider_account_applies_the_new_login(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1/D3: opencode signs in against the live store. After the CLI
+    refreshed its token, a Navide sign-in of the active profile ends with
+    the new login live (as on main): the live login equal to the pre-login
+    copy is that account's own, never an outside account."""
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    po = store.create(agent_key="opencode", name="OC", scope="anthropic")["id"]
+    mk = lambda a: json.dumps({"type": "oauth", "access": a, "refresh": "r-" + a, "expires": 1})  # noqa: E731
+    vault.write_slot("opencode", po, LiveCredentials(secret=mk("old")), scope="anthropic")
+    store.set_default("opencode", po)
+    vault.write_live("opencode", LiveCredentials(secret=mk("refreshed")), scope="anthropic")
+    vault.login_spawn_env("opencode", po, scope="anthropic")
+    vault.write_live("opencode", LiveCredentials(secret=mk("NEW")), scope="anthropic")
+
+    assert await us._harvest_login_home_locked(vault, "opencode", po) is True
+
+    assert json.loads(vault.read_live("opencode", scope="anthropic").secret)["access"] == "NEW"
+    assert [p["name"] for p in store.list()["profiles"]] == ["OC"]
+    assert store.list()["defaults"]["opencode"] == po
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]
+
+
+@pytest.mark.asyncio
+async def test_re_signing_an_identity_less_active_account_keeps_mains_restore(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1: kimi stores no identity. Re-signing the active account through
+    Navide after the CLI refreshed its token restores the new login every
+    time, as main does, and never registers a stray profile per sign-in."""
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    tok = lambda n: json.dumps({"access_token": n, "refresh_token": "r-" + n})  # noqa: E731
+    pk = store.create(agent_key="kimi", name="Work")["id"]
+    vault.write_slot("kimi", pk, LiveCredentials(secret=tok("t1")))
+    store.set_default("kimi", pk)
+    vault.restore("kimi", pk)
+    n = {"i": 0}
+
+    def fake_harvest(agent_key, slot_id, **k):
+        n["i"] += 1
+        vault.write_slot("kimi", slot_id, LiveCredentials(secret=tok(f"new{n['i']}")))
+        return True
+
+    monkeypatch.setattr(vault, "harvest_login_home", fake_harvest)
+    for round_ in range(3):
+        vault.write_live("kimi", LiveCredentials(secret=tok(f"refreshed{round_}")))
+        await us._harvest_login_home_locked(vault, "kimi", store.list()["defaults"]["kimi"])
+        assert json.loads(vault.read_live("kimi").secret)["access_token"] == f"new{round_ + 1}"
+
+    assert [p["name"] for p in store.list()["profiles"]] == ["Work"]
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"] * 3
+
+
+def test_an_outside_per_provider_login_is_registered_in_a_profile_of_its_scope(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """D3b: registering an outside opencode login (the account prompt's
+    follow, and its switch-back's capture) creates the profile in the
+    provider scope it was read from; without one the store refused it and
+    the active pointer never moved."""
+    from agent_team_backend import credential_watcher
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault = _plain_vault_setup(tmp_path, monkeypatch)
+    po = store.create(agent_key="opencode", name="OC", scope="anthropic")["id"]
+    mk = lambda a: json.dumps({"type": "oauth", "access": a, "refresh": "r-" + a, "expires": 1})  # noqa: E731
+    vault.write_slot("opencode", po, LiveCredentials(secret=mk("A")), scope="anthropic")
+    store.set_default("opencode", po)
+    vault.write_live("opencode", LiveCredentials(secret=mk("B")), scope="anthropic")
+
+    followed = credential_watcher._adopt_unregistered_live_account(
+        "opencode", "Signed in outside Navide", scope="anthropic"
+    )
+
+    assert followed is not None and followed != po
+    assert store.list()["defaults"]["opencode"] == followed
+    assert store.get(followed)["scope"] == "anthropic"
+    assert json.loads(vault.read_slot("opencode", followed, scope="anthropic").secret)["access"] == "B"
+    assert json.loads(vault.read_slot("opencode", po, scope="anthropic").secret)["access"] == "A"
+
+
+@pytest.mark.asyncio
+async def test_the_same_unidentified_outside_login_never_multiplies_profiles(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N1: an outside login with no email that a profile already holds
+    is followed to that profile; a prompt never registers a second one."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    s = _session()
+    for round_ in range(2):
+        vault.write_live("claude", LiveCredentials(secret=_SEC_B, account=None))
+        await us._harvest_login_home_locked(vault, "claude", pa)
+        assert store.list()["defaults"]["claude"] != pa
+        if round_ == 0:
+            us_switch = {"agent_key": "claude", "profile_id": pa, "force": True}
+            await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": us_switch})
+            assert not s.websocket.sent[-1].get("error")
+            assert vault.read_live("claude").secret == _SEC_A
+
+    names = [p["name"] for p in store.list()["profiles"]]
+    assert len(names) == 3, names
+
+
+# ── Account prompt: switch-back is a real, guarded switch (round 2: AC-N2) ──
+
+
+def _switch_back(app, s, pid, fingerprint=None):
+    payload = {"agent_key": "claude", "profile_id": pid, "restore_live": True}
+    if fingerprint is not None:
+        payload["restore_live_fingerprint"] = fingerprint
+    return app.handle_message(s, {"id": "sb", "type": "cli_profiles.set_default", "payload": payload})
+
+
+@pytest.mark.asyncio
+async def test_the_account_prompt_carries_a_fingerprint_never_the_secret(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account={"emailAddress": "b@x.com"}))
+
+    await us._harvest_login_home_locked(vault, "claude", pa)
+
+    [prompt] = [e for e in _isolated_convenience_gate.history() if e["action"] == "prompt"]
+    assert json.loads(prompt["detail"])["liveFingerprint"] == login_fingerprint(_SEC_B)
+    assert "tokB" not in prompt["detail"] and "rB" not in prompt["detail"]
+
+
+@pytest.mark.asyncio
+async def test_a_stale_switch_back_never_overwrites_a_newer_outside_login(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N2: the prompt was about B; the user then signed in D outside.
+    Its switch-back is refused and nothing moves: D stays live, B's
+    profile keeps B."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account={"emailAddress": "b@x.com"}))
+    await us._harvest_login_home_locked(vault, "claude", pa)
+    [prompt] = [e for e in _isolated_convenience_gate.history() if e["action"] == "prompt"]
+    pb = store.list()["defaults"]["claude"]
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account={"emailAddress": "d@x.com"}))
+
+    s = _session()
+    await _switch_back(app, s, pa, json.loads(prompt["detail"])["liveFingerprint"])
+
+    assert s.websocket.sent[-1]["error"]["code"] == "LIVE_CHANGED"
+    assert vault.read_live("claude").secret == _SEC_D
+    assert vault.read_slot("claude", pb).secret == _SEC_B
+    assert store.list()["defaults"]["claude"] == pb
+
+
+@pytest.mark.asyncio
+async def test_a_switch_back_without_the_prompts_fingerprint_is_refused(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_B, account=None))
+    s = _session()
+    await _switch_back(app, s, pa)
+
+    assert s.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+    assert vault.read_live("claude").secret == _SEC_B
+
+
+@pytest.mark.asyncio
+async def test_switching_back_keeps_the_unknown_live_login_in_its_own_profile(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """AC-N2: with the prompt's account still the active one, switching back
+    first captures the live login nobody holds into a profile of its own,
+    then switches like Settings does: counted, announced, broadcast."""
+    from agent_team_backend import ws_handlers
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account=None))
+    changed: list[str] = []
+
+    async def profiles_changed(reason, **kw):
+        changed.append(reason)
+
+    monkeypatch.setattr(ws_handlers, "_broadcast_profiles_changed", profiles_changed)
+    s = _session()
+    await _switch_back(app, s, pa, login_fingerprint(_SEC_D))
+
+    assert not s.websocket.sent[-1].get("error")
+    assert vault.read_live("claude").secret == _SEC_A
+    assert store.list()["defaults"]["claude"] == pa
+    held = [p["id"] for p in store.list()["profiles"]
+            if vault.read_slot("claude", p["id"]).secret == _SEC_D]
+    assert len(held) == 1 and held[0] not in (pa, pc)
+    assert changed == ["set_default"]
+    assert [e["action"] for e in _isolated_convenience_gate.history()] == ["repair"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("guard", ["login", "rate"])
+async def test_switching_back_obeys_the_normal_switch_guards(
+    tmp_path, monkeypatch, _isolated_convenience_gate, guard
+) -> None:
+    """AC-N2: a running sign-in and the switch rate limit refuse the
+    switch-back too; nothing is captured, registered or written."""
+    from agent_team_backend import ws_handlers
+    from agent_team_backend.convenience_wiring import login_fingerprint
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _register_running_terminal, _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _SEC_D = _SEC_C.replace("tokC", "tokD")
+    vault.write_live("claude", LiveCredentials(secret=_SEC_D, account=None))
+    s = _session()
+    if guard == "login":
+        _register_running_terminal(s, "login", "claude", login_profile_id=pa)
+    else:
+        monkeypatch.setattr(ws_handlers, "_switch_rate_retry_after", lambda agent_key: 30.0)
+
+    await _switch_back(app, s, pa, login_fingerprint(_SEC_D))
+
+    code = s.websocket.sent[-1]["error"]["code"]
+    assert code == ("LOGIN_IN_PROGRESS" if guard == "login" else "SWITCH_RATE_LIMITED")
+    assert vault.read_live("claude").secret == _SEC_D
+    assert [p["name"] for p in store.list()["profiles"]] == ["A", "C"]
+    assert _isolated_convenience_gate.history() == []
+
+
+@pytest.mark.asyncio
+async def test_a_sign_in_through_navide_applies_live_even_with_auto_repair_off(
+    tmp_path, monkeypatch, _isolated_convenience_gate
+) -> None:
+    """P4 (a): signing the active account in again inside Navide is the
+    user's own request, not an automatic repair; with the switch off the
+    new login still goes live, and a later switch keeps it in the slot."""
+    from agent_team_backend.credential_vault import LiveCredentials
+    from tests.test_app_cli_profiles import _session
+
+    app, store, vault, pa, pc = _prompt_setup(tmp_path, monkeypatch)
+    _isolated_convenience_gate.set_allowed("credentials.auto-repair", False)
+    vault.write_live("claude", LiveCredentials(secret=_SEC_A, account={"emailAddress": "a@x.com"}))
+    fresh = _SEC_A.replace("tokA", "tokA2")
+
+    def harvest(agent_key, slot_id, **kwargs):
+        vault.write_slot("claude", slot_id, LiveCredentials(secret=fresh, account={"emailAddress": "a@x.com"}))
+        return True
+
+    monkeypatch.setattr(vault, "harvest_login_home", harvest)
+    await us._harvest_login_home_locked(vault, "claude", pa)
+
+    assert vault.read_live("claude").secret == fresh
+    s = _session()
+    await app.handle_message(s, {"id": "1", "type": "cli_profiles.set_default", "payload": {
+        "agent_key": "claude", "profile_id": pc, "force": True}})
+    assert vault.read_slot("claude", pa).secret == fresh

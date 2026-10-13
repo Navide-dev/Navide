@@ -1,9 +1,11 @@
 import json
 import os
+import stat
 from pathlib import Path
 
 import pytest
 
+from agent_team_backend import osplat
 from agent_team_backend.codex_home import CodexHomeManager
 from agent_team_backend.skills_store import SkillsStore
 
@@ -334,6 +336,48 @@ def test_prepare_adopts_stranded_login_for_new_pane(tmp_path: Path) -> None:
     assert stranded.is_symlink()
 
 
+def _signed_out_outside_navide(tmp_path: Path) -> tuple[CodexHomeManager, Path, Path]:
+    """Two in-pane logins, the newer one promoted, then `codex logout`
+    outside Navide removes the shared credential. Pane A still holds its own
+    older login as a real file."""
+    real = tmp_path / "real-codex"
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home_a, home_b = manager.prepare("pane-a"), manager.prepare("pane-b")
+    _write_pane_auth(home_a / "auth.json", "old-account")
+    os.utime(home_a / "auth.json", (1, 1))
+    _write_pane_auth(home_b / "auth.json", "new-account")
+    assert manager.promote_stranded_auth() is True
+    (real / "auth.json").unlink()
+    return manager, real, home_a
+
+
+def test_resuming_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Path) -> None:
+    # User decision (2026-10-11): after a sign-out outside Navide, the login
+    # copies Navide holds behave as on main. A resume reuses the pane home
+    # as it is: its own login copy stays, and nothing signs the shared one
+    # back in.
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+    sid = "0199aaaa-bbbb-7ccc-8ddd-eeeeeeeeeeee"
+    day = home_a / "sessions" / "2026" / "10" / "10"
+    day.mkdir(parents=True)
+    (day / f"rollout-2026-10-10T00-00-00-{sid}.jsonl").write_text("{}\n", encoding="utf-8")
+
+    home = manager.find_session_home(sid)
+
+    assert home == home_a
+    assert "old-account" in (home / "auth.json").read_text(encoding="utf-8")
+    assert not (real / "auth.json").exists()
+
+
+def test_respawning_the_same_home_after_an_outside_logout_keeps_the_panes_own_login(tmp_path: Path) -> None:
+    manager, real, home_a = _signed_out_outside_navide(tmp_path)
+
+    home = manager.prepare("pane-a")
+
+    assert "old-account" in (home / "auth.json").read_text(encoding="utf-8")
+    assert not (real / "auth.json").exists()
+
+
 # ── sub-agent pin repair ────────────────────────────────────────────────────
 
 def _meta(sid: str, *, parent: str = "", ancestors: tuple[str, ...] = ()) -> str:
@@ -547,3 +591,112 @@ def test_promote_stranded_auth_copies_without_hard_links(
     assert os.stat(real_auth).st_mode & 0o777 == 0o600
     assert stranded.is_symlink() and stranded.resolve() == real_auth
     assert manager.promote_stranded_auth() is False
+
+
+
+def _trust_headers(path: Path) -> list[str]:
+    """The same table header in the shapes TOML allows: a trailing comment,
+    spacing inside the brackets, a literal (single-quoted) key."""
+    key = str(path)
+    return [
+        f'[hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0"]  # trusted in codex',
+        f'[ hooks.state."{key.replace(chr(92), chr(92) * 2)}:stop:0:0" ]',
+        f"[hooks.state.'{key}:stop:0:0']",
+    ]
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_seed_hook_trust_reads_any_toml_shape_of_the_real_row(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    (real / "config.toml").write_text(
+        f'{_trust_headers(real / "hooks.json")[shape]}\ntrusted_hash = "sha256:aaaa"\n', encoding="utf-8"
+    )
+
+    assert manager.seed_hook_trust(pane) == 1
+
+    state = tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))["hooks"]["state"]
+    assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
+
+
+@pytest.mark.parametrize("shape", range(3))
+def test_a_reformatted_seeded_row_is_neither_missing_nor_seeded_twice(tmp_path: Path, shape: int) -> None:
+    import tomllib
+
+    manager, real, pane = _hook_trust_fixture(tmp_path)
+    assert manager.seed_hook_trust(pane) == 2
+    # The seeded stop row is rewritten into another legal TOML shape.
+    text = (real / "config.toml").read_text(encoding="utf-8")
+    seeded = f'[hooks.state."{_toml_escape_for_test(pane / "hooks.json")}:stop:0:0"]'
+    assert seeded in text
+    (real / "config.toml").write_text(text.replace(seeded, _trust_headers(pane / "hooks.json")[shape]), encoding="utf-8")
+
+    assert manager.hook_trust_intact() is True
+    assert manager.seed_hook_trust(pane) == 0
+    tomllib.loads((real / "config.toml").read_text(encoding="utf-8"))
+    manager.drop_all_hook_trust()
+    assert manager.any_pane_hook_trust() is False
+
+
+def _toml_escape_for_test(path: Path) -> str:
+    from agent_team_backend.cli_vendors.codex import _toml_escape
+
+    return _toml_escape(str(path))
+
+
+def test_prepare_keeps_a_correct_skills_link_when_readlink_reports_an_extended_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows' os.readlink returns the target with a \\\\?\\ prefix. Compared
+    as a raw string, the already-correct skills link read as wrong and was
+    unlinked and recreated on every prepare."""
+    real = tmp_path / "real-codex"
+    (real / "skills" / "native").mkdir(parents=True)
+    manager = CodexHomeManager(real_home=real, panes_root=tmp_path / "panes")
+    home = manager.prepare("pane-1")
+    assert (home / "skills").is_symlink()
+
+    real_readlink = os.readlink
+
+    def extended_readlink(path):
+        # Windows' real readlink already carries the prefix: add it only when absent.
+        raw = real_readlink(path)
+        return raw if raw.startswith("\\\\?\\") else "\\\\?\\" + raw
+
+    monkeypatch.setattr(os, "readlink", extended_readlink)
+    recreated: list[str] = []
+    real_symlink_to = Path.symlink_to
+
+    def spy(self, target, target_is_directory=False):
+        if self.name == "skills":
+            recreated.append(self.name)
+        return real_symlink_to(self, target, target_is_directory)
+
+    monkeypatch.setattr(Path, "symlink_to", spy)
+    manager.prepare("pane-1")
+    assert recreated == []
+    assert (home / "skills" / "native").exists()
+
+
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="POSIX symlinks and modes")
+def test_a_temp_file_that_cannot_be_removed_never_changes_the_file_it_links_to(tmp_path: Path) -> None:
+    """A config.toml.navide-tmp that is a link to some other file, in a folder
+    that refuses the removal: nothing is done to the file it points at."""
+    from agent_team_backend.cli_vendors.codex import _discard_temp
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.write_text("not Navide's", encoding="utf-8")
+    elsewhere.chmod(0o644)
+    folder = tmp_path / "dotcodex"
+    folder.mkdir()
+    tmp = folder / "config.toml.navide-tmp"
+    tmp.symlink_to(elsewhere)
+    folder.chmod(0o555)
+    try:
+        with pytest.raises(PermissionError):
+            _discard_temp(tmp)
+    finally:
+        folder.chmod(0o755)
+
+    assert stat.S_IMODE(elsewhere.stat().st_mode) == 0o644

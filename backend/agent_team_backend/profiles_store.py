@@ -160,6 +160,11 @@ def _empty_doc() -> dict[str, Any]:
         "defaults": {key: None for key in SUPPORTED_AGENT_KEYS},
         # User alias for each agent's built-in Default slot; absent = unnamed.
         "defaultNames": {},
+        # The account new panes start on, when it differs from the account the
+        # live credential belongs to (``defaults``): a claude account that runs
+        # on its own config dir is chosen here without swapping anything.
+        # Absent = new panes follow ``defaults``.
+        "paneDefaults": {},
     }
 
 
@@ -225,6 +230,12 @@ class CliProfilesStore:
                 value = default_names.get(key)
                 if isinstance(value, str) and value.strip():
                     doc["defaultNames"][key] = value
+        pane_defaults = data.get("paneDefaults")
+        if isinstance(pane_defaults, dict):
+            for key in SUPPORTED_AGENT_KEYS:
+                value = pane_defaults.get(key)
+                if isinstance(value, str) and value:
+                    doc["paneDefaults"][key] = value
         return doc
 
     def _import_legacy(self, cur: Any, data: Any) -> None:
@@ -270,6 +281,7 @@ class CliProfilesStore:
             "profiles": doc["profiles"],
             "defaults": doc["defaults"],
             "defaultNames": doc["defaultNames"],
+            "paneDefaults": doc["paneDefaults"],
         }
 
     def get(self, profile_id: str) -> dict[str, Any] | None:
@@ -373,6 +385,9 @@ class CliProfilesStore:
             for key, value in list(doc["defaults"].items()):
                 if value == profile_id:
                     doc["defaults"][key] = None
+            for key, value in list(doc["paneDefaults"].items()):
+                if value == profile_id:
+                    doc["paneDefaults"].pop(key)
             self._write(doc)
         home = self.home_path(profile)
         if home.exists():
@@ -407,6 +422,33 @@ class CliProfilesStore:
                 doc["defaults"][agent_key] = None
             self._write(doc)
             return doc["defaults"]
+
+    def get_pane_default(self, agent_key: str) -> str | None:
+        """The profile id new panes of ``agent_key`` start on, or None to
+        follow the active default."""
+        return self._read()["paneDefaults"].get(agent_key) or None
+
+    def set_pane_default(self, agent_key: str, profile_id: str | None) -> dict[str, str]:
+        """Choose the account new panes start on without touching the live
+        credential; None clears the choice. Returns every pane default."""
+        self._validate_agent_key(agent_key)
+        with self._lock:
+            doc = self._read()
+            if profile_id:
+                profile = next(
+                    (p for p in doc["profiles"] if p.get("id") == profile_id), None
+                )
+                if profile is None:
+                    raise KeyError(f"profile not found: {profile_id}")
+                if profile.get("agentKey") != agent_key:
+                    raise ValueError(
+                        f"profile {profile_id} does not belong to agent {agent_key!r}"
+                    )
+                doc["paneDefaults"][agent_key] = profile_id
+            else:
+                doc["paneDefaults"].pop(agent_key, None)
+            self._write(doc)
+            return doc["paneDefaults"]
 
     def home_path(self, profile: dict[str, Any]) -> Path:
         return Path(

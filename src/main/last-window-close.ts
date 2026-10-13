@@ -33,7 +33,7 @@ export interface LastWindowCloseDeps {
   promptOpen: () => boolean
   /** Shows the quit dialog; resolves true when the user chose Quit. */
   ask: () => Promise<boolean>
-  /** The user confirmed: mark the quit and start the teardown. */
+  /** The user confirmed: mark the quit and start it (app.quit()). */
   quit: () => void
 }
 

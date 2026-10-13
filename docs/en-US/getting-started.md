@@ -2,7 +2,7 @@
 
 English | [繁體中文](../zh-TW/getting-started.md) | [日本語](../ja-JP/getting-started.md) | [Documentation](README.md)
 
-Navide supports macOS 13 or newer on Apple silicon, Linux x64, and Windows on x64 or Arm. The [latest GitHub release](https://github.com/nt-nerdtechnic/Navide/releases/latest) provides DMG and ZIP downloads for macOS, signed with a Developer ID certificate and notarized by Apple, NSIS installers for Windows x64 and Arm64, and an AppImage and a `.deb` for Linux x64. If a GitHub download stalls or fails, the same files are served from the dl.navide.dev mirror — the README's download list carries a *mirror* link beside every file, and navide.dev switches to it automatically when it is reachable.
+Navide supports macOS 13 or newer on Apple silicon, Linux x64, and Windows on x64 or Arm. The [latest GitHub release](https://github.com/Navide-dev/Navide/releases/latest) provides DMG and ZIP downloads for macOS, signed with a Developer ID certificate and notarized by Apple, NSIS installers for Windows x64 and Arm64, and an AppImage and a `.deb` for Linux x64. If a GitHub download stalls or fails, the same files are served from the dl.navide.dev mirror — the README's download list carries a *mirror* link beside every file, and navide.dev switches to it automatically when it is reachable.
 
 To install on macOS, download the DMG and copy Navide to Applications, then open it normally — no Gatekeeper workaround is needed.
 
@@ -35,7 +35,7 @@ Each coding CLI has its own installation, authentication, subscription, and data
 ## Install from source
 
 ```bash
-git clone https://github.com/nt-nerdtechnic/Navide.git
+git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 pnpm install
 uv --project backend sync

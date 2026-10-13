@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { allDiagnosticsSorted, diagnosticsKey } from '../editor/diagnostics'
 import type { Diagnostic } from '../editor/diagnostics'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 
 const props = defineProps<{
   // The window's workspace — diagnostics from another root are labelled with
@@ -59,7 +60,7 @@ function openItem(d: Diagnostic): void {
     <div v-if="!all.length" class="problems-empty">{{ $t('label.no-problems-detected') }}</div>
     <div v-else class="problems-list">
       <div v-for="g in groups" :key="g.key" class="prob-group">
-        <div class="prob-file">{{ g.label }}</div>
+        <div class="prob-file" v-truncate>{{ g.label }}</div>
         <div
           v-for="(d, i) in g.items"
           :key="i"
@@ -68,7 +69,7 @@ function openItem(d: Diagnostic): void {
           @click="openItem(d)"
         >
           <span class="prob-icon" :class="sevClass(d.severity)">{{ sevIcon(d.severity) }}</span>
-          <span class="prob-msg">{{ d.message }}</span>
+          <span class="prob-msg" v-truncate>{{ d.message }}</span>
           <span class="prob-loc">{{ d.line }}{{ d.col ? ':' + d.col : '' }}</span>
           <span v-if="d.source" class="prob-src">{{ d.source }}</span>
           <button

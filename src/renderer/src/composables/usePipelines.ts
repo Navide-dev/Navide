@@ -19,6 +19,8 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
   const isLoaded = ref<boolean>(false)
   const loading = ref<boolean>(false)
   const error = ref<string>('')
+  /** Backend code of the last failure (e.g. PIPELINE_RUNNING); '' when none. */
+  const errorCode = ref<string>('')
 
   let unsubChanged: (() => void) | null = null
   let unsubBackend: (() => void) | null = null
@@ -34,6 +36,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       }>('pipelines.list', {})
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'failed to load pipelines'
+        errorCode.value = resp.error?.code ?? ''
         return
       }
       pipelines.value = resp.payload.pipelines
@@ -94,12 +97,14 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       )
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'create failed'
+        errorCode.value = resp.error?.code ?? ''
         return null
       }
       pipelines.value = resp.payload.pipelines
       return resp.payload.pipeline
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'create failed'
+      errorCode.value = ''
       return null
     }
   }
@@ -112,12 +117,14 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       )
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'rename failed'
+        errorCode.value = resp.error?.code ?? ''
         return false
       }
       pipelines.value = resp.payload.pipelines
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'rename failed'
+      errorCode.value = ''
       return false
     }
   }
@@ -133,12 +140,14 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       })
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'delete failed'
+        errorCode.value = resp.error?.code ?? ''
         return false
       }
       pipelines.value = resp.payload.pipelines
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'delete failed'
+      errorCode.value = ''
       return false
     }
   }
@@ -157,6 +166,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       })
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'set active failed'
+        errorCode.value = resp.error?.code ?? ''
         return false
       }
       activePipelineId.value = resp.payload.active_pipeline_id
@@ -164,6 +174,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'set active failed'
+      errorCode.value = ''
       return false
     }
   }
@@ -179,12 +190,14 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
       )
       if (!resp.ok || !resp.payload) {
         error.value = resp.error?.message ?? 'reset failed'
+        errorCode.value = resp.error?.code ?? ''
         return false
       }
       pipelines.value = resp.payload.pipelines
       return true
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'reset failed'
+      errorCode.value = ''
       return false
     }
   }
@@ -198,6 +211,7 @@ export function usePipelines(backend: ReturnType<typeof useBackend>) {
     isLoaded,
     loading,
     error,
+    errorCode,
     refresh,
     createPipeline,
     renamePipeline,

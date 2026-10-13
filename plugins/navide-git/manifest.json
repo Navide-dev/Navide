@@ -14,7 +14,7 @@
     "icon": "assets/git.png",
     "description": "Browse and manage workspace Git repositories in the left region or a separate window.",
     "license": "MIT",
-    "repository": "https://github.com/nt-nerdtechnic/Navide",
+    "repository": "https://github.com/Navide-dev/Navide",
     "categories": ["productivity", "version-control"]
   },
   "contributes": {

@@ -45,6 +45,7 @@ from .base import (
     ChannelAuthError,
     ChannelSendError,
     Emit,
+    InboundAttachment,
     InboundMessage,
     Location,
     backoff_delay,
@@ -189,6 +190,8 @@ class MattermostAdapter:
             is_direct=data.get("channel_type") == "D", ts=time.time(),
             # A Mattermost reply is a thread reply: its parent is the thread root.
             reply_to_id=str(post.get("root_id") or ""),
+            # Files are reported, not fetched: this adapter has no media support yet.
+            attachments=[InboundAttachment("file", "", None, "", "") for _ in post.get("file_ids") or []],
         ))
 
     def known_locations(self) -> list[dict[str, Any]]:

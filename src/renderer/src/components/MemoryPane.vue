@@ -14,6 +14,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { formatBytes } from '../lib/formatBytes'
 
@@ -303,7 +304,7 @@ defineExpose({ reload })
               >
                 <button type="button" class="memory-open" :disabled="busy" @click="openFile(file)">
                   <span class="memory-row-head">
-                    <strong class="memory-relative">{{ file.relative }}</strong>
+                    <strong class="memory-relative" v-truncate>{{ file.relative }}</strong>
                     <span v-if="!file.exists" class="memory-tag missing">
                       {{ t('settings.memory.not-created') }}
                     </span>

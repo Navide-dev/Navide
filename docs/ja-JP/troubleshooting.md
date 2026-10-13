@@ -107,4 +107,4 @@ Documentation Injection は Best-effort です。MCP Configuration、Package Run
 - Expected Behavior と Actual Behavior
 - Redact 済み Log または Screenshot
 
-Repository の [Bug Report Template](https://github.com/nt-nerdtechnic/Navide/issues/new?template=bug_report.yml)を使用してください。Vulnerability は [Security Policy（英語）](../../SECURITY.md)に従って非公開で報告してください。
+Repository の [Bug Report Template](https://github.com/Navide-dev/Navide/issues/new?template=bug_report.yml)を使用してください。Vulnerability は [Security Policy（英語）](../../SECURITY.md)に従って非公開で報告してください。

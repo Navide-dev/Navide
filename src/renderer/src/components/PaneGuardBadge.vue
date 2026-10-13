@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref } from 'vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import { guardKey, type GuardStore, type GuardTaintEvent } from '../composables/useGuard'
 
 /**
@@ -62,14 +62,15 @@ const consoleLines = computed(() => {
   if (!e) return []
   if (!events.value?.length) {
     // A mark made before deliveries were recorded, or the list failed to load.
-    return [{ key: 'since', ts: e.since, source: (e.sources ?? []).map(sourceText).join(', '), text: e.detail, full: null as string | null }]
+    return [{ key: 'since', ts: e.since, source: (e.sources ?? []).map(sourceText).join(', '), text: e.detail, whole: e.detail, full: null as string | null }]
   }
   return events.value.map((ev) => {
     const message = ev.message
     const text = message
       ? `${message.sender || ev.detail}: "${preview(message.content)}"`
       : `${ev.detail} (${t(ev.msg_key ? 'guard.pane.text-missing' : 'guard.pane.text-none')})`
-    return { key: String(ev.id), ts: ev.ts, source: sourceText(ev.source), text, full: message ? message.content : null }
+    const whole = message ? `${message.sender || ev.detail}: "${message.content}"` : text
+    return { key: String(ev.id), ts: ev.ts, source: sourceText(ev.source), text, whole, full: message ? message.content : null }
   })
 })
 
@@ -190,6 +191,7 @@ async function clear(): Promise<void> {
                 v-if="line.full !== null"
                 type="button"
                 class="pgd-line"
+                v-truncate="`${clock(line.ts)}  [${line.source}] ${line.whole}`"
                 :title="t('guard.pane.expand')"
                 :aria-expanded="expanded.includes(line.key)"
                 @click="toggleLine(line.key)"

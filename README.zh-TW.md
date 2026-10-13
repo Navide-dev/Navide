@@ -10,9 +10,9 @@ Navide 是一套開源、AI-native 的軟體工程環境，專為一個人調度
 
 [English](README.md) | 繁體中文 | [日本語](README.ja-JP.md)
 
-[下載 v0.2.14](https://github.com/nt-nerdtechnic/Navide/releases/tag/v0.2.14) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
+[下載 v0.2.21](https://github.com/Navide-dev/Navide/releases/tag/v0.2.21) | [開始使用](docs/zh-TW/getting-started.md) | [文件中心](docs/zh-TW/README.md) | [Roadmap](docs/zh-TW/roadmap.md)
 
-[![Latest release](https://img.shields.io/github/v/release/nt-nerdtechnic/Navide?sort=semver&label=release&logo=github)](https://github.com/nt-nerdtechnic/Navide/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/Navide-dev/Navide?sort=semver&label=release&logo=github)](https://github.com/Navide-dev/Navide/releases/latest)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F?logo=electron)](https://www.electronjs.org/)
 [![Vue 3](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)](https://vuejs.org/)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python)](https://python.org/)
@@ -115,13 +115,13 @@ Local-first 不代表所有情況都完全離線。使用外部 Agent CLI、雲�
 
 ## 試用 Navide
 
-Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.14 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
+Navide 支援配備 Apple 晶片且執行 macOS 13 以上版本的 Mac、Linux x64，以及 x64／Arm 版 Windows。v0.2.21 提供經 Developer ID 簽章並通過 Apple Notarization 的 macOS 版本，以及 Windows x64 安裝程式與 Linux x64 套件：
 
-- [下載 DMG](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-arm64.dmg) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-arm64.dmg))
-- [下載 ZIP](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-arm64.zip) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-arm64.zip))
-- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-win-x64.exe) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-win-x64.exe))
-- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-win-arm64.exe) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-win-arm64.exe))
-- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-x86_64.AppImage) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.14/Navide-0.2.14-amd64.deb) ([GitHub](https://github.com/nt-nerdtechnic/Navide/releases/download/v0.2.14/Navide-0.2.14-amd64.deb))
+- [下載 DMG](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-arm64.dmg) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-arm64.dmg))
+- [下載 ZIP](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-arm64.zip) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-arm64.zip))
+- [下載 Windows x64 安裝程式](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-win-x64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-win-x64.exe))
+- [下載 Windows ARM64 安裝程式](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-win-arm64.exe) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-win-arm64.exe))
+- [下載 Linux AppImage](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-x86_64.AppImage) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-x86_64.AppImage))・[下載 Linux .deb](https://dl.navide.dev/releases/v0.2.21/Navide-0.2.21-amd64.deb) ([GitHub](https://github.com/Navide-dev/Navide/releases/download/v0.2.21/Navide-0.2.21-amd64.deb))
 
 連結指向 dl.navide.dev，與 App 自動更新用的是同一個載點；旁邊的「GitHub」連結是 GitHub Release 上同一個檔案、逐位元相同（發版流程同時發佈兩邊並比對 checksum）。
 
@@ -141,7 +141,7 @@ Linux 與 Windows 通過與 macOS 相同的 CI 關卡。Arm 版 Windows 的原�
 ### 從原始碼安裝與啟動
 
 ```bash
-git clone https://github.com/nt-nerdtechnic/Navide.git
+git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 pnpm install
 uv --project backend sync

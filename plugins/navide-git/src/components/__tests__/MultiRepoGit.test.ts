@@ -21,6 +21,7 @@ vi.mock('vue-i18n', () => ({
 // MultiRepoGit only needs the confirmation affordance from the foundation;
 // loading the real module would require a full i18n instance.
 vi.mock('@navide/plugin-ui/foundation', () => ({
+  vTruncate: {},
   useNotify: () => ({ confirm: vi.fn(async () => true), toast: vi.fn(), alert: vi.fn() }),
 }))
 

@@ -302,7 +302,7 @@ A backend in any package other than the first-party `navide.plans` is
 third-party native code. The Host never runs it directly; it starts only when
 all of these hold, and they are checked again before every restart:
 
-- Settings → Extensions → "Allow third-party plugins to run native backends"
+- Settings → Navide Plugins → "Allow third-party Navide plugins to run native backends"
   is on. It is off by default and can only be turned on there: while it is
   off, opening a plugin never prompts and never turns it on.
 - The user has not disabled the plugin's backend.
@@ -507,7 +507,7 @@ itself create a tool catalog. This remains distinct from a general third-party
 installed-backend activation workflow.
 
 After installation, frontend-only, backend-only, and combined packages appear
-in the Extensions installed list and can be removed there. Package inventory is
+in the Navide Plugins installed list and can be removed there. Package inventory is
 independent of frontend view descriptors, so a backend-only package remains
 manageable even though it contributes no view.
 
@@ -998,7 +998,7 @@ views, and gracefully closes its child backend before the bounded force-kill
 fallback. Other package versions remain independent. Factory and Official
 Registry packages use these same checks and have no bypass.
 
-### Settings and Extensions surface
+### Settings and Navide Plugins surface
 
 Settings exposes Execution Policy in its own tab. The Host default is
 read-only; the user can create or edit one global user policy in `full`,
@@ -1022,7 +1022,7 @@ and `revision.json` pair from the Host default. Workspace source selections,
 preserved. An unsafe or unavailable policy directory is reported as a manual
 remediation case and never treated as permission to delete files.
 
-Extensions displays the selected agent's effective Execution Policy next to
+Navide Plugins displays the selected agent's effective Execution Policy next to
 the installed package inventory. Each v2 package separately reports its
 Manifest Permissions and exact package-version Grant state, including when no
 matching Grant exists. Neither display is presented as replacing the other;
@@ -1146,7 +1146,7 @@ A package may also declare which paths it reads or writes:
 - An Extension Pack may not declare it.
 
 The declaration is a disclosure, not a grant and not a sandbox. The Host shows
-it to the user in Settings → Extensions; it does not change any grant, Bridge
+it to the user in Settings → Navide Plugins; it does not change any grant, Bridge
 port, broker decision, or `system` namespace check, and nothing confines the
 package to the paths it lists. Declare it truthfully and never narrower than
 what the package can reach — a package with its own backend can reach anything

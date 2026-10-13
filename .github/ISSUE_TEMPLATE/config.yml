@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
   - name: Questions & Help
-    url: https://github.com/nt-nerdtechnic/Navide/discussions/categories/q-a
+    url: https://github.com/Navide-dev/Navide/discussions/categories/q-a
     about: Ask usage questions or get help in Discussions instead of opening an Issue.
   - name: Ideas & Early Discussion
-    url: https://github.com/nt-nerdtechnic/Navide/discussions/categories/ideas
+    url: https://github.com/Navide-dev/Navide/discussions/categories/ideas
     about: Discuss ideas that are not yet concrete feature requests.
   - name: Security Vulnerabilities
-    url: https://github.com/nt-nerdtechnic/Navide/blob/main/SECURITY.md
+    url: https://github.com/Navide-dev/Navide/blob/main/SECURITY.md
     about: Report security issues privately as described in the security policy. Do not open a public Issue.

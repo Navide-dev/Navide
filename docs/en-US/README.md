@@ -38,8 +38,9 @@ The root [README](../../README.md) introduces the product and current distributi
 | [Architecture](architecture.md) | Understand process boundaries, state ownership, and major services |
 | [Adding a CLI vendor](../adding-a-cli-vendor.md) | Add an AI coding CLI: the two spec files, registration, and the checks CI enforces |
 | [CI and CLI regressions](ci-and-cli-regression.md) | Run deterministic regression suites, maintain vendor contracts, and understand native platform guarantees |
-| [CLI extension guide](cli-extension-guide.md) | Per-vendor integration records: install routes, resume syntax, session storage formats |
+| [CLI integration records](cli-extension-guide.md) | Per-vendor integration records: install routes, resume syntax, session storage formats |
 | [CLI vendor matrix](cli-vendor-matrix.md) | See every shipped CLI, the command it runs, and the capabilities its spec declares |
+| [Glossary](glossary.md) | One term per concept: Navide plugins, Agent Assets, CLI extensions, and the words never to use bare |
 | [Plugin development](plugin-development.md) | Build a frontend view plugin or a backend plugin, then package and sign it |
 | [Plugin development v2](plugin-development-v2.md) | Use the public contracts, SDK, UI package, and external frontend package workflow |
 | [Publishing to the Navide Marketplace](marketplace-publishing.md) | Scaffold, package, sign, and publish a plugin with `navide-plugin`, then pass review |

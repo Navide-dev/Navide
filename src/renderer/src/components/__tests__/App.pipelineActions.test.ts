@@ -144,6 +144,9 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     'onPipelineResume',
     'onPipelineReset',
     'onPipelineRestart',
+    'pipelineDag',
+    'onPipelineGateApprove',
+    'onPipelineGateReject',
     code,
   )
   factory(
@@ -159,6 +162,11 @@ async function loadActions(stubs: Stubs): Promise<Record<string, Handler>> {
     stubs.onPipelineResume,
     stubs.onPipelineReset,
     stubs.onPipelineRestart,
+    // Not waiting on a gate: the DAG actions are covered by
+    // App.pipelineLinearRegression.test.ts; these tests are about the rest.
+    { awaitingGate: { value: null } },
+    vi.fn(async () => true),
+    vi.fn(async () => true),
   )
   return handlers
 }
@@ -179,9 +187,12 @@ describe('pipeline UI action registration', () => {
     const handlers = await loadActions(makeStubs())
     expect(Object.keys(handlers).sort()).toEqual([
       'ui.pipeline.abort',
+      'ui.pipeline.gate_pass',
+      'ui.pipeline.gate_reject',
       'ui.pipeline.next',
       'ui.pipeline.reset',
       'ui.pipeline.restart',
+      'ui.pipeline.restart_from',
       'ui.pipeline.resume',
       'ui.pipeline.start',
     ])

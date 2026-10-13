@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { i18n } from '@navide/plugin-ui/foundation'
+import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { CliRiskContext } from '../composables/useResourceUsage'
 import type { CliRiskAction, CliRiskHistoryRow, CliRiskPaneState, CliRiskSignal } from '../lib/cliRisk'
 import { buildCliRiskAnalysisPrompt, cliRiskAnalysisPaneName, type CliRiskAnalysisSpawn } from '../lib/cliRiskAnalysisPrompt'
@@ -260,6 +261,7 @@ async function reveal(signal: CliRiskSignal): Promise<void> {
     ref="badgeRef"
     type="button"
     class="cli-risk-inline"
+    v-truncate
     :class="[first.severity, { compact }]"
     :title="`${heading(first)}: ${label(first)}`"
     :aria-label="`${heading(first)}: ${label(first)}`"

@@ -229,6 +229,7 @@ def test_corrupt_registry_starts_empty(tmp_path: Path) -> None:
         "profiles": [],
         "defaults": {key: None for key in profiles_mod.SUPPORTED_AGENT_KEYS},
         "defaultNames": {},
+        "paneDefaults": {},
     }
 
 

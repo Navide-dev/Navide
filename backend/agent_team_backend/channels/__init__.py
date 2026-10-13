@@ -135,6 +135,21 @@ def default_seams() -> Seams:
         if taint.is_tainted(parent_id) and not taint.is_tainted(child_id):
             taint.safe_mark_tainted(child_id, "agent", f"spawned by tainted pane {parent_id}")
 
+    def ui_settings() -> dict[str, Any]:
+        from .. import app
+
+        return app.ui_settings_store.get()
+
+    def pane_agent(pane_id: str) -> str:
+        pane = agent_messaging.current(pane_id)
+        return pane.agent_key if pane is not None else ""
+
+    def agent_skills(agent_key: str) -> list[str]:
+        from .. import app
+        from .quick_menu import agent_skills as listed
+
+        return listed(app.skills_store, agent_key)
+
     async def broadcast(event_type: str, payload: dict[str, Any]) -> None:
         from .. import app
 
@@ -156,6 +171,7 @@ def default_seams() -> Seams:
         awaiting_info=awaiting_info, answer=answer, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
+        ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills,
     )
 
 

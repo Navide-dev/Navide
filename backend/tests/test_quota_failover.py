@@ -110,6 +110,13 @@ class FakeVault:
     discarded: list[tuple[str, str]]
     captures: list[tuple[str, str]]
 
+    # No claude account has signed in inside its own config dir.
+    def account_dir_signed_in(self, slot_id: str) -> bool:
+        return False
+
+    def account_dir_identity(self, slot_id: str) -> dict | None:
+        return None
+
     def _login_isolated(self, agent_key: str) -> bool:
         return agent_key not in getattr(self, "global_login_vendors", set())
 

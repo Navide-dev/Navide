@@ -17,10 +17,10 @@ import {
 import { STATUS_COLOR_PALETTE } from '../../lib/statusBadgePalette'
 
 const tabs: TabItem[] = [
-  { key: 'rg-1', label: 'Main', count: 12, type: 'stage', status: 'active' },
-  { key: 'rg-2', label: 'Specs', count: 7, type: 'stage', status: 'idle' },
-  { key: 'rg-3', label: 'Empty', count: 0, type: 'stage', status: 'empty' },
-  { key: 'rg-4', label: 'Blocked', count: 3, type: 'stage', status: 'awaiting' }
+  { key: 'rg-1', label: 'Main', count: 12, live: 12, type: 'stage', status: 'active' },
+  { key: 'rg-2', label: 'Specs', count: 7, live: 7, type: 'stage', status: 'idle' },
+  { key: 'rg-3', label: 'Empty', count: 0, live: 0, type: 'stage', status: 'empty' },
+  { key: 'rg-4', label: 'Blocked', count: 3, live: 3, type: 'stage', status: 'awaiting' }
 ]
 
 function mountBar(items: TabItem[] = tabs) {

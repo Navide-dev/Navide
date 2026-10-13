@@ -1,9 +1,10 @@
 // Loop launch button: unified-store setting keys, default prompts, and the
 // session-limit reset-time parser used for unattended loop auto-resume.
+import { PROMPT_SKILL_SEED } from './promptSkillSeed'
+
 export const LOOP_PROMPT_SETTING_KEY = 'loop-prompt-text'
 
-export const DEFAULT_LOOP_PROMPT =
-  '啟動持續開發推進的Loop直到完成度超過100%，確保開發完成之後建立對應的HTML報告書，檢查這個功能是否都正常運作，並且不要影響到原本正常的程式碼'
+export const DEFAULT_LOOP_PROMPT = PROMPT_SKILL_SEED.prompt
 
 export const LOOP_RESUME_SETTING_KEY = 'loop-resume-text'
 
