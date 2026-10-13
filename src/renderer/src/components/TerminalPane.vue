@@ -431,7 +431,11 @@ const selectModifierLabel = isMacPlatform() ? '⌥ Option' : 'Shift'
 
 // xterm's selection lives outside the DOM, so main cannot read it from the
 // context-menu params — pass it along with the request.
-function onTerminalContextMenu(): void {
+function onTerminalContextMenu(e: MouseEvent): void {
+  // Off macOS, a CLI with mouse reporting on already received this click —
+  // Claude Code pastes or copies on it — so a menu would offer a second
+  // Paste. Shift keeps the click from the CLI and still opens the menu.
+  if (!isMacPlatform() && !e.shiftKey && terminal.isMouseTracking()) return
   props.terminalPort.showContextMenu?.(terminal.getSelection())
 }
 
