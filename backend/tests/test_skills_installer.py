@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import tarfile
 import threading
-import time
 
 import pytest
 
@@ -193,12 +192,20 @@ def test_slow_download_does_not_block_other_callers(setup, monkeypatch):
     _, installer, source = setup
     entered = threading.Event()
     release = threading.Event()
+    left = threading.Event()
     payload = archive([("repo/SKILL.md", SKILL, tarfile.REGTYPE)])
 
     def download(url, limit):
         entered.set()
-        assert release.wait(5), "download was never released"
-        return json.dumps({"sha": "a" * 40}).encode() if "api.github.com" in url else payload
+        try:
+            # Released only once pane B is done, so pane B finishing at all
+            # while this still waits is the proof; no wall-clock bound, which
+            # a loaded runner breaks (2.48 s of B's own work on Windows CI).
+            # Pane B queued behind it would finish only after this times out.
+            assert release.wait(30), "download was never released"
+            return json.dumps({"sha": "a" * 40}).encode() if "api.github.com" in url else payload
+        finally:
+            left.set()
 
     monkeypatch.setattr(module, "_download", download)
     outcome = {}
@@ -208,13 +215,12 @@ def test_slow_download_does_not_block_other_callers(setup, monkeypatch):
     )
     slow.start()
     assert entered.wait(5)
-    started = time.monotonic()
     item = preview(installer, source)
     install(installer, item, consent=True)
-    elapsed = time.monotonic() - started
+    still_downloading = not left.is_set()
     release.set()
     slow.join(5)
-    assert elapsed < 1.0, f"pane B waited {elapsed:.2f}s behind pane A's download"
+    assert still_downloading, "pane B waited behind pane A's download"
     assert outcome["item"]["source"]["repository"] == "example/repo"
 
 
