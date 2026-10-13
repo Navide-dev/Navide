@@ -47,7 +47,9 @@ def _self_check_conpty() -> int:
 if len(sys.argv) > 2 and sys.argv[1] == "--self-check" and sys.argv[2] == "conpty":
     raise SystemExit(_self_check_conpty())
 
+import faulthandler  # noqa: E402
 import os  # noqa: E402
+import signal  # noqa: E402
 import socket  # noqa: E402
 
 import threading  # noqa: E402
@@ -91,6 +93,20 @@ def _read_handover(stream=None) -> tuple[str, str]:
 
 
 SHUTDOWN_LINE = "shutdown"
+
+# Set only by the cli_regression harness: a backend that does not exit after
+# the shutdown line gets SIGUSR1 before it is killed, and this dumps every
+# thread's stack to stderr so the step it hung in is on record. Unset (every
+# real launch) nothing is registered. Windows has no SIGUSR1.
+SHUTDOWN_DIAG_ENV = "NAVIDE_SHUTDOWN_DIAG"
+
+
+def _register_shutdown_diag(environ=None) -> bool:
+    environ = os.environ if environ is None else environ
+    if environ.get(SHUTDOWN_DIAG_ENV) != "1" or not hasattr(signal, "SIGUSR1"):
+        return False
+    faulthandler.register(signal.SIGUSR1, file=sys.stderr, all_threads=True)
+    return True
 
 
 def _watch_stdin_for_shutdown(server: "uvicorn.Server", stream=None) -> None:
@@ -180,6 +196,7 @@ def main() -> int:
     )
     log = logging.getLogger("agent_team_backend")
     log_file = setup_file_logging(args.log_level)
+    _register_shutdown_diag()
     log.info("starting backend version=%s", __version__)
     log.info("backend log file: %s", log_file)
     print(f"AGENT_TEAM_BACKEND_LOG path={log_file}", flush=True)
@@ -282,6 +299,7 @@ def main() -> int:
     print(f"AGENT_TEAM_BACKEND_LISTEN host={args.host} port={resolved_port}", flush=True)
 
     server.run()
+    log.info("shutdown: server stopped")
     return 0
 
 

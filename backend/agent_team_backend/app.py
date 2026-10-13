@@ -2442,31 +2442,38 @@ async def _stop_log_watcher() -> None:
         except Exception as err:  # noqa: BLE001
             log.warning("delivered-message ledger shutdown flush failed: %s", err)
     await mcp_manager.shutdown()
+    log.info("shutdown: MCP clients stopped")
     try:
         await plugin_wiring.run_shutdown_hooks(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin shutdown hooks failed: %s", err)
+    log.info("shutdown: plugin hooks done")
     try:
         await mcp_server.shutdown()
     except Exception as err:  # noqa: BLE001
         log.warning("MCP server shutdown failed: %s", err)
+    log.info("shutdown: MCP server stopped")
     try:
         plugin_wiring.shutdown(plugin_host)
     except Exception as err:  # noqa: BLE001
         log.warning("plugin host shutdown failed: %s", err)
+    log.info("shutdown: plugin host stopped")
     try:
         guard_runtime.flush()
     except Exception as err:  # noqa: BLE001
         log.warning("guard audit flush failed: %s", err)
+    log.info("shutdown: guard audit flushed")
     # Last: nothing may touch the databases after this point.
     try:
         workspace_databases.close_all()
     except Exception as err:  # noqa: BLE001
         log.warning("workspace database close failed: %s", err)
+    log.info("shutdown: workspace databases closed")
     try:
         database.close()
     except Exception as err:  # noqa: BLE001
         log.warning("database close failed: %s", err)
+    log.info("shutdown: database closed")
     _log_watcher = None
     _git_watcher = None
     _credential_watcher = None
