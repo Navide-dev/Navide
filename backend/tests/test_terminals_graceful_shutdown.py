@@ -487,21 +487,59 @@ async def test_kill_all_honours_a_declared_grace() -> None:
     assert session.proc.poll() is not None
 
 
+class _SteppingClock:
+    """The service loop with a clock that moves a fixed step on every read and
+    otherwise is the real loop. kill_all's grace poll reads it once per tick,
+    so the grace it ran is counted in reads, not measured: the snapshot, the
+    breakaway sweep and the lifecycle drain around it take whatever a loaded
+    runner gives them (5.38s on Windows CI) without moving it."""
+
+    def __init__(self, loop: asyncio.AbstractEventLoop, step: float) -> None:
+        self._real = loop
+        self.step = step
+        self.now = 0.0
+
+    def time(self) -> float:
+        self.now += self.step
+        return self.now
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+
 @pytest.mark.asyncio
-async def test_kill_all_leaves_a_vendor_without_a_spec_on_the_old_grace() -> None:
+async def test_kill_all_leaves_a_vendor_without_a_spec_on_the_old_grace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     # The other half: nobody who declared nothing pays for this.
     svc = TerminalService(emit=_noop_emit)
     session = svc.create(
         pane_id="p1", agent_key="codex", command=_ignore_term_script(), cwd="/"
     )
     await asyncio.sleep(0.3)
+    clock = _SteppingClock(svc._loop, 0.05)  # noqa: SLF001
+    svc._loop = clock  # type: ignore[assignment]  # noqa: SLF001
+    signalled: list[tuple[bool, float]] = []
+    real = osplat.process_tree.kill_group
 
-    started = time.monotonic()
+    def spy(gid: int, *, force: bool) -> None:
+        signalled.append((force, clock.now))
+        real(gid, force=force)
+
+    monkeypatch.setattr(osplat.process_tree, "kill_group", spy)
+
     await svc.kill_all()
-    waited = time.monotonic() - started
 
-    assert waited < 2.5, f"a spec-less vendor waited {waited:.2f}s"
     assert session.proc.poll() is not None
+    term_at = next(at for force, at in signalled if not force)
+    killed_at = next((at for force, at in signalled if force), None)
+    if killed_at is None:
+        # Windows: the TERM already terminated it, so no grace ran at all.
+        assert sys.platform == "win32", signalled
+    else:
+        # It ignores TERM, so the escalation comes when the grace runs out:
+        # kill_all's own 1s, not the 3s claude declares.
+        assert 1.0 <= killed_at - term_at <= 1.0 + 3 * clock.step, signalled
 
 
 @pytest.mark.asyncio
