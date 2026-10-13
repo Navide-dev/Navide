@@ -569,6 +569,7 @@ def test_seed_hook_trust_escapes_backslashes_in_toml_keys(tmp_path: Path) -> Non
     assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
 
 
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="Android fallback: POSIX modes and os.fchmod")
 def test_promote_stranded_auth_copies_without_hard_links(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

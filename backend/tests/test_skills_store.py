@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_team_backend import skills_store
+from agent_team_backend import osplat, skills_store
 from agent_team_backend.skills_store import (
     SKILL_FILE_SIZE_LIMIT,
     SkillConflictError,
@@ -937,6 +937,7 @@ def test_module_imports_without_os_link() -> None:
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="Android fallback: POSIX modes and os.fchmod")
 @pytest.mark.parametrize("directory_fds", [True, False])
 def test_install_bundle_copies_when_hard_links_are_unavailable(
     store: SkillsStore, monkeypatch: pytest.MonkeyPatch, directory_fds: bool,
