@@ -72,6 +72,7 @@ export {
   MENU_ROLE_ACCELERATORS,
   menuOwnedSpecs,
   NATIVE_MENU_KEYS,
+  nativeMenuKeys,
   splitKeyTokens,
   TERMINAL_KEYS,
 } from './keybindings/externalKeys'

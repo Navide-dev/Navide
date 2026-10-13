@@ -23,7 +23,7 @@ import { commandI18nKey } from '@navide/plugin-ui/shared'
 import { formatKeySpec, keySpecToTokens } from '@navide/plugin-ui/shared'
 import {
   MENU_OWNED_SPECS,
-  NATIVE_MENU_KEYS,
+  nativeMenuKeys,
   TERMINAL_KEYS,
   splitKeyTokens,
   type ExternalKeyRow,
@@ -296,7 +296,7 @@ async function onImport(): Promise<void> {
 // ── Read-only reference (keys the rule table does not own) ────────────────────
 const referenceSections: { key: string; rows: ExternalKeyRow[] }[] = [
   { key: 'terminal', rows: TERMINAL_KEYS },
-  { key: 'native', rows: NATIVE_MENU_KEYS },
+  { key: 'native', rows: nativeMenuKeys() },
 ]
 
 // The reference honours the search box too, so looking up "⌘R" finds it here
