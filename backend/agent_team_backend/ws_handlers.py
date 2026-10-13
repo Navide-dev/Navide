@@ -1825,15 +1825,18 @@ def _account_dir_for_spawn(
     (``login``) prepares it for the named profile even before it holds a
     login; any other spawn uses a dir only once its account signed in there,
     so an account that never did keeps running exactly as before. Blocking
-    (directory I/O and, on macOS, a Keychain presence check)."""
+    (directory I/O and, on macOS, a Keychain presence check).
+
+    Only an explicit pin (``payload_profile_id``: a pane fixed to its account,
+    or a dir sign-in) runs on a dir. A spawn without one follows the live
+    credential even when the pane default or the live owner signed in inside
+    its dir, so an account switch reaches it (plan claude_f1bf4b, scheme A).
+    The pin recorded for bookkeeping is still _profile_pin_for_spawn's."""
     from . import app
 
     if agent_key != "claude":
         return ""
-    if login:
-        slot = str(payload_profile_id or "")
-    else:
-        slot = _profile_pin_for_spawn(agent_key, payload_profile_id)
+    slot = str(payload_profile_id or "")
     if not slot or slot == DEFAULT_SLOT_ID:
         return ""
     profile = app.cli_profiles_store.get(slot)
