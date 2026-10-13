@@ -8366,25 +8366,37 @@ function followDialogRows(rows: ReturnType<typeof followSwitchRows>): FollowDial
   return rows.map((r) => ({ ...r, accountLabel: followAccountLabel(r.profileId) }))
 }
 
-/** Reopen the chosen panes on `profileId`, resuming each conversation. Idle
- *  panes go first; a pane mid-turn is waited for, never interrupted. */
-async function moveFollowPanes(ids: string[], profileId: string): Promise<void> {
-  pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
-  // A rebuild elsewhere (a restart batch, the user's Rebuild) replaces a pane
-  // id while this batch waits; the conversation is what stays, so a chosen
-  // pane is found again by its session.
+/** The conversation behind each pane id. A rebuild elsewhere (a restart
+ *  batch, the user's Rebuild) replaces a pane id while the user decides or a
+ *  batch waits; the conversation is what stays. Callers that ask first take
+ *  this before asking, while the ids are still current. */
+function followSessions(ids: readonly string[]): Map<string, string> {
   const sessions = new Map<string, string>()
   for (const id of ids) {
     const pane = panes.value.find((p) => p.id === id)
     const session = pane ? paneResumeSessionId(pane) : ''
     if (session) sessions.set(id, session)
   }
+  return sessions
+}
+
+/** The pane a chosen id is now: itself, or the one its conversation moved to. */
+function followPaneNow(id: string, sessions: ReadonlyMap<string, string>): string | null {
+  if (panes.value.some((p) => p.id === id)) return id
+  const session = sessions.get(id)
+  return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
+}
+
+/** Reopen the chosen panes on `profileId`, resuming each conversation. Idle
+ *  panes go first; a pane mid-turn is waited for, never interrupted. */
+async function moveFollowPanes(
+  ids: string[],
+  profileId: string,
+  sessions: ReadonlyMap<string, string> = followSessions(ids),
+): Promise<void> {
+  pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
   const failures = await runFollowSwitchBatch(ids, {
-    resolve: (id) => {
-      if (panes.value.some((p) => p.id === id)) return id
-      const session = sessions.get(id)
-      return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
-    },
+    resolve: (id) => followPaneNow(id, sessions),
     isBusy: followPaneBusy,
     rebuild: (id) => rebuildPaneViaResume(id, { profileId, suppressBusyToast: true }),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -8410,9 +8422,10 @@ async function offerFollowSwitch(outgoingId: string | null, targetId: string | n
   })
   if (rows.length === 0) return
   const target = targetId ?? DEFAULT_SLOT_ID
+  const sessions = followSessions(rows.map((r) => r.paneId))
   const choice = await askFollowDialog({ mode: 'switch', subject: followAccountLabel(target), rows: followDialogRows(rows) })
   if (!choice || choice.paneIds.length === 0) return
-  await moveFollowPanes(choice.paneIds, target)
+  await moveFollowPanes(choice.paneIds, target, sessions)
 }
 
 /** The quota badge's "Switch account": pick an account this pane can land
@@ -8438,14 +8451,16 @@ async function onQuotaSwitchAccount(paneId: string): Promise<void> {
       exhausted: isExhausted(snap),
     }
   })
+  const peers = quotaPeerRows(inputs, paneId, current, effective)
+  const sessions = followSessions([paneId, ...peers.map((r) => r.paneId)])
   const choice = await askFollowDialog({
     mode: 'quota',
     subject: self.name,
-    rows: followDialogRows(quotaPeerRows(inputs, paneId, current, effective)),
+    rows: followDialogRows(peers),
     targets: quotaSwitchTargets(accounts, { current, liveId, dirSignedIn: followDirSignedIn }),
   })
   if (!choice?.targetId) return
-  await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)
+  await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId, sessions)
 }
 
 // ── Panes that follow the default account (plan_8debb8, scheme B) ──────────
@@ -8545,6 +8560,7 @@ async function unpinAllAccountPanes(): Promise<void> {
   if (fixed.length === 0) return
   const idle = fixed.filter((p) => !followPaneBusy(p.id)).map((p) => p.id)
   const running = fixed.filter((p) => followPaneBusy(p.id))
+  const sessions = followSessions(fixed.map((p) => p.id))
   let ids = idle
   if (running.length > 0) {
     const choice = await askFollowDialog({ mode: 'unpin',
@@ -8561,8 +8577,11 @@ async function unpinAllAccountPanes(): Promise<void> {
     ids = [...idle, ...choice.paneIds]
   }
   if (ids.length === 0) return
-  for (const id of ids) accountFollow.add(id)
-  await moveFollowPanes(ids, '')
+  for (const id of ids) {
+    const now = followPaneNow(id, sessions)
+    if (now) accountFollow.add(now)
+  }
+  await moveFollowPanes(ids, '', sessions)
 }
 
 provide(accountPinKey, {
