@@ -2,10 +2,12 @@
 // The follow-switch dialog: after a claude switch it lists the pinned panes
 // the switch did not reach (pre-checked as the pure rows say); on an
 // out-of-quota pane it picks a landable account and the peers to take along.
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import AccountFollowSwitchDialog, { type FollowDialogRow } from '../AccountFollowSwitchDialog.vue'
-import type { QuotaTarget } from '../../lib/accountFollowSwitch'
+import { DEFAULT_SLOT_ID, type QuotaTarget } from '../../lib/accountFollowSwitch'
 
 const tMock = (key: string): string => key
 
@@ -68,5 +70,56 @@ describe('AccountFollowSwitchDialog', () => {
       targets: [{ id: 'X', label: 'x', remaining: '', eligible: false, exhausted: false }],
     })
     expect(wrapper.get('[data-testid="account-follow-confirm"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('quota mode: an out-of-quota account reads grey like the other hints, not red', () => {
+    wrapper = mountDialog({
+      mode: 'quota',
+      subject: 'pane',
+      targets: [{ id: 'Y', label: 'y', remaining: '0%', eligible: true, exhausted: true }],
+    })
+    const hint = wrapper.get('[data-testid="account-follow-target-Y"] .hint')
+    expect(hint.text()).toBe('account-follow.exhausted')
+    expect(hint.classes()).toEqual(['hint'])
+  })
+
+  it('quota mode: the Default says to switch to it, not to sign in inside a folder it does not have', () => {
+    wrapper = mountDialog({
+      mode: 'quota',
+      subject: 'pane',
+      targets: [
+        { id: DEFAULT_SLOT_ID, label: 'default', remaining: '', eligible: false, exhausted: false },
+        { id: 'X', label: 'x', remaining: '', eligible: false, exhausted: false },
+      ],
+    })
+    expect(wrapper.get(`[data-testid="account-follow-target-${DEFAULT_SLOT_ID}"] .hint`).text())
+      .toBe('account-follow.default-needs-switch')
+    expect(wrapper.get('[data-testid="account-follow-target-X"] .hint').text())
+      .toBe('account-follow.needs-dir-sign-in')
+  })
+})
+
+// happy-dom does no layout, so the width rule is read from the stylesheet: a
+// row's long state text ("busy — reopens once it is free") used to be nowrap
+// inside a content-sized grid column, which widened the list past the card.
+describe('AccountFollowSwitchDialog layout', () => {
+  const style = /<style scoped>([\s\S]*?)<\/style>/.exec(
+    readFileSync(resolve(process.cwd(), 'src/renderer/src/components/AccountFollowSwitchDialog.vue'), 'utf8')
+  )![1]
+  const rule = (selector: string): string => {
+    const m = new RegExp(`(?:^|\\n)([^{}\\n]*)\\{([^}]*)\\}`, 'g')
+    let out = ''
+    for (const [, sel, decl] of style.matchAll(m)) {
+      if (sel.split(',').map((x) => x.trim()).includes(selector)) out += decl
+    }
+    return out
+  }
+
+  it('the list column can shrink to the card', () => {
+    expect(rule('.rows')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/)
+  })
+
+  it('a row state wraps instead of widening the row', () => {
+    expect(rule('.state')).toMatch(/white-space:\s*normal/)
   })
 })

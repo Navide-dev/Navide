@@ -10807,6 +10807,7 @@
     "quota-confirm": "切り替えて {count} 個のペインを再開",
     "cancel": "キャンセル",
     "needs-dir-sign-in": "先に専用フォルダーでサインインしてください",
+    "default-needs-switch": "先にこのアカウントへ切り替えてください",
     "exhausted": "利用枠なし",
     "state-idle": "待機中・すぐに開き直す",
     "state-running": "処理中（実行・応答待ち・入力中）・空いたら開き直す",
