@@ -180,6 +180,12 @@ def test_taint_raised_unparseable_needs_a_whole_command_glob_allow(guard_store):
         ("python3 -c 'import json' \"$(cat /tmp/x)\"", "ask"),
         ("python3 -c 'import json' `cat /tmp/x`", "ask"),
         ("cd /tmp > /tmp/x && python3 -c 'import json'", "ask"),
+        # An escaped blank does not start a comment, so `; bash` still runs.
+        ("python3 -c 'import json' \\ #; bash /tmp/x.sh", "ask"),
+        # An unquoted heredoc body runs its substitutions.
+        ("cd dir && python3 - <<EOF\nimport json\n$(bash /tmp/x.sh)\nEOF", "ask"),
+        ("cd dir && python3 - <<EOF\nimport json\n'`bash /tmp/x.sh`'\nEOF", "ask"),
+        ("cd dir && python3 - <<'EOF'\nimport json\n$(not run)\nEOF", "allow"),
     ],
 )
 def test_taint_allow_glob_vouches_only_for_one_command(guard_store, command, action):

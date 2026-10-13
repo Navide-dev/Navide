@@ -478,9 +478,12 @@ def _extract_substitutions(text: str) -> tuple[str, list[tuple[str, str]]]:
             out.append(f"{_PLACEHOLDER}{len(subs) - 1}\x00")
             i = j + 1
             continue
-        elif c == "#" and not in_single and not in_double and (not out or out[-1][-1] in " \t;&|()<>"):
+        elif c == "#" and not in_single and not in_double and (
+            not out or (len(out[-1]) == 1 and out[-1] in " \t;&|()<>")
+        ):
             # A comment runs to the end of its line only; shlex would take the
-            # rest of the flattened text with it once newlines become ';'.
+            # rest of the flattened text with it once newlines become ';'. An
+            # escaped blank (`\ #`) keeps the word going, so no comment starts.
             end = text.find("\n", i)
             i = n if end < 0 else end
             continue
@@ -560,6 +563,9 @@ def single_command(text: str) -> bool:
     except ValueError:
         return False
     if subs or ctx.heredoc_unparsed or not pipelines or any(len(p) != 1 for p in pipelines):
+        return False
+    # An unquoted heredoc body runs its substitutions; quotes there are text.
+    if any(not quoted and ("$(" in body or "`" in body) for body, quoted in ctx.heredocs):
         return False
     return all(
         p[0].argv[:1] == ["cd"] and len(p[0].argv) <= 2 and not p[0].redirects for p in pipelines[:-1]

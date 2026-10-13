@@ -561,6 +561,8 @@ def test_herestring_dynamic_is_opaque():
         "echo $#\nrm -rf ~",
         "echo ${#x}; rm -rf ~",
         "echo \\# x; rm -rf ~",
+        "ls \\ #; rm -rf ~",
+        "ls \\\t#; rm -rf ~",
     ],
 )
 def test_comment_does_not_hide_later_commands(command):
@@ -569,3 +571,5 @@ def test_comment_does_not_hide_later_commands(command):
 
 def test_comment_text_is_not_a_command():
     assert sh("ls # rm -rf ~").level == "normal"
+    # An escaped backslash leaves the blank unescaped: still a comment.
+    assert sh("ls \\\\ # rm -rf ~").level == "normal"
