@@ -5,8 +5,10 @@ import asyncio
 import codecs
 from collections import defaultdict
 import json
+import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -37,11 +39,17 @@ _REAP_WINDOW_S = 10.0
 _STARTUP_TIMEOUT_S = 120.0 if sys.platform.startswith("linux") else 45.0
 
 
+#: How long a backend that did not exit gets to write its stack dump (SIGUSR1)
+#: before it is killed.
+_STACK_DUMP_WAIT_S = 1.5
+
+
 class BackendProcess:
     def __init__(self, root: Path):
         self.root = root
         self.env = isolated_environment(root)
         self.env["NAVIDE_REGRESSION_ROOT"] = str(root)
+        self.env["NAVIDE_SHUTDOWN_DIAG"] = "1"
         self.env["PYTHONPATH"] = str(Path(__file__).resolve().parents[3])
         self.process = None
         self.url = ""
@@ -80,6 +88,17 @@ class BackendProcess:
             await self.__aexit__(*sys.exc_info())
             raise
         return self
+
+    async def _dump_stacks(self) -> None:
+        """Have a hung backend write every thread's stack into backend.log
+        (NAVIDE_SHUTDOWN_DIAG), then give it a moment to finish writing."""
+        if not hasattr(signal, "SIGUSR1"):
+            return
+        try:
+            os.kill(self.process.pid, signal.SIGUSR1)
+        except OSError:
+            return
+        await asyncio.sleep(_STACK_DUMP_WAIT_S)
 
     def _discovery_url(self) -> str | None:
         # File creation precedes write completion, so the port is validated
@@ -133,6 +152,7 @@ class BackendProcess:
                     if code != 0:
                         exit_error = f"backend shutdown failed (exit code {code}); see {self.log_path}"
                 except subprocess.TimeoutExpired:
+                    await self._dump_stacks()
                     try:
                         process = psutil.Process(self.process.pid)
                         for child in process.children(recursive=True):
