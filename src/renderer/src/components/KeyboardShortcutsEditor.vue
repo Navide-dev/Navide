@@ -370,7 +370,7 @@ const visibleReference = computed(() => {
         <table class="kse-table">
           <thead>
             <tr>
-              <th>{{ $t('settings.keybindings.col.command') }}</th>
+              <th class="kse-th-command">{{ $t('settings.keybindings.col.command') }}</th>
               <th class="kse-th-keys">{{ $t('settings.keybindings.col.keys') }}</th>
               <th class="kse-th-when">{{ $t('settings.keybindings.col.when') }}</th>
               <th class="kse-th-source">{{ $t('settings.keybindings.col.source') }}</th>
@@ -660,7 +660,6 @@ const visibleReference = computed(() => {
 /* The column header repeats once per category. It earns its place when the page
    is scrolled, but it should read as a ruler, not as five competing headings. */
 .kse-table thead th {
-  font-size: 9.5px;
   opacity: 0.75;
 }
 .kse-table-scroll {
@@ -700,9 +699,9 @@ const visibleReference = computed(() => {
 .kse-table tr.customized td:first-child {
   box-shadow: inset 2px 0 0 var(--accent-fg);
 }
-.kse-th-command { width: 28%; }
+.kse-th-command { width: 34%; }
 .kse-th-keys    { width: 30%; }
-.kse-th-when    { width: 26%; }
+.kse-th-when    { width: 20%; }
 .kse-th-source  { width: 10%; }
 .kse-th-actions { width: 6%; }
 
@@ -731,16 +730,16 @@ const visibleReference = computed(() => {
   border-color: var(--danger-fg, #f85149);
 }
 
-.kse-td-command {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 190px;
-}
+/* The cell stays a table cell: as a flex box it left the fixed grid and ran
+   under the keys column. Label and id stack as blocks instead. */
 .kse-label {
+  display: block;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 .kse-id {
+  display: block;
+  margin-top: 1px;
   font-family: monospace;
   font-size: 10.5px;
   color: var(--text-muted);
@@ -777,6 +776,10 @@ const visibleReference = computed(() => {
 .kse-chips .kse-conflict {
   flex-basis: 100%;
   margin-top: 2px;
+  /* A full-width line, so it reads as a caption rather than a stretched pill. */
+  padding: 0;
+  border: none;
+  border-radius: 0;
 }
 .kse-chip {
   display: inline-flex;
@@ -812,6 +815,11 @@ const visibleReference = computed(() => {
 .kse-add {
   border: 1px dashed var(--border-default);
   border-radius: 6px;
+}
+.kse-add,
+.kse-mini {
+  min-width: 24px;
+  min-height: 24px;
 }
 .kse-chip-remove:hover,
 .kse-add:hover,

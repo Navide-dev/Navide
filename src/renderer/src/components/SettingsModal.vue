@@ -3051,7 +3051,7 @@ watch(activeTab, (tab) => {
             <!-- Download progress -->
             <div v-if="props.analyzerApi.pulling.value" class="az-progress-wrap">
               <div class="az-progress-label">
-                <span class="az-spin">⏳</span>
+                <span class="az-spin" aria-hidden="true"></span>
                 <span>{{ props.analyzerApi.pullProgress.value?.status ?? $t('settings.analyzer.connecting') }}</span>
                 <template v-if="props.analyzerApi.pullProgress.value?.total">
                   <span class="az-pct">
@@ -3111,7 +3111,7 @@ watch(activeTab, (tab) => {
 
             <div v-if="props.analyzerApi.benchmarking.value" class="az-progress-wrap">
               <div v-if="props.analyzerApi.benchmarkProgress.value" class="az-progress-label">
-                <span class="az-spin">⏳</span>
+                <span class="az-spin" aria-hidden="true"></span>
                 {{ $t('settings.analyzer.testing') }} <strong>{{ props.analyzerApi.benchmarkProgress.value.model }}</strong>
                 · {{ props.analyzerApi.benchmarkProgress.value.task_id }}
               </div>
@@ -3155,8 +3155,12 @@ watch(activeTab, (tab) => {
                     <td class="az-td-model" v-truncate>{{ r.name }}</td>
                     <td v-for="tid in ['T1','T2','T3','T4']" :key="tid" class="az-td-task">
                       <template v-if="r.tasks.find(t => t.task_id === tid)">
-                        <span :class="r.tasks.find(t => t.task_id === tid)!.passed ? 'az-pass' : 'az-fail'">
-                          {{ r.tasks.find(t => t.task_id === tid)!.passed ? '✅' : '❌' }}
+                        <span
+                          :class="r.tasks.find(t => t.task_id === tid)!.passed ? 'az-pass' : 'az-fail'"
+                          :aria-label="r.tasks.find(t => t.task_id === tid)!.passed ? $t('settings.analyzer.badge-pass') : $t('settings.analyzer.badge-excluded')"
+                        >
+                          <svg v-if="r.tasks.find(t => t.task_id === tid)!.passed" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3.5 8.5 3 3 6-7"/></svg>
+                          <svg v-else viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7"/></svg>
                         </span>
                         <span class="az-elapsed">{{ r.tasks.find(t => t.task_id === tid)!.elapsed_s }}s</span>
                       </template>
@@ -5626,7 +5630,17 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
   flex-shrink: 0;
 }
 .az-progress-label { font-size: var(--font-xs); color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
-.az-spin { animation: spin 1s linear infinite; display: inline-block; }
+.az-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border-default);
+  border-top-color: var(--accent-fg);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .az-hint {
@@ -5639,7 +5653,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-hint ul { margin: 0 0 10px; padding-left: 18px; }
 .az-hint li { margin-bottom: 4px; }
 .az-hint code { background: var(--bg-subtle); padding: 1px 5px; border-radius: var(--radius-xs); font-size: var(--font-2xs); color: var(--text-bright); }
-.az-pass-rule { color: var(--accent-fg); font-size: var(--font-2xs); }
+.az-pass-rule { color: var(--text-secondary); font-size: var(--font-2xs); }
 
 .az-results { padding: 16px 20px; flex: 1; overflow-y: auto; min-height: 0; }
 .az-results-summary {
@@ -5665,6 +5679,10 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 .az-td-score { text-align: center; color: var(--text-secondary); }
 .az-td-verdict { text-align: center; }
 .az-elapsed { font-size: var(--font-3xs); color: var(--text-secondary); margin-left: 3px; }
+.az-pass,
+.az-fail { display: inline-flex; vertical-align: -2px; }
+.az-pass { color: var(--success-fg); }
+.az-fail { color: var(--danger-fg); }
 .az-na { color: var(--text-disabled); }
 .failover-caps { padding: 0 var(--space-row-x) var(--space-row-y); }
 .failover-table td { font-size: var(--font-2xs); }
@@ -5679,7 +5697,7 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 }
 .failover-todo { font-size: var(--font-3xs); color: var(--text-muted); }
 .failover-warn { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--attention-fg); }
-.az-row-fail td { color: var(--text-disabled); }
+.az-row-fail td { color: var(--text-secondary); }
 .az-row-fail .az-td-model { color: var(--text-muted); }
 .az-badge-pass {
   background: color-mix(in srgb, var(--success-fg) 15%, transparent);

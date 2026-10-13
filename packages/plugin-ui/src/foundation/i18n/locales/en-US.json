@@ -7746,13 +7746,13 @@
       "model-manager-note": "Download · delete local models",
       "model-placeholder": "Model name, e.g. qwen2.5-coder, llama3.2, gemma3",
       "downloading": "Downloading…",
-      "download": "⬇ Download",
+      "download": "Download",
       "connecting": "Connecting…",
       "no-local-models": "No local models detected. Run ollama pull <model-name> or use the download field above.",
       "delete-local-title": "Delete locally",
       "model-benchmark": "Model Benchmark",
-      "running": "⏳ Running…",
-      "run-benchmark": "🧪 Run benchmark",
+      "running": "Running…",
+      "run-benchmark": "Run benchmark",
       "testing": "Testing:",
       "preparing": "Preparing…",
       "benchmark-hint": "Runs 4 standard tasks against all local models to determine which ones are suitable for pipeline intent detection:",
@@ -8759,7 +8759,7 @@
       "zh": "Traditional Chinese",
       "en": "English",
       "ja": "Japanese",
-      "color": "Colour"
+      "color": "Color"
     },
     "row-only": "list only",
     "when": {
