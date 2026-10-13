@@ -83,6 +83,8 @@ BUILTIN_RULES: tuple[BuiltinRule, ...] = (
     BuiltinRule("stdin-script", "unanalyzable", "normal", "Interpreter reads its script from stdin", "cat x | bash"),
     BuiltinRule("heredoc-unparsed", "unanalyzable", "normal", "Heredoc delimiter or end cannot be determined",
                 "cat <<EOF (no EOF line)"),
+    BuiltinRule("untokenizable-shape", "unanalyzable", "normal", "Uses shell syntax the analyser cannot model",
+                "echo $'x'"),
     BuiltinRule("unknown-script", "unanalyzable", "normal", "Runs a script Guard cannot see", "./deploy.sh"),
     BuiltinRule("dynamic-path", "unanalyzable", "normal", "File path is not static", "Write $OUT"),
 )

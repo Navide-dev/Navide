@@ -6,7 +6,7 @@ import pytest
 
 from agent_team_backend import agent_messaging
 from agent_team_backend.db import Database
-from agent_team_backend.guard import clear_taint, evaluate, is_tainted, mark_tainted, policy, runtime
+from agent_team_backend.guard import classify, clear_taint, evaluate, is_tainted, mark_tainted, policy, runtime
 from agent_team_backend.guard.engine import redact
 from agent_team_backend.guard.store import GuardStore
 
@@ -194,6 +194,40 @@ def test_taint_allow_glob_vouches_only_for_one_command(guard_store, command, act
     guard_store.rules_add("allow", "cd * && python3 *")
     mark_tainted("p1", "agent")
     assert run(command).action == action
+
+
+# Known shapes the tokenizer splits differently from bash and zsh, kept as
+# concatenations. Each is unanalysable, so a tainted pane is asked even with
+# allow globs in place.
+_UNTOKENIZABLE_SHAPES = [
+        'python3 ' + '-c ' + "'import " + "json' " + "$'\\'' " + '; ' + 'bash ' + '/tmp/x.sh ' + '; ' + "\\'",
+        'python3 ' + '-c ' + "'import " + "json' " + '<\r ' + '; ' + 'bash ' + '/tmp/x.sh',
+        'python3 ' + '-c ' + "'import " + "json' " + '\\< ' + '; ' + 'bash ' + '/tmp/x.sh',
+        'python3 ' + '-c ' + "'import " + "json' " + '&<<E\nbody\nE',
+        'python3 ' + '-c ' + "'import " + "json' " + '\\\\( ' + '# ' + '& ' + '; ' + 'bash ' + '/tmp/x.sh',
+        'python3 ' + '-c ' + "'import " + "json' " + '# ' + 'a ' + 'comment',
+        'ls ' + '\\ ' + '#; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + '\\\t#; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + "$'\\'' " + '; ' + 'rm ' + '-rf ' + '~ ' + '; ' + "\\'",
+        'ls ' + "$'a\\'b' " + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + '<\r ' + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + '\\< ' + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + "'<' " + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + '\\> ' + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + "'|' " + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + '\\\\( ' + '# ' + '& ' + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + 'x( ' + '# ' + '; ' + 'rm ' + '-rf ' + '~',
+        'ls ' + "$'\\' " + "<<EOF'\nrm " + '-rf ' + '~\nEOF',
+]
+
+
+@pytest.mark.parametrize("command", _UNTOKENIZABLE_SHAPES, ids=[str(i) for i in range(len(_UNTOKENIZABLE_SHAPES))])
+def test_untokenizable_shape_is_unanalysable(guard_store, command):
+    assert classify("Bash", {"command": command}, cwd=WS, workspace=WS).parseable is False
+    guard_store.rules_add("allow", "python3 -c 'import json*")
+    guard_store.rules_add("allow", "ls *")
+    mark_tainted("p1", "agent")
+    assert run(command).action == "ask"
 
 
 def test_taint_allow_keeps_main_semantics_elsewhere(guard_store):

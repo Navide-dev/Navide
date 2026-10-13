@@ -573,3 +573,43 @@ def test_comment_text_is_not_a_command():
     assert sh("ls # rm -rf ~").level == "normal"
     # An escaped backslash leaves the blank unescaped: still a comment.
     assert sh("ls \\\\ # rm -rf ~").level == "normal"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo $" + "'x'",  # ANSI-C quoting
+        "echo a" + "\r",  # a control character other than newline and tab
+        "echo a" + "\x01",
+        "echo a" + "\\;b",  # an unquoted backslash before an operator character
+        "echo a" + "\\ b",  # ... or a blank
+        "ls a" + "(b)",  # an unquoted `(` inside a word
+        "echo " + "'|'",  # a quoted word made only of operator characters
+        "echo $(echo $" + "'x')",  # inside a substitution body too
+    ],
+)
+def test_shapes_outside_the_modelled_subset_are_unanalysable(command):
+    v = sh(command)
+    assert (v.level, v.parseable) == ("normal", False), (command, v)
+    assert "untokenizable-shape" in v.rule_ids
+
+
+@pytest.mark.parametrize(
+    "command, rule_ids, parseable",
+    [
+        ('python3 -c "import json; print(1)"', ("interpreter-inline-code",), False),
+        ("cd dir && python3 - <<'EOF'\nimport json\nprint(len([1, 2]))\nx = {'a': (1, 2)}\nEOF",
+         ("interpreter-inline-code",), False),
+        ("git log --oneline", (), True),
+        ("ls -la", (), True),
+        ("pnpm test:run", (), True),
+        ("grep -rn 'a|b' .", (), True),
+        ('echo "$HOME"', (), True),
+        ("find . -name '*.ts'", (), True),
+        ('git commit -m "fix: a (b)"', (), True),
+        ("echo 'a;b'", (), True),
+    ],
+)
+def test_modelled_shapes_keep_their_verdict(command, rule_ids, parseable):
+    v = sh(command)
+    assert (v.level, v.rule_ids, v.parseable) == ("normal", rule_ids, parseable), (command, v)

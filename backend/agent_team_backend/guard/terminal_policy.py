@@ -109,7 +109,8 @@ _UNANALYZABLE_RULES = {"dynamic-command", "eval", "unbalanced-quotes", "nesting-
 #: Opaque-only notes that are not a danger by themselves (an unknown script, a
 #: python -c): they share the verdict's level but never decide a refusal. An
 #: unparsed heredoc's lines were screened as shell, which decides on its own.
-_NOTE_RULES = {"unknown-script", "interpreter-inline-code", "dynamic-path", "heredoc-unparsed"}
+_NOTE_RULES = {"unknown-script", "interpreter-inline-code", "dynamic-path", "heredoc-unparsed",
+               "untokenizable-shape"}
 
 _MAX_PATTERN = 500
 _MAX_TEXT = MAX_COMMAND_CHARS
