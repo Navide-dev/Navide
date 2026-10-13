@@ -55,7 +55,8 @@ describe('follow switch wiring: off means unchanged', () => {
     const asks = appSource.split('askFollowDialog(').length - 1
     // definition + offerFollowSwitch + onQuotaSwitchAccount + planAccountFollow
     // (scheme B's running-pane confirm, asked only when the list is used)
-    expect(asks).toBe(4)
+    // + unpinAllAccountPanes (scheme A's "make all follow", asked only on click)
+    expect(asks).toBe(5)
     expect(functionBody('offerFollowSwitch')).toContain('askFollowDialog(')
     expect(functionBody('onQuotaSwitchAccount')).toContain('askFollowDialog(')
     expect(functionBody('planAccountFollow')).toContain('askFollowDialog(')
@@ -132,12 +133,69 @@ describe('follow the default account (plan_8debb8, scheme B) wiring', () => {
 
   it('offers the toggle only on claude panes once an account runs on its own dir', () => {
     expect(appSource).toContain(':account-follow="paneAccountFollow(p)"')
-    expect(appSource).toContain('@toggle-account-follow="accountFollow.toggle(p.id)"')
     const fn = functionBody('paneAccountFollow')
     expect(fn).toContain('if (!accountFollowOffered.value || p.agentKey !== FOLLOW_SWITCH_AGENT) return undefined')
   })
 
   it('keeps the flag on a pane across rebuilds and restores', () => {
     expect(functionBody('rekeyLineage')).toContain('accountFollow.rekey(oldId, newId)')
+  })
+})
+
+describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed', () => {
+  it('marks every claude pane that will run on the live login as following, at spawn', () => {
+    const body = functionBody('spawnPane')
+    expect(body).toContain('accountFollow.add(id)')
+    expect(body).toContain('!opts.isLogin')
+    expect(body).toContain('!followDirSignedIn(opts.profileId)')
+  })
+
+  it("a rebuild decides the pin from the follow flag it read before the kill", () => {
+    const body = functionBody('rebuildPaneViaResume')
+    expect(body).toContain('following: accountFollow.has(paneId),')
+    expect(body).toContain('accountSpawnPin(snap.profileId, snap.following, followDirSignedIn)')
+    // An explicit account (quota move, fixing) makes the pane fixed.
+    expect(body).toContain('if (explicitPin) accountFollow.remove(paneId)')
+  })
+
+  it('both restore paths send the pin through the same rule', () => {
+    const uses = appSource.split(
+      'profileId: accountSpawnPin(saved.profile_id, accountFollow.has(saved.pane_id), followDirSignedIn),'
+    ).length - 1
+    expect(uses).toBe(2)
+  })
+
+  it('the account badge reads the account the pane really runs on', () => {
+    expect(appSource).toContain(':profile-id="paneRunPin(p)"')
+    expect(functionBody('followPaneInput')).toContain('profileId: paneRunPin(p),')
+  })
+
+  it('fixing and unfixing a pane reuse the ordinary rebuild', () => {
+    expect(appSource).toContain('@toggle-account-follow="toggleAccountPin(p.id)"')
+    const body = functionBody('toggleAccountPin')
+    expect(body).toContain('rebuildPaneViaResume(paneId)')
+    expect(body).toContain('rebuildPaneViaResume(paneId, { profileId: live })')
+    // Fixing on an account without a dir login sends the user to sign in.
+    expect(body).toContain('if (!followDirSignedIn(live))')
+    expect(body).toContain('onCliLoginSpawn(FOLLOW_SWITCH_AGENT, undefined, { accountDirProfileId: live })')
+    expect(body).not.toContain('continueWith')
+  })
+
+  it('"make all follow" runs only from the badge button, through the follow batch', () => {
+    const refs = appSource.split('unpinAllAccountPanes').length - 1
+    // the definition and the provide that hands it to the badge — nothing
+    // calls it on a timer, a watcher or at start-up.
+    expect(refs).toBe(2)
+    const start = appSource.indexOf('provide(accountPinKey, {')
+    expect(start).toBeGreaterThan(-1)
+    expect(appSource.slice(start, appSource.indexOf('\n})\n', start))).toContain('unpinAll: unpinAllAccountPanes,')
+    const body = functionBody('unpinAllAccountPanes')
+    expect(body).toContain("askFollowDialog({ mode: 'unpin'")
+    expect(body).toContain("await moveFollowPanes(ids, '')")
+  })
+
+  it("keeps #194's follow flow wired but no longer offered in this window", () => {
+    expect(appSource).toContain('provide(accountFollowKey, {')
+    expect(appSource).toContain('provide(accountPinKey, {')
   })
 })

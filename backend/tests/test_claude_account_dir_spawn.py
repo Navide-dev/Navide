@@ -100,15 +100,34 @@ async def test_renderer_cannot_claim_an_account_dir(
     assert "account_dir_login" not in created["metadata"]
 
 
-async def test_fresh_pane_follows_the_pane_default(
+async def test_fresh_pane_follows_the_live_credential_despite_the_pane_default(
     store: CliProfilesStore, spawn_stubs: FakeAttribution, real_vault: CredentialVault
 ) -> None:
+    """Plan claude_f1bf4b (scheme A): only an explicit pin runs on an account
+    dir. A fresh pane follows the live credential even when the pane default
+    signed in inside its dir."""
     profile = store.create(agent_key="claude", name="B")
-    directory = _sign_in_dir(real_vault, profile["id"])
+    _sign_in_dir(real_vault, profile["id"])
     store.set_pane_default("claude", profile["id"])
     created = await _spawn(_session())
-    assert created["env"]["CLAUDE_CONFIG_DIR"] == str(directory)
-    assert created["metadata"]["profile_id"] == profile["id"]
+    assert "CLAUDE_CONFIG_DIR" not in (created["env"] or {})
+    assert "account_dir_profile_id" not in created["metadata"]
+    # Filed under the live credential's owner, as any pane on the live login.
+    assert created["metadata"]["profile_id"] == DEFAULT_SLOT_ID
+
+
+async def test_fresh_pane_follows_the_live_credential_when_the_live_owner_has_a_dir(
+    store: CliProfilesStore, spawn_stubs: FakeAttribution, real_vault: CredentialVault
+) -> None:
+    """The live owner having signed in inside its own dir no longer files new
+    panes there: they stay on the live credential, so a switch reaches them."""
+    live = store.create(agent_key="claude", name="A")
+    store.set_default("claude", live["id"])
+    _sign_in_dir(real_vault, live["id"])
+    created = await _spawn(_session())
+    assert "CLAUDE_CONFIG_DIR" not in (created["env"] or {})
+    assert "account_dir_profile_id" not in created["metadata"]
+    assert created["metadata"]["credential_source"] == "vault"
 
 
 async def test_pane_default_without_a_dir_login_files_the_pane_under_the_live_owner(

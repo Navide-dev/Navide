@@ -9205,6 +9205,9 @@
     "follow-default-title": "預設帳號",
     "follow-hint": "新 pane 與 {count} 個跟隨中的 pane 使用這個帳號",
     "follow-hint-none": "新 pane 使用這個帳號。在 pane 帳號徽章旁的圖釘可設為跟隨。",
+    "pinned-hint": "{count} 個 pane 固定在帳號資料夾，切換帳號時不會跟著換。",
+    "unpin-all": "全部改為跟隨",
+    "unpin-all-tooltip": "把這些 pane 改回用目前的登入，之後每次切換帳號都會一起換。每個 pane 會重開一次並接續對話；正在執行的會先詢問。",
     "continue-with": "接續 ›",
     "continue-with-tooltip": "用 {account} 重開這個 pane 並接續對話",
     "dir-sign-in": "登入",
@@ -10834,8 +10837,12 @@
     "follow-body": "這些跟隨中的 pane 正在執行。可以等它們跑完再換，或這次先不換。閒置的 pane 會立即換。",
     "follow-wait": "跑完就換",
     "follow-skip-running": "跳過正在跑的",
-    "toggle-label": "跟隨預設帳號",
-    "toggle-follow-tooltip": "跟隨中：選擇預設帳號時，這個 pane 會換到該帳號並接續對話。點一下改為固定。",
-    "toggle-fixed-tooltip": "已固定：選擇預設帳號時，這個 pane 不會跟著換。點一下改為跟隨。"
+    "toggle-label": "固定這個 pane 的帳號",
+    "toggle-follow-tooltip": "跟隨中：切換帳號時，這個 pane 下一回合就用新帳號，不用重開。點一下固定在目前的帳號（會在該帳號的資料夾重開一次；資料夾還沒登入會先請你登入）。",
+    "toggle-fixed-tooltip": "已固定：切換帳號時這個 pane 不會跟著換，繼續在它的帳號資料夾裡執行。點一下改回跟隨（會重開一次並接續對話）。",
+    "unpin-title": "有 {count} 個要改為跟隨的 pane 正在執行",
+    "unpin-body": "改為跟隨會用目前的登入重開 pane，並接續對話。可以等它們跑完再改，或這次先跳過。閒置的 pane 會立即改。",
+    "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
+    "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
   }
 }

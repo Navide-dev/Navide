@@ -5,9 +5,11 @@ import type { Ref } from 'vue'
 import TerminalPane from '../TerminalPane.vue'
 import { createTerminalDockStub } from '../../ports/__tests__/terminalDock.stub'
 
-// Scheme B's per-pane toggle (plan_8debb8): beside the account badge, a pane
-// is either fixed (default) or following the default account. App.vue owns
-// the flag; the pane only shows it and asks to flip it. useTerminal is mocked
+// The per-pane toggle beside the account badge (plan claude_f1bf4b, scheme A):
+// a pane follows the live account by default (blue link) and can be fixed to
+// its account's own config dir (grey pin). The button is the "fix" toggle, so
+// it reads pressed when the pane is fixed. App.vue owns the flag; the pane
+// only shows it and asks to flip it. useTerminal is mocked
 // out as in TerminalPane.usageLimitBadge.test.ts.
 
 const mockTerminal = vi.hoisted(() => ({ displayStatus: null as unknown as Ref<string> }))
@@ -53,25 +55,27 @@ describe('TerminalPane – account follow toggle', () => {
     expect(wrapper.find('[data-testid="account-follow-toggle"]').exists()).toBe(false)
   })
 
-  it('shows a fixed pane as not pressed, with the fixed tooltip', () => {
+  it('shows a fixed pane as pressed (grey pin), with the fixed tooltip', () => {
     wrapper = mountPane({ accountFollow: 'fixed' })
     const btn = wrapper.get('[data-testid="account-follow-toggle"]')
-    expect(btn.attributes('aria-pressed')).toBe('false')
+    expect(btn.attributes('aria-pressed')).toBe('true')
     expect(btn.attributes('title')).toBe('account-follow.toggle-fixed-tooltip')
     expect(btn.classes()).not.toContain('on')
   })
 
-  it('shows a following pane as pressed, with the follow tooltip', () => {
+  it('shows a following pane as not pressed (blue link), with the follow tooltip', () => {
     wrapper = mountPane({ accountFollow: 'follow' })
     const btn = wrapper.get('[data-testid="account-follow-toggle"]')
-    expect(btn.attributes('aria-pressed')).toBe('true')
+    expect(btn.attributes('aria-pressed')).toBe('false')
     expect(btn.attributes('title')).toBe('account-follow.toggle-follow-tooltip')
     expect(btn.classes()).toContain('on')
   })
 
-  it('asks the window to flip it on click', async () => {
-    wrapper = mountPane({ accountFollow: 'fixed' })
+  it('asks the window to flip it on click, either way', async () => {
+    wrapper = mountPane({ accountFollow: 'follow' })
     await wrapper.get('[data-testid="account-follow-toggle"]').trigger('click')
-    expect(wrapper.emitted('toggle-account-follow')).toHaveLength(1)
+    await wrapper.setProps({ accountFollow: 'fixed' })
+    await wrapper.get('[data-testid="account-follow-toggle"]').trigger('click')
+    expect(wrapper.emitted('toggle-account-follow')).toHaveLength(2)
   })
 })
