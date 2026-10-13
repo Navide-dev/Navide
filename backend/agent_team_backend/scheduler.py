@@ -961,9 +961,10 @@ class SchedulerService:
                 return None
             started = self.now_ms()
             # A scheduled start comes from a listing read before this lock; a
-            # run that finished meanwhile moved next_run_at past now.
+            # run that finished meanwhile moved next_run_at past now, or, for a
+            # once job, disabled it and cleared next_run_at.
             due = job["state"].get("next_run_at")
-            if not manual and due is not None and due > started:
+            if not manual and (not job["enabled"] or due is None or due > started):
                 return None
             job["state"]["running_at"] = started
             # Written before anything is dispatched: this is the reentry lock.

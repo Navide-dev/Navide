@@ -576,6 +576,77 @@ async def test_once_missed_while_closed_is_caught_up_once(env) -> None:
         await restarted.close()
 
 
+async def test_a_tick_acting_on_a_stale_listing_does_not_fire_a_caught_up_once_job_again(env) -> None:
+    """Restart race: the tick listed the overdue once job, then the catch-up
+    ran it to completion before the tick got to start it. The finished run
+    disabled the job and cleared next_run_at, so the start must refuse it."""
+    service = env["make"]()
+    job = (await service.upsert(once_job()))["job"]
+    env["clock"].advance_ms(60 * MINUTE)
+    stale = await service.store.list_jobs()
+    await service._catch_up([job["id"]])  # noqa: SLF001
+    await settle(service)
+    assert len(env["bridge"].delivered) == 1
+
+    async def stale_listing() -> list[dict]:
+        return stale
+
+    service.store.list_jobs = stale_listing  # type: ignore[method-assign]
+    await service.tick()
+    await settle(service)
+
+    assert len(env["bridge"].delivered) == 1
+    assert [r["status"] for r in await runs(service, job["id"])] == ["ok"]
+    row = await job_row(service, job["id"])
+    assert row["enabled"] is False and row["state"]["next_run_at"] is None
+
+
+async def test_a_periodic_job_caught_up_against_a_stale_tick_keeps_its_next_slot(env) -> None:
+    service = env["make"]()
+    job = await create(service, minutes=2)
+    env["clock"].advance_ms(60 * MINUTE)
+    stale = await service.store.list_jobs()
+    await service._catch_up([job["id"]])  # noqa: SLF001
+    await settle(service)
+    real_listing = service.store.list_jobs
+
+    async def stale_listing() -> list[dict]:
+        return stale
+
+    service.store.list_jobs = stale_listing  # type: ignore[method-assign]
+    await service.tick()
+    await settle(service)
+    assert len(env["bridge"].delivered) == 1
+    service.store.list_jobs = real_listing  # type: ignore[method-assign]
+    env["clock"].advance_ms(2 * MINUTE)
+    await service.tick()
+    await settle(service)
+    assert len(env["bridge"].delivered) == 2
+
+
+async def test_run_now_still_runs_a_disabled_job(env) -> None:
+    service = env["make"]()
+    job = await create(service)
+    await service.set_enabled(job["id"], False)
+    assert await service.run_now(job["id"]) == {"ok": True, "enqueued": True}
+    await settle(service)
+    assert len(env["bridge"].delivered) == 1
+    assert (await job_row(service, job["id"]))["enabled"] is False
+
+
+async def test_run_now_still_runs_a_once_job_that_already_ran(env) -> None:
+    service = env["make"]()
+    job = (await service.upsert(once_job()))["job"]
+    env["clock"].advance_ms(5 * MINUTE)
+    await service.tick()
+    await settle(service)
+    assert await service.run_now(job["id"]) == {"ok": True, "enqueued": True}
+    await settle(service)
+    assert len(env["bridge"].delivered) == 2
+    row = await job_row(service, job["id"])
+    assert row["enabled"] is False and row["state"]["next_run_at"] is None
+
+
 async def test_once_missed_with_catch_up_skip_is_recorded_and_disabled(env) -> None:
     service = env["make"]()
     job = (await service.upsert(once_job(policy={"catch_up": "skip"})))["job"]
