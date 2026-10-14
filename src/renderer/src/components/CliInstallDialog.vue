@@ -66,12 +66,27 @@ const dontAsk = ref(false)
 onMounted(() => { void onboarding.refresh() })
 onBeforeUnmount(() => { onboarding.dispose() })
 
+/** Set once the user toggles the box; from then on their choice is the truth. */
+let dontAskTouched = false
+
 // Reflect the stored opt-out once status arrives, so the box isn't shown
-// unticked to someone who already switched this CLI's prompt off.
-watch(installPromptDismissed, (dismissed) => { dontAsk.value = dismissed.has(props.depId) })
+// unticked to someone who already switched this CLI's prompt off. A status
+// answered before the user's own toggle landed must not undo it.
+watch(installPromptDismissed, (dismissed) => {
+  if (!dontAskTouched) dontAsk.value = dismissed.has(props.depId)
+})
 
 const dep = computed<OnboardDep | undefined>(() => deps.value.find((d) => d.id === props.depId))
 const label = computed(() => dep.value?.label || props.fallbackLabel || props.depId)
+/**
+ * Whether the "don't ask again" box applies. A pane or spawn prompt is only
+ * ever opened for an agent CLI, so it need not wait for status to say so —
+ * waiting left the box missing while status loaded (or forever, if it failed),
+ * and "Not now" in that window saved no opt-out at all.
+ */
+const offersDontAsk = computed(() => dep.value
+  ? dep.value.group === 'agent_cli'
+  : props.origin === 'pane' || props.origin === 'spawn')
 
 const blockers = computed(() => result.value?.missing_requirements ?? [])
 
@@ -262,6 +277,7 @@ function close(): void {
 }
 
 async function toggleDontAsk(): Promise<void> {
+  dontAskTouched = true
   const ok = await onboarding.dismissInstallPrompt(props.depId, dontAsk.value)
   if (!ok) {
     dontAsk.value = !dontAsk.value
@@ -456,7 +472,7 @@ function signIn(): void {
       </main>
 
       <footer class="ci-footer">
-        <label v-if="dep?.group === 'agent_cli'" class="ci-dont-ask">
+        <label v-if="offersDontAsk" class="ci-dont-ask">
           <input v-model="dontAsk" type="checkbox" @change="toggleDontAsk" />
           {{ $t('cli-install.dont-ask', { label }) }}
         </label>

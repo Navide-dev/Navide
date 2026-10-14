@@ -83,3 +83,25 @@ describe('cli.missing is still handled for a spawn the probe blocks', () => {
     expect(listener).toContain('const paneId = ev.pane_id || undefined')
   })
 })
+
+// The opt-out used to be skipped whenever no pane id came along, so whether an
+// automatic prompt respected "don't ask again" hung on a field that only says
+// which pane to relaunch. Only the spawn dropdown — the user asking for the
+// CLI — may skip it, and it says so explicitly.
+describe('promptCliInstall decides the opt-out by who asked, not by the pane id', () => {
+  const fn = block('async function promptCliInstall(', '\nfunction closeCliInstall(')
+
+  it('takes an explicit requested flag', () => {
+    expect(fn).toContain('async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string, requested = false)')
+  })
+
+  it('checks the opt-out for every prompt the user did not ask for', () => {
+    expect(fn).toContain('if (!requested) {')
+    expect(fn).not.toContain('if (paneId) {')
+  })
+
+  it('marks only the spawn dropdown as requested', () => {
+    expect(appSource).toContain('@install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"')
+    expect(appSource.match(/promptCliInstall\([^)]*, true\)/g)).toHaveLength(1)
+  })
+})
