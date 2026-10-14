@@ -52,11 +52,21 @@ Only `paths` and `platform_id` are swappable:
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
-from agent_team_backend import osplat
-from agent_team_backend.osplat import _windows
+# Loaded with `-p`, this module is imported before `tests/conftest.py`. Imported
+# after it, it is being collected as a test file: a file list such as
+# `backend/tests/*.py` names it, and pytest collects an explicitly named file
+# whatever its name. A swap then would hold for the rest of the process and
+# hand every later test that spawns through `paths.shell_command()` a
+# `cmd.exe` command, so it does nothing and reports itself skipped.
+if "tests.conftest" in sys.modules:
+    pytest.skip("a plugin, not a test module: load it with -p tests.osplat_win_swap", allow_module_level=True)
+
+from agent_team_backend import osplat  # noqa: E402
+from agent_team_backend.osplat import _windows  # noqa: E402
 
 _SWAPPABLE = ("paths", "platform_id")
 
