@@ -57,6 +57,7 @@ STATUS_EDIT_EVERY_S = 5.0
 TYPING_EVERY_S = 4.0
 AWAITING_PROBE_EVERY_S = 5.0
 AWAITING_RETRY_MAX = 3  # relay attempts per awaiting prompt before giving up
+LIMIT_PROBE_EVERY_S = 15.0  # a running chat run asks the window whether its CLI hit a usage limit
 RUN_TICK_S = 0.5
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
@@ -84,6 +85,15 @@ MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷�
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
+MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
+MSG_USAGE_LIMIT_NO_RESET = "⚠️ {agent} 額度已用完（重置時間未知）"
+MSG_USAGE_LIMIT_MENU = "pane 停在額度選單：1 停下等重置／2 原地等待，重置後自動繼續／3 改用 usage credits"
+MSG_USAGE_LIMIT_KEPT = "這則請求先保留，重置後的回覆會照樣送到這裡"
+# Claude Code's limit menu, read off the pane's screen (whitespace collapsed). The window's
+# awaiting detector does not match it (its footer says "confirm", not "select"), and widening
+# that detector would also hold deliveries to the pane, so the channel reads the menu itself.
+_LIMIT_MENU_RE = re.compile(r"Stop and wait for limit to reset.{0,300}?Enter to confirm · Esc to cancel")
+_LIMIT_RESETS_RE = re.compile(r"hit your .{0,40}?limit\W{0,5}resets\s+(.{3,60}?\([^)]+\))")
 MSG_OFFLINE = "⚠️ pane 目前不在線上（可能在其他 workspace 或已關閉）"
 MSG_RELAY_EXPIRED = "⚠️ 這個確認已失效"
 # Appended to a relay prompt whose request lapsed, when the platform can edit it.
@@ -165,6 +175,13 @@ class Seams:
     pdf_root: Callable[[], Path] = lambda: _default_pdf_root()
     # (html_path, pdf_path, timeout_ms) -> {ok, error_code?}: the Host prints a PDF
     render_pdf: Callable[[Path, Path, int], Awaitable[dict[str, Any]]] = pdf.request_host
+    # pane_id -> {until: ms | None, buffer: str}: the pane's usage-limit reading and screen
+    # tail, via the UI probe; read-only, never a quota fetch
+    limit_info: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_limit()
+
+
+async def _no_limit() -> dict[str, Any]:
+    return {}
 
 
 AdapterFactory = Callable[[dict[str, Any], dict[str, Any], ChannelStore], ChannelAdapter]
@@ -217,6 +234,8 @@ class _Pending:
     silent: bool = False  # no result either (replies, or a child at minimal verbosity)
     summary: bool = False  # child result in the parent chat below full: a short excerpt
     owner: str = ""  # pane whose messages these are, for reply-to routing
+    limit_noticed: bool = False  # the chat was told this run's pane hit a usage limit
+    next_limit_probe: float = 0.0
 
 
 @dataclass
@@ -2184,7 +2203,42 @@ class ChannelManager:
             if now >= next_probe:
                 next_probe = now + AWAITING_PROBE_EVERY_S
                 await self._check_awaiting(adapter, pane_id, pending)
+            if not pending.limit_noticed and now >= pending.next_limit_probe:
+                pending.next_limit_probe = now + LIMIT_PROBE_EVERY_S
+                await self._check_usage_limit(adapter, pane_id, pending)
             await asyncio.sleep(RUN_TICK_S)
+
+    async def _check_usage_limit(self, adapter: ChannelAdapter, pane_id: str, pending: _Pending) -> None:
+        """Tell the chat, once per run, that its pane hit a usage limit. A limited turn writes
+        no turn end, so the run stays open: the reply after the reset still lands under it."""
+        if self._seams.pane_state(pane_id).get("display_status") == "awaiting":
+            return  # the awaiting relay has the screen
+        try:
+            info = await self._seams.limit_info(pane_id)
+        except Exception:  # noqa: BLE001
+            return
+        until = info.get("until")
+        if isinstance(until, bool) or not isinstance(until, (int, float)) or until <= 0:
+            until = None
+        screen = " ".join(str(info.get("buffer") or "").split())
+        menu = bool(_LIMIT_MENU_RE.search(screen))
+        if until is None and not menu:
+            return
+        pending.limit_noticed = True
+        if until is not None:
+            t = time.localtime(until / 1000)
+            reset = f"{t.tm_mon}/{t.tm_mday} {t.tm_hour:02d}:{t.tm_min:02d}"
+        else:
+            found = _LIMIT_RESETS_RE.search(screen)
+            reset = found.group(1) if found else ""
+        agent = self._seams.pane_agent(pane_id)
+        agent = "Claude" if agent in ("", "claude") else agent
+        lines = [MSG_USAGE_LIMIT.format(agent=agent, reset=reset) if reset
+                 else MSG_USAGE_LIMIT_NO_RESET.format(agent=agent)]
+        if menu:
+            lines.append(MSG_USAGE_LIMIT_MENU)
+        lines.append(MSG_USAGE_LIMIT_KEPT)
+        await self._notice(adapter, pending.loc, "\n".join(lines))
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
         if not pending.status_id or pending.status_failures >= STATUS_EDIT_MAX_FAILURES:
