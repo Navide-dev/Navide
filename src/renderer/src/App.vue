@@ -328,7 +328,7 @@ import {
   screenShowsBlockingDialog,
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
-import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
+import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
 import { executeCommand, initKeybindingsPort, useKeybindings, registerCommand, setContext } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
@@ -1799,7 +1799,7 @@ function reconcileSpawnHistoryLiveness(entries: SpawnHistoryEntry[]): void {
   const rosterPaneIds = new Set(remoteTargetByPane.keys())
   const reconciledAt = new Date().toISOString()
   for (const e of entries) {
-    if (!e.removedAt && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt
+    if (!isHistoryEntryRemoved(e) && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt
   }
 }
 
