@@ -426,6 +426,31 @@ def test_a_project_under_desktop_still_works(home: Path) -> None:
     assert media.resolve_outbound(str(f)) == (f.resolve(), "")
 
 
+def test_a_project_folder_that_mentions_tokens_still_sends_its_files(home: Path) -> None:
+    # 2026-10-14: "*token*" on the folder refused every file of this workspace.
+    f = _file(home / "Desktop" / "Token仲介平台" / ".agent-team" / "work" / "siraya-params"
+              / "announcement-draft-v2.13.md")
+    assert media.resolve_outbound(str(f)) == (f.resolve(), "")
+    assert media.denied_rule(str(f)) == ""
+
+
+@pytest.mark.parametrize("rel, rule", [
+    ("Token仲介平台/.env", "*.env"), ("Token仲介平台/github_token.txt", "*token*"),
+    ("Token仲介平台/keys/id_rsa", "id_rsa*"), ("app/server.pem", "*.pem"), ("app/private.key", "*.key"),
+    ("app/credentials.json", "credentials*"), ("app/token", "*token*"), ("app/api_token.txt", "*token*"),
+    ("app/tokens/github.txt", "tokens"), ("app/token/github.txt", "token"), ("app/secrets/notes.txt", "*secret*"),
+])
+def test_real_credential_names_are_still_refused_and_name_their_rule(home: Path, rel: str, rule: str) -> None:
+    f = _file(home / "Desktop" / rel)
+    assert media.resolve_outbound(str(f)) == (None, "denied_name")
+    assert media.denied_rule(str(f)) == rule
+
+
+@pytest.mark.parametrize("lang", sorted(media.STRINGS))
+def test_the_denied_name_reason_names_the_rule(lang: str) -> None:
+    assert "*.pem" in media.text(lang, "reason.denied_name", rule="*.pem")
+
+
 @pytest.mark.parametrize("parent, reason", [(".ssh", ""), (".aws/profile", ""),
                                             ("secrets", "denied_name"), ("work/credentials", "denied_name")])
 def test_a_workspace_inside_a_secret_folder_sends_nothing(home: Path, parent: str, reason: str) -> None:
