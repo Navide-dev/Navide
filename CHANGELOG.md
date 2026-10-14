@@ -21,6 +21,9 @@ All notable released changes to Navide will be documented in this file. The form
 - Account switching: "Make all follow", the switch offer and the quota switch find a pane that was rebuilt while their question was open, and move it instead of reporting it missing (#214).
 - CLI install prompt: the "Stop asking" box now shows up before the CLI status has loaded and is saved, so the Codex install prompt no longer comes back after every failed launch. A box the user ticked is not unticked by a status that arrives later (#216).
 - CLI install prompt: an uncertain detection result no longer counts as "not installed", so a CLI that is already installed (common with nvm or a slow login shell) no longer gets the install prompt. The ＋ menu waits for the login-shell PATH before marking a CLI as missing and re-detects before prompting, a `--version` timeout counts as installed, and exit 127 opens the installer only when a probe confirms the CLI is missing (#226).
+- Pipelines: pipeline tools use the pane's own workspace path when the pane sits in a subfolder of a repository (M1, M2; #227).
+- Plans: a plan document keeps its DOCTYPE first when it is promoted (P3), and a failed Plans backend subscription answers with an error instead of leaving the Host waiting (P2) (#227).
+- Plans: migrated Plans preferences land in the right workspace partition (X1), and the history backfill no longer stamps entries whose removal time is unknown with today's date (X2) (#227).
 
 ## [0.2.21] — 2026-10-13 — signed release
 

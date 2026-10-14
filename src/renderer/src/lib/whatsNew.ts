@@ -143,6 +143,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'en-US': 'The status bar’s backend popover (title, connection state, Restart/Start/Stop) and pipeline pill (Stage N / M, completed/aborted) are now translated in Traditional Chinese and Japanese.',
         'ja-JP': 'ステータスバーのバックエンドのポップオーバー（タイトル、接続状態、再起動／開始／停止）とパイプラインの進行状況（ステージ N / M、完了／中止）が日本語で表示されるようになり、英語のままにならなくなりました。',
       },
+      {
+        'zh-TW': 'pane 在儲存庫的子資料夾裡工作時，Plan 和 pipeline 也能正常運作。',
+        'en-US': 'Plans and pipelines work correctly when a pane works in a subfolder of a repository.',
+        'ja-JP': 'ペインがリポジトリのサブフォルダーで作業しているときも、Plan とパイプラインが正しく動作するようになりました。',
+      },
     ],
   },
   {
