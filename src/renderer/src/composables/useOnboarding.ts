@@ -1,7 +1,9 @@
 import { ref, computed, watch } from 'vue'
 import type { useBackend } from './useBackend'
 
-export type DepStatus = 'ok' | 'missing' | 'outdated'
+/** 'unknown' comes only from the quick pass, before the backend's login-shell
+ *  PATH has answered: not found yet, which is not the same as not installed. */
+export type DepStatus = 'ok' | 'missing' | 'outdated' | 'unknown'
 /** How the binary got installed — decides which official command applies. */
 export type InstallMethod = '' | 'npm' | 'homebrew' | 'native' | 'script' | 'unknown'
 /** 'vendor' = the CLI keeps updating itself; 'manual' = its own opt-out env var is set. */

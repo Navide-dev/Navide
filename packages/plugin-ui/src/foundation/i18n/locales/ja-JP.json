@@ -9025,7 +9025,8 @@
     "status": {
       "ok": "インストール済み",
       "missing": "未インストール",
-      "outdated": "旧バージョン"
+      "outdated": "旧バージョン",
+      "unknown": "まだ見つかりません"
     },
     "requirements-label": "前提条件",
     "chain-label": "インストール順序",

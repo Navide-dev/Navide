@@ -24,7 +24,7 @@ export interface CliRowChip {
 export interface CliAgentRowFacts {
   /** Onboarding's probe for this CLI. null = not probed yet, which is not the
    *  same as "missing" and must not be painted red. */
-  install: { status: 'ok' | 'missing' | 'outdated'; version: string } | null
+  install: { status: 'ok' | 'missing' | 'outdated' | 'unknown'; version: string } | null
   /** False for the vendors with no permission flag to skip (grok / opencode /
    *  pi), where an override row would be a no-op. */
   hasPermissionFlag: boolean
@@ -59,7 +59,8 @@ export function cliAgentRowChips(facts: CliAgentRowFacts, t: Translate): CliRowC
     chips.push({ id, tone, label })
   }
 
-  if (facts.install) {
+  // 'unknown' is "not found yet" (see DepStatus), so it reads like null.
+  if (facts.install && facts.install.status !== 'unknown') {
     const { status, version } = facts.install
     if (status === 'missing') {
       chip('install', 'bad', t('settings.cliAgents.chip.not-installed'))
