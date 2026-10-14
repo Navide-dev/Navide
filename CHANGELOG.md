@@ -6,7 +6,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Added
 
-- **Voice readback** (off by default): Navide speaks short notices in the system voice, "<pane> 完成了" when a pane finishes and "<pane> 需要你回答" when it needs an answer, only for panes marked with 🔊. Esc or a shortcut stops speech. Turn it on in Settings › Voice; the new "Voice model" row shows whether the 美佳 Premium voice is installed, and its Download button opens macOS System Settings to get it (PR pending).
+- **Read aloud** (off by default): when a pane marked 🔊 finishes or needs an answer, Navide speaks a short notice with the system voice ("{pane} is done" / "{pane} needs your answer"; "{n} panes are done" when several finish together). The 🔊 toggle is in each pane's title bar, and Esc or the voice input shortcut stops speech at once. Turn it on with "Read replies aloud" in Settings › Voice Input › Read aloud, which also offers a voice picker, speed and preview. The "Voice model" row shows whether the recommended voice for the interface language is installed (美佳（Premium） for zh-TW, Ava (Premium) for en-US, Kyoko (Enhanced) for ja-JP); on macOS its Download button opens Accessibility › Spoken Content in System Settings. Speech is synthesized on this computer (#229).
 
 ### Changed
 
