@@ -7,7 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Changed
 
 - Settings: the status badges, keyboard shortcuts and analyzer pages are polished further (#215, #219). Disabled Reset buttons keep readable text, the keyboard shortcuts page uses outlined icons instead of emoji with a visible legend under the toolbar, the analyzer has one primary button per page, and status badge descriptions and tags wrap instead of being cut off (most visible in ja-JP).
-- Settings: the layout, CLI agents and CLI extensions pages are polished, ja-JP text no longer leaves a single character on its own line, and the analyzer's ghost buttons have readable contrast (round 4; PR pending).
+- Settings: the layout, CLI agents and CLI extensions pages are polished (round 4, #225). Icons are consistent and controls aligned, disabled controls are visible, push badges read "Push on / Push off / No push channel", the CLI extensions tab is shortened to "What Navide changes", the analyzer's ghost buttons have readable contrast, and ja-JP lines no longer leave a single character on its own line.
 - Account popover: each pane's "Follow account switch" toggle sits at the top of the account popover. The 🔗 button in the pane header is removed, and the header shows 📌 only when the pane is pinned (#223).
 - Status bar: the backend popover (title, connection state, Restart/Start/Stop) and the pipeline pill (Stage N / M, completed/aborted) are translated in zh-TW and ja-JP instead of showing English (#222).
 - Dependencies: fastapi 0.143, anthropic 1.13, ruff 0.17, koffi 3.3.3, Electron 44.7, Playwright and happy-dom (#207, #208, #209, #210, #211).
