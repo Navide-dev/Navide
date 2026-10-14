@@ -2,6 +2,24 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.22] — 2026-10-14 — signed release
+
+### Changed
+
+- Settings: the status badges, keyboard shortcuts and analyzer pages are polished further (#215, #219). Disabled Reset buttons keep readable text, the keyboard shortcuts page uses outlined icons instead of emoji with a visible legend under the toolbar, the analyzer has one primary button per page, and status badge descriptions and tags wrap instead of being cut off (most visible in ja-JP).
+- Settings: the layout, CLI agents and CLI extensions pages are polished, ja-JP text no longer leaves a single character on its own line, and the analyzer's ghost buttons have readable contrast (round 4; PR pending).
+- Account popover: each pane's "Follow account switch" toggle moves into the account popover. The 🔗 button in the pane header is removed, and the header shows 📌 only when the pane is pinned (PR pending).
+- Dependencies: fastapi 0.143, anthropic 1.13, ruff 0.17, koffi 3.3.3, Electron 44.7, Playwright and happy-dom (#207, #208, #209, #210, #211).
+- Tests: three timing-sensitive tests now count clock reads or order by events instead of waiting on wall-clock deadlines (#204, #206, #220).
+
+### Fixed
+
+- Channels: a Telegram or other channel chat no longer stays on "⏳ 仍在執行" after Claude compacts an idle conversation; the compaction summary is no longer treated as a prompt from the pane (#213).
+- Channels: when a channel-bound Claude pane hits its usage limit while a chat request is open, the chat is told once, with the reset time (and the limit menu's options when it is on screen). The request stays open, so a reply after the reset still arrives in the chat (#217).
+- Channels: when Claude splits one reply into two transcript lines, the chat no longer gets an extra empty "（pane 回合結束，沒有文字輸出）" reply (PR pending).
+- Account switching: "Make all follow", the switch offer and the quota switch find a pane that was rebuilt while their question was open, and move it instead of reporting it missing (#214).
+- CLI install prompt: the "Stop asking" box now shows up before the CLI status has loaded and is saved, so the Codex install prompt no longer comes back after every failed launch. A box the user ticked is not unticked by a status that arrives later (#216).
+
 ## [0.2.21] — 2026-10-13 — signed release
 
 ### Added

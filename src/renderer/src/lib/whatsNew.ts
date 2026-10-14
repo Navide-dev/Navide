@@ -111,6 +111,36 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.22',
+    title: {
+      'zh-TW': '頻道聊天不再卡在「仍在執行」、額度用完會通知聊天、不再重複詢問安裝 Codex',
+      'en-US': 'Channel Chats No Longer Stuck on “Still Running”, Usage Limit Notices in Chat, and No More Repeated Codex Install Prompts',
+      'ja-JP': 'チャンネルのチャットが「実行中」で止まらなくなり、使用量の上限をチャットに通知、Codex のインストール確認が繰り返されなくなりました',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Telegram 等頻道聊天：Claude 在閒置時自動壓縮對話後，聊天不會再一直停在「⏳ 仍在執行」。綁定頻道的 pane 用完 Claude 額度時，聊天會收到一次通知並附上重置時間；這則請求會先保留，重置後的回覆照樣會送到聊天。Claude 把一則回覆拆成兩行紀錄時，聊天也不會再多收到一則空白的「（pane 回合結束，沒有文字輸出）」。',
+        'en-US': 'Telegram and other channel chats: a chat no longer stays on “⏳ still running” after Claude compacts an idle conversation. When a pane bound to a chat hits its Claude usage limit, the chat is told once, with the reset time; the request stays open, so the reply after the reset still arrives there. When Claude splits one reply into two transcript lines, the chat no longer gets an extra empty “pane turn ended with no text output” reply.',
+        'ja-JP': 'Telegram などのチャンネルのチャット：Claude がアイドル中の会話を自動で圧縮したあとも、チャットが「⏳ 実行中」のまま止まらなくなりました。チャットに紐づいたペインが Claude の使用量の上限に達すると、チャットにリセット時刻つきで一度だけ通知します。リクエストは保留されたままなので、リセット後の返信もそのチャットに届きます。Claude が一つの返信を記録の二行に分けたときに、空の「ペインのターンが終了、テキスト出力なし」という返信が余分に届くこともなくなりました。',
+      },
+      {
+        'zh-TW': '帳號清單的「全部改為跟隨」和切換帳號，現在也能找到在問題開著時被重建的 pane，不會再把它當成不見了。每個 pane 的「跟隨帳號切換」開關移到帳號彈出視窗裡；pane 標頭的 🔗 按鈕已移除，只有固定帳號的 pane 會在標頭顯示 📌。',
+        'en-US': '“Make all follow” and account switching in the account list now find a pane that was rebuilt while the question was open, instead of reporting it missing. Each pane’s “Follow account switch” toggle now lives in the account popover; the 🔗 button in the pane header is gone, and the header shows 📌 only when a pane is pinned.',
+        'ja-JP': 'アカウント一覧の「すべて追従にする」とアカウントの切り替えは、確認を開いている間に作り直されたペインも見つけられるようになり、見つからないと報告しなくなりました。ペインごとの「アカウントの切り替えに追従」のスイッチはアカウントのポップオーバーに移りました。ペインのヘッダーの 🔗 ボタンはなくなり、📌 は固定したペインのヘッダーにだけ表示されます。',
+      },
+      {
+        'zh-TW': 'CLI 安裝提示的「不要再詢問」勾選框現在一定會出現並記住你的選擇，Codex 的安裝提示不會再一直跳出來。',
+        'en-US': 'The “Stop asking” box on the CLI install prompt now always shows up and is saved, so the Codex install prompt stops coming back.',
+        'ja-JP': 'CLI のインストール確認にある「今後確認しない」のチェックボックスが必ず表示され、選択が保存されるようになりました。Codex のインストール確認が何度も出ることはなくなります。',
+      },
+      {
+        'zh-TW': '設定的狀態徽章、鍵盤快速鍵和分析頁面再整理過：停用的按鈕文字清楚可讀，鍵盤快速鍵改用圖示並附上看得到的說明，每頁只留一個主要按鈕，日文的文字也不會再被截斷。版面、CLI agent 和 CLI 擴充頁面也一併整理，日文不會再有單獨掉到下一行的字，分析頁面的次要按鈕也更清楚。',
+        'en-US': 'Settings: the status badges, keyboard shortcuts and analyzer pages are tidied up again — disabled buttons stay readable, keyboard shortcuts use icons with a visible legend instead of emoji, each page has one primary button, and Japanese text is no longer cut off. The layout, CLI agents and CLI extensions pages are tidied up as well, Japanese lines no longer leave a lone character on the next line, and the analyzer’s outline buttons have better contrast.',
+        'ja-JP': '設定のステータスバッジ、キーボードショートカット、分析のページをさらに整えました。無効なボタンの文字も読みやすくなり、キーボードショートカットは絵文字の代わりにアイコンと見える凡例で表示し、各ページの主ボタンは一つになり、日本語の文字が切れることもなくなりました。レイアウト、CLI エージェント、CLI 拡張機能のページも整え、日本語で一文字だけ次の行に送られることはなくなり、分析ページの枠線ボタンのコントラストも改善しました。',
+      },
+    ],
+  },
+  {
     version: '0.2.21',
     title: {
       'zh-TW': '點一下就切換所有 pane 的帳號、Guard 可放行信任的指令、配對失敗會說原因',
