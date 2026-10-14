@@ -11097,7 +11097,13 @@ describe('first-party Git private bridge', () => {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
-  })
+    // Copies and removes the Node binary (~110 MB) as the package's backend: a
+    // file write the size of which no other test here makes. 40–140 ms on an
+    // idle machine, 5.4 s on a loaded Linux runner (PR #241), past the 5 s
+    // default. Every await above takes the previous step's result, so there is
+    // no ordering to fix: the time is the disk's. 30 s, as
+    // pluginBackendEscape.test.ts gives its real backend runs.
+  }, 30_000)
 
   it('retains Plans shell actions through the authenticated private bridge', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-shell-')))
