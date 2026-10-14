@@ -17,6 +17,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Status bar: the backend popover (title, connection state, Restart/Start/Stop) and the pipeline pill (Stage N / M, completed/aborted) are translated in zh-TW and ja-JP instead of showing English (#222).
 - Dependencies: fastapi 0.143, anthropic 1.13, ruff 0.17, koffi 3.3.3, Electron 44.7, Playwright and happy-dom (#207, #208, #209, #210, #211).
 - Tests: four timing-sensitive tests now count clock reads, order by events or await their own return instead of waiting on wall-clock deadlines (#204, #206, #220, #228).
+- Tests: the artifacts tests that time out under heavy machine load get a budget that fits the load (#232).
 
 ### Fixed
 
@@ -29,6 +30,8 @@ All notable released changes to Navide will be documented in this file. The form
 - Pipelines: pipeline tools use the pane's own workspace path when the pane sits in a subfolder of a repository (M1, M2; #227).
 - Plans: a plan document keeps its DOCTYPE first when it is promoted (P3), and a failed Plans backend subscription answers with an error instead of leaving the Host waiting (P2) (#227).
 - Plans: migrated Plans preferences land in the right workspace partition (X1), and the history backfill no longer stamps entries whose removal time is unknown with today's date (X2) (#227).
+- Channels: a file in a folder whose name mentions "token" (for example "Token仲介平台") is no longer refused as a secret when sent as a chat attachment; the "*token*" rule now checks the file name only, folders named like a token directory are still refused, and the refusal message names the rule that matched (#233).
+- Sync: sizing the skill review cache no longer fails when a review download removes its temporary file mid-count, so the next skill is held in the same round instead of the following one (#231).
 
 ## [0.2.21] — 2026-10-13 — signed release
 
