@@ -138,6 +138,20 @@ def test_requires_navide_hidden_without_a_readable_minimum(prefixed: TestClient)
     assert "Requires Navide" not in prefixed.get(f"{PREFIX}/").text
 
 
+def test_requires_navide_hidden_at_or_below_0_1_0(prefixed: TestClient) -> None:  # noqa: F811
+    # Every installable Navide meets these, so the line said nothing on every card.
+    publish = f"{PREFIX}/api/publish"
+    _publish_manifest(prefixed, publish, id="acme.floor", engines={"navide": ">=0.1.0"})
+    _publish_manifest(prefixed, publish, id="acme.older", engines={"navide": ">=0.0.5"})
+    _publish_manifest(prefixed, publish, id="acme.newer", engines={"navide": ">=0.1.1"})
+    for name in ("floor", "older"):
+        assert "Requires Navide" not in prefixed.get(f"{PREFIX}/extensions/acme/{name}").text
+    assert "Requires Navide ≥ 0.1.1" in prefixed.get(f"{PREFIX}/extensions/acme/newer").text
+    home = prefixed.get(f"{PREFIX}/").text
+    assert home.count("Requires Navide") == 1
+    assert "Requires Navide ≥ 0.1.1" in home
+
+
 def test_requires_navide_follows_the_stable_latest_version(prefixed: TestClient) -> None:  # noqa: F811
     _publish_v2(prefixed, "1.0.0", engines={"navide": "^0.2.0"})
     _publish_v2(prefixed, "1.1.0-beta.1", engines={"navide": "^0.3.0"})
