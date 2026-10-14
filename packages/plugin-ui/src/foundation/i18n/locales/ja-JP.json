@@ -8021,11 +8021,11 @@
     "pipeline-aborted-paused": "パイプラインを中止しました（一時停止）。エージェントは保持されます。続けるには「再開」、クリアするには「リセット」を選択してください。",
     "pipeline-completed": "✓ パイプラインの全 {count} ステージが完了しました。右側の各ペインを確認してください。",
     "provide-task": "タスクの説明とワークスペースを指定してから開始してください。",
-    "missing": "⚠ 不足",
+    "missing": "⚠ 見つかりません",
     "already-open": "● 起動済み",
     "tagline": "Claude Code · Codex · Antigravity CLI をまとめて操作",
-    "open-workspace": "📂 ワークスペースを開く",
-    "recent": "🕓 最近使用した項目",
+    "open-workspace": "ワークスペースを開く",
+    "recent": "最近使用した項目",
     "no-recent-workspaces": "最近使用したワークスペースはまだありません。<strong>参照…</strong>をクリックしてプロジェクトフォルダーを開いてください。",
     "restart-title": "↺ ステージ 01 からパイプラインをやり直しますか？",
     "restart-preserved": "既存の pipeline.log は保持され、イベントは引き続き追記されます。プロジェクトデータベース (navide.db) のステージ記録は未実行にリセットされます。",
@@ -10860,7 +10860,11 @@
     "limit-title": "最近のワークスペースの上限",
     "limit-hint": "「最近使用した項目」は、削除するまで開いたワークスペースをすべて保持します。これは保存領域の安全上限にすぎません。上限に達すると古い項目から削除され、起動中や固定済みのワークスペースは削除されません。",
     "limit-off": "上限なし",
-    "limit-on": "最大保持数"
+    "limit-on": "最大保持数",
+    "state-completed": "完了",
+    "state-running": "実行中",
+    "state-aborted": "中断",
+    "folder-not-found": "フォルダが見つかりません"
   },
   "account-follow": {
     "switch-title": "{account} に切り替えました。これらのペインも切り替えますか？",
