@@ -183,3 +183,31 @@ async def test_host_approved_pre_dispatch_recovery_runs_one_legacy_mutation(
 
     assert result == {"stage": "done", "approvedAt": None}
     assert legacy_calls == [(str(tmp_path), ".agent-team/plans/example.html", "done")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("response,code", [
+    # No Host session at all: request_host_agent_workspace_backend's own reply.
+    ({"ok": False, "error": "Navide Host is not connected", "error_code": "host_unavailable"}, "host_unavailable"),
+    # Host up but the Plans descriptor/package version is not registered.
+    ({"ok": False, "error": {"code": "BACKEND_UNAVAILABLE", "message": "Plans agent backend is unavailable"}},
+     "BACKEND_UNAVAILABLE"),
+])
+async def test_no_host_session_fails_with_an_actionable_message_and_stable_code(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    response: dict[str, Any],
+    code: str,
+) -> None:
+    _route_failure(monkeypatch, response)
+
+    def legacy_must_not_run(*args: Any) -> Any:
+        raise AssertionError("no local fallback without the Host disposition")
+
+    monkeypatch.setattr(plan_tools, "_list_plans_sync", legacy_must_not_run)
+
+    with pytest.raises(FsError) as raised:
+        await plan_tools.plan_list(_host_context(), workspace_path=str(tmp_path))
+
+    assert raised.value.code == code
+    assert "open Navide" in str(raised.value) and "retry" in str(raised.value)
