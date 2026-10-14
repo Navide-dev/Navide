@@ -1908,6 +1908,15 @@
       "cliFiles": "Each CLI's own instruction files"
     },
     "voice": {
+      "readback-model": "Voice model",
+      "readback-model-ready": "{voice} — Ready",
+      "readback-model-missing": "{voice} — Not installed. Reading with \"{using}\" for now.",
+      "readback-model-missing-none": "{voice} — Not installed, and this computer has no voice for the interface language.",
+      "readback-model-other-os": "Install better voices in your operating system's speech settings.",
+      "readback-model-download-hint": "In Accessibility › Spoken Content (just opened), click ⓘ / Manage Voices… next to System voice and download {voice}, then press Re-check.",
+      "readback-engine": "Voice engine",
+      "readback-engine-ready": "System voice · Ready",
+      "readback-engine-no-voices": "System voice · No voices installed",
       "readback-section": "Read aloud",
       "readback": "Read replies aloud",
       "readback-hint": "When a pane marked 🔊 finishes or needs your answer, a short notice is spoken with the system voice (for example \"Navide is done\"). Click 🔊 in a pane's title bar to mark it. Speech is synthesized on this computer; nothing is downloaded.",

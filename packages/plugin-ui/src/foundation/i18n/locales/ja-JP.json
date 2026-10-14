@@ -1908,6 +1908,15 @@
       "cliFiles": "各 CLI 固有の指示ファイル"
     },
     "voice": {
+      "readback-model": "音声モデル",
+      "readback-model-ready": "{voice} — 準備完了",
+      "readback-model-missing": "{voice} — 未インストール。現在は「{using}」で読み上げます。",
+      "readback-model-missing-none": "{voice} — 未インストールで、インターフェースの言語に合う音声もありません。",
+      "readback-model-other-os": "OS の音声設定でより良い音声をインストールしてください。",
+      "readback-model-download-hint": "開いた「アクセシビリティ › 読み上げコンテンツ」で「システムの声」の ⓘ／「声を管理…」から {voice} をダウンロードし、「再確認」を押してください。",
+      "readback-engine": "音声エンジン",
+      "readback-engine-ready": "システム音声 · 準備完了",
+      "readback-engine-no-voices": "システム音声 · インストール済みの音声なし",
       "readback-section": "読み上げ",
       "readback": "返信を読み上げる",
       "readback-hint": "🔊 を付けたペインが完了したり回答を求めたりしたとき、システムの音声で短い通知を読み上げます（例：「Navide が完了しました」）。ペインのタイトルバーの 🔊 をクリックして付けます。音声はこのコンピューター上で合成され、何もダウンロードしません。",

@@ -662,6 +662,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
   /** Open Spotlight's privacy settings (macOS); the destination is main's. */
   openSpotlightSettings: (): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke('system:open-spotlight-settings'),
+  /** Open Accessibility › Spoken Content (macOS) to download voices; the destination is main's. */
+  openSpokenContentSettings: (): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('system:open-spoken-content-settings'),
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   stabilizeDroppedPaths: (paths: string[]): Promise<{ ok: boolean; paths: string[] }> =>
     ipcRenderer.invoke('drop:stabilize', paths),

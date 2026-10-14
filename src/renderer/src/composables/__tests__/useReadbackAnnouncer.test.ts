@@ -4,6 +4,8 @@ import {
   isPaneReadback,
   pickReadbackVoice,
   readbackLine,
+  readbackVoiceModel,
+  voiceQuality,
   setPaneReadback,
   useReadbackAnnouncer,
   type ReadbackItem,
@@ -168,5 +170,56 @@ describe('pane 🔊 marks', () => {
     expect(isPaneReadback('y')).toBe(false)
     setPaneReadback('x', false)
     expect(isPaneReadback('x')).toBe(false)
+  })
+})
+
+describe('voiceQuality', () => {
+  const v = (name: string, voiceURI = name) => ({ name, lang: 'zh-TW', voiceURI })
+  it('reads the macOS voice identifier first, then the name', () => {
+    expect(voiceQuality(v('Meijia', 'com.apple.voice.premium.zh-TW.Meijia'))).toBe('premium')
+    expect(voiceQuality(v('Meijia', 'com.apple.voice.enhanced.zh-TW.Meijia'))).toBe('enhanced')
+    expect(voiceQuality(v('Meijia', 'com.apple.voice.compact.zh-TW.Meijia'))).toBe('compact')
+    expect(voiceQuality(v('Ava (Premium)'))).toBe('premium')
+    expect(voiceQuality(v('Kyoko (Enhanced)'))).toBe('enhanced')
+    expect(voiceQuality(v('美佳（高音質）'))).toBe('premium')
+    expect(voiceQuality(v('Samantha'))).toBe('compact')
+  })
+
+  it('ranks a Premium voice found only by its identifier first', () => {
+    const voices = [
+      { name: 'Meijia', lang: 'zh-TW', voiceURI: 'com.apple.voice.compact.zh-TW.Meijia' },
+      { name: 'Meijia', lang: 'zh-TW', voiceURI: 'com.apple.voice.premium.zh-TW.Meijia' },
+    ]
+    expect(pickReadbackVoice(voices, 'zh-TW', '')?.voiceURI).toBe('com.apple.voice.premium.zh-TW.Meijia')
+  })
+})
+
+describe('readbackVoiceModel', () => {
+  const v = (name: string, lang: string, voiceURI = name) => ({ name, lang, voiceURI })
+
+  it('zh-TW: 美佳 Premium installed is ready', () => {
+    const m = readbackVoiceModel([v('Meijia', 'zh-TW'), v('Meijia (Premium)', 'zh-TW')], 'zh-TW')
+    expect(m).toMatchObject({ preferred: '美佳（Premium）', ready: true })
+    expect(m.using?.name).toBe('Meijia (Premium)')
+  })
+
+  it('zh-TW: only compact 美佳 → not installed, still reads with compact 美佳', () => {
+    const m = readbackVoiceModel([v('Tingting', 'zh-CN'), v('Meijia', 'zh-TW', 'com.apple.voice.compact.zh-TW.Meijia')], 'zh-TW')
+    expect(m.ready).toBe(false)
+    expect(m.using?.name).toBe('Meijia')
+  })
+
+  it('en-US prefers Ava, ja-JP prefers Kyoko (Enhanced counts as ready)', () => {
+    expect(readbackVoiceModel([v('Ava (Premium)', 'en-US')], 'en-US')).toMatchObject({ preferred: 'Ava (Premium)', ready: true })
+    expect(readbackVoiceModel([v('Samantha', 'en-US')], 'en-US')).toMatchObject({ ready: false })
+    expect(readbackVoiceModel([v('Kyoko (Enhanced)', 'ja-JP')], 'ja-JP')).toMatchObject({ preferred: 'Kyoko (Enhanced)', ready: true })
+  })
+
+  it('a Premium voice of another name is not the preferred one', () => {
+    expect(readbackVoiceModel([v('Zoe (Premium)', 'en-US')], 'en-US').ready).toBe(false)
+  })
+
+  it('no voices at all: not installed and nothing to read with', () => {
+    expect(readbackVoiceModel([], 'zh-TW')).toMatchObject({ ready: false, using: null })
   })
 })

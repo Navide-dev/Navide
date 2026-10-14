@@ -8,10 +8,13 @@ import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import VoiceShortcutRow from './VoiceShortcutRow.vue'
 import VoiceFnKeyRow from './VoiceFnKeyRow.vue'
+import { isMacPlatform } from '@navide/plugin-ui/shared'
 import {
   readbackSupported,
+  readbackVoiceModel,
   speakReadback,
   voicesForLanguage,
+  type VoiceLike,
 } from '../../composables/useVoiceReadback'
 import {
   useVoiceSettings,
@@ -302,10 +305,41 @@ const canDownload = computed(
 const canReadAloud = readbackSupported()
 interface VoiceOption { voiceURI: string; name: string; lang: string }
 const voices = ref<VoiceOption[]>([])
+/** Every installed voice, any language (the engine row counts them). */
+const allVoices = ref<VoiceLike[]>([])
 
 function refreshVoices(): void {
   const all = globalThis.speechSynthesis?.getVoices() ?? []
+  allVoices.value = all.map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang, localService: v.localService }))
   voices.value = voicesForLanguage(all, String(locale.value)).map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang }))
+}
+
+// Voice model: the recommended download for the UI language (美佳 Premium for
+// zh-TW). Only macOS can be sent to where voices are downloaded; an app cannot
+// install one itself. Readback keeps using the best voice there is meanwhile.
+const onMac = isMacPlatform()
+const voiceModel = computed(() => readbackVoiceModel(allVoices.value, String(locale.value)))
+const downloadHint = ref(false)
+
+const voiceModelLine = computed(() => {
+  const m = voiceModel.value
+  let line = m.ready
+    ? t('settings.voice.readback-model-ready', { voice: m.preferred })
+    : m.using
+      ? t('settings.voice.readback-model-missing', { voice: m.preferred, using: m.using.name })
+      : t('settings.voice.readback-model-missing-none', { voice: m.preferred })
+  if (!onMac && !m.ready) line += ` ${t('settings.voice.readback-model-other-os')}`
+  else if (downloadHint.value && !m.ready) line += ` ${t('settings.voice.readback-model-download-hint', { voice: m.preferred })}`
+  return line
+})
+
+async function openVoiceDownload(): Promise<void> {
+  downloadHint.value = true
+  await window.agentTeam?.openSpokenContentSettings?.()
+}
+
+function recheckVoices(): void {
+  refreshVoices()
 }
 
 watch(
@@ -486,6 +520,35 @@ function previewReadback(): void {
           </select>
         </template>
       </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-model"
+        :title="t('settings.voice.readback-model')"
+        :description="voiceModelLine"
+      >
+        <template #control>
+          <button
+            v-if="onMac"
+            class="voice-btn"
+            data-testid="readback-model-download"
+            :disabled="voiceModel.ready"
+            @click="openVoiceDownload"
+          >
+            {{ t('settings.voice.download') }}
+          </button>
+          <button class="voice-btn" data-testid="readback-model-recheck" @click="recheckVoices">
+            {{ t('settings.voice.recheck') }}
+          </button>
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-engine"
+        :title="t('settings.voice.readback-engine')"
+        :description="allVoices.length > 0 ? t('settings.voice.readback-engine-ready') : t('settings.voice.readback-engine-no-voices')"
+      />
 
       <SettingRow
         v-if="voiceReadbackEnabled"

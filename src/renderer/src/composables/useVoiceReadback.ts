@@ -234,11 +234,47 @@ export function pickReadbackVoice<V extends VoiceLike>(voices: readonly V[], uiL
   const [, region] = langParts(uiLang)
   const score = (v: V): number =>
     (langParts(v.lang)[1] === region ? 4 : 0) +
-    (/premium/i.test(v.name) ? 2 : /enhanced/i.test(v.name) ? 1 : 0) +
+    ({ premium: 2, enhanced: 1, compact: 0 })[voiceQuality(v)] +
     (v.localService ? 0.5 : 0)
   let best: V | null = null
   for (const v of voicesForLanguage(voices, uiLang)) if (!best || score(v) > score(best)) best = v
   return best
+}
+
+export type VoiceQuality = 'premium' | 'enhanced' | 'compact'
+
+/**
+ * A voice's download tier. The Web Speech API has no quality field, so it is
+ * read from the macOS voice identifier (com.apple.voice.premium.zh-TW.Meijia)
+ * and, failing that, from the name Chromium shows ("Ava (Premium)").
+ */
+export function voiceQuality(v: VoiceLike): VoiceQuality {
+  if (/\.premium\./i.test(v.voiceURI) || /premium|高音質|高品質|プレミアム/i.test(v.name)) return 'premium'
+  if (/\.enhanced\./i.test(v.voiceURI) || /enhanced|增強|強化|拡張/i.test(v.name)) return 'enhanced'
+  return 'compact'
+}
+
+// The voice Settings recommends per UI language, and the names it goes by.
+const PREFERRED_VOICES: Record<string, { display: string; names: string[] }> = {
+  zh: { display: '美佳（Premium）', names: ['meijia', 'mei-jia', '美佳'] },
+  en: { display: 'Ava (Premium)', names: ['ava'] },
+  ja: { display: 'Kyoko (Enhanced)', names: ['kyoko', '恭子'] },
+}
+
+/** The voice name without its "(Premium)" style suffix, lower-cased. */
+function baseVoiceName(name: string): string {
+  return name.replace(/\s*[(（].*$/, '').trim().toLowerCase()
+}
+
+/**
+ * The recommended voice for the UI language and whether its Premium/Enhanced
+ * download is installed. `using` is what readback speaks with either way —
+ * the best voice available — so a missing download never stops readback.
+ */
+export function readbackVoiceModel<V extends VoiceLike>(voices: readonly V[], uiLang: string): { preferred: string; ready: boolean; using: V | null } {
+  const pref = PREFERRED_VOICES[langParts(uiLang)[0]] ?? PREFERRED_VOICES.en
+  const ready = voicesForLanguage(voices, uiLang).some((v) => pref.names.includes(baseVoiceName(v.name)) && voiceQuality(v) !== 'compact')
+  return { preferred: pref.display, ready, using: pickReadbackVoice(voices, uiLang, '') }
 }
 
 export function readbackSupported(): boolean {
