@@ -89,6 +89,10 @@ function ruleLabel(rule: string): string {
 <template>
   <SettingsSection :label="t('guard.terminal.title')" data-testid="terminal-protection">
     <p class="tp-hint">{{ t('guard.terminal.hint') }}</p>
+    <details class="tp-more">
+      <summary>{{ t('guard.terminal.more') }}</summary>
+      <p>{{ t('guard.terminal.hint-detail') }}</p>
+    </details>
     <p v-if="store.error.value" class="tp-error" role="alert" data-testid="terminal-protection-error">{{ store.error.value }}</p>
 
     <SettingsCard>
@@ -115,6 +119,9 @@ function ruleLabel(rule: string): string {
       <p class="tp-hint tp-inset">{{ t('guard.terminal.loosen-confirm') }}</p>
     </SettingsCard>
 
+    <!-- Block patterns, allow exceptions and the tester belong to this
+         section; the rule on the left keeps them from reading as new ones. -->
+    <div class="tp-group">
     <h4 class="tp-sub">{{ t('guard.terminal.block.title') }}</h4>
     <p class="tp-hint">{{ t('guard.terminal.block.hint') }}</p>
     <SettingsCard>
@@ -158,18 +165,26 @@ function ruleLabel(rule: string): string {
       </div>
       <p v-if="testError" class="tp-error tp-inset" role="alert">{{ testError }}</p>
     </SettingsCard>
+    </div>
   </SettingsSection>
 </template>
 
 <style scoped>
-.tp-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.4; }
+.tp-hint { margin: 0 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 .tp-warning {
-  margin: 0 0 8px; padding: 6px 10px; font-size: var(--font-row-desc); line-height: 1.4;
-  color: var(--attention-fg); background: var(--attention-subtle); border: 1px solid var(--attention-muted);
-  border-radius: var(--radius-sm);
+  margin: 0 0 8px; padding: 6px 10px; font-size: var(--font-row-desc); line-height: 1.5;
+  color: var(--text-primary); background: var(--attention-subtle); border-left: 3px solid var(--attention-fg);
+  border-radius: var(--radius-sm); text-wrap: pretty; word-break: auto-phrase;
 }
 .tp-error { margin: 8px 0 0; font-size: var(--font-2xs); color: var(--danger-fg); word-break: break-word; }
 .tp-inset { margin: 0; padding: 0 var(--space-row-x) 8px; }
+/* Indented under its section with a thin rule, so the sub-blocks read as part of it. */
+.tp-group { margin: 4px 0 8px; padding-left: 12px; border-left: 2px solid var(--border-muted); }
+.tp-group > .tp-sub:first-child { margin-top: 10px; }
+/* Edge cases fold away under the one-sentence summary. */
+.tp-more { margin: -4px 0 8px; font-size: var(--font-row-desc); color: var(--text-secondary); line-height: 1.5; }
+.tp-more summary { width: fit-content; cursor: pointer; color: var(--accent-fg); }
+.tp-more p { margin: 4px 0 0; max-width: 72ch; text-wrap: pretty; word-break: auto-phrase; }
 .tp-sub { margin: 14px 0 4px; font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
 .tp-item { display: flex; align-items: center; gap: 10px; padding: 8px var(--space-row-x); }
 .tp-item + .tp-item { border-top: 1px solid var(--border-muted); }
@@ -199,6 +214,7 @@ function ruleLabel(rule: string): string {
 }
 .tp-btn.sm { font-size: var(--font-2xs); padding: 3px 8px; }
 .tp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tp-btn.primary:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
 .tp-btn.primary { background: var(--accent-emphasis); border-color: var(--accent-emphasis); color: var(--text-on-emphasis); }
 .tp-btn.ghost { color: var(--text-secondary); }
 </style>

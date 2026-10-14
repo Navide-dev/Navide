@@ -194,7 +194,7 @@ async function remove(id: string): Promise<void> {
   overflow-y: auto;
   padding: 18px 22px;
 }
-.ga-section { margin-bottom: 26px; }
+.ga-section { margin-bottom: 0; }
 .ga-head {
   display: flex;
   align-items: flex-start;
@@ -203,7 +203,7 @@ async function remove(id: string): Promise<void> {
   margin-bottom: 14px;
 }
 .ga-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 46ch; line-height: 1.4; }
+.ga-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 60ch; line-height: 1.4; text-wrap: pretty; word-break: auto-phrase; }
 
 .ga-banner {
   border-radius: 6px;

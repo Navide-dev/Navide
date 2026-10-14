@@ -1584,6 +1584,13 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   security: { scope: 'user', storage: 'app_data_dir' },
 }
 
+// Two letters per CLI card: the first letter and the first consonant after
+// it, so names that share a prefix (Kimi, Kilo) still read apart.
+function cardInitials(label: string): string {
+  const second = label.slice(1).match(/[b-df-hj-np-tv-z]/i)?.[0] ?? label.slice(1, 2)
+  return (label.slice(0, 1) + second).toUpperCase()
+}
+
 function scopeLabel(scope: SettingsScope): string {
   return scope ? t(`settings.scope.${scope}`) : ''
 }
@@ -2504,7 +2511,8 @@ watch(activeTab, (tab) => {
   <Teleport to="body">
     <!-- Overlay -->
     <div class="s-overlay nv-modal-overlay" @click.self="closeSettingsLayer()">
-      <div class="s-modal nv-modal-shell nv-modal-shell--wide">
+      <!-- lang lets CJK line breaking and glyph choice follow the UI locale. -->
+      <div class="s-modal nv-modal-shell nv-modal-shell--wide" :lang="$i18n.locale">
 
         <!-- ── Sidebar (title + search + grouped nav) ────────────────────── -->
         <aside class="s-sidebar" :inert="!!selectedCliKey">
@@ -2710,6 +2718,7 @@ watch(activeTab, (tab) => {
               </div>
             </div>
             <div class="settings-meta-row">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
               <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
               <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
               <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
@@ -2862,6 +2871,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'skills'" class="s-body s-body--bleed" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
             <span class="settings-path" v-truncate>{{ pathForTab('skills') }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
@@ -2873,6 +2883,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'credentials'" class="s-body s-body--bleed" data-settings-section="credentials">
           <h1 class="s-page-title">{{ $t('settings.nav.credentials') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
           </div>
           <CredentialsPane :backend="props.backend" :active="activeTab === 'credentials'" @high-count="credentialsHighCount = $event" />
@@ -2882,6 +2893,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed" data-settings-section="prompts">
           <h1 class="s-page-title">{{ $t('settings.nav.prompts') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
           </div>
           <PromptSkillsPane />
@@ -2891,6 +2903,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'memory'" class="s-body s-body--bleed" data-settings-section="memory">
           <h1 class="s-page-title">{{ $t('settings.nav.memory') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
           </div>
           <!-- Project files belong to the folder that is actually open; the
@@ -2905,6 +2918,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'analyzer'" class="s-body s-body--bleed analyzer-body">
           <h1 class="s-page-title">{{ $t('settings.nav.analyzer') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
             <span class="settings-path" v-truncate>{{ settingsPaths.analyzer }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
@@ -3183,6 +3197,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'cliExtensions'" class="s-body s-body--bleed" data-settings-section="cli-extensions">
           <h1 class="s-page-title">{{ $t('settings.nav.cliExtensions') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
           </div>
           <!-- Mounted on first visit only: the scan reads every CLI's files. -->
@@ -3221,7 +3236,7 @@ watch(activeTab, (tab) => {
               >
                 <div class="cli-card-heading">
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
-                  <span class="cli-card-icon" aria-hidden="true">{{ row.label.slice(0, 2).toUpperCase() }}</span>
+                  <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
                   <span class="cli-agent-label">{{ row.label }}</span>
                   <span v-if="row.needsAttention" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
                 </div>
@@ -3876,6 +3891,7 @@ watch(activeTab, (tab) => {
               </SettingRow>
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
+                  <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                   <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
                   <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
@@ -4421,6 +4437,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
             <span class="settings-path" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
@@ -4468,6 +4485,7 @@ watch(activeTab, (tab) => {
             <section class="ext-policy-block" data-settings-section="execution-policy">
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
               <div class="settings-meta-row inline">
+                <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
@@ -5119,6 +5137,7 @@ watch(activeTab, (tab) => {
   border-radius: var(--radius-sm);
   margin-top: 10px;
 }
+.settings-meta-label { flex-shrink: 0; color: var(--text-secondary); }
 .scope-badge {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
