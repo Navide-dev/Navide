@@ -5645,8 +5645,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 @media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* No side padding: the hint lines up with its section title above it. */
 .az-hint {
-  padding: 20px 24px;
+  padding: 8px 0 4px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   line-height: 1.7;

@@ -352,6 +352,17 @@ const visibleReference = computed(() => {
       </button>
     </div>
 
+    <!-- The row icons carry their meaning only in a tooltip; this legend puts it
+         in visible text once, above the tables. -->
+    <p class="kse-legend">
+      <span class="kse-legend-item" :title="$t('settings.keybindings.protected-hint')">
+        <span class="kse-locked"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></span>{{ $t('settings.keybindings.legend-locked') }}
+      </span>
+      <span class="kse-legend-item" :title="$t('settings.keybindings.menu-owned-hint')">
+        <span class="kse-menu-owned"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5 14 13H2Z"/><path d="M8 6.5v3M8 11.5v.01"/></svg></span>{{ $t('settings.keybindings.legend-menu-owned') }}
+      </span>
+    </p>
+
     <p v-if="customizedCount" class="kse-status">
       {{ $t('settings.keybindings.customized-count', { count: customizedCount }) }}
     </p>
@@ -559,6 +570,24 @@ const visibleReference = computed(() => {
   font-size: var(--font-xs);
   border-top: 1px solid var(--border-muted);
   padding-top: 12px;
+}
+
+.kse-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+.kse-legend-item {
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+}
+.kse-legend .kse-locked,
+.kse-legend .kse-menu-owned {
+  padding: 0 4px 0 0;
 }
 
 /* ── toolbar ── */
