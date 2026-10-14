@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import shlex
 import subprocess
+import sys
 import threading
 import tomllib
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -20,6 +21,17 @@ from agent_team_backend import claude_hooks, codex_session_hooks, copilot_hooks,
 from agent_team_backend.claude_hooks import _build_curl_command
 from tests import hook_shell
 from tests.test_claude_hooks import _run_to_completion
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _warm_powershell():
+    # The PowerShell hook tests measure the shell's cold start inside the first
+    # test that needs it. Measured here instead, a start that hangs is killed
+    # and retried after 50 s rather than waited on for 300 s, which outlived
+    # pytest-timeout's 120 s (PR #236, Windows 1/4). Two
+    # attempts fit that 120 s even with the 24 s cold start of the arm runner.
+    if sys.platform == "win32":
+        hook_shell.warm_powershell(attempt_s=50)
 
 
 @pytest.fixture(autouse=True)
@@ -264,3 +276,23 @@ def test_the_hang_ceiling_grows_with_the_shell_cold_start(monkeypatch) -> None:
     monkeypatch.setitem(hook_shell._cold_start_s, "fast-shell", 0.5)
     assert hook_shell.hang_ceiling(["slow-shell", "-c", "x"], 45) > 45 + 2 * 24.0
     assert hook_shell.hang_ceiling(["fast-shell", "-c", "x"], 45) < 50
+
+
+def test_a_shell_start_that_hangs_is_killed_and_retried(tmp_path, monkeypatch) -> None:
+    # The first start hangs, as powershell.exe once did on the Windows runner;
+    # the second exits at once. The hang costs one attempt, not the test.
+    marker = tmp_path / "started-once"
+    fake = tmp_path / "fake_shell.py"
+    fake.write_text(
+        "import pathlib, sys, time\n"
+        f"marker = pathlib.Path({str(marker)!r})\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('x')\n"
+        "    time.sleep(600)\n",
+        encoding="utf-8",
+    )
+    argv = [sys.executable, str(fake), "x"]
+    monkeypatch.setattr(hook_shell, "_cold_start_s", {})
+    hook_shell.warm(argv, attempt_s=3)
+    assert marker.exists()
+    assert hook_shell.cold_start_s(argv) < 3
