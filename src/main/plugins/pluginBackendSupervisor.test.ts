@@ -54,7 +54,7 @@ const packagedFixtures = [
   ['Go', join(process.cwd(), 'dist-test-fixtures/plans/backend/navide-plans-go')],
 ] as const
 if (packagedFixtureEnabled && packagedFixtures.some(([, entryFile]) => !existsSync(entryFile))) {
-  throw new Error('NAVIDE_TEST_PACKAGED_PLANS=1 requires both packaged Plans fixtures; run pnpm run build:plans:fixture first.')
+  throw new Error('NAVIDE_TEST_PACKAGED_PLANS=1 requires both packaged Plans fixtures; run bun run build:plans:fixture first.')
 }
 const packagedBackendEnvironment: Record<string, string> = {}
 for (const key of ['TMPDIR', 'TEMP', 'TMP'] as const) {
@@ -1544,6 +1544,26 @@ describe('PluginBackendSupervisor', () => {
       message: 'Backend plugin is unavailable.',
       cause: spawnError,
     }))
+  })
+
+  it('keeps the message in the host-only diagnostic when the cause stack holds only a bare header', async () => {
+    const stderr = vi.fn()
+    const spawnError = new Error('spawn /custom/private/plans ENOENT')
+    // Bun on Windows can report a stack without the message.
+    spawnError.stack = 'Error\n    at spawnPlans (/custom/spawn.ts:1:1)'
+    const supervisor = makeSupervisor({
+      onStderr: stderr,
+      spawnProcess: () => {
+        throw spawnError
+      },
+    })
+    supervisors.push(supervisor)
+
+    await expect(supervisor.start()).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
+
+    expect(stderr).toHaveBeenCalledWith(
+      'spawn /custom/private/plans ENOENT\nError\n    at spawnPlans (/custom/spawn.ts:1:1)\n',
+    )
   })
 
   it('emits host-only diagnostic and original cause on async child error before generic failure', async () => {

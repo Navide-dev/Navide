@@ -22,8 +22,7 @@ x64 向けに 2 種類のパッケージを配布しています。
 ## Source からインストールするために必要なもの
 
 - Apple silicon 上の macOS 13+、Linux x64、または x64 / Arm 版 Windows
-- Node.js 22.12+（22.x）
-- pnpm 10+
+- Bun 1.4.3+（Node.js や pnpm の別途インストールは不要）
 - Python 3.12+
 - uv 0.11+
 - 対応する 14 種類の Coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）のうち一つ以上。一覧は [User Guide](user-guide.md) を参照
@@ -37,12 +36,12 @@ x64 向けに 2 種類のパッケージを配布しています。
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
-`pnpm dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
+`bun run dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
 
 ## 初回起動
 
@@ -73,8 +72,8 @@ Manual Flow が動作したら、小さな Task で Pipeline を試してくだ�
 ## 開発チェック
 
 ```bash
-pnpm typecheck
-pnpm test:run
+bun run typecheck
+bun run test:run
 uv --project backend run pytest backend/tests
 ```
 

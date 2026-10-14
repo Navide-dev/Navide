@@ -12,8 +12,11 @@ Before the public packages are published to npm, run the external workspace
 smoke test from the Navide repository root:
 
 ```text
-pnpm test:run src/main/plugins/pluginExternalWorkspace.test.ts
+bun run test:run src/main/plugins/pluginExternalWorkspace.test.ts
 ```
+
+The smoke test needs `pnpm` on PATH: the external project is a pnpm consumer,
+independent of the repository's own Bun toolchain.
 
 The smoke test copies this example into a temporary project outside the Navide
 workspace and replaces only the three unpublished public packages with local

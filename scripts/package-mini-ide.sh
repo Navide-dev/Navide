@@ -13,13 +13,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-VERSION="$(node -p "require('./package.json').version")"
+VERSION="$(bun -p "require('./package.json').version")"
 BUNDLE_DIR="$ROOT/dist-plugins/mini-ide"
 STAGE_DIR="$ROOT/dist-plugins/package/navide.mini-ide"
 OUT_VSIX="$ROOT/dist-plugins/navide.mini-ide-$VERSION.vsix"
 
 echo "==> Building mini-IDE bundle (v$VERSION)"
-pnpm run build:mini-ide
+bun run build:mini-ide
 
 echo "==> Staging package at $STAGE_DIR"
 rm -rf "$STAGE_DIR"

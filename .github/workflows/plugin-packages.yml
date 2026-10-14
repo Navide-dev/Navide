@@ -71,16 +71,11 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
+      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: package.json
 
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -95,21 +90,21 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Check the runner is the target
         run: |
-          host="$(node -p "process.platform + '-' + process.arch")"
+          host="$(bun -p "process.platform + '-' + process.arch")"
           echo "runner target: ${host}"
           test "${host}" = "${{ matrix.target }}"
 
       - name: Build navide.plans
         # The same build commands scripts/publish-first-party-plugins.sh runs.
         run: |
-          pnpm run build:public-packages
-          pnpm run build:plans:v2
-          pnpm run build:plans:backend
+          bun run build:public-packages
+          bun run build:plans:v2
+          bun run build:plans:backend
 
       - name: Verify the backend architecture
         run: |
@@ -117,7 +112,7 @@ jobs:
           case "${{ matrix.target }}" in
             win32-*)
               test -f "${backend}.exe"
-              node scripts/check-pe-machine.mjs "${{ matrix.arch }}" "${backend}.exe"
+              bun scripts/check-pe-machine.mjs "${{ matrix.arch }}" "${backend}.exe"
               ;;
             *)
               test -x "${backend}"

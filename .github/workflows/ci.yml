@@ -25,29 +25,24 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: package.json
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
       # Both scans always run: a finding in one must not hide the other half of
       # the tree. Each records its outcome and the gate below re-raises it, so
       # the job still turns red when either scan finds something.
-      # package.json ignores exactly one advisory, GHSA-ch52-4w7c-c8xp
-      # (http-cache-semantics <=4.2.0, no patched release exists). It only
-      # reaches us through electron-builder's build-time Electron download
-      # (@electron/get > got > cacheable-request), which is a single-user
-      # client cache on the build machine, not the shared cache the advisory
-      # is about, and none of it ships in the app. Drop the entry once a
-      # patched http-cache-semantics is published.
-      - name: npm audit (high and above)
-        id: npm-audit
+      # The former pnpm audit ignored one advisory, GHSA-ch52-4w7c-c8xp
+      # (http-cache-semantics <=4.2.0, which had no patched release). Its only
+      # path was electron-builder's build-time Electron download, and a patched
+      # release (4.3.0) is now locked, so bun audit needs no ignore entry.
+      - name: Bun audit (high and above)
+        id: bun-audit
         continue-on-error: true
-        run: pnpm audit --audit-level=high
+        run: bun audit --audit-level=high
       - name: Set up uv
         uses: astral-sh/setup-uv@v7
       - name: pip-audit (backend lock)
@@ -91,11 +86,11 @@ jobs:
           uv --project backend run --with pip-audit pip-audit --no-deps --disable-pip -r /tmp/backend-requirements-win-arm64.txt
       - name: Audit gate
         env:
-          NPM_AUDIT: ${{ steps.npm-audit.outcome }}
+          BUN_AUDIT: ${{ steps.bun-audit.outcome }}
           PIP_AUDIT: ${{ steps.pip-audit.outcome }}
           PIP_AUDIT_WIN_ARM64: ${{ steps.pip-audit-win-arm64.outcome }}
         run: |
-          echo "npm audit:                $NPM_AUDIT"
+          echo "bun audit:                $BUN_AUDIT"
           echo "pip-audit:                $PIP_AUDIT"
           echo "pip-audit (win arm64):    $PIP_AUDIT_WIN_ARM64"
           if [ "$PIP_AUDIT_WIN_ARM64" != success ]; then
@@ -104,7 +99,7 @@ jobs:
             # visible as a warning on every run so it is lifted, not forgotten.
             echo "::warning title=Windows on Arm dependency audit::pip-audit found advisories in the win_arm64 resolution of backend/uv.lock (expected while cryptography is pinned to 46.0.3 there; see backend/pyproject.toml)"
           fi
-          if [ "$NPM_AUDIT" != success ] || [ "$PIP_AUDIT" != success ]; then
+          if [ "$BUN_AUDIT" != success ] || [ "$PIP_AUDIT" != success ]; then
             exit 1
           fi
 
@@ -115,13 +110,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: package.json
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -133,16 +126,16 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
       - name: Typecheck every application and plugin surface
-        run: pnpm typecheck
+        run: bun run typecheck
       - name: Backend correctness lint
         run: uv --project backend run --locked ruff check backend
       - name: Verify collection ownership and required gate
         env:
           NAVIDE_REQUIRE_CI_SHELL: '1'
-        run: pnpm test:infrastructure --reporter=default --reporter=junit --outputFile.junit=test-results/ci/infrastructure.xml
+        run: bun run test:infrastructure --reporter=default --reporter=junit --outputFile.junit=test-results/ci/infrastructure.xml
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -171,13 +164,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: package.json
       # backend-ws-token-parity.test.ts deliberately checks the Python seam.
       - name: Set up Python
         uses: actions/setup-python@v7
@@ -190,12 +181,12 @@ jobs:
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
       - name: Complete unit and CLI suites
         env:
           NAVIDE_CLI_COVERAGE_REQUIRED: '1'
-        run: pnpm test:frontend --reporter=default --reporter=./tests/cli/contractReporter.ts --reporter=junit --reporter=json --outputFile.junit=test-results/ci/frontend.xml --outputFile.json=test-results/ci/frontend.json
+        run: bun run test:frontend --reporter=default --reporter=./tests/cli/contractReporter.ts --reporter=junit --reporter=json --outputFile.junit=test-results/ci/frontend.xml --outputFile.json=test-results/ci/frontend.json
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -219,19 +210,25 @@ jobs:
             runner: windows-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
-    env:
-      # Mini IDE bundles the editor; leave enough heap for its production build.
-      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: package.json
+      # Only pluginExternalWorkspace.test.ts needs pnpm: it installs the packed
+      # public packages into a temporary project with `pnpm install --offline`.
+      # The test runs under `bun run`, where bunfig.toml's `[run] bun = true`
+      # puts Bun's `node` alias first on PATH, so that pnpm executes on Bun, not
+      # on a separately installed Node.js (checked locally with a real Node later
+      # on PATH). This step therefore only provides the pnpm command; it does not
+      # prove a Node-hosted pnpm, and no setup-node step is needed for it.
+      - name: Set up pnpm for the plugin-author consumer check
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
@@ -249,16 +246,16 @@ jobs:
           cache: false
       - name: Install locked dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
       - name: Build application and all bundled plugins once
-        run: pnpm build
+        run: bun run build
       # Consumes this job's output. The macOS invocation additionally builds
       # the test-only Plans fixtures and exercises the production backend.
       - name: Complete artifact suite and packaged Plans contracts
-        run: pnpm test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
+        run: bun run test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
       - name: Verify production Plans excludes fixtures
-        run: node scripts/verify-plans-production.mjs
+        run: bun scripts/verify-plans-production.mjs
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v7
         if: always()
@@ -372,7 +369,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "--- processes still around:"
-          Get-Process | Where-Object { $_.ProcessName -match 'python|node|winpty|conhost|OpenConsole|git|uv|pytest|cmd|powershell|pwsh|claude|codex' } | ForEach-Object { Write-Host ("{0} ({1})" -f $_.ProcessName, $_.Id) }
+          Get-Process | Where-Object { $_.ProcessName -match 'python|node|bun|winpty|conhost|OpenConsole|git|uv|pytest|cmd|powershell|pwsh|claude|codex' } | ForEach-Object { Write-Host ("{0} ({1})" -f $_.ProcessName, $_.Id) }
           if (Test-Path pytest.log) {
             $lines = @(Get-Content pytest.log)
             Write-Host ("--- results so far: {0}" -f @($lines | Where-Object { $_ -match ' (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)' }).Count)

@@ -1983,7 +1983,7 @@
       "fn-status-request-failed": "向 macOS 要求「輸入監控」權限失敗（fn 鍵輔助程式沒有回應）。請自行到「系統設定 → 隱私權與安全性 → 輸入監控」允許 Navide，再按「重新檢查」。",
       "fn-status-restarting": "fn 鍵監聽已停止，正在重新啟動…",
       "fn-status-failed": "fn 鍵監聽無法執行。",
-      "fn-status-missing": "這份 Navide 缺少 fn 鍵輔助程式，因此偵測不到 fn。若是從原始碼執行，請先執行 pnpm build:fn-key（pnpm dev 會自動處理），再試一次。",
+      "fn-status-missing": "這份 Navide 缺少 fn 鍵輔助程式，因此偵測不到 fn。若是從原始碼執行，請先執行 bun run build:fn-key（bun run dev 會自動處理），再試一次。",
       "fn-open-input-monitoring": "開啟輸入監控設定",
       "fn-check-again": "重新檢查",
       "fn-retry": "再試一次",

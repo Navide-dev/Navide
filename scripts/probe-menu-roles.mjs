@@ -2,7 +2,7 @@
 // transcription in packages/plugin-ui/src/shared/keybindings/externalKeys.ts can be checked
 // against the shipped Electron instead of against memory.
 //
-//   npx electron scripts/probe-menu-roles.mjs
+//   bun run electron scripts/probe-menu-roles.mjs
 //
 // getDefaultRoleAccelerator() answers for the platform it runs on, so a macOS
 // run fills the `mac` column only. Run it again on Windows or Linux to verify

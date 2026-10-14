@@ -1682,7 +1682,13 @@ export class PluginBackendSupervisor {
     if (!this.onStderr) return
     const targetGen = generation ?? this.currentGeneration
     if (targetGen?.diagnosticTruncated) return
-    let message = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause)
+    let message = String(cause)
+    if (cause instanceof Error) {
+      // Bun on Windows can yield a stack holding only a bare `Error` header;
+      // keep the message. V8 stacks already carry it, so Node output is unchanged.
+      const stack = cause.stack
+      message = stack === undefined ? cause.message : stack.includes(cause.message) ? stack : `${cause.message}\n${stack}`
+    }
     message = message
       .replace(/\x1B(?:\].*?(?:\x07|\x1B\\\\)|\[[0-?]*[ -/]*[@-~]|[@-Z\\-_]|.?)/gu, '')
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/gu, '')

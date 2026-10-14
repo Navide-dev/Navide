@@ -28,7 +28,7 @@ NODE = shutil.which("node")
 
 pytestmark = pytest.mark.skipif(
     NODE is None or not CONTRACTS_DIST.is_file(),
-    reason="needs node and a built @navide/plugin-contracts (pnpm run build:public-packages)",
+    reason="needs node and a built @navide/plugin-contracts (bun run build:public-packages)",
 )
 
 ADMIN_TOKEN = "compat-admin-token"

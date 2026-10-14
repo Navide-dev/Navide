@@ -1983,7 +1983,7 @@
       "fn-status-request-failed": "macOS への「入力監視」の許可リクエストに失敗しました（fn キーのヘルパーが応答しませんでした）。「システム設定 → プライバシーとセキュリティ → 入力監視」で Navide を手動で許可してから「再確認」を押してください。",
       "fn-status-restarting": "fn キーの監視が停止しました。再起動しています…",
       "fn-status-failed": "fn キーの監視を実行できませんでした。",
-      "fn-status-missing": "この Navide には fn キーのヘルパーが含まれていないため、fn を検出できません。ソースから実行している場合は pnpm build:fn-key を実行してから（pnpm dev なら自動で行われます）、もう一度お試しください。",
+      "fn-status-missing": "この Navide には fn キーのヘルパーが含まれていないため、fn を検出できません。ソースから実行している場合は bun run build:fn-key を実行してから（bun run dev なら自動で行われます）、もう一度お試しください。",
       "fn-open-input-monitoring": "入力監視を開く",
       "fn-check-again": "再確認",
       "fn-retry": "もう一度試す",

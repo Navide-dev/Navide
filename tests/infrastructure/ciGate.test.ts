@@ -39,7 +39,7 @@ describe('required CI gate', () => {
   })
 
   it('requires executable shell validation in the Linux static job', () => {
-    const step = workflow.jobs.static.steps.find((entry) => entry.run?.startsWith('pnpm test:infrastructure'))
+    const step = workflow.jobs.static.steps.find((entry) => entry.run?.startsWith('bun run test:infrastructure'))
     expect(step?.env?.NAVIDE_REQUIRE_CI_SHELL).toBe('1')
     if (process.env.NAVIDE_REQUIRE_CI_SHELL === '1') expect(bashAvailable).toBe(true)
   })

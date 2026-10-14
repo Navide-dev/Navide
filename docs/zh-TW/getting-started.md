@@ -22,8 +22,7 @@ x64 提供兩種套件：
 ## 從原始碼安裝的前置需求
 
 - 配備 Apple 晶片的 macOS 13+、Linux x64，或 x64／Arm 版 Windows
-- Node.js 22.12+（22.x）
-- pnpm 10+
+- Bun 1.4.3+（不需另外安裝 Node.js 或 pnpm）
 - Python 3.12+
 - uv 0.11+
 - 至少一個受支援的 Coding CLI（共 14 種：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code），清單見[使用手冊](user-guide.md)
@@ -37,12 +36,12 @@ x64 提供兩種套件：
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-pnpm install
+bun install
 uv --project backend sync
-pnpm dev
+bun run dev
 ```
 
-`pnpm dev` 會同時啟動 Electron 應用程式、Vite Renderer 與 Python FastAPI Backend。
+`bun run dev` 會同時啟動 Electron 應用程式、Vite Renderer 與 Python FastAPI Backend。
 
 ## 首次啟動
 
@@ -73,8 +72,8 @@ Onboarding Wizard 會檢查必要 Runtime，並偵測可用的 Agent CLI。依�
 ## 開發檢查
 
 ```bash
-pnpm typecheck
-pnpm test:run
+bun run typecheck
+bun run test:run
 uv --project backend run pytest backend/tests
 ```
 

@@ -27,13 +27,13 @@ manifest rules the Registry enforces, see
 ### Install the CLI
 
 `@navide/plugin-sdk` and `@navide/plugin-contracts` are not on the npm
-registry yet. Until they are, build them from a Navide checkout and install the
-tarballs into your plugin project:
+registry yet. Until they are, build them from a Navide checkout (which needs
+[Bun](https://bun.sh)) and install the tarballs into your plugin project:
 
 ```bash
 # in the Navide checkout
-pnpm install
-pnpm run build:public-packages
+bun install
+bun run build:public-packages
 npm pack ./packages/plugin-contracts ./packages/plugin-sdk --pack-destination /tmp/navide-sdk
 
 # in your plugin project

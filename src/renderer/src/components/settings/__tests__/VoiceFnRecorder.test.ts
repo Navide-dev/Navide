@@ -211,7 +211,7 @@ describe('recording fn in Settings → Voice Input → Shortcut', () => {
     vi.stubGlobal('agentTeam', { fnKey: fn.api })
     const w = mountSection()
     await startRecording(w)
-    expect(text(w, 'key-recorder-fn-status')).toContain('pnpm build:fn-key')
+    expect(text(w, 'key-recorder-fn-status')).toContain('bun run build:fn-key')
     await w.get('[data-testid="key-recorder-fn-retry"]').trigger('click')
     await flushPromises()
     expect(fn.api.unsubscribe).toHaveBeenCalledTimes(1)

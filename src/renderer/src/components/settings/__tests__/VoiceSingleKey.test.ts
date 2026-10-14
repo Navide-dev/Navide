@@ -184,7 +184,7 @@ describe('fn (🌐) key row', () => {
     setUserRules([{ key: 'fn', command: HOLD_TO_TALK_COMMAND, when: WHEN }])
     const w = mountSection()
     await flushPromises()
-    expect(w.get('[data-testid="voice-fn-status"]').text()).toContain('pnpm build:fn-key')
+    expect(w.get('[data-testid="voice-fn-status"]').text()).toContain('bun run build:fn-key')
     expect(w.get('[data-testid="voice-fn-status"] button').text()).toBe('Try again')
   })
 

@@ -32,8 +32,8 @@ REQUEST="${1#v}"
 # patch/minor/major compute the next version from the current package.json;
 # an explicit X.Y.Z is used verbatim (existing behavior, unchanged).
 if [[ "$REQUEST" == "patch" || "$REQUEST" == "minor" || "$REQUEST" == "major" ]]; then
-  command -v node >/dev/null || fail "node is required to compute the next version"
-  CURRENT="$(node -p "require('./package.json').version")"
+  command -v bun >/dev/null || fail "bun is required to compute the next version"
+  CURRENT="$(bun -p "require('./package.json').version")"
   [[ "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || \
     fail "current package.json version '$CURRENT' is not X.Y.Z"
   MAJOR="${BASH_REMATCH[1]}"; MINOR="${BASH_REMATCH[2]}"; PATCH="${BASH_REMATCH[3]}"
@@ -63,7 +63,7 @@ if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   fail "resolved version '$VERSION' is not a valid X.Y.Z"
 fi
 
-for command in git node pnpm uv; do
+for command in git bun uv; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
@@ -81,10 +81,10 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
   fail "remote tag already exists: $TAG"
 fi
 
-pnpm release:check
+bun run release:check
 warn_missing_announcement "$VERSION"
 
-CURRENT="$(node -p "require('./package.json').version")"
+CURRENT="$(bun -p "require('./package.json').version")"
 echo ""
 echo "Release: $CURRENT -> $VERSION"
 echo "Source:  $(git rev-parse --short HEAD)"
@@ -108,18 +108,18 @@ rollback_version_files() {
 trap rollback_version_files EXIT
 
 version_changed=true
-node scripts/set-release-version.mjs "$VERSION"
+bun scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
-node scripts/update-readme-download-links.mjs "$VERSION"
+bun scripts/update-readme-download-links.mjs "$VERSION"
 uv --project backend lock
-pnpm release:check "$TAG"
+bun run release:check "$TAG"
 
 echo ""
 echo "=== Release gates ==="
 uv --project backend run ruff check backend
-pnpm typecheck
-pnpm test:run
+bun run typecheck
+bun run test:run
 # Backend tests run with a throwaway HOME and no reach to the real keychain.
 scripts/release-backend-tests.sh
 
@@ -144,7 +144,7 @@ echo "=== Building release artifacts ==="
   cd backend
   uv run pyinstaller --noconfirm agent_team_backend.spec
 )
-CSC_IDENTITY_AUTO_DISCOVERY=false pnpm dist
+CSC_IDENTITY_AUTO_DISCOVERY=false bun run dist
 
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \

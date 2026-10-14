@@ -115,6 +115,14 @@ function resolveInstalledPackageBin(
   return join(packageDirectory, bin)
 }
 
+function vueTscEntry(consumerEntry: string): string {
+  // Bun's loader cannot apply Volar's `tsc` bootstrap, so a direct vue-tsc
+  // entry reports TS2307 for every .vue import. Under Bun the same typecheck
+  // runs through the repository's explicit adapter; the consumer's vue-tsc is
+  // the same installed package. Node keeps the consumer entry unchanged.
+  return process.versions.bun ? join(repositoryRoot, 'scripts/bun/vue-tsc.cjs') : consumerEntry
+}
+
 async function extractPackageTarball(tarball: string, packageDirectory: string, cwd: string): Promise<void> {
   mkdirSync(packageDirectory, { recursive: true })
   await runCommandOrThrow(
@@ -216,7 +224,7 @@ describe('navide Mini-IDE public package boundary', () => {
         // wall time at load average ~280 and outran the test timeout. Both
         // settle before the finally block removes the project they read.
         const [typecheck, build] = await Promise.allSettled([
-          runNodeEntryOrThrow(vueTscCli, ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject),
+          runNodeEntryOrThrow(vueTscEntry(vueTscCli), ['--noEmit', '--project', join(externalProject, 'tsconfig.json')], externalProject),
           runNodeEntryOrThrow(viteCli, ['build', '--config', join(externalProject, 'vite.config.ts')], externalProject, {
             NAVIDE_MINI_IDE_DIST_DIR: join(externalProject, 'dist'),
           }),

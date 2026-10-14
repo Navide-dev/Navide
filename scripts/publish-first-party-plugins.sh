@@ -85,7 +85,7 @@ require_publish_env() {
 
 OUT_DIR="$ROOT/dist-plugins/publish"
 mkdir -p "$OUT_DIR"
-HOST_TARGET="$(node -p "process.platform + '-' + process.arch")"
+HOST_TARGET="$(bun -p "process.platform + '-' + process.arch")"
 
 navide_plugin() {
   uv --project "$ROOT/marketplace/registry" run --quiet navide-plugin "$@"
@@ -95,8 +95,8 @@ navide_plugin() {
 publish_dir() {
   local src="$1" target="$2"
   local id version vsix
-  id="$(node -p "require('$src/manifest.json').id")"
-  version="$(node -p "require('$src/manifest.json').version")"
+  id="$(bun -p "require('$src/manifest.json').id")"
+  version="$(bun -p "require('$src/manifest.json').version")"
   vsix="$OUT_DIR/$id-$version-$target.vsix"
   echo "==> Packing $id $version ($target)"
   navide_plugin pack "$src" --out "$vsix" --target "$target"
@@ -175,20 +175,20 @@ fi
 require_publish_env
 
 if [ "$SKIP_BUILD" -eq 0 ]; then
-  pnpm run build:public-packages
+  bun run build:public-packages
 fi
 
 if [ "$ONLY" != "plans" ]; then
   if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:git:v2
+    bun run build:git:v2
   fi
   publish_dir "$ROOT/dist-plugins/navide-git" universal
 fi
 
 if [ "$ONLY" != "git" ]; then
   if [ "$SKIP_BUILD" -eq 0 ]; then
-    pnpm run build:plans:v2
-    pnpm run build:plans:backend
+    bun run build:plans:v2
+    bun run build:plans:backend
   fi
   backend="$ROOT/dist-plugins/navide-plans/backend/navide-plans"
   case "$HOST_TARGET" in win32-*) backend="$backend.exe" ;; esac

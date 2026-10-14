@@ -1,0 +1,6 @@
+[run]
+# Run package scripts and dependency CLIs (vite, vitest, tsc, electron-builder)
+# on Bun itself, even when a Node.js is installed on the machine. Bun then puts
+# a `node` alias for itself ahead of PATH, so a `#!/usr/bin/env node` shebang
+# or a nested `node ...` command in a script also lands on Bun.
+bun = true

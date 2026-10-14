@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Agent-Team: Electron (Vue 3 + TypeScript, pnpm) frontend + Python (uv) backend.
+Agent-Team: Electron (Vue 3 + TypeScript, Bun) frontend + Python (uv) backend.
 This file is a router — read the referenced file BEFORE doing the matching work.
 
 ## Route table
@@ -26,7 +26,9 @@ in-repo docs above.
 
 ## Always-on rules (the expensive-to-violate subset)
 
-1. **Tests**: `pnpm test:run`, never `pnpm test` (watch mode hangs). Backend:
+1. **Tests**: `bun run test:run`, never `bun run test` (watch mode hangs) or bare `bun test`
+   (Bun's own runner, not Vitest). `pluginExternalWorkspace.test.ts` installs as a
+   pnpm project would, so it needs `pnpm` on PATH. Backend:
    `uv --project backend run pytest backend/tests` (the path argument is
    required — without it pytest misses backend's ini config). Run verification
    commands bare — no pipe to tail/head (it eats the exit code).

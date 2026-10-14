@@ -1,4 +1,4 @@
-import { pnpm, run, testEnvironment } from './test-process.mjs'
+import { bun, run, testEnvironment } from './test-process.mjs'
 
 const args = process.argv.slice(2)
 const prepared = args.includes('--prepared')
@@ -12,14 +12,14 @@ if (!prepared) {
   for (const build of [
     'build:public-packages', 'build:plans:v2', 'build:plans:backend',
     'build:mini-ide:v2', 'build:git:v2',
-  ]) pnpm(['run', build])
+  ]) bun(['run', build])
   run(process.execPath, ['scripts/stage-official-plugin-artifacts.mjs'])
 }
 // Electron's lazy download must finish before parallel tests start: two
 // workers importing electron at once both extract into the same dist folder.
 run(process.execPath, ['node_modules/electron/install.js'])
 if (packaged) {
-  pnpm(['run', 'build:plans:fixture'])
+  bun(['run', 'build:plans:fixture'])
 }
 
 const env = testEnvironment({ NAVIDE_TEST_ARTIFACTS_PREBUILT: '1' })

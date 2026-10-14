@@ -58,7 +58,7 @@ def find_pane_helper(env: dict[str, str] | None = None) -> str | None:
 
     Packaged: next to the frozen backend in Contents/Resources/bin (where
     electron-builder puts it, see package.json build.mac.extraResources).
-    Checkout: build/pane-helper/, if `pnpm run build:pane-helper` has run.
+    Checkout: build/pane-helper/, if `bun run build:pane-helper` has run.
     """
     override = (env if env is not None else os.environ).get(PANE_HELPER_ENV)
     if override is not None:
