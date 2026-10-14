@@ -4798,7 +4798,7 @@ watch(activeTab, (tab) => {
 .ap-section { margin-bottom: 26px; }
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ap-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); }
+.ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); text-wrap: pretty; }
 .ap-hint-warn { color: var(--danger-fg); }
 
 /* ── Two-column settings layout (page title / full-width rows / control labels) ── */
@@ -4838,7 +4838,9 @@ watch(activeTab, (tab) => {
 .cli-agent-card.drag-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .cli-agent-card.is-disabled { background: var(--bg-muted); }
 .cli-agent-card.is-disabled .cli-card-heading { opacity: .6; }
-.cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* Two lines tall either way, so a wrapped name does not push its card's
+   status rows below the neighbours'. */
+.cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 38px; }
 .cli-card-heading .cli-agent-label { overflow-wrap: anywhere; }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
@@ -4893,9 +4895,9 @@ watch(activeTab, (tab) => {
   padding: 0 8px; border-radius: 99px; white-space: nowrap;
   border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-secondary);
 }
-.cli-chip--ok { color: #2b8a3e; border-color: transparent; }
-.cli-chip--warn { color: #c77400; border-color: transparent; }
-.cli-chip--bad { color: #c0392b; border-color: transparent; }
+.cli-chip--ok { color: var(--success-fg, #2b8a3e); border-color: transparent; }
+.cli-chip--warn { color: var(--attention-fg, #c77400); border-color: transparent; }
+.cli-chip--bad { color: var(--danger-fg, #c0392b); border-color: transparent; }
 .cli-chip--info { color: var(--accent-fg, #3b5bdb); border-color: transparent; }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
@@ -5137,8 +5139,8 @@ watch(activeTab, (tab) => {
 .settings-path-btn {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
-  background: transparent;
-  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
   border-radius: var(--radius-sm);
   padding: 3px 7px;
   font-size: 10.5px;
@@ -5148,7 +5150,8 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   background: var(--bg-muted);
 }
-.settings-path-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Disabled drops the fill instead of fading, so the label stays readable. */
+.settings-path-btn:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: not-allowed; }
 
 button.tiny {
   padding: 3px 7px;

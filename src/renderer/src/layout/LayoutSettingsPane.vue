@@ -189,7 +189,7 @@ function onSize(id: SlotId, raw: string): void {
 
 <style scoped>
 .ls { display: flex; flex-direction: column; gap: 18px; max-width: 720px; }
-.ls-intro { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.6; }
+.ls-intro { margin: 0; color: var(--text-secondary); font-size: var(--font-xs); line-height: 1.6; text-wrap: pretty; }
 
 .ls-slot {
   border: 1px solid var(--border-muted);
@@ -219,19 +219,23 @@ function onSize(id: SlotId, raw: string): void {
   color: var(--text-primary);
   font-size: var(--font-2xs);
 }
-.ls-size-input:disabled { opacity: 0.5; }
+/* Disabled keeps its frame so an empty slot's size still reads as a field. */
+.ls-size-input:disabled { opacity: 1; background: transparent; border-color: var(--border-default); color: var(--text-secondary); }
 
 .ls-toggle.is-fixed { opacity: 0.7; cursor: default; }
 .ls-toggle {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 2px 6px;
   font-size: var(--font-2xs);
   color: var(--text-secondary);
   cursor: pointer;
 }
 
-.ls-empty { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); font-style: italic; }
+.ls-empty { margin: 0; font-size: var(--font-2xs); color: var(--text-secondary); }
+/* A toggle's note is its own line under the label, not a run-on after it. */
+.ls-toggle .ls-fixed-note { flex-basis: 100%; padding-left: 19px; }
 
 .ls-views { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .ls-view { display: flex; align-items: center; gap: 8px; }
@@ -254,7 +258,15 @@ function onSize(id: SlotId, raw: string): void {
 }
 .ls-view-name.active { border-color: var(--accent-fg); color: var(--text-bright); }
 .ls-view-name.is-static { cursor: default; }
-.ls-view-icon { font-size: var(--font-sm); }
+/* The registry mixes colour emoji with text glyphs (⏱ ✉). Here they render as
+   one even column: emoji presentation, one width, and no colour. */
+.ls-view-icon {
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: var(--font-sm);
+  font-variant-emoji: emoji;
+  filter: grayscale(1);
+}
 
 .ls-move,
 .ls-hide,
@@ -269,8 +281,10 @@ function onSize(id: SlotId, raw: string): void {
   font-size: var(--font-2xs);
   cursor: pointer;
 }
+/* One width for the picker so the Remove buttons line up down the list. */
+.ls-move { width: 136px; }
 .ls-move:disabled,
-.ls-hide:disabled { opacity: 0.45; cursor: default; }
+.ls-hide:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: default; }
 
 .ls-presets { display: flex; gap: 8px; flex-wrap: wrap; }
 .ls-preset {

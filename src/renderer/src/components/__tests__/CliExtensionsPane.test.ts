@@ -53,7 +53,7 @@ describe('CliExtensionsPane', () => {
   it('counts valid CLI extensions and in-process code', async () => {
     render()
     await flushPromises()
-    expect(wrapper.get('.cli-ext-counts').text()).toBe('3 CLI extensions · 1 with code inside the CLI\'s own process')
+    expect(wrapper.get('.cli-ext-counts').text()).toBe('3 CLI extensions · 1 run code inside their CLI')
   })
 
   it('puts in-process code first and shows the vendor type label untranslated', async () => {
