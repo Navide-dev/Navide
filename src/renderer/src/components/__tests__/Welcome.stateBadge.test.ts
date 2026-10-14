@@ -86,4 +86,20 @@ describe('Welcome recent-workspace state badge', () => {
     await mountWelcome()
     expect(wrapper!.text()).not.toContain('spawn-only')
   })
+
+  // The badges and the "3m ago" times were English literals in the component,
+  // so a Chinese or Japanese window read them in English.
+  it('labels badges and times in the window language', async () => {
+    const previous = i18n.global.locale.value
+    i18n.global.locale.value = 'zh-TW'
+    try {
+      await mountWelcome()
+      const items = wrapper!.findAll('.recent-item')
+      expect(items[1].find('.r-badge').text()).toContain('執行中')
+      expect(items[0].find('.r-time').text()).toBe('剛剛')
+      expect(wrapper!.text()).not.toMatch(/running|completed|aborted|just now|ago/)
+    } finally {
+      i18n.global.locale.value = previous
+    }
+  })
 })

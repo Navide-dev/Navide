@@ -6,6 +6,8 @@ import { NEW_WORKSPACE_ERROR_KEYS } from '../../../shared/workspaceCreate'
 import type { useBackend } from '../composables/useBackend'
 import { useEditorTargets } from '../composables/useEditorTargets'
 import { useRecentWorkspaces, type RecentWorkspace } from '../composables/useRecentWorkspaces'
+import { relativeTime } from '../lib/relativeTime'
+import navideMark from '../assets/navide-mark.png'
 
 const props = defineProps<{
   backend: ReturnType<typeof useBackend>
@@ -111,11 +113,11 @@ function showMore(): void {
 function stateBadge(state: string): { icon: string; label: string; cls: string } | null {
   switch (state) {
     case 'completed':
-      return { icon: '✓', label: 'completed', cls: 'completed' }
+      return { icon: '✓', label: t('recentWorkspaces.state-completed'), cls: 'completed' }
     case 'running':
-      return { icon: '▶', label: 'running', cls: 'running' }
+      return { icon: '▶', label: t('recentWorkspaces.state-running'), cls: 'running' }
     case 'aborted':
-      return { icon: '⏸', label: 'aborted', cls: 'aborted' }
+      return { icon: '⏸', label: t('recentWorkspaces.state-aborted'), cls: 'aborted' }
     default:
       return null
   }
@@ -125,18 +127,8 @@ function timeAgo(iso: string): string {
   if (!iso) return ''
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return ''
-  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (secs < 60) return 'just now'
-  const mins = Math.floor(secs / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  if (days === 1) return 'yesterday'
-  if (days < 30) return `${days} days ago`
-  const months = Math.floor(days / 30)
-  if (months < 12) return `${months}mo ago`
-  return `${Math.floor(months / 12)}y ago`
+  const { unit, count } = relativeTime(then, Date.now())
+  return t(`time.ago-${unit}`, { count })
 }
 
 async function openWorkspace(path: string): Promise<void> {
@@ -266,7 +258,7 @@ function ctxCopyPath(): void {
     <div class="welcome-card">
       <header class="w-head">
         <button v-if="dismissible" class="w-close" :aria-label="$t('action.close')" @click="dismiss">✕</button>
-        <h1>Navide</h1>
+        <h1 class="w-brand"><img class="w-mark" :src="navideMark" alt="" />Navide</h1>
         <p class="tagline">{{ $t('label.tagline') }}</p>
       </header>
 
@@ -334,7 +326,7 @@ function ctxCopyPath(): void {
                     {{ stateBadge(item.last_known_state)?.icon }}
                     {{ stateBadge(item.last_known_state)?.label }}
                   </span>
-                  <span v-if="!item.exists" class="r-missing" title="Folder not found">{{ $t('label.missing') }}</span>
+                  <span v-if="!item.exists" class="r-missing" :title="$t('recentWorkspaces.folder-not-found')">{{ $t('label.missing') }}</span>
                   <span class="r-time">{{ timeAgo(item.last_opened_at) }}</span>
                 </div>
                 <div class="r-path" v-truncate>{{ item.path }}</div>
@@ -360,7 +352,7 @@ function ctxCopyPath(): void {
       </section>
 
       <footer class="w-foot">
-        <button class="link" @click="emit('open-settings')">⚙ {{ $t('action.settings') }}</button>
+        <button class="link" @click="emit('open-settings')">{{ $t('action.settings') }}</button>
       </footer>
     </div>
 
@@ -454,6 +446,16 @@ button.link:focus-visible,
   letter-spacing: 0.5px;
   line-height: 1.2;
 }
+.w-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.w-mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
 .tagline {
   margin: 4px 0 0;
   color: var(--text-secondary);
@@ -479,8 +481,8 @@ button.link:focus-visible,
   margin: 10px 0 0;
 }
 button.primary {
-  background: var(--success-emphasis);
-  border: 1px solid var(--success-strong);
+  background: var(--accent-emphasis);
+  border: 1px solid var(--accent-emphasis);
   color: var(--text-on-emphasis);
   padding: 8px 16px;
   border-radius: var(--radius-control);
@@ -488,7 +490,8 @@ button.primary {
   font-size: var(--font-sm);
 }
 button.primary:hover:not(:disabled) {
-  background: var(--success-strong);
+  background: var(--accent-focus);
+  border-color: var(--accent-focus);
 }
 button.ghost {
   background: transparent;

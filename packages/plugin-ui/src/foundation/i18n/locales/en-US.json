@@ -8023,8 +8023,8 @@
     "missing": "⚠ missing",
     "already-open": "● open",
     "tagline": "Drive Claude Code · Codex · Antigravity CLI together",
-    "open-workspace": "📂 Open Workspace",
-    "recent": "🕓 Recent",
+    "open-workspace": "Open Workspace",
+    "recent": "Recent",
     "no-recent-workspaces": "No recent workspaces yet. Click <strong>Browse…</strong> to open a project folder.",
     "restart-title": "↺ Start pipeline over from Stage 01?",
     "restart-preserved": "Existing pipeline.log is preserved (events keep appending). The stage records in the project database (navide.db) will be reset to pending.",
@@ -10861,7 +10861,11 @@
     "limit-title": "Recent workspaces limit",
     "limit-hint": "Recent keeps every workspace you open until you remove it. This is only a storage safety bound: when it is reached the oldest entries go first, and open or pinned workspaces are never removed.",
     "limit-off": "No limit",
-    "limit-on": "Keep up to"
+    "limit-on": "Keep up to",
+    "state-completed": "completed",
+    "state-running": "running",
+    "state-aborted": "aborted",
+    "folder-not-found": "Folder not found"
   },
   "account-follow": {
     "switch-title": "Switched to {account} — move these panes too?",

@@ -8023,8 +8023,8 @@
     "missing": "⚠ 遺失",
     "already-open": "● 已開啟",
     "tagline": "同時驅動 Claude Code · Codex · Antigravity CLI",
-    "open-workspace": "📂 開啟工作區",
-    "recent": "🕓 最近",
+    "open-workspace": "開啟工作區",
+    "recent": "最近",
     "no-recent-workspaces": "尚無最近的工作區。點擊 <strong>瀏覽…</strong> 以開啟專案資料夾。",
     "restart-title": "↺ 從第 01 階段重新執行流程？",
     "restart-preserved": "現有 pipeline.log 保留（事件持續附加）。專案資料庫（navide.db）中的階段記錄將重設為待執行。",
@@ -10861,7 +10861,11 @@
     "limit-title": "最近工作區保留上限",
     "limit-hint": "「最近」會保留每個開過的工作區，直到你手動移除。這只是儲存安全上限：達到上限時先移除最舊的紀錄，已開啟與已釘選的工作區永遠不會被移除。",
     "limit-off": "不設上限",
-    "limit-on": "最多保留"
+    "limit-on": "最多保留",
+    "state-completed": "已完成",
+    "state-running": "執行中",
+    "state-aborted": "已中止",
+    "folder-not-found": "找不到資料夾"
   },
   "account-follow": {
     "switch-title": "已切換到 {account}，這些 pane 也要一起換嗎？",
