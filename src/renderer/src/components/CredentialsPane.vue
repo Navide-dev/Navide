@@ -326,8 +326,8 @@ async function saveRoots(): Promise<void> {
 <template>
   <div class="cred-pane" data-settings-section="credentials">
     <div class="cred-toolbar">
+      <!-- The page title above already names this page; no second heading. -->
       <div>
-        <h2>{{ t('settings.credentials.title') }}</h2>
         <p>{{ t('settings.credentials.intro') }}</p>
         <p class="cred-meta">
           <span>{{ t('settings.credentials.meta') }}</span>
@@ -363,10 +363,9 @@ async function saveRoots(): Promise<void> {
       </ul>
     </div>
     <div v-if="scan && scan.high > 0" class="cred-banner" role="status">
-      <strong>{{ t('settings.credentials.banner-high', { count: scan.high }) }}</strong>
+      <strong>{{ t('settings.credentials.banner-high', { count: scan.high }, scan.high) }}</strong>
       <span>{{ t('settings.credentials.banner-high-hint') }}</span>
     </div>
-    <p v-if="scannedLabel" class="cred-scanned">{{ scannedLabel }}</p>
 
     <section v-if="rootsOpen" class="cred-roots">
       <h3>{{ t('settings.credentials.roots.title') }}</h3>
@@ -398,6 +397,15 @@ async function saveRoots(): Promise<void> {
       </template>
     </section>
 
+    <!-- Scan time on the left, the Findings/Inventory switch on the right. -->
+    <div class="cred-viewbar">
+      <p class="cred-scanned">{{ scannedLabel }}</p>
+      <div class="cred-view-switch" role="group" :aria-label="t('settings.credentials.view-label')">
+        <button type="button" :class="{ on: view === 'findings' }" :aria-pressed="view === 'findings'" @click="view = 'findings'">{{ t('settings.credentials.view-findings') }}</button>
+        <button type="button" :class="{ on: view === 'inventory' }" :aria-pressed="view === 'inventory'" @click="view = 'inventory'">{{ t('settings.credentials.view-inventory') }}</button>
+      </div>
+    </div>
+
     <div class="cred-filterbar">
       <div class="cred-chips" role="group" :aria-label="t('settings.credentials.filter-label')">
         <button
@@ -411,10 +419,6 @@ async function saveRoots(): Promise<void> {
         >{{ chip.label }}<span class="count">{{ chip.count }}</span></button>
       </div>
       <input v-model="query" class="cred-search" type="search" :placeholder="t('settings.credentials.search')" />
-      <div class="cred-view-switch" role="group" :aria-label="t('settings.credentials.view-label')">
-        <button type="button" :class="{ on: view === 'findings' }" :aria-pressed="view === 'findings'" @click="view = 'findings'">{{ t('settings.credentials.view-findings') }}</button>
-        <button type="button" :class="{ on: view === 'inventory' }" :aria-pressed="view === 'inventory'" @click="view = 'inventory'">{{ t('settings.credentials.view-inventory') }}</button>
-      </div>
     </div>
 
     <div class="cred-body" :class="{ 'drawer-open': drawerOpen }">
@@ -524,8 +528,11 @@ async function saveRoots(): Promise<void> {
 .cred-pane { display: flex; flex: 1; min-height: 0; flex-direction: column; padding: 16px 22px 18px; gap: 12px; overflow: hidden; color: var(--text-primary); }
 .cred-toolbar, .cred-toolbar-actions, .cred-drawer-head, .cred-root-add, .cred-step { display: flex; align-items: center; gap: 10px; }
 .cred-toolbar { justify-content: space-between; align-items: flex-start; }
-.cred-toolbar h2 { margin: 0; font-size: 15px; color: var(--text-bright); }
-.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); }
+.cred-toolbar > div:first-child { flex: 1; min-width: 0; }
+.cred-toolbar-actions { flex-shrink: 0; }
+.cred-toolbar-actions button { white-space: nowrap; }
+.cred-toolbar p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-2xs); line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
+.cred-toolbar p:first-child { margin-top: 0; color: var(--text-primary); font-size: var(--font-xs); }
 .cred-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .cred-keyring.ok { color: var(--success-fg); }
 .cred-keyring.bad { color: var(--attention-fg); }
@@ -548,13 +555,17 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-root-list li { display: flex; align-items: center; gap: 8px; font-size: var(--font-2xs); }
 .cred-root-list code { flex: 1; min-width: 0; font-family: Menlo, Monaco, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-root-add input { flex: 1; }
+.cred-viewbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .cred-filterbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cred-chips, .cred-view-switch { display: flex; flex-wrap: wrap; gap: 4px; }
 .cred-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); font-size: var(--font-2xs); }
-.cred-chip.on, .cred-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+.cred-view-switch button.on { background: var(--bg-elevated); color: var(--text-bright); font-weight: 600; }
+.cred-chip.on { background: var(--accent-subtle, var(--bg-elevated)); border-color: var(--accent-muted, var(--accent-fg)); color: var(--accent-fg); font-weight: 600; }
 .cred-chip .count { font-size: var(--font-3xs); opacity: 0.6; font-variant-numeric: tabular-nums; }
-.cred-search { flex: 1; min-width: 140px; max-width: 260px; }
-.cred-view-switch { margin-left: auto; }
+.cred-search { flex: 1; min-width: 220px; }
+/* Findings / Inventory is one control with two states, not two buttons. */
+.cred-view-switch { margin-left: auto; flex-wrap: nowrap; gap: 0; padding: 2px; border: 1px solid var(--border-default); border-radius: var(--radius-control); background: var(--bg-inset); }
+.cred-view-switch button { border-color: transparent; background: transparent; color: var(--text-secondary); padding: 3px 10px; font-size: var(--font-2xs); }
 .cred-body { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; flex: 1; gap: 12px; }
 .cred-body.drawer-open { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
 .cred-main { min-width: 0; min-height: 0; overflow-y: auto; }
@@ -567,9 +578,12 @@ input { min-width: 0; border: 1px solid var(--border-default); border-radius: va
 .cred-card { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 9px 11px; text-align: left; border: 1px solid var(--border-muted); border-radius: var(--radius-card); background: var(--bg-subtle); min-width: 0; }
 .cred-card:hover:not(:disabled) { background: var(--bg-muted); border-color: var(--border-default); }
 .cred-card.active { border-color: var(--accent-fg, var(--border-emphasis)); background: var(--bg-muted); }
-.cred-card.quiet { opacity: 0.6; }
-.cred-card-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
-.cred-card-head strong { font-size: var(--font-xs); color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Snoozed or dismissed: set back, but still readable. */
+.cred-card.quiet { border-style: dashed; background: transparent; }
+.cred-card.quiet .cred-card-head strong { color: var(--text-primary); }
+.cred-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; min-width: 0; }
+/* Titles are full sentences in en/ja: two lines before they clip. */
+.cred-card-head strong { font-size: var(--font-xs); line-height: 1.35; color: var(--text-bright); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: auto-phrase; }
 .cred-card-loc { font-family: Menlo, Monaco, monospace; font-size: var(--font-3xs); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cred-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .cred-kv { display: flex; gap: 6px; font-size: var(--font-3xs); color: var(--text-secondary); min-width: 0; }

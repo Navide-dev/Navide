@@ -1896,6 +1896,7 @@
       "labeledValue": "{label}: {value}"
     },
     "scope": {
+      "label": "Applies to",
       "user": "User",
       "userWorkspace": "User / Workspace",
       "accountServer": "Account / Server",
@@ -6471,7 +6472,7 @@
       "scanning": "Scanning…",
       "scan-roots": "Scan roots…",
       "scanned-at": "Scanned {time} · {ms} ms",
-      "banner-high": "{count} high-risk finding(s) need attention",
+      "banner-high": "{count} high-risk finding needs attention | {count} high-risk findings need attention",
       "banner-high-hint": "Open a card for plain advice. Nothing here changes anything for you.",
       "filter-label": "Filter by kind",
       "search": "Search label, location, host…",
@@ -7681,7 +7682,9 @@
       "delete-confirm": "Delete this account?",
       "cli": {
         "title": "CLI Accounts",
-        "hint": "Click \"Sign in\" or \"+ New account\" and a temporary login pane opens, launching the CLI's browser sign-in automatically. Authorize in the browser: the account then shows as signed in and the pane closes by itself — the active account and running panes are untouched. All accounts share your real home directory (sessions and history are shared); switching accounts swaps the stored credentials in place. Use \"Set as default\" to switch the active account; already-open panes keep the previous account until reopened.",
+        "hint": "Click \"Sign in\" or \"+ New account\" to open a temporary login pane; it closes once you authorize in the browser. \"Set as default\" picks the account new panes use, and open panes keep theirs until reopened.",
+        "hint-detail": "All accounts share your home directory, so sessions and history carry over; switching swaps the stored credentials in place, and signing in never touches the active account.",
+        "hint-more": "Details",
         "login-no-workspace": "Open a workspace first — signing in launches a temporary login pane.",
         "login-spawn-failed": "Could not start the login pane.",
         "login-complete": "Signed in as {email}. Account saved.",
@@ -7693,6 +7696,7 @@
         "global-login-confirm": "Sign in",
         "global-login-cancel": "Cancel",
         "refresh-quota": "Refresh quota",
+        "refresh-quota-all": "Refresh all",
         "refreshing-quota": "Refreshing…",
         "refresh-quota-hint": "Re-read every CLI's remaining quota now, skipping the usual wait after a failed read. Claude is read by launching its CLI, so this can take a few seconds.",
         "refresh-quota-card-hint": "Re-read this account's remaining quota now, skipping the usual wait after a failed read. Only the account the CLI is signed in as can be read.",
@@ -7708,7 +7712,7 @@
         "delete-confirm": "Delete this account? Its saved sign-in will also be removed.",
         "duplicate-flag": "Duplicate",
         "duplicate-hint": "\"{self}\" and {others} store the same account ({email}). Delete the spare one.",
-        "unsupported": "This agent does not support multiple accounts.",
+        "unsupported": "Navide can't keep more than one account for these CLIs:",
         "active-error": "This account is currently active and cannot be deleted. Switch to another account first.",
         "login-in-progress-error": "A sign-in for this account is still running. Finish or close its login pane first.",
         "account-dir-in-use-error": "{count} running pane(s) use this account's own folder. Close them before deleting the account.",
@@ -10312,7 +10316,8 @@
     },
     "rules": {
       "title": "Custom rules",
-      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). On a pane with external content, a command Guard cannot analyse is only released by a glob pattern that matches the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
+      "hint": "Deny patterns raise a match to Critical or High; allow patterns lower a High match to Normal.",
+      "hint-detail": "Critical never moves down. On a pane with external content, a command Guard cannot analyse is only released by an allow pattern matching the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
       "kind": {
         "allow": "Allow",
         "deny": "Deny"
@@ -10325,7 +10330,7 @@
       "remove": "Remove"
     },
     "test": {
-      "title": "Try it",
+      "title": "Test against Guard rules",
       "placeholder": "Type a shell command, e.g. rm -rf ~",
       "tainted": "Externally influenced pane",
       "run": "Check",
@@ -10335,7 +10340,9 @@
     },
     "terminal": {
       "title": "Terminal command protection",
-      "hint": "Commands Navide never types into a plain terminal pane for an agent, an MCP client or a scheduled job — refused whatever the Guard switch says. Each part of a line (split at ; && {'|'}{'|'} {'|'} & and newlines) is checked; one refused part refuses the line. What you type yourself is not checked.",
+      "hint": "Navide refuses these commands when an agent, an MCP client or a scheduled job types them into a plain terminal pane, whatever the Guard switch says. What you type yourself is never checked.",
+      "more": "Details",
+      "hint-detail": "Each part of a line (split at ; && {'|'}{'|'} {'|'} & and newlines) is checked, and one refused part refuses the whole line.",
       "default-off": "Off by default",
       "loosen-confirm": "Switching a category off asks for confirmation; switching one on does not.",
       "category": {
@@ -10376,7 +10383,7 @@
         "block-pattern": "Your block pattern"
       },
       "test": {
-        "title": "Test a command",
+        "title": "Test against terminal protection",
         "placeholder": "e.g. ls && sudo rm -rf /opt/app",
         "refused": "Would be refused",
         "allowed": "Would be typed"
