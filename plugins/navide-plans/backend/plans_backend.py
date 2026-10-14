@@ -964,7 +964,16 @@ def _write_plan_meta(content: str, meta: dict[str, Any]) -> str:
     match = PLAN_META_RE.search(content)
     block = json.dumps(meta, ensure_ascii=False, indent=2).replace("<", "\\u003c")
     if match is None:
-        return f'<script type="application/json" id="plan-meta">\n{block}\n</script>\n{content}'
+        # Same placement as usePlanHtml.injectPlanMeta: prepending would push
+        # a <!DOCTYPE> behind the island and the file would render in quirks mode.
+        island = f'<script type="application/json" id="plan-meta">\n{block}\n</script>\n'
+        head_close = re.search(r"</head>", content, re.IGNORECASE)
+        if head_close is not None:
+            return f"{content[:head_close.start()]}{island}{content[head_close.start():]}"
+        html_open = re.search(r"<html\b[^>]*>", content, re.IGNORECASE)
+        if html_open is not None:
+            return f"{content[:html_open.end()]}\n{island}{content[html_open.end():]}"
+        return f"{island}{content}"
     return f"{content[:match.start(1)]}\n{block}\n{content[match.end(1):]}"
 
 
