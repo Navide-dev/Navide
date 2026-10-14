@@ -615,7 +615,11 @@ class ClaudeLogReader(LogReader):
                         # carry their text so the frontend can name the pane.
                         # tool_result lists / command wrappers stay text-less.
                         text = ""
-                        if rtype == "user":
+                        # A compaction summary is written as a plain-string user
+                        # record but nobody typed it, and an idle compaction has
+                        # no turn after it: as prompt text it opened a chat run
+                        # that never ended.
+                        if rtype == "user" and not rec.get("isCompactSummary"):
                             msg = rec.get("message")
                             content = msg.get("content") if isinstance(msg, dict) else None
                             if isinstance(content, str):
