@@ -179,6 +179,7 @@ def fast_timers(monkeypatch):
     monkeypatch.setattr(mgr_mod, "STATUS_EDIT_EVERY_S", 0.05)
     monkeypatch.setattr(mgr_mod, "STATUS_EDIT_MIN_INTERVAL_S", 0.0)
     monkeypatch.setattr(mgr_mod, "AWAITING_PROBE_EVERY_S", 0.02)
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 0.2)
     monkeypatch.setattr(mgr_mod, "LIMIT_PROBE_EVERY_S", 0.02)
     monkeypatch.setattr(mgr_mod, "STATUS_POLL_S", 0.02)
     monkeypatch.setattr(mgr_mod, "RUN_TICK_S", 0.01)
@@ -593,6 +594,31 @@ async def test_a_chat_held_by_another_pane_is_refused_until_released(env: Env) -
     res = await env.m.bind("pane-2", "b", "telegram", "existing", "-100", "50")
     assert res["ok"] is True
     assert [b.pane_id for b in env.store.bindings()] == ["pane-2"]
+
+
+async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: Env) -> None:
+    # Claude writes one message as two end_turn lines: thinking only, then the text
+    # (2026-10-14 09:36:47 / 09:36:52). The first must not answer the chat with nothing.
+    await env.inbound("你有什麼建議")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "")
+    await asyncio.sleep(0.05)
+    env.turn_complete("pane-1", "我的建議")
+    await _until(lambda: _said(env, "我的建議"))
+    assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
+    await asyncio.sleep(0.3)  # past the grace
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    assert sum("我的建議" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: Env) -> None:
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "")
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
 
 
 async def test_running_watch_is_capped_but_late_reply_still_sent(clocked) -> None:
