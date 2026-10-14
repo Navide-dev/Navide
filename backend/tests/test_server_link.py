@@ -417,6 +417,15 @@ async def _until(predicate, timeout: float = 3.0) -> None:
     raise AssertionError("condition never became true")
 
 
+# A poll must not hold a token file open while the link writes it. Windows will
+# not replace or delete a file another thread has open (Python opens files
+# without FILE_SHARE_DELETE), so the write fails with WinError 5 and the
+# rotation the test is waiting for never lands. The writers hold _token_lock.
+def _stored_token() -> str:
+    with server_link._token_lock:
+        return server_link.access_token()
+
+
 def make_link(server: FakeServer, *, config: ServerLinkConfig = CONFIG, cleared=None) -> ServerLink:
     return ServerLink(
         connect=server.connect,
@@ -3207,7 +3216,7 @@ async def test_rotation_carries_the_member_pin_to_the_new_token(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: server_link.access_token().startswith("nvd_rotated"))
+        await _until(lambda: _stored_token().startswith("nvd_rotated"))
         new = server_link.access_token()
         assert trust_store.member_for_credential(CONFIG.url, new) == "m1"  # pinned before confirm (N1b: node hint kept)
         ts.rotate_code = "UNKNOWN_TYPE"
@@ -3325,11 +3334,11 @@ async def test_rotations_do_not_grow_the_member_pins(monkeypatch):
     try:
         seen = []
         for _ in range(3):
-            await _until(lambda: server_link.access_token() not in seen and server_link.access_token().startswith("nvd_rotated"))
+            await _until(lambda: _stored_token() not in seen and _stored_token().startswith("nvd_rotated"))
             seen.append(server_link.access_token())
             await _until(lambda: len(_own_members()) == 1)
             await server.opened[-1].close()
-            await _until(lambda: bool(server.opened[-1].syncs) and server_link.access_token() not in seen, timeout=5)
+            await _until(lambda: bool(server.opened[-1].syncs) and _stored_token() not in seen, timeout=5)
         owners = _own_members()
         assert len(owners) == 1 and list(owners.values()) == ["m1"]
         assert trust_store.member_for_credential(CONFIG.url, server_link.access_token()) == "m1"
@@ -3348,7 +3357,7 @@ async def test_a_settled_promotion_forgets_the_old_pin(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: server_link.access_token() == "nvd_next-live")
+        await _until(lambda: _stored_token() == "nvd_next-live")
         await _until(lambda: trust_store.member_for_credential(CONFIG.url, "tok-old-revoked") == "")
         assert trust_store.member_for_credential(CONFIG.url, "nvd_next-live") == "m1"
         assert len(_own_members()) == 1
