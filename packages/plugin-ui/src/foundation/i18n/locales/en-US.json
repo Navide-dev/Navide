@@ -8349,7 +8349,15 @@
       "backend-pill-connected": "backend",
       "backend-pill-down": "backend down",
       "backend-pill-connecting": "connecting…",
-      "backend-pill-restarting": "restarting {attempt}/{max}…"
+      "backend-pill-restarting": "restarting {attempt}/{max}…",
+      "backend-popover-title": "Backend",
+      "backend-working": "working…",
+      "backend-restart": "Restart",
+      "backend-start": "Start",
+      "backend-stop": "Stop",
+      "pipeline-pill-stage": "Stage {current} / {total}",
+      "pipeline-pill-completed": "completed",
+      "pipeline-pill-aborted": "aborted"
   },
   "layout": {
     "expand": "Expand panel",

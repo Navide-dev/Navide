@@ -22067,8 +22067,8 @@ function paneIsCommander(p: ActivePane): boolean {
       <div class="statusbar-right">
         <span v-if="pipeline.state !== 'idle'" class="sb-item sb-pipeline" :class="'sb-' + pipeline.state">
           {{ pipeline.state === 'running'
-            ? `Stage ${pipeline.stageIndex + 1} / ${stagesApi.stages.value.length || '?'}`
-            : pipeline.state }}
+            ? $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: stagesApi.stages.value.length || '?' })
+            : $t('label.pipeline-pill-' + pipeline.state) }}
         </span>
         <span
           v-if="backfill.active"
@@ -22126,8 +22126,8 @@ function paneIsCommander(p: ActivePane): boolean {
     <div v-if="openPopover === 'backend'" class="bp-pop" @click.stop>
       <div class="bp-head">
         <span class="bp-dot sb-backend" :class="'sb-' + backend.status.value" />
-        <span class="bp-title">Backend</span>
-        <span class="bp-state" :class="'sb-' + backend.status.value">{{ backend.status.value }}</span>
+        <span class="bp-title">{{ $t('label.backend-popover-title') }}</span>
+        <span class="bp-state" :class="'sb-' + backend.status.value">{{ $t('label.backend-state-' + backend.status.value) }}</span>
       </div>
       <div class="bp-rows">
         <div class="bp-row"><span class="bp-k">URL</span><span class="bp-v">{{ backendUrl || '—' }}</span></div>
@@ -22135,13 +22135,13 @@ function paneIsCommander(p: ActivePane): boolean {
       </div>
       <div class="bp-actions">
         <button class="bp-btn bp-restart" :disabled="backendBusy" @click="onRestartBackend">
-          {{ backendBusy ? 'working…' : (backend.status.value === 'connected' ? 'Restart' : 'Start') }}
+          {{ backendBusy ? $t('label.backend-working') : (backend.status.value === 'connected' ? $t('label.backend-restart') : $t('label.backend-start')) }}
         </button>
         <button
           class="bp-btn bp-stop"
           :disabled="backendBusy || backend.status.value !== 'connected'"
           @click="onStopBackend"
-        >Stop</button>
+        >{{ $t('label.backend-stop') }}</button>
       </div>
     </div>
 
