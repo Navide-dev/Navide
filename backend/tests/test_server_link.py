@@ -2572,6 +2572,47 @@ async def test_a_resent_message_that_was_already_answered_is_answered_again(broa
         await link.stop()
 
 
+async def test_a_refused_unsigned_push_takes_no_room_in_the_replay_ledger(broadcasts):
+    """D2. The persisted ledger is bounded, oldest out first, so every key that
+    lands in it pushes a real one closer to the edge. A push that does not
+    verify was never delivered and has nothing to protect from a replay."""
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending("k-forged", sign=False)})
+        await _until(lambda: len(conn.acks) == 1)
+        assert conn.acks[0]["state"] == "rejected"
+        assert not await asyncio.to_thread(trust_store.has_seen_message, "k-forged")
+    finally:
+        await link.stop()
+
+
+async def test_a_flood_of_unsigned_pushes_cannot_flush_a_delivered_message(broadcasts):
+    """D2, end to end: a relay delivers a real message, pushes a ledger's worth
+    of messages that fail their signature, then replays the real one. The
+    replay must not reach the pane a second time."""
+    agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        conn = server.opened[0]
+        await conn.push({"type": "messages.pending", "payload": _pending("k-real")})
+        await _until(lambda: len(broadcasts) == 1)
+        # A full ledger plus one batch, so the batch that overflows it is written.
+        flood = trust_store.MAX_SEEN_MESSAGES + trust_store.SEEN_FLUSH_AFTER
+        for index in range(flood):
+            await conn.push(
+                {"type": "messages.pending", "payload": _pending(f"k-junk-{index}", sign=False)}
+            )
+        await _until(lambda: len(conn.acks) == flood, timeout=30.0)
+        await conn.push({"type": "messages.pending", "payload": _pending("k-real")})
+        await asyncio.sleep(0.2)
+        assert len(broadcasts) == 1
+    finally:
+        await link.stop()
+
+
 async def test_a_resent_message_still_waiting_for_its_pane_is_not_answered_twice(broadcasts):
     agent_messaging.register("p1", "reviewer", "/tmp/proj-a", agent_key="claude")
     server = FakeServer()

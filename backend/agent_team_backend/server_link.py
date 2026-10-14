@@ -3139,13 +3139,22 @@ class ServerLink:
         # Checked after the claim rather than before: the claim is what makes
         # the check race-free, and a key already in the ledger is simply left
         # marked handled in memory too.
-        if await asyncio.to_thread(trust_store.has_seen_message, msg_key):
-            return False
-        # Recorded on the claim rather than after delivery: a message that got
-        # this far has been handed to the delivery path, and re-running that
-        # path is the thing being prevented.
+        #
+        # Only checked here, not recorded: see _remember_inbound.
+        return not await asyncio.to_thread(trust_store.has_seen_message, msg_key)
+
+    async def _remember_inbound(self, msg_key: str) -> None:
+        """Persist a claimed key, once its signature has verified.
+
+        The ledger is bounded and evicts the oldest key first, so every key in
+        it pushes a delivered one closer to the edge. Recording on the claim let
+        a relay push a ledger's worth of messages that fail their signature —
+        each refused, none reaching a pane — and then replay a delivered message
+        whose key they had flushed out (D2). A key goes in only once a key the
+        relay cannot mint has vouched for it, and still before the delivery
+        path runs, which is what re-running is prevented for.
+        """
         await asyncio.to_thread(trust_store.note_seen_message, msg_key)
-        return True
 
     async def _authenticate_sender(
         self, data: dict[str, Any], *, msg_key: str, device_id: str, member_id: str
@@ -3639,6 +3648,12 @@ class ServerLink:
             log.warning("refusing a %s from %s: its signature does not verify", kind, device_id)
             await self._ack(msg_key, "rejected", reason=REASON_UNAUTHENTICATED)
             return
+        # Into the replay ledger only when a key the relay cannot mint vouched
+        # for the frame: the first frame of an exchange verifies against a key
+        # it carries itself, which anyone can make as many of as they like —
+        # and an unanswered replay of one only shows a code nobody confirms.
+        if str((pin or {}).get("signKey") or "") or (existing.their_key if existing else ""):
+            await self._remember_inbound(msg_key)
 
         name = self._device_name_for(device_id)
         # Their encryption key, from the frame and only the frame. It is
@@ -4008,6 +4023,7 @@ class ServerLink:
             )
             await self._ack(msg_key, "rejected", reason=reason)
             return
+        await self._remember_inbound(msg_key)
         await self._ensure_policy()
         # Three rings, not one condition: your own machines are one trust
         # domain and never consult the rules, a blocked device is refused ahead
