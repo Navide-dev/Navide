@@ -41,6 +41,18 @@ async def test_allowlist_rejects_an_unregistered_workspace(tmp_path: Path, monke
 
 
 @pytest.mark.asyncio
+async def test_legacy_shell_run_without_a_workspace_is_refused(tmp_path: Path) -> None:
+    """d1. With no workspace_path the legacy branch skipped the registered-
+    workspace check entirely and ran the command in the backend's own cwd."""
+    marker = tmp_path / "ran"
+
+    payload = await _run(_session(), {"command": f"touch {marker}"})
+
+    assert payload == {"ok": False, "error": "workspace path is required"}
+    assert not marker.exists()
+
+
+@pytest.mark.asyncio
 async def test_allowlist_keeps_cwd_within_registered_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     child = tmp_path / "child"
     child.mkdir()

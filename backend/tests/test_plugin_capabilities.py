@@ -232,6 +232,17 @@ def test_terminal_run_rejects_unregistered_cwd(
         asyncio.run(TerminalCapability().run("echo hi", cwd=str(tmp_path)))
 
 
+def test_terminal_run_without_a_cwd_is_refused(tmp_path: Path) -> None:
+    """d1, the second entry point: with no cwd this ran the command in the
+    backend's own cwd, past the registered-workspace check."""
+    import asyncio
+
+    marker = tmp_path / "ran"
+    with pytest.raises(CapabilityError, match="workspace path is required"):
+        asyncio.run(TerminalCapability().run(f"touch {marker}"))
+    assert not marker.exists()
+
+
 def _host_has_the_seam_shell() -> bool:
     """`TerminalCapability.run` execs whatever `osplat.paths.shell_command()`
     names. Gate on that program being on this host — not on which OS this
@@ -267,15 +278,16 @@ def test_terminal_run_allows_registered_subdir(
 @pytest.mark.skipif(
     not _host_has_the_seam_shell(), reason="the seam's shell is not on this host"
 )
-def test_terminal_run_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_terminal_run_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     import asyncio
 
     from agent_team_backend.plugins import capabilities as capabilities_module
 
     monkeypatch.setattr(capabilities_module, "_RUN_TIMEOUT_SECONDS", 0.1)
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: [str(tmp_path)])
 
     with pytest.raises(CapabilityError, match="timed out"):
-        asyncio.run(TerminalCapability().run("sleep 5"))
+        asyncio.run(TerminalCapability().run("sleep 5", cwd=str(tmp_path)))
 
 
 # -- ui capability: host-side placeholder --------------------------------

@@ -4906,7 +4906,8 @@ ipcMain.handle('settings:cdp-debug-write', (event, config: CdpDebugConfig) => {
 // safeStorage (token encryption) is a main-process API; the renderer only sees
 // masked accounts and, at git-op time, the decrypted credential for the bound
 // account. Handlers never throw across the IPC boundary — always { ok, ... }.
-ipcMain.handle('git-accounts:available', () => {
+ipcMain.handle('git-accounts:available', (event) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, available: getGitAccountsStore().available }
   } catch (e) {
@@ -4914,7 +4915,8 @@ ipcMain.handle('git-accounts:available', () => {
   }
 })
 
-ipcMain.handle('git-accounts:list', () => {
+ipcMain.handle('git-accounts:list', (event) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, accounts: getGitAccountsStore().list() }
   } catch (e) {
@@ -4922,7 +4924,8 @@ ipcMain.handle('git-accounts:list', () => {
   }
 })
 
-ipcMain.handle('git-accounts:add', (_event, input: GitAccountInput) => {
+ipcMain.handle('git-accounts:add', (event, input: GitAccountInput) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, account: getGitAccountsStore().add(input) }
   } catch (e) {
@@ -4930,7 +4933,8 @@ ipcMain.handle('git-accounts:add', (_event, input: GitAccountInput) => {
   }
 })
 
-ipcMain.handle('git-accounts:update', (_event, id: string, patch: Partial<GitAccountInput>) => {
+ipcMain.handle('git-accounts:update', (event, id: string, patch: Partial<GitAccountInput>) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     getGitAccountsStore().update(id, patch)
     return { ok: true }
@@ -4939,7 +4943,8 @@ ipcMain.handle('git-accounts:update', (_event, id: string, patch: Partial<GitAcc
   }
 })
 
-ipcMain.handle('git-accounts:remove', (_event, id: string) => {
+ipcMain.handle('git-accounts:remove', (event, id: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     getGitAccountsStore().remove(id)
     return { ok: true }
@@ -4948,7 +4953,8 @@ ipcMain.handle('git-accounts:remove', (_event, id: string) => {
   }
 })
 
-ipcMain.handle('git-accounts:bind', (_event, workspacePath: string, accountId: string) => {
+ipcMain.handle('git-accounts:bind', (event, workspacePath: string, accountId: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     getGitAccountsStore().bind(workspacePath, accountId)
     return { ok: true }
@@ -4957,7 +4963,8 @@ ipcMain.handle('git-accounts:bind', (_event, workspacePath: string, accountId: s
   }
 })
 
-ipcMain.handle('git-accounts:unbind', (_event, workspacePath: string) => {
+ipcMain.handle('git-accounts:unbind', (event, workspacePath: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     getGitAccountsStore().unbind(workspacePath)
     return { ok: true }
@@ -4966,7 +4973,8 @@ ipcMain.handle('git-accounts:unbind', (_event, workspacePath: string) => {
   }
 })
 
-ipcMain.handle('git-accounts:getBinding', (_event, workspacePath: string) => {
+ipcMain.handle('git-accounts:getBinding', (event, workspacePath: string) => {
+  if (!isAppWindowSender(event)) return UNTRUSTED_SENDER
   try {
     return { ok: true, accountId: getGitAccountsStore().getBinding(workspacePath) }
   } catch (e) {

@@ -7120,11 +7120,15 @@ async def shell_run(session: "Session", msg_id: str, msg_type: str, payload: dic
         return
     if not cmd:
         await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": "no command"}))
+    elif not isinstance(ws_path, str) or not ws_path.strip():
+        # Required here too: without one this branch skipped the workspace
+        # check below and ran the command in the backend's own cwd (d1).
+        await session.send_json(make_response(msg_id, msg_type, {"ok": False, "error": "workspace path is required"}))
     else:
-        resolved_cwd = app.Path(ws_path).resolve() if ws_path else None
+        resolved_cwd = app.Path(ws_path).resolve()
         # Validate that cwd is a known registered workspace (or its subdirectory)
         known_roots = app.attribution.existing_workspace_roots()
-        cwd_allowed = resolved_cwd is None or any(
+        cwd_allowed = any(
             resolved_cwd == r or resolved_cwd.is_relative_to(r)
             for r in known_roots
         )
