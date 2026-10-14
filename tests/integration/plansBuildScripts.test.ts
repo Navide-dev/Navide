@@ -60,7 +60,10 @@ function buildCount(root: string): number {
 // The stub `uv` is a shebang script found through PATH, which Windows'
 // CreateProcess never resolves (only .com/.exe), so the real uv would run and
 // parse the placeholder lock instead.
-describe.skipIf(isWindows())('Plans backend build cache', () => {
+// Each build() starts the real build script and its stub uv as two Node
+// processes, up to six times per test: the cost is process startup, which
+// stretches with machine load, not a wait on anything that could race.
+describe.skipIf(isWindows())('Plans backend build cache', { timeout: 30_000 }, () => {
   it('skips unchanged development builds and rebuilds changed inputs or missing output', () => {
     const root = fixture()
     build(root)
