@@ -79,6 +79,12 @@ interface Props {
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
+  /** Read aloud is on in Settings: offer the 🔊 toggle that marks this pane. */
+  readbackAvailable?: boolean
+  /** This pane is marked 🔊: its done / needs-input notices are spoken. */
+  readback?: boolean
+  /** A readback line about this pane is being spoken right now. */
+  readbackSpeaking?: boolean
   /** Runtime-only quota badge — lit while this pane's CLI has announced it is
    *  out of quota. `usageLimitUntil` is when it comes back, or null when no
    *  reset time could be resolved (the badge then says so instead of naming a
@@ -123,6 +129,7 @@ const emit = defineEmits<{
   (e: 'set-focus', ev?: MouseEvent): void
   (e: 'minimize'): void
   (e: 'toggle-mute'): void
+  (e: 'toggle-readback'): void
   (e: 'rebuild'): void
   (e: 'rebuild-clean'): void
   (e: 'rename', name: string): void
@@ -689,6 +696,14 @@ onMounted(() => {
           :title="$t('pane.terminal.muted-tooltip')"
           @click.stop="emit('toggle-mute')"
         ><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"></path><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg></span>
+        <button
+          v-if="readbackAvailable"
+          class="readback-toggle"
+          :class="{ on: readback }"
+          :aria-pressed="readback ? 'true' : 'false'"
+          :title="$t(readback ? 'pane.terminal.readback-on-tooltip' : 'pane.terminal.readback-off-tooltip')"
+          @click.stop="emit('toggle-readback')"
+        >🔊<span v-if="readbackSpeaking" class="readback-speaking">{{ $t('pane.terminal.readback-speaking') }}</span></button>
         <span
           v-if="loginExpired"
           class="login-expired-inline"
@@ -1024,6 +1039,30 @@ onMounted(() => {
 }
 .muted-inline:hover {
   color: var(--text-primary);
+}
+.readback-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 99px;
+  background: transparent;
+  font-size: var(--font-3xs);
+  line-height: 16px;
+  cursor: pointer;
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+.readback-toggle:hover { opacity: 0.8; }
+.readback-toggle.on {
+  opacity: 1;
+  filter: none;
+  color: var(--accent-fg);
+  background: var(--accent-subtle);
+  border-color: var(--accent-muted);
+  font-weight: 600;
 }
 .login-expired-inline {
   font-size: var(--font-3xs);

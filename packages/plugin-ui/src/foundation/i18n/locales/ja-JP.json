@@ -282,6 +282,15 @@
     "resize-failed": "AI CLI セッションのサイズを変更できません"
   },
   "voice": {
+  "readback": {
+    "done": "{label} が完了しました",
+    "attention": "{label} があなたの回答を待っています",
+    "done-many": "{n} 個のペインが完了しました",
+    "attention-many": "{n} 個のペインが回答を待っています",
+    "separator": "、",
+    "esc-stop": "Esc で停止",
+    "stop": "読み上げを停止"
+  },
   "prewarm-failed": "音声入力の準備ができていません：{reason}",
     "capsule": {
       "starting": "マイクを準備中…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "読み上げオン：このペインが完了または回答待ちになると読み上げます — クリックでオフ",
+      "readback-off-tooltip": "クリックすると、このペインが完了または回答待ちになったときに読み上げます",
+      "readback-speaking": "読み上げ中",
       "backend-reconnecting": "バックエンドとの接続が切れました。再接続中です。入力は一時停止されています。",
       "backend-restarting": "バックエンドが異常終了しました。再起動中です（{attempt}/{max}）。入力は一時停止されています。",
       "backend-unavailable": "バックエンドを利用できません。再起動するまで入力は一時停止されます。",
@@ -1896,6 +1908,16 @@
       "cliFiles": "各 CLI 固有の指示ファイル"
     },
     "voice": {
+      "readback-section": "読み上げ",
+      "readback": "返信を読み上げる",
+      "readback-hint": "🔊 を付けたペインが完了したり回答を求めたりしたとき、システムの音声で短い通知を読み上げます（例：「Navide が完了しました」）。ペインのタイトルバーの 🔊 をクリックして付けます。音声はこのコンピューター上で合成され、何もダウンロードしません。",
+      "readback-voice": "音声",
+      "readback-voice-hint": "「自動」はインターフェースの言語に合う最適なシステム音声を選びます（Premium 版を優先）。より良い音声はシステム設定 › アクセシビリティ › 読み上げコンテンツ でダウンロードできます。",
+      "readback-voice-none": "インターフェースの言語に合うシステム音声がないため、システムの既定の音声を使用します。",
+      "readback-voice-auto": "自動（インターフェースの言語）",
+      "readback-rate": "速度",
+      "readback-preview": "試聴",
+      "readback-stop-hint": "読み上げ中に Esc か音声入力のショートカットを押すとすぐに止まります。",
       "section": "音声入力",
       "enabled": "音声入力（押して話す）",
       "enabled-hint": "Ctrl+Alt+M を押している間（ショートカットで変更可）、フォーカス中の CLI ペインに音声入力できます。テキストは手で打ったのと同じように入力欄に入り、Enter を押すまで送信されません。音声はこのコンピューター上のローカル Whisper モデルで文字起こしされ、外部に送信されません。",

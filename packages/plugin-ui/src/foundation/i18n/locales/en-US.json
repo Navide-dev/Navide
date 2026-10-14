@@ -282,6 +282,15 @@
     "resize-failed": "Unable to resize the AI CLI session"
   },
   "voice": {
+  "readback": {
+    "done": "{label} is done",
+    "attention": "{label} needs your answer",
+    "done-many": "{n} panes are done",
+    "attention-many": "{n} panes need your answer",
+    "separator": ", ",
+    "esc-stop": "Esc to stop",
+    "stop": "Stop reading"
+  },
   "prewarm-failed": "Voice input is not ready: {reason}",
     "capsule": {
       "starting": "Preparing microphone…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
+      "readback-off-tooltip": "Click to read this pane aloud when it finishes or needs your answer",
+      "readback-speaking": "Speaking",
       "backend-reconnecting": "Backend disconnected — reconnecting. Typing is paused.",
       "backend-restarting": "Backend crashed — restarting ({attempt}/{max}). Typing is paused.",
       "backend-unavailable": "Backend unavailable — typing is paused until it is restarted.",
@@ -1896,6 +1908,16 @@
       "cliFiles": "Each CLI's own instruction files"
     },
     "voice": {
+      "readback-section": "Read aloud",
+      "readback": "Read replies aloud",
+      "readback-hint": "When a pane marked 🔊 finishes or needs your answer, a short notice is spoken with the system voice (for example \"Navide is done\"). Click 🔊 in a pane's title bar to mark it. Speech is synthesized on this computer; nothing is downloaded.",
+      "readback-voice": "Voice",
+      "readback-voice-hint": "Auto picks the best system voice for the interface language, preferring Premium voices. Better voices can be downloaded in System Settings › Accessibility › Spoken Content.",
+      "readback-voice-none": "No system voice matches the interface language; the system default voice will be used.",
+      "readback-voice-auto": "Auto (interface language)",
+      "readback-rate": "Speed",
+      "readback-preview": "Preview",
+      "readback-stop-hint": "Press Esc or the voice input shortcut to stop reading at once.",
       "section": "Voice input",
       "enabled": "Voice input (hold to talk)",
       "enabled-hint": "Hold Ctrl+Alt+M (rebindable under Shortcuts) to dictate into the focused CLI pane. The text goes into its input box as if you typed it — nothing is sent until you press Enter yourself. Speech is transcribed on this computer by a local Whisper model; audio never leaves the machine.",

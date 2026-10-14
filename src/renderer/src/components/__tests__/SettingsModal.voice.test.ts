@@ -61,7 +61,8 @@ describe('Settings ▸ Voice Input tab', { timeout: 15000 }, () => {
     const body = wrapper!.get('[data-settings-section="voice"]')
     expect(body.findComponent(VoiceSettingsSection).exists()).toBe(true)
     expect(body.isVisible()).toBe(true)
-    // Dictation never sends, so there is no reply to read aloud.
+    // Readback lives inside VoiceSettingsSection (tested below), not as a
+    // second block of the modal's own.
     expect(wrapper!.find('[data-settings-section="voice-readback"]').exists()).toBe(false)
   })
 
@@ -298,5 +299,90 @@ describe('VoiceSettingsSection microphone device', () => {
     w.unmount()
     wrapper = undefined
     expect(media.removeEventListener).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('VoiceSettingsSection read aloud', () => {
+  let wrapper: VueWrapper | undefined
+  const speak = vi.fn()
+  const cancel = vi.fn()
+
+  beforeEach(() => {
+    __resetSettingsForTest()
+    speak.mockReset()
+    cancel.mockReset()
+    vi.stubGlobal('speechSynthesis', {
+      getVoices: () => [
+        { name: 'Samantha', lang: 'en-US', voiceURI: 'samantha', localService: true },
+        { name: 'Daniel', lang: 'en-GB', voiceURI: 'daniel', localService: true },
+        { name: 'Kyoko', lang: 'ja-JP', voiceURI: 'kyoko', localService: true },
+      ],
+      speak,
+      cancel,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })
+    vi.stubGlobal('SpeechSynthesisUtterance', class { text: string; lang = ''; voice: unknown = null; rate = 1; onend: unknown = null; onerror: unknown = null; constructor(t: string) { this.text = t } })
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = undefined
+    vi.unstubAllGlobals()
+  })
+
+  async function mountSection() {
+    const mock = createMockBackend('connected')
+    mock.setResponse('voice.status', { ok: true, sidecar: 'ok', model: { present: true, bytes: MODEL_BYTES }, gpu: true })
+    wrapper = mount(VoiceSettingsSection, { props: { backend: mock.backend }, global: { plugins: [i18n] } })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('is off by default: one switch, nothing spoken, no voice/rate rows', async () => {
+    const w = await mountSection()
+    expect(useVoiceSettings().voiceReadbackEnabled.value).toBe(false)
+    const row = w.get('[data-settings-section="voice-readback"]')
+    expect(row.text()).toContain('Read replies aloud')
+    expect(w.find('[data-settings-section="voice-readback-voice"]').exists()).toBe(false)
+    expect(w.find('[data-settings-section="voice-readback-rate"]').exists()).toBe(false)
+    expect(speak).not.toHaveBeenCalled()
+  })
+
+  it('is independent of voice input', async () => {
+    useVoiceSettings().setVoiceInputEnabled(false)
+    useVoiceSettings().setVoiceReadbackEnabled(true)
+    const w = await mountSection()
+    expect(w.find('[data-settings-section="voice-readback-voice"]').exists()).toBe(true)
+  })
+
+  it('on: voices of the UI language with Auto first; choosing one and the rate saves them', async () => {
+    useVoiceSettings().setVoiceReadbackEnabled(true)
+    const w = await mountSection()
+    const voice = w.get('[data-settings-section="voice-readback-voice"] select')
+    expect(voice.findAll('option').map((o) => o.attributes('value'))).toEqual(['', 'samantha', 'daniel'])
+    await voice.setValue('daniel')
+    expect(useVoiceSettings().voiceReadbackVoice.value).toBe('daniel')
+    const rate = w.get('[data-settings-section="voice-readback-rate"] select')
+    await rate.setValue('1.2')
+    expect(useVoiceSettings().voiceReadbackRate.value).toBe(1.2)
+  })
+
+  it('preview speaks a sample line with the chosen voice', async () => {
+    useVoiceSettings().setVoiceReadbackEnabled(true)
+    useVoiceSettings().setVoiceReadbackVoice('daniel')
+    const w = await mountSection()
+    await w.get('[data-settings-section="voice-readback-preview"] button').trigger('click')
+    expect(speak).toHaveBeenCalledTimes(1)
+    const u = speak.mock.calls[0][0] as { text: string; voice: { voiceURI: string } }
+    expect(u.text).toContain('Navide')
+    expect(u.voice.voiceURI).toBe('daniel')
+  })
+
+  it('no speech synthesizer (e.g. Linux without voices): the block is not shown', async () => {
+    vi.unstubAllGlobals()
+    vi.stubGlobal('speechSynthesis', undefined)
+    const w = await mountSection()
+    expect(w.find('[data-settings-section="voice-readback"]').exists()).toBe(false)
   })
 })

@@ -5,7 +5,18 @@ import TerminalPane from './components/TerminalPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
+import ReadbackCapsule from './components/ReadbackCapsule.vue'
 import { setupVoiceInput } from './voice/voiceWiring'
+import { useVoiceSettings } from './voice/voiceSettings'
+import {
+  cancelReadback,
+  isPaneReadback,
+  readbackLine,
+  readbackSupported as hasReadbackSynth,
+  setPaneReadback,
+  speakReadback,
+  useReadbackAnnouncer,
+} from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
 import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
@@ -9721,6 +9732,49 @@ const voiceInput = setupVoiceInput({
   fnKey: window.agentTeam?.fnKey,
 })
 
+// Read aloud (Settings → Voice → Read aloud, default off): panes marked 🔊
+// speak "<pane> 完成了" / "<pane> 需要你回答" from the done and attention
+// notifications below. With it off announce() returns at once, the 🔊 toggle
+// is not rendered and Esc is never consumed.
+const { voiceReadbackEnabled, voiceReadbackVoice, voiceReadbackRate } = useVoiceSettings()
+const readbackSupported = hasReadbackSynth()
+const readbackOffered = computed(() => voiceReadbackEnabled.value && readbackSupported)
+const readback = useReadbackAnnouncer({
+  enabled: () => readbackOffered.value,
+  paneMarked: isPaneReadback,
+  paneMuted: isPaneMuted,
+  line: (items) => readbackLine(
+    items,
+    (paneId) => {
+      const p = panes.value.find((pn) => pn.id === paneId)
+      return (p && paneNotifyLabel(p)) || paneId
+    },
+    (key, params) => i18n.global.t(key, params ?? {}),
+  ),
+  speak: (text, onEnd) => speakReadback(text, {
+    uiLang: String(i18n.global.locale.value),
+    voiceURI: voiceReadbackVoice.value,
+    rate: voiceReadbackRate.value,
+  }, onEnd),
+  cancel: cancelReadback,
+})
+// Barge-in: pressing the dictation hotkey cuts the readback off first.
+watch(() => voiceInput.state.phase, (phase) => {
+  if (phase === 'starting' || phase === 'recording') readback.stop()
+})
+watch(voiceReadbackEnabled, (on) => { if (!on) readback.stop() })
+// Capture phase, so the pane never sees the Esc that stopped the readback.
+function onReadbackKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape' || !readback.stop()) return
+  e.preventDefault()
+  e.stopPropagation()
+}
+window.addEventListener('keydown', onReadbackKeydown, true)
+onUnmounted(() => window.removeEventListener('keydown', onReadbackKeydown, true))
+function togglePaneReadback(id: string): void {
+  setPaneReadback(id, !isPaneReadback(id))
+}
+
 // ── External UI action bus (MCP-driven) ─────────────────────────────────────
 // Actions a UI-control MCP client can invoke via ui.invoke.request. See
 // useUiActionBus for the request/reply plumbing and ownership check.
@@ -13934,6 +13988,7 @@ function scheduleDoneNotify(paneId: string, timestamp: string): void {
     const pane = panes.value.find((p) => p.id === paneId)
     if (!pane) return
     if (!isPaneMuted(paneId)) playDoneSound()
+    readback.announce(paneId, 'done')
     sysNotify.notifyPaneState(
       paneId,
       'done',
@@ -13948,6 +14003,7 @@ function notifyAttention(paneId: string): void {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return
   if (!isPaneMuted(paneId)) playAttentionSound()
+  readback.announce(paneId, 'attention')
   sysNotify.notifyPaneState(
     paneId,
     'attention',
@@ -21359,6 +21415,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
           :muted="isPaneMuted(p.id)"
+          :readback-available="readbackOffered"
+          :readback="isPaneReadback(p.id)"
+          :readback-speaking="readback.current.value?.paneIds.includes(p.id) ?? false"
           :usage-limit-until="p.usageLimitUntil"
           :usage-limit-hit="p.usageLimitAt != null"
           :quota-switch-offered="followSwitchFlag && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p)"
@@ -21382,6 +21441,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @quota-switch-account="onQuotaSwitchAccount(p.id)"
           @toggle-account-follow="toggleAccountPin(p.id)"
           @toggle-mute="togglePaneMuted(p.id)"
+          @toggle-readback="togglePaneReadback(p.id)"
           @continue-resume="continueRestoredPane(p.id)"
           @user-resume="persistPaneStopped(p.id, false)"
           @pty-lost="onPanePtyLost(p.id)"
@@ -21405,6 +21465,7 @@ function paneIsCommander(p: ActivePane): boolean {
         />
         </template>
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
+        <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />
         <!-- Auto/sidebar mode: meeting-style agent list on the right -->
         <div v-if="effectiveLayoutMode === 'sidebar'" class="auto-meeting-list" :style="dualFocusActive ? { gridColumn: '3' } : {}">
           <div
