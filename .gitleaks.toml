@@ -12,7 +12,6 @@ title = "Agent-Team gitleaks config"
     '''Copyright \(c\) 20\d{2} NT IT''',
     '''Copyright \(c\) 20\d{2} 恩梯科技''',
     '''(?i)ghp_secret\d+''',
-    '''key:\s*['"][a-zA-Z0-9+_-]+['"]''',
     # A Vue prop binding after a `*-key="…"` attribute (for example
     # `:width-key="widthKey" :default-width=…`) is captured as the value.
     '''^[a-z]+(-[a-z]+)+=$''',

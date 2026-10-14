@@ -66,6 +66,11 @@
     "toolsets": {
       "appimage": "1.0.3"
     },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false
+    },
     "files": [
       "out/**/*",
       "!node_modules/{monaco-editor,mermaid,@xterm}/**"
