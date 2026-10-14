@@ -99,7 +99,8 @@ KINDS: dict[str, KindSpec] = {
 }
 _KIND_BY_CODE = {code: name for name, code in KIND_CODES.items()}
 
-_PLAN_META_RE = re.compile(r'<script id="plan-meta" type="application/json">(.*?)</script>', re.DOTALL)
+# Attribute order varies: the provisioned template writes type before id.
+_PLAN_META_RE = re.compile(r'<script\b[^>]*\bid="plan-meta"[^>]*>(.*?)</script>', re.DOTALL)
 
 
 class ShareError(Exception):
