@@ -263,6 +263,43 @@ def test_parse_activity_turn_complete_carries_assistant_text(
     )
 
 
+def test_parse_activity_compaction_summary_is_not_a_prompt(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    """An idle auto-compaction writes its summary as a plain-string `user`
+    record, and no assistant turn follows it. Carried as prompt text, it reached
+    the channel mirror as a local prompt and opened a chat run that no
+    turn_complete would ever close (MSG_STILL_RUNNING, then silence)."""
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "cmp-001.jsonl"
+    _write_jsonl(session, [
+        {
+            "type": "system",
+            "subtype": "compact_boundary",
+            "timestamp": "2026-10-13T19:48:18.020Z",
+            "compactMetadata": {"trigger": "auto"},
+        },
+        {
+            "type": "user",
+            "timestamp": "2026-10-13T19:48:18.019Z",
+            "isCompactSummary": True,
+            "isVisibleInTranscriptOnly": True,
+            "message": {
+                "role": "user",
+                "content": "This session is being continued from a previous conversation "
+                "that ran out of context. The summary below covers the earlier portion.",
+            },
+        },
+    ])
+    seen: set[str] = set()
+    events = reader.parse_activity(session, seen)
+
+    user_events = [e for e in events if e.detail == "user"]
+    assert len(user_events) == 1
+    assert user_events[0].event_type == "agent_active"
+    assert user_events[0].text == ""
+
+
 def test_parse_activity_text_joins_only_text_blocks(
     fake_claude: tuple[ClaudeLogReader, Path],
 ) -> None:
