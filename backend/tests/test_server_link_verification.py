@@ -114,6 +114,12 @@ async def test_the_push_is_wired_to_the_dispatcher(monkeypatch: pytest.MonkeyPat
 
 # ---- the poll ----------------------------------------------------------------
 
+# The loop is awaited to its own return, not under a deadline. Its last step is
+# the announcement, and status() makes three asyncio.to_thread hops for it (one
+# of them generates the device signing key), so a starved thread pool on
+# a loaded Windows runner stretched it past the one second these tests allowed.
+# A loop that never stops is still caught, by pytest-timeout.
+
 
 async def test_the_poll_adopts_the_answer_and_stops(
     monkeypatch: pytest.MonkeyPatch, _quiet_broadcast: list[dict]
@@ -121,7 +127,7 @@ async def test_the_poll_adopts_the_answer_and_stops(
     link = _link(monkeypatch, [{"ok": True, "payload": {"emailVerified": True}}])
     monkeypatch.setattr(server_link, "_link", link)
 
-    await asyncio.wait_for(link._verify_loop(), 1)
+    await link._verify_loop()
 
     assert link.email_verified is True
     assert link.asked == ["account.status"]
@@ -143,7 +149,7 @@ async def test_the_poll_keeps_asking_while_the_answer_is_no(
     )
     monkeypatch.setattr(server_link, "_link", link)
 
-    await asyncio.wait_for(link._verify_loop(), 1)
+    await link._verify_loop()
 
     assert link.asked == ["account.status"] * 3
     assert link.email_verified is True
@@ -179,7 +185,7 @@ async def test_an_old_server_is_asked_more_slowly_and_never_hung_up_on(
     monkeypatch.setattr(server_link, "_link", link)
     ws = link._ws
 
-    await asyncio.wait_for(link._verify_loop(), 1)
+    await link._verify_loop()
 
     # Kept asking, so a server upgraded under a running link is noticed.
     assert link.asked == ["account.status"] * 3
@@ -201,7 +207,7 @@ async def test_a_failed_request_does_not_become_a_fallback(
     )
     monkeypatch.setattr(server_link, "_link", link)
 
-    await asyncio.wait_for(link._verify_loop(), 1)
+    await link._verify_loop()
 
     assert link._verify_fallback is False
     assert link.asked == ["account.status"] * 2

@@ -34,6 +34,13 @@ function importSpecifiers(source: string): string[] {
   return imports
 }
 
+// Parsing is the CPU-bound part of these scans. A file whose text never
+// mentions a forbidden specifier cannot import it, so only those are parsed.
+function importSpecifiersMentioning(path: string, needles: readonly string[]): string[] {
+  const source = readFileSync(path, 'utf8')
+  return needles.some((needle) => source.includes(needle)) ? importSpecifiers(source) : []
+}
+
 describe('public Vue plugin ownership boundary', () => {
   it('publishes explicit shared and foundation subpaths', () => {
     const manifest = JSON.parse(
@@ -52,7 +59,7 @@ describe('public Vue plugin ownership boundary', () => {
 
   it('keeps the public Vue package independent from Host implementation paths', () => {
     for (const path of sourceFiles(publicVueRoot)) {
-      const imports = importSpecifiers(readFileSync(path, 'utf8'))
+      const imports = importSpecifiersMentioning(path, ['@navide/plugin-ui/shared', 'src/renderer', 'electron'])
       expect(imports, relative(repositoryRoot, path)).not.toContain('@navide/plugin-ui/shared')
       expect(
         imports.some((specifier) => specifier.includes('src/renderer')),
@@ -72,7 +79,7 @@ describe('public Vue plugin ownership boundary', () => {
       '@navide/git-feature',
     ]
     for (const path of sourceFiles(pluginRoot)) {
-      const imports = importSpecifiers(readFileSync(path, 'utf8'))
+      const imports = importSpecifiersMentioning(path, [...forbidden, 'src/renderer'])
       for (const specifier of imports) {
         expect(
           forbidden.includes(specifier),

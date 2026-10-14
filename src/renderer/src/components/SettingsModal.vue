@@ -964,7 +964,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.voice-input.title'),
     group: t('settings.nav.voice'),
     summary: t('settings.search.item.voice-input.summary'),
-    keywords: 'voice input speech dictation microphone mic hold to talk push to talk whisper transcribe model download 語音 語音輸入 麥克風 按住說話 聽寫 轉文字 模型 下載 音声入力 マイク',
+    keywords: 'voice input speech dictation microphone mic hold to talk push to talk whisper transcribe model download read aloud readback tts speech synthesis 語音 語音輸入 麥克風 按住說話 聽寫 轉文字 模型 下載 朗讀 音声入力 マイク 読み上げ',
   },
   {
     id: 'general-environment',
@@ -1582,6 +1582,13 @@ const settingsScopeNotes: Record<SettingsTab, { scope: SettingsScope; storage: k
   channels: { scope: 'user', storage: 'safeStorage' },
   // Guard's switch, rules, audit and taint marks are tables in navide.db.
   security: { scope: 'user', storage: 'app_data_dir' },
+}
+
+// Two letters per CLI card: the first letter and the first consonant after
+// it, so names that share a prefix (Kimi, Kilo) still read apart.
+function cardInitials(label: string): string {
+  const second = label.slice(1).match(/[b-df-hj-np-tv-z]/i)?.[0] ?? label.slice(1, 2)
+  return (label.slice(0, 1) + second).toUpperCase()
 }
 
 function scopeLabel(scope: SettingsScope): string {
@@ -2504,7 +2511,8 @@ watch(activeTab, (tab) => {
   <Teleport to="body">
     <!-- Overlay -->
     <div class="s-overlay nv-modal-overlay" @click.self="closeSettingsLayer()">
-      <div class="s-modal nv-modal-shell nv-modal-shell--wide">
+      <!-- lang lets CJK line breaking and glyph choice follow the UI locale. -->
+      <div class="s-modal nv-modal-shell nv-modal-shell--wide" :lang="$i18n.locale">
 
         <!-- ── Sidebar (title + search + grouped nav) ────────────────────── -->
         <aside class="s-sidebar" :inert="!!selectedCliKey">
@@ -2710,6 +2718,7 @@ watch(activeTab, (tab) => {
               </div>
             </div>
             <div class="settings-meta-row">
+              <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
               <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.mcp.scope) }}</span>
               <span class="settings-path" v-truncate>{{ pathForTab('mcp') }}</span>
               <button class="settings-path-btn" :disabled="!settingsPaths.mcp" @click="openSettingsPath(settingsPaths.mcp)">{{ $t('action.open') }}</button>
@@ -2862,6 +2871,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'skills'" class="s-body s-body--bleed" data-settings-section="skills">
           <h1 class="s-page-title">{{ $t('settings.nav.skills') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.skills.scope) }}</span>
             <span class="settings-path" v-truncate>{{ pathForTab('skills') }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.skills" @click="openSettingsPath(settingsPaths.skills)">{{ $t('action.open') }}</button>
@@ -2873,6 +2883,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'credentials'" class="s-body s-body--bleed" data-settings-section="credentials">
           <h1 class="s-page-title">{{ $t('settings.nav.credentials') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.credentials.scope) }}</span>
           </div>
           <CredentialsPane :backend="props.backend" :active="activeTab === 'credentials'" @high-count="credentialsHighCount = $event" />
@@ -2882,6 +2893,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'prompts'" class="s-body s-body--bleed" data-settings-section="prompts">
           <h1 class="s-page-title">{{ $t('settings.nav.prompts') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.prompts.scope) }}</span>
           </div>
           <PromptSkillsPane />
@@ -2891,6 +2903,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'memory'" class="s-body s-body--bleed" data-settings-section="memory">
           <h1 class="s-page-title">{{ $t('settings.nav.memory') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.memory.scope) }}</span>
           </div>
           <!-- Project files belong to the folder that is actually open; the
@@ -2905,6 +2918,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'analyzer'" class="s-body s-body--bleed analyzer-body">
           <h1 class="s-page-title">{{ $t('settings.nav.analyzer') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.analyzer.scope) }}</span>
             <span class="settings-path" v-truncate>{{ settingsPaths.analyzer }}</span>
             <button class="settings-path-btn" :disabled="!settingsPaths.analyzer" @click="openSettingsPath(settingsPaths.analyzer)">{{ $t('action.open') }}</button>
@@ -3040,7 +3054,7 @@ watch(activeTab, (tab) => {
                 @keydown.enter="azDoPull"
               />
               <button
-                class="az-run-btn nv-btn nv-btn--primary"
+                class="az-pull-btn nv-btn"
                 :disabled="props.analyzerApi.pulling.value || !azPullName.trim()"
                 @click="azDoPull"
               >
@@ -3183,6 +3197,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'cliExtensions'" class="s-body s-body--bleed" data-settings-section="cli-extensions">
           <h1 class="s-page-title">{{ $t('settings.nav.cliExtensions') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.cliExtensions.scope) }}</span>
           </div>
           <!-- Mounted on first visit only: the scan reads every CLI's files. -->
@@ -3221,7 +3236,7 @@ watch(activeTab, (tab) => {
               >
                 <div class="cli-card-heading">
                   <span class="cli-agent-grip" :title="$t('settings.cliAgents.drag-hint')" aria-hidden="true">⠿</span>
-                  <span class="cli-card-icon" aria-hidden="true">{{ row.label.slice(0, 2).toUpperCase() }}</span>
+                  <span class="cli-card-icon" aria-hidden="true">{{ cardInitials(row.label) }}</span>
                   <span class="cli-agent-label">{{ row.label }}</span>
                   <span v-if="row.needsAttention" class="cli-card-attention" :title="$t('settings.cliAgents.filter-attention')" :aria-label="$t('settings.cliAgents.filter-attention')">!</span>
                 </div>
@@ -3876,6 +3891,7 @@ watch(activeTab, (tab) => {
               </SettingRow>
               <div class="s-fullrow">
                 <div class="settings-meta-row inline">
+                  <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                   <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.general.scope) }}</span>
                   <span class="settings-path" v-truncate>{{ pathForTab('general') }}</span>
                 </div>
@@ -4421,6 +4437,7 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'accounts'" class="s-body s-body--bleed accounts-body" data-settings-section="accounts">
           <h1 class="s-page-title">{{ $t('settings.nav.accounts') }}</h1>
           <div class="settings-meta-row">
+            <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
             <span class="scope-badge">{{ scopeLabel(settingsScopeNotes.accounts.scope) }}</span>
             <span class="settings-path" v-truncate>{{ pathForTab('accounts') }}</span>
           </div>
@@ -4468,6 +4485,7 @@ watch(activeTab, (tab) => {
             <section class="ext-policy-block" data-settings-section="execution-policy">
               <h2 class="ext-policy-block-title">{{ $t('settings.nav.executionPolicy') }}</h2>
               <div class="settings-meta-row inline">
+                <span class="settings-meta-label">{{ $t('settings.scope.label') }}</span>
                 <span class="scope-badge">{{ scopeLabel(executionPolicyScopeNote.scope) }}</span>
                 <span class="settings-path" v-truncate>{{ pathForStorage(executionPolicyScopeNote.storage) }}</span>
               </div>
@@ -4798,7 +4816,7 @@ watch(activeTab, (tab) => {
 .ap-section { margin-bottom: 26px; }
 .ap-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .ap-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); }
+.ap-hint { margin: 0 0 14px; font-size: 11.5px; color: var(--text-secondary); text-wrap: pretty; }
 .ap-hint-warn { color: var(--danger-fg); }
 
 /* ── Two-column settings layout (page title / full-width rows / control labels) ── */
@@ -4838,7 +4856,9 @@ watch(activeTab, (tab) => {
 .cli-agent-card.drag-over { box-shadow: inset 0 0 0 2px var(--accent-focus); }
 .cli-agent-card.is-disabled { background: var(--bg-muted); }
 .cli-agent-card.is-disabled .cli-card-heading { opacity: .6; }
-.cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* Two lines tall either way, so a wrapped name does not push its card's
+   status rows below the neighbours'. */
+.cli-card-heading { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 38px; }
 .cli-card-heading .cli-agent-label { overflow-wrap: anywhere; }
 .cli-card-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 8px; background: var(--bg-muted); color: var(--text-secondary); font-size: var(--font-xs); font-weight: 700; }
 .cli-card-attention { margin-left: auto; color: var(--warning-fg, #c77400); font-weight: 700; }
@@ -4893,9 +4913,9 @@ watch(activeTab, (tab) => {
   padding: 0 8px; border-radius: 99px; white-space: nowrap;
   border: 1px solid var(--border-default); background: var(--bg-muted); color: var(--text-secondary);
 }
-.cli-chip--ok { color: #2b8a3e; border-color: transparent; }
-.cli-chip--warn { color: #c77400; border-color: transparent; }
-.cli-chip--bad { color: #c0392b; border-color: transparent; }
+.cli-chip--ok { color: var(--success-fg, #2b8a3e); border-color: transparent; }
+.cli-chip--warn { color: var(--attention-fg, #c77400); border-color: transparent; }
+.cli-chip--bad { color: var(--danger-fg, #c0392b); border-color: transparent; }
 .cli-chip--info { color: var(--accent-fg, #3b5bdb); border-color: transparent; }
 /* Launch overrides for the selected agent. */
 .launch-row { flex-direction: column; align-items: stretch; padding: 0; }
@@ -5117,6 +5137,7 @@ watch(activeTab, (tab) => {
   border-radius: var(--radius-sm);
   margin-top: 10px;
 }
+.settings-meta-label { flex-shrink: 0; color: var(--text-secondary); }
 .scope-badge {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
@@ -5137,8 +5158,8 @@ watch(activeTab, (tab) => {
 .settings-path-btn {
   flex-shrink: 0;
   border: 1px solid var(--border-default);
-  background: transparent;
-  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  color: var(--text-primary);
   border-radius: var(--radius-sm);
   padding: 3px 7px;
   font-size: 10.5px;
@@ -5148,7 +5169,8 @@ watch(activeTab, (tab) => {
   color: var(--text-bright);
   background: var(--bg-muted);
 }
-.settings-path-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Disabled drops the fill instead of fading, so the label stays readable. */
+.settings-path-btn:disabled { opacity: 1; background: transparent; border-color: var(--border-muted); color: var(--text-secondary); cursor: not-allowed; }
 
 button.tiny {
   padding: 3px 7px;
@@ -5583,6 +5605,8 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 
 .az-pull-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .az-pull-input { flex: 1; margin-bottom: 0; }
+/* Secondary on purpose: "run benchmark" is the page's one primary action. */
+.az-pull-btn { font-size: var(--font-xs); font-weight: 600; padding: 7px 16px; }
 .az-pull-error { font-size: var(--font-2xs); color: var(--danger-fg); margin-top: 6px; }
 
 .az-progress-bar-wrap {
@@ -5643,8 +5667,9 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 @media (prefers-reduced-motion: reduce) { .az-spin { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* No side padding: the hint lines up with its section title above it. */
 .az-hint {
-  padding: 20px 24px;
+  padding: 8px 0 4px;
   color: var(--text-secondary);
   font-size: var(--font-xs);
   line-height: 1.7;

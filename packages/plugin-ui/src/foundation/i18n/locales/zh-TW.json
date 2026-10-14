@@ -282,6 +282,15 @@
     "resize-failed": "無法調整 AI CLI session 大小"
   },
   "voice": {
+  "readback": {
+    "done": "{label} 完成了",
+    "attention": "{label} 需要你回答",
+    "done-many": "{n} 個 pane 完成了",
+    "attention-many": "{n} 個 pane 需要你回答",
+    "separator": "，",
+    "esc-stop": "Esc 停止",
+    "stop": "停止朗讀"
+  },
   "prewarm-failed": "語音輸入尚未就緒：{reason}",
     "capsule": {
       "starting": "準備麥克風…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "朗讀已開啟：完成或需要回答時會念出來——點一下關閉",
+      "readback-off-tooltip": "點一下開啟朗讀：這個 pane 完成或需要你回答時用聲音告訴你",
+      "readback-speaking": "朗讀中",
       "backend-reconnecting": "後端已中斷 — 重新連線中，暫停輸入。",
       "backend-restarting": "後端已崩潰 — 重新啟動中（{attempt}/{max}），暫停輸入。",
       "backend-unavailable": "後端無法使用 — 重新啟動前暫停輸入。",
@@ -1233,8 +1245,9 @@
   "settings": {
     "cliExtensions": {
       "tabInstalled": "已安裝的 CLI 擴充",
-      "intro": "列出每個 AI CLI 自己安裝的 CLI 擴充（Claude plugin、Claude mod、Codex hook、Pi extension……），以及它們能碰到什麼。Navide 只讀取，這裡不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
-      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個是在 CLI 程序內執行的程式碼",
+      "tabConvenience": "Navide 做的修改",
+      "intro": "每個 AI CLI 為自己安裝的 CLI 擴充（Claude plugin 與 mod、Codex hook、Pi extension 等），以及各自能碰到什麼。這裡只讀取，不會安裝、啟用或修改任何東西。Navide 外掛另有專頁。",
+      "summary": "{total} 個 CLI 擴充 · 其中 {l3} 個在 CLI 程序內執行程式碼",
       "machineWide": "每家 CLI 整台機器只有一份：Navide 裡這家 CLI 的每個 pane、每個帳號，都會載入同一套。",
       "rescan": "重新掃描",
       "loading": "掃描中…",
@@ -1883,6 +1896,7 @@
       "labeledValue": "{label}：{value}"
     },
     "scope": {
+      "label": "適用範圍",
       "user": "使用者",
       "userWorkspace": "使用者／工作區",
       "accountServer": "帳號／伺服器",
@@ -1895,6 +1909,25 @@
       "cliFiles": "各 CLI 自己的指示檔"
     },
     "voice": {
+      "readback-model": "語音模型",
+      "readback-model-ready": "{voice} — 已就緒",
+      "readback-model-missing": "{voice} — 未安裝。目前用「{using}」朗讀。",
+      "readback-model-missing-none": "{voice} — 未安裝，這台電腦也沒有符合介面語言的聲音。",
+      "readback-model-other-os": "請在作業系統的語音設定中安裝更好的聲音。",
+      "readback-model-download-hint": "在剛打開的「輔助使用 › 朗讀內容」中，點「系統聲音」旁的 ⓘ／「管理聲音…」下載 {voice}，完成後按「重新檢查」。",
+      "readback-engine": "語音引擎",
+      "readback-engine-ready": "系統聲音 · 就緒",
+      "readback-engine-no-voices": "系統聲音 · 沒有已安裝的聲音",
+      "readback-section": "語音朗讀",
+      "readback": "朗讀回覆",
+      "readback-hint": "標了 🔊 的 pane 完成或需要你回答時，用系統聲音念一句短通知（例如「Navide指揮 完成了」）。在 pane 標題列點 🔊 即可標記。全部在本機合成，不會下載任何東西。",
+      "readback-voice": "聲音",
+      "readback-voice-hint": "「自動」會依介面語言挑最好的系統聲音（優先 Premium 版，例如美佳 Premium）。更好的聲音可在系統設定 › 輔助使用 › 朗讀內容 下載。",
+      "readback-voice-none": "這台電腦沒有符合介面語言的系統聲音，將使用系統預設聲音。",
+      "readback-voice-auto": "自動（依介面語言）",
+      "readback-rate": "語速",
+      "readback-preview": "試聽",
+      "readback-stop-hint": "朗讀中按 Esc 或語音輸入快捷鍵即可立刻停止。",
       "section": "語音輸入",
       "enabled": "語音輸入（按住說話）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷鍵設定中更改）即可對目前聚焦的 CLI pane 聽寫。文字會像手動輸入一樣填進輸入框，不會自動送出，確認後請自己按 Enter。語音由本機的 Whisper 模型轉成文字，音訊不會離開這台電腦。",
@@ -2131,7 +2164,7 @@
       "notifications": "通知",
       "crossDevice": "Navide Cloud",
       "accounts": "帳號",
-      "cliAgents": "CLI Agents",
+      "cliAgents": "CLI 代理",
       "cliExtensions": "擴充",
       "roles": "角色",
       "pipelines": "流程",
@@ -6442,7 +6475,7 @@
       "banner-high": "有 {count} 項高風險發現需要處理",
       "banner-high-hint": "點開卡片查看建議。這個頁面不會替你修改任何東西。",
       "filter-label": "依類型篩選",
-      "search": "搜尋名稱、位置、host…",
+      "search": "搜尋名稱、位置、主機…",
       "view-label": "檢視",
       "view-findings": "發現",
       "view-inventory": "清單",
@@ -6460,18 +6493,18 @@
         "low": "低"
       },
       "kind": {
-        "git-helper": "Git helper",
+        "git-helper": "Git 憑證輔助程式",
         "cli-account": "CLI 帳號",
         "ssh-key": "SSH 金鑰",
         "keychain-item": "鑰匙圈項目",
-        "remote": "Git remote",
+        "remote": "Git 遠端",
         "env-var": "環境變數",
         "plaintext-file": "明文檔案",
         "keyring": "鑰匙圈"
       },
       "reminder": {
         "title": "提醒",
-        "active": "進行中",
+        "active": "未處理",
         "snoozed": "已延後",
         "dismissed": "已忽略",
         "until": "至 {date}",
@@ -6519,7 +6552,7 @@
       },
       "code": {
         "url-token": {
-          "title": "remote URL 內嵌了 token",
+          "title": "遠端網址內嵌了 token",
           "body": "任何能讀到 repo 設定、shell 歷史或紀錄的人都看得到這個 token。請先到服務商撤銷該 token，再把它從 remote URL 移除，讓 git 改用鑰匙圈。"
         },
         "ssh-no-passphrase-default-host": {
@@ -6543,15 +6576,15 @@
           "body": "CLI 把登入 token 放在可讀的檔案而不是鑰匙圈。若該 CLI 支援鑰匙圈，請登出後改用鑰匙圈選項重新登入，或把檔案權限限制給自己。"
         },
         "gh-active-account-only": {
-          "title": "只有 gh 的 active 帳號可用",
+          "title": "只有 gh 目前使用中的帳號可用",
           "body": "GitHub CLI 同一時間只服務一個 active 帳號，綁在其他帳號的 repo 會默默用錯身分。推送前請執行 gh auth switch，或為每個 repo 設定各自的 credential helper。"
         },
         "helper-duplicate": {
-          "title": "git credential helper 重複",
+          "title": "Git 憑證輔助程式重複",
           "body": "同一個 helper 被設定多次，git 可能重複詢問或重複儲存憑證。請從 git 設定移除多餘的 credential.helper。"
         },
         "helper-shadowed": {
-          "title": "有 git credential helper 永遠輪不到",
+          "title": "有 Git 憑證輔助程式永遠輪不到",
           "body": "前面的 helper 先回應，所以這個永遠不會被用到。請檢查 credential.helper 的順序，只保留你要的那個。"
         },
         "env-token-in-shell-rc": {
@@ -7287,9 +7320,9 @@
         "perm-inherit": "權限 繼承",
         "perm-force-on": "權限 強制開",
         "perm-force-off": "權限 強制關",
-        "push": "push {kind}",
-        "push-off": "push 已關",
-        "no-push": "無 push",
+        "push": "推送開啟",
+        "push-off": "推送已關",
+        "no-push": "無推送通道",
         "accounts": "{count} 帳號",
         "signed-out": "未登入",
         "custom-binary": "自訂執行檔",
@@ -7616,6 +7649,8 @@
       "remove-binding": "移除這組綁定",
       "protected-hint": "這個快捷鍵不能移除 — 它是回到設定頁的入口。你仍然可以把它改綁到其他按鍵。",
       "menu-owned-hint": "這個按鍵由應用程式選單擁有，會早於畫面層觸發 — 在這裡解除並不會讓它停止。請改把命令綁到別的按鍵。",
+      "legend-locked": "無法移除",
+      "legend-menu-owned": "由應用程式選單攔截",
       "already-bound": "{key} 已經綁在這個命令上了",
       "invalid-key": "{key} 不能當作快捷鍵",
       "add-binding": "新增另一組綁定",
@@ -7647,7 +7682,9 @@
       "delete-confirm": "確定刪除此帳號？",
       "cli": {
         "title": "CLI 帳號",
-        "hint": "按「登入」或「＋ 新增帳號」會開啟暫時的登入 pane，並自動啟動該 CLI 的瀏覽器登入。在瀏覽器完成授權後，帳號會自動顯示為已登入、pane 也會自行關閉 — 使用中的帳號與執行中的 pane 完全不受影響。所有帳號共用你真實的家目錄（session 與歷史共通），切換帳號時就地替換儲存的憑證。要切換使用中的帳號請用「設為預設」；已開啟的 pane 在重開前仍使用原帳號。",
+        "hint": "按「登入」或「＋ 新增帳號」會開一個暫時的登入 pane，在瀏覽器授權後自動關閉。「設為預設」決定新 pane 用哪個帳號，已開的 pane 重開前維持原帳號。",
+        "hint-detail": "所有帳號共用你的家目錄，session 與歷史互通；切換時就地替換儲存的憑證，登入也不會動到使用中的帳號。",
+        "hint-more": "詳細說明",
         "login-no-workspace": "請先開啟工作區 — 登入需要啟動暫時的登入 pane。",
         "login-spawn-failed": "無法啟動登入 pane。",
         "login-complete": "已登入 {email}，帳號已儲存。",
@@ -7659,6 +7696,7 @@
         "global-login-confirm": "登入",
         "global-login-cancel": "取消",
         "refresh-quota": "重新偵測額度",
+        "refresh-quota-all": "全部重新偵測",
         "refreshing-quota": "偵測中…",
         "refresh-quota-hint": "立即重新讀取所有 CLI 的剩餘額度，略過讀取失敗後的等待時間。Claude 需要啟動它自己的 CLI 才能讀到，可能要等幾秒。",
         "refresh-quota-card-hint": "立即重新讀取這個帳號的剩餘額度，略過讀取失敗後的等待時間。只有 CLI 目前登入的帳號才讀得到。",
@@ -7674,7 +7712,7 @@
         "delete-confirm": "確定刪除此帳號？其儲存的登入憑證也會一併移除。",
         "duplicate-flag": "重複",
         "duplicate-hint": "「{self}」與 {others} 存的是同一個帳號（{email}），建議刪除多餘的那一個。",
-        "unsupported": "此 agent 不支援多帳號。",
+        "unsupported": "Navide 無法替這些 CLI 保存多個帳號：",
         "active-error": "此帳號目前使用中，請先切換到其他帳號再刪除。",
         "login-in-progress-error": "此帳號的登入程序仍在進行中，請先完成或關閉其登入 pane。",
         "account-dir-in-use-error": "有 {count} 個執行中的 pane 正在使用這個帳號自己的資料夾，請先關閉它們再刪除帳號。",
@@ -7743,7 +7781,7 @@
       "ollama-connected": "Ollama {version} 已連線",
       "not-connected": "未連線 · 請執行",
       "model-manager": "模型管理員",
-      "model-manager-note": "下載 · 刪除本地模型",
+      "model-manager-note": "輸入名稱從 Ollama 下載模型，或刪除不再需要的模型",
       "model-placeholder": "模型名稱，例如 qwen2.5-coder, llama3.2, gemma3",
       "downloading": "下載中…",
       "download": "下載",
@@ -8347,7 +8385,15 @@
       "backend-pill-connected": "後端",
       "backend-pill-down": "後端已中斷",
       "backend-pill-connecting": "連線中…",
-      "backend-pill-restarting": "重新啟動中 {attempt}/{max}…"
+      "backend-pill-restarting": "重新啟動中 {attempt}/{max}…",
+      "backend-popover-title": "後端",
+      "backend-working": "處理中…",
+      "backend-restart": "重新啟動",
+      "backend-start": "啟動",
+      "backend-stop": "停止",
+      "pipeline-pill-stage": "階段 {current} / {total}",
+      "pipeline-pill-completed": "已完成",
+      "pipeline-pill-aborted": "已中止"
   },
   "layout": {
     "expand": "展開面板",
@@ -9015,7 +9061,8 @@
     "status": {
       "ok": "已安裝",
       "missing": "未安裝",
-      "outdated": "版本過舊"
+      "outdated": "版本過舊",
+      "unknown": "尚未找到"
     },
     "requirements-label": "前置需求",
     "chain-label": "安裝順序",
@@ -10269,7 +10316,8 @@
     },
     "rules": {
       "title": "自訂規則",
-      "hint": "拒絕樣式會把符合的指令提升到你選的等級（嚴重或高）。允許樣式可讓「高」降為一般（不影響「嚴重」）。收過外部內容的面板上，Guard 無法分析的指令只有用比對整條指令的萬用字元樣式才會放行，例如 python3 -c *。新增允許或移除拒絕需要確認。",
+      "hint": "拒絕樣式把符合的指令提升到嚴重或高；允許樣式把「高」降為一般。",
+      "hint-detail": "「嚴重」不會被降級。收過外部內容的面板上，Guard 無法分析的指令要有比對整條指令的允許樣式才放行，例如 python3 -c *。新增允許或移除拒絕都需要確認。",
       "kind": {
         "allow": "允許",
         "deny": "拒絕"
@@ -10282,7 +10330,7 @@
       "remove": "移除"
     },
     "test": {
-      "title": "試試看",
+      "title": "用 Guard 規則測試",
       "placeholder": "輸入一行 shell 指令，例如 rm -rf ~",
       "tainted": "受外部影響的 pane",
       "run": "判斷",
@@ -10292,7 +10340,9 @@
     },
     "terminal": {
       "title": "終端機指令防護",
-      "hint": "Navide 絕不替 Agent、MCP 用戶端或排程工作打進一般 Terminal Pane 的指令 —— 不論 Guard 開關為何都會拒絕。一行會在 ; && {'|'}{'|'} {'|'} & 與換行處切開逐段檢查，任何一段被拒就整行拒絕。你自己打的內容不受檢查。",
+      "hint": "Agent、MCP 用戶端或排程工作往一般終端機 pane 打這些指令時，Navide 一律拒絕，不看 Guard 開關。你自己打的內容不受檢查。",
+      "more": "詳細說明",
+      "hint-detail": "一行會在 ; && {'|'}{'|'} {'|'} & 與換行處切開逐段檢查，任一段被拒就整行拒絕。",
       "default-off": "預設關閉",
       "loosen-confirm": "關閉類別需要確認；開啟不需要。",
       "category": {
@@ -10308,8 +10358,8 @@
         "pipe-to-shell": "直接執行網路下載的腳本",
         "credential": "憑證檔（SSH、雲端金鑰、Keychain、.env）",
         "force-push-main": "Force-push 或刪除 main／master",
-        "classifier-critical": "其他被 Guard 判為 critical 的指令",
-        "classifier-high": "其他被 Guard 判為 high 的指令（git push、git reset --hard、workspace 內的 rm -rf）",
+        "classifier-critical": "其他被 Guard 判為「嚴重」的指令",
+        "classifier-high": "其他被 Guard 判為「高」的指令（git push、git reset --hard、workspace 內的 rm -rf）",
         "unanalyzable": "無法靜態判斷的指令"
       },
       "block": {
@@ -10333,7 +10383,7 @@
         "block-pattern": "你的封鎖樣式"
       },
       "test": {
-        "title": "測試指令",
+        "title": "用終端機指令防護測試",
         "placeholder": "例如 ls && sudo rm -rf /opt/app",
         "refused": "會被拒絕",
         "allowed": "會被打進去"
@@ -10837,9 +10887,10 @@
     "follow-body": "這些跟隨中的 pane 正在執行。可以等它們跑完再換，或這次先不換。閒置的 pane 會立即換。",
     "follow-wait": "跑完就換",
     "follow-skip-running": "跳過正在跑的",
-    "toggle-label": "固定這個 pane 的帳號",
-    "toggle-follow-tooltip": "跟隨中：切換帳號時，這個 pane 下一回合就用新帳號，不用重開。點一下固定在目前的帳號（會在該帳號的資料夾重開一次；資料夾還沒登入會先請你登入）。",
-    "toggle-fixed-tooltip": "已固定：切換帳號時這個 pane 不會跟著換，繼續在它的帳號資料夾裡執行。點一下改回跟隨（會重開一次並接續對話）。",
+    "follow-switch-label": "跟隨帳號切換",
+    "follow-switch-hint": "開啟：這個 pane 下一回合就改用新帳號。關閉：留在它的帳號資料夾裡。切換時會重開一次。",
+    "pinned-indicator-label": "已固定帳號",
+    "pinned-indicator-tooltip": "已固定：切換帳號時這個 pane 不會跟著換。點開帳號標籤可以改回跟隨。",
     "unpin-title": "有 {count} 個要改為跟隨的 pane 正在執行",
     "unpin-body": "改為跟隨會用目前的登入重開 pane，並接續對話。可以等它們跑完再改，或這次先跳過。閒置的 pane 會立即改。",
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",

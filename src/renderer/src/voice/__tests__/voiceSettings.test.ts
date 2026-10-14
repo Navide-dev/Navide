@@ -104,4 +104,25 @@ describe('voice recording mode setting', () => {
     expect(s.voiceScript.value).toBe('hans')
     expect(shared.settingsGet(mod.VOICE_SCRIPT_KEY, null)).toBe('hans')
   })
+
+  it('read aloud defaults OFF with an automatic voice at 1.0×; persists choices and rejects unknown rates', () => {
+    const { mod, shared, createMockBackend } = ctx
+    const { backend, emit } = createMockBackend('connected')
+    shared.initSettingsBackend(backend)
+    const s = mod.useVoiceSettings()
+    expect(s.voiceReadbackEnabled.value).toBe(false)
+    expect(s.voiceReadbackVoice.value).toBe('')
+    expect(s.voiceReadbackRate.value).toBe(1)
+    emit('ui.settings_changed', { settings: { [mod.VOICE_READBACK_RATE_KEY]: 1.5 } })
+    expect(s.voiceReadbackRate.value).toBe(1.5)
+    emit('ui.settings_changed', { settings: { [mod.VOICE_READBACK_RATE_KEY]: 9 } })
+    expect(s.voiceReadbackRate.value).toBe(1)
+    emit('ui.settings_changed', { settings: { [mod.VOICE_READBACK_VOICE_KEY]: 'meijia' } })
+    expect(s.voiceReadbackVoice.value).toBe('meijia')
+
+    s.setVoiceReadbackVoice('kyoko')
+    s.setVoiceReadbackRate(0.8)
+    expect(shared.settingsGet(mod.VOICE_READBACK_VOICE_KEY, null)).toBe('kyoko')
+    expect(shared.settingsGet(mod.VOICE_READBACK_RATE_KEY, null)).toBe(0.8)
+  })
 })

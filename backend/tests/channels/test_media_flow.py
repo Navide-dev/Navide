@@ -197,6 +197,15 @@ async def test_a_refused_file_is_not_sent_and_the_chat_hears_why(media_env: Env,
     assert m.files == [] and not _said(media_env, "SECRET")
 
 
+async def test_a_refused_credential_name_tells_the_chat_which_rule(media_env: Env, ws: Path) -> None:
+    (ws / "out" / "id_rsa").write_text("PRIVATE-BLOB")
+    m = Media(media_env.tg)
+    await _armed(media_env)
+    media_env.turn_complete("pane-1", _msg(f"see key\n---ATTACH--- {ws}/out/id_rsa"))
+    await _until(lambda: _said(media_env, "⚠️"))
+    assert m.files == [] and _said(media_env, "id_rsa*") and not _said(media_env, "PRIVATE-BLOB")
+
+
 @needs_symlinks
 async def test_a_symlink_to_a_secret_is_not_sent(media_env: Env, ws: Path, tmp_path: Path) -> None:
     secret = tmp_path / "secret.txt"

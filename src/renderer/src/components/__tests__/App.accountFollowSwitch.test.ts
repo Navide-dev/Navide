@@ -87,8 +87,19 @@ describe('follow switch wiring: flag on', () => {
   })
 
   it('finds a chosen pane again by its session once another rebuild replaced its id', () => {
-    const body = functionBody('moveFollowPanes')
-    expect(body).toContain('paneResumeSessionId(p) === session')
+    expect(functionBody('followPaneNow')).toContain('paneResumeSessionId(p) === session')
+    expect(functionBody('moveFollowPanes')).toContain('resolve: (id) => followPaneNow(id, sessions),')
+  })
+
+  it('remembers the conversations before asking: a pane rebuilt while the user decides still moves', () => {
+    // Taken at move time, the old id would already be gone and the pane
+    // reported as missing (review of #194, M4).
+    for (const name of ['offerFollowSwitch', 'onQuotaSwitchAccount', 'unpinAllAccountPanes']) {
+      const body = functionBody(name)
+      const remember = body.indexOf('const sessions = followSessions(')
+      expect(remember, name).toBeGreaterThan(-1)
+      expect(remember, name).toBeLessThan(body.indexOf('askFollowDialog('))
+    }
   })
 
   it('ends an open question unanswered before asking a new one', () => {
@@ -99,12 +110,12 @@ describe('follow switch wiring: flag on', () => {
     const body = functionBody('offerFollowSwitch')
     expect(body).toContain('if (rows.length === 0) return')
     expect(body).toContain('const target = targetId ?? DEFAULT_SLOT_ID')
-    expect(body).toContain('await moveFollowPanes(choice.paneIds, target)')
+    expect(body).toContain('await moveFollowPanes(choice.paneIds, target, sessions)')
   })
 
   it('moves the out-of-quota pane first, then the peers ticked', () => {
     expect(functionBody('onQuotaSwitchAccount')).toContain(
-      'await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)',
+      'await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId, sessions)',
     )
   })
 })
@@ -191,7 +202,10 @@ describe('scheme A (plan claude_f1bf4b): live switch, panes follow unless fixed'
     expect(appSource.slice(start, appSource.indexOf('\n})\n', start))).toContain('unpinAll: unpinAllAccountPanes,')
     const body = functionBody('unpinAllAccountPanes')
     expect(body).toContain("askFollowDialog({ mode: 'unpin'")
-    expect(body).toContain("await moveFollowPanes(ids, '')")
+    expect(body).toContain("await moveFollowPanes(ids, '', sessions)")
+    // The flag goes on the pane as it is now, not on an id a rebuild retired.
+    expect(body).toContain('const now = followPaneNow(id, sessions)')
+    expect(body).toContain('if (now) accountFollow.add(now)')
   })
 
   it("keeps #194's follow flow wired but no longer offered in this window", () => {

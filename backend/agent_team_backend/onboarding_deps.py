@@ -531,9 +531,12 @@ def detect_dep(dep: Dep, quick: bool = False) -> dict[str, Any]:
                 status = "missing"
         except (subprocess.SubprocessError, OSError) as exc:
             duration_ms = max(0, round((time.monotonic() - started) * 1000))
-            status = "missing"
             version = ""
             probe_timed_out = isinstance(exc, subprocess.TimeoutExpired)
+            # A timeout found the binary and only failed to grade it — the
+            # spawn probe lets the same timeout through (app.py), so calling
+            # it missing here put the install wizard over a working CLI.
+            status = "ok" if probe_timed_out else "missing"
     if dep.id == "python" and not quick and status in ("outdated", "missing"):
         found_path, found_version = _suitable_versioned_python(dep)
         if found_path:
@@ -984,8 +987,16 @@ def quick_status() -> dict[str, Any]:
     Cheap enough to answer inline on the event loop. Serves the UI's first
     paint so a missing CLI reads "not installed" immediately instead of after
     the full batch's slowest --version probe; a get_status pass follows and
-    replaces it (real versions, ollama, cli_health)."""
+    replaces it (real versions, ollama, cli_health).
+
+    Until the login-shell PATH has answered, a miss reads "unknown": nvm,
+    volta and custom npm prefixes only reach PATH through that shell, so a
+    miss before it says nothing about whether the CLI is installed."""
     deps = [detect_dep(dep, quick=True) for dep in applicable_deps()]
+    if _path_probe_command() is not None and not _path_probe_answered:
+        for entry in deps:
+            if entry["status"] == "missing":
+                entry["status"] = "unknown"
     return {
         "deps": deps,
         "models": [],

@@ -88,7 +88,9 @@ afterEach(() => {
   for (const directory of roots.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
 
-describe('navide-plugin canonical artifacts', () => {
+// Every CLI command is its own Node process, several per test: the cost is
+// process startup, which stretches with machine load, not a race.
+describe('navide-plugin canonical artifacts', { timeout: 30_000 }, () => {
   it('packages a deterministic frontend-only archive from its explicit file list', () => {
     const directory = root()
     packageDirectory(directory, frontendManifest(), {
@@ -271,7 +273,7 @@ async function loginThroughBrowser(
   return { status, stdout, stderr }
 }
 
-describe('navide-plugin developer workflow', () => {
+describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
   it('scaffolds a plugin that validates and packages without a build step', () => {
     const directory = root()
     const created = run(['init', 'hello', '--id', 'acme.hello-world'], directory)

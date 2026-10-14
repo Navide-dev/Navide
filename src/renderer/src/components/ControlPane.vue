@@ -1462,9 +1462,10 @@ const pickedRole = ref<RoleKey>('')
 // reload.
 const missingClis = ref<Set<string>>(new Set())
 let cliStatusFetchedAt = 0
-async function refreshCliStatus(): Promise<void> {
-  if (!props.backend || props.backendStatus !== 'connected') return
-  if (Date.now() - cliStatusFetchedAt < 10_000) return
+/** Resolves true when the badges were refreshed from a status just read. */
+async function refreshCliStatus(): Promise<boolean> {
+  if (!props.backend || props.backendStatus !== 'connected') return false
+  if (Date.now() - cliStatusFetchedAt < 10_000) return false
   cliStatusFetchedAt = Date.now()
   try {
     // The PATH-only quick pass: answered inline, where the full status queues
@@ -1478,8 +1479,10 @@ async function refreshCliStatus(): Promise<void> {
     missingClis.value = new Set(
       deps.filter((d) => d.group === 'agent_cli' && d.status === 'missing').map((d) => d.id)
     )
+    return true
   } catch {
     // keep last known state; the exit=127 install dialog still covers misses
+    return false
   }
 }
 watch(
@@ -2761,8 +2764,11 @@ function spawn(agentKey: string = activeSpawnAgent.value): void {
 
 async function spawnOrOfferInstall(agentKey: string): Promise<void> {
   cliStatusFetchedAt = 0
-  await refreshCliStatus()
-  if (!missingClis.value.has(agentKey)) {
+  // Offer the install only on a miss the re-detect just confirmed. A failed
+  // re-detect leaves the old badge, which may be the very false miss being
+  // re-checked; the pane's own exit 127 still catches a real absence.
+  const confirmed = await refreshCliStatus()
+  if (!confirmed || !missingClis.value.has(agentKey)) {
     emitSpawn(agentKey)
     return
   }

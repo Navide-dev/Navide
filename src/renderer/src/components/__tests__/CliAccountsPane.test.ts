@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { ref } from 'vue'
+import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import CliAccountsPane from '../CliAccountsPane.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import {
@@ -223,9 +224,10 @@ describe('CliAccountsPane', () => {
     return wrapper
   }
 
-  /** Section for one agent, in CLI_AGENT_SPECS order. */
+  /** Section for one agent, by its CLI_AGENT_SPECS index (unsupported agents have none). */
   function section(w: VueWrapper, index: number) {
-    return w.findAll('section.cli-agent')[index]
+    const label = CLI_AGENT_SPECS[index].label
+    return w.findAll('section.cli-agent').find((s) => s.find('.cli-agent-name').exists() && s.get('.cli-agent-name').text() === label)!
   }
 
   function buttonByText(scope: ReturnType<VueWrapper['findAll']>[number], text: string) {
@@ -247,15 +249,17 @@ describe('CliAccountsPane', () => {
     expect(claude.find('.cli-unsupported').exists()).toBe(false)
   })
 
-  it('shows the unsupported message and no rows for an unsupported agent', () => {
+  it('lists unsupported agents once, with no rows or add button', () => {
     const w = mountPane(makeApi())
 
-    const antigravity = section(w, 2)
-    expect(antigravity.get('.cli-unsupported').text()).toBe(
-      'This agent does not support multiple accounts.',
+    const group = w.find('section.cli-unsupported-group')
+    expect(group.get('.cli-unsupported').text()).toBe(
+      "Navide can't keep more than one account for these CLIs:",
     )
-    expect(antigravity.findAll('.cli-card')).toHaveLength(0)
-    expect(buttonByText(antigravity, '+ New account')).toBeUndefined()
+    expect(group.find('[data-agent="antigravity"]').exists()).toBe(true)
+    expect(group.find('[data-agent="claude"]').exists()).toBe(false)
+    expect(group.findAll('.cli-card')).toHaveLength(0)
+    expect(buttonByText(group, '+ New account')).toBeUndefined()
   })
 
   // ── rowName ────────────────────────────────────────────────────────────────
@@ -1114,7 +1118,7 @@ describe('CliAccountsPane', () => {
     // The poller broadcast that ends the cycle clears the busy state.
     usageVersion.value++
     await flushPromises()
-    expect(button.text()).toBe('Refresh quota')
+    expect(button.text()).toBe('Refresh all')
     expect(button.attributes('disabled')).toBeUndefined()
   })
 
@@ -1139,7 +1143,7 @@ describe('CliAccountsPane', () => {
     usage.usageFor.mockReturnValue(undefined)
     usageVersion.value++
     await flushPromises()
-    expect(button.text()).toBe('Refresh quota')
+    expect(button.text()).toBe('Refresh all')
   })
 
   it('stays idle when there is no backend to ask', async () => {
@@ -1149,7 +1153,7 @@ describe('CliAccountsPane', () => {
 
     const button = w.get('.cli-refresh')
     await button.trigger('click')
-    expect(button.text()).toBe('Refresh quota')
+    expect(button.text()).toBe('Refresh all')
     expect(button.attributes('disabled')).toBeUndefined()
   })
 
@@ -1225,7 +1229,7 @@ describe('CliAccountsPane', () => {
 
       vi.advanceTimersByTime(60_000)
       await flushPromises()
-      expect(button.text()).toBe('Refresh quota')
+      expect(button.text()).toBe('Refresh all')
       expect(button.attributes('disabled')).toBeUndefined()
     } finally {
       vi.useRealTimers()

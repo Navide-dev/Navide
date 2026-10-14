@@ -3067,14 +3067,35 @@ def test_sign_out_waits_at_most_five_seconds_for_the_server():
      ("token-revoked", "revoked from another device"), ("device-removed", "removed")],
 )
 async def test_revocation_reasons_are_explained(reason, words):
-    store, ts, cleared = TokenStore(), TokenServer(), []
-    server = FakeServer(responder=ts.responder)
-    link = token_link(server, store, cleared=cleared)
+    # Ordered by events, not by a deadline. The first sessions.sync used to
+    # stand in for "authenticated", but it only goes out after the policy and
+    # directory reads and their thread hops, which a loaded Windows runner can
+    # stretch past any fixed wait. The hello reply is the real precondition:
+    # the fake queues frames in order, so a push made after it is read after it.
+    store, ts = TokenStore(), TokenServer()
+    loop = asyncio.get_running_loop()
+    hello_answered, cleared = asyncio.Event(), asyncio.Event()
+
+    def responder(conn, message):
+        reply = ts.responder(conn, message)
+        if message.get("type") == "auth.hello":
+            hello_answered.set()
+        return reply
+
+    server = FakeServer(responder=responder)
+    link = ServerLink(
+        connect=server.connect,
+        config_loader=lambda: ServerLinkConfig(url=CONFIG.url, token=store.slots[CUR], next_token=store.slots[NXT]),
+        # Runs on a worker thread (asyncio.to_thread), so it hands the event back to the loop.
+        token_clearer=lambda: loop.call_soon_threadsafe(cleared.set),
+        token_store=store,
+        device_name="test-box",
+    )
     assert await link.start() is True
     try:
-        await _until(lambda: _authed(server))
+        await hello_answered.wait()
         await server.opened[0].push({"type": "auth.revoked", "payload": {"deviceId": "x", "reason": reason}})
-        await _until(lambda: bool(cleared))
+        await cleared.wait()
         assert words in link.terminated_reason
     finally:
         await link.stop()

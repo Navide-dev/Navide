@@ -58,9 +58,18 @@ describe('terminal.exit offers the install for a dock that has no pane', () => {
   })
 
   it("leaves the pane's own 127 prompt in place, after the no-pane branch", () => {
-    const paneCheckIdx = listener.indexOf("if (ev.exit_code === 127 && pane.agentKey !== 'terminal') {")
+    const paneCheckIdx = listener.indexOf('if (ev.exit_code === 127 && pane.agentKey !== \'terminal\'')
     expect(paneCheckIdx).toBeGreaterThan(noPaneEnd)
     expect(listener).toContain('promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)')
+  })
+
+  // A 127 from a pane whose probe FOUND the CLI is some other command in the
+  // launch line (a wrapper, a helper in a custom command) — not a CLI that is
+  // missing. Only a probe that also missed it makes the 127 a verdict.
+  it("asks the pane's 127 for the probe's not_found too, like the no-pane branch", () => {
+    expect(listener).toContain(
+      "if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {"
+    )
   })
 })
 
@@ -81,5 +90,27 @@ describe('cli.missing is still handled for a spawn the probe blocks', () => {
   it('normalizes an empty pane id, so it cannot bypass the opt-out', () => {
     const listener = block("backend.on('cli.missing', (raw) => {", '\n})\n')
     expect(listener).toContain('const paneId = ev.pane_id || undefined')
+  })
+})
+
+// The opt-out used to be skipped whenever no pane id came along, so whether an
+// automatic prompt respected "don't ask again" hung on a field that only says
+// which pane to relaunch. Only the spawn dropdown — the user asking for the
+// CLI — may skip it, and it says so explicitly.
+describe('promptCliInstall decides the opt-out by who asked, not by the pane id', () => {
+  const fn = block('async function promptCliInstall(', '\nfunction closeCliInstall(')
+
+  it('takes an explicit requested flag', () => {
+    expect(fn).toContain('async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string, requested = false)')
+  })
+
+  it('checks the opt-out for every prompt the user did not ask for', () => {
+    expect(fn).toContain('if (!requested) {')
+    expect(fn).not.toContain('if (paneId) {')
+  })
+
+  it('marks only the spawn dropdown as requested', () => {
+    expect(appSource).toContain('@install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"')
+    expect(appSource.match(/promptCliInstall\([^)]*, true\)/g)).toHaveLength(1)
   })
 })

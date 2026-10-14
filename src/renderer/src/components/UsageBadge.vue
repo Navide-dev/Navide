@@ -43,6 +43,13 @@ const props = defineProps<{
   /** The pane this badge sits on, and the account it was started on. */
   paneId?: string
   paneProfileId?: string
+  /** This pane's follow flag, when the window offers it (scheme A). */
+  paneFollow?: 'follow' | 'fixed'
+}>()
+
+const emit = defineEmits<{
+  /** Flip this pane's follow flag; App.vue owns it. */
+  (e: 'toggle-pane-follow'): void
 }>()
 
 // A pane started on an account that signed in inside its own config dir runs
@@ -711,6 +718,24 @@ function acctTitle(profileId: string | null): string {
         <span class="usage-pop-provider">{{ agentKey }}</span>
         <span v-if="snap.planType" class="usage-pop-plan">{{ snap.planType }}</span>
       </div>
+      <div v-if="paneFollow !== undefined" class="usage-pane-follow">
+        <div class="usage-pane-follow-top">
+          <span class="usage-pane-follow-label">
+            {{ $t('account-follow.follow-switch-label') }}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            class="usage-pane-follow-switch"
+            data-testid="pane-follow-switch"
+            :class="{ on: paneFollow === 'follow' }"
+            :aria-checked="paneFollow === 'follow' ? 'true' : 'false'"
+            :aria-label="$t('account-follow.follow-switch-label')"
+            @click="emit('toggle-pane-follow')"
+          />
+        </div>
+        <div class="usage-pane-follow-hint">{{ $t('account-follow.follow-switch-hint') }}</div>
+      </div>
       <div v-if="expired" class="usage-pop-expired">{{ $t('usage.expired-tooltip') }}</div>
       <div v-if="cliMissing" class="usage-pop-missing">{{ $t('usage.cli-missing-tooltip') }}</div>
       <div v-if="unverified" class="usage-pop-missing">{{ $t('usage.unverified-tooltip') }}</div>
@@ -1127,6 +1152,59 @@ function acctTitle(profileId: string | null): string {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--border-default);
+}
+/* This pane's own follow flag, above everything else in the popover. */
+.usage-pane-follow {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-muted);
+}
+.usage-pane-follow-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.usage-pane-follow-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.usage-pane-follow-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  background: var(--bg-subtle);
+  cursor: pointer;
+}
+.usage-pane-follow-switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: transform 0.12s ease;
+}
+.usage-pane-follow-switch.on {
+  border-color: var(--accent-muted);
+  background: var(--accent-subtle);
+}
+.usage-pane-follow-switch.on::after {
+  background: var(--accent-fg);
+  transform: translateX(12px);
+}
+.usage-pane-follow-hint {
+  margin-top: 2px;
+  font-size: var(--font-3xs);
+  color: var(--text-tertiary, var(--text-secondary));
 }
 .usage-pop-switch-title {
   font-size: var(--font-3xs);

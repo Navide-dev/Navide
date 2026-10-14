@@ -99,6 +99,19 @@ def default_seams() -> Seams:
             "answerable": not pane.agent_key or pane.agent_key in relay.ANSWERABLE_AGENTS,
         }
 
+    async def limit_info(pane_id: str) -> dict[str, Any]:
+        # The renderer's own reading (usageLimitUntil) and screen tail, as cli_get_status
+        # reports them; nothing here asks a vendor for quota.
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {}
+        reply = await mcp._ui_request(
+            pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
+            action="ui.pane.getStatus", args={"paneId": pane.pane_id},
+        )
+        result = reply.get("result") or {}
+        return {"until": result.get("usageLimitUntil"), "buffer": str(result.get("buffer") or "")}
+
     async def answer(pane_id: str, answer_payload: dict[str, Any]) -> dict[str, Any]:
         pane = agent_messaging.current(pane_id)
         if pane is None:
@@ -168,7 +181,7 @@ def default_seams() -> Seams:
 
     return Seams(
         deliver=deliver, await_verdict=await_verdict, interrupt=interrupt, pane_state=pane_state,
-        awaiting_info=awaiting_info, answer=answer, resolve_pane=resolve_pane, broadcast=broadcast,
+        awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills,

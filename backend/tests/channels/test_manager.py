@@ -106,6 +106,8 @@ class FakeSeams:
         self.settings: dict[str, Any] = {}
         self.agents: dict[str, str] = {}
         self.skills: dict[str, list[str]] = {}
+        self.limit: dict[str, Any] = {}
+        self.limit_probes = 0
         self._n = 0
 
     async def deliver(self, pane_id: str, text: str, from_display: str) -> dict[str, Any]:
@@ -126,6 +128,10 @@ class FakeSeams:
 
     async def awaiting_info(self, pane_id: str) -> dict[str, Any]:
         return {"kind": self.kind, "prompt": self.prompt, "options": self.options}
+
+    async def limit_info(self, pane_id: str) -> dict[str, Any]:
+        self.limit_probes += 1
+        return self.limit
 
     async def answer(self, pane_id: str, answer: dict[str, Any]) -> dict[str, Any]:
         self.answers.append((pane_id, answer))
@@ -149,7 +155,7 @@ class FakeSeams:
                      resolve_pane=self.resolve_pane, broadcast=self.broadcast,
                      read_secret=self.read_secret, write_secret=self.write_secret,
                      ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
-                     agent_skills=lambda a: self.skills.get(a, []))
+                     agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info)
 
 
 def _said(env: "Env", needle: str) -> bool:
@@ -173,6 +179,8 @@ def fast_timers(monkeypatch):
     monkeypatch.setattr(mgr_mod, "STATUS_EDIT_EVERY_S", 0.05)
     monkeypatch.setattr(mgr_mod, "STATUS_EDIT_MIN_INTERVAL_S", 0.0)
     monkeypatch.setattr(mgr_mod, "AWAITING_PROBE_EVERY_S", 0.02)
+    monkeypatch.setattr(mgr_mod, "EMPTY_TURN_GRACE_S", 0.2)
+    monkeypatch.setattr(mgr_mod, "LIMIT_PROBE_EVERY_S", 0.02)
     monkeypatch.setattr(mgr_mod, "STATUS_POLL_S", 0.02)
     monkeypatch.setattr(mgr_mod, "RUN_TICK_S", 0.01)
 
@@ -588,6 +596,31 @@ async def test_a_chat_held_by_another_pane_is_refused_until_released(env: Env) -
     assert [b.pane_id for b in env.store.bindings()] == ["pane-2"]
 
 
+async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: Env) -> None:
+    # Claude writes one message as two end_turn lines: thinking only, then the text
+    # (2026-10-14 09:36:47 / 09:36:52). The first must not answer the chat with nothing.
+    await env.inbound("你有什麼建議")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "")
+    await asyncio.sleep(0.05)
+    env.turn_complete("pane-1", "我的建議")
+    await _until(lambda: _said(env, "我的建議"))
+    assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
+    await asyncio.sleep(0.3)  # past the grace
+    assert not _said(env, mgr_mod.MSG_EMPTY_REPLY)
+    assert sum("我的建議" in t for t in env.tg.texts()) == 1
+
+
+async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: Env) -> None:
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "")
+    await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
+    assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
+
+
 async def test_running_watch_is_capped_but_late_reply_still_sent(clocked) -> None:
     env, clock = clocked
     await env.inbound("long job")
@@ -603,6 +636,64 @@ async def test_running_watch_is_capped_but_late_reply_still_sent(clocked) -> Non
     assert (env.tg.typing, len(env.tg.edits)) == (typing, edits)  # indicators stopped
     env.turn_complete("pane-1", "finally")
     await _until(lambda: _said(env, "finally"))
+
+
+# Claude Code's limit menu as the pane's screen shows it (whitespace as rendered).
+_LIMIT_SCREEN = """
+✻ Baked for 18s · done 1:21 AM
+
+● Stop hook feedback
+  ⎿ You've hit your weekly limit · resets Oct 16 at 12pm (Asia/Taipei)
+
+✻ Churned for 1s · done 1:23 AM
+────────────────────────────────
+   What do you want to do?
+
+   ❯ 1. Stop and wait for limit to reset
+     2. Wait here, then continue automatically at Oct 16 at 12pm
+     3. Switch to usage credits
+
+   Enter to confirm · Esc to cancel
+"""
+
+
+async def test_usage_limit_menu_tells_the_chat_once_and_keeps_the_run(env: Env) -> None:
+    await env.inbound("long job")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.fake.limit = {"buffer": _LIMIT_SCREEN}
+    await _until(lambda: _said(env, "額度已用完"))
+    notice = next(t for t in env.tg.texts() if "額度已用完" in t)
+    assert "Oct 16 at 12pm (Asia/Taipei) 重置" in notice
+    assert "額度選單" in notice and "重置後的回覆會照樣送到這裡" in notice
+    probes = env.fake.limit_probes
+    await asyncio.sleep(0.1)
+    assert sum("額度已用完" in t for t in env.tg.texts()) == 1  # one notice per episode
+    assert env.fake.limit_probes == probes  # and no more probing once told
+    assert "pane-1" in env.m._pending  # the run stays open
+    env.turn_complete("pane-1", "done after the reset")
+    await _until(lambda: _said(env, "done after the reset"))
+
+
+async def test_usage_limit_until_names_the_reset_time(env: Env) -> None:
+    until = time.mktime((2026, 10, 16, 12, 0, 0, 0, 0, -1))
+    await env.inbound("long job")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.fake.limit = {"until": until * 1000, "buffer": ""}
+    await _until(lambda: _said(env, "額度已用完"))
+    notice = next(t for t in env.tg.texts() if "額度已用完" in t)
+    assert "10/16 12:00 重置" in notice
+    assert "額度選單" not in notice  # no menu on screen, so none is described
+
+
+async def test_no_usage_limit_no_notice(env: Env) -> None:
+    await env.inbound("job")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.fake.limit = {"buffer": "Enter to confirm · Esc to cancel"}  # some other picker
+    await _until(lambda: env.fake.limit_probes >= 3)
+    assert not _said(env, "額度已用完")
 
 
 async def test_running_status_edits_carry_no_elapsed_seconds(clocked) -> None:

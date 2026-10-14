@@ -529,6 +529,10 @@ onMounted(() => void props.api.refreshCloud())
       <div class="cli-head-text">
         <h3 class="cli-title">{{ $t('settings.accounts.cli.title') }}</h3>
         <p class="cli-hint">{{ $t('settings.accounts.cli.hint') }}</p>
+        <details class="cli-more">
+          <summary>{{ $t('settings.accounts.cli.hint-more') }}</summary>
+          <p>{{ $t('settings.accounts.cli.hint-detail') }}</p>
+        </details>
       </div>
       <button
         class="cli-btn ghost sm cli-refresh"
@@ -539,14 +543,16 @@ onMounted(() => void props.api.refreshCloud())
         {{
           refreshing.has(ALL_SCOPE)
             ? $t('settings.accounts.cli.refreshing-quota')
-            : $t('settings.accounts.cli.refresh-quota')
+            : $t('settings.accounts.cli.refresh-quota-all')
         }}
       </button>
     </div>
 
     <div v-if="error" class="cli-banner danger">{{ error }}</div>
 
-    <section v-for="spec in CLI_AGENT_SPECS" :key="spec.agentKey" class="cli-agent">
+    <!-- Multi-account CLIs first; the rest share one line at the end
+         instead of repeating the same sentence under each name. -->
+    <section v-for="spec in CLI_AGENT_SPECS.filter((s) => supported(s.agentKey))" :key="spec.agentKey" class="cli-agent">
       <div class="cli-agent-head">
         <span class="cli-agent-name">{{ spec.label }}</span>
         <select
@@ -569,259 +575,260 @@ onMounted(() => void props.api.refreshCloud())
         </button>
       </div>
 
-      <!-- Agents that cannot isolate multiple accounts (e.g. antigravity). -->
-      <p v-if="!supported(spec.agentKey)" class="cli-unsupported">
-        {{ $t('settings.accounts.cli.unsupported') }}
-      </p>
-
-      <template v-else>
-        <div class="cli-card-grid">
-          <!-- First card is the built-in Default (the user's real home). -->
-          <div
-            v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]"
-            :key="p?.id ?? '__default__'"
-            class="cli-card"
-            :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
-          >
-            <div class="cli-card-head">
-              <span
-                class="cli-card-av"
-                :class="{ default: !p }"
-                :style="p ? { background: avatarColor(p.id) } : undefined"
-              >
-                {{ avatarInitial(cardTitle(spec.agentKey, p)) }}
-              </span>
-              <input
-                v-if="renamingKey === slotKey(spec.agentKey, p)"
-                :ref="setRenameInput"
-                v-model="renameDraft"
-                class="cli-card-rename"
-                :placeholder="rowName(spec.agentKey, p)"
-                :aria-label="$t('settings.accounts.cli.rename')"
-                maxlength="64"
-                @keydown.enter.prevent="commitRename(spec.agentKey, p)"
-                @keydown.esc.prevent="cancelRename"
-                @blur="commitRename(spec.agentKey, p)"
-              />
-              <span
-                v-else
-                class="cli-card-id"
-                v-truncate
-                :class="{ dim: p && !rowIdentity(spec.agentKey, p.id)?.signedIn }"
-              >
-                {{ cardTitle(spec.agentKey, p) }}
-              </span>
-              <!-- The built-in Default is renamable too: it is a real account
-                   like any other, and for a vendor with no email it is the
-                   only way to tell it apart. -->
-              <button
-                v-if="renamingKey !== slotKey(spec.agentKey, p)"
-                class="cli-card-rename-btn"
-                :title="$t('settings.accounts.cli.rename')"
-                :aria-label="$t('settings.accounts.cli.rename')"
-                @click="startRename(spec.agentKey, p)"
-              >
-                ✎
-              </button>
-              <span
-                v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null)"
-                class="cli-badge"
-              >
-                {{ $t('settings.accounts.cli.is-default') }}
-              </span>
-            </div>
-            <!-- With an alias on top, the signed-in identity moves here. -->
-            <span v-if="cardSubtitle(spec.agentKey, p)" class="cli-card-meta">{{
-              cardSubtitle(spec.agentKey, p)
-            }}</span>
-            <span v-if="!p" class="cli-card-meta">{{
-              rowIdentity(spec.agentKey, null)?.signedIn
-                ? $t('settings.accounts.cli.default-hint')
-                : $t('settings.accounts.cli.not-signed-in')
-            }}</span>
-
-            <!-- Another card stores this same account; the user picks which to
-                 delete (Delete below), we only point it out. -->
-            <template
-              v-for="d in [rowDuplicate(spec.agentKey, p?.id ?? null)]"
-              :key="'dup'"
+      <div class="cli-card-grid">
+        <!-- First card is the built-in Default (the user's real home). -->
+        <div
+          v-for="p in [null, ...api.profilesForAgent(spec.agentKey)]"
+          :key="p?.id ?? '__default__'"
+          class="cli-card"
+          :class="{ active: api.defaultProfileId(spec.agentKey) === (p?.id ?? null) }"
+        >
+          <div class="cli-card-head">
+            <span
+              class="cli-card-av"
+              :class="{ default: !p, pending: !rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn }"
+              :style="p && rowIdentity(spec.agentKey, p.id)?.signedIn ? { background: avatarColor(p.id) } : undefined"
             >
-              <div v-if="d" class="cli-card-dup">
-                <span class="cli-card-dup-flag">{{
-                  $t('settings.accounts.cli.duplicate-flag')
-                }}</span>
-                <span>{{
-                  $t('settings.accounts.cli.duplicate-hint', {
-                    self: rowLabel(p),
-                    others: duplicateOthers(spec.agentKey, p?.id ?? null),
-                    email: d.email,
-                  })
-                }}</span>
-              </div>
-            </template>
-
-            <PortableCredentialBlock
-              v-if="portableAgent(spec.agentKey) && portableShown(spec.agentKey, p?.id ?? '__default__')"
-              :api="api"
-              :agent-key="spec.agentKey"
-              :slot-id="p?.id ?? '__default__'"
-              :meta="portableMeta(spec.agentKey, p?.id ?? '__default__')"
-              :start-open="portablePasting.has(`${spec.agentKey}/${p?.id ?? '__default__'}`)"
-              @close="setPortablePasting(spec.agentKey, p?.id ?? '__default__', false)"
+              {{ rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn ? avatarInitial(cardTitle(spec.agentKey, p)) : '' }}
+            </span>
+            <input
+              v-if="renamingKey === slotKey(spec.agentKey, p)"
+              :ref="setRenameInput"
+              v-model="renameDraft"
+              class="cli-card-rename"
+              :placeholder="rowName(spec.agentKey, p)"
+              :aria-label="$t('settings.accounts.cli.rename')"
+              maxlength="64"
+              @keydown.enter.prevent="commitRename(spec.agentKey, p)"
+              @keydown.esc.prevent="cancelRename"
+              @blur="commitRename(spec.agentKey, p)"
             />
-
-            <!-- Quota area (single-element v-for = local display-model alias). -->
-            <template
-              v-for="u in [cardUsage(spec.agentKey, p?.id ?? null)]"
-              :key="'usage'"
+            <span
+              v-else
+              class="cli-card-id"
+              v-truncate
+              :class="{ dim: p && !rowIdentity(spec.agentKey, p.id)?.signedIn }"
             >
-              <template v-if="u && !u.noData">
-                <div v-if="u.resetExpired" class="cli-card-none">
-                  <span class="cli-card-dash">—</span>
-                  <span class="cli-card-foot">{{ $t('usage.cached-reset-expired') }}</span>
-                </div>
-                <template v-else>
-                  <div class="cli-card-big" :class="u.tier">
-                    {{ u.big }}
-                    <small>{{ u.headLabel }}</small>
-                  </div>
-                  <div class="cli-card-bars">
-                    <div
-                      v-for="w in u.windows"
-                      :key="w.kind + w.label"
-                      class="cli-mini-bar"
-                      :title="barTitle(w)"
-                    >
-                      <div
-                        class="cli-mini-fill"
-                        :class="remainingTier(windowRemaining(w))"
-                        :style="{ width: windowRemaining(w) + '%' }"
-                      ></div>
-                    </div>
-                  </div>
-                  <div v-if="u.foot" class="cli-card-foot">{{ u.foot }}</div>
-                </template>
-                <div v-if="u.cached" class="cli-card-cache">
-                  {{ $t('usage.cached-at', { time: u.lastSuccess }) }}
-                </div>
-                <div v-if="u.pending" class="cli-card-refresh pending">
-                  {{ $t('usage.reading-now') }}
-                </div>
-                <div v-else-if="u.cached" class="cli-card-refresh">
-                  {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
-                </div>
-                <div v-if="u.refreshError" class="cli-card-reason">
-                  {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
-                </div>
-              </template>
-              <div
-                v-else-if="u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
-                class="cli-card-none"
-              >
-                <span class="cli-card-dash">—</span>
-                <span class="cli-card-foot">{{ $t('usage.no-data') }}</span>
-                <span v-if="u?.expired" class="cli-card-expired">
-                  ⚠ {{ $t('usage.expired-tooltip') }}
-                </span>
-                <span v-if="u?.pending" class="cli-card-refresh pending">
-                  {{ $t('usage.reading-now') }}
-                </span>
-                <span v-else-if="u?.refreshStatus" class="cli-card-refresh">
-                  {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
-                </span>
-                <span v-if="u?.refreshError" class="cli-card-reason">
-                  {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
-                </span>
-              </div>
-            </template>
-
-            <div class="cli-card-actions">
-              <template v-if="confirmRemoveId === (p?.id ?? '__default__')">
-                <span class="cli-confirm-text">{{ $t('settings.accounts.cli.delete-confirm') }}</span>
-                <button class="cli-btn danger sm" @click="remove(p?.id ?? null, spec.agentKey)">
-                  {{ $t('settings.accounts.cli.delete') }}
-                </button>
-                <button class="cli-btn ghost sm" @click="confirmRemoveId = null">
-                  {{ $t('settings.accounts.cli.cancel') }}
-                </button>
-              </template>
-              <template v-else>
-                <button
-                  v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
-                  class="cli-btn ghost sm cli-card-refresh-btn"
-                  :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))"
-                  :title="$t('settings.accounts.cli.refresh-quota-card-hint')"
-                  @click="refreshCardQuota(spec.agentKey, p?.id ?? null)"
-                >
-                  {{
-                    refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))
-                      ? $t('settings.accounts.cli.refreshing-quota')
-                      : $t('settings.accounts.cli.refresh-quota')
-                  }}
-                </button>
-                <button
-                  v-if="api.defaultProfileId(spec.agentKey) !== (p?.id ?? null)"
-                  class="cli-btn ghost sm"
-                  :disabled="switching !== null"
-                  @click="requestSetDefault(spec.agentKey, p?.id ?? null)"
-                >
-                  {{
-                    switching === switchRowKey(spec.agentKey, p?.id ?? null)
-                      ? $t('settings.accounts.cli.switching')
-                      : $t('settings.accounts.cli.set-default')
-                  }}
-                </button>
-                <button
-                  v-if="!rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn || cardUsage(spec.agentKey, p?.id ?? null)?.expired"
-                  class="cli-btn ghost sm"
-                  :disabled="switching !== null"
-                  @click="signIn(spec.agentKey, p?.id ?? null)"
-                >
-                  {{ $t('settings.accounts.cli.sign-in') }}
-                </button>
-                <button
-                  v-if="canStartPortable(spec.agentKey, p?.id ?? '__default__')"
-                  class="cli-btn ghost sm"
-                  @click="setPortablePasting(spec.agentKey, p?.id ?? '__default__', true)"
-                >
-                  {{ $t('settings.accounts.cli.portable-paste') }}
-                </button>
-                <button
-                  v-if="p || rowIdentity(spec.agentKey, null)?.signedIn"
-                  class="cli-btn ghost sm"
-                  @click="confirmRemoveId = (p?.id ?? '__default__')"
-                >
-                  {{ $t('settings.accounts.cli.delete') }}
-                </button>
-              </template>
-            </div>
+              {{ cardTitle(spec.agentKey, p) }}
+            </span>
+            <!-- The built-in Default is renamable too: it is a real account
+                 like any other, and for a vendor with no email it is the
+                 only way to tell it apart. -->
+            <button
+              v-if="renamingKey !== slotKey(spec.agentKey, p)"
+              class="cli-card-rename-btn"
+              :title="$t('settings.accounts.cli.rename')"
+              :aria-label="$t('settings.accounts.cli.rename')"
+              @click="startRename(spec.agentKey, p)"
+            >
+              ✎
+            </button>
+            <span
+              v-if="api.defaultProfileId(spec.agentKey) === (p?.id ?? null)"
+              class="cli-badge"
+            >
+              {{ $t('settings.accounts.cli.is-default') }}
+            </span>
           </div>
+          <!-- With an alias on top, the signed-in identity moves here. -->
+          <span v-if="cardSubtitle(spec.agentKey, p)" class="cli-card-meta">{{
+            cardSubtitle(spec.agentKey, p)
+          }}</span>
+          <span v-if="!p" class="cli-card-meta">{{
+            rowIdentity(spec.agentKey, null)?.signedIn
+              ? $t('settings.accounts.cli.default-hint')
+              : $t('settings.accounts.cli.not-signed-in')
+          }}</span>
 
-          <!-- Credentials pulled from the cloud that were pasted into a named
-               account elsewhere. No profile here stands for them, so each is
-               its own card; selecting one hands it to new panes like any
-               other, and removing it is local. -->
-          <div
-            v-for="m in importedSlots(spec.agentKey)"
-            :key="'imported:' + m.slotId"
-            class="cli-card cli-card-imported"
-            :class="{ active: m.enabled }"
+          <!-- Another card stores this same account; the user picks which to
+               delete (Delete below), we only point it out. -->
+          <template
+            v-for="d in [rowDuplicate(spec.agentKey, p?.id ?? null)]"
+            :key="'dup'"
           >
-            <div class="cli-card-head">
-              <span class="cli-card-av imported">☁</span>
-              <span class="cli-card-id" v-truncate>{{ $t('settings.accounts.cli.imported-account') }}</span>
+            <div v-if="d" class="cli-card-dup">
+              <span class="cli-card-dup-flag">{{
+                $t('settings.accounts.cli.duplicate-flag')
+              }}</span>
+              <span>{{
+                $t('settings.accounts.cli.duplicate-hint', {
+                  self: rowLabel(p),
+                  others: duplicateOthers(spec.agentKey, p?.id ?? null),
+                  email: d.email,
+                })
+              }}</span>
             </div>
-            <span class="cli-card-meta">{{ $t('settings.accounts.cli.imported-account-hint') }}</span>
-            <PortableCredentialBlock
-              :api="api"
-              :agent-key="spec.agentKey"
-              :slot-id="m.slotId"
-              :meta="m"
-              :cloud-only="true"
-            />
+          </template>
+
+          <PortableCredentialBlock
+            v-if="portableAgent(spec.agentKey) && portableShown(spec.agentKey, p?.id ?? '__default__')"
+            :api="api"
+            :agent-key="spec.agentKey"
+            :slot-id="p?.id ?? '__default__'"
+            :meta="portableMeta(spec.agentKey, p?.id ?? '__default__')"
+            :start-open="portablePasting.has(`${spec.agentKey}/${p?.id ?? '__default__'}`)"
+            @close="setPortablePasting(spec.agentKey, p?.id ?? '__default__', false)"
+          />
+
+          <!-- Quota area (single-element v-for = local display-model alias). -->
+          <template
+            v-for="u in [cardUsage(spec.agentKey, p?.id ?? null)]"
+            :key="'usage'"
+          >
+            <template v-if="u && !u.noData">
+              <div v-if="u.resetExpired" class="cli-card-none">
+                <span class="cli-card-dash">—</span>
+                <span class="cli-card-foot">{{ $t('usage.cached-reset-expired') }}</span>
+              </div>
+              <template v-else>
+                <div class="cli-card-big" :class="u.tier">
+                  {{ u.big }}
+                  <small>{{ u.headLabel }}</small>
+                </div>
+                <div class="cli-card-bars">
+                  <div
+                    v-for="w in u.windows"
+                    :key="w.kind + w.label"
+                    class="cli-mini-bar"
+                    :title="barTitle(w)"
+                  >
+                    <div
+                      class="cli-mini-fill"
+                      :class="remainingTier(windowRemaining(w))"
+                      :style="{ width: windowRemaining(w) + '%' }"
+                    ></div>
+                  </div>
+                </div>
+                <div v-if="u.foot" class="cli-card-foot">{{ u.foot }}</div>
+              </template>
+              <div v-if="u.cached" class="cli-card-cache">
+                {{ $t('usage.cached-at', { time: u.lastSuccess }) }}
+              </div>
+              <div v-if="u.pending" class="cli-card-refresh pending">
+                {{ $t('usage.reading-now') }}
+              </div>
+              <div v-else-if="u.cached" class="cli-card-refresh">
+                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+              </div>
+              <div v-if="u.refreshError" class="cli-card-reason">
+                {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
+              </div>
+            </template>
+            <div
+              v-else-if="u || rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn"
+              class="cli-card-none"
+            >
+              <span class="cli-card-dash">—</span>
+              <span class="cli-card-foot">{{ $t('usage.no-data') }}</span>
+              <span v-if="u?.expired" class="cli-card-expired">
+                ⚠ {{ $t('usage.expired-tooltip') }}
+              </span>
+              <span v-if="u?.pending" class="cli-card-refresh pending">
+                {{ $t('usage.reading-now') }}
+              </span>
+              <span v-else-if="u?.refreshStatus" class="cli-card-refresh">
+                {{ $t('usage.refresh-status', { status: u.refreshStatus }) }}
+              </span>
+              <span v-if="u?.refreshError" class="cli-card-reason">
+                {{ $t('usage.refresh-error', { reason: u.refreshError }) }}
+              </span>
+            </div>
+          </template>
+
+          <div class="cli-card-actions">
+            <template v-if="confirmRemoveId === (p?.id ?? '__default__')">
+              <span class="cli-confirm-text">{{ $t('settings.accounts.cli.delete-confirm') }}</span>
+              <button class="cli-btn danger sm" @click="remove(p?.id ?? null, spec.agentKey)">
+                {{ $t('settings.accounts.cli.delete') }}
+              </button>
+              <button class="cli-btn ghost sm" @click="confirmRemoveId = null">
+                {{ $t('settings.accounts.cli.cancel') }}
+              </button>
+            </template>
+            <template v-else>
+              <button
+                v-if="canRefreshCard(spec.agentKey, p?.id ?? null)"
+                class="cli-btn ghost sm cli-card-refresh-btn"
+                :disabled="refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))"
+                :title="$t('settings.accounts.cli.refresh-quota-card-hint')"
+                @click="refreshCardQuota(spec.agentKey, p?.id ?? null)"
+              >
+                {{
+                  refreshing.has(switchRowKey(spec.agentKey, p?.id ?? null))
+                    ? $t('settings.accounts.cli.refreshing-quota')
+                    : $t('settings.accounts.cli.refresh-quota')
+                }}
+              </button>
+              <button
+                v-if="api.defaultProfileId(spec.agentKey) !== (p?.id ?? null)"
+                class="cli-btn ghost sm"
+                :disabled="switching !== null"
+                @click="requestSetDefault(spec.agentKey, p?.id ?? null)"
+              >
+                {{
+                  switching === switchRowKey(spec.agentKey, p?.id ?? null)
+                    ? $t('settings.accounts.cli.switching')
+                    : $t('settings.accounts.cli.set-default')
+                }}
+              </button>
+              <button
+                v-if="!rowIdentity(spec.agentKey, p?.id ?? null)?.signedIn || cardUsage(spec.agentKey, p?.id ?? null)?.expired"
+                class="cli-btn ghost sm"
+                :disabled="switching !== null"
+                @click="signIn(spec.agentKey, p?.id ?? null)"
+              >
+                {{ $t('settings.accounts.cli.sign-in') }}
+              </button>
+              <button
+                v-if="canStartPortable(spec.agentKey, p?.id ?? '__default__')"
+                class="cli-btn ghost sm"
+                @click="setPortablePasting(spec.agentKey, p?.id ?? '__default__', true)"
+              >
+                {{ $t('settings.accounts.cli.portable-paste') }}
+              </button>
+              <button
+                v-if="p || rowIdentity(spec.agentKey, null)?.signedIn"
+                class="cli-btn ghost sm"
+                @click="confirmRemoveId = (p?.id ?? '__default__')"
+              >
+                {{ $t('settings.accounts.cli.delete') }}
+              </button>
+            </template>
           </div>
         </div>
-      </template>
+
+        <!-- Credentials pulled from the cloud that were pasted into a named
+             account elsewhere. No profile here stands for them, so each is
+             its own card; selecting one hands it to new panes like any
+             other, and removing it is local. -->
+        <div
+          v-for="m in importedSlots(spec.agentKey)"
+          :key="'imported:' + m.slotId"
+          class="cli-card cli-card-imported"
+          :class="{ active: m.enabled }"
+        >
+          <div class="cli-card-head">
+            <span class="cli-card-av imported">☁</span>
+            <span class="cli-card-id" v-truncate>{{ $t('settings.accounts.cli.imported-account') }}</span>
+          </div>
+          <span class="cli-card-meta">{{ $t('settings.accounts.cli.imported-account-hint') }}</span>
+          <PortableCredentialBlock
+            :api="api"
+            :agent-key="spec.agentKey"
+            :slot-id="m.slotId"
+            :meta="m"
+            :cloud-only="true"
+          />
+        </div>
+      </div>
+    </section>
+
+    <!-- Agents that cannot isolate multiple accounts (e.g. antigravity). -->
+    <section v-if="CLI_AGENT_SPECS.some((s) => !supported(s.agentKey))" class="cli-agent cli-unsupported-group">
+      <p class="cli-unsupported">{{ $t('settings.accounts.cli.unsupported') }}</p>
+      <ul class="cli-unsupported-list">
+        <li v-for="spec in CLI_AGENT_SPECS.filter((s) => !supported(s.agentKey))" :key="spec.agentKey" :data-agent="spec.agentKey">{{ spec.label }}</li>
+      </ul>
     </section>
   </div>
 </template>
@@ -837,8 +844,12 @@ onMounted(() => void props.api.refreshCloud())
 }
 .cli-head-text { min-width: 0; }
 .cli-refresh { flex: none; }
+/* Edge cases fold away under the one-sentence summary. */
+.cli-more { margin: 4px 0 0; font-size: 11.5px; color: var(--text-secondary); line-height: 1.5; }
+.cli-more summary { width: fit-content; cursor: pointer; color: var(--accent-fg); }
+.cli-more p { margin: 4px 0 0; max-width: 72ch; text-wrap: pretty; word-break: auto-phrase; }
 .cli-title { margin: 0 0 4px; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
-.cli-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 52ch; line-height: 1.4; }
+.cli-hint { margin: 0; font-size: 11.5px; color: var(--text-secondary); max-width: 72ch; line-height: 1.5; text-wrap: pretty; word-break: auto-phrase; }
 
 .cli-banner {
   border-radius: 6px;
@@ -862,11 +873,21 @@ onMounted(() => void props.api.refreshCloud())
   margin-bottom: 8px;
 }
 .cli-agent-name { font-size: var(--font-xs); font-weight: 600; color: var(--text-primary); }
-.cli-unsupported { margin: 0; font-size: var(--font-2xs); color: var(--text-muted); font-style: italic; }
+.cli-unsupported-group { padding-top: 12px; border-top: 1px solid var(--border-muted); }
+.cli-unsupported { margin: 0 0 6px; font-size: var(--font-2xs); color: var(--text-secondary); }
+.cli-unsupported-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cli-unsupported-list li {
+  font-size: var(--font-2xs);
+  color: var(--text-primary);
+  padding: 2px 8px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+}
 
 .cli-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 8px;
 }
 .cli-card {
@@ -896,6 +917,8 @@ onMounted(() => void props.api.refreshCloud())
   color: #fff;
 }
 .cli-card-av.default { background: var(--border-strong); }
+/* Nobody signed in yet: an empty outlined slot, not a letter from the status text. */
+.cli-card-av.pending { background: transparent; border: 1px dashed var(--border-strong); }
 .cli-card-id {
   flex: 1;
   min-width: 0;

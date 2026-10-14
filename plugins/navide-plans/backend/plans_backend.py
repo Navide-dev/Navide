@@ -964,7 +964,16 @@ def _write_plan_meta(content: str, meta: dict[str, Any]) -> str:
     match = PLAN_META_RE.search(content)
     block = json.dumps(meta, ensure_ascii=False, indent=2).replace("<", "\\u003c")
     if match is None:
-        return f'<script type="application/json" id="plan-meta">\n{block}\n</script>\n{content}'
+        # Same placement as usePlanHtml.injectPlanMeta: prepending would push
+        # a <!DOCTYPE> behind the island and the file would render in quirks mode.
+        island = f'<script type="application/json" id="plan-meta">\n{block}\n</script>\n'
+        head_close = re.search(r"</head>", content, re.IGNORECASE)
+        if head_close is not None:
+            return f"{content[:head_close.start()]}{island}{content[head_close.start():]}"
+        html_open = re.search(r"<html\b[^>]*>", content, re.IGNORECASE)
+        if html_open is not None:
+            return f"{content[:html_open.end()]}\n{island}{content[html_open.end():]}"
+        return f"{island}{content}"
     return f"{content[:match.start(1)]}\n{block}\n{content[match.end(1):]}"
 
 
@@ -1002,15 +1011,20 @@ def _write_meta_for_path(
 
 
 def _todo_summary(meta: dict[str, Any]) -> dict[str, Any]:
+    # Same shape as the MCP fallback's summary (plan_tools._todo_summary):
+    # awaiting_user counts unfinished todos only the user can do.
     counts: dict[str, int] = {}
     total = 0
+    awaiting_user = 0
     for todo in meta.get("todos", []):
         if not _is_record(todo):
             continue
         total += 1
         status = todo.get("status") if isinstance(todo.get("status"), str) else "unknown"
         counts[status or "unknown"] = counts.get(status or "unknown", 0) + 1
-    return {"total": total, "by_status": counts}
+        if todo.get("owner") == "user" and status not in ("done", "skipped"):
+            awaiting_user += 1
+    return {"total": total, "by_status": counts, "awaiting_user": awaiting_user}
 
 
 def _slug(value: str) -> str:
@@ -1145,7 +1159,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": rel_dir.rsplit("/", 1)[-1],
                 "stage": None,
                 "overview": "",
-                "todos": {"total": 0, "by_status": {}},
+                "todos": {"total": 0, "by_status": {}, "awaiting_user": 0},
                 "mtime": None,
                 "kind": "unreadable",
                 "meta": None,
@@ -1199,7 +1213,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                         "name": name,
                         "stage": None,
                         "overview": "",
-                        "todos": {"total": 0, "by_status": {}},
+                        "todos": {"total": 0, "by_status": {}, "awaiting_user": 0},
                         "mtime": None,
                         "kind": "unreadable",
                         "meta": None,
@@ -1213,7 +1227,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": meta.get("name") if meta is not None else name,
                 "stage": meta.get("stage") if meta is not None else None,
                 "overview": meta.get("overview", "") if meta is not None else "",
-                "todos": _todo_summary(meta) if meta is not None else {"total": 0, "by_status": {}},
+                "todos": _todo_summary(meta) if meta is not None else {"total": 0, "by_status": {}, "awaiting_user": 0},
                 "mtime": info["mtime"],
                 "kind": "plan" if meta is not None else "document",
                 "meta": meta,
@@ -1864,9 +1878,20 @@ def _handle(frame: Any) -> None:
         subscription = {"id": frame["id"], "events": events, "acknowledged": True}
         with _state_lock:
             _subscriptions[_subscription_key(frame["id"])] = subscription
-        _acknowledge(subscription)
-        if "plans.changed" in events:
-            _start_watch(subscription)
+        try:
+            _acknowledge(subscription)
+            if "plans.changed" in events:
+                _start_watch(subscription)
+        except BrokenPipeError:
+            raise
+        except Exception as error:
+            # Same reason as the navide/call catch-all below, and worse here: the
+            # Host's subscribe has no call timeout, so a dead thread with no reply
+            # leaves it waiting until this process exits.
+            _log(f"subscriptions/listen failed: {type(error).__name__}: {error}")
+            with _state_lock:
+                _subscriptions.pop(_subscription_key(frame["id"]), None)
+            _plugin_error(frame["id"], "BACKEND_ERROR")
         return
 
     if not _valid_request(frame, "navide/call", ("_meta", "name", "arguments", "runtime")):

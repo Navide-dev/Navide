@@ -62,6 +62,16 @@ describe('restore backfills history without inventing timestamps', () => {
     expect(enrich.slice(0, 400)).toContain('entry.removedTimeUnknown = undefined')
   })
 
+  it('does not stamp a removal time over an unknown one when the history is reconciled', () => {
+    // Opening Agent History re-hydrates and reconciles. Checking removedAt alone
+    // gave every "removed, time unknown" row today's date, and the deep watcher
+    // then persisted that invented time to the project mirror.
+    const fn = appSource.slice(appSource.indexOf('function reconcileSpawnHistoryLiveness('))
+    const body = fn.slice(0, fn.indexOf('\n}\n'))
+    expect(body).toContain('!isHistoryEntryRemoved(e)')
+    expect(body).not.toContain('!e.removedAt &&')
+  })
+
   it('carries the two new fields on the restore record type', () => {
     expect(appSource).toContain('  spawned_at?: string\n  removed_at?: string')
   })

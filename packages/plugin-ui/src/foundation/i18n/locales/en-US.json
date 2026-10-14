@@ -282,6 +282,15 @@
     "resize-failed": "Unable to resize the AI CLI session"
   },
   "voice": {
+  "readback": {
+    "done": "{label} is done",
+    "attention": "{label} needs your answer",
+    "done-many": "{n} panes are done",
+    "attention-many": "{n} panes need your answer",
+    "separator": ", ",
+    "esc-stop": "Esc to stop",
+    "stop": "Stop reading"
+  },
   "prewarm-failed": "Voice input is not ready: {reason}",
     "capsule": {
       "starting": "Preparing microphone…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "Read aloud is on: spoken when this pane finishes or needs an answer — click to turn off",
+      "readback-off-tooltip": "Click to read this pane aloud when it finishes or needs your answer",
+      "readback-speaking": "Speaking",
       "backend-reconnecting": "Backend disconnected — reconnecting. Typing is paused.",
       "backend-restarting": "Backend crashed — restarting ({attempt}/{max}). Typing is paused.",
       "backend-unavailable": "Backend unavailable — typing is paused until it is restarted.",
@@ -1233,8 +1245,9 @@
   "settings": {
     "cliExtensions": {
       "tabInstalled": "Installed CLI extensions",
-      "intro": "Each AI CLI's own CLI extensions — Claude plugins and mods, Codex hooks, Pi extensions and the rest — and what they can reach. Navide only reads them: nothing here installs, enables or changes anything. Navide plugins have their own page.",
-      "summary": "{total} CLI extensions · {l3} with code inside the CLI's own process",
+      "tabConvenience": "What Navide changes",
+      "intro": "What each AI CLI installed for itself — Claude plugins and mods, Codex hooks, Pi extensions and more — and what each one can reach. Read-only: nothing here installs, enables or changes anything. Navide plugins have their own page.",
+      "summary": "{total} CLI extensions · {l3} run code inside their CLI",
       "machineWide": "One set per CLI for the whole machine: every Navide pane and account of that CLI loads the same ones.",
       "rescan": "Rescan",
       "loading": "Scanning…",
@@ -1883,6 +1896,7 @@
       "labeledValue": "{label}: {value}"
     },
     "scope": {
+      "label": "Applies to",
       "user": "User",
       "userWorkspace": "User / Workspace",
       "accountServer": "Account / Server",
@@ -1895,6 +1909,25 @@
       "cliFiles": "Each CLI's own instruction files"
     },
     "voice": {
+      "readback-model": "Voice model",
+      "readback-model-ready": "{voice} — Ready",
+      "readback-model-missing": "{voice} — Not installed. Reading with \"{using}\" for now.",
+      "readback-model-missing-none": "{voice} — Not installed, and this computer has no voice for the interface language.",
+      "readback-model-other-os": "Install better voices in your operating system's speech settings.",
+      "readback-model-download-hint": "In Accessibility › Spoken Content (just opened), click ⓘ / Manage Voices… next to System voice and download {voice}, then press Re-check.",
+      "readback-engine": "Voice engine",
+      "readback-engine-ready": "System voice · Ready",
+      "readback-engine-no-voices": "System voice · No voices installed",
+      "readback-section": "Read aloud",
+      "readback": "Read replies aloud",
+      "readback-hint": "When a pane marked 🔊 finishes or needs your answer, a short notice is spoken with the system voice (for example \"Navide is done\"). Click 🔊 in a pane's title bar to mark it. Speech is synthesized on this computer; nothing is downloaded.",
+      "readback-voice": "Voice",
+      "readback-voice-hint": "Auto picks the best system voice for the interface language, preferring Premium voices. Better voices can be downloaded in System Settings › Accessibility › Spoken Content.",
+      "readback-voice-none": "No system voice matches the interface language; the system default voice will be used.",
+      "readback-voice-auto": "Auto (interface language)",
+      "readback-rate": "Speed",
+      "readback-preview": "Preview",
+      "readback-stop-hint": "Press Esc or the voice input shortcut to stop reading at once.",
       "section": "Voice input",
       "enabled": "Voice input (hold to talk)",
       "enabled-hint": "Hold Ctrl+Alt+M (rebindable under Shortcuts) to dictate into the focused CLI pane. The text goes into its input box as if you typed it — nothing is sent until you press Enter yourself. Speech is transcribed on this computer by a local Whisper model; audio never leaves the machine.",
@@ -6439,7 +6472,7 @@
       "scanning": "Scanning…",
       "scan-roots": "Scan roots…",
       "scanned-at": "Scanned {time} · {ms} ms",
-      "banner-high": "{count} high-risk finding(s) need attention",
+      "banner-high": "{count} high-risk finding needs attention | {count} high-risk findings need attention",
       "banner-high-hint": "Open a card for plain advice. Nothing here changes anything for you.",
       "filter-label": "Filter by kind",
       "search": "Search label, location, host…",
@@ -7287,9 +7320,9 @@
         "perm-inherit": "Permissions inherited",
         "perm-force-on": "Permissions forced on",
         "perm-force-off": "Permissions forced off",
-        "push": "push {kind}",
-        "push-off": "push off",
-        "no-push": "no push",
+        "push": "Push on",
+        "push-off": "Push off",
+        "no-push": "No push channel",
         "accounts": "{count} accounts | {count} account | {count} accounts",
         "signed-out": "Signed out",
         "custom-binary": "Custom binary",
@@ -7616,6 +7649,8 @@
       "remove-binding": "Remove this binding",
       "protected-hint": "This shortcut cannot be removed — it is the way back into Settings. You can still rebind it to another key.",
       "menu-owned-hint": "This key is owned by the application menu and fires before the app sees it — unbinding it here will not stop it. Bind the command to another key instead.",
+      "legend-locked": "Can’t be removed",
+      "legend-menu-owned": "Claimed by the app menu",
       "already-bound": "{key} is already on this command",
       "invalid-key": "{key} cannot be used as a shortcut",
       "add-binding": "Add another binding",
@@ -7647,7 +7682,9 @@
       "delete-confirm": "Delete this account?",
       "cli": {
         "title": "CLI Accounts",
-        "hint": "Click \"Sign in\" or \"+ New account\" and a temporary login pane opens, launching the CLI's browser sign-in automatically. Authorize in the browser: the account then shows as signed in and the pane closes by itself — the active account and running panes are untouched. All accounts share your real home directory (sessions and history are shared); switching accounts swaps the stored credentials in place. Use \"Set as default\" to switch the active account; already-open panes keep the previous account until reopened.",
+        "hint": "Click \"Sign in\" or \"+ New account\" to open a temporary login pane; it closes once you authorize in the browser. \"Set as default\" picks the account new panes use, and open panes keep theirs until reopened.",
+        "hint-detail": "All accounts share your home directory, so sessions and history carry over; switching swaps the stored credentials in place, and signing in never touches the active account.",
+        "hint-more": "Details",
         "login-no-workspace": "Open a workspace first — signing in launches a temporary login pane.",
         "login-spawn-failed": "Could not start the login pane.",
         "login-complete": "Signed in as {email}. Account saved.",
@@ -7659,6 +7696,7 @@
         "global-login-confirm": "Sign in",
         "global-login-cancel": "Cancel",
         "refresh-quota": "Refresh quota",
+        "refresh-quota-all": "Refresh all",
         "refreshing-quota": "Refreshing…",
         "refresh-quota-hint": "Re-read every CLI's remaining quota now, skipping the usual wait after a failed read. Claude is read by launching its CLI, so this can take a few seconds.",
         "refresh-quota-card-hint": "Re-read this account's remaining quota now, skipping the usual wait after a failed read. Only the account the CLI is signed in as can be read.",
@@ -7674,7 +7712,7 @@
         "delete-confirm": "Delete this account? Its saved sign-in will also be removed.",
         "duplicate-flag": "Duplicate",
         "duplicate-hint": "\"{self}\" and {others} store the same account ({email}). Delete the spare one.",
-        "unsupported": "This agent does not support multiple accounts.",
+        "unsupported": "Navide can't keep more than one account for these CLIs:",
         "active-error": "This account is currently active and cannot be deleted. Switch to another account first.",
         "login-in-progress-error": "A sign-in for this account is still running. Finish or close its login pane first.",
         "account-dir-in-use-error": "{count} running pane(s) use this account's own folder. Close them before deleting the account.",
@@ -7743,7 +7781,7 @@
       "ollama-connected": "Ollama {version} connected",
       "not-connected": "Not connected · run",
       "model-manager": "Model Manager",
-      "model-manager-note": "Download · delete local models",
+      "model-manager-note": "Pull a model from Ollama by name, or delete one you no longer need",
       "model-placeholder": "Model name, e.g. qwen2.5-coder, llama3.2, gemma3",
       "downloading": "Downloading…",
       "download": "Download",
@@ -8347,7 +8385,15 @@
       "backend-pill-connected": "backend",
       "backend-pill-down": "backend down",
       "backend-pill-connecting": "connecting…",
-      "backend-pill-restarting": "restarting {attempt}/{max}…"
+      "backend-pill-restarting": "restarting {attempt}/{max}…",
+      "backend-popover-title": "Backend",
+      "backend-working": "working…",
+      "backend-restart": "Restart",
+      "backend-start": "Start",
+      "backend-stop": "Stop",
+      "pipeline-pill-stage": "Stage {current} / {total}",
+      "pipeline-pill-completed": "completed",
+      "pipeline-pill-aborted": "aborted"
   },
   "layout": {
     "expand": "Expand panel",
@@ -9015,7 +9061,8 @@
     "status": {
       "ok": "installed",
       "missing": "not installed",
-      "outdated": "outdated"
+      "outdated": "outdated",
+      "unknown": "not found yet"
     },
     "requirements-label": "Prerequisites",
     "chain-label": "Installation order",
@@ -10269,7 +10316,8 @@
     },
     "rules": {
       "title": "Custom rules",
-      "hint": "Deny patterns raise a match to the level you pick (Critical or High). Allow patterns downgrade a High match to Normal (never Critical). On a pane with external content, a command Guard cannot analyse is only released by a glob pattern that matches the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
+      "hint": "Deny patterns raise a match to Critical or High; allow patterns lower a High match to Normal.",
+      "hint-detail": "Critical never moves down. On a pane with external content, a command Guard cannot analyse is only released by an allow pattern matching the whole command, e.g. python3 -c *. Adding an allow or removing a deny needs confirmation.",
       "kind": {
         "allow": "Allow",
         "deny": "Deny"
@@ -10282,7 +10330,7 @@
       "remove": "Remove"
     },
     "test": {
-      "title": "Try it",
+      "title": "Test against Guard rules",
       "placeholder": "Type a shell command, e.g. rm -rf ~",
       "tainted": "Externally influenced pane",
       "run": "Check",
@@ -10292,7 +10340,9 @@
     },
     "terminal": {
       "title": "Terminal command protection",
-      "hint": "Commands Navide never types into a plain terminal pane for an agent, an MCP client or a scheduled job — refused whatever the Guard switch says. Each part of a line (split at ; && {'|'}{'|'} {'|'} & and newlines) is checked; one refused part refuses the line. What you type yourself is not checked.",
+      "hint": "Navide refuses these commands when an agent, an MCP client or a scheduled job types them into a plain terminal pane, whatever the Guard switch says. What you type yourself is never checked.",
+      "more": "Details",
+      "hint-detail": "Each part of a line (split at ; && {'|'}{'|'} {'|'} & and newlines) is checked, and one refused part refuses the whole line.",
       "default-off": "Off by default",
       "loosen-confirm": "Switching a category off asks for confirmation; switching one on does not.",
       "category": {
@@ -10333,7 +10383,7 @@
         "block-pattern": "Your block pattern"
       },
       "test": {
-        "title": "Test a command",
+        "title": "Test against terminal protection",
         "placeholder": "e.g. ls && sudo rm -rf /opt/app",
         "refused": "Would be refused",
         "allowed": "Would be typed"
@@ -10837,9 +10887,10 @@
     "follow-body": "These following panes are mid-turn. They can move once they finish, or stay on their current account this time. The idle ones move now.",
     "follow-wait": "Move when finished",
     "follow-skip-running": "Skip running panes",
-    "toggle-label": "Fix this pane to its account",
-    "toggle-follow-tooltip": "Following: when you switch accounts, this pane uses the new one from its next turn — no restart. Click to fix it to the current account (it reopens once in that account’s own folder; you sign in there first if you have not).",
-    "toggle-fixed-tooltip": "Fixed: switching accounts does not move this pane; it keeps running in its account’s own folder. Click to make it follow again (it reopens once and picks up its conversation).",
+    "follow-switch-label": "Follow account switch",
+    "follow-switch-hint": "On: this pane moves to the new account on its next turn. Off: it stays in its account’s own folder. Either change reopens it once.",
+    "pinned-indicator-label": "Fixed to its account",
+    "pinned-indicator-tooltip": "Fixed: switching accounts does not move this pane. Open the account badge to make it follow again.",
     "unpin-title": "{count} pane(s) to make follow are working",
     "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",

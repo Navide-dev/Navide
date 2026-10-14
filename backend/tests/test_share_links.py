@@ -591,3 +591,17 @@ async def test_an_old_server_is_refused_before_the_file_or_ring_is_touched(home:
         await share_links.create_share(client, str(_plan(home, "<p/>")), "plan")
     assert err.value.code == "UNSUPPORTED"
     assert touched == [] and client.calls == 1
+
+
+@pytest.mark.parametrize(
+    "opening",
+    [
+        '<script type="application/json" id="plan-meta">',  # the provisioned template's order
+        '<script id="plan-meta" type="application/json">',
+    ],
+)
+def test_the_title_is_the_plan_name_whatever_the_attribute_order(opening: str, tmp_path: Path) -> None:
+    path = tmp_path / "roadmap_abc123.html"
+    meta = json.dumps({"schemaVersion": 1, "name": "Secret Roadmap", "stage": "draft"}, indent=2)
+    text = f"<html><head>\n{opening}\n{meta}\n</script>\n</head><body></body></html>\n"
+    assert share_links._title(text, path) == "Secret Roadmap"

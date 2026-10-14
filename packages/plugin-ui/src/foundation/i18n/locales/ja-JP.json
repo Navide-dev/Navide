@@ -282,6 +282,15 @@
     "resize-failed": "AI CLI セッションのサイズを変更できません"
   },
   "voice": {
+  "readback": {
+    "done": "{label} が完了しました",
+    "attention": "{label} があなたの回答を待っています",
+    "done-many": "{n} 個のペインが完了しました",
+    "attention-many": "{n} 個のペインが回答を待っています",
+    "separator": "、",
+    "esc-stop": "Esc で停止",
+    "stop": "読み上げを停止"
+  },
   "prewarm-failed": "音声入力の準備ができていません：{reason}",
     "capsule": {
       "starting": "マイクを準備中…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "読み上げオン：このペインが完了または回答待ちになると読み上げます — クリックでオフ",
+      "readback-off-tooltip": "クリックすると、このペインが完了または回答待ちになったときに読み上げます",
+      "readback-speaking": "読み上げ中",
       "backend-reconnecting": "バックエンドとの接続が切れました。再接続中です。入力は一時停止されています。",
       "backend-restarting": "バックエンドが異常終了しました。再起動中です（{attempt}/{max}）。入力は一時停止されています。",
       "backend-unavailable": "バックエンドを利用できません。再起動するまで入力は一時停止されます。",
@@ -1233,8 +1245,9 @@
   "settings": {
     "cliExtensions": {
       "tabInstalled": "インストール済みの CLI 拡張",
-      "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin、Claude mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲を一覧にします。Navide は読み取るだけで、ここでインストール・有効化・変更を行うことはありません。Navide プラグインは専用のページにあります。",
-      "summary": "CLI 拡張 {total} 件 · うち CLI のプロセス内で動くコード {l3} 件",
+      "tabConvenience": "Navide による変更",
+      "intro": "各 AI CLI が自分でインストールした CLI 拡張（Claude plugin・mod、Codex hook、Pi extension など）と、それぞれが触れられる範囲です。読み取り専用で、ここでインストール・有効化・変更は行いません。Navide プラグインは専用のページにあります。",
+      "summary": "CLI 拡張 {total} 件 · うち {l3} 件は CLI のプロセス内でコードを実行",
       "machineWide": "CLI ごとにマシン全体で 1 セットです。その CLI の Navide ペインとアカウントはすべて同じものを読み込みます。",
       "rescan": "再スキャン",
       "loading": "スキャン中…",
@@ -1883,6 +1896,7 @@
       "labeledValue": "{label}：{value}"
     },
     "scope": {
+      "label": "適用範囲",
       "user": "ユーザー",
       "userWorkspace": "ユーザー / ワークスペース",
       "accountServer": "アカウント / サーバー",
@@ -1895,6 +1909,25 @@
       "cliFiles": "各 CLI 固有の指示ファイル"
     },
     "voice": {
+      "readback-model": "音声モデル",
+      "readback-model-ready": "{voice} — 準備完了",
+      "readback-model-missing": "{voice} — 未インストール。現在は「{using}」で読み上げます。",
+      "readback-model-missing-none": "{voice} — 未インストールで、インターフェースの言語に合う音声もありません。",
+      "readback-model-other-os": "OS の音声設定でより良い音声をインストールしてください。",
+      "readback-model-download-hint": "開いた「アクセシビリティ › 読み上げコンテンツ」で「システムの声」の ⓘ／「声を管理…」から {voice} をダウンロードし、「再確認」を押してください。",
+      "readback-engine": "音声エンジン",
+      "readback-engine-ready": "システム音声 · 準備完了",
+      "readback-engine-no-voices": "システム音声 · インストール済みの音声なし",
+      "readback-section": "読み上げ",
+      "readback": "返信を読み上げる",
+      "readback-hint": "🔊 を付けたペインが完了したり回答を求めたりしたとき、システムの音声で短い通知を読み上げます（例：「Navide が完了しました」）。ペインのタイトルバーの 🔊 をクリックして付けます。音声はこのコンピューター上で合成され、何もダウンロードしません。",
+      "readback-voice": "音声",
+      "readback-voice-hint": "「自動」はインターフェースの言語に合う最適なシステム音声を選びます（Premium 版を優先）。より良い音声はシステム設定 › アクセシビリティ › 読み上げコンテンツ でダウンロードできます。",
+      "readback-voice-none": "インターフェースの言語に合うシステム音声がないため、システムの既定の音声を使用します。",
+      "readback-voice-auto": "自動（インターフェースの言語）",
+      "readback-rate": "速度",
+      "readback-preview": "試聴",
+      "readback-stop-hint": "読み上げ中に Esc か音声入力のショートカットを押すとすぐに止まります。",
       "section": "音声入力",
       "enabled": "音声入力（押して話す）",
       "enabled-hint": "Ctrl+Alt+M を押している間（ショートカットで変更可）、フォーカス中の CLI ペインに音声入力できます。テキストは手で打ったのと同じように入力欄に入り、Enter を押すまで送信されません。音声はこのコンピューター上のローカル Whisper モデルで文字起こしされ、外部に送信されません。",
@@ -6460,7 +6493,7 @@
         "low": "低"
       },
       "kind": {
-        "git-helper": "Git ヘルパー",
+        "git-helper": "Git 認証ヘルパー",
         "cli-account": "CLI アカウント",
         "ssh-key": "SSH キー",
         "keychain-item": "キーチェーン項目",
@@ -6547,15 +6580,15 @@
           "body": "GitHub CLI は一度に 1 つのアクティブなアカウントしか扱わないため、別アカウントのリポジトリは気付かないうちに誤った身元を使います。push 前に gh auth switch を実行するか、リポジトリごとに credential helper を設定してください。"
         },
         "helper-duplicate": {
-          "title": "git の credential helper が重複しています",
+          "title": "Git 認証ヘルパーが重複しています",
           "body": "同じ helper が複数回設定されており、git が認証情報を二重に尋ねたり保存したりする可能性があります。git 設定から余分な credential.helper を削除してください。"
         },
         "helper-shadowed": {
-          "title": "到達しない git の credential helper",
+          "title": "到達しない Git 認証ヘルパー",
           "body": "先に並ぶ helper が先に応答するため、この helper は使われません。credential.helper の順序を確認し、使いたいものだけを残してください。"
         },
         "env-token-in-shell-rc": {
-          "title": "シェルの起動ファイルでトークンを export しています",
+          "title": "シェルの起動ファイルでトークンをエクスポートしています",
           "body": "起動するすべてのプログラムがこのトークンを引き継ぎ、ファイルも漏洩やコミットが起きやすくなります。プロバイダー側で失効させ、export 行を削除し、必要なときにキーチェーンから読み込んでください。"
         },
         "env-token-set": {
@@ -7287,9 +7320,9 @@
         "perm-inherit": "権限設定を継承",
         "perm-force-on": "権限設定を強制オン",
         "perm-force-off": "権限設定を強制オフ",
-        "push": "プッシュ {kind}",
-        "push-off": "プッシュ オフ",
-        "no-push": "プッシュなし",
+        "push": "プッシュ有効",
+        "push-off": "プッシュ無効",
+        "no-push": "プッシュ非対応",
         "accounts": "{count} アカウント | {count} アカウント | {count} アカウント",
         "signed-out": "ログアウト中",
         "custom-binary": "カスタム実行ファイル",
@@ -7616,6 +7649,8 @@
       "remove-binding": "この割り当てを削除",
       "protected-hint": "このショートカットは設定画面に戻る手段のため、削除できません。別のキーへの変更は可能です。",
       "menu-owned-hint": "このキーはアプリケーションメニューが管理し、アプリ側で処理する前に実行されるため、ここで割り当てを解除しても無効にはなりません。別のキーをコマンドに割り当ててください。",
+      "legend-locked": "削除不可",
+      "legend-menu-owned": "アプリメニューが優先",
       "already-bound": "{key} はすでにこのコマンドに割り当てられています",
       "invalid-key": "{key} はショートカットに使用できません",
       "add-binding": "別の割り当てを追加",
@@ -7647,13 +7682,16 @@
       "delete-confirm": "このアカウントを削除しますか？",
       "cli": {
         "title": "CLI アカウント",
-        "hint": "「ログイン」または「+ 新しいアカウント」をクリックすると、一時的なログイン用ペインが開き、CLI のブラウザーログインを自動で開始します。ブラウザーで認証すると、アカウントがログイン済みと表示され、ペインは自動で閉じます。使用中のアカウントや実行中のペインには影響しません。すべてのアカウントは実際のホームディレクトリを共有します（セッションと履歴も共有）。アカウントの切り替えは、保存された認証情報を同じ場所で入れ替えて行います。「既定に設定」で使用するアカウントを切り替えます。すでに開いているペインは、開き直すまで以前のアカウントを使い続けます。",
+        "hint": "「ログイン」または「+ 新しいアカウント」で一時的なログイン用ペインが開き、ブラウザーで認証すると自動で閉じます。「既定に設定」は新しいペインが使うアカウントを決め、開いているペインは開き直すまで元のアカウントのままです。",
+        "hint-detail": "すべてのアカウントはホームディレクトリを共有し、セッションと履歴も共通です。切り替え時は保存済みの認証情報をその場で入れ替え、ログインしても使用中のアカウントには影響しません。",
+        "hint-more": "詳細",
         "login-no-workspace": "先にワークスペースを開いてください。ログインには一時的なログイン用ペインを起動します。",
         "login-spawn-failed": "ログイン用ペインを起動できませんでした。",
         "login-complete": "{email} としてログインしました。アカウントを保存しました。",
         "login-complete-no-email": "ログインが完了しました。アカウントを保存しました。",
         "new-account": "+ 新しいアカウント",
         "refresh-quota": "利用枠を更新",
+        "refresh-quota-all": "すべて更新",
         "refreshing-quota": "更新中…",
         "refresh-quota-hint": "読み取り失敗後の通常の待機時間を省略し、すべての CLI の残り利用枠を今すぐ取得し直します。Claude は CLI を起動して読み取るため、数秒かかる場合があります。",
         "refresh-quota-card-hint": "読み取り失敗後の通常の待機時間を省略し、このアカウントの残り利用枠を今すぐ取得し直します。読み取れるのは CLI でログイン中のアカウントのみです。",
@@ -7669,7 +7707,7 @@
         "delete-confirm": "このアカウントを削除しますか？保存されたログイン情報も削除されます。",
         "duplicate-flag": "重複",
         "duplicate-hint": "「{self}」と {others} には同じアカウント（{email}）が保存されています。不要な方を削除してください。",
-        "unsupported": "このエージェントは複数アカウントに対応していません。",
+        "unsupported": "次の CLI では複数のアカウントを保持できません：",
         "active-error": "このアカウントは現在使用中のため削除できません。先に別のアカウントに切り替えてください。",
         "login-in-progress-error": "このアカウントのログイン処理がまだ実行中です。先にログインを完了するか、ログイン用ペインを閉じてください。",
         "account-dir-in-use-error": "このアカウント専用フォルダーを使って実行中のペインが {count} 個あります。アカウントを削除する前に閉じてください。",
@@ -7743,7 +7781,7 @@
       "ollama-connected": "Ollama {version} に接続済み",
       "not-connected": "未接続 · 次を実行：",
       "model-manager": "モデルマネージャー",
-      "model-manager-note": "ローカルモデルのダウンロード・削除",
+      "model-manager-note": "名前を入力して Ollama からモデルを取得、または不要なモデルを削除",
       "model-placeholder": "モデル名（例：qwen2.5-coder、llama3.2、gemma3）",
       "downloading": "ダウンロード中…",
       "download": "ダウンロード",
@@ -8347,7 +8385,15 @@
     "backend-pill-connected": "バックエンド",
     "backend-pill-down": "バックエンド停止",
     "backend-pill-connecting": "接続中…",
-    "backend-pill-restarting": "再起動中 {attempt}/{max}…"
+    "backend-pill-restarting": "再起動中 {attempt}/{max}…",
+    "backend-popover-title": "バックエンド",
+    "backend-working": "処理中…",
+    "backend-restart": "再起動",
+    "backend-start": "起動",
+    "backend-stop": "停止",
+    "pipeline-pill-stage": "ステージ {current} / {total}",
+    "pipeline-pill-completed": "完了",
+    "pipeline-pill-aborted": "中止"
   },
   "layout": {
     "expand": "パネルを展開",
@@ -9015,7 +9061,8 @@
     "status": {
       "ok": "インストール済み",
       "missing": "未インストール",
-      "outdated": "旧バージョン"
+      "outdated": "旧バージョン",
+      "unknown": "まだ見つかりません"
     },
     "requirements-label": "前提条件",
     "chain-label": "インストール順序",
@@ -10182,8 +10229,8 @@
       "row": {
         "local": "このコンピューターのあなた",
         "relay": "チャットアプリで承認",
-        "remote": "リモート端末・他の pane・agent",
-        "tainted": "外部の影響を受けた pane"
+        "remote": "リモート端末・他のペイン・agent",
+        "tainted": "外部の影響を受けたペイン"
       }
     },
     "level": {
@@ -10216,7 +10263,7 @@
       "group": {
         "critical": "既定で重大",
         "high": "既定で高",
-        "unanalyzable": "静的に判定できない（既定は通常。外部の影響を受けた pane では高として扱います）"
+        "unanalyzable": "静的に判定できない（既定は通常。外部の影響を受けたペインでは高として扱います）"
       },
       "default": "既定: {level}",
       "floor": "安全の下限: 高まで",
@@ -10269,7 +10316,8 @@
     },
     "rules": {
       "title": "カスタムルール",
-      "hint": "拒否パターンは一致したコマンドを選んだレベル（重大または高）に上げます。許可パターンは「高」を通常に下げます（「重大」は対象外）。外部の内容を受け取ったペインでは、Guard が解析できないコマンドはコマンド全体に一致するワイルドカードパターン（例：python3 -c *）でのみ許可されます。許可の追加と拒否の削除には確認が必要です。",
+      "hint": "拒否パターンは一致したコマンドを重大または高に上げ、許可パターンは「高」を通常に下げます。",
+      "hint-detail": "「重大」は下がりません。外部の内容を受け取ったペインでは、Guard が解析できないコマンドはコマンド全体に一致する許可パターン（例：python3 -c *）がある場合だけ通ります。許可の追加と拒否の削除には確認が必要です。",
       "kind": {
         "allow": "許可",
         "deny": "拒否"
@@ -10282,9 +10330,9 @@
       "remove": "削除"
     },
     "test": {
-      "title": "試してみる",
+      "title": "Guard のルールでテスト",
       "placeholder": "シェルコマンドを入力（例：rm -rf ~）",
-      "tainted": "外部の影響を受けた pane",
+      "tainted": "外部の影響を受けたペイン",
       "run": "判定",
       "unparseable": "静的に判断できません（変数展開、eval、エンコードされたスクリプト）。",
       "user-deny": "拒否パターン `{pattern}`",
@@ -10292,7 +10340,9 @@
     },
     "terminal": {
       "title": "ターミナルコマンド保護",
-      "hint": "Agent、MCP クライアント、スケジュールされたジョブのために Navide がプレーンな Terminal Pane へ決して打ち込まないコマンドです。Guard のスイッチに関係なく拒否されます。行は ; && {'|'}{'|'} {'|'} & と改行で分けて検査され、1 つでも拒否されれば行全体が拒否されます。ご自身の入力は検査されません。",
+      "hint": "Agent、MCP クライアント、スケジュールされたジョブがプレーンなターミナルペインにこれらのコマンドを入力すると、Guard のスイッチに関係なく Navide が拒否します。ご自身の入力は検査されません。",
+      "more": "詳細",
+      "hint-detail": "行は ; && {'|'}{'|'} {'|'} & と改行で分けて検査され、1 つでも拒否されれば行全体が拒否されます。",
       "default-off": "既定でオフ",
       "loosen-confirm": "カテゴリをオフにするときは確認が必要です。オンにするときは不要です。",
       "category": {
@@ -10308,8 +10358,8 @@
         "pipe-to-shell": "ネットワークから取得したスクリプトの直接実行",
         "credential": "認証情報ファイル（SSH、クラウドキー、Keychain、.env）",
         "force-push-main": "main／master への force-push や削除",
-        "classifier-critical": "Guard が critical と判定するその他のもの",
-        "classifier-high": "Guard が high と判定するその他のもの（git push、git reset --hard、workspace 内の rm -rf）",
+        "classifier-critical": "Guard が「重大」と判定するその他のもの",
+        "classifier-high": "Guard が「高」と判定するその他のもの（git push、git reset --hard、workspace 内の rm -rf）",
         "unanalyzable": "静的に判定できない行"
       },
       "block": {
@@ -10333,16 +10383,16 @@
         "block-pattern": "あなたのブロックパターン"
       },
       "test": {
-        "title": "コマンドをテスト",
+        "title": "ターミナルコマンド保護でテスト",
         "placeholder": "例: ls && sudo rm -rf /opt/app",
         "refused": "拒否されます",
         "allowed": "打ち込まれます"
       }
     },
     "taint": {
-      "title": "外部の影響を受けた pane",
-      "hint": "チャットアプリ、リモート端末、他の pane、MCP から内容を受け取った pane は、マークを解除するまで「高」と「重大」の操作をこのコンピューターで確認します。",
-      "empty": "マークされた pane はありません。"
+      "title": "外部の影響を受けたペイン",
+      "hint": "チャットアプリ、リモート端末、他のペイン、MCP から内容を受け取ったペインは、マークを解除するまで「高」と「重大」の操作をこのコンピューターで確認します。",
+      "empty": "マークされたペインはありません。"
     },
     "audit": {
       "title": "最近の判定",
@@ -10837,9 +10887,10 @@
     "follow-body": "これらの追従中のペインは実行中です。終わってから切り替えるか、今回は切り替えないかを選べます。待機中のペインはすぐに切り替わります。",
     "follow-wait": "終わったら切り替える",
     "follow-skip-running": "実行中のペインをスキップ",
-    "toggle-label": "このペインのアカウントを固定",
-    "toggle-follow-tooltip": "追従中：アカウントを切り替えると、このペインは次のターンから新しいアカウントを使います。再起動は不要です。クリックすると現在のアカウントに固定します（そのアカウントの専用フォルダーで一度開き直します。未サインインの場合は先にサインインします）。",
-    "toggle-fixed-tooltip": "固定：アカウントを切り替えてもこのペインは変わらず、アカウントの専用フォルダーで動き続けます。クリックすると追従に戻します（一度開き直して会話を続けます）。",
+    "follow-switch-label": "アカウント切り替えに追従",
+    "follow-switch-hint": "オン：このペインは次のターンから新しいアカウントを使います。オフ：アカウントの専用フォルダーに留まります。切り替えると一度開き直します。",
+    "pinned-indicator-label": "アカウントに固定",
+    "pinned-indicator-tooltip": "固定：アカウントを切り替えてもこのペインは変わりません。アカウントバッジを開くと追従に戻せます。",
     "unpin-title": "追従にするペインのうち {count} 個が実行中です",
     "unpin-body": "追従にすると、ペインを現在のログインで開き直して会話を続けます。終わるのを待つか、今回はスキップするかを選べます。待機中のペインはすぐに切り替わります。",
     "pin-default-refused": "組み込みの既定アカウントには専用フォルダーがないため、固定できません。先に別のアカウントに切り替えてください。",

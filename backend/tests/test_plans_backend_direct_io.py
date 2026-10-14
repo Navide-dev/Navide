@@ -769,7 +769,7 @@ def test_paged_list_entries_carry_only_the_meta_the_plans_view_reads(
     }
     # The entry's own fields are untouched.
     assert entry["name"] == "Rich plan" and entry["kind"] == "plan" and entry["stage"] == "approved"
-    assert entry["todos"] == {"total": 2, "by_status": {"pending": 1, "done": 1}}
+    assert entry["todos"] == {"total": 2, "by_status": {"pending": 1, "done": 1}, "awaiting_user": 1}
 
 
 def test_paged_list_meta_keeps_an_empty_review_notes_list(

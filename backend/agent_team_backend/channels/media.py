@@ -54,6 +54,11 @@ DENIED_NAMES = (
     "cookies", "cookies-journal", "login data", "login data-journal", "web data",
     "*.sqlite", "*.sqlite3", "*.db", "*.db-wal", "*.db-shm",
 )
+# "*token*" judges only the file's own name: on a folder it refused every file of a project
+# whose name merely mentions tokens ("Token仲介平台", 2026-10-14). A folder counts when its
+# name ends in token or tokens (api_tokens, github-token) or is a dotted one (.tokens).
+_FILE_ONLY_NAMES = frozenset({"*token*"})
+_DENIED_FOLDERS = ("*token", "*tokens", ".token*")
 
 _KIND_DEFAULT_NAMES = {
     "photo": "photo.jpg", "voice": "voice.ogg", "video_note": "video_note.mp4",
@@ -232,8 +237,7 @@ def _check(raw: str) -> tuple[Path | None, os.stat_result | None, str]:
         return None, None, "not_file"
     scope = _scope(real)
     # A colon can also arrive through a symlink, after the raw path passed.
-    if any(":" in part for part in scope) or any(
-            fnmatch.fnmatch(_name_key(part), pat) for part in scope for pat in DENIED_NAMES):
+    if _denied_rule(scope):
         return None, None, "denied_name"
     if any(_within(real, s) for s in _system_dirs()):
         return None, None, "system"
@@ -248,6 +252,32 @@ def _check(raw: str) -> tuple[Path | None, os.stat_result | None, str]:
     if st.st_nlink > 1:
         return None, None, "hard_link"
     return real, st, ""
+
+
+def _denied_rule(scope: tuple[str, ...]) -> str:
+    """The name rule a segment of ``scope`` breaks: ":" for a stream name, else the first
+    matching pattern; "" when none does. The last segment is the file itself."""
+    if any(":" in part for part in scope):
+        return ":"
+    for i, part in enumerate(scope):
+        key, is_file = _name_key(part), i == len(scope) - 1
+        for pat in DENIED_NAMES if is_file else DENIED_NAMES + _DENIED_FOLDERS:
+            if (is_file or pat not in _FILE_ONLY_NAMES) and fnmatch.fnmatch(key, pat):
+                return pat
+    return ""
+
+
+def denied_rule(raw: str) -> str:
+    """The rule behind a ``denied_name`` refusal of ``raw``, for the chat notice; "" when
+    no name rule refuses it (any more)."""
+    path = Path(raw.strip())
+    if any(":" in part for part in path.parts[1:]):
+        return ":"
+    try:
+        real = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return ""
+    return _denied_rule(_scope(real))
 
 
 def _within(path: Path, folder: Path) -> bool:
@@ -329,7 +359,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason.parent_ref": "路徑不可含 ..",
         "reason.missing": "找不到這個檔案",
         "reason.not_file": "不是一般檔案",
-        "reason.denied_name": "這個檔名看起來是憑證或金鑰",
+        "reason.denied_name": "路徑符合憑證規則「{rule}」",
         "reason.system": "不傳系統檔案",
         "reason.hard_link": "這個檔案有其他硬連結，可能是 workspace 外的檔案",
         "reason.changed": "檢查後檔案被更動或換成連結",
@@ -358,7 +388,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason.parent_ref": "the path may not contain ..",
         "reason.missing": "the file does not exist",
         "reason.not_file": "it is not a regular file",
-        "reason.denied_name": "the name looks like a credential or key",
+        "reason.denied_name": "the path matches the credential pattern \"{rule}\"",
         "reason.system": "system files are not sent",
         "reason.hard_link": "the file has other hard links and may be a file from outside the workspace",
         "reason.changed": "the file changed or became a link after it was checked",
@@ -387,7 +417,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason.parent_ref": "パスに .. は使えません",
         "reason.missing": "ファイルが見つかりません",
         "reason.not_file": "通常のファイルではありません",
-        "reason.denied_name": "認証情報や鍵のようなファイル名です",
+        "reason.denied_name": "パスが認証情報のパターン「{rule}」に一致します",
         "reason.system": "システムファイルは送信しません",
         "reason.hard_link": "このファイルには別のハードリンクがあり、workspace 外のファイルの可能性があります",
         "reason.changed": "確認した後にファイルが変更されたか、リンクに置き換えられました",

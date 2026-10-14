@@ -5,7 +5,18 @@ import TerminalPane from './components/TerminalPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import RestoredPanePlaceholder from './components/RestoredPanePlaceholder.vue'
 import VoiceCapsule from './components/VoiceCapsule.vue'
+import ReadbackCapsule from './components/ReadbackCapsule.vue'
 import { setupVoiceInput } from './voice/voiceWiring'
+import { useVoiceSettings } from './voice/voiceSettings'
+import {
+  cancelReadback,
+  isPaneReadback,
+  readbackLine,
+  readbackSupported as hasReadbackSynth,
+  setPaneReadback,
+  speakReadback,
+  useReadbackAnnouncer,
+} from './composables/useVoiceReadback'
 import { requestMarketplaceDetail } from './marketplaceDeepLink'
 import type { DeepLinkExtensionTarget } from '../../shared/deepLink'
 import { buildWorkspaceGroups } from './lib/workspaceGroups'
@@ -328,7 +339,7 @@ import {
   screenShowsBlockingDialog,
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
-import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
+import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
 import { executeCommand, initKeybindingsPort, useKeybindings, registerCommand, setContext } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
@@ -1799,7 +1810,7 @@ function reconcileSpawnHistoryLiveness(entries: SpawnHistoryEntry[]): void {
   const rosterPaneIds = new Set(remoteTargetByPane.keys())
   const reconciledAt = new Date().toISOString()
   for (const e of entries) {
-    if (!e.removedAt && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt
+    if (!isHistoryEntryRemoved(e) && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt
   }
 }
 
@@ -8366,25 +8377,37 @@ function followDialogRows(rows: ReturnType<typeof followSwitchRows>): FollowDial
   return rows.map((r) => ({ ...r, accountLabel: followAccountLabel(r.profileId) }))
 }
 
-/** Reopen the chosen panes on `profileId`, resuming each conversation. Idle
- *  panes go first; a pane mid-turn is waited for, never interrupted. */
-async function moveFollowPanes(ids: string[], profileId: string): Promise<void> {
-  pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
-  // A rebuild elsewhere (a restart batch, the user's Rebuild) replaces a pane
-  // id while this batch waits; the conversation is what stays, so a chosen
-  // pane is found again by its session.
+/** The conversation behind each pane id. A rebuild elsewhere (a restart
+ *  batch, the user's Rebuild) replaces a pane id while the user decides or a
+ *  batch waits; the conversation is what stays. Callers that ask first take
+ *  this before asking, while the ids are still current. */
+function followSessions(ids: readonly string[]): Map<string, string> {
   const sessions = new Map<string, string>()
   for (const id of ids) {
     const pane = panes.value.find((p) => p.id === id)
     const session = pane ? paneResumeSessionId(pane) : ''
     if (session) sessions.set(id, session)
   }
+  return sessions
+}
+
+/** The pane a chosen id is now: itself, or the one its conversation moved to. */
+function followPaneNow(id: string, sessions: ReadonlyMap<string, string>): string | null {
+  if (panes.value.some((p) => p.id === id)) return id
+  const session = sessions.get(id)
+  return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
+}
+
+/** Reopen the chosen panes on `profileId`, resuming each conversation. Idle
+ *  panes go first; a pane mid-turn is waited for, never interrupted. */
+async function moveFollowPanes(
+  ids: string[],
+  profileId: string,
+  sessions: ReadonlyMap<string, string> = followSessions(ids),
+): Promise<void> {
+  pipelineLog(`⟳ account-follow (${profileId.slice(0, 8)}): ${ids.length} pane(s)`)
   const failures = await runFollowSwitchBatch(ids, {
-    resolve: (id) => {
-      if (panes.value.some((p) => p.id === id)) return id
-      const session = sessions.get(id)
-      return (session && panes.value.find((p) => paneResumeSessionId(p) === session)?.id) || null
-    },
+    resolve: (id) => followPaneNow(id, sessions),
     isBusy: followPaneBusy,
     rebuild: (id) => rebuildPaneViaResume(id, { profileId, suppressBusyToast: true }),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -8410,9 +8433,10 @@ async function offerFollowSwitch(outgoingId: string | null, targetId: string | n
   })
   if (rows.length === 0) return
   const target = targetId ?? DEFAULT_SLOT_ID
+  const sessions = followSessions(rows.map((r) => r.paneId))
   const choice = await askFollowDialog({ mode: 'switch', subject: followAccountLabel(target), rows: followDialogRows(rows) })
   if (!choice || choice.paneIds.length === 0) return
-  await moveFollowPanes(choice.paneIds, target)
+  await moveFollowPanes(choice.paneIds, target, sessions)
 }
 
 /** The quota badge's "Switch account": pick an account this pane can land
@@ -8438,14 +8462,16 @@ async function onQuotaSwitchAccount(paneId: string): Promise<void> {
       exhausted: isExhausted(snap),
     }
   })
+  const peers = quotaPeerRows(inputs, paneId, current, effective)
+  const sessions = followSessions([paneId, ...peers.map((r) => r.paneId)])
   const choice = await askFollowDialog({
     mode: 'quota',
     subject: self.name,
-    rows: followDialogRows(quotaPeerRows(inputs, paneId, current, effective)),
+    rows: followDialogRows(peers),
     targets: quotaSwitchTargets(accounts, { current, liveId, dirSignedIn: followDirSignedIn }),
   })
   if (!choice?.targetId) return
-  await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId)
+  await moveFollowPanes([paneId, ...choice.paneIds], choice.targetId, sessions)
 }
 
 // ── Panes that follow the default account (plan_8debb8, scheme B) ──────────
@@ -8545,6 +8571,7 @@ async function unpinAllAccountPanes(): Promise<void> {
   if (fixed.length === 0) return
   const idle = fixed.filter((p) => !followPaneBusy(p.id)).map((p) => p.id)
   const running = fixed.filter((p) => followPaneBusy(p.id))
+  const sessions = followSessions(fixed.map((p) => p.id))
   let ids = idle
   if (running.length > 0) {
     const choice = await askFollowDialog({ mode: 'unpin',
@@ -8561,8 +8588,11 @@ async function unpinAllAccountPanes(): Promise<void> {
     ids = [...idle, ...choice.paneIds]
   }
   if (ids.length === 0) return
-  for (const id of ids) accountFollow.add(id)
-  await moveFollowPanes(ids, '')
+  for (const id of ids) {
+    const now = followPaneNow(id, sessions)
+    if (now) accountFollow.add(now)
+  }
+  await moveFollowPanes(ids, '', sessions)
 }
 
 provide(accountPinKey, {
@@ -9701,6 +9731,49 @@ const voiceInput = setupVoiceInput({
   hint: (text) => notifyRestore.toast(text, { type: 'info' }),
   fnKey: window.agentTeam?.fnKey,
 })
+
+// Read aloud (Settings → Voice → Read aloud, default off): panes marked 🔊
+// speak "<pane> 完成了" / "<pane> 需要你回答" from the done and attention
+// notifications below. With it off announce() returns at once, the 🔊 toggle
+// is not rendered and Esc is never consumed.
+const { voiceReadbackEnabled, voiceReadbackVoice, voiceReadbackRate } = useVoiceSettings()
+const readbackSupported = hasReadbackSynth()
+const readbackOffered = computed(() => voiceReadbackEnabled.value && readbackSupported)
+const readback = useReadbackAnnouncer({
+  enabled: () => readbackOffered.value,
+  paneMarked: isPaneReadback,
+  paneMuted: isPaneMuted,
+  line: (items) => readbackLine(
+    items,
+    (paneId) => {
+      const p = panes.value.find((pn) => pn.id === paneId)
+      return (p && paneNotifyLabel(p)) || paneId
+    },
+    (key, params) => i18n.global.t(key, params ?? {}),
+  ),
+  speak: (text, onEnd) => speakReadback(text, {
+    uiLang: String(i18n.global.locale.value),
+    voiceURI: voiceReadbackVoice.value,
+    rate: voiceReadbackRate.value,
+  }, onEnd),
+  cancel: cancelReadback,
+})
+// Barge-in: pressing the dictation hotkey cuts the readback off first.
+watch(() => voiceInput.state.phase, (phase) => {
+  if (phase === 'starting' || phase === 'recording') readback.stop()
+})
+watch(voiceReadbackEnabled, (on) => { if (!on) readback.stop() })
+// Capture phase, so the pane never sees the Esc that stopped the readback.
+function onReadbackKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Escape' || !readback.stop()) return
+  e.preventDefault()
+  e.stopPropagation()
+}
+window.addEventListener('keydown', onReadbackKeydown, true)
+onUnmounted(() => window.removeEventListener('keydown', onReadbackKeydown, true))
+function togglePaneReadback(id: string): void {
+  setPaneReadback(id, !isPaneReadback(id))
+}
 
 // ── External UI action bus (MCP-driven) ─────────────────────────────────────
 // Actions a UI-control MCP client can invoke via ui.invoke.request. See
@@ -13915,6 +13988,7 @@ function scheduleDoneNotify(paneId: string, timestamp: string): void {
     const pane = panes.value.find((p) => p.id === paneId)
     if (!pane) return
     if (!isPaneMuted(paneId)) playDoneSound()
+    readback.announce(paneId, 'done')
     sysNotify.notifyPaneState(
       paneId,
       'done',
@@ -13929,6 +14003,7 @@ function notifyAttention(paneId: string): void {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) return
   if (!isPaneMuted(paneId)) playAttentionSound()
+  readback.announce(paneId, 'attention')
   sysNotify.notifyPaneState(
     paneId,
     'attention',
@@ -14621,7 +14696,10 @@ backend.on('terminal.exit', (raw) => {
     if (pane.preparationStatus !== 'ready') setPrepStatus(pane, 'failed')
     syncViews()
   }
-  if (ev.exit_code === 127 && pane.agentKey !== 'terminal') {
+  // 127 alone is not "this CLI is missing": when the spawn probe found the CLI,
+  // it is some other name in the launch line (a wrapper, a helper in a custom
+  // command). Only a probe that missed it too makes the 127 a verdict.
+  if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {
     void promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)
   }
 })
@@ -14854,12 +14932,14 @@ function onCliInstalled(): void {
 // mainModalOpen with the sibling watches above.
 watch([reconnectPickerOpen, cliInstallRequest, whatsNewEntry, activeTourVersion], () => setContext('modalOpen', mainModalOpen()))
 
-async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string): Promise<void> {
+async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string, requested = false): Promise<void> {
   if (cliInstallRequest.value) return
-  // The opt-out only silences the AUTOMATIC prompt (a pane dying with 127).
-  // Picking the CLI in the spawn dropdown is the user asking for it, so that
-  // path always opens — declining once is not the same as opting out.
-  if (paneId) {
+  // The opt-out only silences the AUTOMATIC prompt (a pane dying with 127,
+  // cli.missing). Picking the CLI in the spawn dropdown is the user asking for
+  // it (`requested`), so that path always opens — declining once is not the
+  // same as opting out. Decided by who asked, not by whether a pane id came
+  // along: that id only says which pane to relaunch.
+  if (!requested) {
     // Decide against the real list, not against an empty one that was never
     // loaded: an empty set reads as "nothing dismissed", which is how a user
     // who opted out gets asked again.
@@ -20933,7 +21013,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @spawn-for-issue="onHandleIssue"
       @rename-pane="setPaneCustomName"
       @rename-workspace="onRenameWorkspace"
-      @install-cli="(p) => void promptCliInstall(p.agentKey, p.label)"
+      @install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"
       :collapsed="leftPanelCollapsed"
       :views="shellLayout.slots.left.views"
       @update:collapsed="setLeftCollapsed"
@@ -21335,6 +21415,9 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
           :muted="isPaneMuted(p.id)"
+          :readback-available="readbackOffered"
+          :readback="isPaneReadback(p.id)"
+          :readback-speaking="readback.current.value?.paneIds.includes(p.id) ?? false"
           :usage-limit-until="p.usageLimitUntil"
           :usage-limit-hit="p.usageLimitAt != null"
           :quota-switch-offered="followSwitchFlag && p.agentKey === FOLLOW_SWITCH_AGENT && paneCanRebuild(p)"
@@ -21358,6 +21441,7 @@ function paneIsCommander(p: ActivePane): boolean {
           @quota-switch-account="onQuotaSwitchAccount(p.id)"
           @toggle-account-follow="toggleAccountPin(p.id)"
           @toggle-mute="togglePaneMuted(p.id)"
+          @toggle-readback="togglePaneReadback(p.id)"
           @continue-resume="continueRestoredPane(p.id)"
           @user-resume="persistPaneStopped(p.id, false)"
           @pty-lost="onPanePtyLost(p.id)"
@@ -21381,6 +21465,7 @@ function paneIsCommander(p: ActivePane): boolean {
         />
         </template>
         <VoiceCapsule :state="voiceInput.state" @dismiss="voiceInput.dismiss" />
+        <ReadbackCapsule :state="readback.current.value" @stop="readback.stop()" />
         <!-- Auto/sidebar mode: meeting-style agent list on the right -->
         <div v-if="effectiveLayoutMode === 'sidebar'" class="auto-meeting-list" :style="dualFocusActive ? { gridColumn: '3' } : {}">
           <div
@@ -22046,8 +22131,8 @@ function paneIsCommander(p: ActivePane): boolean {
       <div class="statusbar-right">
         <span v-if="pipeline.state !== 'idle'" class="sb-item sb-pipeline" :class="'sb-' + pipeline.state">
           {{ pipeline.state === 'running'
-            ? `Stage ${pipeline.stageIndex + 1} / ${stagesApi.stages.value.length || '?'}`
-            : pipeline.state }}
+            ? $t('label.pipeline-pill-stage', { current: pipeline.stageIndex + 1, total: stagesApi.stages.value.length || '?' })
+            : $t('label.pipeline-pill-' + pipeline.state) }}
         </span>
         <span
           v-if="backfill.active"
@@ -22105,8 +22190,8 @@ function paneIsCommander(p: ActivePane): boolean {
     <div v-if="openPopover === 'backend'" class="bp-pop" @click.stop>
       <div class="bp-head">
         <span class="bp-dot sb-backend" :class="'sb-' + backend.status.value" />
-        <span class="bp-title">Backend</span>
-        <span class="bp-state" :class="'sb-' + backend.status.value">{{ backend.status.value }}</span>
+        <span class="bp-title">{{ $t('label.backend-popover-title') }}</span>
+        <span class="bp-state" :class="'sb-' + backend.status.value">{{ $t('label.backend-state-' + backend.status.value) }}</span>
       </div>
       <div class="bp-rows">
         <div class="bp-row"><span class="bp-k">URL</span><span class="bp-v">{{ backendUrl || '—' }}</span></div>
@@ -22114,13 +22199,13 @@ function paneIsCommander(p: ActivePane): boolean {
       </div>
       <div class="bp-actions">
         <button class="bp-btn bp-restart" :disabled="backendBusy" @click="onRestartBackend">
-          {{ backendBusy ? 'working…' : (backend.status.value === 'connected' ? 'Restart' : 'Start') }}
+          {{ backendBusy ? $t('label.backend-working') : (backend.status.value === 'connected' ? $t('label.backend-restart') : $t('label.backend-start')) }}
         </button>
         <button
           class="bp-btn bp-stop"
           :disabled="backendBusy || backend.status.value !== 'connected'"
           @click="onStopBackend"
-        >Stop</button>
+        >{{ $t('label.backend-stop') }}</button>
       </div>
     </div>
 

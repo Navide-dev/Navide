@@ -111,6 +111,51 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.22',
+    title: {
+      'zh-TW': '設定頁全面整理、語音朗讀通知、頻道聊天不再卡在「仍在執行」',
+      'en-US': 'A Tidier Settings Window, Spoken Notices, and Channel Chats No Longer Stuck on “Still Running”',
+      'ja-JP': '設定画面を全面的に整理、音声による通知の読み上げ、チャンネルのチャットが「実行中」で止まらなくなりました',
+    },
+    highlights: [
+      {
+        'zh-TW': '設定頁全面整理：狀態徽章、鍵盤快速鍵和分析頁面中，停用的按鈕文字清楚可讀，鍵盤快速鍵改用圖示並附上看得到的說明，每頁只留一個主要按鈕，日文的文字也不會再被截斷。版面、CLI agent 和 CLI 擴充頁面也一併整理：圖示一致、控制項對齊，停用的控制項看得出來，推送標籤改成「推送開啟／推送已關／無推送通道」，分頁名稱縮短為「Navide 做的修改」，分析頁面的按鈕對比更清楚，日文也不會再有單獨掉到下一行的字。帳號、憑證和安全性頁面也重新排版：支援多帳號的 CLI 排在前面並顯示完整 email，較長的說明收進「詳細說明」，憑證頁用分段切換在發現與清單之間切換，安全性頁的 CLI 分兩欄列出，範圍列標成「適用範圍」，每個 CLI 的縮寫也不再重複，側欄的「CLI Agents」改為「CLI 代理」。',
+        'en-US': 'A tidier Settings window: on the status badges, keyboard shortcuts and analyzer pages, disabled buttons stay readable, keyboard shortcuts use icons with a visible legend instead of emoji, each page has one primary button, and Japanese text is no longer cut off. The layout, CLI agents and CLI extensions pages are tidied up as well: consistent icons and aligned controls, disabled controls you can see, push badges that read “Push on / Push off / No push channel”, a shorter “What Navide changes” tab, better contrast on the analyzer buttons, and Japanese lines that no longer leave a lone character on the next line. The accounts, credentials and security pages are laid out again too: CLIs with several accounts come first with full email addresses, long explanations fold under “Details”, Credentials switches between findings and inventory with a segmented control, Security lists the CLIs in two columns with scope rows labelled “Applies to”, and every CLI has its own distinct initials.',
+        'ja-JP': '設定画面を全面的に整理：ステータスバッジ、キーボードショートカット、分析のページでは、無効なボタンの文字も読みやすくなり、キーボードショートカットは絵文字の代わりにアイコンと見える凡例で表示し、各ページの主ボタンは一つになり、日本語の文字が切れることもなくなりました。レイアウト、CLI エージェント、CLI 拡張機能のページも整えました。アイコンをそろえて操作部品の位置を合わせ、無効な操作部品も見分けられるようにし、プッシュの表示を「プッシュ有効／プッシュ無効／プッシュ非対応」に、タブ名を「Navide による変更」に短くし、分析ページのボタンのコントラストを改善し、日本語で一文字だけ次の行に送られることもなくなりました。アカウント、認証情報、セキュリティのページも整理しました。複数アカウントに対応した CLI を先頭に完全なメールアドレスで表示し、長い説明は「詳細」に折りたたみ、認証情報ではセグメント切り替えで検出結果と一覧を切り替え、セキュリティでは CLI を 2 列に並べて「適用範囲」の行を見出し付きにし、CLI の略称も重複しなくなりました。日本語の改行位置もさらに自然になりました。',
+      },
+      {
+        'zh-TW': '語音朗讀：標上 🔊 的 pane 完成時，Navide 會用系統聲音念出「<pane> 完成了」，需要你回答時念「<pane> 需要你回答」。在 pane 標題列點 🔊 就能標記；按 Esc 或語音輸入快速鍵會立刻停止。預設關閉，到設定 › 語音輸入 › 語音朗讀開啟「朗讀回覆」。「語音模型」一列會顯示建議的聲音（中文是美佳（Premium））是否已安裝，按「下載」會打開 macOS 系統設定的「輔助使用 › 朗讀內容」下載。',
+        'en-US': 'Read aloud: when a pane marked 🔊 finishes or needs your answer, Navide speaks a short notice in the system voice — “<pane> is done” or “<pane> needs your answer”. Click 🔊 in a pane’s title bar to mark it; Esc or the voice input shortcut stops speech at once. It is off by default: turn on “Read replies aloud” in Settings › Voice Input › Read aloud. The “Voice model” row shows whether the recommended voice (Ava (Premium) for English) is installed, and Download opens Accessibility › Spoken Content in macOS System Settings to get it.',
+        'ja-JP': '読み上げ：🔊 を付けたペインが完了したり回答を求めたりすると、Navide がシステムの音声で「<pane> が完了しました」「<pane> があなたの回答を待っています」と短く読み上げます。ペインのタイトルバーの 🔊 をクリックして付け、Esc か音声入力のショートカットですぐに止められます。既定ではオフなので、設定 › 音声入力 › 読み上げ で「返信を読み上げる」をオンにしてください。「音声モデル」の行で推奨の音声（日本語は Kyoko (Enhanced)）がインストール済みかを確認でき、「ダウンロード」を押すと macOS のシステム設定の「アクセシビリティ › 読み上げコンテンツ」が開きます。',
+      },
+      {
+        'zh-TW': 'Telegram 等頻道聊天：Claude 在閒置時自動壓縮對話後，聊天不會再一直停在「⏳ 仍在執行」。綁定頻道的 pane 用完 Claude 額度時，聊天會收到一次通知並附上重置時間；這則請求會先保留，重置後的回覆照樣會送到聊天。Claude 把一則回覆拆成兩行紀錄時，聊天也不會再多收到一則空白的「（pane 回合結束，沒有文字輸出）」。資料夾名稱含有 token 字樣（例如「Token仲介平台」）的檔案，現在可以當附件傳到聊天，不會再被誤判成金鑰。',
+        'en-US': 'Telegram and other channel chats: a chat no longer stays on “⏳ still running” after Claude compacts an idle conversation. When a pane bound to a chat hits its Claude usage limit, the chat is told once, with the reset time; the request stays open, so the reply after the reset still arrives there. When Claude splits one reply into two transcript lines, the chat no longer gets an extra empty “pane turn ended with no text output” reply. A file in a folder whose name mentions “token” can now be sent as a chat attachment instead of being refused as a secret.',
+        'ja-JP': 'Telegram などのチャンネルのチャット：Claude がアイドル中の会話を自動で圧縮したあとも、チャットが「⏳ 実行中」のまま止まらなくなりました。チャットに紐づいたペインが Claude の使用量の上限に達すると、チャットにリセット時刻つきで一度だけ通知します。リクエストは保留されたままなので、リセット後の返信もそのチャットに届きます。Claude が一つの返信を記録の二行に分けたときに、空の「ペインのターンが終了、テキスト出力なし」という返信が余分に届くこともなくなりました。フォルダー名に token を含むファイルも、秘密情報と誤判定されずにチャットへ添付できるようになりました。',
+      },
+      {
+        'zh-TW': '帳號清單的「全部改為跟隨」和切換帳號，現在也能找到在問題開著時被重建的 pane，不會再把它當成不見了。每個 pane 的「跟隨帳號切換」開關移到帳號彈出視窗的最上方；pane 標頭的 🔗 按鈕已移除，只有固定帳號的 pane 會在標頭顯示 📌。',
+        'en-US': '“Make all follow” and account switching in the account list now find a pane that was rebuilt while the question was open, instead of reporting it missing. Each pane’s “Follow account switch” toggle now sits at the top of the account popover; the 🔗 button in the pane header is gone, and the header shows 📌 only when a pane is pinned.',
+        'ja-JP': 'アカウント一覧の「すべて追従にする」とアカウントの切り替えは、確認を開いている間に作り直されたペインも見つけられるようになり、見つからないと報告しなくなりました。ペインごとの「アカウント切り替えに追従」のスイッチはアカウントのポップオーバーの一番上に移りました。ペインのヘッダーの 🔗 ボタンはなくなり、📌 は固定したペインのヘッダーにだけ表示されます。',
+      },
+      {
+        'zh-TW': 'CLI 安裝提示的「不要再詢問」勾選框現在一定會出現並記住你的選擇，Codex 的安裝提示不會再一直跳出來。偵測結果不確定時也不會再當成沒安裝，所以用 nvm 或 shell 啟動較慢時，已經裝好的 CLI 不會再跳出安裝提示。',
+        'en-US': 'The “Stop asking” box on the CLI install prompt now always shows up and is saved, so the Codex install prompt stops coming back. An uncertain detection result no longer counts as “not installed”, so a CLI that is already installed — common with nvm or a slow shell — no longer gets the install prompt.',
+        'ja-JP': 'CLI のインストール確認にある「今後確認しない」のチェックボックスが必ず表示され、選択が保存されるようになりました。Codex のインストール確認が何度も出ることはなくなります。検出結果がはっきりしないときに「未インストール」と扱うこともなくなったため、nvm を使っていたりシェルの起動が遅かったりしても、インストール済みの CLI でインストールの確認が出ることはなくなりました。',
+      },
+      {
+        'zh-TW': '狀態列的後端彈出視窗（標題、連線狀態、重新啟動／啟動／停止）和流程進度標籤（階段 N / M、已完成／已中止）現在會依介面語言顯示，不再出現英文。',
+        'en-US': 'The status bar’s backend popover (title, connection state, Restart/Start/Stop) and pipeline pill (Stage N / M, completed/aborted) are now translated in Traditional Chinese and Japanese.',
+        'ja-JP': 'ステータスバーのバックエンドのポップオーバー（タイトル、接続状態、再起動／開始／停止）とパイプラインの進行状況（ステージ N / M、完了／中止）が日本語で表示されるようになり、英語のままにならなくなりました。',
+      },
+      {
+        'zh-TW': 'pane 在儲存庫的子資料夾裡工作時，Plan 和 pipeline 也能正常運作。',
+        'en-US': 'Plans and pipelines work correctly when a pane works in a subfolder of a repository.',
+        'ja-JP': 'ペインがリポジトリのサブフォルダーで作業しているときも、Plan とパイプラインが正しく動作するようになりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.21',
     title: {
       'zh-TW': '點一下就切換所有 pane 的帳號、Guard 可放行信任的指令、配對失敗會說原因',
