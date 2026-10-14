@@ -47,6 +47,19 @@ _MUTATING_PLAN_METHODS = frozenset({
     "plans.update_todo",
     "plans.add_note",
 })
+# Failures that mean no Host session can serve the call. They stay failures
+# (no local fallback without the Host's disposition); the hint tells the
+# agent what the user has to do. Codes are passed through unchanged.
+_NO_HOST_SESSION_HINTS = {
+    "host_unavailable": (
+        " - the Navide app is not running or has no Host session;"
+        " open Navide and retry."
+    ),
+    "BACKEND_UNAVAILABLE": (
+        " - the Plans backend in the Navide app is not ready;"
+        " open Navide (or reopen its Plans view) and retry."
+    ),
+}
 
 
 async def _host_agent_plan_call(
@@ -95,9 +108,10 @@ async def _host_agent_plan_call(
         # from an error code. It is required for both the read-only recovery
         # path and every mutation path.
         return _NO_HOST_ROUTE
+    code = error_code if isinstance(error_code, str) else "BACKEND_UNAVAILABLE"
     raise FsError(
-        str(message or "production Plans backend request was denied"),
-        code=error_code if isinstance(error_code, str) else "BACKEND_UNAVAILABLE",
+        str(message or "production Plans backend request was denied") + _NO_HOST_SESSION_HINTS.get(code, ""),
+        code=code,
     )
 
 
