@@ -1011,15 +1011,20 @@ def _write_meta_for_path(
 
 
 def _todo_summary(meta: dict[str, Any]) -> dict[str, Any]:
+    # Same shape as the MCP fallback's summary (plan_tools._todo_summary):
+    # awaiting_user counts unfinished todos only the user can do.
     counts: dict[str, int] = {}
     total = 0
+    awaiting_user = 0
     for todo in meta.get("todos", []):
         if not _is_record(todo):
             continue
         total += 1
         status = todo.get("status") if isinstance(todo.get("status"), str) else "unknown"
         counts[status or "unknown"] = counts.get(status or "unknown", 0) + 1
-    return {"total": total, "by_status": counts}
+        if todo.get("owner") == "user" and status not in ("done", "skipped"):
+            awaiting_user += 1
+    return {"total": total, "by_status": counts, "awaiting_user": awaiting_user}
 
 
 def _slug(value: str) -> str:
@@ -1154,7 +1159,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": rel_dir.rsplit("/", 1)[-1],
                 "stage": None,
                 "overview": "",
-                "todos": {"total": 0, "by_status": {}},
+                "todos": {"total": 0, "by_status": {}, "awaiting_user": 0},
                 "mtime": None,
                 "kind": "unreadable",
                 "meta": None,
@@ -1208,7 +1213,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                         "name": name,
                         "stage": None,
                         "overview": "",
-                        "todos": {"total": 0, "by_status": {}},
+                        "todos": {"total": 0, "by_status": {}, "awaiting_user": 0},
                         "mtime": None,
                         "kind": "unreadable",
                         "meta": None,
@@ -1222,7 +1227,7 @@ def _list_plans(origin: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": meta.get("name") if meta is not None else name,
                 "stage": meta.get("stage") if meta is not None else None,
                 "overview": meta.get("overview", "") if meta is not None else "",
-                "todos": _todo_summary(meta) if meta is not None else {"total": 0, "by_status": {}},
+                "todos": _todo_summary(meta) if meta is not None else {"total": 0, "by_status": {}, "awaiting_user": 0},
                 "mtime": info["mtime"],
                 "kind": "plan" if meta is not None else "document",
                 "meta": meta,

@@ -526,7 +526,7 @@ def test_lists_metadata_less_documents_and_promotes_markdown_without_corrupting_
             "name": "README.md",
             "stage": None,
             "overview": "",
-            "todos": {"total": 0, "by_status": {}},
+            "todos": {"total": 0, "by_status": {}, "awaiting_user": 0},
             "mtime": 100.0,
             "kind": "document",
             "meta": None,
@@ -884,7 +884,7 @@ def test_lists_and_reads_legacy_plans_across_doc_dirs(
             "name": "Legacy Cursor Feature",
             "stage": "done",
             "overview": "A legacy feature plan",
-            "todos": {"total": 1, "by_status": {"done": 1}},
+            "todos": {"total": 1, "by_status": {"done": 1}, "awaiting_user": 0},
             "mtime": 200.0,
             "kind": "plan",
             "meta": {
@@ -1530,7 +1530,7 @@ def test_an_oversized_list_is_paged_and_never_kills_the_child(
     # What an agent's plan_list needs survives the trim, for every entry.
     for entry in trimmed:
         assert {"rel_path", "name", "stage", "overview", "todos", "kind", "mtime"} <= set(entry)
-        assert set(entry["todos"]) >= {"total", "by_status"}
+        assert set(entry["todos"]) >= {"total", "by_status", "awaiting_user"}
     by_path = {entry["rel_path"]: entry for entry in trimmed}
     assert by_path[".agent-team/plans/plan-0007_abcdef.html"]["name"] == "Plan 0007"
     assert by_path[".agent-team/plans/broken-list_abcdef.html"]["reason"] == "plan-meta is not valid JSON"
