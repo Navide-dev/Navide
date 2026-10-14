@@ -149,7 +149,11 @@ size:
   `overview`, `todos`, `mtime`. When a workspace has so many plans that the full
   list would exceed one 1 MiB backend message (roughly 700 KB of listing), each
   entry's `meta` is dropped to null and everything above is kept, so nothing is
-  ever left out; the Plans view pages the list and always has full `meta`.
+  ever left out. The Plans view pages the list instead; each paged entry's
+  `meta` carries the fields the list shows (name, stage, overview, archivedAt,
+  todos with their owner) but not `reviewNotes`, which are read with the
+  document. An entry too big for one page arrives with `meta` null and keeps
+  its `todos` counts, including `awaiting_user`.
 - A document whose `plan-meta` is missing or broken is still listed, marked
   "Needs attention" with the reason (`kind: "document"`, `reason`), and can be
   opened; fix the block to make it a plan again. A file that cannot be read at
