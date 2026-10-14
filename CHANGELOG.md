@@ -4,6 +4,10 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [0.2.22] — 2026-10-14 — signed release
 
+### Added
+
+- **Voice readback** (off by default): Navide speaks short notices in the system voice, "<pane> 完成了" when a pane finishes and "<pane> 需要你回答" when it needs an answer, only for panes marked with 🔊. Esc or a shortcut stops speech. Turn it on in Settings › Voice; the new "Voice model" row shows whether the 美佳 Premium voice is installed, and its Download button opens macOS System Settings to get it (PR pending).
+
 ### Changed
 
 - Settings: the status badges, keyboard shortcuts and analyzer pages are polished further (#215, #219). Disabled Reset buttons keep readable text, the keyboard shortcuts page uses outlined icons instead of emoji with a visible legend under the toolbar, the analyzer has one primary button per page, and status badge descriptions and tags wrap instead of being cut off (most visible in ja-JP).

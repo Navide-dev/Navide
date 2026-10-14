@@ -119,6 +119,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
     },
     highlights: [
       {
+        'zh-TW': '語音朗讀：Navide 可以用系統語音唸出簡短通知，pane 完成時唸「<pane> 完成了」，需要你回答時唸「<pane> 需要你回答」。只有標上 🔊 的 pane 會發聲，按 Esc 或快速鍵就能停止。預設關閉，到設定 › 語音開啟；新的「語音模型」一列會顯示是否已安裝美佳 Premium 語音，按「下載」會開啟 macOS 系統設定取得。',
+        'en-US': 'Voice readback: Navide can speak short notices in the system voice — “<pane> is done” when a pane finishes and “<pane> needs your answer” when it needs one. Only panes you mark with 🔊 speak, and Esc or a shortcut stops it. It is off by default; turn it on in Settings › Voice, where the new “Voice model” row shows whether the 美佳 Premium voice is installed and its Download button opens macOS System Settings to get it.',
+        'ja-JP': '音声読み上げ：Navide がシステムの音声で短い通知を読み上げます。ペインが終わると「<pane> 完了しました」、回答が必要なときは「<pane> が回答を待っています」と知らせます。読み上げるのは 🔊 を付けたペインだけで、Esc またはショートカットで止められます。既定ではオフなので、設定 › 音声でオンにしてください。新しい「音声モデル」の行で 美佳 Premium 音声がインストール済みかを確認でき、「ダウンロード」を押すと macOS のシステム設定が開きます。',
+      },
+      {
         'zh-TW': 'Telegram 等頻道聊天：Claude 在閒置時自動壓縮對話後，聊天不會再一直停在「⏳ 仍在執行」。綁定頻道的 pane 用完 Claude 額度時，聊天會收到一次通知並附上重置時間；這則請求會先保留，重置後的回覆照樣會送到聊天。Claude 把一則回覆拆成兩行紀錄時，聊天也不會再多收到一則空白的「（pane 回合結束，沒有文字輸出）」。',
         'en-US': 'Telegram and other channel chats: a chat no longer stays on “⏳ still running” after Claude compacts an idle conversation. When a pane bound to a chat hits its Claude usage limit, the chat is told once, with the reset time; the request stays open, so the reply after the reset still arrives there. When Claude splits one reply into two transcript lines, the chat no longer gets an extra empty “pane turn ended with no text output” reply.',
         'ja-JP': 'Telegram などのチャンネルのチャット：Claude がアイドル中の会話を自動で圧縮したあとも、チャットが「⏳ 実行中」のまま止まらなくなりました。チャットに紐づいたペインが Claude の使用量の上限に達すると、チャットにリセット時刻つきで一度だけ通知します。リクエストは保留されたままなので、リセット後の返信もそのチャットに届きます。Claude が一つの返信を記録の二行に分けたときに、空の「ペインのターンが終了、テキスト出力なし」という返信が余分に届くこともなくなりました。',
