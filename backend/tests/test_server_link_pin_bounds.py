@@ -222,11 +222,24 @@ async def test_lost_confirm_answer_still_promotes_after_its_pin_was_forgotten(kc
     trust_store.load()
     server_link.set_access_token(CONFIG.token)
     ts = TokenServer(legacy=True, confirm="lost-after-apply")
-    server = FakeServer(responder=ts.responder, count=16)
+    # Ordered by an event, not a deadline. The reconnect waits a second, and
+    # the promotion before the second connection's first sessions.sync makes
+    # several trust record writes through worker threads, which a loaded
+    # Windows runner stretched past the five seconds this used to allow. A
+    # link that never gets there is still caught, by pytest-timeout.
+    resynced = asyncio.Event()
+
+    def responder(conn, message):
+        reply = ts.responder(conn, message)
+        if message.get("type") == "sessions.sync" and conn is not server.opened[0]:
+            resynced.set()
+        return reply
+
+    server = FakeServer(responder=responder, count=16)
     link = real_link(server)
     assert await link.start()
     try:
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs), timeout=5)
+        await resynced.wait()
         await _until(lambda: server_link.access_token().startswith("nvd_rotated") and server_link.next_access_token() == "")
         await asyncio.sleep(0.05)
         assert link._trust_locked == ""
