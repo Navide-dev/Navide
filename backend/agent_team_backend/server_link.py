@@ -247,6 +247,10 @@ _ACK_STATES = ("delivered", "failed", "rejected")
 POLICY_SIGNATURE_FIELD = "_sig"
 
 LINK_ENCRYPTION_FAILED = "p2p-encryption-failed"
+#: Refused because the text is a pairing frame, or the address is the pairing
+#: pane. Pairing goes out only through _send_pair_frame, behind the p2p.pair.*
+#: confirmation; the message channel signing one would bypass it (M5).
+LINK_PAIRING_REFUSED = "p2p-pairing-refused"
 #: Refused because this machine cannot read its own trust record. Distinct from
 #: an encryption failure: nothing is wrong with the message, this machine is
 #: simply not in a state where it can tell one sender from another.
@@ -2959,6 +2963,25 @@ class ServerLink:
             return self._unavailable()
         if self._trust_locked:
             return self._trust_refusal()
+        # Signed with this machine's key, a pairing frame sent from here is
+        # one the far side acts on — a `pair-revoked` unpairs it — and this
+        # channel is open to anything holding the ws token: cli_send, a plugin.
+        if (
+            device_pairing.parse(text) is not None
+            or str(to.get("workspace") or "") == PAIRING_WORKSPACE
+            or str(to.get("paneName") or "") == PAIRING_PANE
+        ):
+            log.warning("refusing to send a pairing frame or to the pairing pane as a message")
+            return {
+                "ok": False,
+                "error": {
+                    "code": LINK_PAIRING_REFUSED,
+                    "message": (
+                        "pairing is not sent as a message; use the pairing flow in "
+                        "Navide's account window"
+                    ),
+                },
+            }
         to_device = str(to.get("deviceId") or "")
         try:
             body = await self._sealed_for(to_device, text)

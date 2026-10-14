@@ -762,9 +762,18 @@ def resolve(from_pane_id: str, to: str) -> ResolveResult:
     device, rest = _split_device_segment(target)
     if device:
         if not is_local_device(device):
-            return _unknown_device(device, target)
+            # Local first, here too (M4): a UUID-shaped folder is common on this
+            # platform (`/var/folders/…/T/<uuid>/`, app containers, worktrees),
+            # and `<uuid>/proj/reviewer` naming a pane that exists on this
+            # machine must not leave it.
+            local = _resolve_here(from_pane_id, target)
+            return local if local.pane is not None else _unknown_device(device, target)
         target = rest
+    return _resolve_here(from_pane_id, target)
 
+
+def _resolve_here(from_pane_id: str, target: str) -> ResolveResult:
+    """`resolve` for a target with no device segment left in it."""
     purge_expired()
     sender = _PANES.get(from_pane_id)
 
