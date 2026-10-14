@@ -1442,6 +1442,7 @@ SPEC = VendorSpec(
         ),
         flag="--mcp-config",
         flag_accepts_path=True,
+        flag_file_prefix="",
     ),
     # An `asyncRewake` hook: it runs in the background, and exiting 2 wakes the
     # agent with its stderr shown as a system reminder — even when the session

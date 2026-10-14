@@ -386,6 +386,14 @@ class _Caller:
     pane_id: str = ""
 
 
+def _bearer(request: Any) -> str:
+    """The token of an ``Authorization: Bearer`` header, or ""."""
+    headers = getattr(request, "headers", None)
+    value = str(headers.get("authorization") or "") if headers is not None else ""
+    scheme, _, token = value.partition(" ")
+    return token.strip() if scheme.lower() == "bearer" else ""
+
+
 def _resolve_caller(ctx: Context) -> _Caller:
     """Validate the request's credential (pane / host / external).
 
@@ -393,7 +401,9 @@ def _resolve_caller(ctx: Context) -> _Caller:
     written CLI config without a known pane id instead carries
     `?client=host&t=<internal token>` (see mcp_wiring.plan_mcp_url); an
     external client carries `?client=external&t=<external token>`, accepted
-    only while auth.external_enabled() is True. Raises CallerUnknown
+    only while auth.external_enabled() is True. The token may instead arrive
+    as an `Authorization: Bearer` header (codex reads it from its spawn env,
+    so it stays out of the command line). Raises CallerUnknown
     with a caller-facing message when none of these validate.
 
     For the pane kind specifically: the id is fixed at spawn time while a
@@ -420,7 +430,7 @@ def _resolve_caller(ctx: Context) -> _Caller:
     params = getattr(request, "query_params", None)
     if params is None:
         raise CallerUnknown(_UNWIRED)
-    token = str(params.get("t") or "")
+    token = str(params.get("t") or "") or _bearer(request)
     client = str(params.get("client") or "")
     if client == "host":
         if not secrets.compare_digest(token, auth.internal_token()):

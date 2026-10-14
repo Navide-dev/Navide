@@ -210,12 +210,14 @@ async def test_codex_flags_and_config_overrides_stay_separate() -> None:
 
     assert "codex" in argv
     assert flag in argv
-    # Two session hooks plus the Navide MCP server, each a `-c <value>` pair.
-    assert argv.count("-c") == 3, argv
+    # Two session hooks plus the Navide MCP server's URL and the variable its
+    # credential is read from (never argv), each a `-c <value>` pair.
+    assert argv.count("-c") == 4, argv
     values = [argv[i + 1] for i, token in enumerate(argv) if token == "-c"]
     assert any(value.startswith("hooks.SessionStart=") for value in values), argv
     assert any(value.startswith("hooks.PreToolUse=") for value in values), argv
     assert any(value.startswith("mcp_servers.navide.url=") for value in values), argv
+    assert any(value.startswith("mcp_servers.navide.bearer_token_env_var=") for value in values), argv
     # The flag never absorbed the following `-c`.
     assert not any(token != flag and token.startswith(flag) for token in argv), argv
 
@@ -271,7 +273,7 @@ async def test_codex_launch_really_starts_a_cli_that_sees_separate_arguments(tmp
 
     assert "codex" in argv, argv
     assert MARKER in argv, argv
-    assert argv.count("-c") == 3, argv
+    assert argv.count("-c") == 4, argv
     # Each `-c` carries exactly one TOML override, never a merged bundle.
     values = [argv[i + 1] for i, token in enumerate(argv) if token == "-c"]
     assert all(value.startswith(("hooks.", "mcp_servers.")) for value in values), argv
