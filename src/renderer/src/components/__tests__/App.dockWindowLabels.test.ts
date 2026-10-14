@@ -80,7 +80,7 @@ describe('a live embedded panel is not stamped removed', () => {
   it('reconciles history liveness through historyEntryIsLive, with the roster for panels', () => {
     const fn = body(appSource, 'reconcileSpawnHistoryLiveness')
     expect(fn).toContain('const rosterPaneIds = new Set(remoteTargetByPane.keys())')
-    expect(fn).toContain('if (!e.removedAt && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt')
+    expect(fn).toContain('if (!isHistoryEntryRemoved(e) && !historyEntryIsLive(e, livePaneIds, rosterPaneIds)) e.removedAt = reconciledAt')
     // Everything else about it is as it was.
     expect(fn).toContain('if (isDetachedWindow) return')
     expect(fn).toContain('const livePaneIds = new Set(panes.value.map((p) => p.id))')
