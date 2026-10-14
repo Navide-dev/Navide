@@ -9,6 +9,10 @@ import { onSettingsChanged, settingsGet, settingsSet } from '@navide/plugin-ui/s
 export const HOLD_TO_TALK_COMMAND = 'workbench.action.holdToTalk'
 export const VOICE_INPUT_ENABLED_KEY = 'agentTeam.voiceInputEnabled'
 export const VOICE_READBACK_ENABLED_KEY = 'agentTeam.voiceReadbackEnabled'
+// Read-aloud voice ('' = the best voice for the UI language) and speed.
+export const VOICE_READBACK_VOICE_KEY = 'agentTeam.voiceReadbackVoice'
+export const VOICE_READBACK_RATE_KEY = 'agentTeam.voiceReadbackRate'
+export const VOICE_READBACK_RATES = [0.8, 1, 1.2, 1.5] as const
 // Chosen microphone: '' is the system default. The label is saved with it
 // because Chromium hashes deviceIds per origin (dev vs packaged differ), so
 // the label is what lets a saved choice be found again.
@@ -46,6 +50,11 @@ function readMode(): VoiceRecordingMode {
   return (VOICE_RECORDING_MODES as readonly unknown[]).includes(v) ? (v as VoiceRecordingMode) : 'hold-tap'
 }
 
+function readRate(): number {
+  const v = settingsGet<unknown>(VOICE_READBACK_RATE_KEY, 1)
+  return (VOICE_READBACK_RATES as readonly unknown[]).includes(v) ? (v as number) : 1
+}
+
 function readScript(): VoiceScript {
   const v = settingsGet<unknown>(VOICE_SCRIPT_KEY, 'hant-tw')
   return (VOICE_SCRIPTS as readonly unknown[]).includes(v) ? (v as VoiceScript) : 'hant-tw'
@@ -53,6 +62,8 @@ function readScript(): VoiceScript {
 
 const voiceInputEnabled = ref(read(VOICE_INPUT_ENABLED_KEY))
 const voiceReadbackEnabled = ref(read(VOICE_READBACK_ENABLED_KEY))
+const voiceReadbackVoice = ref(readString(VOICE_READBACK_VOICE_KEY))
+const voiceReadbackRate = ref(readRate())
 const voiceInputDeviceId = ref(readString(VOICE_INPUT_DEVICE_KEY))
 const voiceInputDeviceLabel = ref(readString(VOICE_INPUT_DEVICE_LABEL_KEY))
 const voiceRecordingMode = ref<VoiceRecordingMode>(readMode())
@@ -67,6 +78,8 @@ function ensureSubscription(): void {
   unsubscribe = onSettingsChanged((keys) => {
     if (keys.includes(VOICE_INPUT_ENABLED_KEY)) voiceInputEnabled.value = read(VOICE_INPUT_ENABLED_KEY)
     if (keys.includes(VOICE_READBACK_ENABLED_KEY)) voiceReadbackEnabled.value = read(VOICE_READBACK_ENABLED_KEY)
+    if (keys.includes(VOICE_READBACK_VOICE_KEY)) voiceReadbackVoice.value = readString(VOICE_READBACK_VOICE_KEY)
+    if (keys.includes(VOICE_READBACK_RATE_KEY)) voiceReadbackRate.value = readRate()
     if (keys.includes(VOICE_INPUT_DEVICE_KEY)) voiceInputDeviceId.value = readString(VOICE_INPUT_DEVICE_KEY)
     if (keys.includes(VOICE_INPUT_DEVICE_LABEL_KEY)) voiceInputDeviceLabel.value = readString(VOICE_INPUT_DEVICE_LABEL_KEY)
     if (keys.includes(VOICE_RECORDING_MODE_KEY)) voiceRecordingMode.value = readMode()
@@ -78,6 +91,8 @@ function ensureSubscription(): void {
 export function useVoiceSettings(): {
   voiceInputEnabled: Readonly<Ref<boolean>>
   voiceReadbackEnabled: Readonly<Ref<boolean>>
+  voiceReadbackVoice: Readonly<Ref<string>>
+  voiceReadbackRate: Readonly<Ref<number>>
   voiceInputDeviceId: Readonly<Ref<string>>
   voiceInputDeviceLabel: Readonly<Ref<string>>
   voiceRecordingMode: Readonly<Ref<VoiceRecordingMode>>
@@ -85,6 +100,8 @@ export function useVoiceSettings(): {
   voiceFnKeyEnabled: Readonly<Ref<boolean>>
   setVoiceInputEnabled: (on: boolean) => void
   setVoiceReadbackEnabled: (on: boolean) => void
+  setVoiceReadbackVoice: (voiceURI: string) => void
+  setVoiceReadbackRate: (rate: number) => void
   setVoiceInputDevice: (id: string, label: string) => void
   setVoiceRecordingMode: (mode: VoiceRecordingMode) => void
   setVoiceScript: (script: VoiceScript) => void
@@ -94,6 +111,8 @@ export function useVoiceSettings(): {
   return {
     voiceInputEnabled,
     voiceReadbackEnabled,
+    voiceReadbackVoice,
+    voiceReadbackRate,
     voiceInputDeviceId,
     voiceInputDeviceLabel,
     voiceRecordingMode,
@@ -106,6 +125,14 @@ export function useVoiceSettings(): {
     setVoiceReadbackEnabled: (on) => {
       voiceReadbackEnabled.value = on
       settingsSet(VOICE_READBACK_ENABLED_KEY, on)
+    },
+    setVoiceReadbackVoice: (voiceURI) => {
+      voiceReadbackVoice.value = voiceURI
+      settingsSet(VOICE_READBACK_VOICE_KEY, voiceURI)
+    },
+    setVoiceReadbackRate: (rate) => {
+      voiceReadbackRate.value = rate
+      settingsSet(VOICE_READBACK_RATE_KEY, rate)
     },
     setVoiceInputDevice: (id, label) => {
       voiceInputDeviceId.value = id
