@@ -740,35 +740,17 @@ onMounted(() => {
           :cli-profiles="cliProfiles"
           :pane-id="paneId"
           :pane-profile-id="profileId"
+          :pane-follow="accountFollow"
+          @toggle-pane-follow="emit('toggle-account-follow')"
         />
-        <button
-          v-if="accountFollow !== undefined"
-          type="button"
-          class="account-follow-toggle"
-          :class="{ on: accountFollow === 'follow' }"
-          data-testid="account-follow-toggle"
-          :aria-pressed="accountFollow === 'fixed' ? 'true' : 'false'"
-          :aria-label="$t('account-follow.toggle-label')"
-          :title="$t(accountFollow === 'follow' ? 'account-follow.toggle-follow-tooltip' : 'account-follow.toggle-fixed-tooltip')"
-          @click.stop="emit('toggle-account-follow')"
-        >
-          <!-- Following: a link to the default account. Fixed: a pin. -->
-          <svg v-if="accountFollow === 'follow'" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-            <path
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"
-            />
-          </svg>
-          <svg v-else viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M10.6 1.2a1 1 0 0 1 1.4 0l2.8 2.8a1 1 0 0 1 0 1.4l-1.1 1.1a1 1 0 0 1-1 .25l-2.2 2.2.2 2.4a1 1 0 0 1-.3.8l-.6.6a.6.6 0 0 1-.85 0L6.4 10.2l-3.6 3.6a.6.6 0 1 1-.85-.85l3.6-3.6-2.55-2.55a.6.6 0 0 1 0-.85l.6-.6a1 1 0 0 1 .8-.3l2.4.2 2.2-2.2a1 1 0 0 1 .25-1z"
-            />
-          </svg>
-        </button>
+        <span
+          v-if="accountFollow === 'fixed'"
+          class="account-pin-indicator"
+          data-testid="account-pin-indicator"
+          role="img"
+          :title="$t('account-follow.pinned-indicator-tooltip')"
+          :aria-label="$t('account-follow.pinned-indicator-label')"
+        >📌</span>
         <PaneChannelButton :pane-id="paneId" :pane-name="title" :agent-key="agentKey" />
       </div>
       <div v-if="subtitle" class="header-sub" v-truncate>{{ subtitle }}</div>
@@ -1074,31 +1056,14 @@ onMounted(() => {
   flex-shrink: 0;
   cursor: pointer;
 }
-/* Beside the account badge: following the account (accent link, the default)
-   or fixed to its account's own config dir (muted pin). The button is the
-   "fix" toggle, so it reads pressed when fixed. */
-.account-follow-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+/* Beside the account badge when the pane is fixed to its account's own
+   config dir; following (the default) shows nothing. The toggle is in the
+   badge's popover. */
+.account-pin-indicator {
   flex-shrink: 0;
-  width: 20px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.account-follow-toggle:hover {
-  color: var(--text-primary);
-  border-color: var(--border-muted);
-}
-.account-follow-toggle.on {
-  color: var(--accent-fg);
-  background: var(--accent-subtle);
-  border-color: var(--accent-muted);
+  font-size: var(--font-3xs);
+  line-height: 1;
+  cursor: default;
 }
 /* Beside the quota badge, with the follow-switch flag on: reopen the pane
    on another account. Quieter than the badge it sits next to. */

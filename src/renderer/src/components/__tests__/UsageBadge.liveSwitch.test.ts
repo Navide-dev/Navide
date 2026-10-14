@@ -103,7 +103,7 @@ function makeProfiles(opts: {
 
 function mountBadge(
   fake: ReturnType<typeof makeProfiles>['fake'],
-  props: { paneId?: string; paneProfileId?: string } = {},
+  props: { paneId?: string; paneProfileId?: string; paneFollow?: 'follow' | 'fixed' } = {},
   provide: { actions?: CliAccountDirActions; switchHandler?: unknown; follow?: AccountFollowActions; pins?: AccountPinActions } = {},
 ): VueWrapper {
   return mount(UsageBadge, {
@@ -285,5 +285,59 @@ describe('UsageBadge – scheme A not in effect: exactly main', () => {
     await vi.runAllTimersAsync()
     expect(setPaneDefault).toHaveBeenCalledWith('claude', 'bbbb')
     expect(switchHandler).not.toHaveBeenCalled()
+  })
+})
+
+describe('UsageBadge – this pane\'s "follow account switch" toggle', () => {
+  function mountPaneFollow(paneFollow?: 'follow' | 'fixed') {
+    const profiles = makeProfiles({ liveDefault: 'aaaa', dirs: DIRS })
+    return mountBadge(profiles.fake, { paneId: 'p1', paneProfileId: 'aaaa', paneFollow }, {
+      actions: actions(), switchHandler: vi.fn(async () => ({ ok: true })), follow: follow(), pins: pins(1),
+    })
+  }
+
+  it('is absent when the window does not offer the flag for this pane', async () => {
+    const w = mountPaneFollow(undefined)
+    await open(w)
+    expect(w.find('[data-testid="pane-follow-switch"]').exists()).toBe(false)
+  })
+
+  it('sits above the account list, on for a following pane, with its label and hint', async () => {
+    const w = mountPaneFollow('follow')
+    await open(w)
+    const sw = w.get('[data-testid="pane-follow-switch"]')
+    expect(sw.attributes('role')).toBe('switch')
+    expect(sw.attributes('aria-checked')).toBe('true')
+    const rowEl = w.get('.usage-pane-follow')
+    expect(rowEl.text()).toContain(i18n.global.t('account-follow.follow-switch-label'))
+    expect(rowEl.text()).toContain(i18n.global.t('account-follow.follow-switch-hint'))
+    const html = w.html()
+    expect(html.indexOf('usage-pane-follow')).toBeLessThan(html.indexOf('usage-acct-list'))
+  })
+
+  it('is off for a fixed pane', async () => {
+    const w = mountPaneFollow('fixed')
+    await open(w)
+    expect(w.get('[data-testid="pane-follow-switch"]').attributes('aria-checked')).toBe('false')
+  })
+
+  it('asks the pane to flip the flag on click, and touches nothing else', async () => {
+    const profiles = makeProfiles({ liveDefault: 'aaaa', dirs: DIRS })
+    const switchHandler = vi.fn(async () => ({ ok: true }))
+    const fol = follow()
+    const pin = pins(1)
+    const w = mountBadge(profiles.fake, { paneId: 'p1', paneProfileId: 'aaaa', paneFollow: 'follow' }, {
+      actions: actions(), switchHandler, follow: fol, pins: pin,
+    })
+    await open(w)
+    await w.get('[data-testid="pane-follow-switch"]').trigger('click')
+    await w.setProps({ paneFollow: 'fixed' })
+    await w.get('[data-testid="pane-follow-switch"]').trigger('click')
+    await vi.runAllTimersAsync()
+    expect(w.emitted('toggle-pane-follow')).toHaveLength(2)
+    expect(switchHandler).not.toHaveBeenCalled()
+    expect(profiles.setDefault).not.toHaveBeenCalled()
+    expect(pin.unpinAll).not.toHaveBeenCalled()
+    expect(fol.move).not.toHaveBeenCalled()
   })
 })
