@@ -416,12 +416,16 @@ const visibleReference = computed(() => {
                         v-else
                         class="kse-locked"
                         :title="$t('settings.keybindings.protected-hint')"
-                      >🔒</span>
+                        :aria-label="$t('settings.keybindings.protected-hint')"
+                        role="img"
+                      ><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></span>
                       <span
                         v-if="MENU_OWNED_SPECS.has(chip.key)"
                         class="kse-menu-owned"
                         :title="$t('settings.keybindings.menu-owned-hint')"
-                      >⚠</span>
+                        :aria-label="$t('settings.keybindings.menu-owned-hint')"
+                        role="img"
+                      ><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5 14 13H2Z"/><path d="M8 6.5v3M8 11.5v.01"/></svg></span>
                     </span>
                   </template>
 
@@ -880,17 +884,19 @@ const visibleReference = computed(() => {
 }
 
 .kse-locked {
+  display: inline-flex;
+  align-items: center;
   padding: 2px 6px;
-  font-size: var(--font-3xs);
+  color: var(--text-secondary);
   cursor: help;
-  opacity: 0.7;
 }
 
 /* Sits next to the cap, not in place of the remove button: the binding is still
    editable, it just cannot be cleared by unbinding it here. */
 .kse-menu-owned {
+  display: inline-flex;
+  align-items: center;
   padding: 2px 4px;
-  font-size: var(--font-3xs);
   cursor: help;
   color: var(--warn, #d29922);
 }
