@@ -164,7 +164,16 @@ def review_cache_bytes() -> int:
     root = _stash_dir() / "files"
     if not root.is_dir():
         return 0
-    return sum(p.stat().st_size for p in root.rglob("*") if p.is_file())
+    total = 0
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        try:
+            total += p.stat().st_size
+        except FileNotFoundError:
+            # A review download renames or removes its temps while this runs.
+            continue
+    return total
 
 
 def _stash_path(scope: str, item_id: str) -> Path:
