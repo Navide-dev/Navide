@@ -2446,6 +2446,11 @@ class ChannelManager:
         pending = self._pending.pop(pane_id, None)
         if pending and pending.task:
             pending.task.cancel()
+        # A run held for the text half of its turn end goes too: what the pane says next is
+        # no longer that chat's to read (unbound, or the pane went away).
+        held = self._textless.pop(pane_id, None)
+        if held is not None:
+            held[1].cancel()
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)
