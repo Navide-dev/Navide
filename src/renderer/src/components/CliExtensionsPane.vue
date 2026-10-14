@@ -109,7 +109,7 @@ onMounted(() => { void load() })
       {{ t('settings.cliExtensions.tabInstalled') }}
     </button>
     <button type="button" role="tab" class="cli-ext-tab" data-tab="convenience" :aria-selected="tab === 'convenience'" @click="tab = 'convenience'">
-      {{ t('convenience.overview.title') }}
+      {{ t('settings.cliExtensions.tabConvenience') }}
     </button>
   </div>
   <div v-if="tab === 'convenience'" class="cli-ext-convenience">
@@ -214,7 +214,7 @@ onMounted(() => { void load() })
 /* A scrolling flex column must not squeeze its rows to fit. */
 .cli-ext > * { flex-shrink: 0; }
 .cli-ext-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
-.cli-ext-intro, .cli-ext-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); }
+.cli-ext-intro, .cli-ext-note { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .cli-ext-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .cli-ext-counts { flex: 1 1 240px; min-width: 0; font-size: var(--font-sm); font-weight: 600; color: var(--text-bright); }
 .cli-ext-rescan { flex-shrink: 0; font: inherit; font-size: var(--font-2xs); color: var(--text-primary); background: var(--bg-muted); border: 1px solid var(--border-default); border-radius: var(--radius-control); padding: 4px 10px; cursor: pointer; }

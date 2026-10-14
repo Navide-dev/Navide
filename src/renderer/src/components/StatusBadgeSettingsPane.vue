@@ -293,6 +293,7 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
   color: var(--text-secondary);
   line-height: 1.4;
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .sb-field {
