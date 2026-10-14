@@ -232,6 +232,20 @@ async def _plan_workspace(caller: _Caller, workspace_path: str) -> str:
     return await asyncio.to_thread(resolve_plan_root, chosen)
 
 
+async def _run_workspace(caller: _Caller, workspace_path: str) -> str:
+    """The workspace a pipeline run is recorded under: the argument, else the caller's pane.
+
+    Deliberately NOT resolve_plan_root. The window records a run, and answers
+    ui.pipeline.*, under the workspace it has open; rewriting a subfolder pane's
+    path to its git root made pipeline_status miss the run and sent window
+    requests to a path no window owns.
+    """
+    chosen = workspace_path or _caller_workspace(caller)
+    if not chosen:
+        raise FsError(_WORKSPACE_REQUIRED)
+    return chosen
+
+
 def _norm_workspace(path: str) -> str:
     """Comparable form of a workspace path (symlinks + trailing slash)."""
     try:
@@ -6200,7 +6214,7 @@ async def pipeline_status(ctx: Context, workspace_path: str = "") -> dict[str, A
     about another project.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await asyncio.to_thread(_pipeline_status_of, workspace_path)
 
 
@@ -7125,7 +7139,7 @@ async def pipeline_start(
     a run in another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     args: dict[str, Any] = {"task": str(task or "")}
     pipeline_id = str(pipeline_id or "").strip()
     if pipeline_id:
@@ -7168,7 +7182,7 @@ async def pipeline_abort(ctx: Context, workspace_path: str = "") -> dict[str, An
     a run in another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.abort", args={}
     )
@@ -7236,10 +7250,9 @@ async def _definition_workspace(caller: _Caller, workspace_path: str) -> str:
     blank workspace_path as "no run to check", and a host or external caller
     with no pane of its own has exactly that. Passing one turns the guards on.
     """
-    chosen = workspace_path or _caller_workspace(caller)
-    if not chosen:
-        return ""
-    return await asyncio.to_thread(resolve_plan_root, chosen)
+    # Not resolve_plan_root: the run these guards look for is recorded under
+    # the window's own workspace (see _run_workspace).
+    return workspace_path or _caller_workspace(caller)
 
 
 def _run_is_active(workspace_path: str) -> bool:
@@ -7874,7 +7887,7 @@ async def pipeline_next(ctx: Context, workspace_path: str = "") -> dict[str, Any
     a run in another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.next", args={}
     )
@@ -7903,7 +7916,7 @@ async def pipeline_resume(ctx: Context, workspace_path: str = "") -> dict[str, A
     resume a run in another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.resume", args={}
     )
@@ -7930,7 +7943,7 @@ async def pipeline_reset(ctx: Context, workspace_path: str = "") -> dict[str, An
     another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.reset", args={}
     )
@@ -7958,7 +7971,7 @@ async def pipeline_restart(ctx: Context, workspace_path: str = "") -> dict[str, 
     restart a run in another project's window.
     """
     caller = _resolve_caller(ctx)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     return await _ui_request(
         workspace_path, "invoke", caller=caller, action="ui.pipeline.restart", args={}
     )
@@ -7999,7 +8012,7 @@ async def pipeline_gate(
     op = str(op or "").strip()
     if op not in _PIPELINE_GATE_OPS:
         return _bad_op(op, _PIPELINE_GATE_OPS)
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     args: dict[str, Any] = {}
     if node_id:
         args["nodeId"] = str(node_id)
@@ -8036,7 +8049,7 @@ async def pipeline_restart_from(
     caller = _resolve_caller(ctx)
     if not str(node_id or "").strip():
         return _missing_arg("restart_from", "node_id")
-    workspace_path = await _plan_workspace(caller, workspace_path)
+    workspace_path = await _run_workspace(caller, workspace_path)
     args: dict[str, Any] = {"nodeId": str(node_id).strip()}
     if task:
         args["task"] = str(task)
