@@ -205,6 +205,26 @@ def test_the_review_cache_is_capped_across_holds(tmp_path, monkeypatch, blobs, a
     assert _held(waiting[0]["itemId"])[0]["displayable"] is True
 
 
+def test_the_review_cache_size_skips_a_file_that_vanishes_mid_count(monkeypatch):
+    # A review download on the loop renames and removes its temps while an
+    # apply on a worker thread sizes the cache; that must not refuse the apply.
+    hold_dir = sync_approvals._stash_dir() / "files" / "skill-files" / "somehold"
+    hold_dir.mkdir(parents=True)
+    (hold_dir / "sealed").write_bytes(b"x" * 10)
+    temp = hold_dir / "fetch-abc.tmp.part"
+    temp.write_bytes(b"y" * 5)
+    real = type(temp).is_file
+
+    def spy(self):
+        found = real(self)
+        if self == temp:
+            self.unlink()                                     # gone after the check, before stat
+        return found
+
+    monkeypatch.setattr(type(temp), "is_file", spy)
+    assert sync_approvals.review_cache_bytes() == 10
+
+
 def test_review_temp_files_are_private_and_leftovers_are_cleaned(tmp_path, monkeypatch, blobs, account_key):
     server = FakeServer()
     a = Device(tmp_path, "a", server, blobs)
