@@ -1912,6 +1912,9 @@ def _handle(frame: Any) -> None:
             if not _is_record(root) or not isinstance(root.get("root"), str):
                 raise BridgeFailure("PROTOCOL_ERROR")
             result = {"ok": True, "root": root["root"]}
+        # "plans.list_docs" is accepted as an alias of plans.list. Nothing in
+        # this repo sends it to the child today (the legacy renderer's
+        # plans.list_docs goes to the core backend); kept, not removed.
         elif name in {"plans.list", "plans.list_docs"}:
             if arguments and set(arguments) != {"offset"}:
                 raise BridgeFailure("INVALID_ARGUMENT")

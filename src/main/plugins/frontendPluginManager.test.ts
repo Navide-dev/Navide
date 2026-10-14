@@ -3346,6 +3346,36 @@ describe('Plans private filesystem grant revalidation', () => {
 
       activeGrant = null
       await expect(resolveRoot(user)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+
+      // The long-lived watcher is gated the same way: without the Grant it is
+      // refused at once instead of watching the workspace.
+      const aborter = new AbortController()
+      const watched = dispatcher.dispatch(
+        { id: 'bridge-watch-1', origin: { kind: 'subscription', requestId: 'sub-1' }, port: 'filesystem', operation: 'watch', arguments: { rel_path: '' } },
+        {
+          runtime: {
+            pluginId: PLANS_PLUGIN_ID,
+            packageVersion,
+            workspaceId: mgr.workspaceIdForPath(workspacePath),
+            instanceId: 'plans-view-1',
+            contributionKey: 'navide.plans.window',
+            hostWindowId: 'window-1',
+            initiator: user,
+          },
+          workspacePath,
+          authorizedPlanRoot: workspacePath,
+          requestId: 'bridge-watch-1',
+          signal: aborter.signal,
+          emit: () => undefined,
+        },
+      )
+      const outcome = await Promise.race([
+        watched.then(() => 'resolved', (error: unknown) => error),
+        new Promise((resolve) => setTimeout(() => resolve('still-watching'), 500)),
+      ])
+      aborter.abort()
+      await watched.catch(() => undefined)
+      expect(outcome).toMatchObject({ code: 'CAPABILITY_DENIED' })
     } finally {
       await mgr.closeBackendPlugins()
     }
