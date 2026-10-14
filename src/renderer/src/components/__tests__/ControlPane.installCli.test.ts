@@ -103,6 +103,37 @@ describe('ControlPane — spawning a CLI that is not installed', () => {
     expect([...(wrapper.vm as any).missingClis]).toEqual(['claude'])
   })
 
+  it('spawns instead of offering the install when the re-detect fails', async () => {
+    // A failed re-detect keeps the old badge, and an old "missing" is exactly
+    // the false miss that kept opening the installer over a working CLI. The
+    // pane's own exit 127 still catches a CLI that really is absent.
+    const mounted = await mountPane(['claude'])
+    wrapper = mounted.wrapper
+    mounted.mock.setRejection('onboarding.status_quick', 'request timed out')
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(wrapper.vm as any).spawn('claude')
+    await flushPromises()
+
+    expect(wrapper.emitted('install-cli')).toBeUndefined()
+    expect(wrapper.emitted('spawn')).toHaveLength(1)
+  })
+
+  it('does not badge a CLI whose presence the backend reports as unknown', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.status_quick', {
+      deps: [{ id: 'claude', group: 'agent_cli', status: 'unknown' }],
+    })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    wrapper = shallowMount(ControlPane as any, {
+      props: props(mock),
+      global: { mocks: { $t: (key: string) => key } },
+    })
+    await flushPromises()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect([...(wrapper.vm as any).missingClis]).toEqual([])
+  })
+
   it('re-detects before offering the install, so a just-finished install still spawns', async () => {
     // The dropdown status is cached for 10s; without the re-detect the user
     // would be shown the install dialog for a CLI they had just installed.

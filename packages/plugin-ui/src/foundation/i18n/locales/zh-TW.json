@@ -9025,7 +9025,8 @@
     "status": {
       "ok": "已安裝",
       "missing": "未安裝",
-      "outdated": "版本過舊"
+      "outdated": "版本過舊",
+      "unknown": "尚未找到"
     },
     "requirements-label": "前置需求",
     "chain-label": "安裝順序",

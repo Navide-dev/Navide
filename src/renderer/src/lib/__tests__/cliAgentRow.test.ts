@@ -69,6 +69,12 @@ describe('cliAgentRowChips', () => {
     expect(chip('install', { install: null })).toBeUndefined()
   })
 
+  it('treats an unknown install like one not probed yet, not as installed', () => {
+    // The quick pass reports "unknown" before the login shell has answered;
+    // a green "Installed" there would vouch for a CLI nobody has found.
+    expect(chip('install', { install: { status: 'unknown', version: '' } })).toBeUndefined()
+  })
+
   it('names the absence of a model flag, and a pick only once there is one', () => {
     expect(chip('model', { supportsModel: false })).toMatchObject({
       tone: 'neutral',
