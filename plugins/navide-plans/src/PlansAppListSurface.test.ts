@@ -36,7 +36,7 @@ const state = vi.hoisted(() => ({
   confirm: vi.fn(async () => true),
   // Plans whose list entry arrives without meta (an entry too big for one
   // page): the backend still says kind 'plan' and, if archived, archivedAt.
-  dropped: {} as Record<string, { name: string; archivedAt?: string }>,
+  dropped: {} as Record<string, { name: string; archivedAt?: string; todos?: Record<string, unknown> }>,
 }))
 
 const awaitingPath = '.agent-team/plans/awaiting-me_a1b2c3.html'
@@ -172,6 +172,7 @@ beforeEach(() => {
                 kind: 'plan',
                 meta: null,
                 ...(dropped.archivedAt ? { archivedAt: dropped.archivedAt } : {}),
+                ...(dropped.todos ? { todos: dropped.todos } : {}),
               }
             }
             const parsed = state.metas[path] as FixtureMeta | null
@@ -266,6 +267,20 @@ describe('Plans list surface — awaiting-you marker', () => {
     const view = await mountPlans()
     expect(rowFor(view, clearPath).find('.plan-chip--awaiting').exists()).toBe(false)
     expect(rowFor(view, documentPath).find('.plan-chip--awaiting').exists()).toBe(false)
+  })
+
+  it('counts from the list summary when an oversized entry arrives without meta', async () => {
+    state.files[droppedActivePath] = '<html><body>huge</body></html>'
+    state.dropped = {
+      [droppedActivePath]: {
+        name: 'Huge plan',
+        todos: { total: 3, by_status: { pending: 2, done: 1 }, awaiting_user: 2 },
+      },
+    }
+    const view = await mountPlans()
+    const chip = rowFor(view, droppedActivePath).find('.plan-chip--awaiting')
+    expect(chip.exists()).toBe(true)
+    expect(chip.text()).toBe('pane.plans.awaiting-you:{"count":2}')
   })
 })
 

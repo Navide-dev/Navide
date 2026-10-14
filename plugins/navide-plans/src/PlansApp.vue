@@ -34,6 +34,7 @@ import { buildPlanRuntimeScript, buildTodoStatusRuntime, createPlanRuntimeMessag
 interface TodoSummary {
   total: number
   by_status: Record<string, number>
+  awaiting_user?: number
 }
 
 interface PlanTodo {
@@ -412,7 +413,10 @@ function planProgress(plan: PlanSummary): { done: number; total: number } {
  *  the retained HTML parser so both carriers count the same way. */
 function planAwaiting(plan: PlanSummary): number {
   const todos = plan.meta?.todos
-  return todos ? htmlPlanAwaitingUser(todos as unknown as RetainedTodo[]) : 0
+  if (todos) return htmlPlanAwaitingUser(todos as unknown as RetainedTodo[])
+  // An entry too big for one list page arrives without meta; the backend's
+  // todo summary still carries the count.
+  return plan.todos?.awaiting_user ?? 0
 }
 
 function progressRatio(plan: PlanSummary): number {
