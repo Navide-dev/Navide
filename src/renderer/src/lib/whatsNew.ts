@@ -113,11 +113,16 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.22',
     title: {
-      'zh-TW': '頻道聊天不再卡在「仍在執行」、額度用完會通知聊天、不再重複詢問安裝 Codex',
-      'en-US': 'Channel Chats No Longer Stuck on “Still Running”, Usage Limit Notices in Chat, and No More Repeated Codex Install Prompts',
-      'ja-JP': 'チャンネルのチャットが「実行中」で止まらなくなり、使用量の上限をチャットに通知、Codex のインストール確認が繰り返されなくなりました',
+      'zh-TW': '設定頁全面整理、語音朗讀通知、頻道聊天不再卡在「仍在執行」',
+      'en-US': 'A Tidier Settings Window, Spoken Notices, and Channel Chats No Longer Stuck on “Still Running”',
+      'ja-JP': '設定画面を全面的に整理、音声による通知の読み上げ、チャンネルのチャットが「実行中」で止まらなくなりました',
     },
     highlights: [
+      {
+        'zh-TW': '設定頁全面整理：狀態徽章、鍵盤快速鍵和分析頁面中，停用的按鈕文字清楚可讀，鍵盤快速鍵改用圖示並附上看得到的說明，每頁只留一個主要按鈕，日文的文字也不會再被截斷。版面、CLI agent 和 CLI 擴充頁面也一併整理：圖示一致、控制項對齊，停用的控制項看得出來，推送標籤改成「推送開啟／推送已關／無推送通道」，分頁名稱縮短為「Navide 做的修改」，分析頁面的按鈕對比更清楚，日文也不會再有單獨掉到下一行的字。',
+        'en-US': 'A tidier Settings window: on the status badges, keyboard shortcuts and analyzer pages, disabled buttons stay readable, keyboard shortcuts use icons with a visible legend instead of emoji, each page has one primary button, and Japanese text is no longer cut off. The layout, CLI agents and CLI extensions pages are tidied up as well: consistent icons and aligned controls, disabled controls you can see, push badges that read “Push on / Push off / No push channel”, a shorter “What Navide changes” tab, better contrast on the analyzer buttons, and Japanese lines that no longer leave a lone character on the next line.',
+        'ja-JP': '設定画面を全面的に整理：ステータスバッジ、キーボードショートカット、分析のページでは、無効なボタンの文字も読みやすくなり、キーボードショートカットは絵文字の代わりにアイコンと見える凡例で表示し、各ページの主ボタンは一つになり、日本語の文字が切れることもなくなりました。レイアウト、CLI エージェント、CLI 拡張機能のページも整えました。アイコンをそろえて操作部品の位置を合わせ、無効な操作部品も見分けられるようにし、プッシュの表示を「プッシュ有効／プッシュ無効／プッシュ非対応」に、タブ名を「Navide による変更」に短くし、分析ページのボタンのコントラストを改善し、日本語で一文字だけ次の行に送られることもなくなりました。',
+      },
       {
         'zh-TW': '語音朗讀：Navide 可以用系統語音唸出簡短通知，pane 完成時唸「<pane> 完成了」，需要你回答時唸「<pane> 需要你回答」。只有標上 🔊 的 pane 會發聲，按 Esc 或快速鍵就能停止。預設關閉，到設定 › 語音開啟；新的「語音模型」一列會顯示是否已安裝美佳 Premium 語音，按「下載」會開啟 macOS 系統設定取得。',
         'en-US': 'Voice readback: Navide can speak short notices in the system voice — “<pane> is done” when a pane finishes and “<pane> needs your answer” when it needs one. Only panes you mark with 🔊 speak, and Esc or a shortcut stops it. It is off by default; turn it on in Settings › Voice, where the new “Voice model” row shows whether the 美佳 Premium voice is installed and its Download button opens macOS System Settings to get it.',
@@ -137,11 +142,6 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'zh-TW': 'CLI 安裝提示的「不要再詢問」勾選框現在一定會出現並記住你的選擇，Codex 的安裝提示不會再一直跳出來。偵測結果不確定時也不會再當成沒安裝，所以用 nvm 或 shell 啟動較慢時，已經裝好的 CLI 不會再跳出安裝提示。',
         'en-US': 'The “Stop asking” box on the CLI install prompt now always shows up and is saved, so the Codex install prompt stops coming back. An uncertain detection result no longer counts as “not installed”, so a CLI that is already installed — common with nvm or a slow shell — no longer gets the install prompt.',
         'ja-JP': 'CLI のインストール確認にある「今後確認しない」のチェックボックスが必ず表示され、選択が保存されるようになりました。Codex のインストール確認が何度も出ることはなくなります。検出結果がはっきりしないときに「未インストール」と扱うこともなくなったため、nvm を使っていたりシェルの起動が遅かったりしても、インストール済みの CLI でインストールの確認が出ることはなくなりました。',
-      },
-      {
-        'zh-TW': '設定的狀態徽章、鍵盤快速鍵和分析頁面再整理過：停用的按鈕文字清楚可讀，鍵盤快速鍵改用圖示並附上看得到的說明，每頁只留一個主要按鈕，日文的文字也不會再被截斷。版面、CLI agent 和 CLI 擴充頁面也一併整理：圖示一致、控制項對齊，停用的控制項看得出來，推送標籤改成「推送開啟／推送已關／無推送通道」，分頁名稱縮短為「Navide 做的修改」，分析頁面的按鈕對比更清楚，日文也不會再有單獨掉到下一行的字。',
-        'en-US': 'Settings: the status badges, keyboard shortcuts and analyzer pages are tidied up again — disabled buttons stay readable, keyboard shortcuts use icons with a visible legend instead of emoji, each page has one primary button, and Japanese text is no longer cut off. The layout, CLI agents and CLI extensions pages are tidied up as well: consistent icons and aligned controls, disabled controls you can see, push badges that read “Push on / Push off / No push channel”, a shorter “What Navide changes” tab, better contrast on the analyzer buttons, and Japanese lines that no longer leave a lone character on the next line.',
-        'ja-JP': '設定のステータスバッジ、キーボードショートカット、分析のページをさらに整えました。無効なボタンの文字も読みやすくなり、キーボードショートカットは絵文字の代わりにアイコンと見える凡例で表示し、各ページの主ボタンは一つになり、日本語の文字が切れることもなくなりました。レイアウト、CLI エージェント、CLI 拡張機能のページも整えました。アイコンをそろえて操作部品の位置を合わせ、無効な操作部品も見分けられるようにし、プッシュの表示を「プッシュ有効／プッシュ無効／プッシュ非対応」に、タブ名を「Navide による変更」に短くし、分析ページのボタンのコントラストを改善し、日本語で一文字だけ次の行に送られることもなくなりました。',
       },
       {
         'zh-TW': '狀態列的後端彈出視窗（標題、連線狀態、重新啟動／啟動／停止）和流程進度標籤（階段 N / M、已完成／已中止）現在會依介面語言顯示，不再出現英文。',

@@ -15,7 +15,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Account popover: each pane's "Follow account switch" toggle sits at the top of the account popover. The 🔗 button in the pane header is removed, and the header shows 📌 only when the pane is pinned (#223).
 - Status bar: the backend popover (title, connection state, Restart/Start/Stop) and the pipeline pill (Stage N / M, completed/aborted) are translated in zh-TW and ja-JP instead of showing English (#222).
 - Dependencies: fastapi 0.143, anthropic 1.13, ruff 0.17, koffi 3.3.3, Electron 44.7, Playwright and happy-dom (#207, #208, #209, #210, #211).
-- Tests: three timing-sensitive tests now count clock reads or order by events instead of waiting on wall-clock deadlines (#204, #206, #220).
+- Tests: four timing-sensitive tests now count clock reads, order by events or await their own return instead of waiting on wall-clock deadlines (#204, #206, #220, #228).
 
 ### Fixed
 
