@@ -59,6 +59,10 @@ AWAITING_PROBE_EVERY_S = 5.0
 AWAITING_RETRY_MAX = 3  # relay attempts per awaiting prompt before giving up
 LIMIT_PROBE_EVERY_S = 15.0  # a running chat run asks the window whether its CLI hit a usage limit
 RUN_TICK_S = 0.5
+# Claude can write one message as two end_turn lines, thinking only and then the text; across
+# 3912 such splits in local transcripts the text came 1.9 s later at the median, 26.6 s at p99
+# and 110 s at most. A turn end with no text waits this long for its text before saying so.
+EMPTY_TURN_GRACE_S = 120.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
 HELD_NOTICE_AFTER_S = 600.0
@@ -296,6 +300,8 @@ class ChannelManager:
         self._secret_hints: dict[BotKey, str] = {}
         self._dedup: OrderedDict[tuple[str, str], None] = OrderedDict()
         self._pending: dict[str, _Pending] = {}
+        # pane_id -> a run whose turn ended with no text, and the timer that answers it empty
+        self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
         self._last_status: dict[BotKey, dict[str, Any]] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
@@ -1155,6 +1161,14 @@ class ChannelManager:
             self._sync_bindings()
         pending = self._pending.get(pane_id)
         is_turn_end = entry.get("event_type") == "turn_complete"
+        text = str(entry.get("text") or "")
+        if is_turn_end and text.strip() and pane_id in self._textless \
+                and (pending is None or pending.armed_at is None):
+            # The text half of a turn end that came in two lines: the reply after all.
+            held, timer = self._textless.pop(pane_id)
+            timer.cancel()
+            self._spawn(self._send_reply(held, text))
+            return
         if pending is None or pending.armed_at is None or not is_turn_end:
             if is_turn_end:
                 self._mirror_unclaimed_turn(pane_id, str(entry.get("text") or ""))
@@ -1171,7 +1185,22 @@ class ChannelManager:
         self._awaiting_posted.discard(pane_id)
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown.pop(pane_id, None)
-        self._spawn(self._send_reply(pending, str(entry.get("text") or "")))
+        if not text.strip():
+            earlier = self._textless.pop(pane_id, None)
+            if earlier is not None:
+                earlier[1].cancel()
+                self._spawn(self._send_reply(earlier[0], ""))
+            self._textless[pane_id] = (pending, self._spawn(self._reply_textless(pane_id, pending)))
+            return
+        self._spawn(self._send_reply(pending, text))
+
+    async def _reply_textless(self, pane_id: str, pending: _Pending) -> None:
+        """No text came after a textless turn end within the grace: the turn said nothing."""
+        await asyncio.sleep(EMPTY_TURN_GRACE_S)
+        held = self._textless.get(pane_id)
+        if held is not None and held[0] is pending:
+            del self._textless[pane_id]
+            await self._send_reply(pending, "")
 
     def _mirror_unclaimed_turn(self, pane_id: str, text: str) -> None:
         """A turn end no chat message asked for (typed at the keyboard, delegated by
