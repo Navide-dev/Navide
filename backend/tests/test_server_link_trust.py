@@ -1808,6 +1808,45 @@ def test_a_block_survives_a_policy_that_will_not_verify() -> None:
     assert device_trust.is_blocked(None, member_id="", device_id="dev-fine") is False
 
 
+def test_a_block_only_the_policy_holds_survives_the_policy_being_withdrawn() -> None:
+    """A block that exists only in the signed policy — written before the local
+    copy existed, or by an editor that never wrote one — must still refuse the
+    device once the server stops serving that policy. Verifying the document is
+    what copies its block list here."""
+    trust_store.load()
+    link = _trust_link()
+    policy = {
+        "version": 1, "default": "deny", "rules": [],
+        "blocked": [{"deviceId": "dev-policy-only", "memberId": ""},
+                    {"deviceId": "", "memberId": "m-policy-only"}],
+    }
+    signature = device_signing.sign_policy(device_id=link._device_id, seq=0, document=policy)
+    signed = {**policy, server_link.POLICY_SIGNATURE_FIELD: {"seq": 0, "sig": signature}}
+
+    assert link._verified_policy(signed) == policy
+
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-policy-only") is True
+    assert device_trust.is_blocked(None, member_id="m-policy-only", device_id="other") is True
+    assert device_trust.ring(
+        None, member_id="", device_id="dev-policy-only", own_device=True
+    ) == device_trust.RING_BLOCKED
+
+
+def test_an_unverified_policy_adds_nothing_to_the_local_copy() -> None:
+    """Only a document this machine signed may add a block here; anything else
+    would let the server fill this machine's block list."""
+    trust_store.load()
+    link = _trust_link()
+    forged = {
+        "version": 1, "default": "deny", "rules": [],
+        "blocked": [{"deviceId": "dev-forged", "memberId": ""}],
+        server_link.POLICY_SIGNATURE_FIELD: {"seq": 0, "sig": "bm9wZQ=="},
+    }
+
+    assert link._verified_policy(forged) is None
+    assert device_trust.is_blocked(None, member_id="", device_id="dev-forged") is False
+
+
 def test_a_locally_blocked_device_stays_off_the_pending_card_with_no_policy() -> None:
     """The other surface the same refusal has to reach. Without this the device
     reappears on the "waiting for you to vouch" card the moment the policy stops

@@ -4701,8 +4701,8 @@ async def p2p_policy_set(session: "Session", msg_id: str, msg_type: str, payload
     # document and keeps it; the account view's "sign rules now" composes the
     # default for a machine that has no rules at all, and would have dropped it.
     # Absent means keep; only an explicit list clears one.
+    cached = (await server_link.policy_state()).get("policy")
     if isinstance(policy, dict) and "blocked" not in policy:
-        cached = (await server_link.policy_state()).get("policy")
         carried = cached.get("blocked") if isinstance(cached, dict) else None
         if carried:
             log.warning(
@@ -4734,7 +4734,26 @@ async def p2p_policy_set(session: "Session", msg_id: str, msg_type: str, payload
             )
         )
         return
+    # The block list goes to the local copy too, as p2p.trust.block and
+    # unblock send it, so a server that stops serving this document cannot
+    # lift a block made here — nor keep one lifted here.
+    await asyncio.to_thread(_mirror_blocks_locally, cached, policy)
     await session.send_json(make_response(msg_id, msg_type, await _policy_payload()))
+
+
+def _mirror_blocks_locally(before: Any, after: Any) -> None:
+    """Apply the change from *before*'s block list to *after*'s to the local copy."""
+    def keys(policy: Any) -> set[tuple[str, str]]:
+        return {(e["deviceId"], e["memberId"]) for e in device_trust.blocked_entries(policy)}
+
+    old, new = keys(before), keys(after)
+    for device_id, member_id in old - new:
+        trust_store.note_unblocked(device_id, member_id)
+    for device_id, member_id in new:
+        try:
+            trust_store.note_blocked(device_id, member_id)
+        except Exception as err:  # noqa: BLE001 - held in memory by note_blocked
+            log.warning("could not keep a local copy of a block: %s", err)
 
 
 @handler("p2p.access_requests.list")
