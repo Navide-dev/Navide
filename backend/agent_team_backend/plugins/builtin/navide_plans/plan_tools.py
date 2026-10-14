@@ -82,6 +82,18 @@ async def _host_agent_plan_call(
         {"reqId": f"mcp:{secrets.token_hex(16)}", "name": name, "args": arguments},
         caller=caller,
     )
+    if (
+        name in _READ_ONLY_PLAN_METHODS and isinstance(response, dict) and
+        response.get("ok") is False and response.get("error_code") == "host_timeout"
+    ):
+        # One slow Host answer (a stalled event loop, a child still starting)
+        # should not fail a read; reads are safe to repeat. Mutations are not.
+        response = await request_host_agent_workspace_backend(
+            "navide.plans",
+            workspace_path,
+            {"reqId": f"mcp:{secrets.token_hex(16)}", "name": name, "args": arguments},
+            caller=caller,
+        )
     if not isinstance(response, dict):
         raise FsError("production Plans Host reply was malformed", code="BACKEND_UNAVAILABLE")
     if response.get("ok") is True:
