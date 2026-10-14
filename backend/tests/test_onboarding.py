@@ -777,13 +777,39 @@ def test_cli_health_timed_out_primary_probe_keeps_a_dismissed_guide_closed(
     dismissed["value"] = baseline["fingerprint"]
 
     timed_out = _probe_primary(monkeypatch, first, _timeout_run)
-    assert timed_out["status"] == "missing" and timed_out["probe_timed_out"] is True
+    assert timed_out["status"] == "ok" and timed_out["probe_timed_out"] is True
     health = ob.build_cli_health([timed_out])
 
     assert [f["type"] for f in health["findings"]] == ["duplicate_install"]
     assert health["fingerprint"] == baseline["fingerprint"]
     assert health["dismissed"] is True
     assert health["needs_attention"] is False
+
+
+def test_detect_dep_version_timeout_degrades_instead_of_reporting_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `--version` that outlives its ceiling found the binary; only the
+    grading failed. The spawn probe lets the same timeout through, so calling
+    it "not installed" here put the install wizard over a working CLI."""
+    binary = _make_executable(tmp_path / "bin" / "claude")
+    status = _probe_primary(monkeypatch, binary, _timeout_run)
+    assert status["status"] == "ok"
+    assert status["version"] == ""
+    assert status["binary_path"] == str(binary)
+    assert status["probe_timed_out"] is True
+
+
+def test_detect_dep_exec_error_is_still_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _oserror_run(*_args, **_kwargs):
+        raise OSError("exec format error")
+
+    binary = _make_executable(tmp_path / "bin" / "claude")
+    status = _probe_primary(monkeypatch, binary, _oserror_run)
+    assert status["status"] == "missing"
+    assert status["probe_timed_out"] is False
 
 
 def test_cli_health_definitive_primary_probe_failure_is_still_reported(

@@ -14640,7 +14640,10 @@ backend.on('terminal.exit', (raw) => {
     if (pane.preparationStatus !== 'ready') setPrepStatus(pane, 'failed')
     syncViews()
   }
-  if (ev.exit_code === 127 && pane.agentKey !== 'terminal') {
+  // 127 alone is not "this CLI is missing": when the spawn probe found the CLI,
+  // it is some other name in the launch line (a wrapper, a helper in a custom
+  // command). Only a probe that missed it too makes the 127 a verdict.
+  if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {
     void promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)
   }
 })

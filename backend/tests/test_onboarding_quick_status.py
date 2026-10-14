@@ -16,8 +16,11 @@ from agent_team_backend import osplat
 
 
 @pytest.fixture(autouse=True)
-def _reset_path_cache():
+def _reset_path_cache(monkeypatch):
     od._path_refreshed_at = None
+    # The login-shell PATH has answered, unless a test says otherwise: only
+    # then is a PATH-presence miss a verdict (see the unknown tests below).
+    monkeypatch.setattr(od, "_path_probe_answered", True)
     yield
     od._path_refreshed_at = None
 
@@ -50,6 +53,33 @@ def test_quick_and_full_agree_on_missing(monkeypatch):
     monkeypatch.setattr(od, "resolve_executable", lambda dep, quick=False: "")
     quick = {d["id"]: d["status"] for d in od.quick_status()["deps"]}
     assert set(quick.values()) == {"missing"}
+
+
+def test_quick_status_reports_unknown_until_the_login_path_answered(monkeypatch):
+    # nvm, volta and a custom npm prefix only reach PATH through the login
+    # shell. Before it has answered, a presence miss says nothing about the
+    # CLI, and the spawn dropdown read "missing" as "offer the installer".
+    monkeypatch.setattr(od, "_path_probe_command", lambda: ["sh", "-c", "true"])
+    monkeypatch.setattr(od, "_path_probe_answered", False)
+    monkeypatch.setattr(od, "resolve_executable", lambda dep, quick=False: "")
+    deps = od.quick_status()["deps"]
+    assert {d["status"] for d in deps} == {"unknown"}
+    assert all(d["binary_path"] == "" for d in deps)
+
+
+def test_quick_status_keeps_a_found_binary_ok_before_the_login_path_answered(monkeypatch):
+    monkeypatch.setattr(od, "_path_probe_command", lambda: ["sh", "-c", "true"])
+    monkeypatch.setattr(od, "_path_probe_answered", False)
+    monkeypatch.setattr(od, "resolve_executable", lambda dep, quick=False: "/opt/bin/x")
+    assert {d["status"] for d in od.quick_status()["deps"]} == {"ok"}
+
+
+def test_quick_status_miss_is_exact_where_there_is_no_login_shell(monkeypatch):
+    # Windows: no login shell to wait for, so the PATH it has is the answer.
+    monkeypatch.setattr(od, "_path_probe_command", lambda: None)
+    monkeypatch.setattr(od, "_path_probe_answered", False)
+    monkeypatch.setattr(od, "resolve_executable", lambda dep, quick=False: "")
+    assert {d["status"] for d in od.quick_status()["deps"]} == {"missing"}
 
 
 @pytest.mark.skipif(

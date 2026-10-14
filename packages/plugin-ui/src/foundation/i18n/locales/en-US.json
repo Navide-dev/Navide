@@ -9017,7 +9017,8 @@
     "status": {
       "ok": "installed",
       "missing": "not installed",
-      "outdated": "outdated"
+      "outdated": "outdated",
+      "unknown": "not found yet"
     },
     "requirements-label": "Prerequisites",
     "chain-label": "Installation order",

@@ -58,9 +58,18 @@ describe('terminal.exit offers the install for a dock that has no pane', () => {
   })
 
   it("leaves the pane's own 127 prompt in place, after the no-pane branch", () => {
-    const paneCheckIdx = listener.indexOf("if (ev.exit_code === 127 && pane.agentKey !== 'terminal') {")
+    const paneCheckIdx = listener.indexOf('if (ev.exit_code === 127 && pane.agentKey !== \'terminal\'')
     expect(paneCheckIdx).toBeGreaterThan(noPaneEnd)
     expect(listener).toContain('promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)')
+  })
+
+  // A 127 from a pane whose probe FOUND the CLI is some other command in the
+  // launch line (a wrapper, a helper in a custom command) — not a CLI that is
+  // missing. Only a probe that also missed it makes the 127 a verdict.
+  it("asks the pane's 127 for the probe's not_found too, like the no-pane branch", () => {
+    expect(listener).toContain(
+      "if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {"
+    )
   })
 })
 
