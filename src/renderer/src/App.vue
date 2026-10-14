@@ -21306,6 +21306,17 @@ function paneIsCommander(p: ActivePane): boolean {
           <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents')">
             {{ $t('action.add-to-grid') }}
           </button>
+          <!-- The sidebar's own Run button, guard and all: disabled exactly
+               when that one is, and it calls the same startPipeline. -->
+          <button
+            type="button"
+            class="empty-secondary"
+            :disabled="!controlPaneRef?.canRunPipeline"
+            :title="controlPaneRef?.canRunPipeline ? undefined : $t('label.set-workspace-pipeline')"
+            @click="controlPaneRef?.startPipeline()"
+          >
+            {{ $t('action.or-run-pipeline') }}
+          </button>
         </div>
       </div>
       <div v-else class="grid" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
@@ -23617,6 +23628,27 @@ function paneIsCommander(p: ActivePane): boolean {
 .empty-primary:focus-visible {
   outline: 2px solid var(--accent-emphasis);
   outline-offset: 2px;
+}
+.empty-secondary {
+  margin-top: -6px;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--accent-fg);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+.empty-secondary:hover:not(:disabled) {
+  text-decoration: underline;
+}
+.empty-secondary:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.empty-secondary:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 /* The stage keeps its panes through a switch, so this covers them rather than
    replacing them. Opaque: a translucent wash over another project's terminals

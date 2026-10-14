@@ -1442,8 +1442,6 @@ onUnmounted(() => {
   if (workspaceDebounce !== null) window.clearTimeout(workspaceDebounce)
 })
 
-defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab })
-
 const manualAgentSpecs = computed(() =>
   props.agentSpecs.filter((spec) => spec.agentKey !== 'terminal')
 )
@@ -2798,6 +2796,11 @@ function startPipeline(): void {
   })
   backToList()
 }
+
+// Down here rather than at the top of setup: canRunPipeline is a const declared
+// above this line. startPipeline/canRunPipeline let the empty stage's "or run
+// the pipeline" link drive the sidebar's own Run button, guard included.
+defineExpose({ openPipelineDetail, showResumeError, selectSidebarTab, startPipeline, canRunPipeline })
 
 const statusColor = computed(() => {
   switch (props.backendStatus) {
