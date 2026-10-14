@@ -1734,7 +1734,8 @@ class ChannelManager:
                 log.warning("channels: opening an attachment for %s failed: %s", loc.key(), exc)
                 opened, reason = None, "changed"
             if opened is None:
-                await note(media.text(lang, "refused", name=name, reason=media.text(lang, f"reason.{reason}")))
+                rule = await asyncio.to_thread(media.denied_rule, spec.path) if reason == "denied_name" else ""
+                await note(media.text(lang, "refused", name=name, reason=media.text(lang, f"reason.{reason}", rule=rule)))
                 continue
             unusual = [why for why, flag in (("a hidden path", opened.hidden), (
                 "outside the pane's workspace", not media.is_inside(opened.path, usual))) if flag]
