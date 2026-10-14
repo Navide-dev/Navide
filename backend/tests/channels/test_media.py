@@ -438,7 +438,8 @@ def test_a_project_folder_that_mentions_tokens_still_sends_its_files(home: Path)
     ("Token仲介平台/.env", "*.env"), ("Token仲介平台/github_token.txt", "*token*"),
     ("Token仲介平台/keys/id_rsa", "id_rsa*"), ("app/server.pem", "*.pem"), ("app/private.key", "*.key"),
     ("app/credentials.json", "credentials*"), ("app/token", "*token*"), ("app/api_token.txt", "*token*"),
-    ("app/tokens/github.txt", "tokens"), ("app/token/github.txt", "token"), ("app/secrets/notes.txt", "*secret*"),
+    ("app/tokens/github.txt", "*tokens"), ("app/token/github.txt", "*token"), ("app/api_tokens/gh.txt", "*tokens"),
+    ("app/github-token/gh.txt", "*token"), ("app/.tokens/gh.txt", "*tokens"), ("app/secrets/notes.txt", "*secret*"),
 ])
 def test_real_credential_names_are_still_refused_and_name_their_rule(home: Path, rel: str, rule: str) -> None:
     f = _file(home / "Desktop" / rel)

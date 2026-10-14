@@ -55,10 +55,10 @@ DENIED_NAMES = (
     "*.sqlite", "*.sqlite3", "*.db", "*.db-wal", "*.db-shm",
 )
 # "*token*" judges only the file's own name: on a folder it refused every file of a project
-# whose name merely mentions tokens ("Token仲介平台", 2026-10-14). A folder counts when it is
-# named token or tokens.
+# whose name merely mentions tokens ("Token仲介平台", 2026-10-14). A folder counts when its
+# name ends in token or tokens (api_tokens, github-token) or is a dotted one (.tokens).
 _FILE_ONLY_NAMES = frozenset({"*token*"})
-_DENIED_FOLDERS = ("token", "tokens")
+_DENIED_FOLDERS = ("*token", "*tokens", ".token*")
 
 _KIND_DEFAULT_NAMES = {
     "photo": "photo.jpg", "voice": "voice.ogg", "video_note": "video_note.mp4",
