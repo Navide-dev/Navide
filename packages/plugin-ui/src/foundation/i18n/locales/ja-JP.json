@@ -8349,7 +8349,15 @@
     "backend-pill-connected": "バックエンド",
     "backend-pill-down": "バックエンド停止",
     "backend-pill-connecting": "接続中…",
-    "backend-pill-restarting": "再起動中 {attempt}/{max}…"
+    "backend-pill-restarting": "再起動中 {attempt}/{max}…",
+    "backend-popover-title": "バックエンド",
+    "backend-working": "処理中…",
+    "backend-restart": "再起動",
+    "backend-start": "起動",
+    "backend-stop": "停止",
+    "pipeline-pill-stage": "ステージ {current} / {total}",
+    "pipeline-pill-completed": "完了",
+    "pipeline-pill-aborted": "中止"
   },
   "layout": {
     "expand": "パネルを展開",

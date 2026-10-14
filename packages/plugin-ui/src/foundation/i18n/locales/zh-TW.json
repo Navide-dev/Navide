@@ -8349,7 +8349,15 @@
       "backend-pill-connected": "後端",
       "backend-pill-down": "後端已中斷",
       "backend-pill-connecting": "連線中…",
-      "backend-pill-restarting": "重新啟動中 {attempt}/{max}…"
+      "backend-pill-restarting": "重新啟動中 {attempt}/{max}…",
+      "backend-popover-title": "後端",
+      "backend-working": "處理中…",
+      "backend-restart": "重新啟動",
+      "backend-start": "啟動",
+      "backend-stop": "停止",
+      "pipeline-pill-stage": "階段 {current} / {total}",
+      "pipeline-pill-completed": "已完成",
+      "pipeline-pill-aborted": "已中止"
   },
   "layout": {
     "expand": "展開面板",
