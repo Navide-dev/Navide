@@ -8,8 +8,17 @@ import SettingRow from './SettingRow.vue'
 import ToggleSwitch from './ToggleSwitch.vue'
 import VoiceShortcutRow from './VoiceShortcutRow.vue'
 import VoiceFnKeyRow from './VoiceFnKeyRow.vue'
+import { isMacPlatform } from '@navide/plugin-ui/shared'
+import {
+  readbackSupported,
+  readbackVoiceModel,
+  speakReadback,
+  voicesForLanguage,
+  type VoiceLike,
+} from '../../composables/useVoiceReadback'
 import {
   useVoiceSettings,
+  VOICE_READBACK_RATES,
   VOICE_RECORDING_MODES,
   VOICE_SCRIPTS,
   type VoiceRecordingMode,
@@ -25,9 +34,12 @@ import type { useBackend } from '../../composables/useBackend'
 
 const props = defineProps<{ backend: ReturnType<typeof useBackend> }>()
 defineEmits<{ 'open-shortcuts': [command: string] }>()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const {
   voiceInputEnabled,
+  voiceReadbackEnabled,
+  voiceReadbackVoice,
+  voiceReadbackRate,
   voiceInputDeviceId,
   voiceInputDeviceLabel,
   voiceRecordingMode,
@@ -36,6 +48,9 @@ const {
   setVoiceInputDevice,
   setVoiceRecordingMode,
   setVoiceScript,
+  setVoiceReadbackEnabled,
+  setVoiceReadbackVoice,
+  setVoiceReadbackRate,
 } = useVoiceSettings()
 
 interface VoiceStatus {
@@ -283,6 +298,73 @@ const progressLine = computed(() => {
 const canDownload = computed(
   () => !downloading.value && status.value?.sidecar === 'ok' && status.value?.model?.present === false,
 )
+
+// ── Read aloud ────────────────────────────────────────────────────────────────
+// The platform synthesizer, so nothing is downloaded. Without one (Linux
+// usually) the block is not shown. Voices are listed only while it is on.
+const canReadAloud = readbackSupported()
+interface VoiceOption { voiceURI: string; name: string; lang: string }
+const voices = ref<VoiceOption[]>([])
+/** Every installed voice, any language (the engine row counts them). */
+const allVoices = ref<VoiceLike[]>([])
+
+function refreshVoices(): void {
+  const all = globalThis.speechSynthesis?.getVoices() ?? []
+  allVoices.value = all.map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang, localService: v.localService }))
+  voices.value = voicesForLanguage(all, String(locale.value)).map((v) => ({ voiceURI: v.voiceURI, name: v.name, lang: v.lang }))
+}
+
+// Voice model: the recommended download for the UI language (美佳 Premium for
+// zh-TW). Only macOS can be sent to where voices are downloaded; an app cannot
+// install one itself. Readback keeps using the best voice there is meanwhile.
+const onMac = isMacPlatform()
+const voiceModel = computed(() => readbackVoiceModel(allVoices.value, String(locale.value)))
+const downloadHint = ref(false)
+
+const voiceModelLine = computed(() => {
+  const m = voiceModel.value
+  let line = m.ready
+    ? t('settings.voice.readback-model-ready', { voice: m.preferred })
+    : m.using
+      ? t('settings.voice.readback-model-missing', { voice: m.preferred, using: m.using.name })
+      : t('settings.voice.readback-model-missing-none', { voice: m.preferred })
+  if (!onMac && !m.ready) line += ` ${t('settings.voice.readback-model-other-os')}`
+  else if (downloadHint.value && !m.ready) line += ` ${t('settings.voice.readback-model-download-hint', { voice: m.preferred })}`
+  return line
+})
+
+async function openVoiceDownload(): Promise<void> {
+  downloadHint.value = true
+  await window.agentTeam?.openSpokenContentSettings?.()
+}
+
+function recheckVoices(): void {
+  refreshVoices()
+}
+
+watch(
+  [voiceReadbackEnabled, locale],
+  ([on], _old, onCleanup) => {
+    if (!canReadAloud || !on) return
+    refreshVoices()
+    // Chromium fills the list asynchronously; it is empty on the first call.
+    globalThis.speechSynthesis.addEventListener?.('voiceschanged', refreshVoices)
+    onCleanup(() => globalThis.speechSynthesis?.removeEventListener?.('voiceschanged', refreshVoices))
+  },
+  { immediate: true },
+)
+
+const savedVoiceMissing = computed(
+  () => voiceReadbackVoice.value !== '' && voices.value.length > 0 && !voices.value.some((v) => v.voiceURI === voiceReadbackVoice.value),
+)
+
+function previewReadback(): void {
+  speakReadback(t('voice.readback.done', { label: 'Navide' }), {
+    uiLang: String(locale.value),
+    voiceURI: voiceReadbackVoice.value,
+    rate: voiceReadbackRate.value,
+  })
+}
 </script>
 
 <template>
@@ -396,6 +478,103 @@ const canDownload = computed(
           <button v-if="canStartEngine" class="voice-btn" @click="startEngine">
             {{ engineState === 'failed' ? t('settings.voice.engine-retry') : t('settings.voice.engine-start') }}
           </button>
+        </template>
+      </SettingRow>
+    </SettingsCard>
+  </SettingsSection>
+
+  <SettingsSection v-if="canReadAloud" :label="t('settings.voice.readback-section')">
+    <SettingsCard>
+      <SettingRow
+        data-settings-section="voice-readback"
+        :title="t('settings.voice.readback')"
+        :description="t('settings.voice.readback-hint')"
+      >
+        <template #control>
+          <ToggleSwitch
+            :model-value="voiceReadbackEnabled"
+            :aria-label="t('settings.voice.readback')"
+            @update:model-value="(v: boolean) => setVoiceReadbackEnabled(v)"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-voice"
+        :title="t('settings.voice.readback-voice')"
+        :description="voices.length === 0 ? t('settings.voice.readback-voice-none') : t('settings.voice.readback-voice-hint')"
+      >
+        <template #control>
+          <select
+            class="voice-select"
+            :aria-label="t('settings.voice.readback-voice')"
+            :value="voiceReadbackVoice"
+            @change="setVoiceReadbackVoice(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t('settings.voice.readback-voice-auto') }}</option>
+            <option v-for="v in voices" :key="v.voiceURI" :value="v.voiceURI">{{ v.name }} ({{ v.lang }})</option>
+            <option v-if="savedVoiceMissing" :value="voiceReadbackVoice" disabled>
+              {{ voiceReadbackVoice }} {{ t('settings.voice.device-unavailable') }}
+            </option>
+          </select>
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-model"
+        :title="t('settings.voice.readback-model')"
+        :description="voiceModelLine"
+      >
+        <template #control>
+          <button
+            v-if="onMac"
+            class="voice-btn"
+            data-testid="readback-model-download"
+            :disabled="voiceModel.ready"
+            @click="openVoiceDownload"
+          >
+            {{ t('settings.voice.download') }}
+          </button>
+          <button class="voice-btn" data-testid="readback-model-recheck" @click="recheckVoices">
+            {{ t('settings.voice.recheck') }}
+          </button>
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-engine"
+        :title="t('settings.voice.readback-engine')"
+        :description="allVoices.length > 0 ? t('settings.voice.readback-engine-ready') : t('settings.voice.readback-engine-no-voices')"
+      />
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-rate"
+        :title="t('settings.voice.readback-rate')"
+      >
+        <template #control>
+          <select
+            class="voice-select"
+            :aria-label="t('settings.voice.readback-rate')"
+            :value="String(voiceReadbackRate)"
+            @change="setVoiceReadbackRate(Number(($event.target as HTMLSelectElement).value))"
+          >
+            <option v-for="r in VOICE_READBACK_RATES" :key="r" :value="String(r)">{{ r.toFixed(1) }}×</option>
+          </select>
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="voiceReadbackEnabled"
+        data-settings-section="voice-readback-preview"
+        :title="t('settings.voice.readback-preview')"
+        :description="t('settings.voice.readback-stop-hint')"
+      >
+        <template #control>
+          <button class="voice-btn" @click="previewReadback">▶ {{ t('voice.readback.done', { label: 'Navide' }) }}</button>
         </template>
       </SettingRow>
     </SettingsCard>

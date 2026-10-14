@@ -964,7 +964,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     title: t('settings.search.item.voice-input.title'),
     group: t('settings.nav.voice'),
     summary: t('settings.search.item.voice-input.summary'),
-    keywords: 'voice input speech dictation microphone mic hold to talk push to talk whisper transcribe model download 語音 語音輸入 麥克風 按住說話 聽寫 轉文字 模型 下載 音声入力 マイク',
+    keywords: 'voice input speech dictation microphone mic hold to talk push to talk whisper transcribe model download read aloud readback tts speech synthesis 語音 語音輸入 麥克風 按住說話 聽寫 轉文字 模型 下載 朗讀 音声入力 マイク 読み上げ',
   },
   {
     id: 'general-environment',

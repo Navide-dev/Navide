@@ -282,6 +282,15 @@
     "resize-failed": "無法調整 AI CLI session 大小"
   },
   "voice": {
+  "readback": {
+    "done": "{label} 完成了",
+    "attention": "{label} 需要你回答",
+    "done-many": "{n} 個 pane 完成了",
+    "attention-many": "{n} 個 pane 需要你回答",
+    "separator": "，",
+    "esc-stop": "Esc 停止",
+    "stop": "停止朗讀"
+  },
   "prewarm-failed": "語音輸入尚未就緒：{reason}",
     "capsule": {
       "starting": "準備麥克風…",
@@ -696,6 +705,9 @@
       }
     },
     "terminal": {
+      "readback-on-tooltip": "朗讀已開啟：完成或需要回答時會念出來——點一下關閉",
+      "readback-off-tooltip": "點一下開啟朗讀：這個 pane 完成或需要你回答時用聲音告訴你",
+      "readback-speaking": "朗讀中",
       "backend-reconnecting": "後端已中斷 — 重新連線中，暫停輸入。",
       "backend-restarting": "後端已崩潰 — 重新啟動中（{attempt}/{max}），暫停輸入。",
       "backend-unavailable": "後端無法使用 — 重新啟動前暫停輸入。",
@@ -1896,6 +1908,25 @@
       "cliFiles": "各 CLI 自己的指示檔"
     },
     "voice": {
+      "readback-model": "語音模型",
+      "readback-model-ready": "{voice} — 已就緒",
+      "readback-model-missing": "{voice} — 未安裝。目前用「{using}」朗讀。",
+      "readback-model-missing-none": "{voice} — 未安裝，這台電腦也沒有符合介面語言的聲音。",
+      "readback-model-other-os": "請在作業系統的語音設定中安裝更好的聲音。",
+      "readback-model-download-hint": "在剛打開的「輔助使用 › 朗讀內容」中，點「系統聲音」旁的 ⓘ／「管理聲音…」下載 {voice}，完成後按「重新檢查」。",
+      "readback-engine": "語音引擎",
+      "readback-engine-ready": "系統聲音 · 就緒",
+      "readback-engine-no-voices": "系統聲音 · 沒有已安裝的聲音",
+      "readback-section": "語音朗讀",
+      "readback": "朗讀回覆",
+      "readback-hint": "標了 🔊 的 pane 完成或需要你回答時，用系統聲音念一句短通知（例如「Navide指揮 完成了」）。在 pane 標題列點 🔊 即可標記。全部在本機合成，不會下載任何東西。",
+      "readback-voice": "聲音",
+      "readback-voice-hint": "「自動」會依介面語言挑最好的系統聲音（優先 Premium 版，例如美佳 Premium）。更好的聲音可在系統設定 › 輔助使用 › 朗讀內容 下載。",
+      "readback-voice-none": "這台電腦沒有符合介面語言的系統聲音，將使用系統預設聲音。",
+      "readback-voice-auto": "自動（依介面語言）",
+      "readback-rate": "語速",
+      "readback-preview": "試聽",
+      "readback-stop-hint": "朗讀中按 Esc 或語音輸入快捷鍵即可立刻停止。",
       "section": "語音輸入",
       "enabled": "語音輸入（按住說話）",
       "enabled-hint": "按住 Ctrl+Alt+M（可在快捷鍵設定中更改）即可對目前聚焦的 CLI pane 聽寫。文字會像手動輸入一樣填進輸入框，不會自動送出，確認後請自己按 Enter。語音由本機的 Whisper 模型轉成文字，音訊不會離開這台電腦。",

@@ -163,6 +163,7 @@ import { isMac } from '../shared/osplat'
 import { installMediaPermissionHandlers } from './media-permissions'
 import { registerFnKeyIpc } from './fn-key-ipc'
 import { registerSpotlightSettingsIpc } from './spotlight-settings-ipc'
+import { registerSpokenContentSettingsIpc } from './spoken-content-settings-ipc'
 import { createDeepLinkRouter, registerDeepLinkIpc } from './deep-link'
 import { DEEP_LINK_SCHEME, deepLinkFromArgv } from '../shared/deepLink'
 import {
@@ -5230,6 +5231,12 @@ app.whenReady().then(async () => {
   app.on('will-quit', () => fnKey.dispose())
   // Settings → Resource limits: Spotlight's privacy settings, opened on request.
   registerSpotlightSettingsIpc(ipcMain, {
+    openExternal: (url) => shell.openExternal(url),
+    isTrusted: (event) => isAppWindowSender(event),
+    isMac,
+  })
+  // Settings → Voice → Read aloud: Spoken Content, to download a better voice.
+  registerSpokenContentSettingsIpc(ipcMain, {
     openExternal: (url) => shell.openExternal(url),
     isTrusted: (event) => isAppWindowSender(event),
     isMac,
