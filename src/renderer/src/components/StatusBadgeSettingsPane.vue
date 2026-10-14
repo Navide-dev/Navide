@@ -295,8 +295,10 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
   padding: 4px 8px;
   transition: border-color var(--motion-fast) var(--ease-out);
 }
+/* The placeholder is the label in effect, not a hint, so it reads at the
+ * secondary text colour rather than the muted one. */
 .sb-field input::placeholder {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 .sb-field input:hover {
   border-color: var(--border-strong);
@@ -360,9 +362,13 @@ function onLabel(status: PaneStatusValue, locale: 'zh-TW' | 'en-US' | 'ja-JP', v
 .sb-reset-all:hover:not(:disabled) {
   background: var(--bg-hover-strong);
 }
+/* Disabled drops the fill and border instead of fading the whole button, so
+ * the label stays readable next to the inputs. */
 .sb-reset:disabled,
 .sb-reset-all:disabled {
-  opacity: 0.4;
+  background: transparent;
+  border-color: var(--border-muted);
+  color: var(--text-secondary);
   cursor: default;
 }
 

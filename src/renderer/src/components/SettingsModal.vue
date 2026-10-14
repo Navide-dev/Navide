@@ -3040,7 +3040,7 @@ watch(activeTab, (tab) => {
                 @keydown.enter="azDoPull"
               />
               <button
-                class="az-run-btn nv-btn nv-btn--primary"
+                class="az-pull-btn nv-btn"
                 :disabled="props.analyzerApi.pulling.value || !azPullName.trim()"
                 @click="azDoPull"
               >
@@ -5583,6 +5583,8 @@ button.ghost:hover:not(:disabled) { background: var(--bg-muted); }
 
 .az-pull-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
 .az-pull-input { flex: 1; margin-bottom: 0; }
+/* Secondary on purpose: "run benchmark" is the page's one primary action. */
+.az-pull-btn { font-size: var(--font-xs); font-weight: 600; padding: 7px 16px; }
 .az-pull-error { font-size: var(--font-2xs); color: var(--danger-fg); margin-top: 6px; }
 
 .az-progress-bar-wrap {
