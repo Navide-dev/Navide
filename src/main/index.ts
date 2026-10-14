@@ -2546,12 +2546,11 @@ async function projectPlansLegacyPreferences(
 ): Promise<{ ok: boolean; error?: string }> {
   const descriptor = frontendPluginManager.getDescriptor('navide.plans')
   const packageVersion = descriptor?.packageVersion
-  // Legacy Plans keyed preferences by the workspace shown in the renderer,
-  // while v2 binds document operations to the repository root that owns
-  // `.agent-team/plans`. Keep the source path for IPC authorization, but write
-  // into the same effective workspace partition the v2 view will read.
-  const storageWorkspacePath = resolvePlansRootPath(workspacePath)
-  const workspaceId = frontendPluginManager.workspaceIdForPath(storageWorkspacePath)
+  // The v2 view's storage partition is runtimeBinding.workspaceId, which
+  // plansCapabilityContext derives from the registered workspace as-is - not
+  // from the repository root its documents live under. Hash the same string,
+  // or the preferences land in a partition nothing reads.
+  const workspaceId = frontendPluginManager.workspaceIdForPath(workspacePath)
   if (
     descriptor?.capabilityPolicy?.kind !== 'manifest-v2' ||
     !packageVersion ||
@@ -4170,7 +4169,7 @@ ipcMain.handle(
         if (typeof value === 'string') projection[key] = value
       }
     }
-    return projectPlansLegacyPreferences(normalizeWorkspacePath(workspacePath), projection)
+    return projectPlansLegacyPreferences(workspacePath, projection)
   },
 )
 
