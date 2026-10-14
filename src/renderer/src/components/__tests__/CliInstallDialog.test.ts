@@ -395,6 +395,42 @@ describe('CliInstallDialog', () => {
     expect((wrapper.find('.ci-dont-ask input').element as HTMLInputElement).checked).toBe(true)
   })
 
+  // A pane or spawn prompt is only ever about an agent CLI, so the box need not
+  // wait for status to learn the dep's group. Waiting is what made the opt-out
+  // unreachable: "Not now" pressed before status arrived saved nothing, and the
+  // next 127 asked again.
+  it('offers the opt-out before status arrives for a pane prompt', async () => {
+    const mock = createMockBackend('connected')
+    mock.setRejection('onboarding.status', 'request timed out')
+    mock.setResponse('onboarding.install_prompt', { ok: true })
+    wrapper = await open(mock, { origin: 'pane' })
+
+    await wrapper.find('.ci-dont-ask input').setValue(true)
+    await flushPromises()
+
+    const sent = mock.sent.find((s) => s.type === 'onboarding.install_prompt')
+    expect(sent?.payload).toEqual({ dep_id: 'qwen', dismissed: true })
+    expect(wrapper.emitted('dismiss-changed')?.[0]).toEqual([{ depId: 'qwen', dismissed: true }])
+  })
+
+  it('keeps a tick made before status arrived when that status predates it', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('onboarding.install_prompt', { ok: true })
+    const w = mount(CliInstallDialog, {
+      props: { backend: mock.backend, depId: 'qwen', origin: 'spawn' },
+      global: { plugins: [i18n] },
+    })
+    wrapper = w
+    await w.find('.ci-dont-ask input').setValue(true)
+    await flushPromises()
+    // A status read that was answered before the write landed.
+    mock.setResponse('onboarding.status', status({ install_prompt_dismissed: [] }))
+    await w.find('.ci-redetect').trigger('click')
+    await flushPromises()
+
+    expect((w.find('.ci-dont-ask input').element as HTMLInputElement).checked).toBe(true)
+  })
+
   it('hides the opt-out for foundation deps', async () => {
     // "Stop asking about Homebrew" would silence a prerequisite, not a choice.
     const mock = createMockBackend('connected')

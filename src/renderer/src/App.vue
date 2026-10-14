@@ -14873,12 +14873,14 @@ function onCliInstalled(): void {
 // mainModalOpen with the sibling watches above.
 watch([reconnectPickerOpen, cliInstallRequest, whatsNewEntry, activeTourVersion], () => setContext('modalOpen', mainModalOpen()))
 
-async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string): Promise<void> {
+async function promptCliInstall(agentKey: string, agentLabel: string, paneId?: string, requested = false): Promise<void> {
   if (cliInstallRequest.value) return
-  // The opt-out only silences the AUTOMATIC prompt (a pane dying with 127).
-  // Picking the CLI in the spawn dropdown is the user asking for it, so that
-  // path always opens — declining once is not the same as opting out.
-  if (paneId) {
+  // The opt-out only silences the AUTOMATIC prompt (a pane dying with 127,
+  // cli.missing). Picking the CLI in the spawn dropdown is the user asking for
+  // it (`requested`), so that path always opens — declining once is not the
+  // same as opting out. Decided by who asked, not by whether a pane id came
+  // along: that id only says which pane to relaunch.
+  if (!requested) {
     // Decide against the real list, not against an empty one that was never
     // loaded: an empty set reads as "nothing dismissed", which is how a user
     // who opted out gets asked again.
@@ -20952,7 +20954,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @spawn-for-issue="onHandleIssue"
       @rename-pane="setPaneCustomName"
       @rename-workspace="onRenameWorkspace"
-      @install-cli="(p) => void promptCliInstall(p.agentKey, p.label)"
+      @install-cli="(p) => void promptCliInstall(p.agentKey, p.label, undefined, true)"
       :collapsed="leftPanelCollapsed"
       :views="shellLayout.slots.left.views"
       @update:collapsed="setLeftCollapsed"
