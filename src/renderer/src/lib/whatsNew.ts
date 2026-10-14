@@ -129,9 +129,9 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'アカウント一覧の「すべて追従にする」とアカウントの切り替えは、確認を開いている間に作り直されたペインも見つけられるようになり、見つからないと報告しなくなりました。ペインごとの「アカウント切り替えに追従」のスイッチはアカウントのポップオーバーの一番上に移りました。ペインのヘッダーの 🔗 ボタンはなくなり、📌 は固定したペインのヘッダーにだけ表示されます。',
       },
       {
-        'zh-TW': 'CLI 安裝提示的「不要再詢問」勾選框現在一定會出現並記住你的選擇，Codex 的安裝提示不會再一直跳出來。',
-        'en-US': 'The “Stop asking” box on the CLI install prompt now always shows up and is saved, so the Codex install prompt stops coming back.',
-        'ja-JP': 'CLI のインストール確認にある「今後確認しない」のチェックボックスが必ず表示され、選択が保存されるようになりました。Codex のインストール確認が何度も出ることはなくなります。',
+        'zh-TW': 'CLI 安裝提示的「不要再詢問」勾選框現在一定會出現並記住你的選擇，Codex 的安裝提示不會再一直跳出來。偵測結果不確定時也不會再當成沒安裝，所以用 nvm 或 shell 啟動較慢時，已經裝好的 CLI 不會再跳出安裝提示。',
+        'en-US': 'The “Stop asking” box on the CLI install prompt now always shows up and is saved, so the Codex install prompt stops coming back. An uncertain detection result no longer counts as “not installed”, so a CLI that is already installed — common with nvm or a slow shell — no longer gets the install prompt.',
+        'ja-JP': 'CLI のインストール確認にある「今後確認しない」のチェックボックスが必ず表示され、選択が保存されるようになりました。Codex のインストール確認が何度も出ることはなくなります。検出結果がはっきりしないときに「未インストール」と扱うこともなくなったため、nvm を使っていたりシェルの起動が遅かったりしても、インストール済みの CLI でインストールの確認が出ることはなくなりました。',
       },
       {
         'zh-TW': '設定的狀態徽章、鍵盤快速鍵和分析頁面再整理過：停用的按鈕文字清楚可讀，鍵盤快速鍵改用圖示並附上看得到的說明，每頁只留一個主要按鈕，日文的文字也不會再被截斷。版面、CLI agent 和 CLI 擴充頁面也一併整理，日文不會再有單獨掉到下一行的字，分析頁面的次要按鈕也更清楚。',

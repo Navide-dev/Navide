@@ -20,6 +20,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Channels: when Claude splits one reply into two transcript lines, the chat no longer gets an extra empty "（pane 回合結束，沒有文字輸出）" reply; the turn's text is replied once. A turn that is really empty still gets that notice, up to 120 s later (#221).
 - Account switching: "Make all follow", the switch offer and the quota switch find a pane that was rebuilt while their question was open, and move it instead of reporting it missing (#214).
 - CLI install prompt: the "Stop asking" box now shows up before the CLI status has loaded and is saved, so the Codex install prompt no longer comes back after every failed launch. A box the user ticked is not unticked by a status that arrives later (#216).
+- CLI install prompt: an uncertain detection result no longer counts as "not installed", so a CLI that is already installed (common with nvm or a slow login shell) no longer gets the install prompt. The ＋ menu waits for the login-shell PATH before marking a CLI as missing and re-detects before prompting, a `--version` timeout counts as installed, and exit 127 opens the installer only when a probe confirms the CLI is missing (#226).
 
 ## [0.2.21] — 2026-10-13 — signed release
 
