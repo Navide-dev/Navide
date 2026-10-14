@@ -33,6 +33,7 @@ from .ratings import is_own_extension, member_score
 from .models import Extension, ExtensionVersion, Publisher
 from .repository import RegistryRepository, rating_average
 from .self_service import verified_domain
+from .versions import compare_semver
 from .storage import StorageError
 from .trust import compute_trust_tier, sensitive_capabilities
 from .versions import latest_stable_version, version_channel
@@ -119,15 +120,22 @@ def _safe_icon(repo: RegistryRepository, row: ExtensionVersion | None) -> str | 
     return None
 
 
+# Every Navide release anyone can still install meets this, so a minimum at or
+# below it says nothing a reader can act on. It was on nearly every card.
+_UNREMARKABLE_NAVIDE_MINIMUM = "0.1.0"
+
+
 def _navide_requirement(row: ExtensionVersion | None) -> dict[str, str | None]:
     """`engines.navide` of `row` and the minimum release it names, read with
-    the same rule the API's compat flag uses. `*` (any release) and forms the
-    rule cannot read have no minimum worth showing."""
+    the same rule the API's compat flag uses. `*` (any release), forms the rule
+    cannot read, and minimums no higher than 0.1.0 have no minimum worth
+    showing. Display only: the API's compat flag still reads the full rule."""
     requirement = engine_requirement(row.manifest) if row else None
     minimum = min_navide_version(requirement)
+    worth_showing = minimum is not None and compare_semver(minimum, _UNREMARKABLE_NAVIDE_MINIMUM) > 0
     return {
         "engines_navide": requirement,
-        "min_navide_version": minimum if minimum != "0.0.0" else None,
+        "min_navide_version": minimum if worth_showing else None,
     }
 
 
