@@ -5792,6 +5792,16 @@ export class FrontendPluginManager {
         }
         return port.resolveRoot(arguments_, context)
       },
+      // The watcher is a local Host primitive, not a filesystem service call,
+      // so it gets the same Grant and agent Execution Policy check here.
+      watch: async (arguments_, context) => {
+        if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+        if (!this.plansBridgeCanDispatch(context)) {
+          this.warnPlansFilesystemDenied('watch', context)
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Filesystem capability is denied.')
+        }
+        return port.watch(arguments_, context)
+      },
     }
   }
 
