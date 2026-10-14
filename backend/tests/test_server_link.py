@@ -23,6 +23,7 @@ from agent_team_backend import (
     app,
     confirm_token,
     device_identity,
+    device_pairing,
     device_signing,
     osplat,
     remote_roster,
@@ -2934,6 +2935,32 @@ async def _reconnect(server: FakeServer, link: ServerLink) -> None:
     n = len(server.opened)
     await server.opened[-1].close()
     await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs))
+
+
+@pytest.mark.parametrize(
+    ("to", "text"),
+    [
+        ({"workspace": "proj", "paneName": "reviewer"},
+         device_pairing.envelope(device_pairing.PAIR_REVOKED)),
+        ({"workspace": server_link.PAIRING_WORKSPACE, "paneName": server_link.PAIRING_PANE},
+         "hello"),
+    ],
+)
+async def test_the_message_channel_cannot_send_a_pairing_frame(to, text):
+    """M5. Signed with this machine's key, a pairing frame from the message
+    channel is one the far side acts on — `pair-revoked` unpairs it — and that
+    channel is open to cli_send and plugins, past the p2p.pair.* confirmation."""
+    server = FakeServer()
+    link = await _connected(server)
+    try:
+        reply = await link.send_message(
+            to={"deviceId": PEER.device_id, **to}, sender=None, text=text, msg_key="k-pair"
+        )
+        assert reply["ok"] is False
+        assert reply["error"]["code"] == server_link.LINK_PAIRING_REFUSED
+        assert _sent(server.opened[0], "messages.send") == []
+    finally:
+        await link.stop()
 
 
 async def test_rotation_writes_next_reads_back_confirms_then_promotes():

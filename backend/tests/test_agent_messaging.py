@@ -607,6 +607,41 @@ def test_resolve_address_refuses_a_foreign_device_before_looking_anywhere() -> N
     assert result.params["to"] == f"{FOREIGN_DEVICE}/beta/reviewer"
 
 
+def test_a_uuid_shaped_folder_on_this_machine_is_resolved_here() -> None:
+    """M4. `/var/folders/…/T/<uuid>/`, app containers and worktrees put
+    UUID-shaped folders in ordinary workspace paths on macOS; an address that
+    names a pane on this machine through one must not be sent to another."""
+    agent_messaging.register("p1", "sender", "/ws/alpha")
+    agent_messaging.register("p-uuid", "reviewer", f"/var/folders/T/{FOREIGN_DEVICE}/proj")
+
+    result = agent_messaging.resolve("p1", f"{FOREIGN_DEVICE}/proj/reviewer")
+
+    assert result.pane is not None and result.pane.pane_id == "p-uuid"
+
+
+def test_routing_keeps_a_uuid_shaped_folder_address_on_this_machine() -> None:
+    from agent_team_backend import message_routing
+
+    agent_messaging.register("p1", "sender", "/ws/alpha")
+    agent_messaging.register("p-uuid", "reviewer", f"/var/folders/T/{FOREIGN_DEVICE}/proj")
+
+    routed = message_routing.route("p1", f"{FOREIGN_DEVICE}/proj/reviewer")
+
+    assert routed.remote is None
+    assert routed.pane is not None and routed.pane.pane_id == "p-uuid"
+
+
+def test_a_foreign_device_with_no_local_match_still_goes_remote() -> None:
+    from agent_team_backend import message_routing
+
+    _seed_two_workspaces()
+
+    routed = message_routing.route("p1", f"{FOREIGN_DEVICE}/beta/reviewer")
+
+    assert routed.pane is None
+    assert routed.remote is not None and routed.remote.device_id == FOREIGN_DEVICE
+
+
 # ── Resolution by pane id ──────────────────────────────────────────────────
 def test_resolve_pane_id_names_one_of_two_panes_sharing_a_name() -> None:
     """The whole reason an id exists: two panes in one workspace may share a
