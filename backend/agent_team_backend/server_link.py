@@ -656,6 +656,23 @@ def _panel_window(
     return keys
 
 
+def _keep_blocks_locally(policy: Any) -> None:
+    """Copy a verified policy's block list into this machine's own copy.
+
+    The local copy is what still refuses a device when the server stops
+    serving the policy (see device_trust.is_blocked), and a block that only the
+    policy held — one written before that copy existed — was lifted by exactly
+    that. Only ever adds: the document is one this machine signed, and a block
+    is lifted where it is lifted, by p2p.trust.unblock or the policy editor.
+    Blocking (Keychain); the caller is already off the event loop.
+    """
+    for entry in device_trust.blocked_entries(policy):
+        try:
+            trust_store.note_blocked(entry["deviceId"], entry["memberId"])
+        except Exception as err:  # noqa: BLE001 - held in memory by note_blocked
+            log.warning("could not keep a local copy of a policy block: %s", err)
+
+
 def _reason_key(reason: str) -> str:
     """The renderer encodes its delivery reason as JSON (``{"key": ...}``); the
     ack carries the key alone.
@@ -2223,6 +2240,7 @@ class ServerLink:
             return None
         trust_store.note_policy_seq(self._device_id, offered)
         trust_store.clear_policy_notice()
+        _keep_blocks_locally(document)
         return document
 
     def policy_snapshot(self) -> dict[str, Any]:
