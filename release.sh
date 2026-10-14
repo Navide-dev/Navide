@@ -117,32 +117,17 @@ pnpm release:check "$TAG"
 
 echo ""
 echo "=== Release gates ==="
-uv --project backend run ruff check backend
+uv --project backend run --locked ruff check backend
 pnpm typecheck
 pnpm test:run
 # Backend tests run with a throwaway HOME and no reach to the real keychain.
 scripts/release-backend-tests.sh
 
 echo ""
-echo "=== Provisioning Antigravity usage secrets (untracked) ==="
-# Antigravity's public installed-app OAuth constants are not in the tree. Copy
-# the gitignored usage_secrets.py from the signing-assets dir so the bundled
-# provider works; skip gracefully (provider disabled) when it is unavailable.
-if [ -f "$HOME/navide-signing/usage_secrets.py" ]; then
-  cp "$HOME/navide-signing/usage_secrets.py" \
-    backend/agent_team_backend/usage_secrets.py
-  echo "usage_secrets.py provisioned from ~/navide-signing"
-elif [ -f backend/agent_team_backend/usage_secrets.py ]; then
-  echo "usage_secrets.py already present; using existing file"
-else
-  echo "WARNING: no usage_secrets.py found — Antigravity quota disabled in this build"
-fi
-
-echo ""
 echo "=== Building release artifacts ==="
 (
   cd backend
-  uv run pyinstaller --noconfirm agent_team_backend.spec
+  uv run --locked pyinstaller --noconfirm agent_team_backend.spec
 )
 CSC_IDENTITY_AUTO_DISCOVERY=false pnpm dist
 
