@@ -21297,15 +21297,15 @@ function paneIsCommander(p: ActivePane): boolean {
             <br />{{ $t('hint.pipeline-starting-log') }}
           </p>
         </div>
-        <div v-else class="empty-card">
-          <h2>{{ $t('label.two-ways-title') }}</h2>
-          <p>
-            <strong>▶ {{ $t('action.run-pipeline') }}</strong> {{ $t('label.two-ways-pipeline', { count: stagesApi.stages.value.length }) }}
-          </p>
-          <p>
-            <strong>{{ $t('action.add-to-grid') }}</strong> {{ $t('label.two-ways-grid') }}
-          </p>
-          <p class="muted">{{ $t('label.set-workspace-pipeline') }}</p>
+        <!-- One sentence and one way forward. The button only surfaces the
+             sidebar's Agents tab, where the spawn card already lives — the same
+             programmatic entry Cmd+1 uses — so nothing spawns from here. -->
+        <div v-else class="empty-card empty-card--idle">
+          <img class="empty-mark" :src="navideMark" alt="" />
+          <p class="empty-lead">{{ $t('label.empty-stage-lead') }}</p>
+          <button type="button" class="empty-primary" @click="controlPaneRef?.selectSidebarTab('agents')">
+            {{ $t('action.add-to-grid') }}
+          </button>
         </div>
       </div>
       <div v-else class="grid" ref="gridRef" data-tour="pane-stage" :style="gridStyle">
@@ -23579,6 +23579,44 @@ function paneIsCommander(p: ActivePane): boolean {
   text-align: center;
   font-size: var(--font-2xs);
   line-height: 1.7;
+}
+.empty-card--idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 420px;
+  border: none;
+  background: transparent;
+}
+.empty-mark {
+  width: 48px;
+  height: 48px;
+}
+.empty-card--idle .empty-lead {
+  margin: 0;
+  text-align: center;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-wrap: balance;
+}
+.empty-primary {
+  padding: 8px 18px;
+  border: 1px solid var(--accent-emphasis);
+  border-radius: var(--radius-control);
+  background: var(--accent-emphasis);
+  color: var(--text-on-emphasis);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.empty-primary:hover {
+  background: var(--accent-focus);
+  border-color: var(--accent-focus);
+}
+.empty-primary:focus-visible {
+  outline: 2px solid var(--accent-emphasis);
+  outline-offset: 2px;
 }
 /* The stage keeps its panes through a switch, so this covers them rather than
    replacing them. Opaque: a translucent wash over another project's terminals
