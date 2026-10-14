@@ -18,10 +18,12 @@ mechanisms and does the I/O:
   config override (codex). Additive by construction: servers passed this way
   load in addition to the user's own, and a command that already carries the
   flag — ours from an earlier pass, or the user's deliberate MCP setup — is
-  left exactly as it is. claude is additionally the one whose flag takes a
-  path, so a spawn with no pane id (and therefore no pane-specific URL) is
-  handed the app-owned ``<app_data_dir>/plan-mcp.json`` instead of an inline
-  document, which is why that file is still written at startup.
+  left exactly as it is. The document carries a credential and argv is
+  readable by every account through ``ps``, so it is passed as a 0600 file
+  under ``<app_data_dir>/plan-mcp-panes/`` (codex: the credential goes in the
+  spawn env, named by a second override). A claude spawn with no pane id is
+  handed the app-owned ``<app_data_dir>/plan-mcp.json``, which is why that
+  file is still written at startup.
 - an ENVIRONMENT VARIABLE carrying a whole config document (opencode, kilo),
   deep-merged by the CLI over the user's files, so nothing on disk is written
   and the value dies with the pane. A value already present in the spawn env
@@ -47,6 +49,7 @@ so a spawn is never broken over MCP wiring.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -79,13 +82,23 @@ LEGACY_SERVER_NAMES = ("navide-plans",)
 # spawn env carries the real value.
 PROJECT_URL_ENV = "NAVIDE_MCP_URL"
 
+# The credential a CLI configured by flag reads from its environment, for a
+# flag that carries a URL rather than a config document (codex). argv is
+# readable by every account on the machine through `ps`; the environment is not.
+TOKEN_ENV = "NAVIDE_MCP_TOKEN"
+
+# Per-spawn config documents for CLIs whose flag reads a file. Each one holds a
+# credential, so the directory is owner-only and is emptied at startup: the
+# documents are read once at CLI start and their tokens die with the run.
+PANE_CONFIG_DIRNAME = "plan-mcp-panes"
+
 # Minted at import, not on first use: spawn wiring runs in worker threads and
 # concurrent pane restores would otherwise race to initialise it, burning a
 # token into one pane's command line that a later winner immediately replaces.
 _CALLER_TOKEN = secrets.token_urlsafe(24)
 
 
-def plan_mcp_url(port: int, pane_id: str = "") -> str:
+def plan_mcp_url(port: int, pane_id: str = "", *, with_token: bool = True) -> str:
     """Endpoint URL, identifying the pane the CLI runs in when known.
 
     The endpoint requires a credential on every call (see
@@ -95,21 +108,32 @@ def plan_mcp_url(port: int, pane_id: str = "") -> str:
     wired command spawned before a pane id was known — this backend's own
     host credential rides instead, so its own CLI wiring is never mistaken
     for an external caller.
+
+    ``with_token=False`` leaves the credential out, for a CLI that sends it
+    as a bearer header instead (see TOKEN_ENV).
     """
     base = f"http://127.0.0.1:{port}/plan-mcp"
-    if pane_id:
-        return f"{base}?pane={quote(pane_id, safe='')}&t={quote(caller_token(), safe='')}"
-    return f"{base}?client=host&t={quote(auth.internal_token(), safe='')}"
+    query = f"pane={quote(pane_id, safe='')}" if pane_id else "client=host"
+    if not with_token:
+        return f"{base}?{query}"
+    return f"{base}?{query}&t={quote(spawn_token(pane_id), safe='')}"
+
+
+def spawn_token(pane_id: str = "") -> str:
+    """The credential a spawn's wiring carries: the pane's, or the host's."""
+    return caller_token() if pane_id else auth.internal_token()
 
 
 def caller_token() -> str:
     """Per-run secret marking a caller as a pane this backend run spawned.
 
-    Scope note: it is a freshness check, not an authorisation boundary — the
-    token sits in every pane's command line, so anything running as the same
-    user can read it with ``ps``. What it buys is that a caller from a previous
-    backend run (or something that never went through spawn wiring) is rejected
-    instead of silently acting as some pane.
+    It never rides in a pane's command line (see wire_command), so it is not
+    on show to other accounts through ``ps``. Anything running as the same
+    user can still find it — in the pane's environment or its 0600 config
+    file — so it is a freshness check rather than an authorisation boundary
+    between processes of one user: a caller from a previous backend run (or
+    something that never went through spawn wiring) is rejected instead of
+    silently acting as some pane.
     """
     return _CALLER_TOKEN
 
@@ -193,6 +217,38 @@ def write_claude_config(port: int, path: Path | None = None) -> Path:
     # written), replaced atomically; plain content because claude parses it.
     secret_files.write_private_plain(path, content.encode("utf-8"))
     return path
+
+
+def pane_config_dir() -> Path:
+    return app_data_dir() / PANE_CONFIG_DIRNAME
+
+
+def write_spawn_config(agent_key: str, port: int, pane_id: str = "") -> Path:
+    """Write ``agent_key``'s config document for one spawn, owner-only.
+
+    Named by the pane (or "host" without one), so a pane that is respawned
+    replaces its own file rather than adding another.
+    """
+    directory = pane_config_dir()
+    secret_files.make_private_dir(directory)
+    digest = hashlib.sha256((pane_id or "host").encode("utf-8")).hexdigest()[:16]
+    path = directory / f"{agent_key}-{digest}.json"
+    document = config_document(agent_key, plan_mcp_url(port, pane_id))
+    secret_files.write_private_plain(path, json.dumps(document, indent=2).encode("utf-8"))
+    return path
+
+
+def clear_pane_configs() -> None:
+    """Remove the previous run's per-spawn config files; their tokens are dead."""
+    try:
+        entries = list(pane_config_dir().iterdir())
+    except OSError:
+        return
+    for entry in entries:
+        try:
+            entry.unlink()
+        except OSError as err:
+            log.warning("could not remove %s: %s", entry, err)
 
 
 def _command_text(command: Any) -> str:
@@ -532,10 +588,10 @@ def wire_command(
     deliberate MCP setup, esp. with --strict-mcp-config), or a missing fallback
     config file — a spawn must never break over MCP wiring.
 
-    With a pane id the flag carries the config inline rather than by path: the
-    URL differs per pane, and writing one file per pane would leave litter
-    behind in the app data dir. Only a flag that accepts a path has a fallback
-    to fall back to.
+    No credential is ever put in the command line: ``ps`` shows argv to every
+    account on the machine. A flag that reads a file is handed a 0600
+    per-spawn document (see write_spawn_config); codex's URL override is
+    paired with an override naming TOKEN_ENV, set in ``env``.
 
     ``env`` is the spawn environment and is mutated in place for the CLIs
     configured by variable; None (or a variable already set) leaves it alone.
@@ -556,18 +612,37 @@ def wire_command(
     if wiring.flag:
         if _already_wired(text, wiring.already_wired.format(flag=wiring.flag, name=SERVER_NAME)):
             return command
+        if wiring.flag_file_prefix is not None and _already_wired(text, PANE_CONFIG_DIRNAME):
+            return command
+        extra = ""
         if wiring.flag_value:
+            # The credential goes in the environment, never in argv; without an
+            # env to put it in, the URL has to carry it.
+            by_env = bool(wiring.flag_token_env_value) and env is not None
             value = wiring.flag_value.format(
-                name=SERVER_NAME, url=plan_mcp_url(port, pane_id)
+                name=SERVER_NAME, url=plan_mcp_url(port, pane_id, with_token=not by_env)
             )
-        elif pane_id or not wiring.flag_accepts_path:
-            value = config_json(agent_key, port, pane_id)
-        else:
+            if by_env:
+                env[TOKEN_ENV] = spawn_token(pane_id)
+                token_value = wiring.flag_token_env_value.format(name=SERVER_NAME, env=TOKEN_ENV)
+                extra = f" {wiring.flag} {paths.quote_arg(token_value)}"
+        elif wiring.flag_accepts_path and not pane_id:
             config = claude_config or claude_config_path()
             if not config.is_file():
                 return command
             value = str(config)
-        return _append_to_command(command, f"{wiring.flag} {paths.quote_arg(value)}")
+        elif wiring.flag_file_prefix is not None:
+            try:
+                path = write_spawn_config(agent_key, port, pane_id)
+            except OSError as err:
+                log.warning("%s pane %s spawns unwired: %s", agent_key, pane_id, err)
+                if warnings is not None:
+                    warnings.append(f"navide MCP not wired: {err}")
+                return command
+            value = f"{wiring.flag_file_prefix}{path}"
+        else:
+            value = config_json(agent_key, port, pane_id)
+        return _append_to_command(command, f"{wiring.flag} {paths.quote_arg(value)}{extra}")
     if wiring.config_env:
         if env is not None and wiring.config_env not in env:
             env[wiring.config_env] = config_json(agent_key, port, pane_id)
@@ -608,11 +683,13 @@ def wire_command(
 
 
 def write_claude_config_for_current_port() -> None:
-    """Refresh the app-owned claude ``--mcp-config`` file with this run's port.
+    """Refresh the app-owned claude ``--mcp-config`` file with this run's port,
+    and drop the previous run's per-spawn config files.
 
     Port discovery file absent -> no-op; panes just spawn unwired. Kept apart
     from the session-manager startup so a failure in one never skips the other.
     """
+    clear_pane_configs()
     port = backend_port()
     if port is not None:
         write_claude_config(port)

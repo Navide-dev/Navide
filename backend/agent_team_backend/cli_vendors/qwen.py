@@ -921,6 +921,7 @@ SPEC = VendorSpec(
             entry=(("httpUrl", McpValue.URL),),
         ),
         flag="--mcp-config",
+        flag_file_prefix="",
     ),
     # `--input-file` is registered but absent from `qwen --help` (verified in
     # 0.21.12's own bundle: "File path for receiving remote input commands

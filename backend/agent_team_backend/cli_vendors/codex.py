@@ -1860,6 +1860,7 @@ SPEC = VendorSpec(
     mcp_wiring=McpWiring(
         flag="-c",
         flag_value='mcp_servers.{name}.url="{url}"',
+        flag_token_env_value='mcp_servers.{name}.bearer_token_env_var="{env}"',
         already_wired="mcp_servers.{name}",
     ),
     login_command_args="login",
