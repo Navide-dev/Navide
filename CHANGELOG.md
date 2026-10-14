@@ -2,6 +2,34 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.22] — 2026-10-14 — signed release
+
+### Added
+
+- **Read aloud** (off by default): when a pane marked 🔊 finishes or needs an answer, Navide speaks a short notice with the system voice ("{pane} is done" / "{pane} needs your answer"; "{n} panes are done" when several finish together). The 🔊 toggle is in each pane's title bar, and Esc or the voice input shortcut stops speech at once. Turn it on with "Read replies aloud" in Settings › Voice Input › Read aloud, which also offers a voice picker, speed and preview. The "Voice model" row shows whether the recommended voice for the interface language is installed (美佳（Premium） for zh-TW, Ava (Premium) for en-US, Kyoko (Enhanced) for ja-JP); on macOS its Download button opens Accessibility › Spoken Content in System Settings. Speech is synthesized on this computer (#229).
+
+### Changed
+
+- Settings: the status badges, keyboard shortcuts and analyzer pages are polished further (#215, #219). Disabled Reset buttons keep readable text, the keyboard shortcuts page uses outlined icons instead of emoji with a visible legend under the toolbar, the analyzer has one primary button per page, and status badge descriptions and tags wrap instead of being cut off (most visible in ja-JP).
+- Settings: the layout, CLI agents and CLI extensions pages are polished (round 4, #225). Icons are consistent and controls aligned, disabled controls are visible, push badges read "Push on / Push off / No push channel", the CLI extensions tab is shortened to "What Navide changes", the analyzer's ghost buttons have readable contrast, and ja-JP lines no longer leave a single character on its own line.
+- Settings: the accounts, credentials and security pages are polished (round 5, #230). CLIs with several accounts are listed first with full email addresses, long explanations fold under "Details", Credentials switches between findings and inventory with a segmented control, deferred cards use a dashed outline, Security lists the CLIs in two columns with the terminal-protection sub-blocks nested, scope rows are labelled "Applies to", CLI initials are unique (for example KM and KL), the zh-TW sidebar reads "CLI 代理", and ja-JP line breaking follows the page's `lang` attribute. Visual only; no setting or behaviour changes.
+- Account popover: each pane's "Follow account switch" toggle sits at the top of the account popover. The 🔗 button in the pane header is removed, and the header shows 📌 only when the pane is pinned (#223).
+- Status bar: the backend popover (title, connection state, Restart/Start/Stop) and the pipeline pill (Stage N / M, completed/aborted) are translated in zh-TW and ja-JP instead of showing English (#222).
+- Dependencies: fastapi 0.143, anthropic 1.13, ruff 0.17, koffi 3.3.3, Electron 44.7, Playwright and happy-dom (#207, #208, #209, #210, #211).
+- Tests: four timing-sensitive tests now count clock reads, order by events or await their own return instead of waiting on wall-clock deadlines (#204, #206, #220, #228).
+
+### Fixed
+
+- Channels: a Telegram or other channel chat no longer stays on "⏳ 仍在執行" after Claude compacts an idle conversation; the compaction summary is no longer treated as a prompt from the pane (#213).
+- Channels: when a channel-bound Claude pane hits its usage limit while a chat request is open, the chat is told once, with the reset time (and the limit menu's options when it is on screen). The request stays open, so a reply after the reset still arrives in the chat (#217).
+- Channels: when Claude splits one reply into two transcript lines, the chat no longer gets an extra empty "（pane 回合結束，沒有文字輸出）" reply; the turn's text is replied once. A turn that is really empty still gets that notice, up to 120 s later (#221).
+- Account switching: "Make all follow", the switch offer and the quota switch find a pane that was rebuilt while their question was open, and move it instead of reporting it missing (#214).
+- CLI install prompt: the "Stop asking" box now shows up before the CLI status has loaded and is saved, so the Codex install prompt no longer comes back after every failed launch. A box the user ticked is not unticked by a status that arrives later (#216).
+- CLI install prompt: an uncertain detection result no longer counts as "not installed", so a CLI that is already installed (common with nvm or a slow login shell) no longer gets the install prompt. The ＋ menu waits for the login-shell PATH before marking a CLI as missing and re-detects before prompting, a `--version` timeout counts as installed, and exit 127 opens the installer only when a probe confirms the CLI is missing (#226).
+- Pipelines: pipeline tools use the pane's own workspace path when the pane sits in a subfolder of a repository (M1, M2; #227).
+- Plans: a plan document keeps its DOCTYPE first when it is promoted (P3), and a failed Plans backend subscription answers with an error instead of leaving the Host waiting (P2) (#227).
+- Plans: migrated Plans preferences land in the right workspace partition (X1), and the history backfill no longer stamps entries whose removal time is unknown with today's date (X2) (#227).
+
 ## [0.2.21] — 2026-10-13 — signed release
 
 ### Added
