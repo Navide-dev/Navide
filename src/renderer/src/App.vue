@@ -383,6 +383,8 @@ import {
 import type { FollowDialogRow } from './components/AccountFollowSwitchDialog.vue'
 import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles'
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
+import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
+import { usePermissions } from './composables/usePermissions'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
 import navideMark from './assets/navide-mark.png'
 
@@ -419,6 +421,7 @@ const PipelineManagerModal = defineAsyncComponent(() => import('./components/Pip
 const AnnouncementsPanel = defineAsyncComponent(() => import('./components/AnnouncementsPanel.vue'))
 const EvolvePanel = defineAsyncComponent(() => import('./components/EvolvePanel.vue'))
 const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vue'))
+const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 
 const backend = useBackend()
 const terminalPort = createHostTerminalDockPort(backend)
@@ -888,6 +891,24 @@ const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.
 const { openPopover, toggle: togglePopover, close: closePopover } = useStatusBarPopover()
+
+// Status-bar notifications bell: the two Settings → Notifications toggles,
+// shared with that page through useNotifyPrefs. The permission status is the
+// last test result main keeps (see usePermissions), re-read when the popover
+// opens; a denial earns the bell a warning dot.
+const notifyPermissions = usePermissions()
+void notifyPermissions.refresh()
+watch(openPopover, (id) => {
+  if (id === 'notify') void notifyPermissions.refresh()
+})
+const notifyPermissionDenied = computed(() => notifyPermissions.statuses.value.notifications === 'denied')
+const notifyBarTitle = computed(() =>
+  [
+    i18n.global.t(systemNotifyOn.value ? 'notifyBar.tooltip-on' : 'notifyBar.tooltip-off'),
+    notifySoundOn.value ? '' : i18n.global.t('notifyBar.sound-off'),
+    notifyPermissionDenied.value ? i18n.global.t('settings.general.notify-permission-status.denied') : '',
+  ].filter(Boolean).join(' · ')
+)
 watch(
   onboardingComplete,
   (value) => {
@@ -9113,7 +9134,7 @@ watch(currentWorkspace, (workspacePath) => {
 // alone is not enough: asking for the tab you are already on leaves the prop
 // unchanged, so the modal's watcher never fires and the request is dropped.
 const settingsTabRequest = ref(0)
-const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions'>('general')
+const settingsInitialTab = ref<'general' | 'cross-device' | 'mcp' | 'analyzer' | 'updates' | 'appearance' | 'accounts' | 'keybindings' | 'prompts' | 'channels' | 'voice' | 'marketplace' | 'cliExtensions' | 'notifications'>('general')
 // Needed to retarget an already-open modal: initialTab is only honoured on mount
 // and by its own watcher, so re-issuing the same tab is a no-op without this.
 const settingsModalRef = ref<{
@@ -22168,6 +22189,33 @@ function paneIsCommander(p: ActivePane): boolean {
           <span class="sb-reconnect-dismiss" :title="$t('restore.dismiss')" @click="dismissReconnectBanner">✕</span>
         </span>
         <span
+          class="sb-item sb-clickable sb-notify"
+          :class="{ 'sb-off': !systemNotifyOn, 'sb-warn': notifyPermissionDenied }"
+          role="button"
+          tabindex="0"
+          :title="notifyBarTitle"
+          :aria-label="notifyBarTitle"
+          @click="togglePopover('notify')"
+          @keydown.enter="togglePopover('notify')"
+        >
+          <span v-if="notifyPermissionDenied" class="sb-dot" />
+          <svg v-if="systemNotifyOn" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+          </svg>
+          <svg v-else width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/>
+            <path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+            <path d="m2 2 20 20"/>
+          </svg>
+          <svg v-if="!notifySoundOn" class="sb-notify-sound-off" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 5 6 9H2v6h4l5 4V5z"/>
+            <line x1="22" y1="9" x2="16" y2="15"/>
+            <line x1="16" y1="9" x2="22" y2="15"/>
+          </svg>
+        </span>
+        <span
           class="sb-item sb-clickable sb-announce"
           :class="{ 'sb-announce-unread': announcements.unreadCount.value > 0 }"
           role="button"
@@ -22243,6 +22291,18 @@ function paneIsCommander(p: ActivePane): boolean {
       :workspace="evolve.panelWorkspace.value"
       :agent-specs="enabledAgentSpecs"
       @close="evolve.closePanel()"
+    />
+
+    <!-- Notifications popover -->
+    <NotifyPanel
+      v-if="openPopover === 'notify'"
+      :system-notify="systemNotifyOn"
+      :notify-sound="notifySoundOn"
+      :permission-status="notifyPermissions.statuses.value.notifications"
+      @update:system-notify="setSystemNotifyOn"
+      @update:notify-sound="setNotifySoundOn"
+      @open-settings="closePopover(); openSettingsAt('notifications')"
+      @close="closePopover()"
     />
 
     <!-- Clock popover -->
@@ -23805,6 +23865,10 @@ function paneIsCommander(p: ActivePane): boolean {
 }
 .sb-url { color: var(--text-muted); font-size: var(--font-3xs); }
 .sb-clock { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.sb-notify.sb-off { color: var(--text-muted); }
+.sb-notify.sb-off:hover { color: var(--text-bright); }
+.sb-notify-sound-off { color: var(--text-muted); }
+.sb-notify.sb-warn .sb-dot { background: var(--attention-fg); }
 .sb-version { color: var(--text-muted); margin-left: 4px; }
 .sb-announce-unread .sb-version { color: inherit; }
 .sb-orphans { color: var(--danger, #C0392B); cursor: pointer; font-weight: 600; }

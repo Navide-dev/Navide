@@ -25,8 +25,9 @@ import {
   setUsageRefreshSec,
   usageRefreshSec,
 } from '../composables/useUsage'
-import { systemNotifyEnabled, setSystemNotifyEnabled } from '../composables/useSystemNotify'
-import { notifySoundEnabled, setNotifySoundEnabled } from '../composables/useSoundNotify'
+import { setSystemNotifyEnabled } from '../composables/useSystemNotify'
+import { setNotifySoundEnabled } from '../composables/useSoundNotify'
+import { notifySoundOn, systemNotifyOn } from '../composables/useNotifyPrefs'
 import { usePermissions } from '../composables/usePermissions'
 import {
   AUTO_RESUME_ON_RECONNECT_SETTING_KEY,
@@ -1409,12 +1410,13 @@ function onResumeInterruptedOnLaunchChange(): void {
 }
 
 // Background notifications for CLI done / needs-input: the OS notification and
-// the sound are separate toggles so either can be muted on its own.
-const systemNotifyEnabledModel = ref(systemNotifyEnabled())
+// the sound are separate toggles so either can be muted on its own. The models
+// are the shared refs the status-bar bell also shows, so both stay in step.
+const systemNotifyEnabledModel = systemNotifyOn
 function onSystemNotifyEnabledChange(): void {
   setSystemNotifyEnabled(systemNotifyEnabledModel.value)
 }
-const notifySoundEnabledModel = ref(notifySoundEnabled())
+const notifySoundEnabledModel = notifySoundOn
 function onNotifySoundEnabledChange(): void {
   setNotifySoundEnabled(notifySoundEnabledModel.value)
 }

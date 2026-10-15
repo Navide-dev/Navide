@@ -8743,6 +8743,14 @@
     "duration-hours": "{count} 時間",
     "duration-minutes": "{count} 分"
   },
+  "notifyBar": {
+    "tooltip-on": "システム通知オン",
+    "tooltip-off": "システム通知オフ",
+    "sound-off": "通知音オフ",
+    "open-settings": "通知の設定",
+    "close": "閉じる",
+    "permission-line": "{label}：{status}"
+  },
   "time": {
     "ago-just-now": "たった今",
     "ago-minutes": "{count} 分前 | {count} 分前",
