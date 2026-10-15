@@ -104,6 +104,22 @@
       ]
     },
     {
+      "test": "backend/tests/test_terminals_registry_data_dir.py::test_kill_all_waits_for_registry_cleanup_before_returning",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-15T22:02:38Z",
+      "lastSeen": "2026-10-15T22:02:38Z",
+      "runs": [
+        {
+          "run": 38813392252,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 308,
+          "at": "2026-10-15T22:02:38Z",
+          "evidence": "FAILED backend/tests/test_terminals_registry_data_dir.py::test_kill_all_waits_for_registry_cleanup_before_returning - assert False"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
       "category": "test-race",
       "count": 1,
