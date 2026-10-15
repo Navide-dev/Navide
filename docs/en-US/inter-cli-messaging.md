@@ -782,7 +782,7 @@ opened after the switch has the new file from the outset.
 
 | Guard | Limit |
 |---|---|
-| Rate limit per sender→target pair | 5 messages per 60s |
+| Rate limit per sender→target pair | 5 messages per 60s (a chat channel sender: 30, see Channels) |
 | Pending messages per target pane | 10 |
 | Delivery log | last 500 rows |
 | Global pause | Messages panel header |
@@ -995,9 +995,13 @@ not grant access.
   sender to one topic arriving within 500 ms are joined into one message.
 - `stop`, `停止`, `/stop` or `esc` interrupts the pane (same as `cli_interrupt`)
   instead of being delivered.
-- A busy pane queues the message as usual (holds, rate limit and the Messages
-  panel are unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most
-  20 chat messages may wait per pane.
+- A busy pane queues the message as usual (holds and the Messages panel are
+  unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most 20 chat
+  messages may wait per pane.
+- A chat sender is a person, so the 5-per-60s pair limit for agents does not
+  apply. Instead each sender may send 30 messages per pane per 60s; past that
+  the chat is told the message was not delivered and how many seconds to wait
+  before resending.
 - While the pane works, one status message is edited in place (at most once a
   second, abandoned after 3 failed edits) and a typing indicator is refreshed
   every 4 s. After 30 minutes without a turn end the indicators stop; the reply
