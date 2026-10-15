@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -162,6 +163,48 @@ Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7456427Z = 1 faile
 Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7922192Z ##[error]Process completed with exit code 1.
 Lint and test	Require every check to succeed	2026-10-15T19:29:12.8164352Z ##[error]Process completed with exit code 1.`
 
+// PR #305 run 38807333845 attempt 1, Backend tests (Windows, 3/4), trimmed:
+// pytest-timeout dumped every thread's stack and ended pytest, so no FAILED line.
+const PYTEST_TIMEOUT_DUMP = String.raw`2026-10-15T21:15:23.2640906Z --- 480s: 852 results; last: backend\tests\test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal +++++++++++++++++++++++++++++++++++ Timeout +++++++++
+2026-10-15T21:15:23.2674803Z --- pytest exit: 1
+2026-10-15T21:15:23.2689020Z --- last 200 lines of pytest.log:
+2026-10-15T21:15:23.2767901Z ~~~~~~~~~~~~~~~~~~~~~~~~~ Stack of vault-io_4 (6540) ~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-10-15T21:15:23.2773721Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032, in _bootstrap
+2026-10-15T21:15:23.3798429Z   File "D:\a\Navide\Navide\backend\.venv\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+2026-10-15T21:15:23.3805545Z     result = testfunction(**testargs)
+2026-10-15T21:15:23.3813260Z   File "D:\a\Navide\Navide\backend\tests\test_db.py", line 230, in test_commits_are_not_blocked_by_a_reader_holding_the_journal
+2026-10-15T21:15:23.3819878Z     db.kv_set(f"k{i}", i, now=i)
+2026-10-15T21:15:23.3852224Z   File "D:\a\Navide\Navide\backend\agent_team_backend\db.py", line 105, in transaction
+2026-10-15T21:15:23.3858071Z     with self._lock:
+2026-10-15T21:15:23.3864151Z +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+2026-10-15T21:15:23.3870331Z --- summary:
+2026-10-15T21:15:23.4403174Z ##[error]Process completed with exit code 1.`
+
+describe('test races without a timing word in the assertion', () => {
+  it('reads a wait helper that gave up as a race (run 38790727272, Windows 4/4)', () => {
+    const log = String.raw`2026-10-15T19:29:02.7453663Z FAILED backend\tests\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({
+      test: 'backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+      category: 'test-race',
+    })])
+  })
+
+  it('reads a pytest-timeout stack dump as a race of the test it stopped', () => {
+    const [entry, ...rest] = classifyLog(PYTEST_TIMEOUT_DUMP)
+    expect(rest).toEqual([])
+    expect(entry).toMatchObject({
+      test: 'backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal',
+      category: 'test-race',
+    })
+    expect(entry.evidence).toContain('test_db.py", line 230, in test_commits_are_not_blocked_by_a_reader_holding_the_journal')
+  })
+
+  it('still lets the environment win over a timeout dump', () => {
+    const log = `2026-10-15T21:10:00.0000000Z npm error network read ECONNRESET\n${PYTEST_TIMEOUT_DUMP}`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({ category: 'environment' })])
+  })
+})
+
 describe('splitJobLogs — one saved log, possibly several jobs', () => {
   it('gives each job of a gh run view --log-failed file its own failures', () => {
     const jobs = splitJobLogs(MIXED_JOBS, '(local log)')
@@ -176,6 +219,19 @@ describe('splitJobLogs — one saved log, possibly several jobs', () => {
       ]]],
       ['Lint and test', [['(job)', '##[error]Process completed with exit code 1.']]],
     ])
+  })
+
+  it('leaves out the aggregate Lint and test job, which fails whenever another job does', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'triage-'))
+    try {
+      const path = join(dir, 'run.log')
+      writeFileSync(path, MIXED_JOBS)
+      const out = execFileSync(process.execPath, ['scripts/ci-triage.mjs', '--log', path], { encoding: 'utf8' })
+      expect(out).toContain('Backend tests (Windows, 4/4)')
+      expect(out).not.toContain('Lint and test')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('keeps a single job log, as the API returns it, under the given job name', () => {

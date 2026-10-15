@@ -24,7 +24,13 @@ import { fileURLToPath } from 'node:url'
 const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time|An action could not be found at the URI|Failed to download archive|Unable to resolve action/i
 // Signatures, not bare words: an assertion diff can quote any text (a tool
 // description saying "timed out" is not a timeout).
-const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use/i
+const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use|condition never became true/i
+// pytest-timeout dumps every thread's stack between these banners and ends
+// pytest, so the test it stopped has no FAILED line: name it from its frame.
+const PYTEST_TIMEOUT = /\+{3,} Timeout \+{3,}/
+const TEST_FRAME = /^\s*File ".*?[\\/](backend[\\/]tests[\\/][^"]+\.py)", line \d+, in (test_\w+)$/
+// The required-check job that fails whenever another job does; it is never the cause.
+const AGGREGATE_JOB = 'Lint and test'
 const MAX_RUNS_PER_TEST = 20
 
 /** The file of the innermost frame pytest reported for `test` when it raised an
@@ -77,10 +83,12 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
     const failed = lines.find((l) => /##\[error\]/.test(l))
     if (failed) {
       const env = lines.find((l) => ENVIRONMENT.test(l))
+      const timedOut = !env && lines.some((l) => PYTEST_TIMEOUT.test(l))
+      const frame = timedOut ? lines.map((l) => TEST_FRAME.exec(l)).find(Boolean) : null
       out.push({
-        test: '(job)',
-        category: env || /canceled/i.test(failed) ? 'environment' : 'product-defect',
-        evidence: (env ?? failed).trim().slice(0, 400),
+        test: frame ? `${frame[1].replace(/\\+/g, '/')}::${frame[2]}` : '(job)',
+        category: env || /canceled/i.test(failed) ? 'environment' : timedOut ? 'test-race' : 'product-defect',
+        evidence: (env ?? frame?.[0] ?? failed).trim().slice(0, 400),
       })
     }
   }
@@ -173,6 +181,7 @@ function main(argv) {
   }
   if (jobs.length === 0) process.stdout.write('no failed Actions jobs\n')
   for (const j of jobs) {
+    if (j.job === AGGREGATE_JOB) continue
     const entries = classifyLog(j.text, { knownRaces })
     for (const e of entries) process.stdout.write(`${e.category.padEnd(15)} ${j.job} :: ${e.test}\n  ${e.evidence}\n`)
     if (write && entries.length) mergeIntoLedger(ledgerPath, entries, { run: j.run, job: j.job, pr: j.pr, at: j.at })
