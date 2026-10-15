@@ -22,7 +22,8 @@ x64 提供兩種套件：
 ## 從原始碼安裝的前置需求
 
 - 配備 Apple 晶片的 macOS 13+、Linux x64，或 x64／Arm 版 Windows
-- Bun 1.4.3+（不需另外安裝 Node.js 或 pnpm）
+- Node.js 22.12+（22.x）
+- pnpm 10+
 - Python 3.12+
 - uv 0.11+
 - 至少一個受支援的 Coding CLI（共 14 種：Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code），清單見[使用手冊](user-guide.md)
@@ -36,12 +37,12 @@ x64 提供兩種套件：
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-bun install
+pnpm install
 uv --project backend sync
-bun run dev
+pnpm dev
 ```
 
-`bun run dev` 會同時啟動 Electron 應用程式、Vite Renderer 與 Python FastAPI Backend。
+`pnpm dev` 會同時啟動 Electron 應用程式、Vite Renderer 與 Python FastAPI Backend。
 
 ## 首次啟動
 
@@ -72,11 +73,9 @@ Onboarding Wizard 會檢查必要 Runtime，並偵測可用的 Agent CLI。依�
 ## 開發檢查
 
 ```bash
-bun run typecheck
-bun run test:run
+pnpm typecheck
+pnpm test:run
 uv --project backend run pytest backend/tests
 ```
-
-`src/main/plugins/pluginExternalWorkspace.test.ts` 會像外部外掛作者的 pnpm 專案那樣安裝打包好的公開套件，所以需要 PATH 上有 `pnpm`；沒有時只有這一個測試失敗，`bun run test:run` 的其餘部分不受影響，CI 會為它提供 pnpm。詳見 [Contributing](../../CONTRIBUTING.md)。
 
 如果應用程式、Backend、CLI、Session Binding、Analyzer 或 Token Tracking 未正常啟動，請參考[疑難排解](troubleshooting.md)。

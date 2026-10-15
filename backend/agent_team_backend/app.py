@@ -2046,7 +2046,7 @@ _INHERITED_CLI_HOME_VARS = (
     # Not home relocators, but the same inheritance hazard with a worse
     # failure mode: runtime markers a CLI stamps on its own subprocesses.
     # Claude Code's child-session marker makes an inheriting pane skip
-    # transcript saving (observed: `bun run dev` launched from a claude pane —
+    # transcript saving (observed: `pnpm dev` launched from a claude pane —
     # the pane works all day and restores as a blank after restart). Grok's
     # child markers are the same shape, stripped preemptively; they are
     # process-lifecycle flags no user config legitimately sets.
@@ -2128,7 +2128,7 @@ def _sanitize_inherited_cli_env() -> None:
     """Drop CLI home-relocating vars inherited from whatever launched us.
 
     The account design assumes every CLI reads its real home; an inherited
-    relocation (e.g. `bun run dev` run from a pane that still carried
+    relocation (e.g. `pnpm dev` run from a pane that still carried
     CLAUDE_CONFIG_DIR) would silently poison every spawned pane and
     log-reader scan with a home nobody's sessions live in.
     """

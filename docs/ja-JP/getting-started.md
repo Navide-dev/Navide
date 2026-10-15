@@ -22,7 +22,8 @@ x64 向けに 2 種類のパッケージを配布しています。
 ## Source からインストールするために必要なもの
 
 - Apple silicon 上の macOS 13+、Linux x64、または x64 / Arm 版 Windows
-- Bun 1.4.3+（Node.js や pnpm の別途インストールは不要）
+- Node.js 22.12+（22.x）
+- pnpm 10+
 - Python 3.12+
 - uv 0.11+
 - 対応する 14 種類の Coding CLI（Aider、Antigravity CLI、Claude Code、Codex、Copilot CLI、Cursor CLI、Droid、Grok CLI、Kilo Code、Kimi Code、Muse Code、OpenCode、Pi、Qwen Code）のうち一つ以上。一覧は [User Guide](user-guide.md) を参照
@@ -36,12 +37,12 @@ x64 向けに 2 種類のパッケージを配布しています。
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-bun install
+pnpm install
 uv --project backend sync
-bun run dev
+pnpm dev
 ```
 
-`bun run dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
+`pnpm dev` は Electron Application、Vite Renderer、Python FastAPI Backend をまとめて起動します。
 
 ## 初回起動
 
@@ -72,11 +73,9 @@ Manual Flow が動作したら、小さな Task で Pipeline を試してくだ�
 ## 開発チェック
 
 ```bash
-bun run typecheck
-bun run test:run
+pnpm typecheck
+pnpm test:run
 uv --project backend run pytest backend/tests
 ```
-
-`src/main/plugins/pluginExternalWorkspace.test.ts` は、パックした公開パッケージを外部プラグイン作者の pnpm プロジェクトと同じ方法でインストールするため、PATH 上に `pnpm` が必要です。pnpm がない場合に失敗するのはこのテストだけで、`bun run test:run` の残りには影響しません。CI ではこのテスト用に pnpm を用意しています。[Contributing](../../CONTRIBUTING.md) を参照してください。
 
 Application、Backend、CLI、Session Binding、Analyzer、Token Tracking が期待どおり起動しない場合は、[トラブルシューティング](troubleshooting.md)を参照してください。

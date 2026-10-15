@@ -3,7 +3,7 @@
 // runner (scripts/isolated-pytest.sh): a local shortcut, never a substitute
 // for the full suite that CI and the release gates run.
 //
-//   bun scripts/changed-backend-tests.mjs [base] [--list] [-- pytest args]
+//   node scripts/changed-backend-tests.mjs [base] [--list] [-- pytest args]
 //
 // "Changed" is everything between `base` (default origin/main) and the
 // working tree, untracked files included, like `vitest --changed`. A changed

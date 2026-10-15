@@ -71,11 +71,16 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -90,21 +95,21 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Check the runner is the target
         run: |
-          host="$(bun -p "process.platform + '-' + process.arch")"
+          host="$(node -p "process.platform + '-' + process.arch")"
           echo "runner target: ${host}"
           test "${host}" = "${{ matrix.target }}"
 
       - name: Build navide.plans
         # The same build commands scripts/publish-first-party-plugins.sh runs.
         run: |
-          bun run build:public-packages
-          bun run build:plans:v2
-          bun run build:plans:backend
+          pnpm run build:public-packages
+          pnpm run build:plans:v2
+          pnpm run build:plans:backend
 
       - name: Verify the backend architecture
         run: |
@@ -112,7 +117,7 @@ jobs:
           case "${{ matrix.target }}" in
             win32-*)
               test -f "${backend}.exe"
-              bun scripts/check-pe-machine.mjs "${{ matrix.arch }}" "${backend}.exe"
+              node scripts/check-pe-machine.mjs "${{ matrix.arch }}" "${backend}.exe"
               ;;
             *)
               test -x "${backend}"

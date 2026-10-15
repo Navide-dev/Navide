@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Dev-only: serve the renderer for a browser, with no Electron at all.
 //
-//   NAVIDE_DEV_WEB=1 bun scripts/dev-web/serve.mjs
+//   NAVIDE_DEV_WEB=1 node scripts/dev-web/serve.mjs
 //
 // `electron-vite dev --rendererOnly` is not a substitute: it skips building
 // main and preload but still launches Electron afterwards. This resolves the

@@ -45,54 +45,48 @@ Describe the problem you are trying to solve and the solution you have in mind.
 
 ## Development Setup / 開發環境設定
 
-**Requirements:** Bun 1.4.3+ (no separate Node.js or pnpm needed for daily work), Python 3.12+, uv 0.11+, Go 1.27.x
+**Requirements:** Node.js 22.12+ (22.x), pnpm 10+, Python 3.12+, uv 0.11+, Go 1.27.x
 for the packaged Plans fixture, and macOS 13+ on Apple silicon, Linux x64, or Windows x64
-
-The repository's `bunfig.toml` sets `[run] bun = true`, so `bun run <script>`
-executes package scripts and dependency CLIs (Vite, Vitest, `tsc`,
-electron-builder) on Bun even when Node.js is also installed. `package.json`'s
-`packageManager` field names the Bun version CI uses; `engines.bun` states the
-minimum. Dependency vulnerability scanning is `bun audit --audit-level=high`.
 
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
 
-bun install
+pnpm install
 uv --project backend sync
 
-bun run dev
+pnpm dev
 ```
 
-The `bun run dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
+The `pnpm dev` command starts Electron, Vite dev server, and the Python FastAPI backend together.
 
 The first development start packages the production Plans backend with
 `uv`/PyInstaller. Later starts reuse it when the Python sources, build script,
 dependency files, resolved interpreter, platform, architecture, and executable
 contents are unchanged. Missing or changed output is rebuilt automatically.
-`bun run build:plans:backend` always rebuilds it explicitly; production and CI
-builds remain unconditional — only `bun run dev` passes `--if-needed`, and the
+`pnpm run build:plans:backend` always rebuilds it explicitly; production and CI
+builds remain unconditional — only `pnpm dev` passes `--if-needed`, and the
 build script honours the opt-out below on that invocation alone.
 
-Without `uv`/PyInstaller that build fails and `bun run dev` stops before Electron
+Without `uv`/PyInstaller that build fails and `pnpm dev` stops before Electron
 starts. To work on anything else in the meantime, skip it:
 
 ```bash
-NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev
+NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev
 ```
 
 The app then starts without the packaged Plans backend: the Host finds no
 backend entry on disk, so the Plans v2 package is not registered and Plans runs
 through its legacy recovery window instead. Every other surface — terminals,
 Git, the editor — is unaffected. Never set this for a production or CI build:
-invoked without `--if-needed` (`bun run build`, `bun run dist`, the CI gates) the
+invoked without `--if-needed` (`pnpm build`, `pnpm dist`, the CI gates) the
 script fails with a message naming the variable rather than shipping a release
 with no packaged Plans backend.
 
-> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 bun run dev` 跳過打包，
+> 沒有 `uv`/PyInstaller 時用 `NAVIDE_SKIP_PLANS_BACKEND_BUILD=1 pnpm dev` 跳過打包，
 > Plans 會以 legacy recovery 視窗運作，其他功能不受影響。
 
-> `bun run dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
+> `pnpm dev` 會同時啟動 Electron、Vite dev server 和 Python FastAPI backend。
 
 ### Git hooks
 
@@ -132,15 +126,15 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
 2. Make your changes.
 3. Run the test suite:
    ```bash
-   bun run test:run
+   pnpm test:run
    uv --project backend run pytest backend/tests
    ```
    While iterating, run only what your change can affect, then the full suites
    above before you push (CI and the release gates always run them in full):
    ```bash
-   bun run vitest run --changed origin/main         # tests importing changed files
-   bun scripts/changed-backend-tests.mjs            # backend tests for changed files
-   bun scripts/changed-backend-tests.mjs --list     # just print the selection
+   pnpm vitest run --changed origin/main           # tests importing changed files
+   node scripts/changed-backend-tests.mjs           # backend tests for changed files
+   node scripts/changed-backend-tests.mjs --list    # just print the selection
    scripts/isolated-pytest.sh backend/tests --lf    # re-run last failures
    ```
    `changed-backend-tests.mjs` compares against `origin/main` (pass another
@@ -153,20 +147,9 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    change to conftest, test helpers, `pyproject.toml` or the lock runs the
    whole suite. It does not follow indirect imports, so it can miss a
    breakage the full suite catches.
-
-   `bun run test:run` is the complete Vitest run (`bun run test` starts watch
-   mode; bare `bun test` is Bun's own runner, not Vitest). One test,
-   `src/main/plugins/pluginExternalWorkspace.test.ts`, installs the packed public
-   packages the way an external plugin author's pnpm project does, so it needs
-   `pnpm` on PATH; without it that single test fails, and CI provides pnpm for
-   it. External plugin authors keep their own Node, npm or pnpm workflow.
-
-   > `bun run test:run` 跑完整 Vitest（`bun run test` 是 watch 模式；單用 `bun test` 是
-   > Bun 自己的 runner，不是 Vitest）。`pluginExternalWorkspace.test.ts` 會像外部外掛作者的
-   > pnpm 專案那樣安裝打包好的公開套件，所以需要 PATH 上有 `pnpm`；沒有時只有這一個測試失敗，CI 會為它提供 pnpm。
 4. Run type checks:
    ```bash
-   bun run typecheck
+   pnpm typecheck
    ```
 5. If you touched the cross-device path (`server_link.py`, `remote_roster.py`,
    `trust_store.py`, or the Navide-Server wire protocol), run the end-to-end
@@ -191,10 +174,14 @@ run separately from ordinary frontend tests. The `Lint and test` status requires
 the test/build matrices, packaged Plans, marketplace contracts, deterministic
 speech sidecar tests and dependency audit to succeed. CI does not run Electron
 UI automation; test UI changes manually. To reproduce the build check locally,
-run `bun run build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
+run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
 
+CI runs its install, typecheck and test jobs on Bun (`bun install --frozen-lockfile`, version pinned in `.bun-version`); releases and local development still use pnpm. When you change a dependency, run `pnpm install` and `bun install` so `bun.lock` and `pnpm-lock.yaml` resolve the same versions; CI fails on a stale `bun.lock` and, via `scripts/check-lockfile-parity.mjs`, whenever the two locks resolve different packages.
+
 > Fork 後建立 feature branch，跑測試與型別檢查無誤後，依照下方 commit 格式提交，並開 PR 至 `main`。
+>
+> CI 的安裝、型別檢查與測試 job 以 Bun 執行（`bun install --frozen-lockfile`，版本固定於 `.bun-version`）；發佈與本機開發仍使用 pnpm。變更依賴時請同時執行 `pnpm install` 與 `bun install`，讓 `bun.lock` 與 `pnpm-lock.yaml` 解析出相同版本；`bun.lock` 過期、或兩份 lock 解析出不同套件時（由 `scripts/check-lockfile-parity.mjs` 檢查）CI 會失敗。
 
 ---
 

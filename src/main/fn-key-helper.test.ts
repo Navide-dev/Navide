@@ -240,7 +240,7 @@ describe('FnKeyService', () => {
     expect(service.subscribe({ id: 1, send: (c, p) => c === FN_KEY_STATUS_CHANNEL && seen.push((p as { phase: string }).phase) }).phase).toBe('missing')
     expect(seen).toEqual(['missing'])
     expect(t.spawn).not.toHaveBeenCalled()
-    // Built meanwhile (bun run build:fn-key): the next subscribe (Try again) starts it.
+    // Built meanwhile (pnpm build:fn-key): the next subscribe (Try again) starts it.
     path = '/bin/navide-fn-key'
     service.unsubscribe(1)
     expect(service.subscribe({ id: 1, send: () => {} }).phase).toBe('starting')
@@ -281,15 +281,15 @@ describe('FnKeyService', () => {
   })
 })
 
-// `bun run dev` never ran `bun run build`, so a checkout's fn toggle once had no
+// `pnpm dev` never ran `pnpm build`, so a checkout's fn toggle once had no
 // helper at all and nothing said so.
 describe('fn-key helper in a dev checkout', () => {
   const root = resolve(__dirname, '..', '..')
 
-  it('bun run dev builds the helper when it is missing or stale, and a failure does not stop dev', () => {
+  it('pnpm dev builds the helper when it is missing or stale, and a failure does not stop dev', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }
     const dev = pkg.scripts.dev
-    expect(dev).toContain('bun scripts/build-fn-key-helper.mjs --if-needed')
+    expect(dev).toContain('node scripts/build-fn-key-helper.mjs --if-needed')
     expect(dev.indexOf('build-fn-key-helper.mjs')).toBeLessThan(dev.indexOf('electron-vite dev'))
     const script = readFileSync(join(root, 'scripts', 'build-fn-key-helper.mjs'), 'utf8')
     expect(script).toMatch(/if \(ifNeeded\) \{\s*try \{\s*build\(\)\s*\} catch/)

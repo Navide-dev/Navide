@@ -133,7 +133,7 @@ For a development checkout, install from source instead.
 
 ### Source prerequisites
 
-- Bun 1.4.3+ (no separate Node.js or pnpm needed)
+- Node.js 22.12+ (22.x) and pnpm 10+
 - Python 3.12+ and uv 0.11+
 - At least one supported coding CLI
 - Optional: Ollama or a local GGUF model for analysis
@@ -143,9 +143,9 @@ For a development checkout, install from source instead.
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-bun install
+pnpm install
 uv --project backend sync
-bun run dev
+pnpm dev
 ```
 
 The onboarding wizard checks runtimes, detects agent CLIs, and explains relevant macOS permissions. Continue with [Getting Started](docs/en-US/getting-started.md) and the [User Guide](docs/en-US/user-guide.md).

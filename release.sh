@@ -33,7 +33,7 @@ warn_missing_announcement() {
 # neither exit code is lost. The background output is held and printed when
 # both are done, so the two never interleave.
 # The background command gets its own process group (set -m) and an INT or
-# TERM stops that group by the recorded id: `bun run typecheck` may not pass a
+# TERM stops that group by the recorded id: `pnpm typecheck` does not pass a
 # signal on to the command chain it runs, so stopping its pid alone leaves
 # the chain running. Ctrl-C reaches the foreground command directly; bash
 # runs the trap once that command has ended, so a TERM sent to this script
@@ -72,8 +72,8 @@ REQUEST="${1#v}"
 # patch/minor/major compute the next version from the current package.json;
 # an explicit X.Y.Z is used verbatim (existing behavior, unchanged).
 if [[ "$REQUEST" == "patch" || "$REQUEST" == "minor" || "$REQUEST" == "major" ]]; then
-  command -v bun >/dev/null || fail "bun is required to compute the next version"
-  CURRENT="$(bun -p "require('./package.json').version")"
+  command -v node >/dev/null || fail "node is required to compute the next version"
+  CURRENT="$(node -p "require('./package.json').version")"
   [[ "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || \
     fail "current package.json version '$CURRENT' is not X.Y.Z"
   MAJOR="${BASH_REMATCH[1]}"; MINOR="${BASH_REMATCH[2]}"; PATCH="${BASH_REMATCH[3]}"
@@ -103,7 +103,7 @@ if [[ ! "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   fail "resolved version '$VERSION' is not a valid X.Y.Z"
 fi
 
-for command in git bun uv; do
+for command in git node pnpm uv; do
   command -v "$command" >/dev/null || fail "required command not found: $command"
 done
 
@@ -121,10 +121,10 @@ if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; the
   fail "remote tag already exists: $TAG"
 fi
 
-bun run release:check
+pnpm release:check
 warn_missing_announcement "$VERSION"
 
-CURRENT="$(bun -p "require('./package.json').version")"
+CURRENT="$(node -p "require('./package.json').version")"
 echo ""
 echo "Release: $CURRENT -> $VERSION"
 echo "Source:  $(git rev-parse --short HEAD)"
@@ -148,22 +148,22 @@ rollback_version_files() {
 trap rollback_version_files EXIT
 
 version_changed=true
-bun scripts/set-release-version.mjs "$VERSION"
+node scripts/set-release-version.mjs "$VERSION"
 # Point the README download links at this release too (every release, patch
 # included), so the download point always reflects the latest version.
-bun scripts/update-readme-download-links.mjs "$VERSION"
+node scripts/update-readme-download-links.mjs "$VERSION"
 uv --project backend lock
-bun run release:check "$TAG"
+pnpm release:check "$TAG"
 
 echo ""
 echo "=== Release gates ==="
 uv --project backend run --locked ruff check backend
 # With NAVIDE_RELEASE_OVERLAP_GATES=1 the type check overlaps the backend
 # tests only: it rebuilds packages/*/dist, which the artifacts project of
-# `bun run test:run` reads, and the backend tests touch neither. Backend tests
+# `pnpm test:run` reads, and the backend tests touch neither. Backend tests
 # run with a throwaway HOME and no reach to the real keychain.
-run_gates bun run typecheck -- scripts/release-backend-tests.sh
-bun run test:run
+run_gates pnpm typecheck -- scripts/release-backend-tests.sh
+pnpm test:run
 
 echo ""
 echo "=== Building release artifacts ==="
@@ -171,9 +171,9 @@ echo "=== Building release artifacts ==="
   cd backend
   uv run --locked pyinstaller --noconfirm agent_team_backend.spec
 )
-CSC_IDENTITY_AUTO_DISCOVERY=false bun run dist
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm dist
 # The dev-only web mode (NAVIDE_DEV_WEB=1) must never reach a release build.
-bun scripts/check-no-dev-web.mjs out
+node scripts/check-no-dev-web.mjs out
 
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \

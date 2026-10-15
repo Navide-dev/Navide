@@ -29,14 +29,19 @@ prove that an existing app/profile loaded it. Do not remove or overwrite an
 installed package to diagnose this.
 
 Use a fresh named development profile and isolate backend and CLI hook state.
-All environment changes below apply only to these commands.
+All environment changes below apply only to these commands. The explicit PATH
+ordering prevents a machine-local mise path overlay from selecting Homebrew's
+pnpm during nested package scripts.
 
 ```sh
 cd /Users/slighter12/git/personal/Navide
+plans_node_bin="$(mise where node@22)/bin"
+plans_pnpm_bin="$(mise where pnpm@10.0.0)"
 plans_probe_dir="$(mktemp -d /private/tmp/navide-plans-parity.XXXXXX)"
 plans_probe_profile="parity-$(uuidgen)"
 
-bun run build:plans
+mise exec node@22 pnpm@10.0.0 -- \
+  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" pnpm run build:plans
 
 AGENT_TEAM_PLUGIN_DEV=1 \
 NAVIDE_PLANS_DEV_PROFILE="$plans_probe_profile" \
@@ -44,7 +49,8 @@ AGENT_TEAM_DATA_DIR="$plans_probe_dir/data" \
 CLAUDE_CONFIG_DIR="$plans_probe_dir/claude" \
 QWEN_HOME="$plans_probe_dir/qwen" \
 COPILOT_HOME="$plans_probe_dir/copilot" \
-bun run dev
+mise exec node@22 pnpm@10.0.0 -- \
+  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" pnpm dev
 ```
 
 Before testing controls, check the Host's `navide.plans dev provenance` record:
@@ -66,7 +72,9 @@ Before testing controls, check the Host's `navide.plans dev provenance` record:
   launches do not publish the diagnostic query/global.
 
 ```sh
-bun -e 'import { loadConfigFromFile } from "vite"; const result = await loadConfigFromFile({ command: "build", mode: "production" }, "plugins/navide-plans/vite.config.ts"); console.log(JSON.parse(result.config.define.__NAVIDE_PLANS_BUILD_ID__))'
+mise exec node@22 pnpm@10.0.0 -- \
+  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" \
+  node --input-type=module -e 'import { loadConfigFromFile } from "vite"; const result = await loadConfigFromFile({ command: "build", mode: "production" }, "plugins/navide-plans/vite.config.ts"); console.log(JSON.parse(result.config.define.__NAVIDE_PLANS_BUILD_ID__))'
 ```
 
 The automated artifact test compares the loaded build identity to current
@@ -74,7 +82,9 @@ source inputs and fails on a stale build. Run it after rebuilding:
 
 ```sh
 NAVIDE_TEST_PRODUCTION_PLANS_BACKEND=1 \
-bun run test:run tests/integration/plansPackagedRoundtrip.test.ts \
+mise exec node@22 pnpm@10.0.0 -- \
+  env PATH="$plans_pnpm_bin:$plans_node_bin:$PATH" \
+  pnpm test:run tests/integration/plansPackagedRoundtrip.test.ts \
   -t 'loads the Host-selected worktree frontend artifact'
 ```
 
@@ -154,7 +164,7 @@ report.
 The integration proof for the recovery seam is the focused Host test:
 
 ```sh
-bun run vitest run \
+pnpm exec vitest run \
   src/main/plugins/plansStorageMigration.test.ts \
   src/renderer/src/editor/__tests__/PlansPane.test.ts
 ```

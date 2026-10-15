@@ -46,7 +46,7 @@ publishing and mirror workflows are outside this change.
 | Lint and test | Linux | Reject any missing, failed, cancelled or skipped upstream job |
 
 The aggregate verdict is a shell step with explicit job-result inputs; it needs
-no checkout or toolchain setup. Infrastructure tests execute that actual shell body
+no checkout or Node setup. Infrastructure tests execute that actual shell body
 for success and every non-success result, and verify that every job is in
 `needs`. Shell execution is mandatory in the Linux static job; local hosts probe
 for Bash. Backend job budgets are 25 minutes on macOS/Linux and 45 minutes
@@ -204,43 +204,33 @@ it does not replace them with a parallel lifecycle implementation.
 
 ## Local commands and diagnostics
 
-Use the Bun version pinned in `package.json`, Python 3.12 and the locked environments:
+Use Node 22, the pinned pnpm version, Python 3.12 and the locked environments:
 
 ```sh
-bun install --frozen-lockfile
+pnpm install --frozen-lockfile
 uv --project backend sync --locked
-bun run typecheck
+pnpm typecheck
 uv --project backend run --locked ruff check backend
-bun run test:infrastructure
-bun run test:frontend
-bun run build
-bun run test:artifacts:ci
+pnpm test:infrastructure
+pnpm test:frontend
+pnpm build
+pnpm test:artifacts:ci
 uv --project backend run --locked pytest backend/tests --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --durations=30 --collection-report=test-results/ci/backend-collection.json
 ```
 
-`bun run test:run` remains the complete Vitest entrypoint. For a focused contract
-loop, use `bun run test:cli` (frontend plus all marked backend historical/shared/
-vendor cases) or `bun run test:cli:frontend`. The CLI entrypoint enables the
+`pnpm test:run` remains the complete Vitest entrypoint. For a focused contract
+loop, use `pnpm test:cli` (frontend plus all marked backend historical/shared/
+vendor cases) or `pnpm test:cli:frontend`. The CLI entrypoint enables the
 execution reporter: every vendor must finish its contract assertions. For a
-single local case, use `bun run test:run --project cli <file>` or
+single local case, use `pnpm test:run --project cli <file>` or
 `uv --project backend run --locked pytest <backend-test-nodeid>`; focused runs
 intentionally do not claim complete roster execution.
 
-`bun run test:artifacts:ci` consumes a preceding `bun run build`; use
-`bun run test:artifacts` for standalone artifact preparation. On macOS the CI
-entrypoint also needs Go for the packaged fixture. `bun run test:packaged-plans`
+`pnpm test:artifacts:ci` consumes a preceding `pnpm build`; use
+`pnpm test:artifacts` for standalone artifact preparation. On macOS the CI
+entrypoint also needs Go for the packaged fixture. `pnpm test:packaged-plans`
 remains the standalone packaged Plans check. These commands exercise backend
 and package composition without driving Electron windows.
-
-Everything above runs on Bun alone, with one exception: the plugin-author
-consumer test (`src/main/plugins/pluginExternalWorkspace.test.ts`, part of the
-artifact project) installs the packed public packages into a temporary project
-the way an external author's pnpm project does, so it needs `pnpm` on PATH. The CI
-build job installs pnpm 10 for that test only; without `pnpm`, a local
-`bun run test:run` fails that one test. Under `bun run`, `bunfig.toml` makes
-Bun's `node` alias the first `node` on PATH, so that pnpm executes on Bun rather
-than on a separately installed Node.js: the test proves the packed packages
-install and build through pnpm, not that pnpm behaves the same on Node.
 
 Other required checks:
 

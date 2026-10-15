@@ -17,7 +17,7 @@ import { buildResumeCommand } from '../../lib/resume-command'
 import { modelArgsFor } from '../../lib/cliModel'
 
 // ── compile-time invariant ─────────────────────────────────────────────────
-// Checked by `bun run typecheck` (tsconfig.web.json includes this file), not at
+// Checked by `pnpm typecheck` (tsconfig.web.json includes this file), not at
 // runtime: if any spec widens its agentKey — `SPEC: AgentSpec` instead of
 // `as const satisfies AgentSpec` — AgentKey degrades to `string`, this type
 // resolves to `false`, and the assignment below stops compiling.

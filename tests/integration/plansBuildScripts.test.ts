@@ -223,15 +223,15 @@ describe('release workflow verifies the Plans artifact it signs', () => {
   const linuxValidationStep = linuxSteps.find((step) => step.name === 'Validate release artifacts')?.run ?? ''
 
   it('runs the production Plans verifier before signing', () => {
-    expect(buildStep).toContain('bun scripts/verify-plans-production.mjs')
+    expect(buildStep).toContain('node scripts/verify-plans-production.mjs')
     // Ahead of electron-builder: an empty backend must fail the release before
     // the notarization leg, not silently ship.
     expect(buildStep.indexOf('verify-plans-production.mjs'))
-      .toBeLessThan(buildStep.indexOf('bun run electron-builder'))
+      .toBeLessThan(buildStep.indexOf('pnpm exec electron-builder'))
   })
 
   it('asserts each release artifact carries its exact official Plans package backend', () => {
-    expect(verifyStep).toContain('artifact_version="$(bun -p "require(\'./package.json\').version")"')
+    expect(verifyStep).toContain('artifact_version="$(node -p "require(\'./package.json\').version")"')
     expect(verifyStep).toContain(
       'Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans',
     )

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Classify why a PR's CI jobs failed, and keep a ledger of tests that fail.
 //
-//   bun scripts/ci-triage.mjs --pr 266            # print one line per failed test
-//   bun scripts/ci-triage.mjs --pr 266 --write    # ... and add them to docs/testing/flaky.json
-//   bun scripts/ci-triage.mjs --log job.log --job "Backend tests (macOS)"   # a saved log
+//   node scripts/ci-triage.mjs --pr 266            # print one line per failed test
+//   node scripts/ci-triage.mjs --pr 266 --write    # ... and add them to docs/testing/flaky.json
+//   node scripts/ci-triage.mjs --log job.log --job "Backend tests (macOS)"   # a saved log
 //
 // Three categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,

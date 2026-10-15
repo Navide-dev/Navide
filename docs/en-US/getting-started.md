@@ -22,7 +22,8 @@ Two packages are published for x64:
 ## What you need to install from source
 
 - macOS 13+ on Apple silicon, Linux x64, or Windows on x64 or Arm
-- Bun 1.4.3+ (no separate Node.js or pnpm needed)
+- Node.js 22.12+ (22.x)
+- pnpm 10+
 - Python 3.12+
 - uv 0.11+
 - At least one of the 14 supported coding CLIs (Aider, Antigravity CLI, Claude Code, Codex, Copilot CLI, Cursor CLI, Droid, Grok CLI, Kilo Code, Kimi Code, Muse Code, OpenCode, Pi, Qwen Code) — the [User Guide](user-guide.md#manual-agent-panes) lists them
@@ -36,12 +37,12 @@ Each coding CLI has its own installation, authentication, subscription, and data
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-bun install
+pnpm install
 uv --project backend sync
-bun run dev
+pnpm dev
 ```
 
-`bun run dev` starts the Electron application, Vite renderer, and Python FastAPI backend together.
+`pnpm dev` starts the Electron application, Vite renderer, and Python FastAPI backend together.
 
 ## First launch
 
@@ -72,11 +73,9 @@ After the manual flow works, try a pipeline with a small task. Review stage defi
 ## Development checks
 
 ```bash
-bun run typecheck
-bun run test:run
+pnpm typecheck
+pnpm test:run
 uv --project backend run pytest backend/tests
 ```
-
-`src/main/plugins/pluginExternalWorkspace.test.ts` installs the packed public packages the way an external plugin author's pnpm project does, so it needs `pnpm` on PATH. Without it that one test fails and the rest of `bun run test:run` is unaffected; CI provides pnpm for it. See [Contributing](../../CONTRIBUTING.md).
 
 See [Troubleshooting](troubleshooting.md) if the app, backend, CLI, session binding, analyzer, or token tracking does not start as expected.

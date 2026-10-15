@@ -24,9 +24,9 @@
         "yaml": "^2.9.1",
       },
       "devDependencies": {
-        "@navide/plugin-contracts": "workspace:*",
-        "@navide/plugin-sdk": "workspace:*",
-        "@navide/plugin-ui": "workspace:*",
+        "@navide/plugin-contracts": "link:packages/plugin-contracts",
+        "@navide/plugin-sdk": "link:packages/plugin-sdk",
+        "@navide/plugin-ui": "link:packages/plugin-ui",
         "@playwright/test": "^1.64.0",
         "@types/html-to-text": "^9.0.4",
         "@types/node": "^22",
@@ -91,6 +91,9 @@
     "esbuild",
   ],
   "overrides": {
+    "@navide/plugin-contracts": "workspace:*",
+    "@navide/plugin-sdk": "workspace:*",
+    "@navide/plugin-ui": "workspace:*",
     "@xmldom/xmldom": "^0.8.15",
     "brace-expansion@1": {
       ".": "^1.1.21",

@@ -1394,7 +1394,7 @@ class CodexHomeManager:
         """Reclaim every pane home no pane needs. Runs once at backend start.
 
         This backend has no live pane then, but another Navide on the same
-        machine (a packaged build beside `bun run dev`) may: its codex processes
+        machine (a packaged build beside `pnpm dev`) may: its codex processes
         carry CODEX_HOME in their environment, and a home one of them runs in
         is skipped. Otherwise the only homes kept are the ones `reclaim`
         refuses. Returns the ids it removed."""

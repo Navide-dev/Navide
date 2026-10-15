@@ -4,16 +4,16 @@
 
 ## Application が起動しない
 
-1. Bun 1.4.3+、Python 3.12+、uv 0.11+ を確認します。
+1. Node.js 22.12+（22.x）、pnpm 10+、Python 3.12+、uv 0.11+ を確認します。
 2. Lock された Dependency を再インストールします。
 
    ```bash
-   bun install --frozen-lockfile
+   pnpm install --frozen-lockfile
    uv --project backend sync --locked
    ```
 
-3. Terminal から `bun run dev` で起動し、最初の Backend または Electron Error を確認します。
-4. `bun run typecheck` を実行して、Environment Problem と Source Error を区別します。
+3. Terminal から `pnpm dev` で起動し、最初の Backend または Electron Error を確認します。
+4. `pnpm typecheck` を実行して、Environment Problem と Source Error を区別します。
 
 ## Backend Health が利用不可のままになる
 

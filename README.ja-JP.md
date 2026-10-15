@@ -133,7 +133,7 @@ Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windo
 
 ### Source からのインストール要件
 
-- Bun 1.4.3+（Node.js や pnpm の別途インストールは不要）
+- Node.js 22.12+（22.x）と pnpm 10+
 - Python 3.12+ と uv 0.11+
 - 対応する Coding CLI が一つ以上
 - 任意：解析用の Ollama または Local GGUF Model
@@ -143,9 +143,9 @@ Linux と Windows は macOS と同じ CI Gate を通過します。Arm 版 Windo
 ```bash
 git clone https://github.com/Navide-dev/Navide.git
 cd Navide
-bun install
+pnpm install
 uv --project backend sync
-bun run dev
+pnpm dev
 ```
 
 Onboarding Wizard は Runtime を確認し、Agent CLI を検出し、関連する macOS 権限を説明します。続きは[はじめに](docs/ja-JP/getting-started.md)と[ユーザーガイド](docs/ja-JP/user-guide.md)を参照してください。

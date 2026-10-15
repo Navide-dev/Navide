@@ -41,11 +41,16 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -65,19 +70,23 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: bun run release:check "${GITHUB_REF_NAME}"
+        run: pnpm release:check "${GITHUB_REF_NAME}"
 
       - name: Run release gates
+        env:
+          # vue-tsc on tsconfig.web.json outgrew Node's default ~2 GB heap and
+          # aborted here (OOM, exit 134); CI's test jobs already run with 4 GB.
+          NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           uv --project backend run --locked ruff check backend
-          bun run typecheck
-          bun run test:run
-          bun run test:packaged-plans
+          pnpm typecheck
+          pnpm test:run
+          pnpm run test:packaged-plans
           uv --project backend run --locked pytest backend/tests
 
       - name: Build Python backend
@@ -99,12 +108,12 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: bun run build:stt
+        run: pnpm build:stt
 
       - name: Build, sign & notarize application
         shell: bash
         run: |
-          bun run build
+          pnpm build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
@@ -112,11 +121,11 @@ jobs:
           # into the release. Verify it before the expensive sign/notarize leg:
           # a build that produced no backend ships a release whose Plans starts
           # in legacy recovery for every user, and nothing else here notices.
-          bun scripts/verify-plans-production.mjs
+          node scripts/verify-plans-production.mjs
           # hdiutil on shared macOS runners intermittently fails to attach the
           # DMG staging image ("Device not configured"); retry absorbs it.
           for attempt in 1 2 3; do
-            if bun run electron-builder --mac --arm64 --publish never; then
+            if pnpm exec electron-builder --mac --arm64 --publish never; then
               exit 0
             fi
             echo "electron-builder attempt ${attempt} failed; retrying in 15s..."
@@ -125,6 +134,7 @@ jobs:
           echo "electron-builder failed after 3 attempts"
           exit 1
         env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
           # Developer ID signing (electron-builder imports the base64 .p12).
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -141,7 +151,7 @@ jobs:
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans"
           test ! -e "${app_path}/Contents/Resources/plugins/plans/backend/navide-plans-go"
           # …and the exact selected v2 factory package carries its arm64 backend.
-          artifact_version="$(bun -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./package.json').version")"
           test -x "${app_path}/Contents/Resources/official-artifacts/navide.plans/${artifact_version}/darwin-arm64/package/backend/navide-plans"
           # The voice sidecar is a loose Mach-O in Resources/bin; it must carry
           # the Developer ID signature with the hardened runtime flag.
@@ -165,7 +175,7 @@ jobs:
         # signed + notarized .app with ditto (which keeps the symlinks) and refresh
         # latest-mac.yml's sha512/size to match.
         shell: bash
-        run: bun scripts/fix-mac-update-zip.mjs dist-release
+        run: node scripts/fix-mac-update-zip.mjs dist-release
 
       - name: Validate update artifacts
         shell: bash
@@ -222,11 +232,16 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -247,12 +262,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: bun run release:check "${GITHUB_REF_NAME}"
+        run: pnpm release:check "${GITHUB_REF_NAME}"
 
       - name: Run Linux release gates
         # The frontend gates (typecheck, vitest, packaged-plans) are platform
@@ -287,21 +302,23 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: bun run build:stt
+        run: pnpm build:stt
 
       - name: Build application
         shell: bash
         run: |
-          bun run build
+          pnpm build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
-          bun scripts/verify-plans-production.mjs
+          node scripts/verify-plans-production.mjs
           # No signing on Linux: neither AppImage nor deb has a Gatekeeper or
           # SmartScreen equivalent, so there is no certificate to provision and
           # nothing to notarize. `--publish never` still writes latest-linux.yml,
           # which the AppImage updater reads.
-          bun run electron-builder --linux --x64 --publish never
+          pnpm exec electron-builder --linux --x64 --publish never
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Validate release artifacts
         shell: bash
@@ -320,7 +337,7 @@ jobs:
           test -n "${backend}"
           file "${backend}" | grep -q 'ELF 64-bit'
           # …and the exact selected v2 factory package carries its Linux backend.
-          artifact_version="$(bun -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./package.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-x64/package/backend/navide-plans"
           rm -rf "${work}"
 
@@ -418,11 +435,16 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -443,7 +465,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Run Linux release gates
@@ -480,21 +502,23 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '0'
-        run: bun run build:stt
+        run: pnpm build:stt
 
       - name: Build application
         shell: bash
         run: |
-          bun run build
+          pnpm build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
-          bun scripts/verify-plans-production.mjs
+          node scripts/verify-plans-production.mjs
           # No signing on Linux: neither AppImage nor deb has a Gatekeeper or
           # SmartScreen equivalent, so there is no certificate to provision and
           # nothing to notarize. `--publish never` still writes latest-linux.yml,
           # which the AppImage updater reads.
-          bun run electron-builder --linux --arm64 --publish never
+          pnpm exec electron-builder --linux --arm64 --publish never
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Validate release artifacts
         shell: bash
@@ -515,7 +539,7 @@ jobs:
           test -n "${backend}"
           file "${backend}" | grep -q 'ELF 64-bit.*aarch64'
           # …and the selected v2 Plans package carries its Linux backend.
-          artifact_version="$(bun -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./package.json').version")"
           test -x "${work}/squashfs-root/resources/official-artifacts/navide.plans/${artifact_version}/linux-arm64/package/backend/navide-plans"
           rm -rf "${work}"
 
@@ -564,10 +588,7 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Not for the JavaScript toolchain (which is Bun-only): the backend suite's
-      # Windows launch test (test_credential_launch.py) needs a real node.exe to
-      # build its synthetic native CLI, and skips without one.
-      - name: Set up Node.js for a backend test fixture
+      - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
@@ -622,11 +643,16 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -647,12 +673,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: bun run release:check "${GITHUB_REF_NAME}"
+        run: pnpm release:check "${GITHUB_REF_NAME}"
 
       - name: Build Python backend
         # PyInstaller cannot cross-compile; this is the only place a Windows
@@ -683,20 +709,22 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: bun run build:stt
+        run: pnpm build:stt
 
       - name: Build application
         run: |
-          bun run build
+          pnpm build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
-          bun scripts/verify-plans-production.mjs
+          node scripts/verify-plans-production.mjs
           # No signing yet: there is no Windows code-signing certificate, so
           # SmartScreen will warn on first run and electron-updater installs
           # updates without verifying a signature. `--publish never` still
           # writes latest.yml, which the NSIS updater reads.
-          bun run electron-builder --win --x64 --publish never
+          pnpm exec electron-builder --win --x64 --publish never
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Validate release artifacts
         run: |
@@ -706,7 +734,7 @@ jobs:
           # and the v2 Plans package must carry its Windows backend. `test -f`
           # rather than `-x`: the executable bit means nothing on NTFS.
           test -f dist-release/win-unpacked/resources/bin/agent_team_backend.exe
-          artifact_version="$(bun -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./package.json').version")"
           test -f "dist-release/win-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-x64/package/backend/navide-plans.exe"
 
       - name: Attach installers to the workflow run
@@ -763,11 +791,16 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          bun-version-file: package.json
+          version: 10.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -788,12 +821,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: bun run release:check "${GITHUB_REF_NAME}"
+        run: pnpm release:check "${GITHUB_REF_NAME}"
 
       - name: Build Python backend
         # PyInstaller cannot cross-compile, so an arm64 backend exe exists only
@@ -828,18 +861,20 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '0'
-        run: bun run build:stt
+        run: pnpm build:stt
 
       - name: Build application
         run: |
-          bun run build
+          pnpm build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
-          bun scripts/verify-plans-production.mjs
+          node scripts/verify-plans-production.mjs
           # Unsigned for the same reason the x64 build is: there is no Windows
           # code-signing certificate yet.
-          bun run electron-builder --win --arm64 --publish never
+          pnpm exec electron-builder --win --arm64 --publish never
+        env:
+          NODE_OPTIONS: "--max-old-space-size=4096"
 
       - name: Validate release artifacts
         run: |
@@ -850,13 +885,13 @@ jobs:
           test -f dist-release/latest.yml
           test "$(find dist-release -maxdepth 1 -name 'Navide-*-win-arm64.exe' | wc -l | tr -d ' ')" -eq 1
           test -f dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe
-          artifact_version="$(bun -p "require('./package.json').version")"
+          artifact_version="$(node -p "require('./package.json').version")"
           plans_backend="dist-release/win-arm64-unpacked/resources/official-artifacts/navide.plans/${artifact_version}/win32-arm64/package/backend/navide-plans.exe"
           test -f "${plans_backend}"
           # The point of this job is a native build, and an installer whose
           # payload is quietly x64 would run anyway — under Prism, exactly what
           # we are trying to stop. The COFF headers are the only witness.
-          bun scripts/check-pe-machine.mjs arm64 \
+          node scripts/check-pe-machine.mjs arm64 \
             dist-release/win-arm64-unpacked/Navide.exe \
             dist-release/win-arm64-unpacked/resources/bin/agent_team_backend.exe \
             "${plans_backend}"
@@ -872,7 +907,7 @@ jobs:
         # picks the installer whose URL contains process.arch, so the published
         # manifest has to list x64 and arm64 together.
         run: |
-          bun scripts/merge-windows-update-manifest.mjs \
+          node scripts/merge-windows-update-manifest.mjs \
             dist-x64/latest.yml dist-release/latest.yml dist-release/latest.yml
           cat dist-release/latest.yml
 

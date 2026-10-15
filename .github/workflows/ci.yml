@@ -25,20 +25,19 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      # The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version-file: package.json
+          bun-version-file: .bun-version
       - name: Install dependencies
         run: bun install --frozen-lockfile
       # Both scans always run: a finding in one must not hide the other half of
       # the tree. Each records its outcome and the gate below re-raises it, so
       # the job still turns red when either scan finds something.
-      # The former pnpm audit ignored one advisory, GHSA-ch52-4w7c-c8xp
-      # (http-cache-semantics <=4.2.0, which had no patched release). Its only
-      # path was electron-builder's build-time Electron download, and a patched
-      # release (4.3.0) is now locked, so bun audit needs no ignore entry.
+      # package.json's pnpm.auditConfig still ignores GHSA-ch52-4w7c-c8xp
+      # (http-cache-semantics <=4.2.0) for pnpm users; both lockfiles now
+      # resolve the patched 4.3.0, so bun audit needs no ignore entry.
       - name: Bun audit (high and above)
         id: bun-audit
         continue-on-error: true
@@ -110,11 +109,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      # The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version-file: package.json
+          bun-version-file: .bun-version
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -128,6 +127,10 @@ jobs:
         run: |
           bun install --frozen-lockfile
           uv --project backend sync --locked
+      # CI installs from bun.lock but releases install from pnpm-lock.yaml; both
+      # must resolve the same packages (see CONTRIBUTING.md).
+      - name: Verify pnpm-lock.yaml and bun.lock resolve the same packages
+        run: bun scripts/check-lockfile-parity.mjs
       - name: Typecheck every application and plugin surface
         run: bun run typecheck
       - name: Backend correctness lint
@@ -164,11 +167,11 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      # The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version-file: package.json
+          bun-version-file: .bun-version
       # backend-ws-token-parity.test.ts deliberately checks the Python seam.
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -210,25 +213,28 @@ jobs:
             runner: windows-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
+    env:
+      # Mini IDE bundles the editor; leave enough heap for its production build.
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # The Bun version comes from package.json (packageManager, bun@1.4.3).
+      # The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version-file: package.json
+          bun-version-file: .bun-version
       # Only pluginExternalWorkspace.test.ts needs pnpm: it installs the packed
-      # public packages into a temporary project with `pnpm install --offline`.
-      # The test runs under `bun run`, where bunfig.toml's `[run] bun = true`
-      # puts Bun's `node` alias first on PATH, so that pnpm executes on Bun, not
-      # on a separately installed Node.js (checked locally with a real Node later
-      # on PATH). This step therefore only provides the pnpm command; it does not
-      # prove a Node-hosted pnpm, and no setup-node step is needed for it.
+      # public packages into a temporary project with `pnpm install --offline`,
+      # like an external plugin author would. pnpm comes from packageManager.
       - name: Set up pnpm for the plugin-author consumer check
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      # Node.js here is for the pnpm consumer check and the plain `node` step
+      # below, which run outside `bun run`; install and build stay on Bun.
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          version: 10
+          node-version: 22
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -255,7 +261,7 @@ jobs:
       - name: Complete artifact suite and packaged Plans contracts
         run: bun run test:artifacts:ci --reporter=default --reporter=junit --reporter=json --outputFile.junit=test-results/ci/artifacts.xml --outputFile.json=test-results/ci/artifacts.json
       - name: Verify production Plans excludes fixtures
-        run: bun scripts/verify-plans-production.mjs
+        run: node scripts/verify-plans-production.mjs
       - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
