@@ -100,7 +100,7 @@ class TelegramAdapter:
     platform = "telegram"
     capabilities = Capabilities(
         threads=True, create_location=True, edit=True, typing=True, buttons=True,
-        text_limit=TEXT_LIMITS["telegram"],
+        text_limit=TEXT_LIMITS["telegram"], reply_to=True,
     )
     # Groups allow about 20 messages a minute; the mirror outbox paces to this.
     rate_per_min = 20.0
@@ -335,12 +335,16 @@ class TelegramAdapter:
         return params
 
     async def send_text(
-        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None
+        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None,
+        reply_to: str = "",
     ) -> list[str]:
         ids: list[str] = []
         chunks = chunk_text(text, self.capabilities.text_limit) or [text or "…"]
         for i, chunk in enumerate(chunks):
             params = self._target(loc)
+            if reply_to and i == 0:
+                # Quote the message; still send if it was deleted meanwhile.
+                params["reply_parameters"] = {"message_id": int(reply_to), "allow_sending_without_reply": True}
             if buttons and i == len(chunks) - 1:
                 params["reply_markup"] = {
                     "inline_keyboard": [[{"text": label, "callback_data": data} for label, data in buttons]]

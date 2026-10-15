@@ -492,3 +492,15 @@ async def test_menu_sends_and_edits_several_button_rows(api: FakeBotApi) -> None
     edit = api.calls_of("editMessageText")[0]
     assert edit["message_id"] == 9
     assert edit["reply_markup"]["inline_keyboard"] == [[{"text": "Next ▶", "callback_data": "nv2:g:cccccccc"}]]
+
+
+async def test_send_text_replies_to_a_message_on_its_first_chunk(api: FakeBotApi) -> None:
+    ad = _adapter(api)
+    await ad.send_text(Location("telegram", "default", "42"), ("word " * 2000).strip(), reply_to="9")
+    sends = api.calls_of("sendMessage")
+    assert len(sends) > 1
+    assert sends[0]["reply_parameters"] == {"message_id": 9, "allow_sending_without_reply": True}
+    assert all("reply_parameters" not in s for s in sends[1:])
+    await ad.send_text(Location("telegram", "default", "42"), "plain")
+    assert "reply_parameters" not in api.calls_of("sendMessage")[-1]
+    assert ad.capabilities.reply_to
