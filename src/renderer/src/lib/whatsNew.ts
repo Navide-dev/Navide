@@ -154,6 +154,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'Navide プラグインの信頼性を改善：Registry に接続できないときも、以前見つかったプラグインの更新が消えなくなり、各パッケージは最後に見つかった更新を保持します。「Navide プラグイン」と「Navide マーケットプレイス」で、プラグインの削除、インストール済み一覧の再読み込み、「プレリリースを受け取る」の切り替えに失敗したときは、黙って失敗せずにエラーを表示するようになりました。',
       },
       {
+        'zh-TW': '切換版面（從格線改成側欄、聚焦或全螢幕）後，終端機 pane 的欄寬可能被鎖得比 pane 窄。這時在 pane 的右鍵選單選「填滿面板寬度」，就能改用 pane 的完整寬度；這個選項只在欄寬被鎖住時出現，上方較早的輸出可能會有幾行重新換行。',
+        'en-US': 'After switching the layout from Grid to sidebar, spotlight or fullscreen, a terminal pane’s columns can stay locked narrower than the pane. Its right-click menu now offers “Fit to pane width” to use the full width; it appears only while the pane is capped, and older output above may re-wrap a few lines.',
+        'ja-JP': 'レイアウトをグリッドからサイドバー、スポットライト、フルスクリーンに切り替えたあと、ターミナルのペインの桁数がペインより狭く固定されることがあります。そのときはペインの右クリックメニューの「ペイン幅に合わせる」でペインの全幅を使えます。この項目は桁数が固定されているときだけ表示され、上の古い出力は数行折り返し直される場合があります。',
+      },
+      {
         'zh-TW': 'Windows 與 Linux 修正：在終端機按住 Ctrl 點檔案路徑就能開啟（macOS 仍是 Cmd），也認得 C:\\ 這類 Windows 路徑。可以拖曳標題列上的工作區名稱來移動視窗。外掛視圖在最大化、還原或全螢幕後會跟著視窗大小。結束確認視窗的標題是「Navide」，不再是「agent-team」；Linux 上的最大化按鈕也不會再停在「還原」。在 Windows 上，以反斜線路徑開啟 Plan 會開到正確的 Plan。',
         'en-US': 'Windows and Linux fixes: Ctrl+click on a file path in the terminal opens it (Cmd+click on macOS), and Windows paths such as C:\\… are recognised. The window can be dragged by the workspace name in the title bar. Plugin views keep the window’s size after maximize, restore or full screen. The quit prompts are titled “Navide” instead of “agent-team”, and on Linux the maximize button no longer gets stuck on “Restore”. On Windows, a plan opened by a backslash path opens the right plan.',
         'ja-JP': 'Windows と Linux の修正：ターミナルでファイルのパスを Ctrl+クリックすると開けるようになり（macOS は Cmd+クリック）、C:\\… のような Windows のパスも認識します。タイトルバーのワークスペース名をドラッグしてウィンドウを動かせます。プラグインのビューは、最大化、元に戻す、フルスクリーンのあともウィンドウの大きさに合わせます。終了の確認の題名は「agent-team」ではなく「Navide」になり、Linux では最大化ボタンが「元に戻す」のまま残らなくなりました。Windows では、バックスラッシュのパスで開いた Plan が正しく開きます。',

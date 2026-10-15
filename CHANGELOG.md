@@ -49,6 +49,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Git panel: when the history or a commit cannot be read, the panel says "Read failed: <reason>" above the history it keeps, or in place of the commit detail, instead of looking like "no new commits". Both Git panel copies show it (#276, D4).
 - Scheduler: a run whose message was only queued is updated once that message settles: ", then delivered", ", then failed: <reason>" (the run becomes an error) or ", outcome no longer tracked". Backoff and the job's state are not changed (#276, E1).
 - Diagnostics: `ui.diagnostics.read` with a `limit` that cuts the page short returns the last returned entry as `nextSeq`, so a polling reader no longer skips the rest (#276, B2).
+- Terminal: when a terminal pane's columns are locked narrower than the pane, which happens after switching the layout from Grid to sidebar, spotlight or fullscreen, the pane's right-click menu offers "Fit to pane width" (zh-TW「填滿面板寬度」, ja-JP「ペイン幅に合わせる」) to use the pane's full width. It is shown only while the pane is capped, and older output above may re-wrap a few lines. The lock a layout switch sets is unchanged (#277).
 - Registry website: "Requires Navide ≥ x" is shown only for a minimum above 0.1.0; the compatibility flag in the API is unchanged (#241).
 
 ## [0.2.22] — 2026-10-14 — signed release
