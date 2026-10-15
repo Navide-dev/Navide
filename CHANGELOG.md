@@ -2,6 +2,31 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.23] — 2026-10-15 — signed release
+
+### Changed
+
+- Empty stage: a workspace tab with no panes shows one sentence, an "Open Agent" button that opens the sidebar's Agents tab, and an "or run the pipeline ▶" link that does what the sidebar's Run button does and is disabled when that button is, instead of the "Two ways to drive the team" card (#239).
+- Welcome window: the recent list's state badges (completed / running / aborted), its relative times and the "Folder not found" tooltip are translated in zh-TW and ja-JP. The Open Workspace and Recent headings and the Settings link drop their emoji, the Navide mark sits beside the title, and the primary button uses the accent colour instead of green (#240).
+- Plan spec: `_spec.md` says what a paged plan list entry's `meta` carries (no `reviewNotes`), and that an entry too big for one page keeps its `todos` counts, including `awaiting_user` (#252).
+- Release builds: the packaged app turns off the Electron fuses for RunAsNode, `NODE_OPTIONS` and the `--inspect` command-line arguments (#247).
+- CI: GitHub Actions are pinned to commit SHAs, the release `uv run` steps use `--locked`, and the unused Antigravity usage-secrets provisioning steps are removed (#247).
+- Tests: five tests that were flaky on loaded machines or Windows now order by events, read under the writers' lock, pre-warm PowerShell, skip a helper collected as a test file, or get a budget that fits a 110 MB copy (#238, #248, #253, #254, #256).
+
+### Fixed
+
+- Channels: when a turn ended without text, Navide holds the chat request for up to 120 s for that turn's text (0.2.22, #221). If the chat was unbound, or its pane went away, during that wait, the pane's next reply, including one typed at the keyboard, could be sent to the unbound chat. Unbinding now drops the held request, so nothing more is sent to that chat (#245).
+- MCP: a pane's `/plan-mcp` credential is no longer in its command line, where `ps` shows it to every account on the machine. Claude, Copilot and Qwen panes are handed an owner-only (0600) config file under `plan-mcp-panes/` in Navide's data folder, emptied at startup; Codex panes read it from the `NAVIDE_MCP_TOKEN` environment variable and send it as a bearer header (#242).
+- Cross-device trust: a block made in the policy editor, or held only by the signed policy, is kept in this machine's local copy too, so the device stays refused when the server stops serving the policy; a block lifted in the policy editor is lifted in the local copy as well (#243).
+- Cross-device messages: a message goes into the replay ledger only after its signature verifies against a key the relay cannot make, so a relay can no longer push a delivered message's key out of the bounded ledger with forged messages and then replay it (#244).
+- Messaging: an address whose first segment is a UUID-shaped folder (for example under `/var/folders/…/T/`, an app container or a worktree) and that names a pane on this machine stays on this machine instead of going to a remote device. The message channel refuses pairing frames and the pairing pane (`p2p-pairing-refused`); pairing goes only through the pairing flow in the account window (#246).
+- Security: the Git accounts IPC handlers answer only Navide's own windows, and the legacy `shell.run` and plugin `terminal.run` calls require a workspace path instead of running the command in the backend's own folder (#249).
+- Plans: the Host `plans.list` summary reports `awaiting_user` (unfinished todos only the user can do), as the MCP fallback already did (#234), and the Plans view counts "for you" todos for an entry too big for one list page, which arrives without `meta` (#236).
+- Plans: when plan tools have no Host session, the error tells the agent to open Navide (or reopen its Plans view) and retry; error codes are unchanged (#237). `plan_list` and `plan_read` retry once when the Host answer times out; changes are not retried (#250).
+- Plans: the Plans watcher is started only after the same Grant and agent Execution Policy check as the Plans filesystem calls (#251).
+- Share links: a plan whose `plan-meta` tag lists `type` before `id`, as the provisioned template writes it, is shared under its plan name instead of its file name (#235).
+- Registry website: "Requires Navide ≥ x" is shown only for a minimum above 0.1.0; the compatibility flag in the API is unchanged (#241).
+
 ## [0.2.22] — 2026-10-14 — signed release
 
 ### Added
