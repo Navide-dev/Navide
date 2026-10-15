@@ -436,6 +436,7 @@
     "setting-label": "關閉前顯示確認提醒"
   },
   "git": {
+    "read-failed": "讀取失敗：{reason}",
     "account": {
       "selector-title": "此工作區使用的帳號",
       "unbound": "未綁定帳號",

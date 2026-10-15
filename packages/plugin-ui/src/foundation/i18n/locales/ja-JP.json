@@ -436,6 +436,7 @@
     "setting-label": "閉じる前に確認を表示"
   },
   "git": {
+    "read-failed": "読み込みに失敗しました：{reason}",
     "account": {
       "selector-title": "このワークスペースのアカウント",
       "unbound": "アカウントなし",

@@ -436,6 +436,7 @@
     "setting-label": "Show a confirmation reminder before closing"
   },
   "git": {
+    "read-failed": "Read failed: {reason}",
     "account": {
       "selector-title": "Account for this workspace",
       "unbound": "No account",
