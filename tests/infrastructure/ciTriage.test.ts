@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { classifyLog, mergeIntoLedger } from '../../scripts/ci-triage.mjs'
+import { classifyLog, mergeIntoLedger, splitJobLogs } from '../../scripts/ci-triage.mjs'
 
 // Real lines from the 2026-10-15 PR runs (#266, #267), trimmed to what matters.
 const PYTEST_RACE = `2026-10-15T04:18:03.0400740Z E                   subprocess.TimeoutExpired: Command '['python', '-m', 'tests.cli_regression.support.backend_entry']' timed out after 15 seconds
@@ -148,6 +148,41 @@ describe('classifyLog — one entry per failed test, in one of three categories'
   })
 })
 
+// `gh run view 38790727272 --attempt 1 --log-failed` (PR #300), trimmed: one
+// file, three failed jobs, each line prefixed "job<TAB>step<TAB>".
+const MIXED_JOBS = `Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3608700Z =========================== short test summary info ============================
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3609380Z FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3610010Z assert (not True)
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3611260Z ===== 1 failed, 11768 passed, 32 skipped, 46 warnings in 300.32s (0:05:00) =====
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:28.3792230Z ##[error]Process completed with exit code 1.
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.6850048Z --- 960s: 2934 results; last: FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never be
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7450569Z =========================== short test summary info ===========================
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7453663Z FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7456427Z = 1 failed, 2877 passed, 68 skipped, 8804 deselected, 12 warnings in 918.17s (0:15:18) =
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7922192Z ##[error]Process completed with exit code 1.
+Lint and test	Require every check to succeed	2026-10-15T19:29:12.8164352Z ##[error]Process completed with exit code 1.`
+
+describe('splitJobLogs — one saved log, possibly several jobs', () => {
+  it('gives each job of a gh run view --log-failed file its own failures', () => {
+    const jobs = splitJobLogs(MIXED_JOBS, '(local log)')
+    expect(jobs.map((j) => [j.job, classifyLog(j.text).map((e) => [e.test, e.evidence.split(' - ')[0]])])).toEqual([
+      ['Backend tests (macOS, 1/1)', [[
+        'backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst',
+        'FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst',
+      ]]],
+      ['Backend tests (Windows, 4/4)', [[
+        'backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+        'FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+      ]]],
+      ['Lint and test', [['(job)', '##[error]Process completed with exit code 1.']]],
+    ])
+  })
+
+  it('keeps a single job log, as the API returns it, under the given job name', () => {
+    expect(splitJobLogs(PYTEST_DEFECT, 'Backend tests (macOS, 1/1)')).toEqual([{ job: 'Backend tests (macOS, 1/1)', text: PYTEST_DEFECT }])
+  })
+})
+
 describe('mergeIntoLedger — docs/testing/flaky.json', () => {
   const dirs: string[] = []
   afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
@@ -172,6 +207,16 @@ describe('mergeIntoLedger — docs/testing/flaky.json', () => {
       lastSeen: '2026-10-16T00:00:00Z',
     })
     expect(ledger.tests[0].runs).toHaveLength(2)
+  })
+
+  it('refuses a run without a run id, so two unknown runs never collapse into one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flaky-'))
+    dirs.push(dir)
+    const path = join(dir, 'flaky.json')
+    const entries = classifyLog(PYTEST_RACE)
+    expect(() => mergeIntoLedger(path, entries, { run: 0, job: 'j', pr: 0, at: '2026-10-15T00:00:00Z' })).toThrow(/run id/)
+    expect(() => mergeIntoLedger(path, entries, { job: 'j', pr: 0, at: '2026-10-15T00:00:00Z' } as never)).toThrow(/run id/)
+    expect(existsSync(path)).toBe(false)
   })
 
   it('keeps an existing ledger and its other tests', () => {

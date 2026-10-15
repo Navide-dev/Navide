@@ -4,6 +4,8 @@
 //   node scripts/ci-triage.mjs --pr 266            # print one line per failed test
 //   node scripts/ci-triage.mjs --pr 266 --write    # ... and add them to docs/testing/flaky.json
 //   node scripts/ci-triage.mjs --log job.log --job "Backend tests (macOS)"   # a saved log
+//   node scripts/ci-triage.mjs --log run.log --run 38790727272 --pr 300 --write
+//                                  # gh run view --log-failed output: each job is its own row source
 //
 // Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
@@ -85,9 +87,27 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
   return out
 }
 
+/** A saved log as [{job, text}]. `gh run view --log` / `--log-failed` puts
+ *  several jobs in one file, each line prefixed "job<TAB>step<TAB>"; a job log
+ *  from the API has no prefix and is all `job`. */
+export function splitJobLogs(text, job) {
+  const lines = text.split(/\r?\n/)
+  if (!lines.some((l) => /^[^\t]+\t[^\t]+\t/.test(l))) return [{ job, text }]
+  const jobs = new Map()
+  for (const line of lines) {
+    const m = /^([^\t]+)\t[^\t]+\t(.*)$/.exec(line)
+    if (!m) continue
+    if (!jobs.has(m[1])) jobs.set(m[1], [])
+    jobs.get(m[1]).push(m[2])
+  }
+  return [...jobs].map(([name, body]) => ({ job: name, text: body.join('\n') }))
+}
+
 /** Add one job's entries to the ledger at `path`, counting each test once per
- *  (run, job). `run` is {run, job, pr, at}. */
+ *  (run, job). `run` is {run, job, pr, at}; a missing or 0 run id is refused,
+ *  since every such run would count as the same one. */
 export function mergeIntoLedger(path, entries, run) {
+  if (!(Number(run.run) > 0)) throw new Error('mergeIntoLedger needs a run id (pass --run with --log)')
   const ledger = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : { schema: 1, tests: [] }
   for (const entry of entries) {
     let row = ledger.tests.find((t) => t.test === entry.test)
@@ -135,7 +155,12 @@ function main(argv) {
   const knownRaces = new Set(known.filter((t) => t.category === 'test-race').map((t) => t.test))
   const jobs = []
   if (opt('--log')) {
-    jobs.push({ job: opt('--job') ?? '(local log)', run: 0, pr: 0, at: new Date().toISOString(), text: readFileSync(opt('--log'), 'utf8') })
+    if (write && !(Number(opt('--run')) > 0)) {
+      process.stderr.write('--log with --write needs --run N (the Actions run id)\n')
+      return 2
+    }
+    const meta = { run: Number(opt('--run') ?? 0), pr: Number(opt('--pr') ?? 0), at: new Date().toISOString() }
+    for (const j of splitJobLogs(readFileSync(opt('--log'), 'utf8'), opt('--job') ?? '(local log)')) jobs.push({ ...meta, ...j })
   } else if (opt('--pr')) {
     const pr = Number(opt('--pr'))
     const repo = JSON.parse(gh(['repo', 'view', '--json', 'nameWithOwner'])).nameWithOwner
@@ -143,7 +168,7 @@ function main(argv) {
       jobs.push({ ...j, pr, text: gh(['api', `repos/${repo}/actions/jobs/${j.id}/logs`]) })
     }
   } else {
-    process.stderr.write('usage: ci-triage.mjs (--pr N | --log FILE [--job NAME]) [--write] [--ledger PATH]\n')
+    process.stderr.write('usage: ci-triage.mjs (--pr N | --log FILE [--job NAME] [--run N] [--pr N]) [--write] [--ledger PATH]\n')
     return 2
   }
   if (jobs.length === 0) process.stdout.write('no failed Actions jobs\n')
