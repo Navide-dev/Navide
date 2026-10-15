@@ -19,6 +19,13 @@ import {
 import { registerCommand, _resetRegistry } from '../commandRegistry'
 import { setContext } from '../contextService'
 
+// These cases pin the macOS rule table and tooltips (⌘N, ⌘,); happy-dom's
+// navigator.platform reads as non-mac, which would add the Ctrl+Alt+N / Ctrl+,
+// rules. platformSidebarKeys.test.ts covers Windows and Linux.
+vi.hoisted(() => {
+  Object.defineProperty(globalThis.navigator, 'platform', { value: 'MacIntel', configurable: true })
+})
+
 const Host = defineComponent({
   setup() {
     useKeybindings()

@@ -8377,7 +8377,7 @@
     "grid-toolbar": "グリッドレイアウト",
     "grid-custom-columns": "列数を指定",
     "grid-custom-rows": "行数を指定",
-    "titlebar-settings": "設定 (⌘,)",
+    "titlebar-settings": "設定 ({key})",
     "drag-reorder": "ドラッグして並べ替え、クリックしてフォーカス",
     "docked-in-sidebar": "サイドバーに格納済み",
     "stage-manager-tooltip": "ステージマネージャー — 進行を制御し、---STAGE-DONE--- を判断",

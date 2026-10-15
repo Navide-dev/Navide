@@ -8377,7 +8377,7 @@
       "grid-toolbar": "Grid layout",
       "grid-custom-columns": "Custom columns",
       "grid-custom-rows": "Custom rows",
-      "titlebar-settings": "Settings (⌘,)",
+      "titlebar-settings": "Settings ({key})",
       "drag-reorder": "Drag to reorder or click to focus",
       "docked-in-sidebar": "Docked in sidebar",
       "stage-manager-tooltip": "Stage manager — controls flow and decides ---STAGE-DONE---",

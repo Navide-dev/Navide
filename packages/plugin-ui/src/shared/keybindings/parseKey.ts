@@ -133,6 +133,10 @@ function eventKeyMatches(expectedKey: string, e: KeyboardEvent): boolean {
   // binding silently missed and the keystroke leaked into the focused terminal.
   // Fall back to the physical digit key from the main row or the numpad.
   if (/^[0-9]$/.test(expectedKey)) {
+    // Off macOS, Ctrl+Alt is AltGr (Windows reports both flags), and on many
+    // layouts AltGr+digit types a character (German ², Polish ...): that
+    // character is the user's text, so the physical digit must not claim it.
+    if (!isMacPlatform() && e.ctrlKey && e.altKey && e.key.length === 1) return false
     return e.code === `Digit${expectedKey}` || e.code === `Numpad${expectedKey}`
   }
 

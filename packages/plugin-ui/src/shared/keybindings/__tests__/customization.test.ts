@@ -6,7 +6,7 @@
 // same key under different `when` clauses (cmd+shift+g is focusSourceControl in
 // the Mini IDE and openGitWindow in the main window), so a rebind or an unbind
 // that leaks across those contexts is a real user-facing break, not a detail.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   buildRows,
   classifyRow,
@@ -23,6 +23,13 @@ import {
 import { KeyResolver } from '../keyResolver'
 import { defaults } from '../defaults'
 import type { KeybindingRule } from '../types'
+
+// These cases pin the macOS rule table and tooltips (⌘N, ⌘,); happy-dom's
+// navigator.platform reads as non-mac, which would add the Ctrl+Alt+N / Ctrl+,
+// rules. platformSidebarKeys.test.ts covers Windows and Linux.
+vi.hoisted(() => {
+  Object.defineProperty(globalThis.navigator, 'platform', { value: 'MacIntel', configurable: true })
+})
 
 const base: KeybindingRule[] = [
   { key: 'cmd+s', command: 'editor.action.save', when: 'editorOpen' },
