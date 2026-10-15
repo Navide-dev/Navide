@@ -437,10 +437,14 @@ class WorkspaceDatabases:
             return db
 
     def close_all(self) -> None:
+        # Close outside the registry lock: a thread inside a db transaction
+        # (preview_log.batch) can ask the registry for that db again, so
+        # holding the registry while waiting for the db's lock deadlocks.
         with self._lock:
-            for db in self._dbs.values():
-                try:
-                    db.close()
-                except Exception as err:  # noqa: BLE001
-                    log.warning("workspace db close failed at %s: %s", db.path, err)
+            dbs = list(self._dbs.values())
             self._dbs.clear()
+        for db in dbs:
+            try:
+                db.close()
+            except Exception as err:  # noqa: BLE001
+                log.warning("workspace db close failed at %s: %s", db.path, err)

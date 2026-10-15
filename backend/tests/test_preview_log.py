@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
+import threading
+import time
+
 import pytest
 
 from agent_team_backend import preview_log as preview_log_module
@@ -13,7 +17,7 @@ from agent_team_backend.preview_log import (
     MERGE_WINDOW_MS,
     PreviewLog,
 )
-from agent_team_backend.db import DB_FILENAME, Database
+from agent_team_backend.db import DB_FILENAME, Database, WorkspaceDatabases
 from agent_team_backend.projects import PROJECT_DIR_NAME
 
 
@@ -337,3 +341,37 @@ def test_append_to_a_missing_workspace_is_a_no_op(tmp_path, clock, caplog):
             str(tmp_path / "nope"), change="modified", rel_path="a.ts", source="user"
         ) is None
     assert any("preview log append failed" in r.message for r in caplog.records)
+
+
+def test_shutdown_close_does_not_deadlock_with_a_watcher_burst(tmp_path):
+    """A watcher burst holds the workspace db's transaction (batch) and then
+    asks the registry for the db again (append); shutdown's close_all held the
+    registry and waited for that db. CI saw the backend hang there for good."""
+    ws = str(tmp_path)
+    databases = WorkspaceDatabases()
+    store = PreviewLog(databases)
+    store.append(ws, change="modified", rel_path="a.ts", source="watcher")
+    inside = threading.Event()
+    errors: list[BaseException] = []
+
+    def burst():
+        try:
+            with store.batch(ws):
+                inside.set()
+                time.sleep(0.2)  # still running when shutdown starts
+                store.append(ws, change="modified", rel_path="b.ts", source="watcher")
+        except sqlite3.OperationalError as err:
+            # The registry no longer holds the db, so append opens a second
+            # connection, which the batch's open transaction keeps locked out.
+            # Shutdown loses this last write; the app logs it and moves on.
+            errors.append(err)
+
+    worker = threading.Thread(target=burst, daemon=True)
+    worker.start()
+    assert inside.wait(5)
+    closer = threading.Thread(target=databases.close_all, daemon=True)
+    closer.start()
+    # Bounded, so a deadlock fails here instead of hanging the run.
+    closer.join(10)
+    worker.join(10)
+    assert not closer.is_alive() and not worker.is_alive(), "close_all deadlocked with the burst"
