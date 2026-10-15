@@ -172,7 +172,11 @@ CI retains complete frontend and backend suites on macOS, Linux and Windows.
 Static checks run once, while application builds and artifact integration tests
 run separately from ordinary frontend tests. The `Lint and test` status requires
 the test/build matrices, packaged Plans, marketplace contracts, deterministic
-speech sidecar tests and dependency audit to succeed. CI does not run Electron
+speech sidecar tests and dependency audit to succeed. On a pull request, a
+change confined to the renderer, preload or e2e (frontend-only) skips the backend
+jobs, and a change confined to `backend/tests/` skips the frontend and build
+jobs; `scripts/ci-changed-scopes.mjs` holds the rules, runs everything when
+unsure, and pushes to `main` always run everything. CI does not run Electron
 UI automation; test UI changes manually. To reproduce the build check locally,
 run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
