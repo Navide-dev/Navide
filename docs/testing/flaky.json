@@ -70,6 +70,24 @@
       ]
     },
     {
+      "test": "backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#306",
+      "count": 1,
+      "firstSeen": "2026-10-15T19:29:02Z",
+      "lastSeen": "2026-10-15T19:29:02Z",
+      "runs": [
+        {
+          "run": 38790727272,
+          "job": "Backend tests (Windows, 4/4)",
+          "pr": 300,
+          "at": "2026-10-15T19:29:02Z",
+          "evidence": "FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
       "category": "test-race",
       "count": 1,
