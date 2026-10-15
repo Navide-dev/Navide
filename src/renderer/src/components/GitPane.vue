@@ -531,7 +531,7 @@ async function doAbort(): Promise<void> {
   const op = opInProgress.value
   if (!op) return
   const r = await abortOperation(op)
-  if (!r.ok) notifyToast(r.error || 'Abort failed', { type: 'error' })
+  if (!r.ok) notifyToast(r.error || t('git.abort-failed'), { type: 'error' })
 }
 
 // ── Auto-detect and pre-fill commit message once all conflicts are resolved ────
@@ -687,7 +687,7 @@ async function runAutoCommit(): Promise<void> {
     autoCommitStep.value = 'checking'
     const lint = await checkStaged()
     if (!lint.ok) {
-      notifyToast(`Auto Commit aborted: ${lint.errorCount} lint error(s) detected`, { type: 'error' })
+      notifyToast(t('git.auto-commit-lint-aborted', { count: lint.errorCount }), { type: 'error' })
       return
     }
 
@@ -701,7 +701,7 @@ async function runAutoCommit(): Promise<void> {
     if (!autoCommit.value || isCommitting.value) return
     autoCommitStep.value = 'committing'
     const cr = await commit(r.message, false)
-    if (cr.ok) notifyToast(`Auto-committed: ${r.message}`, { type: 'success' })
+    if (cr.ok) notifyToast(t('git.auto-commit-done', { message: r.message }), { type: 'success' })
   } finally {
     autoCommitRunning.value = false
     autoCommitStep.value = ''
@@ -783,7 +783,7 @@ async function runRemote(op: Exclude<typeof remoteBusy.value, ''>, fn: () => Pro
           ? `\n\n${t('git.account.credential-invalid')}`
           : ''
       void notifyAlert(remoteError.value + hint, { title: `${label} failed` })
-    } else notifyToast(`${label} done`, { type: 'success' })
+    } else notifyToast(t(`git.remote-op-done.${op}`), { type: 'success' })
   } finally {
     remoteBusy.value = ''
   }
@@ -901,7 +901,7 @@ async function doCompareBranch(branch: string): Promise<void> {
   const current = gitStatus.value?.branch; if (!current) return
   const r = await compareBranches(branch, current)
   if (r.ok) compareResult.value = { stat: r.stat, files: r.files }
-  else { comparingBranch.value = ''; notifyToast(r.error || 'compare failed', { type: 'error' }) }
+  else { comparingBranch.value = ''; notifyToast(r.error || t('label.compare-failed'), { type: 'error' }) }
 }
 
 const rebaseError = ref(''), rebaseOutput = ref('')
@@ -994,7 +994,7 @@ async function doMergeIntoAndPush(target: string): Promise<void> {
 
 async function doConflictAbort(): Promise<void> {
   const r = await abortOperation('merge')
-  if (!r.ok) notifyToast(r.error || 'Abort failed', { type: 'error' })
+  if (!r.ok) notifyToast(r.error || t('git.abort-failed'), { type: 'error' })
   showMergeConflictModal.value = false
   mergeConflictFiles.value = []
   mergeConflictContext.value = ''

@@ -6,7 +6,7 @@ import type { useBackend } from '../composables/useBackend'
 import { useEditorTargets } from '../composables/useEditorTargets'
 import { useExplorer, type FsEntry } from '../composables/useExplorer'
 import { revealPath } from '../composables/native'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
 import { placeSubmenu } from '../lib/submenuPlacement'
@@ -185,9 +185,9 @@ async function copyPathsSelected(): Promise<void> {
   const text = [...selectedKeys.value].map(rel => absPath(rel)).join('\n')
   try {
     await navigator.clipboard.writeText(text)
-    toast(`Copied ${selectedKeys.value.size} path(s)`, { type: 'success' })
+    toast(i18n.global.t('editorWindow.paths-copied', { count: selectedKeys.value.size }), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 
@@ -371,9 +371,9 @@ async function reveal(entry: FsEntry): Promise<void> {
 async function copyPath(entry: FsEntry): Promise<void> {
   try {
     await navigator.clipboard.writeText(absPath(entry.rel_path))
-    toast('Path copied', { type: 'success' })
+    toast(i18n.global.t('editorWindow.path-copied'), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 

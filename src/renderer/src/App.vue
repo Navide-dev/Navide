@@ -14437,7 +14437,7 @@ backend.on('agent_msg.deliver', (raw) => {
   const target = panes.value.find((p) => p.id === ev.target_pane_id)
   notifyRestore.toast(
     i18n.global.t('msg.cross-workspace-toast', {
-      from: ev.from_display || 'unknown',
+      from: ev.from_display || i18n.global.t('msg.cross-workspace-unknown-sender'),
       target: target?.messagingName ?? '',
     }),
   )
@@ -14633,7 +14633,7 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
         restoreLive: { liveFingerprint: action.liveFingerprint },
       })
       if (res.ok) announcements.markRead(action.rowId)
-      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      else if (res.message) notifyRestore.toast(i18n.global.t('convenience.switch-back-failed', { detail: res.message }), { type: 'error' })
       break
     }
   }

@@ -7,7 +7,7 @@ import { useGit } from '../composables/useGit'
 import { createHostGitTransport } from '../composables/hostGitTransport'
 import { createHostGitCredentialPort } from '../composables/hostSurfacePorts'
 import { revealPath } from '../composables/hostShell'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
 
@@ -230,9 +230,9 @@ async function copyPathsSelected(): Promise<void> {
   const text = [...selectedKeys.value].map(rel => absPath(rel)).join('\n')
   try {
     await navigator.clipboard.writeText(text)
-    toast(`Copied ${selectedKeys.value.size} path(s)`, { type: 'success' })
+    toast(i18n.global.t('editorWindow.paths-copied', { count: selectedKeys.value.size }), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 
@@ -437,9 +437,9 @@ async function reveal(entry: FsEntry): Promise<void> {
 async function copyPath(entry: FsEntry): Promise<void> {
   try {
     await navigator.clipboard.writeText(absPath(entry.rel_path))
-    toast('Path copied', { type: 'success' })
+    toast(i18n.global.t('editorWindow.path-copied'), { type: 'success' })
   } catch {
-    toast('Copy failed', { type: 'error' })
+    toast(i18n.global.t('editorWindow.copy-failed'), { type: 'error' })
   }
 }
 

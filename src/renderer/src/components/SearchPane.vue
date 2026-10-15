@@ -165,7 +165,7 @@ async function replaceInFiles(files: string[]): Promise<void> {
       void alert(p?.error || 'Replace failed', { title: 'Replace' })
       return
     }
-    toast(`Replaced ${p.total ?? 0} occurrence(s)`, { type: 'success' })
+    toast(t('editorWindow.replaced-occurrences', { count: p.total ?? 0 }), { type: 'success' })
     await doSearch()
   } catch (e) {
     void alert(e instanceof Error ? e.message : 'Replace failed', { title: 'Replace' })
@@ -225,7 +225,7 @@ async function replaceOne(file: FileResult, m: Match): Promise<void> {
     // An empty check (=== '') misses cases where other content landed at those positions.
     const expectedSnippet = m.text.slice(m.col, m.end)
     if (line == null || line.slice(m.col, m.end) !== expectedSnippet) {
-      toast('Content has changed, please search again', { type: 'info' })
+      toast(t('editorWindow.search-stale'), { type: 'info' })
       await doSearch()
       return
     }

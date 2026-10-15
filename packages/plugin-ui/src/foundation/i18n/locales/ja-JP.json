@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "元のアカウントに戻せませんでした：{detail}",
     "notice": {
       "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
       "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
@@ -164,6 +165,26 @@
     "restore": "元のサイズに戻す"
   },
   "editorWindow": {
+    "paths-copied": "{count} 件のパスをコピーしました",
+    "path-copied": "パスをコピーしました",
+    "copy-failed": "コピーに失敗しました",
+    "replaced-occurrences": "{count} 件を置換しました",
+    "search-stale": "内容が変更されました。もう一度検索してください",
+    "ai-terminal-starting": "AI ターミナルを起動中です。少し待ってから再試行してください",
+    "ai-terminal-not-started": "先に AI ターミナルを起動してから再試行してください",
+    "json-syntax-error": "JSON 構文エラー：{message}",
+    "file-outside-workspace": "ファイルはこのワークスペースの外にあります",
+    "no-indented-lines": "インデントされた行が見つかりません",
+    "indentation-tabs": "検出されたインデント：タブ",
+    "indentation-spaces-size": "検出されたインデント：スペース {size} 個",
+    "indentation-spaces": "検出されたインデント：スペース",
+    "no-quick-fixes": "利用できるクイックフィックスはありません",
+    "create-file-failed": "ファイルを作成できませんでした",
+    "saved": "保存しました",
+    "ai-rewrite-discarded": "ドキュメントが変更されたため、AI の書き換えを破棄しました",
+    "encoding-switch-failed": "エンコードを切り替えられませんでした",
+    "no-completion": "利用できる補完はありません",
+    "reopen-encoding-failed": "このエンコードで開き直せませんでした",
     "close-editor": "エディターを閉じる",
     "close-editor-dirty": "{count} 個のファイルに未保存の変更があります。それでもエディターを閉じますか？",
     "close-file": "ファイルを閉じる",
@@ -334,6 +355,7 @@
     }
   },
   "msg": {
+    "cross-workspace-unknown-sender": "不明",
     "panel-title": "CLI 間メッセージ",
     "pause": "配信を一時停止",
     "resume": "配信を再開",
@@ -436,6 +458,23 @@
     "setting-label": "閉じる前に確認を表示"
   },
   "git": {
+    "abort-failed": "中止に失敗しました",
+    "cherry-pick-failed": "チェリーピックに失敗しました",
+    "revert-failed": "リバートに失敗しました",
+    "commit-id-copied": "コミット ID をコピーしました",
+    "commit-message-copied": "コミットメッセージをコピーしました",
+    "conflict-write-failed": "書き込みに失敗しました",
+    "conflict-stage-failed": "ステージに失敗しました",
+    "conflict-apply-failed": "適用に失敗しました",
+    "conflicts-resolved-file": "{name} の競合を解決しました",
+    "patch-apply-failed": "パッチを適用できませんでした",
+    "remote-op-done": {
+      "fetch": "フェッチが完了しました",
+      "pull": "プルが完了しました",
+      "push": "プッシュが完了しました",
+      "sync": "同期が完了しました",
+      "publish": "公開が完了しました"
+    },
     "account": {
       "selector-title": "このワークスペースのアカウント",
       "unbound": "アカウントなし",
@@ -726,7 +765,7 @@
       "clipboard-send-failed": "貼り付けた内容の一部だけが {pane} に届きました。残りは送信中に失われました",
       "clipboard-send-failed-all": "貼り付けた内容が {pane} に届きませんでした。{chars} 文字が送信中に失われました",
       "open-file-failed": "{file} を開けませんでした。エディタが応答しませんでした",
-      "idle-reclaimed": "メモリを解放するため、待機中の CLI ペイン {count} 個を休止しました。クリックすると再開できます",
+      "idle-reclaimed": "メモリを解放するため、待機中の CLI ペイン {count} 個を休止しました。各ペインの「クリックして再開」カードから再開できます",
       "click-to-resume": "クリックして再開",
       "interrupted-at-launch": "再起動時に作業中",
       "interrupted-at-launch-tooltip": "Navide の再起動時にこのペインは作業中で、ターンが中断されました。自動では再開されていません（自動再開の上限を超えたか、再開に失敗しました）。クリックすると再開します。",
@@ -8597,13 +8636,13 @@
     "release-notes": "リリースノート",
     "error": "アップデートエラー：{message}",
     "unsupported": "このビルドでは自動アップデートを利用できません。",
-    "new-version-toast": "Agent-Team v{version} が利用可能です",
+    "new-version-toast": "Navide v{version} が利用可能です",
     "major-update-title": "アップデートが利用可能です",
-    "major-update-body": "Agent-Team v{version} が利用可能です（現在は v{current}）。今すぐダウンロードしますか？",
+    "major-update-body": "Navide v{version} が利用可能です（現在は v{current}）。今すぐダウンロードしますか？",
     "download-now": "アップデートをダウンロード",
     "later": "後で",
     "restart-confirm-title": "再起動してアップデートをインストールしますか？",
-    "restart-confirm-body": "Agent-Team v{version} をダウンロードしました。インストールを完了するため、アプリを閉じて開き直します。今すぐ再起動しますか？"
+    "restart-confirm-body": "Navide v{version} をダウンロードしました。インストールを完了するため、アプリを閉じて開き直します。今すぐ再起動しますか？"
   },
   "announce": {
     "title": "お知らせ",
@@ -8845,6 +8884,7 @@
     "note": "名前が空の場合は、組み込みの翻訳を使用します。色はテーマトークンに基づくため、どのテーマでも読みやすく表示されます。"
   },
   "preview": {
+    "copy-failed": "コピーに失敗しました",
     "binary-file": "バイナリファイル",
     "cannot-display-text": "このファイル形式はテキストとして表示できません。",
     "open-externally": "外部アプリで開く",
