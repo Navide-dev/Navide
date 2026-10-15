@@ -951,6 +951,8 @@
     "minimize-selected": "最小化所選",
     "mute": "靜音通知",
     "unmute": "取消靜音",
+    "fit-width": "填滿面板寬度",
+    "fit-width-title": "改用面板的完整寬度。上方較早的輸出可能會有幾行重新換行。",
     "restore-selected": "還原所選",
     "reclaim-selected": "回收所選（{count} 個）",
     "reclaim-selected-title": "回收所選中符合條件的 CLI 以釋放記憶體，面板會保留為可點擊接續的卡片；忙碌、聚焦、有未送出輸入或無法接續的面板會略過。",
