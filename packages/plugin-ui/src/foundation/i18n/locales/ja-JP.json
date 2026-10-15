@@ -1830,6 +1830,8 @@
         }
       },
       "getPrereleases": "プレリリースを受け取る",
+      "getPrereleasesFailed": "プレリリースの受け取り設定を変更できませんでした：{error}",
+      "inventoryRefreshFailed": "インストール済みの Navide プラグインの一覧を再読み込みできませんでした：{error}",
       "incompatibleInstalled": "Navide ≥ {version} が必要",
       "incompatibleReason": "このバージョンは Navide {version} 以降が必要と宣言しています。有効なままですが、Navide を更新するまで正しく動作しない可能性があります。",
       "pack": {

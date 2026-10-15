@@ -1830,6 +1830,8 @@
         }
       },
       "getPrereleases": "Get pre-releases",
+      "getPrereleasesFailed": "Could not change Get pre-releases: {error}",
+      "inventoryRefreshFailed": "Could not reload the installed Navide plugins: {error}",
       "incompatibleInstalled": "Needs Navide ≥ {version}",
       "incompatibleReason": "This version declares it needs Navide {version} or newer. It stays enabled, but may not work until you update Navide.",
       "pack": {

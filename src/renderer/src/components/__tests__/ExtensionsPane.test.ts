@@ -698,6 +698,67 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('[data-id="acme.demo"]').exists()).toBe(false)
   })
 
+  it('says why a removal failed and keeps the row', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{ id: 'acme.backend', requires: [], sensitive: [] }]),
+      remove: vi.fn().mockRejectedValue(new Error("Error invoking remote method 'plugins:remove': Error: package is in use")),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    await wrapper.get('[data-id="acme.backend"] .ext-remove').trigger('click')
+    await flushPromises()
+    useNotify().resolveDialog(true)
+    await flushPromises()
+
+    expect(api.remove).toHaveBeenCalledWith('acme.backend')
+    expect(wrapper.get('.ext-error').text()).toBe('package is in use')
+    expect(wrapper.find('[data-id="acme.backend"]').exists()).toBe(true)
+  })
+
+  it('shows an inventory that fails to load instead of leaving the rejection unhandled', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      mockPlugins({ listInstalled: vi.fn().mockRejectedValue(new Error('backend gone')) })
+      wrapper = mountExtensions()
+      await flushPromises()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(wrapper.get('.ext-error').text()).toBe('Could not reload the installed Navide plugins: backend gone')
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('shows both the rollback failure and a failed redraw after it', async () => {
+    const listInstalled = vi
+      .fn()
+      .mockResolvedValueOnce([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.1', rollbackKind: 'factory' },
+      ])
+      .mockRejectedValue(new Error('backend gone'))
+    mockPlugins({
+      listInstalled,
+      rollback: vi.fn().mockRejectedValue(new Error('plugin views did not become ready')),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    await wrapper.get('[data-id="acme.demo"] .ext-rollback').trigger('click')
+    await flushPromises()
+    useNotify().resolveDialog(true)
+    await flushPromises()
+
+    expect(wrapper.findAll('.ext-error').map((banner) => banner.text())).toEqual([
+      'plugin views did not become ready',
+      'Could not reload the installed Navide plugins: backend gone',
+    ])
+  })
+
   it('keeps the Developer Mode local-unpacked warning visible in inventory', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
