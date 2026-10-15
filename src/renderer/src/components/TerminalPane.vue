@@ -10,6 +10,7 @@ import { CLI_CONTEXT_MIME, PANE_BATCH_MIME, PANE_ID_MIME, resolveCliDropSources,
 import type { MentionCandidate } from '@navide/terminal'
 import { PLAN_REF_MIME, isPlanDrag, parsePlanRefPayload, type PlanDragRef } from '../lib/planDrag'
 import { formatLoopTime } from '../lib/loopPrompt'
+import { PANE_STUCK_AFTER_MS } from '../lib/paneStuck'
 import PromptSkillPicker from './PromptSkillPicker.vue'
 import { usePromptSkills } from '../composables/usePromptSkills'
 import { castablePromptSkills } from '../lib/promptSkills'
@@ -76,6 +77,9 @@ interface Props {
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
+  /** When the pane went quiet mid-turn (App.vue's stuck poll); null when not
+   *  stuck. */
+  stuckSince?: number | null
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
@@ -712,6 +716,11 @@ onMounted(() => {
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
         <span
+          v-if="stuckSince != null && displayStatus !== 'exited' && displayStatus !== 'error'"
+          class="stuck-inline"
+          :title="$t('pane.terminal.stuck-tooltip', { minutes: PANE_STUCK_AFTER_MS / 60_000 })"
+        >{{ $t('pane.terminal.stuck-badge', { minutes: PANE_STUCK_AFTER_MS / 60_000 }) }}</span>
+        <span
           v-if="usageLimitHit"
           class="usage-limit-inline"
           role="button"
@@ -1079,6 +1088,18 @@ onMounted(() => {
 }
 .login-expired-inline:hover {
   border-color: var(--attention-fg);
+}
+/* A turn in flight with no sign of life: a reminder, so not clickable. */
+.stuck-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--attention-fg);
+  background: var(--attention-subtle);
+  border: 1px solid var(--attention-muted);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* Quota exhausted. Deliberately louder than the login badge. Clicking it
    (after a confirm) dismisses the flag, e.g. when it is stale or moot. */
