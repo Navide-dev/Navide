@@ -16,6 +16,22 @@
           "evidence": "FAILED backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kilo] - AssertionError: backend shutdown timed out; see /private/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/pytest-of-runner/pytest-0/test_vendor_launch_kilo_0/backend.log"
         }
       ]
+    },
+    {
+      "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
+      "category": "test-race",
+      "count": 1,
+      "firstSeen": "2026-10-15T05:37:34Z",
+      "lastSeen": "2026-10-15T05:37:34Z",
+      "runs": [
+        {
+          "run": 38686424014,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": 276,
+          "at": "2026-10-15T05:37:34Z",
+          "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
+        }
+      ]
     }
   ]
 }

@@ -17,7 +17,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time/i
+const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time|An action could not be found at the URI|Failed to download archive|Unable to resolve action/i
 // Signatures, not bare words: an assertion diff can quote any text (a tool
 // description saying "timed out" is not a timeout).
 const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use/i
@@ -29,8 +29,10 @@ function bare(line) {
 }
 
 /** One entry per failed test: {test, category, evidence}. A job that failed
- *  with no failing test in its log gets a single "(job)" entry. */
-export function classifyLog(text) {
+ *  with no failing test in its log gets a single "(job)" entry. A test in
+ *  `knownRaces` (the ledger's test-race rows) stays a race: a timing assert
+ *  can fail with any message. */
+export function classifyLog(text, { knownRaces = new Set() } = {}) {
   const lines = text.split(/\r?\n/).map(bare)
   const out = []
   const seen = new Set()
@@ -46,7 +48,8 @@ export function classifyLog(text) {
     seen.add(test)
     // The failure's own message plus what was printed just before and after it.
     const context = lines.slice(Math.max(0, i - 3), i + 4).join('\n')
-    const category = ENVIRONMENT.test(context) ? 'environment' : TEST_RACE.test(context) ? 'test-race' : 'product-defect'
+    const category = ENVIRONMENT.test(context) ? 'environment'
+      : TEST_RACE.test(context) || knownRaces.has(test) ? 'test-race' : 'product-defect'
     out.push({ test, category, evidence: line.trim().slice(0, 400) })
   }
   if (out.length === 0) {
@@ -109,6 +112,8 @@ function main(argv) {
   const write = argv.includes('--write')
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const ledgerPath = opt('--ledger') ?? join(root, 'docs', 'testing', 'flaky.json')
+  const known = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')).tests ?? [] : []
+  const knownRaces = new Set(known.filter((t) => t.category === 'test-race').map((t) => t.test))
   const jobs = []
   if (opt('--log')) {
     jobs.push({ job: opt('--job') ?? '(local log)', run: 0, pr: 0, at: new Date().toISOString(), text: readFileSync(opt('--log'), 'utf8') })
@@ -124,7 +129,7 @@ function main(argv) {
   }
   if (jobs.length === 0) process.stdout.write('no failed Actions jobs\n')
   for (const j of jobs) {
-    const entries = classifyLog(j.text)
+    const entries = classifyLog(j.text, { knownRaces })
     for (const e of entries) process.stdout.write(`${e.category.padEnd(15)} ${j.job} :: ${e.test}\n  ${e.evidence}\n`)
     if (write && entries.length) mergeIntoLedger(ledgerPath, entries, { run: j.run, job: j.job, pr: j.pr, at: j.at })
   }
