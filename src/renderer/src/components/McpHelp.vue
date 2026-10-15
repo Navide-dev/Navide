@@ -25,6 +25,7 @@ const planTools = [
   'plan_update_stage',
   'plan_update_todo',
   'plan_add_note',
+  'plan_add_todo',
 ] as const
 
 const cliTools = [

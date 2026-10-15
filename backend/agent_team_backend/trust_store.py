@@ -1638,7 +1638,7 @@ def note_signs_v2(device_id: str) -> bool:
         return True
 
 
-def _note_device_once(device_id: str, pairing: str, what: str) -> None:
+def _note_device_once(device_id: str, pairing: str, what: str, *, detail: dict | None = None) -> None:
     """One device-pairing notice *pairing* per device, recorded the first time
     only. Never raises: these are notices, never a failed delivery."""
     try:
@@ -1650,16 +1650,39 @@ def _note_device_once(device_id: str, pairing: str, what: str) -> None:
                     and notice.get("pairing") == pairing and notice.get("deviceId") == device_id
                 ):
                     return
-            _record_locked(state, NOTICE_PAIRING, device_id=device_id, detail={"pairing": pairing})
+            _record_locked(state, NOTICE_PAIRING, device_id=device_id,
+                           detail={"pairing": pairing, **(detail or {})})
             _save_record_locked(state, what)
     except Exception as err:  # noqa: BLE001 - a notice, never a failed delivery
         log.warning("could not record %s from %s (%s)", what, device_id, err)
+
+
+#: How many times each device has arrived without a usable v2 signature, per
+#: notice kind, since this process started. The notice is recorded once per
+#: device; this is what shows a downgrade that keeps happening. In memory only:
+#: keys come from pinned devices, so it is bounded by MAX_DEVICES.
+_sig2_downgrades: dict[tuple[str, str], int] = {}
+_sig2_downgrades_lock = threading.Lock()
+
+
+def _count_sig2_downgrade(device_id: str, pairing: str, what: str) -> None:
+    with _sig2_downgrades_lock:
+        count = _sig2_downgrades.get((device_id, pairing), 0) + 1
+        _sig2_downgrades[(device_id, pairing)] = count
+    log.warning("%s from %s (#%d)", what, device_id, count)
+
+
+def sig2_downgrade_count(device_id: str, pairing: str) -> int:
+    """How many times *device_id* hit the *pairing* notice in this process."""
+    with _sig2_downgrades_lock:
+        return _sig2_downgrades.get((device_id, pairing), 0)
 
 
 def note_sig2_missing(device_id: str) -> None:
     """A device that signs v2 sent a message without it (plan 797ad7, B4):
     taken in 0.2.20, but something on the way dropped the time signature — a
     server without sig2, or a relay removing it."""
+    _count_sig2_downgrade(device_id, "sig2-missing", "a missing v2 signature")
     _note_device_once(device_id, "sig2-missing", "a missing v2 signature")
 
 
@@ -1667,7 +1690,19 @@ def note_sig2_unusable(device_id: str) -> None:
     """A message's v2 signature did not verify, or its send time was outside
     the window (review B4-1): decided on v1 in 0.2.20. Usually one of the two
     machines' clocks is off."""
+    _count_sig2_downgrade(device_id, "sig2-unusable", "an unusable v2 signature")
     _note_device_once(device_id, "sig2-unusable", "an unusable v2 signature")
+
+
+def note_sig2_refused(device_id: str, cause: str, *, minutes: int | None = None) -> None:
+    """A message from a device that signs v2 was refused for its v2 signature
+    (plan 797ad7, Q4; on from 0.2.23). *cause* is "missing", "unusable",
+    "clock-ahead" or "clock-behind"; the clock ones carry how many *minutes*
+    the sender's clock is off. Counted every time, noticed once per cause."""
+    pairing = f"sig2-refused-{cause}"
+    what = f"a refused message ({cause} v2 signature)"
+    _count_sig2_downgrade(device_id, pairing, what)
+    _note_device_once(device_id, pairing, what, detail={} if minutes is None else {"minutes": minutes})
 
 
 def pinned_encryption_key(device_id: str) -> str:
@@ -2299,6 +2334,8 @@ def _reset_for_test() -> None:
         _seen_pending.clear()
         _seen_last_flush = 0.0
         _disarm_seen_timer_locked()
+        with _sig2_downgrades_lock:
+            _sig2_downgrades.clear()
         _unsaved_blocks.clear()
         _forget_written()
         # A JSON null reads back as "no marker" (kv_get's default), which is

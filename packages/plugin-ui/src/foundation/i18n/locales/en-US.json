@@ -4951,7 +4951,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>62</strong> of them today (56 core, plus the 6 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>63</strong> of them today (56 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -4959,7 +4959,8 @@
             "plan_create": "Create a new plan (starting as a draft)",
             "plan_update_stage": "Advance the stage: Draft → In Review → Approved → In Progress → Done",
             "plan_update_todo": "Update the status of a single todo",
-            "plan_add_note": "Record a finding or a decision"
+            "plan_add_note": "Record a finding or a decision",
+            "plan_add_todo": "Add a todo to an existing plan"
           },
           "note1": "Plans are HTML the agent writes with these tools; you read and approve them in Navide's Plans view. The agent only starts writing code once the stage has advanced to \"Approved\".",
           "h2": "Workspace, pipeline orchestration and settings",
@@ -7078,6 +7079,10 @@
         "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
         "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
         "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
+        "sig2-refused-missing": "{device} sent a message without its time signature, and it was refused: that device signs one, so something on the way removed it",
+        "sig2-refused-unusable": "{device} sent a message whose time signature did not check out, and it was refused",
+        "sig2-refused-clock-ahead": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes ahead of this one. Check both machines' clocks",
+        "sig2-refused-clock-behind": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes behind this one, or the message was held back on the way. Check both machines' clocks",
         "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",

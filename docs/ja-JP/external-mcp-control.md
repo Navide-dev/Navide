@@ -74,6 +74,7 @@ Credential（Navide が claude/codex の Pane を Spawn するときに発行）
 | `plan_update_stage` | `workspace_path`, `rel_path`, `stage` | Stage を設定: `draft`、`in-review`、`approved`、`in-progress`、`done`、`abandoned` |
 | `plan_update_todo` | `workspace_path`, `rel_path`, `todo_id`, `status` | 一つの Todo の Status を設定: `pending`、`in-progress`、`done`、`skipped` |
 | `plan_add_note` | `workspace_path`, `rel_path`, `text`, `author?`（`ai`\|`user`、既定は `ai`） | Review Note を追記 |
+| `plan_add_todo` | `workspace_path`, `rel_path`, `content`, `id?`, `owner?`（`agent`\|`user`）, `status?`（既定は `pending`）, `after?` | 既存の Plan に Todo を追加（末尾、または `after` で指定した Todo の後ろ） |
 
 ここで `workspace_path` が必須なのは、外部 Client が Pane ではないためです。Pane
 の呼び出し元はこれを省略し、Tool はその Pane 自身の Workspace を使います。これは
