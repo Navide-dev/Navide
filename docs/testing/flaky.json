@@ -27,6 +27,31 @@
       ]
     },
     {
+      "test": "backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#303",
+      "count": 2,
+      "firstSeen": "2026-10-15T18:46:40Z",
+      "lastSeen": "2026-10-15T19:11:17Z",
+      "runs": [
+        {
+          "run": 38787642744,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 300,
+          "at": "2026-10-15T18:46:40Z",
+          "evidence": "FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst"
+        },
+        {
+          "run": 38790727272,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 300,
+          "at": "2026-10-15T19:11:17Z",
+          "evidence": "FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]",
       "category": "test-race",
       "status": "fixed",
