@@ -17,18 +17,20 @@ function scratch(): string {
   return root
 }
 
-// Loads only fail() and run_concurrently() from release.sh (running the script
+// Loads only fail() and run_gates() from release.sh (running the script
 // itself would start a release) and runs `background -- foreground`, each a
 // bash snippet.
 const program = `set -Eeuo pipefail
 IFS=$'\\n\\t'
-eval "$(sed -n -e '/^fail() {/,/^}/p' -e '/^run_concurrently() {/,/^}/p' "$1")"
-run_concurrently bash -c "$2" -- bash -c "$3"
+eval "$(sed -n -e '/^fail() {/,/^}/p' -e '/^run_gates() {/,/^}/p' "$1")"
+run_gates bash -c "$2" -- bash -c "$3"
 echo after`
 
-// Whatever the release that runs these tests chose, start from the default.
+// Whatever the release that runs these tests chose, start from the default
+// (one after the other); `overlap` opts in.
 const baseEnv = { ...process.env }
-delete baseEnv.NAVIDE_RELEASE_SERIAL_GATES
+delete baseEnv.NAVIDE_RELEASE_OVERLAP_GATES
+const overlap = { NAVIDE_RELEASE_OVERLAP_GATES: '1' }
 
 function concurrently(background: string, foreground: string, cwd: string, env: NodeJS.ProcessEnv = {}) {
   const result = spawnSync('bash', ['-c', program, 'test', releaseScript, background, foreground], {
@@ -41,10 +43,10 @@ function concurrently(background: string, foreground: string, cwd: string, env: 
 const meet = (mine: string, theirs: string) =>
   `touch ${mine}; for i in $(seq 200); do [ -e ${theirs} ] && exit 0; sleep 0.05; done; exit 9`
 
-describe.skipIf(isWindows())('release.sh concurrent gates', () => {
+describe.skipIf(isWindows())('release.sh gates', () => {
   it('runs both at once and passes when both pass', () => {
     const cwd = scratch()
-    const result = concurrently(`${meet('bg', 'fg')}; echo typecheck-output`, meet('fg', 'bg'), cwd)
+    const result = concurrently(`${meet('bg', 'fg')}; echo typecheck-output`, meet('fg', 'bg'), cwd, overlap)
     expect(result.status, result.stderr).toBe(0)
     expect(result.stdout).toContain('typecheck-output')
     expect(result.stdout).toContain('(exit 0)')
@@ -53,7 +55,7 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
 
   it('fails when only the background command fails, after the foreground finishes', () => {
     const cwd = scratch()
-    const result = concurrently('exit 3', 'sleep 0.3; touch fg-done', cwd)
+    const result = concurrently('exit 3', 'sleep 0.3; touch fg-done', cwd, overlap)
     expect(result.status).toBe(1)
     expect(existsSync(join(cwd, 'fg-done'))).toBe(true)
     expect(result.stdout).toContain('(exit 3)')
@@ -63,7 +65,7 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
 
   it('fails when only the foreground command fails, and still waits for the background one', () => {
     const cwd = scratch()
-    const result = concurrently('sleep 0.5; touch bg-done', 'exit 4', cwd)
+    const result = concurrently('sleep 0.5; touch bg-done', 'exit 4', cwd, overlap)
     expect(result.status).toBe(1)
     expect(existsSync(join(cwd, 'bg-done'))).toBe(true)
     expect(result.stderr).toContain('failed (exit 4)')
@@ -75,7 +77,7 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
   it.each([['SIGINT', 130], ['SIGTERM', 143]] as const)('stops the whole background tree on %s', async (signal, code) => {
     const cwd = scratch()
     const child = spawn('bash', ['-c', program, 'test', releaseScript, 'sleep 30 & echo $! > grandchild; wait', 'sleep 1'], {
-      cwd, stdio: 'ignore', env: baseEnv,
+      cwd, stdio: 'ignore', env: { ...baseEnv, ...overlap },
     })
     while (!existsSync(join(cwd, 'grandchild'))) await new Promise((resolve) => setTimeout(resolve, 20))
     child.kill(signal)
@@ -90,9 +92,8 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
     expect(alive).toBe(false)
   })
 
-  it('runs one after the other with NAVIDE_RELEASE_SERIAL_GATES=1', () => {
+  it.each([['unset', {}], ['0', { NAVIDE_RELEASE_OVERLAP_GATES: '0' }]] as const)('runs one after the other when the switch is %s', (_, serial) => {
     const cwd = scratch()
-    const serial = { NAVIDE_RELEASE_SERIAL_GATES: '1' }
     // The foreground side finds the background side's marker: they did not overlap.
     const passed = concurrently('sleep 0.3; touch bg; echo typecheck-output', '[ -e bg ] && touch fg', cwd, serial)
     expect(passed.status, passed.stderr).toBe(0)
@@ -104,7 +105,7 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
 
   it('reports both exit codes when both fail', () => {
     const cwd = scratch()
-    const result = concurrently('exit 5', 'exit 6', cwd)
+    const result = concurrently('exit 5', 'exit 6', cwd, overlap)
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('failed (exit 5)')
     expect(result.stderr).toContain('failed (exit 6)')

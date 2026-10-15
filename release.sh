@@ -25,23 +25,24 @@ warn_missing_announcement() {
   fi
 }
 
-# Runs the command before `--` in the background and the one after it in the
-# foreground, waits for both, and fails naming each that failed, so neither
-# exit code is lost. The background output is held and printed when both are
-# done, so the two never interleave.
+# Runs the command before `--`, then the one after it. By default they run one
+# after the other: measured on a loaded host, overlapping them saved no time
+# and raised the 1-minute load by about 10 while both ran.
+# NAVIDE_RELEASE_OVERLAP_GATES=1 runs the first in the background beside the
+# second instead, waits for both, and fails naming each that failed, so
+# neither exit code is lost. The background output is held and printed when
+# both are done, so the two never interleave.
 # The background command gets its own process group (set -m) and an INT or
 # TERM stops that group by the recorded id: `pnpm typecheck` does not pass a
 # signal on to the command chain it runs, so stopping its pid alone leaves
 # the chain running. Ctrl-C reaches the foreground command directly; bash
 # runs the trap once that command has ended, so a TERM sent to this script
 # alone takes effect when the foreground command finishes.
-# NAVIDE_RELEASE_SERIAL_GATES=1 runs the two one after the other instead (the
-# fallback if the overlap's extra load becomes a problem).
-run_concurrently() {
+run_gates() {
   local IFS=' ' background=() log pid background_status=0 foreground_status=0
   while [[ $# -gt 0 && "$1" != -- ]]; do background+=("$1"); shift; done
   shift
-  if [[ "${NAVIDE_RELEASE_SERIAL_GATES:-}" == 1 ]]; then
+  if [[ "${NAVIDE_RELEASE_OVERLAP_GATES:-}" != 1 ]]; then
     "${background[@]}"
     "$@"
     return
@@ -157,11 +158,11 @@ pnpm release:check "$TAG"
 echo ""
 echo "=== Release gates ==="
 uv --project backend run --locked ruff check backend
-# The type check overlaps the backend tests only: it rebuilds packages/*/dist,
-# which the artifacts project of `pnpm test:run` reads, and the backend tests
-# touch neither. Backend tests run with a throwaway HOME and no reach to the
-# real keychain.
-run_concurrently pnpm typecheck -- scripts/release-backend-tests.sh
+# With NAVIDE_RELEASE_OVERLAP_GATES=1 the type check overlaps the backend
+# tests only: it rebuilds packages/*/dist, which the artifacts project of
+# `pnpm test:run` reads, and the backend tests touch neither. Backend tests
+# run with a throwaway HOME and no reach to the real keychain.
+run_gates pnpm typecheck -- scripts/release-backend-tests.sh
 pnpm test:run
 
 echo ""
