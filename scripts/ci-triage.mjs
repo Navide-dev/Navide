@@ -5,10 +5,12 @@
 //   node scripts/ci-triage.mjs --pr 266 --write    # ... and add them to docs/testing/flaky.json
 //   node scripts/ci-triage.mjs --log job.log --job "Backend tests (macOS)"   # a saved log
 //
-// Three categories, the triage habit RELEASING.md describes, made repeatable:
+// Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
 //                   or a network/disk/cancel signature);
 //   test-race       a test failed on time: a timeout, a hang, a port race — rerun before blaming code;
+//   needs-review    an IndexError or KeyError raised in a backend/tests/ frame of a test the ledger
+//                   does not know as a race: the test may have read a list too early — a person decides;
 //   product-defect  anything else: an assertion, a type error, a lint error — fix the code.
 // Local only, on purpose: it costs no runner minutes and posts nothing anywhere.
 
@@ -22,6 +24,21 @@ const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolv
 // description saying "timed out" is not a timeout).
 const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use/i
 const MAX_RUNS_PER_TEST = 20
+
+/** The file of the innermost frame pytest reported for `test` when it raised an
+ *  IndexError or KeyError: the `path:line: IndexError` line closing the test's
+ *  section under FAILURES. Null when the log has no such line. */
+function lookupErrorPath(lines, test) {
+  const name = test.split('::').slice(1).join('.')
+  const start = lines.findIndex((l) => /^_{3,} (.+) _{3,}$/.exec(l)?.[1] === name)
+  if (start < 0) return null
+  let path = null
+  for (let i = start + 1; i < lines.length && !/^(_{3,} .+ _{3,}|={3,}.*)$/.test(lines[i]); i++) {
+    const m = /^(\S+):\d+: (?:IndexError|KeyError)$/.exec(lines[i])
+    if (m) path = m[1].replace(/\\+/g, '/')
+  }
+  return path
+}
 
 /** Drop the runner's leading ISO timestamp. */
 function bare(line) {
@@ -49,7 +66,9 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
     // The failure's own message plus what was printed just before and after it.
     const context = lines.slice(Math.max(0, i - 3), i + 4).join('\n')
     const category = ENVIRONMENT.test(context) ? 'environment'
-      : TEST_RACE.test(context) || knownRaces.has(test) ? 'test-race' : 'product-defect'
+      : TEST_RACE.test(context) || knownRaces.has(test) ? 'test-race'
+        : /(^|\/)backend\/tests\//.test(lookupErrorPath(lines, test) ?? '') ? 'needs-review'
+          : 'product-defect'
     out.push({ test, category, evidence: line.trim().slice(0, 400) })
   }
   if (out.length === 0) {
