@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import threading
 import time
 
@@ -345,8 +344,11 @@ def test_append_to_a_missing_workspace_is_a_no_op(tmp_path, clock, caplog):
 
 def test_shutdown_close_does_not_deadlock_with_a_watcher_burst(tmp_path):
     """A watcher burst holds the workspace db's transaction (batch) and then
-    asks the registry for the db again (append); shutdown's close_all held the
-    registry and waited for that db. CI saw the backend hang there for good."""
+    appends; shutdown's close_all runs meanwhile. close_all once held the
+    registry while waiting for that db (a deadlock), and after that the
+    append opened a second connection that waited out SQLite's busy timeout,
+    which a throttled macOS runner stretched past 10 s. The burst now keeps
+    its own db: it finishes, its rows are kept, and close_all closes after."""
     ws = str(tmp_path)
     databases = WorkspaceDatabases()
     store = PreviewLog(databases)
@@ -360,10 +362,7 @@ def test_shutdown_close_does_not_deadlock_with_a_watcher_burst(tmp_path):
                 inside.set()
                 time.sleep(0.2)  # still running when shutdown starts
                 store.append(ws, change="modified", rel_path="b.ts", source="watcher")
-        except sqlite3.OperationalError as err:
-            # The registry no longer holds the db, so append opens a second
-            # connection, which the batch's open transaction keeps locked out.
-            # Shutdown loses this last write; the app logs it and moves on.
+        except BaseException as err:  # noqa: BLE001 - reported below
             errors.append(err)
 
     worker = threading.Thread(target=burst, daemon=True)
@@ -371,7 +370,11 @@ def test_shutdown_close_does_not_deadlock_with_a_watcher_burst(tmp_path):
     assert inside.wait(5)
     closer = threading.Thread(target=databases.close_all, daemon=True)
     closer.start()
-    # Bounded, so a deadlock fails here instead of hanging the run.
+    # Bounded, so a deadlock fails here instead of hanging the run. The burst
+    # needs no lock wait at all now, so the bound is far from tight.
     closer.join(10)
     worker.join(10)
-    assert not closer.is_alive() and not worker.is_alive(), "close_all deadlocked with the burst"
+    assert not worker.is_alive(), "the burst never finished"
+    assert not closer.is_alive(), "close_all deadlocked with the burst"
+    assert errors == []
+    assert [r["rel_path"] for r in PreviewLog().tail(ws)] == ["b.ts", "a.ts"]
