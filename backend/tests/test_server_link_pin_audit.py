@@ -15,8 +15,8 @@ from agent_team_backend import app, cloud_secrets, server_link, trust_store
 from agent_team_backend.server_link import ServerLink
 from tests.test_server_link import CONFIG, FakeServer, TokenServer, _until
 from tests.test_server_link_pin_bounds import (  # noqa: F401 - kc is a fixture
-    FILE_ONLY, KEYCHAIN_ONLY, URL, _call, core_cmd_len, kc, next_connection, owners, pair_max,
-    real_link, store_mode,
+    FILE_ONLY, KEYCHAIN_ONLY, URL, _call, confirm_refused, core_cmd_len, kc, next_connection, owners,
+    pair_max, real_link, store_mode,
 )
 from tests.test_trust_store_capacity import KEY, _device
 
@@ -254,12 +254,12 @@ async def test_refused_confirms_never_fill_the_record(kc):
     assert await link.start()
     try:
         for _ in range(10):
-            await asyncio.sleep(0.03)
+            await confirm_refused(server)
             n = len(server.opened)
             await server.opened[-1].close()
             await next_connection(server, n)
-        await asyncio.sleep(0.05)
-        assert link._trust_locked == ""
+        await confirm_refused(server)
+        await _until(lambda: link._trust_locked == "")
     finally:
         await link.stop()
     print(f"\nrefused-confirm at max pairing: paired={paired} ownMembers={len(owners())} cmd bytes={core_cmd_len()}")
