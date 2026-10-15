@@ -32,6 +32,14 @@ export const FRONTEND_SHARED = [
 // CLI suite starts the real backend, so only the backend's own tests qualify.
 export const BACKEND_ONLY = ['backend/tests/']
 
+// Inside BACKEND_ONLY, but imported by the frontend CLI suite
+// (tests/cli/backendWire.test.ts drives the backend through this harness).
+export const BACKEND_SHARED = [
+  'backend/tests/__init__.py',
+  'backend/tests/cli_regression/__init__.py',
+  'backend/tests/cli_regression/support/',
+]
+
 const matches = (file, patterns) =>
   patterns.some((p) => (p.endsWith('/') ? file.startsWith(p) : file === p))
 
@@ -40,7 +48,7 @@ export function isFrontendOnly(file) {
 }
 
 export function isBackendOnly(file) {
-  return matches(file, BACKEND_ONLY)
+  return matches(file, BACKEND_ONLY) && !matches(file, BACKEND_SHARED)
 }
 
 /** @returns {{ backend: boolean, frontend: boolean }} which groups must run */

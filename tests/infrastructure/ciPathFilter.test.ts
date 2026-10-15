@@ -55,6 +55,17 @@ describe('CI path filter rules', () => {
     }
   })
 
+  it('runs everything when the CLI wire test\'s Python harness changes', () => {
+    for (const file of [
+      'backend/tests/__init__.py',
+      'backend/tests/cli_regression/__init__.py',
+      'backend/tests/cli_regression/support/backend_process.py',
+      'backend/tests/cli_regression/support/fake_cli.py',
+    ]) {
+      expect(scopes({ event: 'pull_request', files: [file] })).toEqual({ backend: true, frontend: true })
+    }
+  })
+
   it('runs everything for a change that touches both sides', () => {
     expect(scopes({ event: 'pull_request', files: ['src/renderer/src/App.vue', 'backend/tests/test_projects.py'] }))
       .toEqual({ backend: true, frontend: true })
@@ -126,12 +137,20 @@ describe('path filter allowlists match what the suites read', () => {
       'scripts/ci-changed-scopes.mjs',
       // `pnpm test:cli` runs pytest itself; CI's frontend job does not use it.
       'scripts/run-cli-tests.mjs',
+      // A local test picker; it and its test run in the static job, which the
+      // filter never skips.
+      'scripts/changed-backend-tests.mjs',
+      'tests/infrastructure/changedBackendTests.test.ts',
     ])
     const offenders = sources.filter((source) => {
       if (allowed.has(source)) return false
       const text = readFileSync(source, 'utf8').split('\n')
         .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n')
+      // Python embedded in a test imports the harness as `tests.<module>`.
+      const modules = [...text.matchAll(/\b(?:from|import)\s+(tests(?:\.\w+)+)/g)]
+        .map((m) => `backend/${m[1].replaceAll('.', '/')}.py`)
       return pathLiterals(text, '\'"`').some((s) => isBackendOnly(`${s}/`) || isBackendOnly(s)) ||
+        modules.some(isBackendOnly) ||
         /['"]backend['"]\s*,\s*['"]tests['"]/.test(text)
     })
     expect(offenders, 'these read backend/tests; narrow BACKEND_ONLY in scripts/ci-changed-scopes.mjs').toEqual([])
