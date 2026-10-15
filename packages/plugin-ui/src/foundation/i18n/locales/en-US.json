@@ -357,7 +357,8 @@
   "msg": {
     "external-toast-remote-title": "Remote device · {device}",
     "external-toast-remote-body": "Instruction from {from} delivered to “{target}”",
-    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-title": "External channel · {platform} · {sender}",
+    "external-toast-channel-platform-title": "External channel · {platform}",
     "external-toast-channel-body": "Message from {from} delivered to “{target}”",
     "workspace-toast-title": "Other workspace · {name}",
     "cross-workspace-unknown-sender": "unknown",

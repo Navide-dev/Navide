@@ -22,8 +22,8 @@ function workspaceName(path: string): string {
 
 /**
  * The toast an accepted delivery earns, or null for none. Content from another
- * machine or a chat channel gets the external toast — it replaces the
- * cross-workspace one, which the backend also flags it as. Another local
+ * machine gets the external toast and a chat channel the channel toast — either
+ * replaces the cross-workspace one, which the backend also flags it as. Another local
  * workspace keeps its existing message with the workspace emphasis; a delivery
  * from this workspace stays silent, as before.
  */
@@ -52,9 +52,11 @@ export function deliveryToast(ev: DeliveryToastEvent, targetName: string): Deliv
       message: t('msg.external-toast-channel-body', { from, target: targetName }),
       opts: {
         type: 'info',
-        variant: 'external',
+        variant: 'channel',
         icon: '✉',
-        title: sender ? t('msg.external-toast-channel-title', { platform: platformLabel, sender }) : platformLabel,
+        title: sender
+          ? t('msg.external-toast-channel-title', { platform: platformLabel, sender })
+          : t('msg.external-toast-channel-platform-title', { platform: platformLabel }),
         duration: 8000,
       },
     }
