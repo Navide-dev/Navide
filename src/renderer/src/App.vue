@@ -22524,6 +22524,15 @@ function paneIsCommander(p: ActivePane): boolean {
 }
 .titlebar-id:hover .titlebar-reveal { display: flex; }
 .titlebar-reveal:hover { color: var(--text-bright); }
+/* Windows/Linux draw their own window controls and have no title text of the
+   OS's to grab, so the 70% block above was most of what could move the window
+   — and none of it could. There the block drags, and only what it shows (the
+   name or path and the two hover buttons) opts out: hovering the name still
+   swaps in the path and buttons, which line up edge to edge, so the pointer
+   stays inside the zone while moving to either button. macOS keeps the whole
+   block as its hover zone. */
+:root[data-window-controls='drawn'] .titlebar-id { -webkit-app-region: drag; }
+:root[data-window-controls='drawn'] .titlebar-id > * { -webkit-app-region: no-drag; }
 /* Fills the bar between the traffic lights and the gear, and stays draggable
    so the empty stretch still moves the window. */
 .titlebar-spacer {
