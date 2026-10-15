@@ -8377,7 +8377,7 @@
       "grid-toolbar": "格線版面",
       "grid-custom-columns": "自訂欄數",
       "grid-custom-rows": "自訂列數",
-      "titlebar-settings": "設定（⌘,）",
+      "titlebar-settings": "設定（{key}）",
       "drag-reorder": "拖曳可重新排序，點一下可切換焦點",
       "docked-in-sidebar": "已收合到側欄",
       "stage-manager-tooltip": "階段管理者 — 負責控場，並決定何時輸出 ---STAGE-DONE---",

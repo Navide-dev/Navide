@@ -10,10 +10,17 @@
 // The body-stays-mounted assertion is the load-bearing one: collapsing must not
 // unmount ExplorerPane/GitPane, which hold scroll position, expanded folders and
 // in-flight backend requests that a `v-if` would discard on every toggle.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { shallowMount, type VueWrapper } from '@vue/test-utils'
 import ControlPane from '../ControlPane.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
+
+// These cases pin the macOS rule table and tooltips (⌘N, ⌘,); happy-dom's
+// navigator.platform reads as non-mac, which would add the Ctrl+Alt+N / Ctrl+,
+// rules. platformSidebarKeys.test.ts covers Windows and Linux.
+vi.hoisted(() => {
+  Object.defineProperty(globalThis.navigator, 'platform', { value: 'MacIntel', configurable: true })
+})
 
 const gitContribution = {
   pluginId: 'navide.git',

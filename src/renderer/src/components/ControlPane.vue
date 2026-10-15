@@ -49,7 +49,7 @@ import type { DisplayStatus } from '@navide/terminal'
 import type { Role, RoleKey } from '../data/roles'
 import type { Stage, StageId } from '../data/stages'
 import type { Issue, IssueDetail, IssueProvider, IssueHandlerMode } from '../composables/useIssues'
-import { onSettingsChanged, registerCommand, settingsGet, settingsSet } from '@navide/plugin-ui/shared'
+import { formatKeySpec, onSettingsChanged, registerCommand, settingsGet, settingsKeySpec, settingsSet, sidebarTabKeySpec } from '@navide/plugin-ui/shared'
 import { useUpdater } from '../composables/useUpdater'
 import { i18n } from '@navide/plugin-ui/foundation'
 import { useNotify } from '@navide/plugin-ui/foundation'
@@ -3204,8 +3204,8 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
         :data-legacy-git-tab="t.id === 'git' && legacyGitRecovery ? '' : undefined"
         :data-plugin-contribution="t.id === 'git' && !legacyGitRecovery ? gitPluginTab?.contributionKey : undefined"
         :title="t.id === 'git' && gitPluginTab
-          ? `${gitPluginTab.title} (⌘4)`
-          : `${$t(t.label)} (⌘${t.shortcut})`"
+          ? `${gitPluginTab.title} (${formatKeySpec(sidebarTabKeySpec(4))})`
+          : `${$t(t.label)} (${formatKeySpec(sidebarTabKeySpec(Number(t.shortcut)))})`"
         @click="selectSidebarTab(t.id)"
       >
         <template v-if="t.id === 'git' && !legacyGitRecovery && gitPluginTab">
@@ -4390,7 +4390,7 @@ async function onTaskDrop(e: DragEvent): Promise<void> {
               <button class="link" @click="previewOpen = !previewOpen">
                 {{ previewOpen ? '▾' : '▸' }} {{ currentRole.label }} system prompt
               </button>
-              <button class="link tiny" @click="emit('open-settings')" :title="$t('action.settings') + ' (⌘,)'">
+              <button class="link tiny" @click="emit('open-settings')" :title="`${$t('action.settings')} (${formatKeySpec(settingsKeySpec())})`">
                 ⚙ {{ $t('action.settings') }}
               </button>
             </div>

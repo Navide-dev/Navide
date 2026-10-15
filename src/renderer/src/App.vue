@@ -340,7 +340,7 @@ import {
   screenShowsHookTrustPrompt
 } from './lib/sessionMarkerTurn'
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
-import { executeCommand, initKeybindingsPort, useKeybindings, registerCommand, setContext } from '@navide/plugin-ui/shared'
+import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
 import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
 import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
@@ -20907,7 +20907,7 @@ function paneIsCommander(p: ActivePane): boolean {
         <NavideCloudMark variant="solid" class="titlebar-account-mark" />
         <span v-if="p2pAccountLabel" class="titlebar-account-dot" :class="p2pAccountDotClass"></span>
       </button>
-      <button class="titlebar-gear" @mousedown.stop @click="showSettings = true" :title="$t('label.titlebar-settings')">
+      <button class="titlebar-gear" @mousedown.stop @click="showSettings = true" :title="$t('label.titlebar-settings', { key: formatKeySpec(settingsKeySpec()) })">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/>
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useId } from 'vue'
+import { formatKeySpec, settingsKeySpec } from '@navide/plugin-ui/shared'
 import type { AgentSpec } from './ControlPane.vue'
 import type { Role, RoleKey } from '../data/roles'
 import type { BackendStatus } from '../composables/useBackend'
@@ -88,7 +89,7 @@ const datalistId = useId()
           <button class="link" @click="emit('update:previewOpen', !previewOpen)">
             {{ previewOpen ? '▾' : '▸' }} {{ currentRole.label }} system prompt
           </button>
-          <button class="link tiny" @click="emit('open-settings')" :title="$t('action.settings') + ' (⌘,)'">
+          <button class="link tiny" @click="emit('open-settings')" :title="`${$t('action.settings')} (${formatKeySpec(settingsKeySpec())})`">
             ⚙ {{ $t('action.settings') }}
           </button>
         </div>
