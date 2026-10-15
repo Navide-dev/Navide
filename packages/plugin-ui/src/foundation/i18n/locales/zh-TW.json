@@ -1978,6 +1978,8 @@
       "readback-hint": "標了 🔊 的 pane 完成或需要你回答時，用系統聲音念一句短通知（例如「Navide指揮 完成了」）。在 pane 標題列點 🔊 即可標記。全部在本機合成，不會下載任何東西。",
       "readback-voice": "聲音",
       "readback-voice-hint": "「自動」會依介面語言挑最好的系統聲音（優先 Premium 版，例如美佳 Premium）。更好的聲音可在系統設定 › 輔助使用 › 朗讀內容 下載。",
+      "readback-voice-hint-windows": "「自動」會依介面語言挑最好的系統聲音。更多聲音可在 Windows 的設定 › 時間與語言 › 語音 新增。",
+      "readback-voice-hint-other-os": "「自動」會依介面語言挑最好的系統聲音。更多聲音請在作業系統的語音設定中安裝。",
       "readback-voice-none": "這台電腦沒有符合介面語言的系統聲音，將使用系統預設聲音。",
       "readback-voice-auto": "自動（依介面語言）",
       "readback-rate": "語速",

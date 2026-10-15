@@ -107,6 +107,8 @@ class Capabilities:
     typing: bool
     buttons: bool
     text_limit: int
+    # send_text takes ``reply_to`` (a message id the new message quotes)
+    reply_to: bool = False
 
 
 Emit = Callable[[InboundMessage], Awaitable[None]]

@@ -135,6 +135,24 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    bun run test:run
    uv --project backend run pytest backend/tests
    ```
+   While iterating, run only what your change can affect, then the full suites
+   above before you push (CI and the release gates always run them in full):
+   ```bash
+   bun run vitest run --changed origin/main         # tests importing changed files
+   bun scripts/changed-backend-tests.mjs            # backend tests for changed files
+   bun scripts/changed-backend-tests.mjs --list     # just print the selection
+   scripts/isolated-pytest.sh backend/tests --lf    # re-run last failures
+   ```
+   `changed-backend-tests.mjs` compares against `origin/main` (pass another
+   base as its first argument; pytest arguments go after `--`) and runs
+   pytest through `scripts/isolated-pytest.sh`, the release gate's isolation:
+   a throwaway HOME, no reach to the real keychain, and `uv run --no-sync`
+   (macOS and Linux). It selects
+   changed test files, the tests that import or patch a changed backend
+   module directly, and the tests that name a changed non-backend file; a
+   change to conftest, test helpers, `pyproject.toml` or the lock runs the
+   whole suite. It does not follow indirect imports, so it can miss a
+   breakage the full suite catches.
 
    `bun run test:run` is the complete Vitest run (`bun run test` starts watch
    mode; bare `bun test` is Bun's own runner, not Vitest). One test,

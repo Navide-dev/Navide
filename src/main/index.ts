@@ -174,6 +174,7 @@ import {
   type GitAccountInput
 } from './gitAccountsStore'
 import { applyLinuxKeyringPreflight } from './linuxKeyring'
+import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
@@ -5072,6 +5073,9 @@ if (cdpDebugConfig.enabled) {
 // unlocked Secret Service keyring exists, so Chromium never raises a blocking
 // keyring dialog. Must run before the app is ready; a no-op off Linux.
 linuxKeyringDowngraded = applyLinuxKeyringPreflight(app.commandLine)
+
+// Voice readback on Linux needs speech-dispatcher; a no-op off Linux.
+applyLinuxSpeechDispatcher(app.commandLine)
 
 // Folder paths handed to the app from outside (Finder "Open With", a macOS
 // Quick Action, or CLI args) open as workspaces. Paths that arrive via the

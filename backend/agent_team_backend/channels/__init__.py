@@ -112,19 +112,25 @@ def default_seams() -> Seams:
         result = reply.get("result") or {}
         return {"until": result.get("usageLimitUntil"), "buffer": str(result.get("buffer") or "")}
 
-    async def answer(pane_id: str, answer_payload: dict[str, Any]) -> dict[str, Any]:
+    async def answer(pane_id: str, answer_payload: dict[str, Any],
+                     expected: dict[str, Any] | None = None) -> dict[str, Any]:
         pane = agent_messaging.current(pane_id)
         if pane is None:
             return {"ok": False, "error": "pane is gone"}
+        args: dict[str, Any] = {"paneId": pane.pane_id, "answer": answer_payload}
+        if expected is not None:
+            # The window presses only while this same prompt is on screen, as for cli_answer_prompt.
+            args["expected"] = expected
         reply = await mcp._ui_request(
             pane.workspace_path, "invoke", caller=mcp._pane_caller(pane.pane_id),
-            action="ui.pane.sendKeys", args={"paneId": pane.pane_id, "answer": answer_payload},
+            action="ui.pane.sendKeys", args=args,
         )
         if not reply.get("ok"):
             return {"ok": False, "error": str(reply.get("error") or "the window did not answer")}
         result = reply.get("result") or {}
         if not result.get("ok", True) or not result.get("sent"):
-            return {"ok": False, "error": str(result.get("error") or "not sent")}
+            return {"ok": False, "error": str(result.get("error") or "not sent"),
+                    "error_code": str(result.get("errorCode") or "")}
         return {"ok": True}
 
     def resolve_pane(pane_id: str) -> str:

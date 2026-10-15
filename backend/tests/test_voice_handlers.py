@@ -938,6 +938,7 @@ async def test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on(
     assert stop["text"] == _text(40)
 
 
+@pytest.mark.serial
 async def test_the_budget_grows_when_every_partial_is_slow(
     stream: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -18,6 +18,24 @@
       ]
     },
     {
+      "test": "backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#293",
+      "count": 1,
+      "firstSeen": "2026-10-15T15:53:06Z",
+      "lastSeen": "2026-10-15T15:53:06Z",
+      "runs": [
+        {
+          "run": 38763082739,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 285,
+          "at": "2026-10-15T15:53:06Z",
+          "evidence": "FAILED backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain] - IndexError: list index out of range"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
       "category": "test-race",
       "count": 1,
