@@ -135,10 +135,13 @@ by adding its fingerprint to `.gitleaksignore`, which CI reads as well.
    pnpm vitest run --changed origin/main           # tests importing changed files
    node scripts/changed-backend-tests.mjs           # backend tests for changed files
    node scripts/changed-backend-tests.mjs --list    # just print the selection
-   uv --project backend run pytest backend/tests --lf   # re-run last failures
+   scripts/isolated-pytest.sh backend/tests --lf    # re-run last failures
    ```
    `changed-backend-tests.mjs` compares against `origin/main` (pass another
-   base as its first argument; pytest arguments go after `--`). It selects
+   base as its first argument; pytest arguments go after `--`) and runs
+   pytest through `scripts/isolated-pytest.sh`, the release gate's isolation:
+   a throwaway HOME, no reach to the real keychain, and `uv run --no-sync`
+   (macOS and Linux). It selects
    changed test files, the tests that import or patch a changed backend
    module directly, and the tests that name a changed non-backend file; a
    change to conftest, test helpers, `pyproject.toml` or the lock runs the

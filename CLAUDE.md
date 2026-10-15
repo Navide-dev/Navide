@@ -31,8 +31,9 @@ in-repo docs above.
    required — without it pytest misses backend's ini config). Run verification
    commands bare — no pipe to tail/head (it eats the exit code). While
    iterating, `pnpm vitest run --changed origin/main` and
-   `node scripts/changed-backend-tests.mjs` run only the affected tests
-   (see `CONTRIBUTING.md`); the full suites stay the CI and release default.
+   `node scripts/changed-backend-tests.mjs` run only the affected tests (the
+   latter isolated like the release gate, see `CONTRIBUTING.md`); the full
+   suites stay the CI and release default.
 2. **Never clear terminal scrollback** — no `term.clear()` in any
    resize/redraw path.
 3. **No self-initiated commits** — the user decides when to commit, unless

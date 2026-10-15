@@ -26,18 +26,36 @@ warn_missing_announcement() {
 }
 
 # Runs the command before `--` in the background and the one after it in the
-# foreground, waits for both, and fails naming each that failed: neither is
-# left running and neither exit code is lost. The background output is held
-# and printed when both are done, so the two never interleave.
+# foreground, waits for both, and fails naming each that failed, so neither
+# exit code is lost. The background output is held and printed when both are
+# done, so the two never interleave.
+# The background command gets its own process group (set -m) and an INT or
+# TERM stops that group by the recorded id: `pnpm typecheck` does not pass a
+# signal on to the command chain it runs, so stopping its pid alone leaves
+# the chain running. Ctrl-C reaches the foreground command directly; bash
+# runs the trap once that command has ended, so a TERM sent to this script
+# alone takes effect when the foreground command finishes.
+# NAVIDE_RELEASE_SERIAL_GATES=1 runs the two one after the other instead (the
+# fallback if the overlap's extra load becomes a problem).
 run_concurrently() {
   local IFS=' ' background=() log pid background_status=0 foreground_status=0
   while [[ $# -gt 0 && "$1" != -- ]]; do background+=("$1"); shift; done
   shift
+  if [[ "${NAVIDE_RELEASE_SERIAL_GATES:-}" == 1 ]]; then
+    "${background[@]}"
+    "$@"
+    return
+  fi
   log="$(mktemp "${TMPDIR:-/tmp}/navide-release-gate.XXXXXX")"
-  "${background[@]}" > "$log" 2>&1 &
+  set -m
+  "${background[@]}" > "$log" 2>&1 < /dev/null &
   pid=$!
+  set +m
+  trap "kill -TERM -- -${pid} 2>/dev/null || true; wait ${pid} 2>/dev/null || true; rm -f '${log}'; exit 130" INT
+  trap "kill -TERM -- -${pid} 2>/dev/null || true; wait ${pid} 2>/dev/null || true; rm -f '${log}'; exit 143" TERM
   "$@" || foreground_status=$?
   wait "$pid" || background_status=$?
+  trap - INT TERM
   echo "--- ${background[*]} (exit ${background_status}) ---"
   cat "$log"
   rm -f "$log"

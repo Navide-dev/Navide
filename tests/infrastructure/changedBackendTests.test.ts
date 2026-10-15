@@ -81,3 +81,25 @@ describe('changed backend test selection on this repository', () => {
     expect(selectTests(['src/renderer/src/lib/promptSkillSeed.ts'], real)).toContain('backend/tests/test_prompt_skills.py')
   })
 })
+
+describe('changed backend tests run isolated', () => {
+  const list = (path: string) => readFileSync(path, 'utf8').match(/NO_SANDBOX_FILES=\(\n([^)]*)\)/)?.[1].trim().split(/\s+/)
+
+  it('keeps the no-sandbox list equal to the release gate', () => {
+    expect(list('scripts/isolated-pytest.sh')).toEqual(list('scripts/release-backend-tests.sh'))
+    expect(list('scripts/isolated-pytest.sh')?.length).toBeGreaterThan(0)
+  })
+
+  it('never runs pytest outside the isolated runner, and never syncs', () => {
+    const runner = readFileSync('scripts/changed-backend-tests.mjs', 'utf8')
+    expect(runner).toContain("'scripts/isolated-pytest.sh'")
+    expect(runner).not.toMatch(/spawnSync\(\s*'uv'/)
+    const isolated = readFileSync('scripts/isolated-pytest.sh', 'utf8')
+    const uvRuns = isolated.split('\n').filter((line) => line.includes('"$UV" --project'))
+    expect(uvRuns.length).toBeGreaterThan(0)
+    for (const line of uvRuns) expect(line).toContain('run --no-sync pytest')
+    for (const guard of ['env -i', 'HOME="$SCRATCH/home"', 'PATH="$SCRATCH/bin:', '(deny process-exec (literal "/usr/bin/security"))']) {
+      expect(isolated).toContain(guard)
+    }
+  })
+})

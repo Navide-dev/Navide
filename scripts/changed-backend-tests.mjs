@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Runs the backend test files a change can affect: a local shortcut, never a
-// substitute for the full suite that CI and the release gates run.
+// Runs the backend test files a change can affect, through the isolated
+// runner (scripts/isolated-pytest.sh): a local shortcut, never a substitute
+// for the full suite that CI and the release gates run.
 //
 //   node scripts/changed-backend-tests.mjs [base] [--list] [-- pytest args]
 //
@@ -130,8 +131,14 @@ function main(argv) {
     process.stdout.write(`no backend tests affected by changes since ${base}\n`)
     return 0
   }
+  if (process.platform === 'win32') {
+    process.stderr.write('the isolated runner (scripts/isolated-pytest.sh) needs bash on macOS or Linux; use --list\n')
+    return 2
+  }
   process.stdout.write(`running ${selected === WHOLE_SUITE ? 'the whole backend suite' : `${selected.length} test file(s)`}\n`)
-  const run = spawnSync('uv', ['--project', 'backend', 'run', 'pytest', ...selected, ...pytestArgs], { stdio: 'inherit' })
+  // Never plain `uv run pytest`: the isolated runner keeps the tests away from
+  // the real HOME and keychain, and never syncs the venv.
+  const run = spawnSync('bash', ['scripts/isolated-pytest.sh', ...selected, ...pytestArgs], { stdio: 'inherit' })
   return run.status ?? 1
 }
 

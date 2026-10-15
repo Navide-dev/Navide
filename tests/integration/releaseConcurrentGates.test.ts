@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
-import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { spawn, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isWindows } from '../../src/shared/osplat'
@@ -20,14 +20,19 @@ function scratch(): string {
 // Loads only fail() and run_concurrently() from release.sh (running the script
 // itself would start a release) and runs `background -- foreground`, each a
 // bash snippet.
-function concurrently(background: string, foreground: string, cwd: string) {
-  const program = `set -Eeuo pipefail
+const program = `set -Eeuo pipefail
 IFS=$'\\n\\t'
 eval "$(sed -n -e '/^fail() {/,/^}/p' -e '/^run_concurrently() {/,/^}/p' "$1")"
 run_concurrently bash -c "$2" -- bash -c "$3"
 echo after`
+
+// Whatever the release that runs these tests chose, start from the default.
+const baseEnv = { ...process.env }
+delete baseEnv.NAVIDE_RELEASE_SERIAL_GATES
+
+function concurrently(background: string, foreground: string, cwd: string, env: NodeJS.ProcessEnv = {}) {
   const result = spawnSync('bash', ['-c', program, 'test', releaseScript, background, foreground], {
-    cwd, encoding: 'utf8', timeout: 30_000,
+    cwd, encoding: 'utf8', timeout: 30_000, env: { ...baseEnv, ...env },
   })
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }
@@ -63,6 +68,38 @@ describe.skipIf(isWindows())('release.sh concurrent gates', () => {
     expect(existsSync(join(cwd, 'bg-done'))).toBe(true)
     expect(result.stderr).toContain('failed (exit 4)')
     expect(result.stdout).not.toContain('after')
+  })
+
+  // The background command spawns a grandchild, as `pnpm typecheck` runs its
+  // chain; stopping only the recorded pid would leave the grandchild running.
+  it.each([['SIGINT', 130], ['SIGTERM', 143]] as const)('stops the whole background tree on %s', async (signal, code) => {
+    const cwd = scratch()
+    const child = spawn('bash', ['-c', program, 'test', releaseScript, 'sleep 30 & echo $! > grandchild; wait', 'sleep 1'], {
+      cwd, stdio: 'ignore', env: baseEnv,
+    })
+    while (!existsSync(join(cwd, 'grandchild'))) await new Promise((resolve) => setTimeout(resolve, 20))
+    child.kill(signal)
+    const exit = await new Promise((resolve) => child.on('exit', (status) => resolve(status)))
+    expect(exit).toBe(code)
+    const grandchild = Number(readFileSync(join(cwd, 'grandchild'), 'utf8'))
+    let alive = true
+    for (let i = 0; i < 50 && alive; i++) {
+      try { process.kill(grandchild, 0); await new Promise((resolve) => setTimeout(resolve, 20)) } catch { alive = false }
+    }
+    if (alive) process.kill(grandchild)
+    expect(alive).toBe(false)
+  })
+
+  it('runs one after the other with NAVIDE_RELEASE_SERIAL_GATES=1', () => {
+    const cwd = scratch()
+    const serial = { NAVIDE_RELEASE_SERIAL_GATES: '1' }
+    // The foreground side finds the background side's marker: they did not overlap.
+    const passed = concurrently('sleep 0.3; touch bg; echo typecheck-output', '[ -e bg ] && touch fg', cwd, serial)
+    expect(passed.status, passed.stderr).toBe(0)
+    expect(passed.stdout).toContain('typecheck-output')
+    expect(existsSync(join(cwd, 'fg'))).toBe(true)
+    expect(concurrently('exit 3', 'true', cwd, serial).status).not.toBe(0)
+    expect(concurrently('true', 'exit 4', cwd, serial).status).not.toBe(0)
   })
 
   it('reports both exit codes when both fail', () => {
