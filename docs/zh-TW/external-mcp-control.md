@@ -66,6 +66,7 @@ Workspace。沒有 Pane 也意味著沒有分頁群組：host 與外部呼叫端
 | `plan_update_stage` | `workspace_path`、`rel_path`、`stage` | 設定 stage：`draft`、`in-review`、`approved`、`in-progress`、`done`、`abandoned` |
 | `plan_update_todo` | `workspace_path`、`rel_path`、`todo_id`、`status` | 設定單一 todo 的狀態：`pending`、`in-progress`、`done`、`skipped` |
 | `plan_add_note` | `workspace_path`、`rel_path`、`text`、`author?`（`ai`\|`user`，預設 `ai`） | 附加一則 Review Note |
+| `plan_add_todo` | `workspace_path`、`rel_path`、`content`、`id?`、`owner?`（`agent`\|`user`）、`status?`（預設 `pending`）、`after?` | 在既有 Plan 新增一個 todo（加在最後，或加在 `after` 指定的 todo 之後） |
 
 這裡必須給 `workspace_path`，因為外部 Client 不是 Pane；Pane 呼叫端省略它時，
 這些 Tool 會使用該 Pane 自己的 Workspace，而那正是 Plan 視窗用來解析 Plan 的

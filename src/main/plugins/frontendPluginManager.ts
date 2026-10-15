@@ -12474,6 +12474,7 @@ export const PLANS_BACKEND_METHODS = [
   'plans.update_stage',
   'plans.update_todo',
   'plans.add_note',
+  'plans.add_todo',
   'plans.review_note_add',
   'plans.review_note_edit',
   'plans.review_note_resolve',
@@ -12494,6 +12495,7 @@ export const PLANS_AGENT_BACKEND_METHODS = [
   'plans.update_stage',
   'plans.update_todo',
   'plans.add_note',
+  'plans.add_todo',
 ] as const
 
 export const PLANS_BACKEND_EVENTS = ['plans.changed'] as const

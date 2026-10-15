@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -1016,3 +1017,193 @@ async def test_plan_list_locally_lists_a_document_it_cannot_read(workspace: Path
     assert ".agent-team/plans/binary.html" in by_path
     read = await _call("plan_read", {"workspace_path": str(workspace), "rel_path": "huge.html"})
     assert len(read.structuredContent["html"]) == 6 * 1024 * 1024 + len("<html></html>")
+
+
+# ── plan_add_todo ───────────────────────────────────────────────────────────
+
+
+def _row_ids(html: str) -> list[str]:
+    return re.findall(r'<li\b[^>]*data-todo-id="([^"]+)"', html)
+
+
+async def _add_todo(workspace: Path, **args: Any) -> _ToolResult:
+    return await _call("plan_add_todo", {"workspace_path": str(workspace), "rel_path": "alpha.html", **args})
+
+
+async def test_plan_add_todo_appends_to_the_island_and_the_visible_list(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="Third <step>")
+    assert not result.isError, result.content[0].text
+    assert result.structuredContent == {"id": "t3", "content": "Third <step>", "status": "pending"}
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    todos = parse_plan_meta(html)["todos"]
+    assert [t["id"] for t in todos] == ["t1", "t2", "t3"]
+    assert todos[2] == {"id": "t3", "content": "Third <step>", "status": "pending"}
+    assert _row_ids(html) == ["t1", "t2", "t3"]
+    row = re.search(r'<li data-status="pending" data-todo-id="t3">[\s\S]*?</li>', html).group(0)
+    assert '<span class="st">pending</span>' in row
+    assert "Third &lt;step&gt;" in row
+    # Appended inside the same list, not after it.
+    assert html.index('data-todo-id="t3"') < html.index("</ul>")
+
+
+async def test_plan_add_todo_inserts_after_the_named_todo(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="In between", id="mid-step", after="t1")
+    assert not result.isError, result.content[0].text
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "mid-step", "t2"]
+    assert _row_ids(html) == ["t1", "mid-step", "t2"]
+
+
+async def test_plan_add_todo_auto_ids_never_reuse_or_renumber(workspace: Path) -> None:
+    await _add_todo(workspace, content="Named", id="named")
+    first = await _add_todo(workspace, content="Auto one")
+    second = await _add_todo(workspace, content="Auto two", after="t1")
+    assert first.structuredContent["id"] == "t3"
+    assert second.structuredContent["id"] == "t4"
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t4", "t2", "named", "t3"]
+    assert _row_ids(html) == ["t1", "t4", "t2", "named", "t3"]
+
+
+@pytest.mark.parametrize(
+    ("args", "needle"),
+    [
+        ({"id": "t1"}, "duplicate todo id"),
+        ({"id": "Bad_Id"}, "invalid todo id"),
+        ({"after": "nope"}, "unknown todo id"),
+        ({"status": "blocked"}, "invalid status"),
+        ({"owner": "robot"}, "invalid todo owner"),
+        ({"content": "   "}, "empty"),
+    ],
+)
+async def test_plan_add_todo_refusals_leave_the_file_untouched(
+    workspace: Path, args: dict[str, str], needle: str
+) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    before = target.read_bytes()
+    result = await _add_todo(workspace, **{"content": "New", **args})
+    assert result.isError
+    assert needle in result.content[0].text
+    assert target.read_bytes() == before
+
+
+async def test_plan_add_todo_unknown_after_lists_the_valid_ids(workspace: Path) -> None:
+    result = await _add_todo(workspace, content="New", after="nope")
+    assert result.isError
+    assert "t1" in result.content[0].text and "t2" in result.content[0].text
+
+
+async def test_plan_add_todo_owner_and_status_are_stored_like_plan_create(workspace: Path) -> None:
+    user = await _add_todo(workspace, content="Verify on a real machine", owner="user", status="in-progress")
+    agent = await _add_todo(workspace, content="Agent work", owner="agent")
+    assert user.structuredContent == {
+        "id": "t3", "content": "Verify on a real machine", "status": "in-progress", "owner": "user",
+    }
+    assert agent.structuredContent == {"id": "t4", "content": "Agent work", "status": "pending"}
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+    todos = {t["id"]: t for t in parse_plan_meta(html)["todos"]}
+    assert todos["t3"]["owner"] == "user"
+    assert "owner" not in todos["t4"]
+    assert '<li data-status="in-progress" data-todo-id="t3">' in html
+
+
+async def test_plan_add_todo_refuses_a_write_that_raced_it(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    original = plan_tools._load_plan_for_write  # noqa: SLF001
+
+    def load_then_race(*args: Any) -> Any:
+        loaded = original(*args)
+        target.write_text(target.read_text(encoding="utf-8") + "<!-- raced -->", encoding="utf-8")
+        stat = target.stat()
+        os.utime(target, (stat.st_atime, stat.st_mtime + 5))
+        return loaded
+
+    monkeypatch.setattr(plan_tools, "_load_plan_for_write", load_then_race)
+    result = await _add_todo(workspace, content="Lost update")
+    assert result.isError
+    assert "conflict" in result.content[0].text
+    html = target.read_text(encoding="utf-8")
+    assert html.endswith("<!-- raced -->")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t2"]
+
+
+async def test_plan_add_todo_fills_an_empty_todo_list(workspace: Path) -> None:
+    result = await _call(
+        "plan_add_todo", {"workspace_path": str(workspace), "rel_path": "beta.html", "content": "First"}
+    )
+    assert not result.isError, result.content[0].text
+    assert "warning" not in result.structuredContent
+    html = (_plans_dir(workspace) / "beta.html").read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1"]
+    assert _row_ids(html) == ["t1"]
+    assert html.index('data-todo-id="t1"') < html.index("</ul>")
+
+
+async def test_plan_add_todo_without_todo_markup_writes_the_island_and_warns(workspace: Path) -> None:
+    meta = {"schemaVersion": 1, "name": "Bare", "stage": "draft", "overview": "", "todos": [], "reviewNotes": []}
+    target = _plans_dir(workspace) / "bare.html"
+    target.write_text(
+        f'<script type="application/json" id="plan-meta">\n{json.dumps(meta)}\n</script>\n<p>prose</p>\n',
+        encoding="utf-8",
+    )
+    result = await _call(
+        "plan_add_todo", {"workspace_path": str(workspace), "rel_path": "bare.html", "content": "Only in meta"}
+    )
+    assert not result.isError, result.content[0].text
+    assert result.structuredContent["id"] == "t1"
+    assert "not inserted" in result.structuredContent["warning"]
+    html = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1"]
+    assert _row_ids(html) == []
+
+
+async def test_plan_add_todo_warns_when_the_after_row_is_missing_from_the_markup(workspace: Path) -> None:
+    target = _plans_dir(workspace) / "alpha.html"
+    target.write_text(
+        re.sub(r'<li data-status="done" data-todo-id="t1">[\s\S]*?</li>', "", target.read_text(encoding="utf-8")),
+        encoding="utf-8",
+    )
+    result = await _add_todo(workspace, content="After a hidden row", after="t1")
+    assert not result.isError, result.content[0].text
+    assert "warning" in result.structuredContent
+    html = target.read_text(encoding="utf-8")
+    assert [t["id"] for t in parse_plan_meta(html)["todos"]] == ["t1", "t3", "t2"]
+    assert _row_ids(html) == ["t2"]
+
+
+async def test_plan_add_todo_routes_through_the_host(monkeypatch: pytest.MonkeyPatch, workspace: Path) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def route(plugin_id: str, workspace_path: str, request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        calls.append((request["name"], request["args"]))
+        return {"ok": True, "result": {"id": "t3", "content": "Hosted", "status": "pending"}}
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    target = _plans_dir(workspace) / "alpha.html"
+    before = target.read_bytes()
+    result = await _add_todo(workspace, content="Hosted", after="t1")
+    assert result.structuredContent == {"id": "t3", "content": "Hosted", "status": "pending"}
+    assert calls == [(
+        "plans.add_todo",
+        {"rel_path": "alpha.html", "content": "Hosted", "id": "", "owner": "", "status": "pending", "after": "t1"},
+    )]
+    assert target.read_bytes() == before
+
+
+async def test_plan_add_todo_explains_a_host_refusal_with_the_valid_ids(
+    monkeypatch: pytest.MonkeyPatch, workspace: Path
+) -> None:
+    html = (_plans_dir(workspace) / "alpha.html").read_text(encoding="utf-8")
+
+    async def route(plugin_id: str, workspace_path: str, request: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+        if request["name"] == "plans.read":
+            return {"ok": True, "result": {"rel_path": "alpha.html", "meta": parse_plan_meta(html), "html": html}}
+        return {"ok": False, "error": {"code": "INVALID_ARGUMENT", "message": "Plugin request failed."}}
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    result = await _add_todo(workspace, content="New", after="nope")
+    assert result.isError
+    text = result.content[0].text
+    assert "unknown todo id" in text and "t1" in text and "t2" in text

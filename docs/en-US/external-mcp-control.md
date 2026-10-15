@@ -72,6 +72,7 @@ Implementation: [`mcp_server/server.py`](../../backend/agent_team_backend/mcp_se
 | `plan_update_stage` | `workspace_path`, `rel_path`, `stage` | Set stage: `draft`, `in-review`, `approved`, `in-progress`, `done`, `abandoned` |
 | `plan_update_todo` | `workspace_path`, `rel_path`, `todo_id`, `status` | Set one todo's status: `pending`, `in-progress`, `done`, `skipped` |
 | `plan_add_note` | `workspace_path`, `rel_path`, `text`, `author?` (`ai`\|`user`, default `ai`) | Append a review note |
+| `plan_add_todo` | `workspace_path`, `rel_path`, `content`, `id?`, `owner?` (`agent`\|`user`), `status?` (default `pending`), `after?` | Add a todo to an existing plan, appended or after the todo `after` names |
 
 `workspace_path` is required here because an external client is not a pane;
 a pane caller omits it and the tools use that pane's own workspace, which is

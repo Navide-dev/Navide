@@ -1544,6 +1544,89 @@ def _add_note(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, An
     return note
 
 
+_AUTO_TODO_ID_RE = re.compile(r"t(\d+)$")
+_TODO_ROW_RE = re.compile(r"<li\b[^>]*\bdata-todo-id=[\"']([^\"']*)[\"'][^>]*>[\s\S]*?</li>", re.IGNORECASE)
+_EMPTY_TODO_LIST_RE = re.compile(
+    r"(<ul\b[^>]*\bclass=[\"'][^\"']*\btodos\b[^\"']*[\"'][^>]*>)((?:\s|<!--[\s\S]*?-->)*)(</ul>)",
+    re.IGNORECASE,
+)
+_TODO_MARKUP_WARNING = (
+    "the todo was added to plan-meta, but its visible row was not inserted: "
+    "no todo list (or no row for `after`) was found in the document"
+)
+
+
+def _insert_todo_row(content: str, todo: dict[str, str], after: str) -> str | None:
+    """Insert the todo's visible row after ``after``'s row or the last row.
+
+    An empty todo list gets it as its first row; None when there is nowhere
+    to put it. Rows use the same shape plans.create writes.
+    """
+    row = (
+        f'<li data-status="{todo["status"]}" data-todo-id="{html_escape(todo["id"])}">'
+        f'<span class="st">{todo["status"]}</span> <span>{html_escape(todo["content"])}</span></li>'
+    )
+    rows = list(_TODO_ROW_RE.finditer(content))
+    anchor = next((m for m in rows if m.group(1) == after), None) if after else (rows[-1] if rows else None)
+    if anchor is not None:
+        line_start = content.rfind("\n", 0, anchor.start()) + 1
+        indent = content[line_start:anchor.start()]
+        indent = indent if not indent.strip() else ""
+        return f"{content[:anchor.end()]}\n{indent}{row}{content[anchor.end():]}"
+    if after or rows:
+        return None
+    empty = _EMPTY_TODO_LIST_RE.search(content)
+    if empty is None:
+        return None
+    return f"{content[:empty.end(2)]}{row}\n{content[empty.start(3):]}"
+
+
+def _add_todo(origin: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    text = arguments.get("content")
+    todo_id = arguments.get("id", "")
+    owner = arguments.get("owner", "")
+    status = arguments.get("status", "pending")
+    after = arguments.get("after", "")
+    if (
+        not isinstance(text, str)
+        or not text.strip()
+        or not isinstance(todo_id, str)
+        or not isinstance(after, str)
+        or status not in TODO_STATUSES
+        or owner not in {"", *TODO_OWNERS}
+    ):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    todo_id, after = todo_id.strip(), after.strip()
+    rel_path, content, meta, mtime = _load_for_write(origin, arguments.get("rel_path"))
+    todos = meta["todos"]
+    ids = [todo.get("id") for todo in todos if _is_record(todo)]
+    # A visible row's id is taken too, so the new todo never gets a second row.
+    taken = ids + (_TODO_ROW_RE.findall(content) if rel_path.endswith(".html") else [])
+    if todo_id and (TODO_ID_RE.fullmatch(todo_id) is None or todo_id in taken):
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if after and after not in ids:
+        raise BridgeFailure("INVALID_ARGUMENT")
+    if not todo_id:
+        numbers = [int(m.group(1)) for m in map(_AUTO_TODO_ID_RE.fullmatch, map(str, taken)) if m]
+        todo_id = f"t{max(numbers, default=0) + 1}"
+    todo = {"id": todo_id, "content": text.strip(), "status": status}
+    if owner == "user":
+        todo["owner"] = owner
+    index = len(todos)
+    if after:
+        index = next(i + 1 for i, item in enumerate(todos) if _is_record(item) and item.get("id") == after)
+    todos.insert(index, todo)
+    result: dict[str, Any] = dict(todo)
+    if rel_path.endswith(".html"):
+        inserted = _insert_todo_row(content, todo, after)
+        if inserted is None:
+            result["warning"] = _TODO_MARKUP_WARNING
+        else:
+            content = inserted
+    _write(origin, rel_path, _write_meta_for_path(rel_path, content, meta), mtime)
+    return result
+
+
 def _manual_review_note(origin: dict[str, Any], arguments: dict[str, Any], action: str) -> dict[str, Any]:
     # Retained PlanStore retries one optimistic-lock conflict against fresh
     # bytes. The mutation (including a new note id) must be recomputed too.
@@ -1945,6 +2028,8 @@ def _handle(frame: Any) -> None:
             result = _update_todo(origin, arguments)
         elif name == "plans.add_note":
             result = _add_note(origin, arguments)
+        elif name == "plans.add_todo":
+            result = _add_todo(origin, arguments)
         elif name == "plans.review_note_add":
             result = _manual_review_note(origin, arguments, "add")
         elif name == "plans.review_note_edit":
