@@ -141,8 +141,8 @@ function pasteToCli(text: string): void {
   aiPanelOpen.value = true
   const dock = cliDockRef.value
   if (dock?.terminal?.status === 'running') dock.pasteText(bracketedPaste(text))
-  else if (dock?.terminal?.status === 'starting') toast('AI terminal is starting — retry in a moment')
-  else toast('Start the AI terminal first, then retry')
+  else if (dock?.terminal?.status === 'starting') toast(i18n.global.t('editorWindow.ai-terminal-starting'))
+  else toast(i18n.global.t('editorWindow.ai-terminal-not-started'))
 }
 
 function selectionPrompt(relPath: string, selection: unknown, instruction: string): string {
@@ -855,7 +855,7 @@ registerCommand('editor.action.formatDocument', () => {
       relPath: f.relPath, wsPath: fileWs(f), line, col: 0,
       severity: 'error', message: msg, source: 'json',
     }])
-    toast(`JSON syntax error: ${msg}`)
+    toast(i18n.global.t('editorWindow.json-syntax-error', { message: msg }))
   }
 })
 registerCommand('editor.action.formatSelection',        () => activeEditor()?.formatSelection())
@@ -878,7 +878,7 @@ registerCommand('workbench.action.revealInExplorer', () => {
   // The explorer tree only shows the window's workspace — a file from another
   // root simply is not in it.
   if (f?.kind !== 'file') return
-  if (f.wsPath) { toast('File is outside this workspace'); return }
+  if (f.wsPath) { toast(i18n.global.t('editorWindow.file-outside-workspace')); return }
   void nextTick(() => explorerRef.value?.revealFile(f.relPath))
 })
 registerCommand('workbench.action.revealFileInOS', async () => {
@@ -1106,16 +1106,16 @@ registerCommand('editor.action.detectIndentation', () => {
   const lines = content.split('\n').slice(0, 200).filter((l) => l.match(/^\s+\S/))
   const tabCount = lines.filter((l) => l.startsWith('\t')).length
   const spaceLines = lines.filter((l) => l.startsWith(' '))
-  if (lines.length === 0) { toast('No indented lines detected'); return }
+  if (lines.length === 0) { toast(i18n.global.t('editorWindow.no-indented-lines')); return }
   if (tabCount > spaceLines.length) {
-    toast('Detected indentation: Tabs')
+    toast(i18n.global.t('editorWindow.indentation-tabs'))
   } else if (spaceLines.length > 0) {
     const sizes: Record<number, number> = {}
     for (const l of spaceLines) { const n = l.match(/^( +)/)?.[1].length ?? 0; if (n > 0) sizes[n] = (sizes[n] ?? 0) + 1 }
     const size = Object.entries(sizes).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '2'
-    toast(`Detected indentation: ${size} Spaces`)
+    toast(i18n.global.t('editorWindow.indentation-spaces-size', { size }))
   } else {
-    toast('Detected indentation: Spaces')
+    toast(i18n.global.t('editorWindow.indentation-spaces'))
   }
 })
 
@@ -1482,7 +1482,7 @@ registerCommand('workbench.action.reopenClosedEditor', () => {
 function diagKey(d: Diagnostic): string { return tabKeyOf(d.wsPath, d.relPath) }
 function nextProblem(): void {
   const all = allDiagnosticsSorted()
-  if (!all.length) { toast('No problems detected'); return }
+  if (!all.length) { toast(i18n.global.t('label.no-problems-detected')); return }
   const curLine = (activeEditor()?.getCursorLine?.() ?? 0) + 1 // 1-based
   const curKey = activeKey.value
   const next = all.find(d => diagKey(d) > curKey || (diagKey(d) === curKey && d.line > curLine))
@@ -1492,7 +1492,7 @@ function nextProblem(): void {
 }
 function prevProblem(): void {
   const all = allDiagnosticsSorted()
-  if (!all.length) { toast('No problems detected'); return }
+  if (!all.length) { toast(i18n.global.t('label.no-problems-detected')); return }
   const curLine = (activeEditor()?.getCursorLine?.() ?? 0) + 1
   const curKey = activeKey.value
   const reversed = [...all].reverse()
@@ -1513,7 +1513,7 @@ const quickFixIdx = ref(0)
 function showQuickFix(): void {
   const curLine = (activeEditor()?.getCursorLine?.() ?? 0) + 1 // diagnostics are 1-based
   const diags = (allDiagnosticsSorted()).filter(d => diagKey(d) === activeKey.value && d.line === curLine)
-  if (!diags.length) { toast('No quick fixes available'); return }
+  if (!diags.length) { toast(i18n.global.t('editorWindow.no-quick-fixes')); return }
   quickFixItems.value = diags.map(d => ({ label: `AI Fix: ${d.message}`, message: d.message }))
   quickFixIdx.value = 0
   quickFixOpen.value = true
@@ -1756,7 +1756,7 @@ async function confirmNewFile(): Promise<void> {
   if (!relPath) { closeNewFileDialog(); return }
   closeNewFileDialog()
   const resp = await backend.send<{ ok: boolean; error?: string }>('fs.write_file', { workspace_path: workspacePath, rel_path: relPath, content: '' })
-  if (!resp.payload?.ok) { toast(resp.payload?.error ?? 'Failed to create file'); return }
+  if (!resp.payload?.ok) { toast(resp.payload?.error ?? i18n.global.t('editorWindow.create-file-failed')); return }
   openFile({ filepath: relPath })
 }
 

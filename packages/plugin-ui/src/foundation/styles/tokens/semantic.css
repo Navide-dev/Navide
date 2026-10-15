@@ -219,6 +219,14 @@
   --danger-deep: var(--red-6);        /* #6f1f1f — danger button / badge fill */
   --danger-subtle: var(--red-7);      /* #3d0d0d */
 
+  /* ── Toast variants (useNotify `variant`) ─────────────────── */
+  --toast-external-bg: #b62324;       /* solid fill: another machine / chat channel */
+  --toast-external-fg: #ffffff;
+  --toast-security-border: #f85149;   /* Guard frame (= --danger-fg) */
+  --toast-security-bg: #2a1d21;
+  --toast-workspace-accent: #a371f7;  /* another local workspace */
+  --toast-workspace-bg: #221f38;
+
   /* ── Attention (yellow / orange) ──────────────────────────── */
   --attention-fg: var(--yellow-3);    /* #d29922 */
   --attention-bright: var(--yellow-1);/* #e3b341 */

@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "Couldn't switch back: {detail}",
     "notice": {
       "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
       "repair-note": "This put back or repaired what Navide wrote earlier.",
@@ -164,6 +165,26 @@
     "restore": "Restore"
   },
   "editorWindow": {
+    "paths-copied": "Copied {count} path(s)",
+    "path-copied": "Path copied",
+    "copy-failed": "Copy failed",
+    "replaced-occurrences": "Replaced {count} occurrence(s)",
+    "search-stale": "Content has changed, please search again",
+    "ai-terminal-starting": "AI terminal is starting — retry in a moment",
+    "ai-terminal-not-started": "Start the AI terminal first, then retry",
+    "json-syntax-error": "JSON syntax error: {message}",
+    "file-outside-workspace": "File is outside this workspace",
+    "no-indented-lines": "No indented lines detected",
+    "indentation-tabs": "Detected indentation: Tabs",
+    "indentation-spaces-size": "Detected indentation: {size} Spaces",
+    "indentation-spaces": "Detected indentation: Spaces",
+    "no-quick-fixes": "No quick fixes available",
+    "create-file-failed": "Failed to create file",
+    "saved": "Saved",
+    "ai-rewrite-discarded": "Document changed — AI rewrite discarded",
+    "encoding-switch-failed": "Encoding switch failed",
+    "no-completion": "No completion available",
+    "reopen-encoding-failed": "Failed to re-open with encoding",
     "close-editor": "Close Editor",
     "close-editor-dirty": "{count} file(s) have unsaved changes. Close the editor anyway?",
     "close-file": "Close File",
@@ -334,6 +355,12 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "Remote device · {device}",
+    "external-toast-remote-body": "Instruction from {from} delivered to “{target}”",
+    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-body": "Message from {from} delivered to “{target}”",
+    "workspace-toast-title": "Other workspace · {name}",
+    "cross-workspace-unknown-sender": "unknown",
     "panel-title": "Inter-CLI Messages",
     "pause": "Pause delivery",
     "resume": "Resume delivery",
@@ -436,6 +463,23 @@
     "setting-label": "Show a confirmation reminder before closing"
   },
   "git": {
+    "abort-failed": "Abort failed",
+    "cherry-pick-failed": "Cherry-pick failed",
+    "revert-failed": "Revert failed",
+    "commit-id-copied": "Commit ID copied",
+    "commit-message-copied": "Commit message copied",
+    "conflict-write-failed": "Write failed",
+    "conflict-stage-failed": "Stage failed",
+    "conflict-apply-failed": "Apply failed",
+    "conflicts-resolved-file": "{name} conflicts resolved",
+    "patch-apply-failed": "Failed to apply patch",
+    "remote-op-done": {
+      "fetch": "Fetch done",
+      "pull": "Pull done",
+      "push": "Push done",
+      "sync": "Sync done",
+      "publish": "Publish done"
+    },
     "read-failed": "Read failed: {reason}",
     "account": {
       "selector-title": "Account for this workspace",
@@ -727,7 +771,7 @@
       "clipboard-send-failed": "Only part of the paste reached {pane} — the rest was lost on the way",
       "clipboard-send-failed-all": "The paste never reached {pane} — {chars} characters were lost on the way",
       "open-file-failed": "Could not open {file} — the editor did not respond",
-      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click one to resume it",
+      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click the “Click to resume” card in a pane to bring it back",
       "click-to-resume": "Click to resume",
       "interrupted-at-launch": "Working at restart",
       "interrupted-at-launch-tooltip": "This pane was working when Navide restarted, and its turn was cut off. It was not resumed automatically (over the automatic-resume limit, or the resume failed). Click to resume it.",
@@ -8609,13 +8653,13 @@
     "release-notes": "Release notes",
     "error": "Update error: {message}",
     "unsupported": "Automatic updates aren't available in this build.",
-    "new-version-toast": "Agent-Team v{version} is available",
+    "new-version-toast": "Navide v{version} is available",
     "major-update-title": "Update available",
-    "major-update-body": "Agent-Team v{version} is available (you're on v{current}). Download it now?",
+    "major-update-body": "Navide v{version} is available (you're on v{current}). Download it now?",
     "download-now": "Download update",
     "later": "Later",
     "restart-confirm-title": "Restart to install update?",
-    "restart-confirm-body": "Agent-Team v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
+    "restart-confirm-body": "Navide v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
   },
   "announce": {
     "title": "Announcements",
@@ -8857,6 +8901,7 @@
     "note": "An empty name falls back to the built-in translation. Colours resolve through theme tokens, so a choice stays readable in every theme."
   },
   "preview": {
+    "copy-failed": "Copy failed",
     "binary-file": "Binary file",
     "cannot-display-text": "This file type cannot be displayed as text.",
     "open-externally": "Open externally",

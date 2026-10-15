@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "無法切換回原帳號：{detail}",
     "notice": {
       "wrote": "已依你允許的便利功能「{feature}」，寫入 {target}（為了{purpose}）",
       "repair-note": "這次是補回或修復 Navide 先前寫入的內容。",
@@ -164,6 +165,26 @@
     "restore": "還原"
   },
   "editorWindow": {
+    "paths-copied": "已複製 {count} 個路徑",
+    "path-copied": "已複製路徑",
+    "copy-failed": "複製失敗",
+    "replaced-occurrences": "已取代 {count} 處",
+    "search-stale": "內容已變更，請重新搜尋",
+    "ai-terminal-starting": "AI 終端機正在啟動 — 請稍後再試",
+    "ai-terminal-not-started": "請先啟動 AI 終端機，再重試",
+    "json-syntax-error": "JSON 語法錯誤：{message}",
+    "file-outside-workspace": "檔案不在此工作區內",
+    "no-indented-lines": "沒有偵測到縮排的行",
+    "indentation-tabs": "偵測到的縮排：Tab",
+    "indentation-spaces-size": "偵測到的縮排：{size} 個空格",
+    "indentation-spaces": "偵測到的縮排：空格",
+    "no-quick-fixes": "沒有可用的快速修正",
+    "create-file-failed": "無法建立檔案",
+    "saved": "已儲存",
+    "ai-rewrite-discarded": "文件已變更 — 已捨棄 AI 改寫結果",
+    "encoding-switch-failed": "切換編碼失敗",
+    "no-completion": "沒有可用的補全建議",
+    "reopen-encoding-failed": "無法以此編碼重新開啟",
     "close-editor": "關閉編輯器",
     "close-editor-dirty": "{count} 個檔案有未儲存的變更。仍要關閉編輯器嗎？",
     "close-file": "關閉檔案",
@@ -334,6 +355,12 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "遠端裝置 · {device}",
+    "external-toast-remote-body": "{from} 的指令已送達「{target}」",
+    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-body": "{from} 的訊息已送達「{target}」",
+    "workspace-toast-title": "其他工作區 · {name}",
+    "cross-workspace-unknown-sender": "未知",
     "panel-title": "CLI 互傳訊息",
     "pause": "暫停投遞",
     "resume": "恢復投遞",
@@ -436,6 +463,23 @@
     "setting-label": "關閉前顯示確認提醒"
   },
   "git": {
+    "abort-failed": "中止失敗",
+    "cherry-pick-failed": "Cherry-pick 失敗",
+    "revert-failed": "Revert 失敗",
+    "commit-id-copied": "已複製 Commit ID",
+    "commit-message-copied": "已複製 Commit 訊息",
+    "conflict-write-failed": "寫入失敗",
+    "conflict-stage-failed": "暫存失敗",
+    "conflict-apply-failed": "套用失敗",
+    "conflicts-resolved-file": "{name} 的衝突已解決",
+    "patch-apply-failed": "套用 patch 失敗",
+    "remote-op-done": {
+      "fetch": "Fetch 完成",
+      "pull": "Pull 完成",
+      "push": "Push 完成",
+      "sync": "同步完成",
+      "publish": "發佈完成"
+    },
     "read-failed": "讀取失敗：{reason}",
     "account": {
       "selector-title": "此工作區使用的帳號",
@@ -727,7 +771,7 @@
       "clipboard-send-failed": "只有部分內容送達 {pane} — 其餘在傳送途中遺失",
       "clipboard-send-failed-all": "貼上的內容完全沒有送達 {pane} — {chars} 個字元在傳送途中遺失",
       "open-file-failed": "無法開啟 {file} — 編輯器沒有回應",
-      "idle-reclaimed": "已回收 {count} 個閒置的 CLI 以釋放記憶體 — 點一下即可繼續",
+      "idle-reclaimed": "已回收 {count} 個閒置的 CLI 以釋放記憶體 — 到該 pane 點「點擊以續接」卡片即可繼續",
       "click-to-resume": "點擊以續接",
       "interrupted-at-launch": "重開時工作中",
       "interrupted-at-launch-tooltip": "Navide 重新啟動時這個 pane 正在工作，回合被中斷；它沒有被自動接回（超過自動接回上限或接回失敗）。點擊即可接回。",
@@ -8609,13 +8653,13 @@
     "release-notes": "版本資訊",
     "error": "更新錯誤：{message}",
     "unsupported": "此組建不支援自動更新。",
-    "new-version-toast": "Agent-Team v{version} 可供更新",
+    "new-version-toast": "Navide v{version} 可供更新",
     "major-update-title": "有新版本可用",
-    "major-update-body": "Agent-Team v{version} 已推出（目前版本為 v{current}）。要現在下載嗎？",
+    "major-update-body": "Navide v{version} 已推出（目前版本為 v{current}）。要現在下載嗎？",
     "download-now": "下載更新",
     "later": "稍後再說",
     "restart-confirm-title": "重新啟動以安裝更新？",
-    "restart-confirm-body": "Agent-Team v{version} 已下載完成。App 會關閉並重新開啟以完成安裝。要現在重新啟動嗎？"
+    "restart-confirm-body": "Navide v{version} 已下載完成。App 會關閉並重新開啟以完成安裝。要現在重新啟動嗎？"
   },
   "announce": {
     "title": "公告通知",
@@ -8857,6 +8901,7 @@
     "note": "名稱留空即使用內建翻譯。顏色透過主題 token 解析，因此在每個主題下都維持可讀。"
   },
   "preview": {
+    "copy-failed": "複製失敗",
     "binary-file": "二進位檔案",
     "cannot-display-text": "此檔案類型無法以文字顯示。",
     "open-externally": "以外部程式開啟",

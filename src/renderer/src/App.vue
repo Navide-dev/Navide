@@ -73,6 +73,7 @@ import { useAgentMessaging, encodeReason, isBroadcastTarget, NOTICE_SENDER, rawR
 import type { MessageReason, PushOutcome, RouteResult } from './composables/useAgentMessaging'
 import { createMessageLogPersistence } from './composables/useMessageLogPersistence'
 import type { ParsedAgentMessage } from './lib/agentMessaging'
+import { deliveryToast } from './lib/deliveryToast'
 import { parsePlanTargetArgs } from './lib/planTarget'
 import { VENDORS_WITHOUT_TURN_END, hasUnparsedMessageAttempt, isExternalDelivery, isInjectedMessageText, isTurnInFlight, normalizeMessagingName, parseMessages, parseSpawns, pushCooldownMs, renderFallbackReport, renderFormatNotice, renderInterruptedChildrenNotice, renderSpawnKickoff, renderSpawnNotice, turnEndConsumesDeliveries } from './lib/agentMessaging'
 import {
@@ -14488,16 +14489,13 @@ backend.on('agent_msg.deliver', (raw) => {
     // Chat channel / remote device: fenced as external content, not the user's.
     external: isExternalDelivery(ev),
   })
-  if (!accepted || !ev.cross_workspace) return
-  // The instruction came from another project — say so, since nothing else in
-  // this window would show where it originated.
+  if (!accepted) return
+  // Say where the instruction came from — another machine, a chat channel or
+  // another project — since nothing else in this window would show it.
+  // deliveryToast stays silent for a delivery from this workspace.
   const target = panes.value.find((p) => p.id === ev.target_pane_id)
-  notifyRestore.toast(
-    i18n.global.t('msg.cross-workspace-toast', {
-      from: ev.from_display || 'unknown',
-      target: target?.messagingName ?? '',
-    }),
-  )
+  const toast = deliveryToast(ev, target?.messagingName ?? '')
+  if (toast) notifyRestore.toast(toast.message, toast.opts)
 })
 
 // Spawn request ids this window has already acted on, newest last. The
@@ -14690,7 +14688,7 @@ async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promi
         restoreLive: { liveFingerprint: action.liveFingerprint },
       })
       if (res.ok) announcements.markRead(action.rowId)
-      else if (res.message) notifyRestore.toast(res.message, { type: 'error' })
+      else if (res.message) notifyRestore.toast(i18n.global.t('convenience.switch-back-failed', { detail: res.message }), { type: 'error' })
       break
     }
   }

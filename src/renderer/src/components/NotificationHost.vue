@@ -32,11 +32,23 @@ watch(dialog, async (d) => {
           v-for="t in toasts"
           :key="t.id"
           class="toast"
-          :class="t.type"
+          :class="[t.type, t.variant, { titled: !!t.title }]"
           @click="dismissToast(t.id)"
         >
-          <span class="toast-icon">{{ toastIcon[t.type] }}</span>
-          <span class="toast-msg">{{ t.message }}</span>
+          <template v-if="t.title">
+            <span class="toast-band">{{ t.icon ?? toastIcon[t.type] }} {{ t.title }}</span>
+            <span class="toast-row">
+              <span class="toast-icon">{{ t.icon ?? toastIcon[t.type] }}</span>
+              <span class="toast-msg">{{ t.message }}</span>
+            </span>
+          </template>
+          <template v-else>
+            <span class="toast-icon">
+              <svg v-if="t.variant === 'security'" class="toast-shield" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M8 1.5 13.5 3.5v4c0 3.3-2.3 5.9-5.5 7-3.2-1.1-5.5-3.7-5.5-7v-4Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.5 8h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              <template v-else>{{ t.icon ?? toastIcon[t.type] }}</template>
+            </span>
+            <span class="toast-msg">{{ t.message }}</span>
+          </template>
         </div>
       </transition-group>
     </div>
@@ -159,6 +171,57 @@ watch(dialog, async (d) => {
   flex: 1;
   word-break: break-word;
   white-space: pre-wrap;
+}
+/* Opt-in variants (useNotify `variant`). Each red carries its own shape so
+   they stay apart without the color: solid fill = from outside this machine,
+   full frame = Guard, left bar = an ordinary error. */
+.toast.titled {
+  flex-direction: column;
+  gap: 2px;
+}
+.toast-band {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.toast.external,
+.toast.external:hover {
+  background: var(--toast-external-bg);
+  border: 1px solid var(--toast-external-bg);
+  color: var(--toast-external-fg);
+}
+.toast.external .toast-icon,
+.toast.external .toast-band {
+  color: var(--toast-external-fg);
+}
+.toast.external .toast-band {
+  opacity: 0.92;
+}
+.toast.security,
+.toast.security:hover {
+  background: var(--toast-security-bg);
+  border: 2px solid var(--toast-security-border);
+}
+.toast.security .toast-icon {
+  color: var(--toast-security-border);
+}
+.toast-shield {
+  display: block;
+  margin-top: 2px;
+}
+.toast.workspace,
+.toast.workspace:hover {
+  background: var(--toast-workspace-bg);
+  border-left-color: var(--toast-workspace-accent);
+}
+.toast.workspace .toast-icon,
+.toast.workspace .toast-band {
+  color: var(--toast-workspace-accent);
 }
 .toast:focus-visible {
   outline: 2px solid var(--accent-focus, var(--accent-fg));

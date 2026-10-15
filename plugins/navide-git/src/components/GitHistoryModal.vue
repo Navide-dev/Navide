@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { computeGraph, laneColor } from '../lib/git-graph'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { GitCommit, GitCommitDetail, DiffBlameHunk } from '../composables/useGit'
 
 // The full-history dialog reuses the parent GitPane's single useGit instance
@@ -171,25 +171,25 @@ function openCommitCtxMenu(e: MouseEvent, hash: string): void {
 function closeCtxMenu(): void { ctxMenu.value.show = false }
 
 async function doCheckoutCommit(hash: string): Promise<void> {
-  const r = await props.checkoutCommit(hash); if (!r.ok) notifyToast(r.error || 'checkout failed', { type: 'error' })
+  const r = await props.checkoutCommit(hash); if (!r.ok) notifyToast(r.error || i18n.global.t('label.checkout-failed'), { type: 'error' })
 }
 async function doCherryPick(hash: string): Promise<void> {
-  const r = await props.cherryPick(hash); if (!r.ok) notifyToast(r.error || 'cherry-pick failed', { type: 'error' })
+  const r = await props.cherryPick(hash); if (!r.ok) notifyToast(r.error || i18n.global.t('git.cherry-pick-failed'), { type: 'error' })
 }
 async function doRevert(hash: string): Promise<void> {
-  const r = await props.revertCommit(hash); if (!r.ok) notifyToast(r.error || 'revert failed', { type: 'error' })
+  const r = await props.revertCommit(hash); if (!r.ok) notifyToast(r.error || i18n.global.t('git.revert-failed'), { type: 'error' })
 }
 async function doMerge(hash: string): Promise<void> {
-  const r = await props.mergeIntoCurrent(hash); if (!r.ok) notifyToast(r.error || 'merge failed', { type: 'error' })
+  const r = await props.mergeIntoCurrent(hash); if (!r.ok) notifyToast(r.error || i18n.global.t('label.merge-failed'), { type: 'error' })
 }
 function copyCommitId(hash: string): void {
   void navigator.clipboard.writeText(hash)
-  notifyToast('Commit ID copied', { type: 'info' })
+  notifyToast(i18n.global.t('git.commit-id-copied'), { type: 'info' })
 }
 function copyCommitMessage(hash: string): void {
   const c = displayLog.value.find((x) => x.hash === hash)
   void navigator.clipboard.writeText(c?.message ?? '')
-  notifyToast('Commit message copied', { type: 'info' })
+  notifyToast(i18n.global.t('git.commit-message-copied'), { type: 'info' })
 }
 
 // Name-input modal shared by "Create Branch…" / "Create Tag…" from a commit.
@@ -220,7 +220,7 @@ function openResetDialog(hash: string): void {
 async function confirmReset(): Promise<void> {
   const d = resetDialog.value; if (!d || !d.mode) return
   const r = await props.resetToCommit(d.hash, d.mode)
-  if (!r.ok) notifyToast(r.error || 'reset failed', { type: 'error' })
+  if (!r.ok) notifyToast(r.error || i18n.global.t('error.reset-failed'), { type: 'error' })
   resetDialog.value = null
 }
 

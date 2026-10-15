@@ -18,6 +18,26 @@ describe('useNotify', () => {
     expect(n.toasts.value[0].type).toBe('info')
   })
 
+  it('keeps a plain toast to exactly id, message and type (no variant fields)', () => {
+    n.toast('plain', { type: 'error', duration: 1000 })
+    expect(Object.keys(n.toasts.value[0]).sort()).toEqual(['id', 'message', 'type'])
+  })
+
+  it('carries an opt-in variant, title and icon without changing type or duration', () => {
+    vi.useFakeTimers()
+    try {
+      n.toast('from afar', { type: 'info', variant: 'external', title: 'Remote device · mac', icon: '⇄', duration: 8000 })
+      const t = n.toasts.value[0]
+      expect(t).toMatchObject({ message: 'from afar', type: 'info', variant: 'external', title: 'Remote device · mac', icon: '⇄' })
+      vi.advanceTimersByTime(7999)
+      expect(n.toasts.value).toHaveLength(1)
+      vi.advanceTimersByTime(1)
+      expect(n.toasts.value).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('toast honors an explicit type', () => {
     n.toast('done', { type: 'success' })
     expect(n.toasts.value[0].type).toBe('success')
