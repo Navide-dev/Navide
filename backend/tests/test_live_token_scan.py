@@ -271,9 +271,9 @@ async def test_an_unchanged_file_is_never_re_parsed(
     reader = app._readers[0]
     real = reader.usage_since_for_session
 
-    def counting(path, session_id, checkpoint):
+    def counting(path, session_id, checkpoint, **kwargs):
         parses.append(path)
-        return real(path, session_id, checkpoint)
+        return real(path, session_id, checkpoint, **kwargs)
 
     monkeypatch.setattr(reader, "usage_since_for_session", counting)
     monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})
@@ -330,9 +330,9 @@ async def test_the_scan_runs_on_the_dedicated_pool_not_the_loop(
     reader = app._readers[0]
     real = reader.usage_since_for_session
 
-    def naming(path, session_id, checkpoint):
+    def naming(path, session_id, checkpoint, **kwargs):
         threads.append(threading.current_thread().name)
-        return real(path, session_id, checkpoint)
+        return real(path, session_id, checkpoint, **kwargs)
 
     monkeypatch.setattr(reader, "usage_since_for_session", naming)
     monkeypatch.setattr(app.tokens_store, "snapshot", lambda ws: {"ws": ws})

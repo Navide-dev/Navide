@@ -364,7 +364,7 @@ export type EvolveNoticeKind =
   | 'skipped'
   | 'fallback_auto'
   | 'not_git'
-  /** Passed 1.5× the token budget; Navide pressed interrupt once. */
+  /** Passed 1.5× the token budget (cache reads left out); Navide interrupted and ended the run. */
   | 'over_budget'
 
 /** What the backend's `evolve.notice` broadcast carries. */

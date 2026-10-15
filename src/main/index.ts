@@ -12,6 +12,7 @@ import {
   getResolvedUserPath,
   readWsToken,
   mintTrustConfirmation,
+  backendDataDir,
   type BackendHandle,
 } from './backend'
 import { answerWindowChallenge, backendChangedTargets, backendInfoFor } from './backendIpc'
@@ -153,8 +154,9 @@ import {
 import { resolveBackendDataDir, readUiSettingsText, UI_SETTINGS_FILE } from './ui-settings-bootstrap'
 import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
-import { errorMain, infoMain, warnMain } from './main-log'
+import { errorMain, infoMain, logMain, warnMain } from './main-log'
 import { watchRendererCrashes } from './renderer-crash-reload'
+import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
@@ -642,7 +644,7 @@ async function createWindow(
     }
   })
   mainWindows.add(win)
-  watchRendererCrashes(win, { kind: params.detached_group ? 'detached-group' : 'main', log: warnMain })
+  watchRendererCrashes(win, { kind: params.detached_group ? 'detached-group' : 'main', log: warnMain, fault: recordRendererGone })
   // In-window plugin contributions attach as <webview> guests. Main overrides
   // their webPreferences here, so the tag the renderer wrote cannot widen what
   // a guest gets, and binds each guest to the identity reserved for it.
@@ -809,7 +811,7 @@ const requestTokenMonitor = createTokenMonitorWindowOpener({
   onWindowCreated: (win) => {
     navideAuxWindows.add(win)
     win.once('closed', () => navideAuxWindows.delete(win))
-    watchRendererCrashes(win, { kind: 'token-monitor', log: warnMain })
+    watchRendererCrashes(win, { kind: 'token-monitor', log: warnMain, fault: recordRendererGone })
     trackAuxWindow(win, { kind: 'token-monitor' })
   },
 })
@@ -2043,6 +2045,7 @@ ipcMain.handle('backend:proveWindow', (event, nonce: unknown) =>
 function watchBackendCrash(b: BackendHandle): void {
   watchBackendExit(b.proc, () => backend === b, (message) => {
     errorMain(`[main] ${message}`)
+    recordMainFault('backend.crash', message, backendDataDir(process.env))
     backend = null
     const attempt = backendAutoRestart.onCrash()
     if (attempt === null) {
@@ -2056,6 +2059,22 @@ function watchBackendCrash(b: BackendHandle): void {
     broadcastBackendChanged()
   })
 }
+
+/** A renderer that died, for the on-disk error ledger the backend owns. */
+function recordRendererGone(line: string): void {
+  recordMainFault('renderer.gone', line, backendDataDir(process.env))
+}
+
+setMainLedgerDataDir(backendDataDir(process.env))
+
+// An exception main never caught reached only stderr, which a packaged launch
+// discards. The monitor records it without changing what happens next:
+// Electron's own handling still runs.
+process.on('uncaughtExceptionMonitor', (err, origin) => {
+  const text = err instanceof Error ? (err.stack ?? err.message) : String(err)
+  logMain(`[main] uncaught exception (${origin}): ${text}`)
+  recordMainFault('main.uncaught', `${origin}: ${text}`, backendDataDir(process.env))
+})
 
 // Serialize lifecycle ops so a double-click can't spawn two backends or race a
 // stop against a start.
@@ -2073,6 +2092,7 @@ const backendAutoRestart = createBackendAutoRestart({
   onGiveUp: (attempts) => {
     backendGaveUp = true
     errorMain(`[main] backend auto-restart gave up after ${attempts} attempts`)
+    recordMainFault('backend.gave_up', `auto-restart gave up after ${attempts} attempts`, backendDataDir(process.env))
   },
   // A backend that survived the stability window vindicates whatever
   // workspaces this launch restored — pay back their attempt charges.
@@ -4090,7 +4110,7 @@ async function openLegacyPlanWindow(workspacePath: string, relPath?: string): Pr
   planWindows.set(workspacePath, win)
   navideAuxWindows.add(win)
   win.once('closed', () => navideAuxWindows.delete(win))
-  watchRendererCrashes(win, { kind: 'plans', log: warnMain })
+  watchRendererCrashes(win, { kind: 'plans', log: warnMain, fault: recordRendererGone })
   // Restored as a plain Plans window: which of the two implementations serves
   // it next launch is decided then, by the router, exactly as it is here.
   trackAuxWindow(win, { kind: 'plans', workspace_path: workspacePath })

@@ -211,6 +211,32 @@ async def window_prove(session: "Session", msg_id: str, msg_type: str, payload: 
     await session.send_json(make_response(msg_id, msg_type, {"proved": True}))
 
 
+@handler("diagnostics.record")
+async def diagnostics_record(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """A renderer warn/error diagnostic, kept in the on-disk error ledger so a
+    reload does not wipe it (the window's own ring buffer still has it too)."""
+    from . import error_ledger
+
+    if (
+        not isinstance(payload, dict)
+        or payload.get("level") not in error_ledger.LEVELS
+        or not isinstance(payload.get("code"), str) or not payload["code"]
+        or not isinstance(payload.get("message"), str)
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "expected {level: warn|error, code, message}")
+        )
+        return
+    pane_id = payload.get("paneId")
+    workspace = payload.get("workspace")
+    entry = await asyncio.to_thread(
+        error_ledger.record, "renderer", payload["level"], payload["code"], payload["message"],
+        pane_id=pane_id if isinstance(pane_id, str) else "",
+        workspace=workspace if isinstance(workspace, str) else "",
+    )
+    await session.send_json(make_response(msg_id, msg_type, {"recorded": entry is not None}))
+
+
 @handler("agent.capability.result")
 async def agent_capability_result(
     session: "Session", msg_id: str, msg_type: str, payload: dict

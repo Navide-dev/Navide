@@ -33,6 +33,7 @@ from . import hook_drain
 from . import guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
+from . import error_ledger
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
@@ -1497,14 +1498,16 @@ def _scan_live_session(
     )
     if grew_in_place:
         delta, cursor = reader.usage_since_for_session(
-            path, session_id, state["cursor"]
+            path, session_id, state["cursor"], with_cache_read=True
         )
         totals = {
-            field: state["totals"][field] + delta[field]
-            for field in ("input", "output", "calls")
+            field: state["totals"].get(field, 0) + delta[field]
+            for field in ("input", "output", "calls", "cache_read")
         }
     else:
-        totals, cursor = reader.usage_since_for_session(path, session_id, {})
+        totals, cursor = reader.usage_since_for_session(
+            path, session_id, {}, with_cache_read=True
+        )
     return {
         **state,
         "session_file": str(path),
@@ -1554,9 +1557,10 @@ def _schedule_live_scan(key: tuple[str, str], *, only_if_changed: bool = False) 
             if current is None:
                 return  # the last pane closed while we were reading
             current.update(scanned)
-            if tokens_store.set_live_total(
-                workspace_path, session_key, scanned["totals"]
-            ):
+            published = {
+                field: scanned["totals"][field] for field in ("input", "output", "calls")
+            }
+            if tokens_store.set_live_total(workspace_path, session_key, published):
                 _schedule_tokens_broadcast(workspace_path)
         except Exception as err:  # noqa: BLE001 — cosmetic tally, never fatal
             log.warning("live token scan failed for session=%s: %s", session_key, err)
@@ -2260,6 +2264,9 @@ async def _start_log_watcher() -> None:
     # loop thread's stack when the loop stops turning (issue #24), instead of
     # the freeze being reproducible only under sample(1).
     loop_watchdog.start(asyncio.get_running_loop())
+    # Exceptions nobody retrieved (a create_task without a done-callback)
+    # reached only stderr; record them in the error ledger as well.
+    error_ledger.install_loop_handler(asyncio.get_running_loop())
     # Guard events raised in hook worker threads are handed back to this loop.
     guard_runtime.remember_loop(asyncio.get_running_loop())
 
@@ -3806,6 +3813,7 @@ async def handle_message(session: Session, msg: dict[str, Any]) -> None:
         )
     except Exception as err:  # noqa: BLE001
         log.exception("handle_message failed for type=%s", msg_type)
+        error_ledger.record("backend", "error", "ws.internal_error", f"{msg_type}: {type(err).__name__}: {err}")
         if not session.dead:
             await session.send_json(
                 make_error(msg_id, msg_type, "INTERNAL_ERROR", _redact_home(str(err)))

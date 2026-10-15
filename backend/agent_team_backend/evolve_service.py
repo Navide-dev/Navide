@@ -22,7 +22,10 @@ A run, when the clock fires or the user asks for one:
 
 Nothing here stops an agent from doing what the rules forbid — the rules are
 disclosed, not enforced. A run past its time limit is reported as timed out,
-never killed; one far past its token budget is interrupted once, disclosed.
+never killed. One far past its token budget (context re-read from cache left
+out) is interrupted once and ended as "over_budget"; an auto-opened pane is
+then reclaimed. Reported commits that the repository does not have are named
+in the run's detail.
 """
 
 from __future__ import annotations
@@ -107,6 +110,7 @@ _INT_BOUNDS = {
 _AT_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 _PANE_ID_RE = re.compile(r"^[A-Za-z0-9._:\-]{1,128}$")
 _LEDGER_RE = re.compile(r"^\.agent-team/plans/[A-Za-z0-9._\-]+\.(?:html|plan\.md)$")
+_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{4,64}$")
 _MAX_EXTRA = 4000
 
 #: Same families the rules ask the agent to mask; applied again on the way in.
@@ -554,10 +558,26 @@ class LiveHost:
         return reply
 
     def pane_tokens(self, pane_id: str) -> int | None:
+        """Tokens the pane spent against the budget: input and output, less
+        the context re-read from cache on every call (76–96% of "input" in the
+        runs that were interrupted within minutes of starting)."""
         from . import app
 
         total = app.pane_token_total(pane_id)
-        return None if total is None else int(total.get("input", 0)) + int(total.get("output", 0))
+        if total is None:
+            return None
+        return int(total.get("input", 0)) - int(total.get("cache_read", 0)) + int(total.get("output", 0))
+
+    async def commit_exists(self, root: str, commit: str) -> bool:
+        from .git_service import _run
+
+        if not _COMMIT_RE.match(commit):
+            return False
+        try:
+            rc, _, _ = await _run(["git", "cat-file", "-e", f"{commit}^{{commit}}"], root)
+        except Exception:  # noqa: BLE001 — no git reads as "not found"
+            return False
+        return rc == 0
 
     async def broadcast(self, event: str, payload: dict[str, Any]) -> None:
         from . import app
@@ -596,6 +616,9 @@ class EvolveService:
         #: run id → (ms the run's pane was first seen idle, nudges sent). In
         #: memory only: a restart at worst grants a run another round of nudges.
         self._idle: dict[str, tuple[int | None, int]] = {}
+        #: run id → its task, for a run whose kickoff could not be confirmed and
+        #: whose pane has shown no activity yet. In memory only, like _idle.
+        self._unconfirmed: dict[str, str] = {}
 
     def now_ms(self) -> int:
         return int(self._clock())
@@ -926,6 +949,7 @@ class EvolveService:
             if answer.get("kickoff") == "failed":
                 fields["detail"] = (fields.get("detail", "") + " kickoff unverified: "
                                     + str(answer.get("hint") or "")).strip()
+                self._unconfirmed[run["id"]] = task
         await asyncio.to_thread(self.store.update, workspace, run["id"], fields)
         started = {**run, **fields}
         await self._notice(workspace, "started", started)
@@ -959,7 +983,8 @@ class EvolveService:
         parent = getattr(caller, "spawned_by", "")
         if caller.pane_id not in allowed and parent not in allowed:
             return {"ok": False, "error": "only the run's own pane (or a pane it opened) may report it"}
-        if run["status"] not in ("running", "timeout"):
+        late = run["status"] == "timeout" or (run["status"] == "error" and run.get("reason") == "over_budget")
+        if run["status"] != "running" and not late:
             return {"ok": False, "error": f"run {run_id} is already {run['status']}"}
         # The pane id alone proves little: an MCP caller names its own pane id.
         # The token was only ever written into this run's task.
@@ -978,6 +1003,13 @@ class EvolveService:
             "proposals": _clean_list(payload.get("proposals"), ("rel_path", "name")),
             "panes": [mask(str(p))[:200] for p in (payload.get("panes") or []) if isinstance(p, str)][:10],
         }
+        if fields["commits"]:
+            root = (await self.host.git_info(workspace)).get("root") or workspace
+            missing = [c["hash"] for c in fields["commits"]
+                       if not await self.host.commit_exists(root, c["hash"])]
+            if missing:
+                fields["detail"] = (str(run.get("detail") or "") + " reported commits not found: "
+                                    + ", ".join(m or "(no hash)" for m in missing)).strip()
         await asyncio.to_thread(self.store.update, workspace, run_id, fields)
         finished = {**run, **fields}
         await self._notice(workspace, "finished", finished)
@@ -1073,13 +1105,27 @@ class EvolveService:
         tokens = self.host.pane_tokens(run["pane_id"]) if run["pane_id"] else None
         if tokens is not None and tokens != run.get("tokens"):
             fields["tokens"] = tokens
+        if tokens and run["id"] in self._unconfirmed:
+            # The pane is spending tokens, so the task did arrive.
+            del self._unconfirmed[run["id"]]
+            fields["detail"] = (str(run.get("detail") or "") + " kickoff confirmed: the pane is working").strip()
         budget = int(settings["token_budget"])
         if tokens is not None and tokens > budget * OVER_BUDGET_FACTOR and not run["interrupted"]:
             answer = await self.host.pane_action(workspace, "ui.pane.interrupt", run["pane_id"])
-            fields["interrupted"] = True
-            fields["detail"] = (str(run.get("detail") or "") + f" interrupted at {tokens} tokens"
+            # Ended here rather than left idling to its time limit: an
+            # interrupted pane got no turn end, so it was never nudged either.
+            fields.update(interrupted=True, status="error", reason="over_budget", ended_at=now)
+            fields["detail"] = (str(fields.get("detail") or run.get("detail") or "")
+                                + f" interrupted at {tokens} tokens"
                                 + ("" if answer.get("ok") else " (interrupt not delivered)")).strip()
+            self._unconfirmed.pop(run["id"], None)
+            await asyncio.to_thread(self.store.update, workspace, run["id"], fields)
             await self._notice(workspace, "over_budget", {**run, **fields})
+            await self._changed(workspace)
+            if run["mode"] == "auto" and run["pane_id"]:
+                self._timeout_reclaims.add(run["id"])
+                self._spawn(self._reclaim(workspace, run["id"], run["pane_id"]))
+            return
         if now - int(run["started_at"]) > int(settings["max_minutes"]) * 60_000:
             fields.update(status="timeout", reason="timeout", ended_at=now)
             await self._notice(workspace, "timeout", {**run, **fields})
@@ -1101,6 +1147,19 @@ class EvolveService:
             since = now
         self._idle[key] = (since, sent)
         if sent >= IDLE_NUDGE_MAX or now - since < IDLE_NUDGE_AFTER_S * 1000:
+            return
+        task = self._unconfirmed.pop(run["id"], None)
+        if task is not None:
+            # Kickoff was never confirmed and the pane has done nothing since:
+            # the task, not a "finish now", is what it is missing.
+            answer = await self.host.send(entry.pane_id, task)
+            self._idle[key] = (now, sent + 1)
+            detail = (str(run.get("detail") or "") + " task sent again: the pane stayed idle with no activity"
+                      + ("" if answer.get("ok") else " (not delivered)")).strip()
+            await asyncio.to_thread(self.store.update, workspace, run["id"], {"detail": detail})
+            await self._notice(workspace, "nudged", {**run, "detail": detail, "nudges": sent + 1,
+                                                     "delivered": bool(answer.get("ok"))})
+            await self._changed(workspace)
             return
         answer = await self.host.send(entry.pane_id, IDLE_NUDGE_TEXT.format(run_id=run["id"]))
         self._idle[key] = (now, sent + 1)

@@ -436,6 +436,7 @@
     "setting-label": "閉じる前に確認を表示"
   },
   "git": {
+    "read-failed": "読み込みに失敗しました：{reason}",
     "account": {
       "selector-title": "このワークスペースのアカウント",
       "unbound": "アカウントなし",
@@ -785,6 +786,10 @@
       "loop-capped-notify-title": "ループを停止しました — 続行回数の上限",
       "loop-capped-notify-body": "タスク完了の報告がないまま、続行プロンプトの送信回数が上限に達しました。作業が順調であれば、ループを再開してください",
       "login-expired-badge": "⚠ ログイン期限切れ",
+      "exit-fault-badge": "⚠ 終了（コード {code}）",
+      "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
+      "stuck-badge": "⏳ {minutes} 分以上動きなし",
+      "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",
@@ -10842,7 +10847,8 @@
       "budget": "今日の実行回数の上限に達しました",
       "workspace_gone": "workspace フォルダが存在しません",
       "workspace_not_open": "その時刻にこの workspace を開いたウィンドウがありませんでした。次に開いたときに実行します",
-      "not_git": "git リポジトリではないため提案のみで実行しました"
+      "not_git": "git リポジトリではないため提案のみで実行しました",
+      "over_budget": "token 予算の 1.5 倍を超えたため、中断して終了しました"
     },
     "notice": {
       "started": "自己改善を開始 · {workspace}",
@@ -10867,7 +10873,7 @@
         "result": "結果を見る"
       },
       "over_budget": "自己改善が予算超過 · {workspace}",
-      "over-budget-body": "この実行は token 予算の 1.5 倍を超えたため、Navide が一度中断を送りました。"
+      "over-budget-body": "この実行は token 予算の 1.5 倍を超えました（キャッシュから再読み込みしたコンテキストは含みません）。Navide が中断して実行を終了し、pane を回収します。"
     }
   },
   "recentWorkspaces": {
