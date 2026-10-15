@@ -127,7 +127,8 @@ function checkDocExamples(docs: { path: string; markdown: string }[]): { problem
           `declare const __docsReal: __DocsReal\ndeclare const __docsDoc: ${name}\n` +
           `export const __docsToDoc: ${name} = __docsReal\nexport const __docsToReal: __DocsReal = __docsDoc\n`
       }
-      const fileName = join(repoRoot, '.docs-typecheck', `${block.doc.replace(/[^\w]+/g, '_')}_L${block.line}${block.extension}`)
+      // TypeScript hands the host forward-slash paths on every platform, so the keys must match.
+      const fileName = join(repoRoot, '.docs-typecheck', `${block.doc.replace(/[^\w]+/g, '_')}_L${block.line}${block.extension}`).replace(/\\/g, '/')
       virtualFiles.set(fileName, { block, source })
     }
   }
