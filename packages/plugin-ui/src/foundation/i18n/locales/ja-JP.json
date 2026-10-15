@@ -10204,7 +10204,10 @@
       "disconnect-label": "{pane} と {channel} の接続を切断",
       "go-to": "{pane} へ移動",
       "auto-child": "自動サブトピック",
-      "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。"
+      "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。",
+      "unnamed-pane": "名前のないペイン",
+      "pane-closed": "閉じています",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
