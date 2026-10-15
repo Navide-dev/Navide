@@ -1978,6 +1978,8 @@
       "readback-hint": "When a pane marked 🔊 finishes or needs your answer, a short notice is spoken with the system voice (for example \"Navide is done\"). Click 🔊 in a pane's title bar to mark it. Speech is synthesized on this computer; nothing is downloaded.",
       "readback-voice": "Voice",
       "readback-voice-hint": "Auto picks the best system voice for the interface language, preferring Premium voices. Better voices can be downloaded in System Settings › Accessibility › Spoken Content.",
+      "readback-voice-hint-windows": "Auto picks the best system voice for the interface language. More voices can be added in Settings › Time & language › Speech.",
+      "readback-voice-hint-other-os": "Auto picks the best system voice for the interface language. Install more voices in your operating system's speech settings.",
       "readback-voice-none": "No system voice matches the interface language; the system default voice will be used.",
       "readback-voice-auto": "Auto (interface language)",
       "readback-rate": "Speed",
