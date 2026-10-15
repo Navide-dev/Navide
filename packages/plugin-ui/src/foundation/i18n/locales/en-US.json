@@ -10833,7 +10833,8 @@
       "budget": "Today's run limit is reached",
       "workspace_gone": "The workspace folder no longer exists",
       "workspace_not_open": "No window had this workspace open at the time; it catches up the next time it opens",
-      "not_git": "Not a git repo; ran as propose-only"
+      "not_git": "Not a git repo; ran as propose-only",
+      "over_budget": "Passed 1.5× its token budget; interrupted and ended"
     },
     "notice": {
       "started": "Self-evolution started · {workspace}",
@@ -10858,7 +10859,7 @@
         "result": "See result"
       },
       "over_budget": "Self-evolution over budget · {workspace}",
-      "over-budget-body": "This run passed 1.5× its token budget; Navide sent one interrupt."
+      "over-budget-body": "This run passed 1.5× its token budget (context re-read from cache not counted). Navide interrupted it, ended the run and reclaims its pane."
     }
   },
   "recentWorkspaces": {

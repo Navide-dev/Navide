@@ -191,10 +191,10 @@ describe('useEvolve', () => {
 
   it('v1.1: over_budget is a warn row with an open-pane button and the detail', () => {
     scope.run(() => useEvolve(fakeBackend()))
-    emit('evolve.notice', { workspace: A, kind: 'over_budget', run: run({ id: 'r7', status: 'running', detail: '312k / 200k' }) })
+    emit('evolve.notice', { workspace: A, kind: 'over_budget', run: run({ id: 'r7', status: 'error', reason: 'over_budget', detail: '312k / 200k' }) })
     const row = useAnnouncements().items.value.find((i) => i.kind === 'evolve')!
     expect(row.title).toBe('自我優化超出預算 · alpha')
-    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算，Navide 已送出一次中斷。'])
+    expect(row.highlights).toEqual(['這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。'])
     expect(row.note).toBe('312k / 200k')
     expect(row.actions).toEqual([{ kind: 'evolve-open-pane', workspace: A, paneId: 'pane-1' }])
   })

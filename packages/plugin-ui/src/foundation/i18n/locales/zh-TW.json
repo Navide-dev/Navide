@@ -10833,7 +10833,8 @@
       "budget": "今天的執行次數已達上限",
       "workspace_gone": "workspace 資料夾不存在",
       "workspace_not_open": "到點時沒有視窗開著這個 workspace，下次開啟時補跑",
-      "not_git": "不是 git repo，改用只提案"
+      "not_git": "不是 git repo，改用只提案",
+      "over_budget": "超過 1.5 倍 token 預算，已中斷並結束"
     },
     "notice": {
       "started": "自我優化開始 · {workspace}",
@@ -10858,7 +10859,7 @@
         "result": "看結果"
       },
       "over_budget": "自我優化超出預算 · {workspace}",
-      "over-budget-body": "這次執行超過 1.5 倍 token 預算，Navide 已送出一次中斷。"
+      "over-budget-body": "這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。"
     }
   },
   "recentWorkspaces": {

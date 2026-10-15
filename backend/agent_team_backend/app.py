@@ -1497,14 +1497,16 @@ def _scan_live_session(
     )
     if grew_in_place:
         delta, cursor = reader.usage_since_for_session(
-            path, session_id, state["cursor"]
+            path, session_id, state["cursor"], with_cache_read=True
         )
         totals = {
-            field: state["totals"][field] + delta[field]
-            for field in ("input", "output", "calls")
+            field: state["totals"].get(field, 0) + delta[field]
+            for field in ("input", "output", "calls", "cache_read")
         }
     else:
-        totals, cursor = reader.usage_since_for_session(path, session_id, {})
+        totals, cursor = reader.usage_since_for_session(
+            path, session_id, {}, with_cache_read=True
+        )
     return {
         **state,
         "session_file": str(path),
@@ -1554,9 +1556,10 @@ def _schedule_live_scan(key: tuple[str, str], *, only_if_changed: bool = False) 
             if current is None:
                 return  # the last pane closed while we were reading
             current.update(scanned)
-            if tokens_store.set_live_total(
-                workspace_path, session_key, scanned["totals"]
-            ):
+            published = {
+                field: scanned["totals"][field] for field in ("input", "output", "calls")
+            }
+            if tokens_store.set_live_total(workspace_path, session_key, published):
                 _schedule_tokens_broadcast(workspace_path)
         except Exception as err:  # noqa: BLE001 — cosmetic tally, never fatal
             log.warning("live token scan failed for session=%s: %s", session_key, err)

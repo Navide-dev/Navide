@@ -10833,7 +10833,8 @@
       "budget": "今日の実行回数の上限に達しました",
       "workspace_gone": "workspace フォルダが存在しません",
       "workspace_not_open": "その時刻にこの workspace を開いたウィンドウがありませんでした。次に開いたときに実行します",
-      "not_git": "git リポジトリではないため提案のみで実行しました"
+      "not_git": "git リポジトリではないため提案のみで実行しました",
+      "over_budget": "token 予算の 1.5 倍を超えたため、中断して終了しました"
     },
     "notice": {
       "started": "自己改善を開始 · {workspace}",
@@ -10858,7 +10859,7 @@
         "result": "結果を見る"
       },
       "over_budget": "自己改善が予算超過 · {workspace}",
-      "over-budget-body": "この実行は token 予算の 1.5 倍を超えたため、Navide が一度中断を送りました。"
+      "over-budget-body": "この実行は token 予算の 1.5 倍を超えました（キャッシュから再読み込みしたコンテキストは含みません）。Navide が中断して実行を終了し、pane を回収します。"
     }
   },
   "recentWorkspaces": {
