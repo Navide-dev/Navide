@@ -4944,7 +4944,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>62</strong> of them today (56 core, plus the 6 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>63</strong> of them today (56 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -4952,7 +4952,8 @@
             "plan_create": "Create a new plan (starting as a draft)",
             "plan_update_stage": "Advance the stage: Draft → In Review → Approved → In Progress → Done",
             "plan_update_todo": "Update the status of a single todo",
-            "plan_add_note": "Record a finding or a decision"
+            "plan_add_note": "Record a finding or a decision",
+            "plan_add_todo": "Add a todo to an existing plan"
           },
           "note1": "Plans are HTML the agent writes with these tools; you read and approve them in Navide's Plans view. The agent only starts writing code once the stage has advanced to \"Approved\".",
           "h2": "Workspace, pipeline orchestration and settings",
