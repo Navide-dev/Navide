@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { MAIN_LEDGER_SKIP_BYTES, recordMainFault } from './error-ledger'
+import { MAIN_LEDGER_SKIP_BYTES, recordMainFault, setMainLedgerDataDir } from './error-ledger'
 
 let dir: string
 
@@ -42,5 +42,16 @@ describe('recordMainFault — the main process writes the shared on-disk error l
     const blocker = join(dir, 'file')
     writeFileSync(blocker, '')
     expect(recordMainFault('c', 'm', blocker)).toBe(false)
+  })
+})
+
+describe('setMainLedgerDataDir — callers that do not know the data dir', () => {
+  afterEach(() => setMainLedgerDataDir(null))
+
+  it('writes to the configured directory when none is passed', () => {
+    expect(recordMainFault('c', 'before configured')).toBe(false)
+    setMainLedgerDataDir(dir)
+    expect(recordMainFault('c', 'configured')).toBe(true)
+    expect(entries().map((e) => e.message)).toEqual(['configured'])
   })
 })

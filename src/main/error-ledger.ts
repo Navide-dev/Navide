@@ -15,9 +15,18 @@ import { join } from 'node:path'
 export const MAIN_LEDGER_SKIP_BYTES = 4 * 1024 * 1024
 const MAX_MESSAGE = 2000
 
+let configuredDataDir: string | null = null
+
+/** The data dir for callers that do not know it (plugin hosts); index.ts sets
+ *  it at startup. Null turns those callers' recording off. */
+export function setMainLedgerDataDir(dir: string | null): void {
+  configuredDataDir = dir
+}
+
 /** Append one main-process fault. Best effort: returns false instead of
  *  throwing, since a ledger that fails must not turn one fault into two. */
-export function recordMainFault(code: string, message: string, dataDir: string): boolean {
+export function recordMainFault(code: string, message: string, dataDir: string | null = configuredDataDir): boolean {
+  if (!dataDir) return false
   try {
     const dir = join(dataDir, 'logs')
     const path = join(dir, 'errors.jsonl')

@@ -156,7 +156,7 @@ import { PlanWindowRegistry } from './plan-windows'
 import { createTokenMonitorWindowOpener } from './token-monitor-window'
 import { errorMain, infoMain, logMain, warnMain } from './main-log'
 import { watchRendererCrashes } from './renderer-crash-reload'
-import { recordMainFault } from './error-ledger'
+import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
@@ -2064,6 +2064,8 @@ function watchBackendCrash(b: BackendHandle): void {
 function recordRendererGone(line: string): void {
   recordMainFault('renderer.gone', line, backendDataDir(process.env))
 }
+
+setMainLedgerDataDir(backendDataDir(process.env))
 
 // An exception main never caught reached only stderr, which a packaged launch
 // discards. The monitor records it without changing what happens next:
