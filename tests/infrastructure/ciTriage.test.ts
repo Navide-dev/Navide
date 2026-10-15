@@ -61,6 +61,83 @@ describe('classifyLog — one entry per failed test, in one of three categories'
     expect(classifyLog(log)[0].test).toBe('backend/tests/test_share_mcp_tools.py::test_x')
   })
 
+  it('reads a runner that could not download an action as the environment (#276, 2026-10-15)', () => {
+    const log = `2026-10-15T05:43:37.7555290Z ##[error]An action could not be found at the URI 'https://codeload.github.com/actions/setup-go/tar.gz/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' (A646:26C2D0)
+2026-10-15T05:43:37.7575250Z ##[error]Failed to download archive 'https://codeload.github.com/actions/setup-go/tar.gz/b7ad1dad' after 1 attempts.`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({ test: '(job)', category: 'environment' })])
+  })
+
+  it('keeps a test the ledger already knows as a race a race, whatever its message', () => {
+    const log = `2026-10-15T05:30:00.0000000Z FAILED backend\\\\tests\\\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'cancelled': True}, {'bytes': 320000, 'cancelled': False})`
+    expect(classifyLog(log)[0].category).toBe('product-defect')
+    const known = new Set(['backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on'])
+    expect(classifyLog(log, { knownRaces: known })[0].category).toBe('test-race')
+  })
+
+  describe('an IndexError or KeyError raised in a test file', () => {
+    // The pin_audit flake from PR #285 (run 38763082739, attempt 1), trimmed.
+    const PIN_AUDIT = 'backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]'
+    const lookupLog = ({ frame, error, failed }: { frame: string, error: string, failed: string }) => `2026-10-15T15:53:05.8883068Z =================================== FAILURES ===================================
+2026-10-15T15:53:05.8886541Z ____________ test_refused_confirms_never_fill_the_record[keychain] _____________
+2026-10-15T15:53:05.8887254Z [gw1] linux -- Python 3.12.15 /home/runner/work/Navide/Navide/backend/.venv/bin/python
+2026-10-15T15:53:05.8894320Z             for _ in range(10):
+2026-10-15T15:53:05.8894606Z                 await asyncio.sleep(0.03)
+2026-10-15T15:53:05.8894920Z                 n = len(server.opened)
+2026-10-15T15:53:05.8895235Z >               await server.opened[-1].close()
+2026-10-15T15:53:05.8895545Z                       ^^^^^^^^^^^^^^^^^
+2026-10-15T15:53:05.8895867Z E               ${error}
+2026-10-15T15:53:05.8896101Z
+2026-10-15T15:53:05.8896287Z ${frame}
+2026-10-15T15:53:05.8896774Z ----------------------------- Captured stderr call -----------------------------
+2026-10-15T15:53:05.8899596Z reading the navide-server credential
+2026-10-15T15:53:06.3004557Z =========================== short test summary info ============================
+2026-10-15T15:53:06.3005337Z FAILED ${failed} - ${error}
+2026-10-15T15:53:06.3006131Z ===== 1 failed, 11700 passed, 61 skipped, 45 warnings in 448.14s (0:07:28) =====`
+    const indexError = lookupLog({
+      frame: 'backend/tests/test_server_link_pin_audit.py:259: IndexError',
+      error: 'IndexError: list index out of range',
+      failed: PIN_AUDIT,
+    })
+
+    it('is a test race when the ledger knows the test as one', () => {
+      expect(classifyLog(indexError, { knownRaces: new Set([PIN_AUDIT]) })).toEqual([
+        expect.objectContaining({ test: PIN_AUDIT, category: 'test-race' }),
+      ])
+    })
+
+    it('needs review when the ledger does not know the test', () => {
+      expect(classifyLog(indexError)[0].category).toBe('needs-review')
+    })
+
+    it('needs review for a KeyError the same way', () => {
+      const log = lookupLog({
+        frame: 'backend/tests/test_server_link_pin_audit.py:259: KeyError',
+        error: "KeyError: 'pins'",
+        failed: PIN_AUDIT,
+      })
+      expect(classifyLog(log)[0].category).toBe('needs-review')
+    })
+
+    it('stays a product defect when the failing frame is in product code', () => {
+      const log = lookupLog({
+        frame: 'backend/agent_team_backend/trust_store.py:412: IndexError',
+        error: 'IndexError: list index out of range',
+        failed: PIN_AUDIT,
+      })
+      expect(classifyLog(log)[0].category).toBe('product-defect')
+    })
+
+    it('reads a Windows path the same way', () => {
+      const log = lookupLog({
+        frame: 'backend\\tests\\test_server_link_pin_audit.py:259: IndexError',
+        error: 'IndexError: list index out of range',
+        failed: PIN_AUDIT.replace(/\//g, '\\\\'),
+      })
+      expect(classifyLog(log, { knownRaces: new Set([PIN_AUDIT]) })[0]).toMatchObject({ test: PIN_AUDIT, category: 'test-race' })
+      expect(classifyLog(log)[0].category).toBe('needs-review')
+    })
+  })
+
   it('keeps the evidence line without the timestamp', () => {
     const [entry] = classifyLog(PYTEST_DEFECT)
     expect(entry.evidence.startsWith('FAILED backend/tests/test_share_mcp_tools.py')).toBe(true)

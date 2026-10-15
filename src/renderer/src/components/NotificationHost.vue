@@ -173,8 +173,9 @@ watch(dialog, async (d) => {
   white-space: pre-wrap;
 }
 /* Opt-in variants (useNotify `variant`). Each red carries its own shape so
-   they stay apart without the color: solid fill = from outside this machine,
-   full frame = Guard, left bar = an ordinary error. */
+   they stay apart without the color: solid fill = another machine, solid
+   header band = a chat channel, full frame = Guard, left bar = an ordinary
+   error. */
 .toast.titled {
   flex-direction: column;
   gap: 2px;
@@ -201,6 +202,25 @@ watch(dialog, async (d) => {
 }
 .toast.external .toast-band {
   opacity: 0.92;
+}
+.toast.channel,
+.toast.channel:hover {
+  padding-top: 0;
+  border: 1px solid var(--toast-channel-accent);
+  overflow: hidden;
+}
+.toast.channel .toast-band {
+  margin: 0 -14px;
+  padding: 5px 14px;
+  background: var(--toast-channel-accent);
+  color: var(--toast-channel-fg);
+  font-weight: 700;
+}
+.toast.channel .toast-row {
+  padding-top: 6px;
+}
+.toast.channel .toast-icon {
+  color: var(--toast-channel-accent);
 }
 .toast.security,
 .toast.security:hover {

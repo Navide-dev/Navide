@@ -25,6 +25,46 @@ warn_missing_announcement() {
   fi
 }
 
+# Runs the command before `--`, then the one after it. By default they run one
+# after the other: measured on a loaded host, overlapping them saved no time
+# and raised the 1-minute load by about 10 while both ran.
+# NAVIDE_RELEASE_OVERLAP_GATES=1 runs the first in the background beside the
+# second instead, waits for both, and fails naming each that failed, so
+# neither exit code is lost. The background output is held and printed when
+# both are done, so the two never interleave.
+# The background command gets its own process group (set -m) and an INT or
+# TERM stops that group by the recorded id: `pnpm typecheck` does not pass a
+# signal on to the command chain it runs, so stopping its pid alone leaves
+# the chain running. Ctrl-C reaches the foreground command directly; bash
+# runs the trap once that command has ended, so a TERM sent to this script
+# alone takes effect when the foreground command finishes.
+run_gates() {
+  local IFS=' ' background=() log pid background_status=0 foreground_status=0
+  while [[ $# -gt 0 && "$1" != -- ]]; do background+=("$1"); shift; done
+  shift
+  if [[ "${NAVIDE_RELEASE_OVERLAP_GATES:-}" != 1 ]]; then
+    "${background[@]}"
+    "$@"
+    return
+  fi
+  log="$(mktemp "${TMPDIR:-/tmp}/navide-release-gate.XXXXXX")"
+  set -m
+  "${background[@]}" > "$log" 2>&1 < /dev/null &
+  pid=$!
+  set +m
+  trap "kill -TERM -- -${pid} 2>/dev/null || true; wait ${pid} 2>/dev/null || true; rm -f '${log}'; exit 130" INT
+  trap "kill -TERM -- -${pid} 2>/dev/null || true; wait ${pid} 2>/dev/null || true; rm -f '${log}'; exit 143" TERM
+  "$@" || foreground_status=$?
+  wait "$pid" || background_status=$?
+  trap - INT TERM
+  echo "--- ${background[*]} (exit ${background_status}) ---"
+  cat "$log"
+  rm -f "$log"
+  [[ $background_status -eq 0 ]] || echo "ERROR: ${background[*]} failed (exit ${background_status})" >&2
+  [[ $foreground_status -eq 0 ]] || echo "ERROR: $* failed (exit ${foreground_status})" >&2
+  [[ $background_status -eq 0 && $foreground_status -eq 0 ]] || exit 1
+}
+
 [[ $# -eq 1 ]] || fail "usage: ./release.sh <X.Y.Z | patch | minor | major>"
 
 REQUEST="${1#v}"
@@ -118,10 +158,12 @@ pnpm release:check "$TAG"
 echo ""
 echo "=== Release gates ==="
 uv --project backend run --locked ruff check backend
-pnpm typecheck
+# With NAVIDE_RELEASE_OVERLAP_GATES=1 the type check overlaps the backend
+# tests only: it rebuilds packages/*/dist, which the artifacts project of
+# `pnpm test:run` reads, and the backend tests touch neither. Backend tests
+# run with a throwaway HOME and no reach to the real keychain.
+run_gates pnpm typecheck -- scripts/release-backend-tests.sh
 pnpm test:run
-# Backend tests run with a throwaway HOME and no reach to the real keychain.
-scripts/release-backend-tests.sh
 
 echo ""
 echo "=== Building release artifacts ==="
@@ -130,6 +172,8 @@ echo "=== Building release artifacts ==="
   uv run --locked pyinstaller --noconfirm agent_team_backend.spec
 )
 CSC_IDENTITY_AUTO_DISCOVERY=false pnpm dist
+# The dev-only web mode (NAVIDE_DEV_WEB=1) must never reach a release build.
+node scripts/check-no-dev-web.mjs out
 
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \

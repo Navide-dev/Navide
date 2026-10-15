@@ -4,6 +4,7 @@ import { resolve, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { devWebPlugins } from './scripts/dev-web/devWebPlugin'
 
 // ── App version — single source of truth is package.json ─────────────────────
 const APP_VERSION: string = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')).version
@@ -108,6 +109,9 @@ export default defineConfig({
           },
         },
       }),
+      // Dev web mode (NAVIDE_DEV_WEB=1, serve only; empty otherwise): lets a
+      // browser holding a login cookie past the gate below. scripts/dev-web/.
+      ...devWebPlugins(DEV_TOKEN, process.env, __dirname),
       // Block all non-Electron requests with a per-session random token.
       // The main process reads the token from tmpdir and injects it via
       // session.webRequest — no browser can guess a 32-byte random value.

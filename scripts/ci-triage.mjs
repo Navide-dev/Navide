@@ -5,10 +5,12 @@
 //   node scripts/ci-triage.mjs --pr 266 --write    # ... and add them to docs/testing/flaky.json
 //   node scripts/ci-triage.mjs --log job.log --job "Backend tests (macOS)"   # a saved log
 //
-// Three categories, the triage habit RELEASING.md describes, made repeatable:
+// Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
 //                   or a network/disk/cancel signature);
 //   test-race       a test failed on time: a timeout, a hang, a port race — rerun before blaming code;
+//   needs-review    an IndexError or KeyError raised in a backend/tests/ frame of a test the ledger
+//                   does not know as a race: the test may have read a list too early — a person decides;
 //   product-defect  anything else: an assertion, a type error, a lint error — fix the code.
 // Local only, on purpose: it costs no runner minutes and posts nothing anywhere.
 
@@ -17,11 +19,26 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time/i
+const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time|An action could not be found at the URI|Failed to download archive|Unable to resolve action/i
 // Signatures, not bare words: an assertion diff can quote any text (a tool
 // description saying "timed out" is not a timeout).
 const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use/i
 const MAX_RUNS_PER_TEST = 20
+
+/** The file of the innermost frame pytest reported for `test` when it raised an
+ *  IndexError or KeyError: the `path:line: IndexError` line closing the test's
+ *  section under FAILURES. Null when the log has no such line. */
+function lookupErrorPath(lines, test) {
+  const name = test.split('::').slice(1).join('.')
+  const start = lines.findIndex((l) => /^_{3,} (.+) _{3,}$/.exec(l)?.[1] === name)
+  if (start < 0) return null
+  let path = null
+  for (let i = start + 1; i < lines.length && !/^(_{3,} .+ _{3,}|={3,}.*)$/.test(lines[i]); i++) {
+    const m = /^(\S+):\d+: (?:IndexError|KeyError)$/.exec(lines[i])
+    if (m) path = m[1].replace(/\\+/g, '/')
+  }
+  return path
+}
 
 /** Drop the runner's leading ISO timestamp. */
 function bare(line) {
@@ -29,8 +46,10 @@ function bare(line) {
 }
 
 /** One entry per failed test: {test, category, evidence}. A job that failed
- *  with no failing test in its log gets a single "(job)" entry. */
-export function classifyLog(text) {
+ *  with no failing test in its log gets a single "(job)" entry. A test in
+ *  `knownRaces` (the ledger's test-race rows) stays a race: a timing assert
+ *  can fail with any message. */
+export function classifyLog(text, { knownRaces = new Set() } = {}) {
   const lines = text.split(/\r?\n/).map(bare)
   const out = []
   const seen = new Set()
@@ -46,7 +65,10 @@ export function classifyLog(text) {
     seen.add(test)
     // The failure's own message plus what was printed just before and after it.
     const context = lines.slice(Math.max(0, i - 3), i + 4).join('\n')
-    const category = ENVIRONMENT.test(context) ? 'environment' : TEST_RACE.test(context) ? 'test-race' : 'product-defect'
+    const category = ENVIRONMENT.test(context) ? 'environment'
+      : TEST_RACE.test(context) || knownRaces.has(test) ? 'test-race'
+        : /(^|\/)backend\/tests\//.test(lookupErrorPath(lines, test) ?? '') ? 'needs-review'
+          : 'product-defect'
     out.push({ test, category, evidence: line.trim().slice(0, 400) })
   }
   if (out.length === 0) {
@@ -109,6 +131,8 @@ function main(argv) {
   const write = argv.includes('--write')
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
   const ledgerPath = opt('--ledger') ?? join(root, 'docs', 'testing', 'flaky.json')
+  const known = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')).tests ?? [] : []
+  const knownRaces = new Set(known.filter((t) => t.category === 'test-race').map((t) => t.test))
   const jobs = []
   if (opt('--log')) {
     jobs.push({ job: opt('--job') ?? '(local log)', run: 0, pr: 0, at: new Date().toISOString(), text: readFileSync(opt('--log'), 'utf8') })
@@ -124,7 +148,7 @@ function main(argv) {
   }
   if (jobs.length === 0) process.stdout.write('no failed Actions jobs\n')
   for (const j of jobs) {
-    const entries = classifyLog(j.text)
+    const entries = classifyLog(j.text, { knownRaces })
     for (const e of entries) process.stdout.write(`${e.category.padEnd(15)} ${j.job} :: ${e.test}\n  ${e.evidence}\n`)
     if (write && entries.length) mergeIntoLedger(ledgerPath, entries, { run: j.run, job: j.job, pr: j.pr, at: j.at })
   }
