@@ -70,6 +70,14 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
+# Added to the bot's "/" menu when missing (never replacing the user's own); every one
+# is handled by the channel manager.
+BOT_COMMANDS = [
+    {"command": "pending", "description": "列出等待確認的 pane"},
+    {"command": "menu", "description": "快速選單"},
+    {"command": "status", "description": "pane 狀態"},
+    {"command": "stop", "description": "中斷 pane"},
+]
 
 
 class OffsetStore(Protocol):
@@ -193,6 +201,23 @@ class TelegramAdapter:
                 log.info("telegram: poll failed (%s); retry in %.1fs", self.status.last_error, delay)
                 await asyncio.sleep(delay)
 
+    async def _add_commands(self) -> None:
+        """Add ours to the bot's "/" menu without touching the list it already has: the
+        user's own commands keep their place and wording, a name already there is left as
+        is, and a list that cannot be read is not written. A failure only loses the menu."""
+        try:
+            current = await self._call("getMyCommands")
+            if not isinstance(current, list):
+                return
+            have = {str(c.get("command") or "").lower() for c in current if isinstance(c, dict)}
+            missing = [c for c in BOT_COMMANDS if c["command"] not in have]
+            if not missing:
+                return
+            await self._call("setMyCommands", {"commands": [*current, *missing]})
+            log.info("telegram: added bot commands: %s", ", ".join(c["command"] for c in missing))
+        except Exception as exc:  # noqa: BLE001
+            log.info("telegram: updating the bot's commands failed: %s", exc)
+
     async def _session(self) -> None:
         me = await self._call("getMe")
         username = me.get("username") or ""
@@ -201,6 +226,7 @@ class TelegramAdapter:
         if me.get("id"):
             self.bot_id = str(me["id"])
         await self._call("deleteWebhook", {"drop_pending_updates": False})
+        await self._add_commands()
         if self._offsets is not None:
             self._offset = self._offsets.get_offset(self.platform, self.account, self.bot_id)
         self.status.lifecycle = "ready"

@@ -494,6 +494,69 @@ async def test_menu_sends_and_edits_several_button_rows(api: FakeBotApi) -> None
     assert edit["reply_markup"]["inline_keyboard"] == [[{"text": "Next ▶", "callback_data": "nv2:g:cccccccc"}]]
 
 
+async def _one_session(api: FakeBotApi) -> None:
+    ad = _adapter(api)
+
+    async def emit(msg: InboundMessage) -> None:
+        pass
+
+    await ad.start(emit)
+    try:
+        await _until(lambda: api.calls_of("getUpdates"))
+    finally:
+        await ad.stop()
+
+
+async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> None:
+    api.handlers["getMyCommands"] = lambda params: []
+    await _one_session(api)
+    calls = api.calls_of("setMyCommands")
+    assert len(calls) == 1
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop"]
+
+
+async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
+    mine = [{"command": "deploy", "description": "my own"}, {"command": "status", "description": "my status"}]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in mine]
+    await _one_session(api)
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    # The user's commands first, unchanged and in order; "status" was theirs already.
+    assert commands[:2] == mine
+    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop"]
+
+
+async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS
+
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in BOT_COMMANDS]
+    await _one_session(api)
+    assert api.calls_of("setMyCommands") == []
+
+
+async def test_an_unreadable_command_list_is_not_written(api: FakeBotApi) -> None:
+    api.fail("getMyCommands", 400, "Bad Request: something")
+    await _one_session(api)
+    assert api.calls_of("setMyCommands") == []
+
+
+async def test_a_failed_command_menu_does_not_stop_the_bot(api: FakeBotApi) -> None:
+    api.handlers["getMyCommands"] = lambda params: []
+    api.fail("setMyCommands", 400, "Bad Request: something")
+    got: list[InboundMessage] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    api.push_message(chat_id=42, text="hello")
+    ad = _adapter(api)
+    await ad.start(emit)
+    try:
+        await _until(lambda: got)
+    finally:
+        await ad.stop()
+    assert got[0].text == "hello"
+
+
 async def test_send_text_replies_to_a_message_on_its_first_chunk(api: FakeBotApi) -> None:
     ad = _adapter(api)
     await ad.send_text(Location("telegram", "default", "42"), ("word " * 2000).strip(), reply_to="9")
