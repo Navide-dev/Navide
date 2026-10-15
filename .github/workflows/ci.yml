@@ -328,9 +328,11 @@ jobs:
       # being cancelled at the job timeout with no word of where it stopped.
       # The slowest tests take ~35 s; faulthandler dumps every thread if a
       # hang sits where the signal cannot reach.
+      # Four pytest-xdist workers, one test file at a time each (loadfile), so
+      # a file's tests keep sharing their module state and fixtures in order.
       - name: Complete backend suite
         if: runner.os != 'Windows'
-        run: uv --project backend run --locked pytest backend/tests --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
+        run: uv --project backend run --locked pytest backend/tests -n 4 --dist loadfile --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
       - name: Linux runtime capabilities
         if: runner.os == 'Linux'
         run: uv --project backend run --locked python backend/linux_smoke.py

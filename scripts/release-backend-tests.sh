@@ -37,6 +37,11 @@ NO_SANDBOX_FILES=(
   backend/tests/test_terminals_exit_orphan_reap.py
 )
 
+# The main pass runs on four pytest-xdist workers, one file at a time each,
+# as CI does. The small no-sandbox pass (PTY, setuid ps, process reaping)
+# stays serial.
+XDIST=(-n 4 --dist loadfile)
+
 isolated() {
   env -i HOME="$SCRATCH/home" USER="$USER" LANG=en_US.UTF-8 TMPDIR="$SCRATCH/tmp" \
     SAFE_PYTEST_LOG="$FAKE_LOG" \
@@ -53,10 +58,10 @@ if [[ "$(uname)" == "Darwin" ]]; then
   # collection, so these files must still be collected in this pass. Node ids
   # are relative to backend/, pytest's rootdir.
   for f in "${NO_SANDBOX_FILES[@]}"; do deselects+=("--deselect=${f#backend/}"); done
-  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${deselects[@]}"
+  isolated /usr/bin/sandbox-exec -f "$SB" "$UV" --project backend run --no-sync pytest backend/tests "${XDIST[@]}" "${deselects[@]}"
   isolated "$UV" --project backend run --no-sync pytest "${NO_SANDBOX_FILES[@]}"
 else
-  isolated "$UV" --project backend run --no-sync pytest backend/tests
+  isolated "$UV" --project backend run --no-sync pytest backend/tests "${XDIST[@]}"
 fi
 
 if [[ -s "$FAKE_LOG" ]]; then
