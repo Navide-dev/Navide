@@ -181,3 +181,22 @@ async def test_a_direct_chat_still_gets_every_shape_whole(env: Env, name: str) -
     await _reply_from(env, "pane-dm", R7_CHAT_VARIANTS[name], chat="555", thread="", direct=True)
     sent = "\n".join(_texts_in(env, "555"))
     assert R7_CHAT_VARIANTS[name].split("\n")[-1] in sent
+
+
+async def test_a_reply_that_cannot_be_sent_is_recorded_in_the_error_ledger(env: Env, monkeypatch, tmp_path) -> None:
+    from agent_team_backend import error_ledger
+
+    led = error_ledger.ErrorLedger(tmp_path / "errors.jsonl")
+    monkeypatch.setattr(error_ledger, "_ledger", led)
+
+    async def boom(*_a, **_k):
+        raise RuntimeError(f"send failed for {URL}")
+
+    monkeypatch.setattr(env.m.mirror, "send", boom)
+    pending = mgr_mod._Pending(loc=GROUP)
+    assert await env.m._post_reply(pending, "first line\n" + "x" * 50) is False
+    entries = led.read()
+    led.close()
+    assert [e["code"] for e in entries] == ["channels.reply_failed"]
+    assert "telegram" in entries[0]["message"] and "RuntimeError" in entries[0]["message"]
+    assert "#k=" not in entries[0]["message"] and LINK_ID not in entries[0]["message"]
