@@ -14,6 +14,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from agent_team_backend import agent_messaging
 from agent_team_backend import app as backend_app
 from agent_team_backend.app import app
+from agent_team_backend.plan_index import resolve_plan_root
 from agent_team_backend.plugins.builtin.navide_plans.plan_meta import parse_plan_meta
 from agent_team_backend.plugins import wiring as plugin_wiring
 from agent_team_backend.mcp_server import server as plan_mcp, auth as plan_mcp_auth, wiring as plan_mcp_wiring
@@ -686,6 +687,36 @@ async def test_plan_create_does_not_warn_when_a_pane_matches(
         },
     )
     assert not result.isError
+    assert "warning" not in result.structuredContent
+
+
+async def test_plan_create_from_a_git_subfolder_pane_lands_in_the_view_root_without_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pane working in a subfolder of a repository: the plan lands in the git
+    root, which is the root the Plan view resolves that same workspace to — so
+    the pane's own workspace does use it and no "no pane uses" warning fires."""
+    repo = tmp_path / "repo"
+    (repo / ".git").mkdir(parents=True)
+    subfolder = repo / "MVP"
+    subfolder.mkdir()
+    fake = _FakeTerminalService([_fake_session("s1", cwd=str(subfolder))])
+    monkeypatch.setattr(backend_app, "get_terminals", lambda: fake)
+    result = await _call(
+        "plan_create",
+        {
+            "workspace_path": str(subfolder),
+            "name": "Subfolder Plan",
+            "overview": "",
+            "todos": ["Task"],
+        },
+    )
+    assert not result.isError
+    assert resolve_plan_root(str(subfolder)) == str(repo.resolve())
+    created = repo / result.structuredContent["rel_path"]
+    assert created.is_file()
+    assert created.parent == (repo / ".agent-team" / "plans")
+    assert not (subfolder / ".agent-team").exists()
     assert "warning" not in result.structuredContent
 
 
