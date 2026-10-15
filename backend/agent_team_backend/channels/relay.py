@@ -74,6 +74,8 @@ class RelayRequest:
     # are) and that message's text, so a request that lapses can settle it.
     message_id: str = ""
     message_text: str = ""
+    # The 「正在等確認」 warnings that carried this request's buttons too: (message id, text).
+    held: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -216,6 +218,22 @@ def answer_hint(request: RelayRequest) -> str:
     if _allow_offered(request):
         return f"回覆 yes {request.id} / no {request.id}"
     return f"回覆 no {request.id}（允許請在電腦前操作）"
+
+
+HELD_PROMPT_MAX = 300
+
+
+def held_text(request: RelayRequest) -> str:
+    """The prompt, its options and how to answer, for a warning that may be read
+    long after the prompt message itself scrolled away."""
+    prompt = request.prompt.strip()
+    if len(prompt) > HELD_PROMPT_MAX:
+        prompt = prompt[:HELD_PROMPT_MAX] + "…"
+    lines = [prompt] if prompt else []
+    if request.kind == "question":
+        lines += [f"{i}. {opt}" for i, opt in _offered(request)]
+    lines.append(answer_hint(request))
+    return "\n".join(lines)
 
 
 def buttons_for(request: RelayRequest) -> list[tuple[str, str]]:

@@ -1528,17 +1528,38 @@ class ChannelManager:
             return False
         live = self.relay.for_pane(pane_id)
         if live:
-            how = relay.answer_hint(live[0])
-        else:
-            try:
-                info = await self._seams.awaiting_info(pane_id)
-            except Exception:  # noqa: BLE001
-                return False
-            if info.get("kind") != "permission":
-                return False  # a question is answered by typing
-            how = MSG_AWAITING_LOCAL
-        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=how))
+            await self._held_with_buttons(msg, live[0])
+            return True
+        try:
+            info = await self._seams.awaiting_info(pane_id)
+        except Exception:  # noqa: BLE001
+            return False
+        if info.get("kind") != "permission":
+            return False  # a question is answered by typing
+        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
         return True
+
+    async def _held_with_buttons(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
+        """The warning carries the prompt's options and buttons, and quotes the prompt
+        message, so a chat that scrolled past the prompt can answer from here."""
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if request.loc.key() != loc.key():
+            # Prompted in another chat: an answer from here is refused, and its message is not here.
+            await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=relay.answer_hint(request)))
+            return
+        text = MSG_HELD_BY_PROMPT.format(how="\n" + relay.held_text(request))
+        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        try:
+            ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reply on %s failed: %s", msg.platform, exc)
+            return
+        if ids:
+            # Settled with the prompt; a chunked warning keeps only its last chunk.
+            request.held.append((ids[-1], text if len(ids) == 1 else ""))
 
     async def _handle_relay_answer(self, msg: InboundMessage, answer: relay.RelayAnswer) -> None:
         request = self.relay.get(answer.request_id)
@@ -2429,11 +2450,12 @@ class ChannelManager:
         adapter = self._adapters.get((request.loc.platform, request.loc.account))
         if not request.message_id or adapter is None or not adapter.capabilities.edit:
             return
-        text = f"{request.message_text}\n\n{note}" if request.message_text else note
-        try:
-            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(self._for_chat(request.loc, text)))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
+        for message_id, message_text in [(request.message_id, request.message_text), *request.held]:
+            text = f"{message_text}\n\n{note}" if message_text else note
+            try:
+                await adapter.edit_text(request.loc, message_id, redact.redact_text(self._for_chat(request.loc, text)))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
 
     async def _send_awaiting(self, pane_id: str, loc: Location, prompt: str, text: str) -> None:
         """An awaiting notice with nothing to answer, retried like a relay prompt."""
