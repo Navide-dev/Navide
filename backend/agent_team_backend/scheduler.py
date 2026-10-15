@@ -564,6 +564,16 @@ class LiveBridge:
         entry = mcp._mcp_message_status.get(msg_key)
         return entry is not None and entry.get("status") == "queued"
 
+    def message_outcome(self, msg_key: str | None) -> dict[str, Any] | None:
+        """Where a sent message stands, {status, reason}; None once the send is
+        no longer tracked (the table keeps about an hour, and a restart clears it)."""
+        if not msg_key:
+            return None
+        from .mcp_server import server as mcp
+
+        entry = mcp._mcp_message_status.get(msg_key)
+        return None if entry is None else {"status": entry.get("status"), "reason": entry.get("reason")}
+
     async def budget_limited(self, action: dict[str, Any]) -> bool:
         """True when the target pane's CLI is marked out of quota in the usage cache.
 
@@ -900,9 +910,29 @@ class SchedulerService:
             return True
         return False
 
+    async def _resolve_queued(self, job: dict[str, Any]) -> None:
+        """A run whose message was handed over but still waiting is recorded "ok"
+        with detail "queued (...)". Once that message settles, the same run says
+        how it ended, and one that then failed or was rejected becomes an error."""
+        key = job["state"].get("last_msg_key")
+        outcome_of = getattr(self.bridge, "message_outcome", None)
+        if not key or outcome_of is None or self.bridge.still_queued(key):
+            return
+        outcome = outcome_of(key)
+        status = (outcome or {}).get("status")
+        if status in ("failed", "rejected"):
+            await self.store.resolve_queued_run(
+                job["id"], "error", status, f"then {status}: {(outcome or {}).get('reason') or status}"
+            )
+        elif outcome is None:
+            await self.store.resolve_queued_run(job["id"], "ok", None, "outcome no longer tracked")
+        elif status != "queued":
+            await self.store.resolve_queued_run(job["id"], "ok", None, f"then {status}")
+
     async def _gate(self, job: dict[str, Any], now: int) -> str | None:
         if not self.bridge.has_window():
             return SKIP_NO_WINDOW
+        await self._resolve_queued(job)
         if self.bridge.still_queued(job["state"].get("last_msg_key")):
             return SKIP_BUSY
         cap = int(job["policy"].get("max_runs_per_day", DEFAULT_POLICY["max_runs_per_day"]))
@@ -1327,8 +1357,10 @@ class SchedulerService:
         return moved
 
     async def runs(self, job_id: str, limit: int = 20) -> dict[str, Any]:
-        if await self.store.get_job(job_id) is None:
+        job = await self.store.get_job(job_id)
+        if job is None:
             return {"ok": False, "error": f'unknown job id "{job_id}"'}
+        await self._resolve_queued(job)
         return {"ok": True, "runs": await self.store.list_runs(job_id, max(1, min(int(limit), 200)))}
 
 
