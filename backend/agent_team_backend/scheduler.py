@@ -1325,10 +1325,11 @@ class SchedulerService:
         Only along the session lineage: the rebuild must have resumed exactly
         the session the old pane held. A different or unknown session is a
         different conversation, and a pane name is never evidence at all — the
-        same rule outcome_of_send keeps for a gone id. The job's owner and
-        updated_by stay as they were (this is not an edit by anyone, and must
-        not mark a user's job as agent-written); ``state.rebound_from`` records
-        the hop. Returns the ids of the jobs moved.
+        same rule outcome_of_send keeps for a gone id. ``updated_by`` stays as
+        it was (this is not an edit by anyone, and must not mark a user's job
+        as agent-written); ``state.rebound_from`` records the hop. A job the
+        old pane owned is re-owned by the new one along the same lineage (see
+        :meth:`_move_owners`). Returns the ids of the jobs whose target moved.
         """
         if not (previous_pane_id and pane_id and session_id) or previous_pane_id == pane_id:
             return []
@@ -1352,8 +1353,56 @@ class SchedulerService:
                 moved.append(job["id"])
         if moved:
             log.info("scheduler: rebound %s from pane %s to %s", moved, previous_pane_id, pane_id)
+        inherited = await self._move_owners({previous_pane_id}, pane_id, session_id, live_ok=True)
+        if moved or inherited:
             await self._changed()
             self.wake()
+        return moved
+
+    async def inherit_owner(
+        self, lineage: set[str], pane_id: str, session_id: str
+    ) -> list[str]:
+        """Hand jobs owned by a closed pane to the pane resuming its session.
+
+        ``lineage`` holds the ids of closed panes whose record held exactly
+        ``session_id``; the caller derives it from the project store, never
+        from a pane name. A job whose owner is still live keeps its owner: an
+        owner the registry does not know yet (a backend restart) was never
+        closed, so it is not in ``lineage`` either. Returns the ids moved.
+        """
+        moved = await self._move_owners(lineage, pane_id, session_id, live_ok=False)
+        if moved:
+            await self._changed()
+        return moved
+
+    async def _move_owners(
+        self, lineage: set[str], pane_id: str, session_id: str, *, live_ok: bool
+    ) -> list[str]:
+        """Re-own pane-owned jobs from a pane in ``lineage`` onto ``pane_id``.
+
+        ``state.owner_inherited`` and the log record each hop. ``updated_by``
+        stays as it was: nobody edited the job. ``live_ok`` is for a rebuild,
+        whose old id was just retired by the same session it resumed.
+        """
+        if not (lineage and pane_id and session_id) or pane_id in lineage:
+            return []
+        moved: list[str] = []
+        async with self._lock:
+            for job in await self.store.list_jobs():
+                owner = job.get("owner") or USER
+                if owner.get("kind") != "pane" or owner.get("pane_id") not in lineage:
+                    continue
+                if not live_ok and _owner_pane(owner) is not None:
+                    continue
+                job["owner"] = {**owner, "pane_id": pane_id}
+                job["state"]["owner_inherited"] = {
+                    "from": owner.get("pane_id"), "to": pane_id,
+                    "session_id": session_id, "at": self.now_ms(),
+                }
+                await self.store.put_job(job)
+                moved.append(job["id"])
+                log.info("scheduler: job %s owner %s inherited by pane %s (session %s)",
+                         job["id"], owner.get("pane_id"), pane_id, session_id)
         return moved
 
     async def runs(self, job_id: str, limit: int = 20) -> dict[str, Any]:
