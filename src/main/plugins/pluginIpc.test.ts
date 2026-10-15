@@ -3838,8 +3838,11 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
       ],
     } as unknown as FrontendPluginManager
     registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
-    const updates = await handlers.get('plugins:checkUpdates')!(null)
-    expect(updates).toEqual([
+    // acme.offline did not answer: the check rejects naming it (a deliberate
+    // change, so an unreachable Registry no longer reads as "no updates"),
+    // and the updates found for the others are still kept.
+    await expect(handlers.get('plugins:checkUpdates')!(null)).rejects.toThrow(/acme\.offline \(network down\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual([
       { id: 'acme.old', namespace: 'acme', name: 'old', installedVersion: '1.0.0', latestVersion: '1.2.0' },
       { id: 'acme.split', namespace: 'acme', name: 'split', installedVersion: '1.0.0', latestVersion: '2.0.0' },
     ])
@@ -3864,6 +3867,57 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     respond({})
     expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(updates)
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps the last known updates when the Registry is unreachable', async () => {
+    respond({
+      [`${BASE}/acme/old`]: { body: { versions: [{ version: '1.2.0', target: 'universal', yanked: false }] } },
+    })
+    const manager = {
+      listInstalledPackages: () => [
+        { id: 'acme.old', requires: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ],
+    } as unknown as FrontendPluginManager
+    const controller = registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
+    const found = await controller.checkUpdates()
+    expect(found).toHaveLength(1)
+
+    respond({ [`${BASE}/acme/old`]: { status: 503 } })
+    await expect(controller.checkUpdates()).rejects.toThrow(/acme\.old \(HTTP 503\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(found)
+
+    respond({ [`${BASE}/acme/old`]: new Error('network down') })
+    await expect(handlers.get('plugins:checkUpdates')!(null)).rejects.toThrow(/acme\.old \(network down\)/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(found)
+  })
+
+  it('updates the packages that answered and keeps the last answer for the ones that failed', async () => {
+    const row = (version: string) => ({ version, target: 'universal', yanked: false })
+    respond({
+      [`${BASE}/acme/a`]: { body: { versions: [row('1.2.0')] } },
+      [`${BASE}/acme/b`]: { body: { versions: [row('2.1.0')] } },
+    })
+    const manager = {
+      listInstalledPackages: () => [
+        { id: 'acme.a', requires: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+        { id: 'acme.b', requires: [], packageVersion: '2.0.0', provenance: 'official-registry' },
+      ],
+    } as unknown as FrontendPluginManager
+    const controller = registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG)
+    await controller.checkUpdates()
+
+    respond({
+      [`${BASE}/acme/a`]: { body: { versions: [row('1.3.0')] } },
+      [`${BASE}/acme/b`]: { status: 500 },
+    })
+    const expected = [
+      { id: 'acme.a', namespace: 'acme', name: 'a', installedVersion: '1.0.0', latestVersion: '1.3.0' },
+      { id: 'acme.b', namespace: 'acme', name: 'b', installedVersion: '2.0.0', latestVersion: '2.1.0' },
+    ]
+    const failure = controller.checkUpdates()
+    await expect(failure).rejects.toThrow(/acme\.b \(HTTP 500\)/)
+    await expect(failure).rejects.not.toThrow(/acme\.a/)
+    expect(await handlers.get('plugins:pendingUpdates')!(null)).toEqual(expected)
   })
 
   it('rejects unauthorized senders before any network request', async () => {

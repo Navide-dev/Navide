@@ -20,8 +20,15 @@ export function usePluginUpdates(): PluginUpdates {
     try {
       updates.value = await api.checkUpdates()
     } catch {
-      // Detection is advisory: an unreachable Registry keeps the last answer
-      // rather than surfacing an error on pages that did not ask for one.
+      // Detection is advisory: a failed check is not surfaced on pages that
+      // did not ask for one. A package the Registry did not answer for keeps
+      // the main process's last known update, so badge that merged answer
+      // (cached, no network); if even that fails, keep this page's last answer.
+      try {
+        updates.value = (await api.pendingUpdates?.()) ?? updates.value
+      } catch {
+        // Keep the last answer.
+      }
     }
   }
 

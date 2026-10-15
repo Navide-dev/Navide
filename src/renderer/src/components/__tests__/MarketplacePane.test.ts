@@ -775,6 +775,23 @@ describe('MarketplacePane', () => {
     stop()
   })
 
+  it('badges the merged answer the main process kept when a check fails', async () => {
+    const merged = [
+      { id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.2.0' },
+      { id: 'acme.two', namespace: 'acme', name: 'two', installedVersion: '1.0.0', latestVersion: '2.0.0' },
+    ]
+    const api = mockPlugins({
+      checkUpdates: vi.fn().mockRejectedValue(new Error('update check failed for acme.two (HTTP 503)')),
+      pendingUpdates: vi.fn().mockResolvedValue(merged),
+    })
+    const pluginUpdates = usePluginUpdates()
+    pluginUpdates.updates.value = []
+    await pluginUpdates.refresh()
+    expect(api.pendingUpdates).toHaveBeenCalled()
+    expect(pluginUpdates.updates.value).toEqual(merged)
+    expect(pluginUpdates.count.value).toBe(2)
+  })
+
   it('formats counts with the app locale and shows the rating on list cards', async () => {
     mockPlugins({
       marketplaceSearch: vi.fn().mockResolvedValue({
