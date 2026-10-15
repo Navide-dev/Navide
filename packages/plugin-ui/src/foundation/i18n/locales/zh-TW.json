@@ -10204,7 +10204,10 @@
       "disconnect-label": "關閉 {pane} 與 {channel} 的連線",
       "go-to": "跳到 {pane}",
       "auto-child": "自動子話題",
-      "auto-child-hint": "為子 pane 自動建立的話題；關閉父 pane 的連線時會一併關閉。"
+      "auto-child-hint": "為子 pane 自動建立的話題；關閉父 pane 的連線時會一併關閉。",
+      "unnamed-pane": "未命名 pane",
+      "pane-closed": "已關閉",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {

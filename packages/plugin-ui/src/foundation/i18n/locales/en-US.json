@@ -10204,7 +10204,10 @@
       "disconnect-label": "Disconnect {pane} from {channel}",
       "go-to": "Go to {pane}",
       "auto-child": "Auto sub-topic",
-      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too."
+      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too.",
+      "unnamed-pane": "Unnamed pane",
+      "pane-closed": "Closed",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
