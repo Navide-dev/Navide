@@ -297,6 +297,85 @@ async def test_ui_diagnostics_also_returns_the_persisted_error_ledger(
     assert [e["message"] for e in result["persisted"]] == ["boom"]
 
 
+def _scoped_ledger(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    from agent_team_backend import error_ledger
+
+    led = error_ledger.ErrorLedger(tmp_path / "errors.jsonl")
+    monkeypatch.setattr(error_ledger, "_ledger", led)
+    led.record("renderer", "error", "pane.exit", "alpha fault", pane_id="pa", workspace="/ws/alpha")
+    led.record("renderer", "error", "pane.exit", "beta secret", pane_id="pb", workspace="/ws/beta")
+    led.record("main", "error", "main.uncaught", "unscoped main fault")
+    return led
+
+
+@pytest.mark.asyncio
+async def test_a_pane_sees_only_its_own_workspaces_persisted_entries(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, addressed: list[tuple[Any, dict[str, Any]]],
+) -> None:
+    led = _scoped_ledger(tmp_path, monkeypatch)
+    agent_messaging.register("pa", "worker", "/ws/alpha", agent_key="claude", owner=_Window())
+    task = asyncio.create_task(_answer("own"))
+    result = await plan_mcp.ui_diagnostics("/ws/alpha", _pane_ctx("pa"))
+    await task
+    led.close()
+    assert result["ok"] is True
+    assert [e["message"] for e in result["persisted"]] == ["alpha fault"]
+
+
+@pytest.mark.asyncio
+async def test_a_pane_asking_for_another_workspace_gets_no_persisted_entries(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]],
+) -> None:
+    led = _scoped_ledger(tmp_path, monkeypatch)
+    agent_messaging.register("pa", "worker", "/ws/alpha", agent_key="claude", owner=_Window())
+    task = asyncio.create_task(_answer("other"))
+    result = await plan_mcp.ui_diagnostics("/ws/beta", _pane_ctx("pa"))
+    await task
+    led.close()
+    assert "persisted" not in result
+
+
+@pytest.mark.asyncio
+async def test_a_refused_request_carries_no_persisted_entries(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    led = _scoped_ledger(tmp_path, monkeypatch)
+
+    async def refused(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {"ok": False, "result": None, "error": "not yours", "error_code": "ui_pane_private"}
+
+    monkeypatch.setattr(plan_mcp, "_ui_request", refused)
+    result = await plan_mcp.ui_diagnostics("/ws/alpha", _ctx())
+    led.close()
+    assert result["error_code"] == "ui_pane_private"
+    assert "persisted" not in result
+
+
+@pytest.mark.asyncio
+async def test_an_unanswered_request_for_the_panes_own_workspace_still_carries_it(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, addressed: list[tuple[Any, dict[str, Any]]],
+) -> None:
+    monkeypatch.setattr(plan_mcp, "_UI_INVOKE_TIMEOUT_S", 0.05)
+    led = _scoped_ledger(tmp_path, monkeypatch)
+    agent_messaging.register("pa", "worker", "/ws/alpha", agent_key="claude", owner=_Window())
+    result = await plan_mcp.ui_diagnostics("", _pane_ctx("pa"))
+    led.close()
+    assert result["error_code"] == "ui_action_timeout"
+    assert [e["message"] for e in result["persisted"]] == ["alpha fault"]
+
+
+@pytest.mark.asyncio
+async def test_the_host_still_sees_every_persisted_entry(
+    tmp_path, monkeypatch: pytest.MonkeyPatch, broadcasts: list[dict[str, Any]],
+) -> None:
+    led = _scoped_ledger(tmp_path, monkeypatch)
+    task = asyncio.create_task(_answer("host"))
+    result = await plan_mcp.ui_diagnostics("/ws/alpha", _ctx())
+    await task
+    led.close()
+    assert [e["message"] for e in result["persisted"]] == ["alpha fault", "beta secret", "unscoped main fault"]
+
+
 @pytest.mark.asyncio
 async def test_ui_diagnostics_uses_its_documented_defaults(
     broadcasts: list[dict[str, Any]],

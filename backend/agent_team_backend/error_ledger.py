@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
@@ -78,9 +79,14 @@ class ErrorLedger:
         return entry
 
     def read(
-        self, *, limit: int = 50, source: str = "", pane_id: str = "", since_ts: str = ""
+        self, *, limit: int = 50, source: str = "", pane_id: str = "", since_ts: str = "",
+        workspace: str = "",
     ) -> list[dict[str, Any]]:
-        """Newest entries last, at most ``limit``, optionally filtered."""
+        """Newest entries last, at most ``limit``, optionally filtered.
+
+        ``workspace`` keeps only entries recorded for that workspace (compared
+        resolved); entries with no workspace are left out by it."""
+        want = _canonical(workspace) if workspace else ""
         files = [self.path.with_name(f"{self.path.name}.{n}") for n in range(BACKUPS, 0, -1)]
         files.append(self.path)
         out: list[dict[str, Any]] = []
@@ -103,6 +109,8 @@ class ErrorLedger:
                         continue
                     if since_ts and str(entry.get("ts") or "") <= since_ts:
                         continue
+                    if want and _canonical(str(entry.get("workspace") or "")) != want:
+                        continue
                     out.append(entry)
         return out[-max(0, limit):] if limit else []
 
@@ -111,6 +119,26 @@ class ErrorLedger:
             if self._handler is not None:
                 self._handler.close()
                 self._handler = None
+
+
+def _canonical(path: str) -> str:
+    if not path:
+        return ""
+    try:
+        return os.path.realpath(os.path.abspath(path))
+    except (OSError, ValueError):
+        return path.rstrip("/")
+
+
+def _pane_workspace(pane_id: str) -> str:
+    """The workspace of a pane the registry still knows, else ""."""
+    try:
+        from . import agent_messaging
+
+        pane = agent_messaging.get(pane_id)
+    except Exception:  # noqa: BLE001 — attribution is best effort
+        return ""
+    return str(getattr(pane, "workspace_path", "") or "") if pane is not None else ""
 
 
 _ledger: ErrorLedger | None = None
@@ -126,6 +154,12 @@ def get() -> ErrorLedger:
 
 
 def record(source: str, level: str, code: str, message: str, **extra: str) -> dict[str, Any] | None:
+    # An entry for a known pane belongs to that pane's workspace: that is what
+    # lets ui_diagnostics show a pane only its own project's faults.
+    if extra.get("pane_id") and not extra.get("workspace"):
+        workspace = _pane_workspace(extra["pane_id"])
+        if workspace:
+            extra = {**extra, "workspace": workspace}
     try:
         return get().record(source, level, code, message, **extra)
     except Exception as err:  # noqa: BLE001 — the log dir itself may be unusable
