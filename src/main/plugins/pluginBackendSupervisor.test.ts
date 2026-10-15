@@ -1546,6 +1546,26 @@ describe('PluginBackendSupervisor', () => {
     }))
   })
 
+  it('keeps the message in the host-only diagnostic when the cause stack lacks it', async () => {
+    const stderr = vi.fn()
+    const spawnError = new Error('spawn /custom/private/plans ENOENT')
+    // Some runtimes build a stack that holds only a bare `Error` header.
+    spawnError.stack = 'Error\n    at spawnPlans (/custom/spawn.ts:1:1)'
+    const supervisor = makeSupervisor({
+      onStderr: stderr,
+      spawnProcess: () => {
+        throw spawnError
+      },
+    })
+    supervisors.push(supervisor)
+
+    await expect(supervisor.start()).rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
+
+    expect(stderr).toHaveBeenCalledWith(
+      'spawn /custom/private/plans ENOENT\nError\n    at spawnPlans (/custom/spawn.ts:1:1)\n',
+    )
+  })
+
   it('emits host-only diagnostic and original cause on async child error before generic failure', async () => {
     const stderr = vi.fn()
     const onFailure = vi.fn()
