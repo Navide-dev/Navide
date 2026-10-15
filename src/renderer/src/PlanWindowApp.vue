@@ -18,6 +18,7 @@ import { useNotify } from '@navide/plugin-ui/foundation'
 import { resolvePlanStore, type PlanCtx, type WriteResult } from './composables/planStore'
 import { sanitizePlanSectionHtml } from './editor/planRuntime'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
+import { recordDiagnostic, setDiagnosticSink } from './lib/uiDiagnostics'
 import PlansPane from './editor/PlansPane.vue'
 import WindowControls from './components/WindowControls.vue'
 import { needsDrawnWindowControls } from '../../shared/osplat'
@@ -60,6 +61,13 @@ const initialLocale = rawLocale === 'zh-TW' || rawLocale === 'en-US' || rawLocal
 const lastOpenedKey = lastOpenedStorageKey(workspacePath)
 
 const backend = useBackend()
+// This window's warn/error diagnostics also go to the on-disk error ledger
+// (see App.vue): a plan that could not be read is otherwise invisible.
+setDiagnosticSink((entry) => {
+  backend
+    .send('diagnostics.record', { level: entry.level, code: entry.code, message: entry.message, paneId: entry.paneId })
+    .catch(() => { /* best effort: the ring buffer still has it */ })
+})
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to this window's own ws connection so theme changes
 // made in other windows arrive as ui.settings_changed broadcasts.
@@ -233,7 +241,8 @@ async function planDocExists(relPath: string): Promise<boolean | null> {
       path: `${planRoot.value}/${relPath}`,
     })
     return res.payload?.exists === true
-  } catch {
+  } catch (error) {
+    recordDiagnostic({ level: 'warn', code: 'plans.stat_failed', message: `${relPath}: ${String(error)}` })
     return null
   }
 }
@@ -409,7 +418,10 @@ async function buildPlanContext(): Promise<string> {
   let meta: PlanCliMetaSummary | null = null
   let content: string | null = null
   if (relPath) {
-    const read = await resolvePlanStore(relPath).readMeta(planCtx(relPath)).catch(() => null)
+    const read = await resolvePlanStore(relPath).readMeta(planCtx(relPath)).catch((error) => {
+      recordDiagnostic({ level: 'warn', code: 'plans.context_meta_failed', message: `${relPath}: ${String(error)}` })
+      return null
+    })
     if (read) {
       meta = {
         name: read.meta.name,
@@ -423,7 +435,10 @@ async function buildPlanContext(): Promise<string> {
           workspace_path: planRoot.value,
           rel_path: relPath,
         })
-        .catch(() => null)
+        .catch((error) => {
+          recordDiagnostic({ level: 'warn', code: 'plans.context_read_failed', message: `${relPath}: ${String(error)}` })
+          return null
+        })
       content = resp?.payload?.ok ? (resp.payload.content ?? null) : null
     }
   }
