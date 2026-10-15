@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "tests": [
+    {
+      "test": "backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kilo]",
+      "category": "test-race",
+      "count": 1,
+      "firstSeen": "2026-10-15T04:18:03Z",
+      "lastSeen": "2026-10-15T04:18:03Z",
+      "runs": [
+        {
+          "run": 38679265730,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 266,
+          "at": "2026-10-15T04:18:03Z",
+          "evidence": "FAILED backend/tests/cli_regression/test_vendor_contracts.py::test_vendor_launch[kilo] - AssertionError: backend shutdown timed out; see /private/var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/pytest-of-runner/pytest-0/test_vendor_launch_kilo_0/backend.log"
+        }
+      ]
+    }
+  ]
+}
