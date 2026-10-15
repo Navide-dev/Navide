@@ -1830,6 +1830,8 @@
         }
       },
       "getPrereleases": "接收預覽版",
+      "getPrereleasesFailed": "無法變更「接收預覽版」設定：{error}",
+      "inventoryRefreshFailed": "無法重新讀取已安裝的 Navide 外掛清單：{error}",
       "incompatibleInstalled": "需要 Navide ≥ {version}",
       "incompatibleReason": "這個版本宣告需要 Navide {version} 以上。它仍保持啟用，但在你更新 Navide 前可能無法正常運作。",
       "pack": {
