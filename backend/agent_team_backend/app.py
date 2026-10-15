@@ -33,6 +33,7 @@ from . import hook_drain
 from . import guard_hooks
 from .guard import runtime as guard_runtime
 from . import ws_auth
+from . import error_ledger
 from . import loop_watchdog
 from . import mem_probe
 from . import osplat
@@ -2263,6 +2264,9 @@ async def _start_log_watcher() -> None:
     # loop thread's stack when the loop stops turning (issue #24), instead of
     # the freeze being reproducible only under sample(1).
     loop_watchdog.start(asyncio.get_running_loop())
+    # Exceptions nobody retrieved (a create_task without a done-callback)
+    # reached only stderr; record them in the error ledger as well.
+    error_ledger.install_loop_handler(asyncio.get_running_loop())
     # Guard events raised in hook worker threads are handed back to this loop.
     guard_runtime.remember_loop(asyncio.get_running_loop())
 
@@ -3809,6 +3813,7 @@ async def handle_message(session: Session, msg: dict[str, Any]) -> None:
         )
     except Exception as err:  # noqa: BLE001
         log.exception("handle_message failed for type=%s", msg_type)
+        error_ledger.record("backend", "error", "ws.internal_error", f"{msg_type}: {type(err).__name__}: {err}")
         if not session.dead:
             await session.send_json(
                 make_error(msg_id, msg_type, "INTERNAL_ERROR", _redact_home(str(err)))
