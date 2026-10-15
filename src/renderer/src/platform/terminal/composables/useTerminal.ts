@@ -43,6 +43,7 @@ import {
   groupPosToRowCol,
   groupRowColToPos,
   installTerminalLinks,
+  isTerminalLinkModifierKey,
   cellColToStrCol,
   strColToCellCol,
   splitTerminalLinkSuffix,
@@ -375,11 +376,14 @@ function openInEditor(
   workspacePath?: string,
   onFailure?: (filepath: string) => void,
 ): void {
-  const slash = absPath.lastIndexOf('/')
+  // A Windows drive path (C:\…) separates with '\' as well as '/'.
+  const win = /^[A-Za-z]:[\\/]/.test(absPath)
+  const slash = win ? Math.max(absPath.lastIndexOf('/'), absPath.lastIndexOf('\\')) : absPath.lastIndexOf('/')
   const dir = slash > 0 ? absPath.slice(0, slash) : '/'
-  const root = workspacePath?.replace(/\/+$/, '')
-  const inWorkspace = !!root && absPath.startsWith(`${root}/`)
-  const filepath = inWorkspace ? absPath.slice(root.length + 1) : absPath.slice(slash + 1)
+  const root = workspacePath?.replace(win ? /[\\/]+$/ : /\/+$/, '')
+  const inWorkspace = !!root && (absPath.startsWith(`${root}/`) || (win && absPath.startsWith(`${root}\\`)))
+  const rel = inWorkspace ? absPath.slice(root.length + 1) : absPath.slice(slash + 1)
+  const filepath = win ? rel.replace(/\\/g, '/') : rel
   // Called synchronously so the request leaves at pick time; a sync throw is
   // folded into the same failure path as a rejection.
   let pending: Promise<boolean | void>
@@ -1800,12 +1804,12 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     el.addEventListener('mousemove', _mousePosTracker)
 
     _cmdKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Meta' || _isCmdHeld) return
+      if (!isTerminalLinkModifierKey(e.key) || _isCmdHeld) return
       _isCmdHeld = true
       el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: _lastMX, clientY: _lastMY, metaKey: true }))
     }
     _cmdKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== 'Meta') return
+      if (!isTerminalLinkModifierKey(e.key)) return
       _isCmdHeld = false
       el.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: _lastMX, clientY: _lastMY }))
     }
@@ -1854,7 +1858,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
           const home = await fetchHomeDir(terminalPort)
           const resolveAbs = (fp: string): string | undefined => {
             const expanded = expandHomePath(fp, home)
-            return expanded.startsWith('/')
+            return expanded.startsWith('/') || /^[A-Za-z]:[\\/]/.test(expanded)
               ? expanded
               : wsPath ? `${wsPath}/${expanded.replace(/^\.\//, '')}` : undefined
           }
@@ -1871,7 +1875,7 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
           const chosenRaw = okIdx >= 0 ? request.candidates[okIdx] : request.fallback
           const { filepath, line: lineNum } = splitTerminalLinkSuffix(chosenRaw)
           if (!filepath) return
-          const basename = filepath.split('/').filter(Boolean).pop() ?? filepath
+          const basename = filepath.split(/[\\/]/).filter(Boolean).pop() ?? filepath
           filePicker.open({
             initialQuery: basename,
             lineNum,

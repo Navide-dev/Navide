@@ -13,7 +13,7 @@ import { createTerminalMentionMenu } from './terminalMentionMenu'
 import { readXtermTheme } from './terminalTheme'
 import { createTerminalInputHandlers, encodeShiftEnter } from './terminalInput'
 import { createResizeController, type ResizeController } from './terminalResize'
-import { installTerminalLinks, extractPlanDocRelPath } from './terminalLinkInteraction'
+import { installTerminalLinks, extractPlanDocRelPath, isTerminalLinkModifier, isTerminalLinkModifierKey } from './terminalLinkInteraction'
 import { buildMentionPickData, clusterMentionCandidates, shouldOpenMentionMenu, type MentionCandidate } from './terminalMentionModel'
 import { setContext, settingsGet, settingsReadiness, settingsReady, settingsSet } from './shared'
 
@@ -73,10 +73,10 @@ function trackCommandKey(event: KeyboardEvent | MouseEvent): void {
   if (event instanceof MouseEvent) {
     lastMouseX = event.clientX
     lastMouseY = event.clientY
-    commandHeld = event.metaKey
+    commandHeld = isTerminalLinkModifier(event)
     return
   }
-  if (event.key !== 'Meta') return
+  if (!isTerminalLinkModifierKey(event.key)) return
   const held = event.type === 'keydown'
   if (commandHeld === held) return
   commandHeld = held

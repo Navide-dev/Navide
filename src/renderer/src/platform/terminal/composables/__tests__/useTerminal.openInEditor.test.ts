@@ -124,7 +124,7 @@ afterEach(() => {
 async function cmdClickOpen(
   absPath: string,
   workspacePath: string | undefined,
-  opts: { exists?: boolean } = {}
+  opts: { exists?: boolean; ctrl?: boolean } = {}
 ): Promise<{ params: OpenParams | undefined; scope: ReturnType<typeof withScope>['scope'] }> {
   screen.line = absPath
   const openEditorWindow = vi.fn()
@@ -145,7 +145,8 @@ async function cmdClickOpen(
     new MouseEvent('mousedown', {
       bubbles: true,
       cancelable: true,
-      metaKey: true,
+      metaKey: !opts.ctrl,
+      ctrlKey: !!opts.ctrl,
       button: 0,
       clientX: 5,
       clientY: 10,
@@ -275,6 +276,42 @@ describe('useTerminal — a mouse pick that opens nothing says so', () => {
     const failed = vi.fn()
     const { scope } = await cmdClickThenClickRow(vi.fn(async () => { throw new Error('ipc gone') }), failed)
     expect(failed).toHaveBeenCalledExactlyOnceWith('docs/adding-a-chat-channel.md')
+    scope.stop()
+  })
+})
+
+describe('useTerminal — the link modifier follows the platform', () => {
+  function onPlatform(platform: string): void {
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform)
+  }
+  afterEach(() => vi.restoreAllMocks())
+
+  it('opens with Ctrl+click on Windows, where the OS takes Win+click', async () => {
+    onPlatform('Win32')
+    const { params, scope } = await cmdClickOpen('/ws/src/app.ts', '/ws', { ctrl: true })
+    expect(params).toEqual({ workspace_path: '/ws', filepath: 'src/app.ts' })
+    scope.stop()
+  })
+
+  it('opens with Ctrl+click on Linux', async () => {
+    onPlatform('Linux aarch64')
+    const { params, scope } = await cmdClickOpen('/ws/src/app.ts', '/ws', { ctrl: true })
+    expect(params).toEqual({ workspace_path: '/ws', filepath: 'src/app.ts' })
+    scope.stop()
+  })
+
+  it('leaves Ctrl+click alone on macOS (Ctrl+click is the context click there)', async () => {
+    onPlatform('MacIntel')
+    const { params, scope } = await cmdClickOpen('/ws/src/app.ts', '/ws', { ctrl: true })
+    expect(params).toBeUndefined()
+    expect(document.querySelector('.term-file-picker-root')).toBeNull()
+    scope.stop()
+  })
+
+  it('opens a Windows backslash path inside the workspace as a relative file', async () => {
+    onPlatform('Win32')
+    const { params, scope } = await cmdClickOpen('C:\\Users\\u\\proj\\src\\main.ts', 'C:\\Users\\u\\proj', { ctrl: true })
+    expect(params).toEqual({ workspace_path: 'C:\\Users\\u\\proj', filepath: 'src/main.ts' })
     scope.stop()
   })
 })
