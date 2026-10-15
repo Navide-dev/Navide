@@ -88,13 +88,14 @@ shows one. Every file the package contains must be listed in
 `artifact-files.json` — the packager never zips a directory recursively, so
 source files, keys and `node_modules` cannot slip in.
 
-> **Before installing it in Navide**, make every view report that it has
-> mounted. Navide waits 10 seconds after a view's HTML loads; at install and
-> update time a view that has not reported ready fails the package. The
-> scaffold's plain `main.js` does not send this signal, so it validates and
-> packages but does not install as written. Bundle the view with
-> `@navide/plugin-sdk` and call `createPluginViewRuntimeClient().ready()` after
-> mounting; the SDK factories are described under
+> **Every view must report that it has mounted.** Navide waits 10 seconds
+> after a view's HTML loads; at install and update time a view that has not
+> reported ready fails the package. The scaffold's `main.js` reports ready
+> itself with `window.nav.ready()`, the call
+> `createPluginViewRuntimeClient().ready()` makes, so it installs as written.
+> Once a view has a build step, bundle it with `@navide/plugin-sdk` and call
+> `createPluginViewRuntimeClient().ready()` after mounting instead; the SDK
+> factories are described under
 > [SDK interface](plugin-development-v2.md#sdk-interface). Navide never calls a
 > `definePlugin` activation function.
 

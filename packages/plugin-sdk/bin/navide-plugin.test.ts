@@ -4,7 +4,9 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createServer, request as httpRequest, type IncomingMessage, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createPluginViewRuntimeClient } from '../src/index'
 import { readZipEntries } from '../../../src/main/plugins/pluginPackage'
 
 const roots: string[] = []
@@ -289,6 +291,39 @@ describe('navide-plugin developer workflow', { timeout: 30_000 }, () => {
     ])
     expect(run(['init', 'hello', '--id', 'acme.other'], directory).status).not.toBe(0)
     expect(run(['init', 'bad', '--id', 'NoNamespace'], directory).status).not.toBe(0)
+  })
+
+  it('scaffolds a view that sends the same readiness handshake as the SDK', () => {
+    // A stub of the preload bridge the SDK's runtime client requires; every call is recorded.
+    const bridge = (calls: string[]) => ({
+      ready: () => calls.push('ready'),
+      onOpenTarget: () => () => undefined,
+    })
+    const sdkCalls: string[] = []
+    const previous = (globalThis as { nav?: unknown }).nav
+    ;(globalThis as { nav?: unknown }).nav = bridge(sdkCalls)
+    try {
+      createPluginViewRuntimeClient().ready()
+    } finally {
+      ;(globalThis as { nav?: unknown }).nav = previous
+    }
+
+    const directory = root()
+    expect(run(['init', 'hello', '--id', 'acme.hello-world'], directory).status).toBe(0)
+    const html = readFileSync(join(directory, 'hello', 'frontend/main/index.html'), 'utf8')
+    expect(html).toContain('<script src="./main.js"></script>')
+    const scaffoldCalls: string[] = []
+    const status = { textContent: '' }
+    const context: Record<string, unknown> = {
+      nav: bridge(scaffoldCalls),
+      document: { getElementById: (id: string) => (id === 'status' ? status : null) },
+    }
+    context.window = context
+    context.globalThis = context
+    runInNewContext(readFileSync(join(directory, 'hello', 'frontend/main/main.js'), 'utf8'), context)
+    expect(status.textContent).not.toBe('')
+    expect(scaffoldCalls).toEqual(['ready'])
+    expect(scaffoldCalls).toEqual(sdkCalls)
   })
 
   it('generates an owner-only keypair that signs, and never overwrites a key', () => {
