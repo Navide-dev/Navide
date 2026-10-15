@@ -151,3 +151,25 @@ async def test_diagnostics_record_refuses_what_is_not_a_warn_or_error_entry(ledg
     await app.handle_message(session, {"id": "8", "type": "diagnostics.record", "payload": payload})
     assert session.sent[0]["error"]["code"] == "BAD_REQUEST"
     assert ledger.read() == []
+
+
+def test_read_filters_by_workspace(ledger) -> None:
+    ledger.record("renderer", "error", "c", "in alpha", workspace="/ws/alpha/")
+    ledger.record("renderer", "error", "c", "in beta", workspace="/ws/beta")
+    ledger.record("main", "error", "c", "nowhere")
+    assert [e["message"] for e in ledger.read(workspace="/ws/alpha")] == ["in alpha"]
+    assert len(ledger.read()) == 3
+
+
+def test_an_entry_with_a_known_pane_records_that_panes_workspace(ledger) -> None:
+    from agent_team_backend import agent_messaging
+
+    agent_messaging._reset_for_test()
+    try:
+        agent_messaging.register("p9", "worker", "/ws/alpha", owner=object())
+        entry = error_ledger.record("renderer", "error", "pane.exit", "x", pane_id="p9")
+        assert entry is not None and entry["workspace"] == "/ws/alpha"
+        unknown = error_ledger.record("renderer", "error", "pane.exit", "y", pane_id="gone")
+        assert unknown is not None and "workspace" not in unknown
+    finally:
+        agent_messaging._reset_for_test()
