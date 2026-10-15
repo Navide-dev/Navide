@@ -195,7 +195,7 @@ import {
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { terminalMultilineRefusal } from './lib/terminalInput'
-import { recordDiagnostic, readDiagnostics, currentDiagnosticSeq } from './lib/uiDiagnostics'
+import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { quickClassify } from './lib/quick-classify'
@@ -424,6 +424,13 @@ const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vu
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 
 const backend = useBackend()
+// Warn and error diagnostics also go to the backend's on-disk error ledger,
+// which outlives a reload and is what ui_diagnostics returns as `persisted`.
+setDiagnosticSink((entry) => {
+  backend
+    .send('diagnostics.record', { level: entry.level, code: entry.code, message: entry.message, paneId: entry.paneId })
+    .catch(() => { /* best effort: the ring buffer still has it */ })
+})
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
@@ -10192,7 +10199,7 @@ watch(currentWorkspace, (_next, prev) => {
 registerCommand('ui.diagnostics.read', (args) => {
   const a = (args as { sinceSeq?: number; paneId?: string; limit?: number } | undefined) ?? {}
   const entries = readDiagnostics({ sinceSeq: a.sinceSeq, paneId: a.paneId || undefined, limit: a.limit })
-  return { entries, nextSeq: currentDiagnosticSeq() }
+  return { entries, nextSeq: diagnosticsNextSeq(entries, a.limit) }
 })
 registerCommand('ui.tab.switch', (args) => {
   const tabId = (args as { tabId?: string } | undefined)?.tabId
@@ -15017,10 +15024,12 @@ function relaunchAfterInstall(depId: string): void {
 window.addEventListener('error', (e) => {
   const where = e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : ''
   pipelineLog(`❌ exception: ${e.message}${where}`)
+  recordDiagnostic({ level: 'error', code: 'window.error', message: `${e.message}${where}` })
 })
 window.addEventListener('unhandledrejection', (e) => {
   const reason = e.reason instanceof Error ? e.reason.message : String(e.reason)
   pipelineLog(`❌ unhandled rejection: ${reason}`)
+  recordDiagnostic({ level: 'error', code: 'window.unhandledrejection', message: reason })
 })
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
