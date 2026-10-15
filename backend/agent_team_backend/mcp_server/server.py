@@ -292,6 +292,10 @@ def _workspace_mismatch_warning(workspace_path: str) -> str | None:
     target = _norm_workspace(workspace_path)
     if any(_norm_workspace(pane) == target for pane in panes):
         return None
+    # A pane in a repository subfolder has the git root as its plan root (the
+    # root its plan window resolves to), so a plan written there is visible.
+    if any(_norm_workspace(resolve_plan_root(pane)) == target for pane in set(panes)):
+        return None
     known = ", ".join(sorted(set(panes)))
     return (
         f"no live Navide pane uses workspace_path '{workspace_path}', so this plan "
