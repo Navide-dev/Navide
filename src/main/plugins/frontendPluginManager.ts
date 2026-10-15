@@ -2662,7 +2662,8 @@ export class FrontendPluginManager {
     if (initiator.kind === 'agent' && this.executionPolicyResolver) {
       try {
         executionPolicy = this.executionPolicyResolver(plugin.workspacePath ?? undefined)
-      } catch {
+      } catch (error) {
+        this.noteExecutionPolicyFailure(error)
         return null
       }
     }
@@ -6417,7 +6418,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(workspacePath)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return false
     }
     return Boolean(
@@ -6710,7 +6712,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(plugin.workspacePath ?? undefined)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return false
     }
     if (!snapshot) return false
@@ -6739,6 +6742,21 @@ export class FrontendPluginManager {
     )
   }
 
+  private readonly executionPolicyFailuresNoted = new Set<string>()
+
+  /** A resolver that throws still denies (fail closed), but used to do so with
+   *  no trace at all. Each distinct failure is written once to main.log and
+   *  the error ledger; repeats of it are not, since every agent call would
+   *  otherwise log again. */
+  private noteExecutionPolicyFailure(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error)
+    if (this.executionPolicyFailuresNoted.has(message)) return
+    if (this.executionPolicyFailuresNoted.size >= 50) this.executionPolicyFailuresNoted.clear()
+    this.executionPolicyFailuresNoted.add(message)
+    warnMain(`[plugin-backend] execution policy could not be read; agent calls are denied: ${message}`)
+    recordMainFault('plugin.policy_resolver_failed', message)
+  }
+
   private currentAgentExecutionPolicy(
     plugin: RunningPlugin,
     initiator: AuthenticatedInitiator | undefined,
@@ -6747,7 +6765,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(plugin.workspacePath ?? undefined)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return null
     }
     return snapshot && snapshot.state !== 'corrupt' ? snapshot : null

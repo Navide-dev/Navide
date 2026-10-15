@@ -11275,6 +11275,34 @@ describe('first-party Git private bridge', () => {
     })
   })
 
+  it('still denies when the policy resolver throws, but says why once in main.log and the ledger', async () => {
+    const { mgr, instanceId } = await openGitView()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    mgr.setExecutionPolicyResolver(() => {
+      throw new Error('policy file unreadable')
+    })
+    const handler = vi.fn()
+    mgr.setPublicCapabilityHandler(handler)
+    const call = (reqId: string) => mgr.executeAgentCapability(instanceId, {
+      reqId, ns: 'fs', method: 'listFilesFlat', args: { query: '', maxResults: 1 },
+    })
+    try {
+      await expect(call('throwing-1')).resolves.toMatchObject({ ok: false })
+      await expect(call('throwing-2')).resolves.toMatchObject({ ok: false })
+      expect(handler).not.toHaveBeenCalled()
+      const warned = warnSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('policy file unreadable'))
+      expect(warned).toHaveLength(1)
+      const lines = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n')
+      expect(lines.map((l) => JSON.parse(l).code)).toEqual(['plugin.policy_resolver_failed'])
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
+  })
+
   it('rechecks a stale agent policy before invoking the public handler', async () => {
     const { mgr, instanceId } = await openGitView()
     let reads = 0
