@@ -7342,6 +7342,64 @@ describe('view lifecycle (open / hideSelf / resize / death paths)', () => {
     expect(view.bounds).toEqual({ x: 0, y: 0, width: 1024, height: 768 })
   })
 
+  describe('fill view across window-state changes off macOS', () => {
+    const baseline = platformId()
+    afterEach(() => {
+      setPlatformId(baseline)
+      vi.useRealTimers()
+    })
+
+    it.each(['linux', 'win32'] as const)('follows a maximize that fires no resize (%s)', (platform) => {
+      setPlatformId(platform)
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 1100, height: 694 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+
+      host.contentBounds = { x: 0, y: 0, width: 1214, height: 702 }
+      host.emit('maximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+      mgr.deactivate('acme.editor')
+    })
+
+    it('reads the bounds again once the window manager has settled (GNOME reports stale bounds)', () => {
+      setPlatformId('linux')
+      vi.useFakeTimers()
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 1100, height: 694 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+
+      host.emit('resize') // fired while the old size is still reported
+      host.contentBounds = { x: 0, y: 0, width: 1214, height: 702 }
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1100, height: 694 })
+      vi.advanceTimersByTime(200)
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+
+      // Hidden views stop tracking, settle timer included.
+      host.emit('maximize')
+      mgr.deactivate('acme.editor')
+      host.contentBounds = { x: 0, y: 0, width: 500, height: 400 }
+      vi.advanceTimersByTime(200)
+      host.emit('unmaximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+    })
+
+    it('keeps macOS on the resize event alone', () => {
+      setPlatformId('darwin')
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 800, height: 600 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+      host.contentBounds = { x: 0, y: 0, width: 1024, height: 768 }
+      host.emit('maximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+      host.emit('resize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1024, height: 768 })
+      mgr.deactivate('acme.editor')
+    })
+  })
+
   it('re-opening a running view reveals and focuses the hosting window', () => {
     const mgr = new FrontendPluginManager()
     const host = new FakeBrowserWindow()
