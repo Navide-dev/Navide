@@ -5,8 +5,8 @@
 > (`navide.git`, `navide.plans`, `navide.mini-ide`) ship as Manifest v2
 > packages, and v1 remains only as their recovery path. The public manifest
 > v2, SDK, permissions, and compatibility policy are specified separately in the
-> [Plugin Developer Spec v2 draft](plugin-development-v2.md). Do not use the v2
-> examples until the migration plan marks that contract as implemented.
+> [Plugin Developer Spec v2](plugin-development-v2.md). New packages, and
+> everything published to the Navide Marketplace, use v2.
 
 This guide is about **Navide plugins**, which extend Navide itself, not the
 CLI extensions an AI CLI installs for itself. See the [glossary](glossary.md)
@@ -231,10 +231,12 @@ startup.
 
 Installed Manifest v2 backend contributions instead reach the service through
 a Host-generated activation catalog bound to the backend child process by an
-exact SHA-256 digest. The Python service validates that projection but does not
-import or spawn its packaged executable yet. Electron's child-process
-supervisor must land before third-party or Developer Mode v2 backends can run;
-until then those entries remain fail-closed.
+exact SHA-256 digest. The Python service validates that projection but never
+imports or spawns the packaged executable; Electron's child-process supervisor
+runs it. A third-party backend runs only inside the OS sandbox, after the user
+allows it (see
+[Third-party backends](plugin-development-v2.md#third-party-backends-sandbox-consent-and-publishing)).
+Developer Mode never runs a backend.
 
 `navide_plans` is the reference implementation: it registers a route, startup
 and shutdown hooks, and a spawn transformer.
@@ -532,6 +534,15 @@ local-only warning. It does not scan a parent directory or grant Registry
 provenance, publishing, or auto-update behavior. The fixed `dist-plugins`
 bundles remain Host-owned development fixtures.
 
+Developer Mode writes no capability grant, and the Host opens a Manifest v2
+view only with a grant for that exact package id and version. A v2 package
+loaded this way is therefore refused when its view opens ("package-version
+capability grant is missing"). To run a v2 package in the app, install it from
+a local Registry, as described in
+[Publishing to the Navide Marketplace](marketplace-publishing.md). To exercise
+a backend, use `navide-plugin dev-backend`, which answers every Host bridge
+request with `CAPABILITY_DENIED`. There is no `navide-plugin dev` command.
+
 `noop` verifies the IPC bridge end to end with a `ping` call. `fs_probe`
 demonstrates a real capability call plus event subscription. Both are minimal
 and are the fastest way to confirm your environment works before writing a real
@@ -555,8 +566,14 @@ Two conventions are worth copying:
 ## Current limits
 
 - Plugins can be installed and removed, but not disabled — there is no
-  enable/disable state.
+  enable/disable state. A third-party native backend has its own disable
+  switch in Settings.
 - `chat` and `ui` backend capabilities are interface-only for Python plugins;
   see the maturity table above.
-- `contributes.views` and `contributes.commands` are accepted and validated by
-  the manifest schema, but are not yet rendered or dispatched by the host.
+- In manifest v1, `contributes.views` and `contributes.commands` are accepted
+  and validated by the manifest schema, but are not rendered or dispatched by
+  the host.
+- Manifest v2 renders `contributes.views` of kind `custom` only and rejects
+  `contributes.commands`; there are no menu or keybinding contribution points.
+- Developer Mode cannot open a Manifest v2 view or run a backend; see
+  [Local development](#local-development).

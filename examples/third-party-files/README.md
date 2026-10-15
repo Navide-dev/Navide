@@ -8,6 +8,15 @@ The manifest declares `fs`, so activation may call `fs.readFile`. It does not
 declare `shell`, so the same activation deliberately calls `shell.run` and
 records the Host's `CAPABILITY_DENIED` response.
 
+The activation runs only in the smoke test below, which calls the exported
+`plugin.activate` with an in-memory Host. Navide itself never calls a
+`definePlugin` activation function, and this view never calls
+`createPluginViewRuntimeClient().ready()`, so installed in Navide it would fail
+the readiness check and do nothing. Treat the example as a reference for the
+external build and packaging workflow; for the runtime pattern Navide executes,
+see
+[SDK interface](../../docs/en-US/plugin-development-v2.md#sdk-interface).
+
 Before the public packages are published to npm, run the external workspace
 smoke test from the Navide repository root:
 

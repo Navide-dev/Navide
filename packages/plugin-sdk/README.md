@@ -30,4 +30,14 @@ digest of the complete archive with a detached Ed25519 signature. `login`
 signs in through the Registry in the browser and stores a publish token in
 `~/.config/navide-plugin/credentials.json` (0600); `publish` uploads to
 `--registry`, `$NAVIDE_REGISTRY_URL`, or `https://server.navide.dev/registry`.
-Runtime activation remains a Navide responsibility.
+`dev-backend` runs a built backend under the same sandbox profile Navide uses
+and answers every Host bridge request with `CAPABILITY_DENIED`. There is no
+`dev` command.
+
+At runtime a view uses the factories `createPluginCapabilityClient()`
+(capability calls and events), `createPluginViewRuntimeClient()` (`ready()`,
+open targets, window and detail composition) and `createPluginBackendClient()`
+(the package's own backend). Each view must call `ready()` after mounting.
+`definePlugin` only returns a frozen `{ activate }` object; Navide never calls
+`activate`. See
+[SDK interface](../../docs/en-US/plugin-development-v2.md#sdk-interface).
