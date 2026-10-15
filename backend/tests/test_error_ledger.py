@@ -114,3 +114,40 @@ async def test_a_failing_request_handler_is_recorded(ledger, monkeypatch) -> Non
     entries = ledger.read()
     assert [e["code"] for e in entries] == ["ws.internal_error"]
     assert "some.request: ValueError: handler blew up" in entries[0]["message"]
+
+
+class _WsSession:
+    dead = False
+
+    def __init__(self) -> None:
+        self.sent: list[dict[str, Any]] = []
+
+    async def send_json(self, data: dict[str, Any]) -> None:
+        self.sent.append(data)
+
+
+async def test_the_renderer_records_through_diagnostics_record(ledger) -> None:
+    from agent_team_backend import app
+
+    session = _WsSession()
+    await app.handle_message(session, {"id": "7", "type": "diagnostics.record", "payload": {
+        "level": "error", "code": "window.error", "message": "TypeError: x is undefined",
+        "paneId": "p1", "workspace": "/ws/a",
+    }})
+    assert session.sent[0]["ok"] is True
+    entry = ledger.read()[-1]
+    assert entry["source"] == "renderer" and entry["code"] == "window.error"
+    assert entry["pane_id"] == "p1" and entry["workspace"] == "/ws/a"
+
+
+@pytest.mark.parametrize("payload", [
+    None, [], {"level": "info", "code": "c", "message": "m"}, {"level": "error", "code": "", "message": "m"},
+    {"level": "error", "code": "c", "message": 5},
+])
+async def test_diagnostics_record_refuses_what_is_not_a_warn_or_error_entry(ledger, payload) -> None:
+    from agent_team_backend import app
+
+    session = _WsSession()
+    await app.handle_message(session, {"id": "8", "type": "diagnostics.record", "payload": payload})
+    assert session.sent[0]["error"]["code"] == "BAD_REQUEST"
+    assert ledger.read() == []
