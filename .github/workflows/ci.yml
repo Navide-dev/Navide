@@ -11,9 +11,32 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a pull request's run, but every main run finishes:
+  # each one is the only verdict for its commit.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  # Which job groups this pull request needs; pushes always run everything.
+  # scripts/ci-changed-scopes.mjs holds the rules and runs everything whenever
+  # it is unsure. A job group whose output is empty (this job failed) still
+  # runs, and the gate below fails on this job's own result.
+  changes:
+    name: Changed scopes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.scopes.outputs.backend }}
+      frontend: ${{ steps.scopes.outputs.frontend }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The merge commit and its first parent (the base branch).
+          fetch-depth: 2
+      - name: Classify changed files
+        id: scopes
+        run: node scripts/ci-changed-scopes.mjs
+
   dependency-audit:
     # Known-vulnerability scan of the locked dependency trees (SCA). This gate
     # blocks: the backlog it was provisionally exempted for is cleared (see
@@ -156,6 +179,8 @@ jobs:
   # of the contract. Ubuntu 22.04 retains the supported glibc floor.
   frontend:
     name: Frontend tests (${{ matrix.platform }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -207,6 +232,8 @@ jobs:
 
   build-artifacts:
     name: Build and artifact contracts (${{ matrix.platform }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -272,6 +299,8 @@ jobs:
   # complete suites. Only Windows is split across four collection-based shards.
   backend:
     name: Backend tests (${{ matrix.platform }}, ${{ matrix.shard }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -446,16 +475,18 @@ jobs:
           retention-days: 7
 
   lint-and-test:
-    # Stable required-check name; missing, cancelled and skipped checks fail.
+    # Stable required-check name; missing, cancelled and skipped checks fail,
+    # except a group the path filter (the changes job) chose not to run.
     name: Lint and test
     if: ${{ always() }}
-    needs: [static, frontend, build-artifacts, backend, registry, dependency-audit, stt-sidecar]
+    needs: [changes, static, frontend, build-artifacts, backend, registry, dependency-audit, stt-sidecar]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Require every check to succeed
         shell: bash
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           BUILD_ARTIFACTS_RESULT: ${{ needs['build-artifacts'].result }}
@@ -463,11 +494,21 @@ jobs:
           REGISTRY_RESULT: ${{ needs.registry.result }}
           AUDIT_RESULT: ${{ needs['dependency-audit'].result }}
           STT_RESULT: ${{ needs['stt-sidecar'].result }}
+          RUN_FRONTEND: ${{ needs.changes.outputs.frontend }}
+          RUN_BACKEND: ${{ needs.changes.outputs.backend }}
         run: |
-          for check in "static=$STATIC_RESULT" "frontend=$FRONTEND_RESULT" \
-            "build-artifacts=$BUILD_ARTIFACTS_RESULT" "backend=$BACKEND_RESULT" \
-            "registry=$REGISTRY_RESULT" "dependency-audit=$AUDIT_RESULT" \
-            "stt-sidecar=$STT_RESULT"; do
-            echo "$check"
-            test "${check#*=}" = success || exit 1
-          done
+          # "skipped" passes only when the filter said exactly "false"; a job
+          # that ran must succeed whatever the filter said.
+          check() {
+            echo "$1=$2${3:+ (filter: run=$3)}"
+            if [ "$2" = skipped ] && [ "${3:-}" = false ]; then return 0; fi
+            test "$2" = success || exit 1
+          }
+          check changes "$CHANGES_RESULT"
+          check static "$STATIC_RESULT"
+          check frontend "$FRONTEND_RESULT" "$RUN_FRONTEND"
+          check build-artifacts "$BUILD_ARTIFACTS_RESULT" "$RUN_FRONTEND"
+          check backend "$BACKEND_RESULT" "$RUN_BACKEND"
+          check registry "$REGISTRY_RESULT"
+          check dependency-audit "$AUDIT_RESULT"
+          check stt-sidecar "$STT_RESULT"
