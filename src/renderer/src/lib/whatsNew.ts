@@ -113,20 +113,40 @@ export const WHATS_NEW: WhatsNewEntry[] = [
   {
     version: '0.2.23',
     title: {
-      'zh-TW': '解除綁定的頻道聊天不再收到 pane 的回覆、更簡潔的開始畫面、安全性加強',
-      'en-US': 'Unbound Channel Chats Stay Unbound, a Simpler Start Screen, and Security Hardening',
-      'ja-JP': '紐づけを解除したチャットにペインの返信が届かなくなりました、シンプルになった開始画面、セキュリティの強化',
+      'zh-TW': '解除綁定的頻道聊天不再收到 pane 的回覆、狀態列通知鈴鐺、Windows 與 Linux 的快速鍵和視窗修正、安全性加強',
+      'en-US': 'Unbound Channel Chats Stay Unbound, a Notifications Bell, Windows and Linux Shortcut and Window Fixes, and Security Hardening',
+      'ja-JP': '紐づけを解除したチャットにペインの返信が届かなくなりました、ステータスバーの通知ベル、Windows と Linux のショートカットとウィンドウの修正、セキュリティの強化',
     },
     highlights: [
       {
-        'zh-TW': 'Telegram 等頻道聊天：pane 的回合結束時沒有文字，Navide 會先保留這則請求，最多等 120 秒讓文字送到。在 0.2.22 裡，如果在這段等待中解除綁定（或 pane 關掉了），pane 的下一則回覆，連你在鍵盤上打的那一則，都可能被送到已解除綁定的聊天。現在解除綁定會一併丟掉保留的請求，不會再有任何內容送到那個聊天。',
-        'en-US': 'Telegram and other channel chats: when a pane’s turn ends without text, Navide holds the chat request for up to 120 s for that text. In 0.2.22, if the chat was unbound (or the pane went away) during that wait, the pane’s next reply, even one typed at the keyboard, could be sent to the unbound chat. Unbinding now drops the held request, so nothing more is sent to that chat.',
-        'ja-JP': 'Telegram などのチャンネルのチャット：ペインのターンがテキストなしで終わると、Navide はそのテキストを最大 120 秒待つあいだリクエストを保留します。0.2.22 では、この待ち時間中にチャットの紐づけを解除する（またはペインがなくなる）と、ペインの次の返信が、キーボードから入力したものも含めて、紐づけを解除したチャットに送られることがありました。紐づけを解除すると保留中のリクエストも破棄されるようになり、そのチャットには何も送られなくなりました。',
+        'zh-TW': 'Telegram 等頻道聊天：pane 的回合結束時沒有文字，Navide 會先保留這則請求，最多等 120 秒讓文字送到。在 0.2.22 裡，如果在這段等待中解除綁定（或 pane 關掉了），pane 的下一則回覆，連你在鍵盤上打的那一則，都可能被送到已解除綁定的聊天。現在解除綁定會一併丟掉保留的請求，不會再有任何內容送到那個聊天。「Channel 連線監控」的每一列現在會同時顯示連線的兩端：pane（已關閉的會標上「已關閉」）以及平台、bot 和聊天名稱。',
+        'en-US': 'Telegram and other channel chats: when a pane’s turn ends without text, Navide holds the chat request for up to 120 s for that text. In 0.2.22, if the chat was unbound (or the pane went away) during that wait, the pane’s next reply, even one typed at the keyboard, could be sent to the unbound chat. Unbinding now drops the held request, so nothing more is sent to that chat. Each row in Channel connections now shows both ends of its link: the pane (marked “Closed” when it is gone) and the platform, bot and chat name.',
+        'ja-JP': 'Telegram などのチャンネルのチャット：ペインのターンがテキストなしで終わると、Navide はそのテキストを最大 120 秒待つあいだリクエストを保留します。0.2.22 では、この待ち時間中にチャットの紐づけを解除する（またはペインがなくなる）と、ペインの次の返信が、キーボードから入力したものも含めて、紐づけを解除したチャットに送られることがありました。紐づけを解除すると保留中のリクエストも破棄されるようになり、そのチャットには何も送られなくなりました。「チャンネル接続」の各行には接続の両端が表示されるようになりました。ペイン（なくなったものは「閉じています」と表示）と、プラットフォーム、bot、チャット名です。',
+      },
+      {
+        'zh-TW': 'Windows 與 Linux 快速鍵改變：主視窗側欄分頁改成 Ctrl+Alt+1–5，設定改成 Ctrl+,。這些按鍵不會再傳給終端機 pane 裡的 CLI。Ctrl+1–9 仍然是選擇 CLI 類型。在 AltGr+數字會打出字元的鍵盤配置上（例如德文的 ² 和 ³），那個數字鍵照樣打出字元，不會切換分頁。macOS 不變。',
+        'en-US': 'Windows and Linux shortcuts change: the main window’s sidebar tabs are now Ctrl+Alt+1–5 and Settings is Ctrl+,. Those keys no longer reach the CLI in a terminal pane. Ctrl+1–9 still selects the CLI type. On keyboard layouts where AltGr+digit types a character (German ² and ³, for example), that digit keeps typing the character and does not switch tabs. macOS is unchanged.',
+        'ja-JP': 'Windows と Linux のショートカットが変わりました：メインウィンドウのサイドバーのタブは Ctrl+Alt+1〜5、設定は Ctrl+, になりました。これらのキーはターミナルのペインの CLI には送られなくなります。Ctrl+1〜9 は引き続き CLI の種類を選びます。AltGr+数字で文字が入力されるキーボード配列（たとえばドイツ語の ² と ³）では、その数字キーはこれまでどおり文字を入力し、タブは切り替わりません。macOS は変わりません。',
+      },
+      {
+        'zh-TW': '狀態列新增通知鈴鐺：一眼就能看出系統通知和提示音是否開著，系統拒絕通知權限時會顯示警示點。點一下就能直接切換「系統通知」和「提示音」，也能看到通知權限狀態，或前往通知設定。',
+        'en-US': 'A notifications bell in the status bar shows at a glance whether system notifications and the notification sound are on, with a warning dot when the system has denied notifications. Click it to switch “System notifications” and “Notification sound” on the spot, see the permission status, or go to Notification settings.',
+        'ja-JP': 'ステータスバーに通知ベルが加わりました。システム通知と通知音がオンかどうかがひと目でわかり、システムが通知を許可していないときは警告の点が付きます。クリックすると「システム通知」と「通知音」をその場で切り替えられ、通知の許可状態の確認や通知の設定への移動もできます。',
       },
       {
         'zh-TW': '沒有 pane 的工作區分頁只顯示一句說明、一個「開啟 Agent」按鈕（打開側欄的 Agents 分頁），以及「或執行流程 ▶」連結。歡迎視窗的最近清單中，狀態標籤、時間和「找不到資料夾」提示都會依介面語言顯示，主要按鈕改用強調色。',
         'en-US': 'A workspace tab with no panes shows one sentence, an “Open Agent” button that opens the sidebar’s Agents tab, and an “or run the pipeline ▶” link. In the Welcome window, the recent list’s state badges, times and “Folder not found” tooltip are translated, and the primary button uses the accent colour.',
         'ja-JP': 'ペインのないワークスペースのタブには、一文の説明と、サイドバーの「エージェント」タブを開く「エージェントを開く」ボタン、「またはパイプラインを実行 ▶」のリンクだけが表示されます。ようこそ画面の最近使用した項目では、状態の表示、時刻、「フォルダが見つかりません」の表示が日本語になり、主ボタンはアクセントカラーになりました。',
+      },
+      {
+        'zh-TW': '設定：Navide Cloud 移到原本的「Navide 外掛」群組，群組改名為「Navide 支援」。Navide Cloud › 同步依照側欄「Agent 資產」的順序和名稱，每一頁列一列；MCP、技能和 Prompt 技能可以打開，記憶、憑證與金鑰和擴充呈灰色，標示「尚未支援同步」。',
+        'en-US': 'Settings: Navide Cloud moves into the group formerly called “Navide Plugins”, now “Navide Services”. Navide Cloud › Sync lists one row per Agent Assets page, in the sidebar’s order and under its names: MCP, Skills and Prompts can be turned on, while Memory, Credentials & keys and Extensions are greyed out as “not syncable yet”.',
+        'ja-JP': '設定：Navide Cloud は、以前「Navide プラグイン」だったグループに移り、グループ名は「Navide サービス」になりました。Navide Cloud › 同期には、サイドバーの「エージェント資産」と同じ順序と名前で 1 ページ 1 行が並びます。MCP、スキル、プロンプトはオンにでき、メモリ、認証情報とキー、拡張機能はグレーで「まだ同期できません」と表示されます。',
+      },
+      {
+        'zh-TW': 'Windows 與 Linux 修正：在終端機按住 Ctrl 點檔案路徑就能開啟（macOS 仍是 Cmd），也認得 C:\\ 這類 Windows 路徑。可以拖曳標題列上的工作區名稱來移動視窗。外掛視圖在最大化、還原或全螢幕後會跟著視窗大小。結束確認視窗的標題是「Navide」，不再是「agent-team」；Linux 上的最大化按鈕也不會再停在「還原」。在 Windows 上，以反斜線路徑開啟 Plan 會開到正確的 Plan。',
+        'en-US': 'Windows and Linux fixes: Ctrl+click on a file path in the terminal opens it (Cmd+click on macOS), and Windows paths such as C:\\… are recognised. The window can be dragged by the workspace name in the title bar. Plugin views keep the window’s size after maximize, restore or full screen. The quit prompts are titled “Navide” instead of “agent-team”, and on Linux the maximize button no longer gets stuck on “Restore”. On Windows, a plan opened by a backslash path opens the right plan.',
+        'ja-JP': 'Windows と Linux の修正：ターミナルでファイルのパスを Ctrl+クリックすると開けるようになり（macOS は Cmd+クリック）、C:\\… のような Windows のパスも認識します。タイトルバーのワークスペース名をドラッグしてウィンドウを動かせます。プラグインのビューは、最大化、元に戻す、フルスクリーンのあともウィンドウの大きさに合わせます。終了の確認の題名は「agent-team」ではなく「Navide」になり、Linux では最大化ボタンが「元に戻す」のまま残らなくなりました。Windows では、バックスラッシュのパスで開いた Plan が正しく開きます。',
       },
       {
         'zh-TW': '安全性加強：pane 連到 Navide MCP 的憑證不再出現在命令列（`ps` 對這台電腦上的每個帳號都看得到），改放在只有你能讀的檔案或環境變數裡。在規則編輯器封鎖的裝置，伺服器停止提供規則時仍然會被拒絕。跨裝置訊息要先通過簽章驗證才會記入防重送紀錄，訊息通道也不再接受配對訊息；配對只能在帳號視窗完成。',

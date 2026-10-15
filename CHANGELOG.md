@@ -4,8 +4,14 @@ All notable released changes to Navide will be documented in this file. The form
 
 ## [0.2.23] — 2026-10-15 — signed release
 
+### Added
+
+- Status bar: a notifications bell shows whether system notifications are on (a crossed-out bell when off), a muted-speaker mark when the notification sound is off, and a warning dot when the system has denied Navide notifications. Clicking it opens a popover with the "System notifications" and "Notification sound" switches from Settings › Notifications, the notification permission status where the platform has one, and a "Notification settings ›" link. The switches are the same settings as that page, and both stay in step across windows (#264).
+
 ### Changed
 
+- Windows and Linux keyboard shortcuts: the main window's sidebar tabs are now Ctrl+Alt+1–5 and Settings is Ctrl+,. Those keys no longer reach the CLI in a terminal pane. Ctrl+1–9 still selects the CLI type for the next pane. Ctrl+Alt is AltGr on Windows: on a keyboard layout where AltGr+digit types a character (German ² and ³, for example), that digit keeps typing the character and does not switch tabs. Tooltips show the platform's key instead of ⌘. macOS is unchanged (#263).
+- Settings: Navide Cloud moves from the "Accounts & Agents" group into the group formerly named "Navide Plugins", now "Navide Services" (zh-TW「Navide 支援」, ja-JP「Navide サービス」). Navide Cloud › Sync lists one row per Agent Assets page, in the sidebar's order and under its names: MCP, Skills and Prompts can be turned on; Memory, Credentials & keys and Extensions are greyed out as "not syncable yet". A Memory switch an older build left on can still be turned off (#265).
 - Empty stage: a workspace tab with no panes shows one sentence, an "Open Agent" button that opens the sidebar's Agents tab, and an "or run the pipeline ▶" link that does what the sidebar's Run button does and is disabled when that button is, instead of the "Two ways to drive the team" card (#239).
 - Welcome window: the recent list's state badges (completed / running / aborted), its relative times and the "Folder not found" tooltip are translated in zh-TW and ja-JP. The Open Workspace and Recent headings and the Settings link drop their emoji, the Navide mark sits beside the title, and the primary button uses the accent colour instead of green (#240).
 - Plan spec: `_spec.md` says what a paged plan list entry's `meta` carries (no `reviewNotes`), and that an entry too big for one page keeps its `todos` counts, including `awaiting_user` (#252).
@@ -25,6 +31,12 @@ All notable released changes to Navide will be documented in this file. The form
 - Plans: when plan tools have no Host session, the error tells the agent to open Navide (or reopen its Plans view) and retry; error codes are unchanged (#237). `plan_list` and `plan_read` retry once when the Host answer times out; changes are not retried (#250).
 - Plans: the Plans watcher is started only after the same Grant and agent Execution Policy check as the Plans filesystem calls (#251).
 - Share links: a plan whose `plan-meta` tag lists `type` before `id`, as the provisioned template writes it, is shared under its plan name instead of its file name (#235).
+- Channels: each row in Channel connections shows both ends of its link: the pane (named from any window, marked "Closed" when the pane is gone, "Unnamed pane" when it has no name), and the platform, the bot and the chat's title (or "chat <id>" when the chat has none), plus the topic for a topic link (#262).
+- Terminal (Windows and Linux): Ctrl+click on a file path opens it, as Cmd+click does on macOS. Windows drive paths such as `C:\src\a.ts` are recognised, and a path the terminal shows with backslashes opens the file picker on the right file name. A row that repeats the previous row's last word (`ls src/a.ts` then `src/a.ts`) is no longer joined to it as one wrapped path (#257).
+- Plans (Windows): opening a plan whose path the Host hands over with backslashes opens that plan (#258).
+- Plugin views (Windows and Linux): a view that fills its window keeps the window's size after maximize, restore and full screen, including on GNOME, where the old size was reported first (#259).
+- Title bar (Windows and Linux): the window can be dragged by the workspace name block in the title bar; the name, the path and the two hover buttons still respond to the pointer (#260).
+- Windows and Linux: the quit confirmation and the cancelled-quit notice are titled "Navide" instead of "agent-team". On Linux, the maximize button no longer stays on "Restore" after the window manager restores the window without telling Navide (dragging it off the top, Super+Down, leaving a tile) (#261).
 - Registry website: "Requires Navide ≥ x" is shown only for a minimum above 0.1.0; the compatibility flag in the API is unchanged (#241).
 
 ## [0.2.22] — 2026-10-14 — signed release
