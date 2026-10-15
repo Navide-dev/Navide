@@ -11786,7 +11786,7 @@ describe('first-party Git private bridge', () => {
     })
     expect(opens).toEqual([{
       workspacePath,
-      relPath: join('.agent-team', 'plans', 'feature.html'),
+      relPath: '.agent-team/plans/feature.html',
     }])
   })
 
@@ -12027,7 +12027,7 @@ describe('first-party Git private bridge', () => {
       })
       expect(opens).toContainEqual({
         workspacePath: tempDir,
-        relPath: join('packages', 'subrepo', '.agent-team', 'plans', 'nested.html'),
+        relPath: 'packages/subrepo/.agent-team/plans/nested.html',
       })
 
       // 2. Nested repo with .git FILE (submodule/worktree): REJECTED
