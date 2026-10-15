@@ -134,6 +134,11 @@ export const WHATS_NEW: WhatsNewEntry[] = [
         'ja-JP': 'ステータスバーに通知ベルが加わりました。システム通知と通知音がオンかどうかがひと目でわかり、システムが通知を許可していないときは警告の点が付きます。クリックすると「システム通知」と「通知音」をその場で切り替えられ、通知の許可状態の確認や通知の設定への移動もできます。',
       },
       {
+        'zh-TW': '更容易看出 pane 出了問題：agent CLI 以非 0 代碼結束時，標題列會顯示「⚠ 已結束（代碼 N）」；回合進行中超過 20 分鐘沒有任何紀錄或輸出時，會顯示「⏳ 超過 20 分鐘沒有動靜」，只是提醒，不會中斷任何東西。Git 面板讀不到歷史或某個 commit 時，會顯示「讀取失敗：原因」，不再看起來像沒有新 commit。',
+        'en-US': 'Easier to see when a pane is in trouble: an agent CLI that ends with a non-zero code shows “⚠ Exited (code N)” in its title bar, and a turn with no log activity and no output for 20 minutes shows “⏳ No activity 20+ min”, as a reminder only; nothing is interrupted. When the Git panel cannot read the history or a commit, it says “Read failed: <reason>” instead of looking like there are no new commits.',
+        'ja-JP': 'ペインの問題に気づきやすくなりました：エージェントの CLI が 0 以外のコードで終了すると、タイトルバーに「⚠ 終了（コード N）」と表示されます。ターンの途中で 20 分以上ログにも画面にも動きがないと「⏳ 20 分以上動きなし」と表示されますが、通知だけで何も中断しません。Git パネルが履歴やコミットを読み込めないときは、新しいコミットがないように見えるのではなく「読み込みに失敗しました：理由」と表示します。',
+      },
+      {
         'zh-TW': '沒有 pane 的工作區分頁只顯示一句說明、一個「開啟 Agent」按鈕（打開側欄的 Agents 分頁），以及「或執行流程 ▶」連結。歡迎視窗的最近清單中，狀態標籤、時間和「找不到資料夾」提示都會依介面語言顯示，主要按鈕改用強調色。',
         'en-US': 'A workspace tab with no panes shows one sentence, an “Open Agent” button that opens the sidebar’s Agents tab, and an “or run the pipeline ▶” link. In the Welcome window, the recent list’s state badges, times and “Folder not found” tooltip are translated, and the primary button uses the accent colour.',
         'ja-JP': 'ペインのないワークスペースのタブには、一文の説明と、サイドバーの「エージェント」タブを開く「エージェントを開く」ボタン、「またはパイプラインを実行 ▶」のリンクだけが表示されます。ようこそ画面の最近使用した項目では、状態の表示、時刻、「フォルダが見つかりません」の表示が日本語になり、主ボタンはアクセントカラーになりました。',
