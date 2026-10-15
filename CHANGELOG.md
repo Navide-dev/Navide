@@ -37,6 +37,7 @@ All notable released changes to Navide will be documented in this file. The form
 - Plugin views (Windows and Linux): a view that fills its window keeps the window's size after maximize, restore and full screen, including on GNOME, where the old size was reported first (#259).
 - Title bar (Windows and Linux): the window can be dragged by the workspace name block in the title bar; the name, the path and the two hover buttons still respond to the pointer (#260).
 - Windows and Linux: the quit confirmation and the cancelled-quit notice are titled "Navide" instead of "agent-team". On Linux, the maximize button no longer stays on "Restore" after the window manager restores the window without telling Navide (dragging it off the top, Super+Down, leaving a tile) (#261).
+- Navide plugins: when the Registry cannot be reached for a package, an update check no longer erases the update found for it earlier; each package keeps its last known update while it is still newer than the installed version, and update badges show that answer. Removing a plugin, reloading the installed plugin list and switching "Get pre-releases" in Navide Plugins and Navide Marketplace now show an error when they fail instead of failing silently, and a failed pre-release switch puts the checkbox back (#268).
 - Registry website: "Requires Navide ≥ x" is shown only for a minimum above 0.1.0; the compatibility flag in the API is unchanged (#241).
 
 ## [0.2.22] — 2026-10-14 — signed release
