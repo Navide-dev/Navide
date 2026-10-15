@@ -310,6 +310,7 @@ const quitCancelWatch = createQuitCancelWatch({
       await resetCancelledQuit()
       await dialog.showMessageBox({
         type: 'warning',
+        title: 'Navide',
         message: quitConfirm.cancelledMessage,
         detail: quitConfirm.cancelledDetail.replace('{windows}', windows),
       })
@@ -5689,6 +5690,9 @@ app.on('quit', () => {
 async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> {
   const opts = {
     type: 'question' as const,
+    // Windows/Linux title a message box with app.getName(), which is the
+    // package name ("agent-team"); macOS ignores the field.
+    title: 'Navide',
     buttons: [quitConfirm.quitLabel, quitConfirm.cancelLabel],
     defaultId: 0,
     cancelId: 1,
