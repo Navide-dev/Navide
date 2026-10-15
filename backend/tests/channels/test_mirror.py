@@ -744,3 +744,16 @@ async def test_a_chat_without_topics_is_told_once_how_to_get_them(env: Env) -> N
     await _until(lambda: _said(env, "主題"))
     await env.m.wait_idle()
     assert sum(mirror_mod.MSG_NO_TOPICS in t for t in env.tg.texts()) == 1
+
+
+async def test_outbox_passes_a_reply_target_only_when_given() -> None:
+    calls: list[tuple[str, dict]] = []
+
+    async def send(text: str, buttons=None, **kw) -> list[str]:
+        calls.append((text, kw))
+        return ["1"]
+
+    box = Outbox(send, per_min=6000, burst=10)
+    await box.submit("plain", "o")
+    await box.submit("quoted", "o", reply_to="42")
+    assert calls == [("plain", {}), ("quoted", {"reply_to": "42"})]

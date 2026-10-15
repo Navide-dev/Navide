@@ -274,6 +274,8 @@ class _Item:
     text: str
     owner: str
     buttons: list[tuple[str, str]] | None = None
+    # A message id this one replies to (quotes), on adapters that can.
+    reply_to: str = ""
     # Set when a caller awaits the send (it needs the message ids, or the error):
     # such an item is sent on its own, never merged with its neighbours.
     future: "asyncio.Future[list[str]] | None" = None
@@ -318,11 +320,12 @@ class Outbox:
             self._items.append(_Item(chunk, owner))
         self._kick()
 
-    async def submit(self, text: str, owner: str = "", buttons: list[tuple[str, str]] | None = None) -> list[str]:
+    async def submit(self, text: str, owner: str = "", buttons: list[tuple[str, str]] | None = None,
+                     reply_to: str = "") -> list[str]:
         """Queue behind everything already waiting for this chat and wait for the send:
         the message ids on success, the adapter's exception on failure."""
         future: asyncio.Future[list[str]] = asyncio.get_running_loop().create_future()
-        self._items.append(_Item(text, owner, buttons, future))
+        self._items.append(_Item(text, owner, buttons, reply_to, future))
         self._kick()
         return await future
 
@@ -353,7 +356,10 @@ class Outbox:
                 text += "\n\n" + self._items.popleft().text
                 self.merged += 1
             try:
-                ids = await self._send(text, first.buttons)
+                if first.reply_to:
+                    ids = await self._send(text, first.buttons, reply_to=first.reply_to)
+                else:
+                    ids = await self._send(text, first.buttons)
             except asyncio.CancelledError:
                 if first.future is not None and not first.future.done():
                     first.future.cancel()
@@ -465,10 +471,12 @@ class Mirror:
         if box is None:
             key = loc.key()
 
-            async def send(text: str, buttons: list[tuple[str, str]] | None) -> list[str]:
+            async def send(text: str, buttons: list[tuple[str, str]] | None, reply_to: str = "") -> list[str]:
                 live = self.m._adapters.get((loc.platform, loc.account))
                 if live is None:
                     raise RuntimeError(f"{loc.platform} is not connected")
+                if reply_to and getattr(live.capabilities, "reply_to", False):
+                    return await live.send_text(loc, text, buttons=buttons or None, reply_to=reply_to)
                 return await live.send_text(loc, text, buttons=buttons or None)
 
             # Real time, not the manager's (test-injectable) clock: pacing is about the wire.
@@ -489,13 +497,14 @@ class Mirror:
         box.post("", owner, chunks=chunk_for(loc.platform, redact.redact_text(text)))
 
     async def send(self, loc: Location, text: str, *, owner: str = "",
-                   buttons: list[tuple[str, str]] | None = None) -> list[str]:
+                   buttons: list[tuple[str, str]] | None = None, reply_to: str = "") -> list[str]:
         """Like ``post`` but awaited, for callers that need the message ids or the error.
-        Goes through the same per-location queue, so it stays in order with mirrored messages."""
+        Goes through the same per-location queue, so it stays in order with mirrored messages.
+        ``reply_to`` quotes that message where the platform can; elsewhere it is ignored."""
         box = self._outbox(loc)
         if box is None:
             raise RuntimeError(f"{loc.platform} is not connected")
-        return await box.submit(redact.redact_text(self.m._for_chat(loc, text)), owner, buttons)
+        return await box.submit(redact.redact_text(self.m._for_chat(loc, text)), owner, buttons, reply_to)
 
     def label(self, route: Route, text: str) -> str:
         return f"{child_tag(route.child)} {text}" if route.child else text

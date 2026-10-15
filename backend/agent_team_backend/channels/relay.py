@@ -74,6 +74,8 @@ class RelayRequest:
     # are) and that message's text, so a request that lapses can settle it.
     message_id: str = ""
     message_text: str = ""
+    # The 「正在等確認」 warnings that carried this request's buttons too: (message id, text).
+    held: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,11 @@ def same_prompt(a: str, b: str) -> bool:
     return " ".join((a or "").split()) == " ".join((b or "").split())
 
 
+def same_options(a: list[str], b: list[str]) -> bool:
+    """The same menu, row for row, up to whitespace (as the window's expected check)."""
+    return len(a) == len(b) and all(same_prompt(x, y) for x, y in zip(a, b))
+
+
 def _offered(request: RelayRequest) -> list[tuple[int, str]]:
     return [(i, opt) for i, opt in enumerate(request.options[:MAX_BUTTON_OPTIONS], 1)
             if not is_permanent_allow(opt) and not is_free_text(opt)]
@@ -222,6 +229,22 @@ def is_pending_command(body: str, identity: str = "") -> bool:
     if bot and identity and bot.lower() != identity.lstrip("@").lower():
         return False
     return head.lower() == "/pending"
+
+
+HELD_PROMPT_MAX = 300
+
+
+def held_text(request: RelayRequest) -> str:
+    """The prompt, its options and how to answer, for a warning that may be read
+    long after the prompt message itself scrolled away."""
+    prompt = request.prompt.strip()
+    if len(prompt) > HELD_PROMPT_MAX:
+        prompt = prompt[:HELD_PROMPT_MAX] + "…"
+    lines = [prompt] if prompt else []
+    if request.kind == "question":
+        lines += [f"{i}. {opt}" for i, opt in _offered(request)]
+    lines.append(answer_hint(request))
+    return "\n".join(lines)
 
 
 def buttons_for(request: RelayRequest) -> list[tuple[str, str]]:

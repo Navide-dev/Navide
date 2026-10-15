@@ -70,7 +70,8 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
-# The bot's "/" menu (setMyCommands), every one handled by the channel manager.
+# Added to the bot's "/" menu when missing (never replacing the user's own); every one
+# is handled by the channel manager.
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
     {"command": "menu", "description": "快速選單"},
@@ -107,7 +108,7 @@ class TelegramAdapter:
     platform = "telegram"
     capabilities = Capabilities(
         threads=True, create_location=True, edit=True, typing=True, buttons=True,
-        text_limit=TEXT_LIMITS["telegram"],
+        text_limit=TEXT_LIMITS["telegram"], reply_to=True,
     )
     # Groups allow about 20 messages a minute; the mirror outbox paces to this.
     rate_per_min = 20.0
@@ -200,6 +201,23 @@ class TelegramAdapter:
                 log.info("telegram: poll failed (%s); retry in %.1fs", self.status.last_error, delay)
                 await asyncio.sleep(delay)
 
+    async def _add_commands(self) -> None:
+        """Add ours to the bot's "/" menu without touching the list it already has: the
+        user's own commands keep their place and wording, a name already there is left as
+        is, and a list that cannot be read is not written. A failure only loses the menu."""
+        try:
+            current = await self._call("getMyCommands")
+            if not isinstance(current, list):
+                return
+            have = {str(c.get("command") or "").lower() for c in current if isinstance(c, dict)}
+            missing = [c for c in BOT_COMMANDS if c["command"] not in have]
+            if not missing:
+                return
+            await self._call("setMyCommands", {"commands": [*current, *missing]})
+            log.info("telegram: added bot commands: %s", ", ".join(c["command"] for c in missing))
+        except Exception as exc:  # noqa: BLE001
+            log.info("telegram: updating the bot's commands failed: %s", exc)
+
     async def _session(self) -> None:
         me = await self._call("getMe")
         username = me.get("username") or ""
@@ -208,11 +226,7 @@ class TelegramAdapter:
         if me.get("id"):
             self.bot_id = str(me["id"])
         await self._call("deleteWebhook", {"drop_pending_updates": False})
-        try:
-            # The "/" menu in the chat; a failure only loses the menu, not the bot.
-            await self._call("setMyCommands", {"commands": BOT_COMMANDS})
-        except Exception as exc:  # noqa: BLE001
-            log.info("telegram: setMyCommands failed: %s", exc)
+        await self._add_commands()
         if self._offsets is not None:
             self._offset = self._offsets.get_offset(self.platform, self.account, self.bot_id)
         self.status.lifecycle = "ready"
@@ -347,12 +361,16 @@ class TelegramAdapter:
         return params
 
     async def send_text(
-        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None
+        self, loc: Location, text: str, *, buttons: list[tuple[str, str]] | None = None,
+        reply_to: str = "",
     ) -> list[str]:
         ids: list[str] = []
         chunks = chunk_text(text, self.capabilities.text_limit) or [text or "…"]
         for i, chunk in enumerate(chunks):
             params = self._target(loc)
+            if reply_to and i == 0:
+                # Quote the message; still send if it was deleted meanwhile.
+                params["reply_parameters"] = {"message_id": int(reply_to), "allow_sending_without_reply": True}
             if buttons and i == len(chunks) - 1:
                 params["reply_markup"] = {
                     "inline_keyboard": [[{"text": label, "callback_data": data} for label, data in buttons]]

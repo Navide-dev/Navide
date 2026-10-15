@@ -100,6 +100,7 @@ _LIMIT_MENU_RE = re.compile(r"Stop and wait for limit to reset.{0,300}?Enter to 
 _LIMIT_RESETS_RE = re.compile(r"hit your .{0,40}?limit\W{0,5}resets\s+(.{3,60}?\([^)]+\))")
 MSG_OFFLINE = "⚠️ pane 目前不在線上（可能在其他 workspace 或已關閉）"
 MSG_RELAY_EXPIRED = "⚠️ 這個確認已失效"
+MSG_RELAY_PROMPT_CHANGED = "⚠️ 畫面上的確認已經換了，這個回覆沒有送出；請在新的確認訊息重新選擇"
 # Appended to a relay prompt whose request lapsed, when the platform can edit it.
 MSG_RELAY_DONE_LOCALLY = "✔ 已在電腦上處理"
 MSG_RELAY_SUPERSEDED = "↪ 已被新的確認取代"
@@ -156,8 +157,9 @@ class Seams:
     pane_state: Callable[[str], dict[str, Any]]
     # pane_id -> {kind: "permission"|"question"|"", prompt: str, options: [str]}, via the UI probe
     awaiting_info: Callable[[str], Awaitable[dict[str, Any]]]
-    # (pane_id, answer) -> {ok, error?}; answer is the ui.pane.sendKeys payload
-    answer: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+    # (pane_id, answer, expected?) -> {ok, error?, error_code?}; answer is the ui.pane.sendKeys
+    # payload, expected the {prompt, options} the window must still show before it presses
+    answer: Callable[..., Awaitable[dict[str, Any]]]
     resolve_pane: Callable[[str], str]  # alias -> current pane id ("" if unknown)
     broadcast: Callable[[str, dict[str, Any]], Awaitable[None]]
     read_secret: Callable[[str], Awaitable[str | None]]
@@ -1531,16 +1533,15 @@ class ChannelManager:
             return False
         live = self.relay.for_pane(pane_id)
         if live:
-            how = relay.answer_hint(live[0])
-        else:
-            try:
-                info = await self._seams.awaiting_info(pane_id)
-            except Exception:  # noqa: BLE001
-                return False
-            if info.get("kind") != "permission":
-                return False  # a question is answered by typing
-            how = MSG_AWAITING_LOCAL
-        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=how))
+            await self._held_with_buttons(msg, live[0])
+            return True
+        try:
+            info = await self._seams.awaiting_info(pane_id)
+        except Exception:  # noqa: BLE001
+            return False
+        if info.get("kind") != "permission":
+            return False  # a question is answered by typing
+        await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=MSG_AWAITING_LOCAL))
         return True
 
     async def _list_pending(self, msg: InboundMessage) -> None:
@@ -1574,6 +1575,28 @@ class ChannelManager:
             request.message_text = text if len(ids) == 1 else ""
             self._spawn(self._settle_prompt(old, MSG_PENDING_RELISTED))
 
+    async def _held_with_buttons(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
+        """The warning carries the prompt's options and buttons, and quotes the prompt
+        message, so a chat that scrolled past the prompt can answer from here."""
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if request.loc.key() != loc.key():
+            # Prompted in another chat: an answer from here is refused, and its message is not here.
+            await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=relay.answer_hint(request)))
+            return
+        text = MSG_HELD_BY_PROMPT.format(how="\n" + relay.held_text(request))
+        buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+        try:
+            ids = await self.mirror.send(loc, text, buttons=buttons or None, reply_to=request.message_id)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reply on %s failed: %s", msg.platform, exc)
+            return
+        if ids:
+            # Settled with the prompt; a chunked warning keeps only its last chunk.
+            request.held.append((ids[-1], text if len(ids) == 1 else ""))
+
     async def _handle_relay_answer(self, msg: InboundMessage, answer: relay.RelayAnswer) -> None:
         request = self.relay.get(answer.request_id)
         # The very chat (bot, chat and topic) the prompt went to: another bot in the
@@ -1598,17 +1621,18 @@ class ChannelManager:
             info = await self._seams.awaiting_info(request.pane_id)
         except Exception:  # noqa: BLE001
             info = {}
-        if not relay.same_prompt(str(info.get("prompt") or ""), request.prompt):
-            # The screen moved on: this id is stale, and the next probe relays what is there now.
-            self.relay.take(request.id)
-            self._spawn(self._settle_prompt(request, MSG_RELAY_SUPERSEDED))
-            self._awaiting_unmark(request.pane_id)
-            await self._reply(msg, MSG_RELAY_EXPIRED)
+        if not (relay.same_prompt(str(info.get("prompt") or ""), request.prompt)
+                and relay.same_options([str(o) for o in info.get("options") or []], request.options)):
+            await self._relay_prompt_changed(msg, request)
             return
+        expected = {"prompt": request.prompt, "options": list(request.options)}
         try:
-            result = await self._seams.answer(request.pane_id, payload)
+            result = await self._seams.answer(request.pane_id, payload, expected)
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
+        if result.get("error_code") == "prompt-changed":
+            await self._relay_prompt_changed(msg, request)
+            return
         if result.get("ok"):
             self.relay.take(request.id)  # used up only once the keys went in
             self._spawn(self._settle_prompt(request, MSG_RELAY_ANSWERED_IN_CHAT + relay.describe_answer(payload)))
@@ -1620,6 +1644,16 @@ class ChannelManager:
             await self._reply(msg, f"✅ 已送出：{relay.describe_answer(payload)}")
         else:
             await self._reply(msg, f"⚠️ 送出失敗：{result.get('error') or 'not sent'}")
+
+    async def _relay_prompt_changed(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
+        """The screen moved on: this id is stale, and the pane's prompt as it is now is
+        relayed again for the chat to pick from."""
+        self.relay.take(request.id)
+        self._spawn(self._settle_prompt(request, MSG_RELAY_SUPERSEDED))
+        self._awaiting_unmark(request.pane_id)
+        route = self.mirror.route(request.pane_id)
+        self._spawn(self._follow_up(request.pane_id, request.loc, route.child if route else ""))
+        await self._reply(msg, MSG_RELAY_PROMPT_CHANGED)
 
     def _guard_vetoes(self, request: relay.RelayRequest) -> bool:
         """Navide Guard on a remote approval: high/critical (or unscreenable)
@@ -2452,11 +2486,12 @@ class ChannelManager:
         adapter = self._adapters.get((request.loc.platform, request.loc.account))
         if not request.message_id or adapter is None or not adapter.capabilities.edit:
             return
-        text = f"{request.message_text}\n\n{note}" if request.message_text else note
-        try:
-            await adapter.edit_text(request.loc, request.message_id, redact.redact_text(self._for_chat(request.loc, text)))
-        except Exception as exc:  # noqa: BLE001
-            log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
+        for message_id, message_text in [(request.message_id, request.message_text), *request.held]:
+            text = f"{message_text}\n\n{note}" if message_text else note
+            try:
+                await adapter.edit_text(request.loc, message_id, redact.redact_text(self._for_chat(request.loc, text)))
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: settling relay prompt in %s failed: %s", request.loc.key(), exc)
 
     async def _send_awaiting(self, pane_id: str, loc: Location, prompt: str, text: str) -> None:
         """An awaiting notice with nothing to answer, retried like a relay prompt."""
