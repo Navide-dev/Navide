@@ -61,6 +61,19 @@ describe('classifyLog — one entry per failed test, in one of three categories'
     expect(classifyLog(log)[0].test).toBe('backend/tests/test_share_mcp_tools.py::test_x')
   })
 
+  it('reads a runner that could not download an action as the environment (#276, 2026-10-15)', () => {
+    const log = `2026-10-15T05:43:37.7555290Z ##[error]An action could not be found at the URI 'https://codeload.github.com/actions/setup-go/tar.gz/b7ad1dad31e06c5925ef5d2fc7ad053ef454303e' (A646:26C2D0)
+2026-10-15T05:43:37.7575250Z ##[error]Failed to download archive 'https://codeload.github.com/actions/setup-go/tar.gz/b7ad1dad' after 1 attempts.`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({ test: '(job)', category: 'environment' })])
+  })
+
+  it('keeps a test the ledger already knows as a race a race, whatever its message', () => {
+    const log = `2026-10-15T05:30:00.0000000Z FAILED backend\\\\tests\\\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'cancelled': True}, {'bytes': 320000, 'cancelled': False})`
+    expect(classifyLog(log)[0].category).toBe('product-defect')
+    const known = new Set(['backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on'])
+    expect(classifyLog(log, { knownRaces: known })[0].category).toBe('test-race')
+  })
+
   it('keeps the evidence line without the timestamp', () => {
     const [entry] = classifyLog(PYTEST_DEFECT)
     expect(entry.evidence.startsWith('FAILED backend/tests/test_share_mcp_tools.py')).toBe(true)
