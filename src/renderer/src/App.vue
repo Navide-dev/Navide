@@ -196,6 +196,7 @@ import {
 } from './lib/spawnKickoff'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
+import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { quickClassify } from './lib/quick-classify'
@@ -1727,6 +1728,10 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
+   *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
+   *  Not persisted. */
+  exitFault?: PaneExitFault | null
   /** Runtime-only quota-exhausted state, set when the pane's CLI printed its
    *  "hit your limit" message (see lib/cliUsageLimit). `usageLimitAt` is when
    *  it was seen — the loop reads it as an edge, so it must change on every
@@ -14730,6 +14735,17 @@ backend.on('terminal.exit', (raw) => {
   if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {
     void promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)
   }
+  // Any other non-zero exit of an agent CLI used to look exactly like the user
+  // quitting it. Keep the code for the title-bar badge, and record it.
+  pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  if (pane.exitFault) {
+    recordDiagnostic({
+      level: 'error',
+      code: 'pane.exit',
+      message: `${pane.agentKey} exited with code ${pane.exitFault.code}`,
+      paneId: pane.id,
+    })
+  }
 })
 
 // The PTY stopped taking input and the backend is holding what we wrote. Keyed
@@ -21455,6 +21471,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-wait-until="p.loopWaitUntil"
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
+          :exit-code="p.exitFault?.code ?? null"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

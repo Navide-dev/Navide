@@ -76,6 +76,9 @@ interface Props {
   /** Runtime-only login-expired badge — lit when the pane's CLI reported an
    *  expired login; clicking it asks App.vue to re-send the login command. */
   loginExpired?: boolean
+  /** The agent CLI's non-zero exit code, shown as a badge while the pane is
+   *  exited; null for a clean exit or a pane that never exited. */
+  exitCode?: number | null
   /** The user muted this pane: no desktop notification and no sound from it.
    *  Shown as a 🔇 badge; clicking it asks App.vue to unmute. */
   muted?: boolean
@@ -712,6 +715,11 @@ onMounted(() => {
           @click.stop="emit('fix-login')"
         >{{ $t('pane.terminal.login-expired-badge') }}</span>
         <span
+          v-if="exitCode != null && (displayStatus === 'exited' || displayStatus === 'error')"
+          class="exit-fault-inline"
+          :title="$t('pane.terminal.exit-fault-tooltip', { code: exitCode })"
+        >{{ $t('pane.terminal.exit-fault-badge', { code: exitCode }) }}</span>
+        <span
           v-if="usageLimitHit"
           class="usage-limit-inline"
           role="button"
@@ -1079,6 +1087,18 @@ onMounted(() => {
 }
 .login-expired-inline:hover {
   border-color: var(--attention-fg);
+}
+/* A non-zero exit of the agent CLI: informational, so not clickable. */
+.exit-fault-inline {
+  font-size: var(--font-3xs);
+  font-weight: 600;
+  color: var(--danger-fg);
+  background: var(--danger-subtle);
+  border: 1px solid var(--danger-muted);
+  border-radius: var(--radius-xs);
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 /* Quota exhausted. Deliberately louder than the login badge. Clicking it
    (after a confirm) dismisses the flag, e.g. when it is stale or moot. */
