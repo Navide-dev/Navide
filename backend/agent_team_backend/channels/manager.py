@@ -100,6 +100,7 @@ _LIMIT_MENU_RE = re.compile(r"Stop and wait for limit to reset.{0,300}?Enter to 
 _LIMIT_RESETS_RE = re.compile(r"hit your .{0,40}?limit\W{0,5}resets\s+(.{3,60}?\([^)]+\))")
 MSG_OFFLINE = "⚠️ pane 目前不在線上（可能在其他 workspace 或已關閉）"
 MSG_RELAY_EXPIRED = "⚠️ 這個確認已失效"
+MSG_RELAY_PROMPT_CHANGED = "⚠️ 畫面上的確認已經換了，這個回覆沒有送出；請在新的確認訊息重新選擇"
 # Appended to a relay prompt whose request lapsed, when the platform can edit it.
 MSG_RELAY_DONE_LOCALLY = "✔ 已在電腦上處理"
 MSG_RELAY_SUPERSEDED = "↪ 已被新的確認取代"
@@ -154,8 +155,9 @@ class Seams:
     pane_state: Callable[[str], dict[str, Any]]
     # pane_id -> {kind: "permission"|"question"|"", prompt: str, options: [str]}, via the UI probe
     awaiting_info: Callable[[str], Awaitable[dict[str, Any]]]
-    # (pane_id, answer) -> {ok, error?}; answer is the ui.pane.sendKeys payload
-    answer: Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+    # (pane_id, answer, expected?) -> {ok, error?, error_code?}; answer is the ui.pane.sendKeys
+    # payload, expected the {prompt, options} the window must still show before it presses
+    answer: Callable[..., Awaitable[dict[str, Any]]]
     resolve_pane: Callable[[str], str]  # alias -> current pane id ("" if unknown)
     broadcast: Callable[[str, dict[str, Any]], Awaitable[None]]
     read_secret: Callable[[str], Awaitable[str | None]]
@@ -1562,17 +1564,18 @@ class ChannelManager:
             info = await self._seams.awaiting_info(request.pane_id)
         except Exception:  # noqa: BLE001
             info = {}
-        if not relay.same_prompt(str(info.get("prompt") or ""), request.prompt):
-            # The screen moved on: this id is stale, and the next probe relays what is there now.
-            self.relay.take(request.id)
-            self._spawn(self._settle_prompt(request, MSG_RELAY_SUPERSEDED))
-            self._awaiting_unmark(request.pane_id)
-            await self._reply(msg, MSG_RELAY_EXPIRED)
+        if not (relay.same_prompt(str(info.get("prompt") or ""), request.prompt)
+                and relay.same_options([str(o) for o in info.get("options") or []], request.options)):
+            await self._relay_prompt_changed(msg, request)
             return
+        expected = {"prompt": request.prompt, "options": list(request.options)}
         try:
-            result = await self._seams.answer(request.pane_id, payload)
+            result = await self._seams.answer(request.pane_id, payload, expected)
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
+        if result.get("error_code") == "prompt-changed":
+            await self._relay_prompt_changed(msg, request)
+            return
         if result.get("ok"):
             self.relay.take(request.id)  # used up only once the keys went in
             self._spawn(self._settle_prompt(request, MSG_RELAY_ANSWERED_IN_CHAT + relay.describe_answer(payload)))
@@ -1584,6 +1587,16 @@ class ChannelManager:
             await self._reply(msg, f"✅ 已送出：{relay.describe_answer(payload)}")
         else:
             await self._reply(msg, f"⚠️ 送出失敗：{result.get('error') or 'not sent'}")
+
+    async def _relay_prompt_changed(self, msg: InboundMessage, request: relay.RelayRequest) -> None:
+        """The screen moved on: this id is stale, and the pane's prompt as it is now is
+        relayed again for the chat to pick from."""
+        self.relay.take(request.id)
+        self._spawn(self._settle_prompt(request, MSG_RELAY_SUPERSEDED))
+        self._awaiting_unmark(request.pane_id)
+        route = self.mirror.route(request.pane_id)
+        self._spawn(self._follow_up(request.pane_id, request.loc, route.child if route else ""))
+        await self._reply(msg, MSG_RELAY_PROMPT_CHANGED)
 
     def _guard_vetoes(self, request: relay.RelayRequest) -> bool:
         """Navide Guard on a remote approval: high/critical (or unscreenable)

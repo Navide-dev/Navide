@@ -158,6 +158,11 @@ def same_prompt(a: str, b: str) -> bool:
     return " ".join((a or "").split()) == " ".join((b or "").split())
 
 
+def same_options(a: list[str], b: list[str]) -> bool:
+    """The same menu, row for row, up to whitespace (as the window's expected check)."""
+    return len(a) == len(b) and all(same_prompt(x, y) for x, y in zip(a, b))
+
+
 def _offered(request: RelayRequest) -> list[tuple[int, str]]:
     return [(i, opt) for i, opt in enumerate(request.options[:MAX_BUTTON_OPTIONS], 1)
             if not is_permanent_allow(opt) and not is_free_text(opt)]

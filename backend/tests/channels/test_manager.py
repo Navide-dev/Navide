@@ -103,6 +103,7 @@ class FakeSeams:
         self.gone: set[str] = set()
         self.answers: list[tuple[str, dict[str, Any]]] = []
         self.answer_result: dict[str, Any] = {"ok": True}
+        self.expected: list[dict[str, Any] | None] = []
         self.settings: dict[str, Any] = {}
         self.agents: dict[str, str] = {}
         self.skills: dict[str, list[str]] = {}
@@ -133,8 +134,10 @@ class FakeSeams:
         self.limit_probes += 1
         return self.limit
 
-    async def answer(self, pane_id: str, answer: dict[str, Any]) -> dict[str, Any]:
+    async def answer(self, pane_id: str, answer: dict[str, Any],
+                     expected: dict[str, Any] | None = None) -> dict[str, Any]:
         self.answers.append((pane_id, answer))
+        self.expected.append(expected)
         return self.answer_result
 
     def resolve_pane(self, pane_id: str) -> str:
@@ -944,7 +947,7 @@ async def test_relay_prompt_answered_against_a_stale_screen_is_settled(env: Env)
     rid = _relay_id(env)
     env.fake.prompt = "Allow Bash(npm publish)?"
     await env.inbound(f"yes {rid}")
-    assert env.fake.answers == [] and mgr_mod.MSG_RELAY_EXPIRED in env.tg.texts()
+    assert env.fake.answers == [] and mgr_mod.MSG_RELAY_PROMPT_CHANGED in env.tg.texts()
     await _until(lambda: any(m == mid for m, _ in env.tg.edits))
     assert (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_SUPERSEDED}") in env.tg.edits
 
