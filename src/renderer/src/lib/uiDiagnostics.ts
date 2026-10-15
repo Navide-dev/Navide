@@ -37,6 +37,13 @@ const MAX_ENTRIES = 200
 
 const buffer: DiagnosticEntry[] = []
 let nextSeq = 1
+let sink: ((entry: DiagnosticEntry) => void) | null = null
+
+/** Where warn and error entries also go: App.vue points this at the backend's
+ *  on-disk error ledger, which outlives a reload. Info breadcrumbs stay here. */
+export function setDiagnosticSink(fn: ((entry: DiagnosticEntry) => void) | null): void {
+  sink = fn
+}
 
 /** Appends a diagnostic entry, stamping it with a monotonic `seq` and an ISO
  *  timestamp. Drops the oldest entry once the buffer exceeds MAX_ENTRIES. */
@@ -51,6 +58,14 @@ export function recordDiagnostic(entry: RecordDiagnosticInput): DiagnosticEntry 
   }
   buffer.push(recorded)
   if (buffer.length > MAX_ENTRIES) buffer.shift()
+  if (sink && recorded.level !== 'info') {
+    try {
+      sink(recorded)
+    } catch {
+      // The entry is in the buffer; a ledger that cannot be reached must not
+      // turn one fault into two.
+    }
+  }
   return recorded
 }
 
@@ -73,6 +88,16 @@ export function takeDiagnosticsSince(seq: number, paneId?: string): DiagnosticEn
  *  so it can later ask takeDiagnosticsSince for only what happened during it. */
 export function currentDiagnosticSeq(): number {
   return nextSeq - 1
+}
+
+/** The `nextSeq` a reader should pass as `sinceSeq` next time. When `limit`
+ *  cut the page short, that is the last returned entry — the high-water mark
+ *  would skip everything between it and the newest entry. */
+export function diagnosticsNextSeq(entries: DiagnosticEntry[], limit?: number): number {
+  if (limit !== undefined && entries.length > 0 && entries.length >= limit) {
+    return entries[entries.length - 1].seq
+  }
+  return currentDiagnosticSeq()
 }
 
 /** Test-only: clears the buffer and resets the sequence counter. */

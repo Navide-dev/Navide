@@ -3278,6 +3278,22 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     resizeCtrl.setColsCap(locked ? term.cols : null)
   }
 
+  // True while a cols cap leaves part of the visible container blank — what the
+  // pane menu's "Fit to pane width" is offered for. A hidden pane proposes no
+  // dimensions, so it never reads as capped.
+  function isColsCapped(): boolean {
+    const dims = fit.proposeDimensions()
+    return !!dims && Number.isFinite(dims.cols) && resizeCtrl.capCols(dims.cols) < dims.cols
+  }
+
+  // The user's explicit opt-out of the cap: widen to the full container now.
+  // Widening reflows the scrollback, which is the cost the cap exists to avoid,
+  // so this only ever runs from a user action — never from a layout path.
+  function unlockCols(): void {
+    lockCols(false)
+    fitTerminal({ redrawAfterSettle: true })
+  }
+
   function fitTerminal(opts?: { redrawAfterSettle?: boolean }): void {
     if (!mounted) return
     resizeCtrl.applyFit()
@@ -3411,6 +3427,8 @@ export function useTerminal(paneId: string, terminalPort: TerminalDockPort, opts
     focus,
     fitTerminal,
     lockCols,
+    isColsCapped,
+    unlockCols,
     redraw,
     pasteText,
     pasteFromClipboard,

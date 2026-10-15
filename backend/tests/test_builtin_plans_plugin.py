@@ -90,7 +90,8 @@ async def test_plugin_tools_are_installed_on_the_core_server(host: PluginHost) -
     wiring.startup(host)
     assert wiring.apply_mcp_tools(host, plan_mcp.server) == ["navide.plans", "navide.skills"]
     names = [tool.name for tool in await plan_mcp.server.list_tools()]
-    for name in ["plan_list", "plan_read", "plan_create", "plan_update_stage", "plan_update_todo", "plan_add_note"]:
+    for name in ["plan_list", "plan_read", "plan_create", "plan_update_stage", "plan_update_todo", "plan_add_note",
+                 "plan_add_todo"]:
         assert names.count(name) == 1
     assert "cli_get_status" in names
     assert "cli_interrupt" in names

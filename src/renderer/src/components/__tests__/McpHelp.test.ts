@@ -53,7 +53,7 @@ describe('McpHelp', () => {
 
     const tables = wrapper.findAll('.mh-table')
     expect(tables).toHaveLength(7)
-    expect(tables[0].findAll('tbody tr')).toHaveLength(6) // plan tools
+    expect(tables[0].findAll('tbody tr')).toHaveLength(7) // plan tools
     expect(tables[1].findAll('tbody tr')).toHaveLength(31) // workspace tools
     // The graph-pipeline tools sit with the other pipeline tools.
     const workspaceNames = tables[1].findAll('tbody tr td:first-child').map((td) => td.text())

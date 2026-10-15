@@ -932,3 +932,55 @@ describe('useGit', () => {
     })
   })
 })
+
+describe('useGit read errors', () => {
+  const commit = { hash: 'a1', short_hash: 'a1', subject: 'first', author: 'me', date: '2026-10-15' }
+
+  it('keeps the commit list and names the reason when git.log fails', async () => {
+    __resetSettingsForTest()
+    const mock = createMockBackend('connected')
+    mock.setResponse('git.status', mockStatus)
+    mock.setResponse('git.log', { commits: [commit] })
+    const { result, scope } = withScope(() => useGit(() => WS, mock.backend))
+    await flush()
+    expect(result.gitLog.value).toHaveLength(1)
+    expect(result.logError.value).toBe('')
+
+    mock.setResponse('git.log', null, { ok: false, error: { code: 'GIT_ERROR', message: 'fatal: bad object' } })
+    expect(await result.loadLog()).toBe(false)
+    expect(result.logError.value).toBe('fatal: bad object')
+    expect(result.gitLog.value).toHaveLength(1)
+
+    mock.setRejection('git.log', 'ws not open')
+    await result.loadLog()
+    expect(result.logError.value).toBe('ws not open')
+
+    mock.clearRejection('git.log')
+    mock.setResponse('git.log', { commits: [commit] })
+    expect(await result.loadLog()).toBe(true)
+    expect(result.logError.value).toBe('')
+    scope.stop()
+  })
+
+  it('names the reason when a commit cannot be shown', async () => {
+    const mock = createMockBackend('connected')
+    mock.setResponse('git.status', mockStatus)
+    mock.setResponse('git.log', { commits: [] })
+    const { result, scope } = withScope(() => useGit(() => WS, mock.backend))
+    await flush()
+
+    mock.setResponse('git.show_commit', { ok: false, error: 'bad revision' })
+    expect(await result.showCommit('zz')).toBeNull()
+    expect(result.commitDetailError.value).toBe('bad revision')
+
+    mock.setRejection('git.show_commit', 'ws not open')
+    expect(await result.showCommit('zz')).toBeNull()
+    expect(result.commitDetailError.value).toBe('ws not open')
+
+    mock.clearRejection('git.show_commit')
+    mock.setResponse('git.show_commit', { ok: true, hash: 'a1', files: [] })
+    expect(await result.showCommit('a1')).not.toBeNull()
+    expect(result.commitDetailError.value).toBe('')
+    scope.stop()
+  })
+})

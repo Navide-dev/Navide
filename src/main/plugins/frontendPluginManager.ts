@@ -9,6 +9,7 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
+import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale } from '../hostLocale'
 import { composePluginFrameQuery } from './pluginContributionQuery'
@@ -1279,6 +1280,12 @@ export class FrontendPluginManager {
     onBackendFailure: (runtime, error) => {
       if (error.cause) {
         this.emitHostBackendFailureDiagnostic(runtime.pluginId, error)
+      }
+      if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE) {
+        // The child stays stopped for good. Outside Plans nothing else tells
+        // anyone, and the host's own line went only to the console.
+        warnMain(`[plugin-backend] ${runtime.pluginId} failed too often; leaving it stopped (${error.code})`)
+        recordMainFault('plugin.backend_gave_up', `${runtime.pluginId} (${runtime.instanceId ?? 'no instance'}): ${error.code}`)
       }
       if (runtime.pluginId === PLANS_PLUGIN_ID && this.isPlansBackendAvailabilityError(error)) {
         if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE && runtime.instanceId) {
@@ -2655,7 +2662,8 @@ export class FrontendPluginManager {
     if (initiator.kind === 'agent' && this.executionPolicyResolver) {
       try {
         executionPolicy = this.executionPolicyResolver(plugin.workspacePath ?? undefined)
-      } catch {
+      } catch (error) {
+        this.noteExecutionPolicyFailure(error)
         return null
       }
     }
@@ -6410,7 +6418,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(workspacePath)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return false
     }
     return Boolean(
@@ -6703,7 +6712,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(plugin.workspacePath ?? undefined)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return false
     }
     if (!snapshot) return false
@@ -6732,6 +6742,21 @@ export class FrontendPluginManager {
     )
   }
 
+  private readonly executionPolicyFailuresNoted = new Set<string>()
+
+  /** A resolver that throws still denies (fail closed), but used to do so with
+   *  no trace at all. Each distinct failure is written once to main.log and
+   *  the error ledger; repeats of it are not, since every agent call would
+   *  otherwise log again. */
+  private noteExecutionPolicyFailure(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error)
+    if (this.executionPolicyFailuresNoted.has(message)) return
+    if (this.executionPolicyFailuresNoted.size >= 50) this.executionPolicyFailuresNoted.clear()
+    this.executionPolicyFailuresNoted.add(message)
+    warnMain(`[plugin-backend] execution policy could not be read; agent calls are denied: ${message}`)
+    recordMainFault('plugin.policy_resolver_failed', message)
+  }
+
   private currentAgentExecutionPolicy(
     plugin: RunningPlugin,
     initiator: AuthenticatedInitiator | undefined,
@@ -6740,7 +6765,8 @@ export class FrontendPluginManager {
     let snapshot: ExecutionPolicySnapshot | undefined
     try {
       snapshot = this.executionPolicyResolver?.(plugin.workspacePath ?? undefined)
-    } catch {
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
       return null
     }
     return snapshot && snapshot.state !== 'corrupt' ? snapshot : null
@@ -12474,6 +12500,7 @@ export const PLANS_BACKEND_METHODS = [
   'plans.update_stage',
   'plans.update_todo',
   'plans.add_note',
+  'plans.add_todo',
   'plans.review_note_add',
   'plans.review_note_edit',
   'plans.review_note_resolve',
@@ -12494,6 +12521,7 @@ export const PLANS_AGENT_BACKEND_METHODS = [
   'plans.update_stage',
   'plans.update_todo',
   'plans.add_note',
+  'plans.add_todo',
 ] as const
 
 export const PLANS_BACKEND_EVENTS = ['plans.changed'] as const

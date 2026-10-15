@@ -695,7 +695,8 @@ class LogReader(ABC):
         return totals
 
     def usage_since_for_session(
-        self, path: Path, session_id: str, checkpoint: dict[str, Any]
+        self, path: Path, session_id: str, checkpoint: dict[str, Any],
+        *, with_cache_read: bool = False,
     ) -> tuple[dict[str, int], dict[str, Any]]:
         """Sum what this log gained for one session since `checkpoint`.
 
@@ -714,17 +715,24 @@ class LogReader(ABC):
         unbounded key set; that form is dropped (empty cursor returned), which
         makes the caller re-read in full next time rather than grow forever.
 
+        `with_cache_read` adds a "cache_read" key: the part of "input" that
+        was the context re-read from cache, which a token budget leaves out.
+
         Heavy (session files reach tens of MB) — callers MUST run it off the
         event loop. Vendors inherit this; none should need to override it.
         """
         parsed = self.parse_incremental(path, dict(checkpoint or {}))
         totals = {"input": 0, "output": 0, "calls": 0}
+        if with_cache_read:
+            totals["cache_read"] = 0
         for usage in parsed.events:
             if session_id and usage.session_id != session_id:
                 continue
             totals["input"] += int(usage.input_tokens)
             totals["output"] += int(usage.output_tokens)
             totals["calls"] += 1
+            if with_cache_read:
+                totals["cache_read"] += int(usage.cache_read_tokens or 0)
         cursor = dict(parsed.checkpoint)
         if str(cursor.get("kind") or "") == "legacy":
             cursor = {}

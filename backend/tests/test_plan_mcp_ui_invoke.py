@@ -279,6 +279,25 @@ async def test_ui_diagnostics_invokes_the_diagnostics_read_action_with_its_args(
 
 
 @pytest.mark.asyncio
+async def test_ui_diagnostics_also_returns_the_persisted_error_ledger(
+    broadcasts: list[dict[str, Any]], tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import error_ledger
+
+    led = error_ledger.ErrorLedger(tmp_path / "errors.jsonl")
+    monkeypatch.setattr(error_ledger, "_ledger", led)
+    led.record("backend", "error", "loop.unhandled", "boom", pane_id="pane-1")
+    led.record("backend", "error", "ws.internal_error", "other pane", pane_id="pane-2")
+    task = asyncio.create_task(_answer("diagnostics-persisted"))
+    result = await plan_mcp.ui_diagnostics("/ws/alpha", _ctx(), pane_id="pane-1", limit=10)
+    await task
+    led.close()
+
+    assert result["ok"] is True
+    assert [e["message"] for e in result["persisted"]] == ["boom"]
+
+
+@pytest.mark.asyncio
 async def test_ui_diagnostics_uses_its_documented_defaults(
     broadcasts: list[dict[str, Any]],
 ) -> None:

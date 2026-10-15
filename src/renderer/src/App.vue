@@ -196,7 +196,9 @@ import {
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
 import { terminalMultilineRefusal } from './lib/terminalInput'
-import { recordDiagnostic, readDiagnostics, currentDiagnosticSeq } from './lib/uiDiagnostics'
+import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
+import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
+import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { quickClassify } from './lib/quick-classify'
@@ -425,6 +427,13 @@ const ClockPanel = defineAsyncComponent(() => import('./components/ClockPanel.vu
 const NotifyPanel = defineAsyncComponent(() => import('./components/NotifyPanel.vue'))
 
 const backend = useBackend()
+// Warn and error diagnostics also go to the backend's on-disk error ledger,
+// which outlives a reload and is what ui_diagnostics returns as `persisted`.
+setDiagnosticSink((entry) => {
+  backend
+    .send('diagnostics.record', { level: entry.level, code: entry.code, message: entry.message, paneId: entry.paneId })
+    .catch(() => { /* best effort: the ring buffer still has it */ })
+})
 const terminalPort = createHostTerminalDockPort(backend)
 // Hook the settings cache to the ws: reconciles + flushes queued writes once
 // connected, and applies ui.settings_changed broadcasts from other windows.
@@ -1721,6 +1730,13 @@ interface ActivePane {
    *  expired-login message (see lib/cliLoginExpired); cleared once the login
    *  command is re-sent via the badge click. Not persisted to PaneRecord. */
   loginExpired?: boolean
+  /** Runtime-only: the agent CLI's last exit, when it was a non-zero one (see
+   *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
+   *  Not persisted. */
+  exitFault?: PaneExitFault | null
+  /** Runtime-only: when this pane went quiet mid-turn (see lib/paneStuck), or
+   *  null while it is not stuck. Shown as a title-bar badge. Not persisted. */
+  stuckSince?: number | null
   /** Runtime-only quota-exhausted state, set when the pane's CLI printed its
    *  "hit your limit" message (see lib/cliUsageLimit). `usageLimitAt` is when
    *  it was seen — the loop reads it as an edge, so it must change on every
@@ -3883,6 +3899,7 @@ onMounted(() => {
     void refreshTerminalPrompts()
     messaging.pump()
     pollAwaitingPanes()
+    pollStuckPanes()
     syncPaneBusy()
   }, 1000)
   void refreshRemoteMessagingTargets()
@@ -3929,6 +3946,46 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+
+/** Flag a pane whose turn is in flight but whose log and screen have both been
+ *  quiet past the threshold, and record it once per episode. Reminder only:
+ *  nothing is interrupted or restarted. */
+function pollStuckPanes(): void {
+  const now = Date.now()
+  for (const pane of panes.value) {
+    if (!pane.realized || pane.agentKey === TERMINAL_AGENT_KEY) continue
+    // Contained per pane, like pollAwaitingPanes: a badge must never take the
+    // messaging pump down with it.
+    try {
+      const ref = paneRefs[pane.id]
+      const status = ref?.displayStatus as string | undefined
+      const lastActive = paneLastActiveAt.get(pane.id) ?? 0
+      const since = status === 'running' || status === 'idle'
+        ? paneStuckSince({
+          turnInFlight: isTurnInFlight(lastActive, paneTurnCompleteAt.get(pane.id) ?? 0, now, {
+            inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
+          }),
+          lastLogActivityAt: lastActive,
+          lastOutputAt: Number(ref?.lastActivityAt ?? 0),
+          now,
+        })
+        : null
+      if (since != null && pane.stuckSince == null) {
+        pane.stuckSince = since
+        recordDiagnostic({
+          level: 'warn',
+          code: 'pane.stuck',
+          message: `${pane.agentKey} has been mid-turn with no activity for ${Math.round((now - since) / 60_000)} min`,
+          paneId: pane.id,
+        })
+      } else if (since == null && pane.stuckSince != null) {
+        pane.stuckSince = null
+      }
+    } catch {
+      /* leave this pane's badge as-is and carry on with the rest */
+    }
+  }
+}
 
 function pollAwaitingPanes(): void {
   for (const pane of panes.value) {
@@ -10193,7 +10250,7 @@ watch(currentWorkspace, (_next, prev) => {
 registerCommand('ui.diagnostics.read', (args) => {
   const a = (args as { sinceSeq?: number; paneId?: string; limit?: number } | undefined) ?? {}
   const entries = readDiagnostics({ sinceSeq: a.sinceSeq, paneId: a.paneId || undefined, limit: a.limit })
-  return { entries, nextSeq: currentDiagnosticSeq() }
+  return { entries, nextSeq: diagnosticsNextSeq(entries, a.limit) }
 })
 registerCommand('ui.tab.switch', (args) => {
   const tabId = (args as { tabId?: string } | undefined)?.tabId
@@ -14721,6 +14778,17 @@ backend.on('terminal.exit', (raw) => {
   if (ev.exit_code === 127 && pane.agentKey !== 'terminal' && ev.startup_probe?.reason === 'not_found') {
     void promptCliInstall(pane.agentKey, pane.agentLabel, pane.id)
   }
+  // Any other non-zero exit of an agent CLI used to look exactly like the user
+  // quitting it. Keep the code for the title-bar badge, and record it.
+  pane.exitFault = paneExitFault(ev.exit_code, pane.agentKey, ev.startup_probe?.reason)
+  if (pane.exitFault) {
+    recordDiagnostic({
+      level: 'error',
+      code: 'pane.exit',
+      message: `${pane.agentKey} exited with code ${pane.exitFault.code}`,
+      paneId: pane.id,
+    })
+  }
 })
 
 // The PTY stopped taking input and the backend is holding what we wrote. Keyed
@@ -15015,10 +15083,12 @@ function relaunchAfterInstall(depId: string): void {
 window.addEventListener('error', (e) => {
   const where = e.filename ? ` (${e.filename.split('/').pop()}:${e.lineno})` : ''
   pipelineLog(`❌ exception: ${e.message}${where}`)
+  recordDiagnostic({ level: 'error', code: 'window.error', message: `${e.message}${where}` })
 })
 window.addEventListener('unhandledrejection', (e) => {
   const reason = e.reason instanceof Error ? e.reason.message : String(e.reason)
   pipelineLog(`❌ unhandled rejection: ${reason}`)
+  recordDiagnostic({ level: 'error', code: 'window.unhandledrejection', message: reason })
 })
 
 // How a slot was judged finished — recorded for history.jsonl auditing so a
@@ -19441,6 +19511,9 @@ function openTurnStats(): void {
 // raises an open request with the pane id and pointer coords.
 const paneCtxMenu = ref<{ paneId: string; x: number; y: number } | null>(null)
 const paneCtxMenuEl = ref<HTMLElement | null>(null)
+// Whether the right-clicked pane is held narrower than its container by the
+// layout-mode cols cap (see lockCols). Offers "Fit to pane width" when true.
+const paneCtxColsCapped = ref(false)
 
 const paneCtxView = computed<ActivePaneView | null>(() =>
   paneCtxMenu.value ? paneViews.value.find((v) => v.id === paneCtxMenu.value!.paneId) ?? null : null
@@ -19547,6 +19620,8 @@ async function mentionPaneInFocusedPane(paneId: string): Promise<void> {
 function openPaneCtxMenu(e: MouseEvent, paneId: string): void {
   e.preventDefault()
   paneCtxMenu.value = { paneId, x: e.clientX, y: e.clientY }
+  // The cap is not reactive, so read it once as the menu opens.
+  paneCtxColsCapped.value = !!paneRefs[paneId]?.isColsCapped?.()
   // Flip/clamp into the viewport once the menu has rendered, so items near the
   // bottom/right edge aren't clipped by the window.
   void nextTick(() => {
@@ -21444,6 +21519,8 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-wait-until="p.loopWaitUntil"
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
+          :exit-code="p.exitFault?.code ?? null"
+          :stuck-since="p.stuckSince ?? null"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"
@@ -21942,6 +22019,12 @@ function paneIsCommander(p: ActivePane): boolean {
         >{{ $t('action.restore') }}</div>
         <div class="pane-ctx-item" @click="startRenamePane(paneCtxMenu!.paneId)">{{ $t('action.rename') }}</div>
         <div class="pane-ctx-item" @click="togglePaneMuted(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ paneCtxView?.isMuted ? $t('action.unmute') : $t('action.mute') }}</div>
+        <div
+          v-if="paneCtxColsCapped"
+          class="pane-ctx-item"
+          :title="$t('action.fit-width-title')"
+          @click="paneRefs[paneCtxMenu!.paneId]?.unlockCols?.(); closePaneCtxMenu()"
+        >{{ $t('action.fit-width') }}</div>
         <div
           class="pane-ctx-item"
           :class="{ disabled: !ctxMentionAddress }"

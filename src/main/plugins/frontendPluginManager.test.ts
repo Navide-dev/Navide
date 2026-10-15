@@ -356,6 +356,7 @@ import {
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
 import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
+import { setMainLedgerDataDir } from '../error-ledger'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
 import type { PlansBridgeContext } from './plansBridge'
@@ -702,6 +703,24 @@ describe('backend Host session registration', () => {
       ),
     }
   }
+
+  it('records a backend child it gave up restarting in main.log and the error ledger', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    try {
+      const { childBudgetSpent } = plansManagerWithHostObservers()
+      childBudgetSpent('headless-1')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`${PLANS_PLUGIN_ID} failed too often`))
+      const [entry] = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+      expect(entry).toMatchObject({ source: 'main', code: 'plugin.backend_gave_up' })
+      expect(entry.message).toContain(PLANS_PLUGIN_ID)
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
+  })
 
   it('restores Plans support when a failed child comes back after an automatic restart', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -11254,6 +11273,34 @@ describe('first-party Git private bridge', () => {
       ok: false,
       error: { code: 'BAD_REQUEST' },
     })
+  })
+
+  it('still denies when the policy resolver throws, but says why once in main.log and the ledger', async () => {
+    const { mgr, instanceId } = await openGitView()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    mgr.setExecutionPolicyResolver(() => {
+      throw new Error('policy file unreadable')
+    })
+    const handler = vi.fn()
+    mgr.setPublicCapabilityHandler(handler)
+    const call = (reqId: string) => mgr.executeAgentCapability(instanceId, {
+      reqId, ns: 'fs', method: 'listFilesFlat', args: { query: '', maxResults: 1 },
+    })
+    try {
+      await expect(call('throwing-1')).resolves.toMatchObject({ ok: false })
+      await expect(call('throwing-2')).resolves.toMatchObject({ ok: false })
+      expect(handler).not.toHaveBeenCalled()
+      const warned = warnSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('policy file unreadable'))
+      expect(warned).toHaveLength(1)
+      const lines = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n')
+      expect(lines.map((l) => JSON.parse(l).code)).toEqual(['plugin.policy_resolver_failed'])
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
   })
 
   it('rechecks a stale agent policy before invoking the public handler', async () => {

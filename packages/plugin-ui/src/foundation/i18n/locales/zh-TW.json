@@ -482,6 +482,7 @@
       "sync": "同步完成",
       "publish": "發佈完成"
     },
+    "read-failed": "讀取失敗：{reason}",
     "account": {
       "selector-title": "此工作區使用的帳號",
       "unbound": "未綁定帳號",
@@ -831,6 +832,10 @@
       "loop-capped-notify-title": "Loop 已停止 — 達續跑次數上限",
       "loop-capped-notify-body": "Loop 已送出上限次數的續跑提示，Agent 仍未回報任務完成 — 若工作方向正確請手動重新啟動",
       "login-expired-badge": "⚠ 登入過期",
+      "exit-fault-badge": "⚠ 已結束（代碼 {code}）",
+      "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
+      "stuck-badge": "⏳ 超過 {minutes} 分鐘沒有動靜",
+      "stuck-tooltip": "這個回合已超過 {minutes} 分鐘沒有任何紀錄或輸出，CLI 可能卡住了；Navide 沒有中斷它。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -997,6 +1002,8 @@
     "minimize-selected": "最小化所選",
     "mute": "靜音通知",
     "unmute": "取消靜音",
+    "fit-width": "填滿面板寬度",
+    "fit-width-title": "改用面板的完整寬度。上方較早的輸出可能會有幾行重新換行。",
     "restore-selected": "還原所選",
     "reclaim-selected": "回收所選（{count} 個）",
     "reclaim-selected-title": "回收所選中符合條件的 CLI 以釋放記憶體，面板會保留為可點擊接續的卡片；忙碌、聚焦、有未送出輸入或無法接續的面板會略過。",
@@ -4992,7 +4999,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供給 CLI agent 的工具",
-          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>62 個</strong>（核心 56 個，加上 Navide 外掛「Plans」註冊的 6 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
+          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>63 個</strong>（核心 56 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
           "h1": "計畫文件",
           "planTools": {
             "plan_list": "列出這個工作區的所有計畫，含階段與待辦進度",
@@ -5000,7 +5007,8 @@
             "plan_create": "建立新計畫（從草稿開始）",
             "plan_update_stage": "推進階段：草稿 → 審查中 → 已核准 → 進行中 → 已完成",
             "plan_update_todo": "更新單一待辦的狀態",
-            "plan_add_note": "寫入發現或決策的紀錄"
+            "plan_add_note": "寫入發現或決策的紀錄",
+            "plan_add_todo": "在既有計畫裡新增一項待辦"
           },
           "note1": "計畫是 agent 用這些工具寫出來的 HTML，你在 Navide 的「計畫」視圖裡閱讀與核准。agent 只有在階段推進到「已核准」之後才會開始寫程式。",
           "h2": "工作區、Pipeline 編排與設定",
@@ -7119,6 +7127,10 @@
         "salvaged": "{device} 從受損的配對紀錄中救回，金鑰保留不變，但需要你重新核准",
         "sig2-missing": "{device} 送來的訊息少了時間簽章，可能是伺服器不轉送這個欄位，或在途中被移除。訊息已照常送達",
         "sig2-unusable": "{device} 送來的訊息時間簽章無效，或時間與這台機器差太多。已改用舊版簽章照常送達；請檢查兩台機器的時間",
+        "sig2-refused-missing": "{device} 送來的訊息少了時間簽章，已拒收：這台裝置會附時間簽章，所以是在途中被移除",
+        "sig2-refused-unusable": "{device} 送來的訊息時間簽章無效，已拒收",
+        "sig2-refused-clock-ahead": "{device} 的訊息因時鐘偏差被拒收：那台機器的時間比這台快 {minutes} 分鐘。請檢查兩台機器的時間",
+        "sig2-refused-clock-behind": "{device} 的訊息因時鐘偏差被拒收：那台機器的時間比這台慢 {minutes} 分鐘，或訊息在途中被延遲。請檢查兩台機器的時間",
         "full": "配對數已達上限，無法與 {device} 配對。需要升級 Navide 後才能新增。",
         "sending": "確認中…",
         "start": "配對",
@@ -10882,7 +10894,8 @@
       "budget": "今天的執行次數已達上限",
       "workspace_gone": "workspace 資料夾不存在",
       "workspace_not_open": "到點時沒有視窗開著這個 workspace，下次開啟時補跑",
-      "not_git": "不是 git repo，改用只提案"
+      "not_git": "不是 git repo，改用只提案",
+      "over_budget": "超過 1.5 倍 token 預算，已中斷並結束"
     },
     "notice": {
       "started": "自我優化開始 · {workspace}",
@@ -10907,7 +10920,7 @@
         "result": "看結果"
       },
       "over_budget": "自我優化超出預算 · {workspace}",
-      "over-budget-body": "這次執行超過 1.5 倍 token 預算，Navide 已送出一次中斷。"
+      "over-budget-body": "這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。"
     }
   },
   "recentWorkspaces": {

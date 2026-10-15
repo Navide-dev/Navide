@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -35,6 +36,8 @@ _COMPONENT = "scheduler"
 
 #: Run-history rows kept per job; older rows are pruned on append.
 RUNS_PER_JOB = 200
+#: A run recorded while its message still waited (scheduler.outcome_of_send).
+_QUEUED_DETAIL = re.compile(r"queued \([^)]*\)")
 
 _JSON_COLUMNS = ("schedule", "action", "policy", "state")
 #: The owner of a job saved before owners were recorded.
@@ -212,6 +215,23 @@ class SchedulerStore:
                 (job_id, job_id, RUNS_PER_JOB),
             )
 
+    def _resolve_queued_run(self, job_id: str, status: str, reason: str | None, suffix: str) -> bool:
+        """Finish the newest dispatched run if it is still the bare "queued (...)"
+        record: append how its message ended, and take that status."""
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT id, status, detail FROM scheduler_runs WHERE job_id = ? AND status != 'skipped'"
+                " ORDER BY id DESC LIMIT 1",
+                (job_id,),
+            ).fetchone()
+            if row is None or row["status"] != "ok" or not _QUEUED_DETAIL.fullmatch(str(row["detail"] or "")):
+                return False
+            cur.execute(
+                "UPDATE scheduler_runs SET status = ?, reason = ?, detail = ? WHERE id = ?",
+                (status, reason, f"{row['detail']}, {suffix}", row["id"]),
+            )
+            return True
+
     def _list_runs(self, job_id: str, limit: int) -> list[dict[str, Any]]:
         with self.db.transaction() as cur:
             rows = cur.execute(
@@ -271,6 +291,9 @@ class SchedulerStore:
 
     async def append_run(self, job_id: str, run: dict[str, Any]) -> None:
         await asyncio.to_thread(self._append_run, job_id, run)
+
+    async def resolve_queued_run(self, job_id: str, status: str, reason: str | None, suffix: str) -> bool:
+        return await asyncio.to_thread(self._resolve_queued_run, job_id, status, reason, suffix)
 
     async def list_runs(self, job_id: str, limit: int) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self._list_runs, job_id, limit)

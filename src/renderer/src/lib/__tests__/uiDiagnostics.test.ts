@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
   recordDiagnostic,
   readDiagnostics,
   takeDiagnosticsSince,
   currentDiagnosticSeq,
+  diagnosticsNextSeq,
+  setDiagnosticSink,
   _resetDiagnostics
 } from '../uiDiagnostics'
 
@@ -97,5 +99,43 @@ describe('currentDiagnosticSeq', () => {
     expect(currentDiagnosticSeq()).toBe(0)
     const entry = recordDiagnostic({ level: 'warn', code: 'c', message: 'm' })
     expect(currentDiagnosticSeq()).toBe(entry.seq)
+  })
+})
+
+describe('diagnosticsNextSeq — resume point for a polling reader', () => {
+  it('resumes after the last returned entry when limit cut the page short', () => {
+    for (let i = 0; i < 10; i++) recordDiagnostic({ level: 'warn', code: 'c', message: `m${i}` })
+    const page = readDiagnostics({ limit: 4 })
+    const next = diagnosticsNextSeq(page, 4)
+    expect(next).toBe(page[3].seq)
+    // Polling with it must return the remaining six, not skip them.
+    expect(readDiagnostics({ sinceSeq: next })).toHaveLength(6)
+  })
+
+  it('is the high-water mark when the page was not cut short', () => {
+    for (let i = 0; i < 3; i++) recordDiagnostic({ level: 'warn', code: 'c', message: `m${i}` })
+    expect(diagnosticsNextSeq(readDiagnostics({ limit: 50 }), 50)).toBe(currentDiagnosticSeq())
+    expect(diagnosticsNextSeq(readDiagnostics(), undefined)).toBe(currentDiagnosticSeq())
+  })
+})
+
+describe('setDiagnosticSink — warn and error entries also go to the on-disk ledger', () => {
+  afterEach(() => setDiagnosticSink(null))
+
+  it('hands warn and error entries to the sink, not info breadcrumbs', () => {
+    const seen: string[] = []
+    setDiagnosticSink((e) => seen.push(`${e.level}:${e.code}`))
+    recordDiagnostic({ level: 'info', code: 'tab.switch', message: 'm' })
+    recordDiagnostic({ level: 'warn', code: 'inject.resend', message: 'm', paneId: 'p1' })
+    recordDiagnostic({ level: 'error', code: 'window.error', message: 'm' })
+    expect(seen).toEqual(['warn:inject.resend', 'error:window.error'])
+  })
+
+  it('still records the entry when the sink throws', () => {
+    setDiagnosticSink(() => {
+      throw new Error('socket gone')
+    })
+    const entry = recordDiagnostic({ level: 'error', code: 'c', message: 'm' })
+    expect(readDiagnostics().map((e) => e.seq)).toContain(entry.seq)
   })
 })
