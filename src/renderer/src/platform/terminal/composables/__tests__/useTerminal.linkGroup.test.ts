@@ -119,6 +119,32 @@ describe('getWrappedLineGroup', () => {
   })
 })
 
+describe('getWrappedLineGroup — command echo', () => {
+  it('does not glue a command row onto output that repeats its path', () => {
+    // `ls src/main.ts` prints the path back on the next row; gluing the two
+    // turned the click into "src/main.tssrc/main.ts" on Windows and Linux.
+    const rows = [{ text: 'user@vm:~/proj$ ls src/main.ts' }, { text: 'src/main.ts' }, { text: '' }]
+    const g = getWrappedLineGroup(mockTerm(rows), 1)
+    expect(g.fullText).toBe('src/main.ts')
+    expect(findFileLinkAt(getWrappedLineGroup(mockTerm(rows), 0).fullText, 20)).toBe('src/main.ts')
+  })
+})
+
+describe('findFileLinkAt — Windows drive paths', () => {
+  it('matches a backslash path with a drive letter', () => {
+    const text = 'error in C:\\Users\\u\\proj\\src\\main.ts:12'
+    expect(findFileLinkAt(text, text.indexOf('main'))).toBe('C:\\Users\\u\\proj\\src\\main.ts:12')
+  })
+
+  it('does not take a drive letter glued to a word', () => {
+    expect(findFileLinkAt('abC:\\x\\y', 4)).toBeNull()
+  })
+
+  it('still matches forward-slash drive paths as before', () => {
+    expect(findFileLinkAt('C:/Users/u/a.ts', 5)).toBe('C:/Users/u/a.ts')
+  })
+})
+
 describe('position mapping', () => {
   const g = getWrappedLineGroup(mockTerm(PREWRAP_ROWS), 0)
 
