@@ -785,6 +785,8 @@
       "loop-capped-notify-title": "ループを停止しました — 続行回数の上限",
       "loop-capped-notify-body": "タスク完了の報告がないまま、続行プロンプトの送信回数が上限に達しました。作業が順調であれば、ループを再開してください",
       "login-expired-badge": "⚠ ログイン期限切れ",
+      "exit-fault-badge": "⚠ 終了（コード {code}）",
+      "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",

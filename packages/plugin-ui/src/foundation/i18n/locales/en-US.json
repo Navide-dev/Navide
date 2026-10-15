@@ -785,6 +785,8 @@
       "loop-capped-notify-title": "Loop stopped — continue limit reached",
       "loop-capped-notify-body": "The loop sent its maximum number of continue prompts without the agent reporting the task done — restart it if the work is still on track",
       "login-expired-badge": "⚠ Login expired",
+      "exit-fault-badge": "⚠ Exited (code {code})",
+      "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",

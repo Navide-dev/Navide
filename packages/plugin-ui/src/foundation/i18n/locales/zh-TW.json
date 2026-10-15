@@ -785,6 +785,8 @@
       "loop-capped-notify-title": "Loop 已停止 — 達續跑次數上限",
       "loop-capped-notify-body": "Loop 已送出上限次數的續跑提示，Agent 仍未回報任務完成 — 若工作方向正確請手動重新啟動",
       "login-expired-badge": "⚠ 登入過期",
+      "exit-fault-badge": "⚠ 已結束（代碼 {code}）",
+      "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
