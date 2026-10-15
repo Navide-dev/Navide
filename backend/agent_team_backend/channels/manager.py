@@ -109,6 +109,8 @@ MSG_RELAY_ANSWERED_IN_CHAT = "✅ 已在聊天室回答："  # + the answer
 MSG_RELAY_PERMANENT = "⚠️ 這個選項會永久放行，請在電腦前操作"
 MSG_RELAY_NEEDS_LOCAL = "⚠️ 這個動作需要在電腦前確認"
 MSG_AWAITING_LOCAL = "pane 在等確認，請在電腦上回答"
+MSG_PENDING_NONE = "目前沒有等待確認的 pane"
+MSG_PENDING_RELISTED = "↓ 已重新列在下方"
 MSG_HELD_BY_PROMPT = "⚠️ pane 正在等確認，這則訊息沒有送出。{how}"
 MSG_LINKED = "✅ 已連結 Navide。回到 Navide 在 pane 的聊天按鈕選這個聊天室即可。"
 MSG_LINK_FAILED = "⚠️ 連結失敗，請回到 Navide 重新取得代碼"
@@ -1440,6 +1442,9 @@ class ChannelManager:
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
             await self._quick_menu(msg)
             return
+        if relay.is_pending_command(msg.text, self._identity(msg)):
+            await self._list_pending(msg)
+            return
         share_cmd = share_cmds.parse_command(msg.text, self._identity(msg))
         if share_cmd is not None and await self._share_command(msg, *share_cmd):
             return
@@ -1537,6 +1542,37 @@ class ChannelManager:
             how = MSG_AWAITING_LOCAL
         await self._reply(msg, MSG_HELD_BY_PROMPT.format(how=how))
         return True
+
+    async def _list_pending(self, msg: InboundMessage) -> None:
+        """/pending: send this chat's waiting prompts again, each with its buttons. The new
+        message becomes the prompt's own (settled when it is answered); the old one drops
+        its buttons."""
+        live = self.relay.for_location(msg.location_key())
+        if not live:
+            # A bot that does not drive this chat stays quiet when several share it.
+            if self._binding_for(msg) is not None or self._sole_bot(msg.platform):
+                await self._reply(msg, MSG_PENDING_NONE)
+            return
+        adapter = self._adapters.get((msg.platform, msg.account))
+        if adapter is None:
+            return
+        names = {str(p.get("pane_id")): str(p.get("name") or "") for p in self._seams.pane_directory()}
+        for request in sorted(live, key=lambda r: r.created):
+            minutes = int(max(self._clock() - request.created, 0) // 60)
+            head = f"📋 {names.get(request.pane_id) or request.pane_id}・{minutes} 分鐘前"
+            text = f"{head}\n{relay.prompt_text(request, request.prompt)}"
+            buttons = relay.buttons_for(request) if adapter.capabilities.buttons else None
+            try:
+                ids = await self.mirror.send(request.loc, text, owner=request.pane_id, buttons=buttons or None)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: /pending to %s failed: %s", request.loc.key(), exc)
+                continue
+            if not ids:
+                continue
+            old = dataclasses.replace(request)
+            request.message_id = ids[-1]
+            request.message_text = text if len(ids) == 1 else ""
+            self._spawn(self._settle_prompt(old, MSG_PENDING_RELISTED))
 
     async def _handle_relay_answer(self, msg: InboundMessage, answer: relay.RelayAnswer) -> None:
         request = self.relay.get(answer.request_id)

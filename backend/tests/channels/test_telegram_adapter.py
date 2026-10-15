@@ -492,3 +492,36 @@ async def test_menu_sends_and_edits_several_button_rows(api: FakeBotApi) -> None
     edit = api.calls_of("editMessageText")[0]
     assert edit["message_id"] == 9
     assert edit["reply_markup"]["inline_keyboard"] == [[{"text": "Next ▶", "callback_data": "nv2:g:cccccccc"}]]
+
+
+async def test_the_command_menu_is_registered_once_per_session(api: FakeBotApi) -> None:
+    ad = _adapter(api)
+
+    async def emit(msg: InboundMessage) -> None:
+        pass
+
+    await ad.start(emit)
+    try:
+        await _until(lambda: api.calls_of("getUpdates"))
+    finally:
+        await ad.stop()
+    calls = api.calls_of("setMyCommands")
+    assert len(calls) == 1
+    assert [c["command"] for c in calls[0]["commands"]][0] == "pending"
+
+
+async def test_a_failed_command_menu_does_not_stop_the_bot(api: FakeBotApi) -> None:
+    api.fail("setMyCommands", 400, "Bad Request: something")
+    got: list[InboundMessage] = []
+
+    async def emit(msg: InboundMessage) -> None:
+        got.append(msg)
+
+    api.push_message(chat_id=42, text="hello")
+    ad = _adapter(api)
+    await ad.start(emit)
+    try:
+        await _until(lambda: got)
+    finally:
+        await ad.stop()
+    assert got[0].text == "hello"

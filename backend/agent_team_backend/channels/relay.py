@@ -213,6 +213,17 @@ def answer_hint(request: RelayRequest) -> str:
     return f"回覆 no {request.id}（允許請在電腦前操作）"
 
 
+def is_pending_command(body: str, identity: str = "") -> bool:
+    """``/pending``, optionally ``@bot``-addressed; one addressed to another bot is not ours."""
+    rest = (body or "").strip()
+    if not rest.startswith("/") or " " in rest:
+        return False
+    head, _, bot = rest.partition("@")
+    if bot and identity and bot.lower() != identity.lstrip("@").lower():
+        return False
+    return head.lower() == "/pending"
+
+
 def buttons_for(request: RelayRequest) -> list[tuple[str, str]]:
     if request.kind == "permission":
         deny = ("拒絕", f"{CALLBACK_PREFIX}{request.id}:n")

@@ -70,6 +70,13 @@ SEND_CONNECT_RETRIES = 2
 # A 409 means another getUpdates consumer holds the bot; retrying at the first
 # step would only fight it for messages. Attempt 4 is base x 8 (~40s).
 CONFLICT_MIN_ATTEMPT = 4
+# The bot's "/" menu (setMyCommands), every one handled by the channel manager.
+BOT_COMMANDS = [
+    {"command": "pending", "description": "列出等待確認的 pane"},
+    {"command": "menu", "description": "快速選單"},
+    {"command": "status", "description": "pane 狀態"},
+    {"command": "stop", "description": "中斷 pane"},
+]
 
 
 class OffsetStore(Protocol):
@@ -201,6 +208,11 @@ class TelegramAdapter:
         if me.get("id"):
             self.bot_id = str(me["id"])
         await self._call("deleteWebhook", {"drop_pending_updates": False})
+        try:
+            # The "/" menu in the chat; a failure only loses the menu, not the bot.
+            await self._call("setMyCommands", {"commands": BOT_COMMANDS})
+        except Exception as exc:  # noqa: BLE001
+            log.info("telegram: setMyCommands failed: %s", exc)
         if self._offsets is not None:
             self._offset = self._offsets.get_offset(self.platform, self.account, self.bot_id)
         self.status.lifecycle = "ready"
