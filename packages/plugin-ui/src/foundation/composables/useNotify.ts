@@ -11,9 +11,9 @@ import { readonly, ref } from 'vue'
 export type ToastType = 'success' | 'error' | 'info'
 
 /** Opt-in emphasis on top of the type: `external` for content from another
- *  machine or a chat channel, `security` for Guard, `workspace` for another
- *  local workspace. Absent means the ordinary toast. */
-export type ToastVariant = 'external' | 'security' | 'workspace'
+ *  machine, `channel` for a chat channel, `security` for Guard, `workspace`
+ *  for another local workspace. Absent means the ordinary toast. */
+export type ToastVariant = 'external' | 'channel' | 'security' | 'workspace'
 
 export interface Toast {
   id: number
