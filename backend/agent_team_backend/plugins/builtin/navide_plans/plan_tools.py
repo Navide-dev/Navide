@@ -46,6 +46,7 @@ _MUTATING_PLAN_METHODS = frozenset({
     "plans.update_stage",
     "plans.update_todo",
     "plans.add_note",
+    "plans.add_todo",
 })
 # Failures that mean no Host session can serve the call. They stay failures
 # (no local fallback without the Host's disposition); the hint tells the
@@ -318,6 +319,18 @@ _TEMPLATE_TODO_LI_RE = re.compile(
 _PLACEHOLDER_RE = re.compile(r"\{\{[^{}]*\}\}")
 _TODO_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
 _NOTE_ID_RE = re.compile(r"n(\d+)")
+_AUTO_TODO_ID_RE = re.compile(r"t(\d+)")
+_TODO_ROW_RE = re.compile(
+    r"<li\b[^>]*\bdata-todo-id=[\"']([^\"']*)[\"'][^>]*>[\s\S]*?</li>", re.IGNORECASE
+)
+_EMPTY_TODO_LIST_RE = re.compile(
+    r"(<ul\b[^>]*\bclass=[\"'][^\"']*\btodos\b[^\"']*[\"'][^>]*>)((?:\s|<!--[\s\S]*?-->)*)(</ul>)",
+    re.IGNORECASE,
+)
+_TODO_MARKUP_WARNING = (
+    "the todo was added to plan-meta, but its visible row was not inserted: "
+    "no todo list (or no row for `after`) was found in the document"
+)
 
 
 def _load_plan_for_write(workspace_path: str, rel_path: str) -> tuple[str, dict[str, Any], float]:
@@ -546,6 +559,100 @@ def _add_note_sync(
     return dict(note)
 
 
+def _add_todo_refusal(
+    meta: dict[str, Any], html: str, content: str, todo_id: str, owner: str, status: str, after: str
+) -> str | None:
+    """Why ``plan_add_todo`` must refuse these arguments, or None when it may proceed.
+
+    Ids already used by a visible row count as taken too, so the new todo can
+    never produce a second row with the same id.
+    """
+    if owner and owner not in TODO_OWNERS:
+        return f"invalid todo owner: {owner!r} (valid: {', '.join(sorted(TODO_OWNERS))})"
+    if status not in TODO_STATUSES:
+        return f"invalid status: {status!r} (valid: {', '.join(sorted(TODO_STATUSES))})"
+    if not content.strip():
+        return "todo content must be non-empty"
+    todos = meta.get("todos")
+    valid = [
+        t["id"] for t in (todos if isinstance(todos, list) else [])
+        if isinstance(t, dict) and isinstance(t.get("id"), str)
+    ]
+    if todo_id:
+        if _TODO_ID_RE.fullmatch(todo_id) is None:
+            return f"invalid todo id {todo_id!r} (use kebab-case: [a-z0-9-])"
+        if todo_id in valid or todo_id in _TODO_ROW_RE.findall(html):
+            return f"duplicate todo id: {todo_id}"
+    if after and after not in valid:
+        return f"unknown todo id: {after!r} (valid ids: {', '.join(valid) or 'none'})"
+    return None
+
+
+def _insert_todo_markup(html: str, todo: dict[str, str], after: str) -> str | None:
+    """Insert the todo's visible row; None when there is nowhere to put it.
+
+    The row goes after ``after``'s row, or after the last todo row. A document
+    whose todo list exists but is empty gets it as that list's first row.
+    """
+    row = _todos_markup([todo])
+    rows = list(_TODO_ROW_RE.finditer(html))
+    if after:
+        anchor = next((m for m in rows if m.group(1) == after), None)
+    else:
+        anchor = rows[-1] if rows else None
+    if anchor is not None:
+        line_start = html.rfind("\n", 0, anchor.start()) + 1
+        indent = html[line_start : anchor.start()]
+        indent = indent if not indent.strip() else ""
+        return f"{html[: anchor.end()]}\n{indent}{row}{html[anchor.end() :]}"
+    if after or rows:
+        return None
+    empty = _EMPTY_TODO_LIST_RE.search(html)
+    if empty is None:
+        return None
+    return f"{html[: empty.end(2)]}{row}\n{html[empty.start(3) :]}"
+
+
+def _add_todo_sync(
+    workspace_path: str,
+    rel_path: str,
+    content: str,
+    todo_id: str = "",
+    owner: str = "",
+    status: str = "pending",
+    after: str = "",
+) -> dict[str, Any]:
+    todo_id, after = todo_id.strip(), after.strip()
+    html, meta, mtime = _load_plan_for_write(workspace_path, rel_path)
+    refusal = _add_todo_refusal(meta, html, content, todo_id, owner, status, after)
+    if refusal:
+        raise FsError(refusal)
+    todos = meta.get("todos")
+    if not isinstance(todos, list):
+        todos = []
+        meta["todos"] = todos
+    if not todo_id:
+        taken = [t.get("id") for t in todos if isinstance(t, dict)] + _TODO_ROW_RE.findall(html)
+        numbers = [int(m.group(1)) for m in map(_AUTO_TODO_ID_RE.fullmatch, map(str, taken)) if m]
+        todo_id = f"t{max(numbers, default=0) + 1}"
+    todo = {"id": todo_id, "content": content.strip(), "status": status}
+    # Same storage rule as plan_create: the "agent" default is an absent key.
+    if owner == "user":
+        todo["owner"] = owner
+    index = len(todos)
+    if after:
+        index = next(i + 1 for i, t in enumerate(todos) if isinstance(t, dict) and t.get("id") == after)
+    todos.insert(index, todo)
+    inserted = _insert_todo_markup(html, todo, after)
+    _save_plan(
+        workspace_path, rel_path, write_plan_meta(inserted or html, meta), expected_mtime=mtime
+    )
+    result: dict[str, Any] = dict(todo)
+    if inserted is None:
+        result["warning"] = _TODO_MARKUP_WARNING
+    return result
+
+
 # ── MCP tools ───────────────────────────────────────────────────────────────
 
 
@@ -741,6 +848,73 @@ async def plan_add_note(
     return await asyncio.to_thread(_add_note_sync, workspace_path, rel_path, text, author)
 
 
+async def plan_add_todo(
+    rel_path: str,
+    content: str,
+    ctx: Context,
+    id: str = "",  # noqa: A002 — the parameter name agents see
+    owner: str = "",
+    status: str = "pending",
+    after: str = "",
+    workspace_path: str = "",
+) -> dict[str, Any]:
+    """Add a todo to an existing plan (island + a new visible todo row).
+
+    Use it when a plan needs a step it does not have yet — a follow-up found
+    during the work, a proposal the user accepted — so the step is tracked
+    like the others instead of living only in a review note.
+
+    `id` is optional kebab-case; omit it to get the next free tN. A duplicate
+    or malformed id is refused, and existing ids are never renumbered.
+    `owner` is "user" for something only the user can do, "agent" (or
+    omitted) for the default. `status` is one of: pending (default),
+    in-progress, done, skipped. `after` is the id of the todo to insert after;
+    omit it to append at the end. An unknown `after` fails with an error
+    listing the plan's valid todo ids. Fails with a conflict error if the file
+    changed on disk during the update.
+
+    Returns the created todo object, plus "warning" when the document has no
+    todo list to put the visible row in: the todo is then in plan-meta only.
+
+    workspace_path defaults to your own pane's workspace; pass it only to
+    update another project's plan.
+    """
+    caller = resolve_caller(ctx)
+    workspace_path = await caller_workspace(caller, workspace_path)
+    try:
+        routed = await _host_agent_plan_call(
+            caller,
+            workspace_path,
+            "plans.add_todo",
+            {
+                "rel_path": rel_path,
+                "content": content,
+                "id": id,
+                "owner": owner,
+                "status": status,
+                "after": after,
+            },
+        )
+    except FsError as error:
+        # The Host relays only an error code. Name the reason (and the valid
+        # ids) from the plan itself, as the local path does.
+        if error.code != "INVALID_ARGUMENT":
+            raise
+        document = await _read_plan_via_host(caller, workspace_path, rel_path)
+        meta = document.get("meta") if isinstance(document, dict) else None
+        refusal = isinstance(meta, dict) and _add_todo_refusal(
+            meta, str(document.get("html", "")), content, id.strip(), owner, status, after.strip()
+        )
+        if refusal:
+            raise FsError(refusal, code=error.code) from None
+        raise
+    if routed is not _NO_HOST_ROUTE:
+        return routed
+    return await asyncio.to_thread(
+        _add_todo_sync, workspace_path, rel_path, content, id, owner, status, after
+    )
+
+
 
 # ── installation onto the core MCP server ───────────────────────────────────
 
@@ -752,6 +926,7 @@ PLAN_TOOLS = (
     plan_update_stage,
     plan_update_todo,
     plan_add_note,
+    plan_add_todo,
 )
 
 
