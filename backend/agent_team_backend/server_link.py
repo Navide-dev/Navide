@@ -199,10 +199,10 @@ MESSAGE_MEMORY_TTL_S = 3600.0
 SIG2_MAX_AGE_S = 55 * 60
 SIG2_MAX_AHEAD_S = 5 * 60
 #: Whether a device that has signed v2 is refused when a message of its arrives
-#: without sig2. Off in 0.2.20 (plan 797ad7, Q4: v1 is refused from 0.2.21): a
-#: server rolled back to a release without sig2, or a relay stripping it, would
-#: otherwise cut that device off. Logged and noticed meanwhile.
-REFUSE_V1_FROM_V2_PEERS = False
+#: without a usable sig2. Off in 0.2.20–0.2.22 (plan 797ad7, Q4), where it was
+#: taken on v1 and noticed; on from 0.2.23. A device never marked ``sigV2`` is
+#: decided on v1 either way.
+REFUSE_V1_FROM_V2_PEERS = True
 
 #: How long a message this device relayed may go unanswered before it asks the
 #: server what became of it, and how often it asks again after that. The
@@ -3267,6 +3267,17 @@ class ServerLink:
             )
             return None
 
+        def v1_verifies() -> bool:
+            return device_signing.verify_message(
+                signature,
+                public_key_b64=key,
+                msg_key=msg_key,
+                from_device=device_id,
+                to_device=self._device_id,
+                kind=kind,
+                body=body,
+            )
+
         signature_v2 = str(data.get("sig2") or "")
         v2_verified = False
         if signature_v2:
@@ -3283,10 +3294,17 @@ class ServerLink:
                 body=body,
             )
             age = None if sent_at is None else time.time() - sent_at
+            cause, minutes = "unusable", None
             if sent_at is None:
                 problem = "its v2 signature does not verify"
             elif age > SIG2_MAX_AGE_S or age < -SIG2_MAX_AHEAD_S:
-                problem = f"sent {int(-age)}s from now, outside the window"
+                # The signature verified; only its time is out. A sender dated
+                # ahead has a fast clock; one dated behind has a slow clock, or
+                # the message was held back on the way.
+                direction = "behind" if age > 0 else "ahead"
+                cause, minutes = f"clock-{direction}", round(abs(age) / 60)
+                problem = (f"clock skew: sender is {minutes} minutes {direction} "
+                           f"(sent {int(-age)}s from now, outside the window)")
             else:
                 problem = ""
             if not problem:
@@ -3297,8 +3315,12 @@ class ServerLink:
                         await asyncio.to_thread(trust_store.note_signs_v2, device_id)
                     except Exception as err:  # noqa: BLE001 - asked again with the next one
                         log.warning("could not record that %s signs v2 (%s)", device_id, err)
-            elif REFUSE_V1_FROM_V2_PEERS:
+            elif REFUSE_V1_FROM_V2_PEERS and pin.get("sigV2"):
                 log.warning("refusing message %s: %s", msg_key, problem)
+                # Noticed only when the device itself sent it — a verifying sig2
+                # (the clock causes) or v1 — or a relay could leave one at will.
+                if minutes is not None or v1_verifies():
+                    await asyncio.to_thread(trust_store.note_sig2_refused, device_id, cause, minutes=minutes)
                 return None
             else:
                 # 0.2.20 (review B4-1): a clock that is off puts every message of
@@ -3314,16 +3336,10 @@ class ServerLink:
             # This device has signed v2 before, so a message without it had it
             # removed on the way — or is older than the device's switch to it.
             log.warning("refusing message %s: %s signs v2 and this carries none", msg_key, device_id)
+            if v1_verifies():
+                await asyncio.to_thread(trust_store.note_sig2_refused, device_id, "missing")
             return None
-        elif not device_signing.verify_message(
-            signature,
-            public_key_b64=key,
-            msg_key=msg_key,
-            from_device=device_id,
-            to_device=self._device_id,
-            kind=kind,
-            body=body,
-        ):
+        elif not v1_verifies():
             log.warning("refusing message %s: its signature does not verify", msg_key)
             return None
         elif not signature_v2 and pin.get("sigV2"):

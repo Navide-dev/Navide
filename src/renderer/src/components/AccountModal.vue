@@ -99,6 +99,8 @@ interface TrustNotice {
   fingerprint?: string
   /** device-pairing: paired | refused | revoked */
   pairing?: string
+  /** device-pairing: sig2-refused-clock-ahead | sig2-refused-clock-behind */
+  minutes?: number
   /** device-pairing, remote-command */
   deviceName?: string
   /** remote-command */
@@ -1911,7 +1913,7 @@ onUnmounted(() => {
               <template v-else-if="n.kind === 'device-pairing'">
                 <div class="req-head">
                   <span class="dev-name" v-truncate>
-                    {{ t('settings.p2p.pair.' + n.pairing, { device: n.deviceName || n.deviceId }) }}
+                    {{ t('settings.p2p.pair.' + n.pairing, { device: n.deviceName || n.deviceId, minutes: n.minutes ?? '' }) }}
                   </span>
                 </div>
               </template>
