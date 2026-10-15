@@ -197,6 +197,7 @@ import {
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
+import { paneStuckSince } from './lib/paneStuck'
 import { resetUiScale, stepUiScaleBy } from './lib/uiScale'
 import { injectStandaloneTask, type StandaloneTaskInjectionDeps } from './lib/standalonePaneTask'
 import { quickClassify } from './lib/quick-classify'
@@ -1732,6 +1733,9 @@ interface ActivePane {
    *  lib/paneExitFault). The title-bar badge shows it while the pane is dead.
    *  Not persisted. */
   exitFault?: PaneExitFault | null
+  /** Runtime-only: when this pane went quiet mid-turn (see lib/paneStuck), or
+   *  null while it is not stuck. Shown as a title-bar badge. Not persisted. */
+  stuckSince?: number | null
   /** Runtime-only quota-exhausted state, set when the pane's CLI printed its
    *  "hit your limit" message (see lib/cliUsageLimit). `usageLimitAt` is when
    *  it was seen — the loop reads it as an edge, so it must change on every
@@ -3894,6 +3898,7 @@ onMounted(() => {
     void refreshTerminalPrompts()
     messaging.pump()
     pollAwaitingPanes()
+    pollStuckPanes()
     syncPaneBusy()
   }, 1000)
   void refreshRemoteMessagingTargets()
@@ -3940,6 +3945,46 @@ onUnmounted(() => {
 // never reports — so a miss there is not evidence the wait ended and must not
 // clear what the hook raised.
 const AWAITING_SCREEN_LINES = 25
+
+/** Flag a pane whose turn is in flight but whose log and screen have both been
+ *  quiet past the threshold, and record it once per episode. Reminder only:
+ *  nothing is interrupted or restarted. */
+function pollStuckPanes(): void {
+  const now = Date.now()
+  for (const pane of panes.value) {
+    if (!pane.realized || pane.agentKey === TERMINAL_AGENT_KEY) continue
+    // Contained per pane, like pollAwaitingPanes: a badge must never take the
+    // messaging pump down with it.
+    try {
+      const ref = paneRefs[pane.id]
+      const status = ref?.displayStatus as string | undefined
+      const lastActive = paneLastActiveAt.get(pane.id) ?? 0
+      const since = status === 'running' || status === 'idle'
+        ? paneStuckSince({
+          turnInFlight: isTurnInFlight(lastActive, paneTurnCompleteAt.get(pane.id) ?? 0, now, {
+            inferEndFromSilence: VENDORS_WITHOUT_TURN_END.has(pane.agentKey),
+          }),
+          lastLogActivityAt: lastActive,
+          lastOutputAt: Number(ref?.lastActivityAt ?? 0),
+          now,
+        })
+        : null
+      if (since != null && pane.stuckSince == null) {
+        pane.stuckSince = since
+        recordDiagnostic({
+          level: 'warn',
+          code: 'pane.stuck',
+          message: `${pane.agentKey} has been mid-turn with no activity for ${Math.round((now - since) / 60_000)} min`,
+          paneId: pane.id,
+        })
+      } else if (since == null && pane.stuckSince != null) {
+        pane.stuckSince = null
+      }
+    } catch {
+      /* leave this pane's badge as-is and carry on with the rest */
+    }
+  }
+}
 
 function pollAwaitingPanes(): void {
   for (const pane of panes.value) {
@@ -21472,6 +21517,7 @@ function paneIsCommander(p: ActivePane): boolean {
           :loop-estimate-reset-at="p.loopEstimateResetAt"
           :login-expired="p.loginExpired"
           :exit-code="p.exitFault?.code ?? null"
+          :stuck-since="p.stuckSince ?? null"
           :muted="isPaneMuted(p.id)"
           :readback-available="readbackOffered"
           :readback="isPaneReadback(p.id)"

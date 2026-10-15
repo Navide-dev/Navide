@@ -787,6 +787,8 @@
       "login-expired-badge": "⚠ ログイン期限切れ",
       "exit-fault-badge": "⚠ 終了（コード {code}）",
       "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
+      "stuck-badge": "⏳ {minutes} 分以上動きなし",
+      "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",

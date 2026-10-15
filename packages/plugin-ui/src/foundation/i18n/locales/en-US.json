@@ -787,6 +787,8 @@
       "login-expired-badge": "⚠ Login expired",
       "exit-fault-badge": "⚠ Exited (code {code})",
       "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
+      "stuck-badge": "⏳ No activity {minutes}+ min",
+      "stuck-tooltip": "This turn has shown no log activity and no output for over {minutes} minutes. The CLI may be stuck; nothing was interrupted.",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",
