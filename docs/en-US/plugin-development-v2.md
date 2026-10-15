@@ -1122,7 +1122,9 @@ as `context.capabilities.invoke(...)` use that object.
 
 `window.nav` is the private preload transport used by the SDK. Its channels,
 payload wrappers, and bootstrap mechanics are not public API. Plugin code must
-not call it directly.
+not call it directly. The one exception is the `navide-plugin init` scaffold:
+having no build step to bundle the SDK, its `main.js` calls `window.nav.ready()`,
+which is all `createPluginViewRuntimeClient().ready()` does.
 
 ## Capabilities and permissions
 
