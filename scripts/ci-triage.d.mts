@@ -1,4 +1,4 @@
-export type TriageCategory = 'environment' | 'test-race' | 'product-defect'
+export type TriageCategory = 'environment' | 'test-race' | 'needs-review' | 'product-defect'
 
 export interface TriageEntry {
   test: string
