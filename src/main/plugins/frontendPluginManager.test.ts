@@ -11786,7 +11786,7 @@ describe('first-party Git private bridge', () => {
     })
     expect(opens).toEqual([{
       workspacePath,
-      relPath: join('.agent-team', 'plans', 'feature.html'),
+      relPath: '.agent-team/plans/feature.html',
     }])
   })
 

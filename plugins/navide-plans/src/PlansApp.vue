@@ -94,7 +94,9 @@ type GroupMode = 'flat' | 'stage'
 
 const params = new URLSearchParams(window.location.search)
 const workspacePath = params.get('workspace_path') ?? ''
-const initialRelPath = params.get('rel_path') ?? ''
+// Plan rel_paths are '/'-separated; a Windows Host may hand over '\\' ones.
+const toPlanRelPath = (path: string): string => path.replace(/\\/g, '/')
+const initialRelPath = toPlanRelPath(params.get('rel_path') ?? '')
 const initialFilePath = params.get('filepath') ?? ''
 // What the window title calls this workspace: the alias the user gave it,
 // resolved by the Host and passed as `workspace_display_name`, else the folder
@@ -1215,7 +1217,7 @@ function receiveTarget(target: Record<string, string>): void {
     openHtmlPreview(htmlTarget)
     return
   }
-  if (target.rel_path) void openPlan(target.rel_path)
+  if (target.rel_path) void openPlan(toPlanRelPath(target.rel_path))
 }
 
 async function beginRename(): Promise<void> {

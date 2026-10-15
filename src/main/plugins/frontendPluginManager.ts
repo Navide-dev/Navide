@@ -6153,7 +6153,8 @@ export class FrontendPluginManager {
       const path = typeof plan.args.path === 'string' ? plan.args.path : ''
       if (!path || isAbsolute(path)) throw new Error('Plans window path must be relative')
       const root = resolve(resolvePlansRootPath(workspacePath))
-      const relativePath = relative(root, resolve(root, path))
+      // Plan rel_paths are '/'-separated everywhere else (the plans backend lists them so).
+      const relativePath = relative(root, resolve(root, path)).split(sep).join('/')
       if (!isAllowedPlanDocumentPath(relativePath, root)) {
         throw new Error('Plans window path is outside the plans directory')
       }
