@@ -85,6 +85,7 @@ src/renderer/plugins/<name>/
 `mount.ts` must call `window.nav.ready()` once the app is mounted, so the host
 knows it can deliver queued open targets:
 
+<!-- docs-typecheck: skip (manifest v1 legacy window.nav runtime, not the v2 SDK) -->
 ```ts
 import { createApp } from 'vue'
 import App from './App.vue'
@@ -328,6 +329,7 @@ marketplace plugins.
 
 ### Calling a capability
 
+<!-- docs-typecheck: skip (manifest v1 legacy window.nav runtime, not the v2 SDK) -->
 ```js
 const res = await window.nav.callCapability('fs', 'read_file', { path })
 ```
@@ -367,6 +369,7 @@ Errors arrive as one of `CAP_DENIED`, `UNKNOWN`, `BAD_REQUEST`, or
 
 ### Receiving events
 
+<!-- docs-typecheck: skip (manifest v1 legacy window.nav runtime, not the v2 SDK) -->
 ```js
 const dispose = window.nav.on('git.changed', (payload) => { ... })
 ```

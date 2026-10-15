@@ -417,11 +417,14 @@ identity; MCP `clientInfo` is never an authorization input.
 
 The author-facing SDK remains transport-free:
 
+<!-- docs-typecheck: mirrors PluginBackendClient -->
 ```ts
+import type { Disposable, JsonValue } from '@navide/plugin-sdk'
+
 interface PluginBackendClient {
   call<Result extends JsonValue>(
     name: string,
-    arguments: JsonValue,
+    args: JsonValue,
     options?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<Result>
 
@@ -655,6 +658,47 @@ when an extension has no stable version at all), and Navide offers a
 pre-release as an install or update candidate only for an extension whose
 "Get pre-releases" switch the user turned on. Build metadata (`+build.1`) does
 not change the channel and is ignored for ordering.
+
+### Manifest field reference
+
+Every field the schema accepts at the top level and in `permissions`,
+`contributes.views[]` and `backend`. **Required** means required whenever its
+parent object is present. Where the schema fixes the values, **Allowed values**
+lists all of them. `tests/infrastructure/pluginDocsManifest.test.ts` compares
+this table with the schema, so a schema change fails CI until this table
+matches.
+
+| Field | Required | Allowed values | Notes |
+|---|---|---|---|
+| `schemaVersion` | yes | `2` | |
+| `apiVersion` | yes | X.Y.Z, optionally prefixed with ^ or ~ | Public SDK and capability range |
+| `id` | yes | Lowercase dotted id such as acme.files | |
+| `name` | yes | 1–80 characters of plain text | |
+| `version` | yes | SemVer 2.0.0 | |
+| `publisher` | yes | Lowercase publisher id | |
+| `engines` | no | Object with a required navide requirement | See `engines.navide` above |
+| `permissions` | yes | Object; may be empty | Must be empty in an Extension Pack |
+| `marketplace` | yes | Object with a required description and license | |
+| `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
+| `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
+| `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
+| `permissions.system` | no | `fs`, `ui`, `aiCli` | 1–3 unique entries |
+| `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
+| `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
+| `contributes.views[].id` | yes | Lowercase view id | |
+| `contributes.views[].kind` | yes | `custom` | |
+| `contributes.views[].location` | yes | `top`, `bottom`, `right`, `left`, `main`, `detail`, `window` | |
+| `contributes.views[].title` | yes | 1–80 characters of plain text | |
+| `contributes.views[].icon` | no | Package-relative path | |
+| `contributes.views[].entry` | yes | Package-relative .html path | |
+| `contributes.views[].detailView` | no | Id of a detail view in the same package | Only on a `left` view |
+| `contributes.views[].targetSchema` | no | Package-relative .json path | Only on a `detail` view |
+| `contributes.views[].receives` | no | Object | Only on a `window` view, see [Composed View Contracts](#composed-view-contracts) |
+| `backend.entry` | yes | Package-relative executable path; script and source filenames are rejected | |
+| `backend.protocolVersion` | yes | `1` | Navide Backend Wire v1 |
+| `backend.activation` | yes | `startup` | |
+| `backend.methods` | no | Up to 64 unique dotted names | The Host forwards only declared names |
+| `backend.events` | no | Up to 32 unique dotted names | The Host forwards only declared names |
 
 ### Extension Packs
 
@@ -1045,6 +1089,8 @@ import {
   createPluginViewRuntimeClient,
 } from '@navide/plugin-sdk'
 
+declare function mountApp(): void // your view's own render code
+
 const runtime = createPluginViewRuntimeClient()
 const context = createPluginCapabilityClient() // { capabilities, events }
 
@@ -1182,6 +1228,10 @@ plugin identity, workspace identity, package version, and storage location
 from the authenticated runtime binding:
 
 ```ts
+import { createPluginCapabilityClient } from '@navide/plugin-sdk'
+
+const context = createPluginCapabilityClient()
+
 await context.capabilities.invoke('storage.set', {
   scope: 'plugin',
   key: 'panel-state',
