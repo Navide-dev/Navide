@@ -16,6 +16,7 @@ import { systemFrameUnlessMac } from '../window-controls'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, lstatSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { isMac } from '../../shared/osplat'
 import { URL, pathToFileURL } from 'node:url'
 import { WebSocket as NodeWebSocket } from 'ws'
 import {
@@ -1165,6 +1166,11 @@ export function sanitizeDiagnosticLines(raw: unknown): string[] {
 
   return result
 }
+
+const HOST_RESIZE_EVENTS = [
+  'resize', 'resized', 'maximize', 'unmaximize', 'restore', 'enter-full-screen', 'leave-full-screen',
+] as const
+const HOST_RESIZE_SETTLE_MS = 150
 
 export class FrontendPluginManager {
   private readonly descriptorSources = new Map<string, 'installed-catalog' | 'factory-bundle' | 'host-bundled'>()
@@ -9893,12 +9899,31 @@ export class FrontendPluginManager {
     record.detachHostResize = null
     if (!record.fill) return
     const host = record.hostWindow
-    const onResize = (): void => {
+    const apply = (): void => {
       if (host.isDestroyed() || record.view.webContents.isDestroyed()) return
       this.applyBounds(record, 'fill')
     }
-    host.on('resize', onResize)
-    record.detachHostResize = () => host.removeListener('resize', onResize)
+    if (isMac()) {
+      host.on('resize', apply)
+      record.detachHostResize = () => host.removeListener('resize', apply)
+      return
+    }
+    // Windows and Linux: a maximize or full-screen switch can land without a
+    // `resize`, or with the old content bounds still reported (GNOME), which
+    // left the view at its first size. Follow the state events too, and read
+    // the bounds once more after the window manager has settled.
+    let settle: ReturnType<typeof setTimeout> | null = null
+    const onChange = (): void => {
+      apply()
+      if (settle) clearTimeout(settle)
+      settle = setTimeout(() => { settle = null; apply() }, HOST_RESIZE_SETTLE_MS)
+    }
+    for (const event of HOST_RESIZE_EVENTS) host.on(event as 'resize', onChange)
+    record.detachHostResize = () => {
+      for (const event of HOST_RESIZE_EVENTS) host.removeListener(event as 'resize', onChange)
+      if (settle) clearTimeout(settle)
+      settle = null
+    }
   }
 
   /** Load a legacy entry from the dev server when available, or a built file.
