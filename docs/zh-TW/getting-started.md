@@ -77,4 +77,6 @@ bun run test:run
 uv --project backend run pytest backend/tests
 ```
 
+`src/main/plugins/pluginExternalWorkspace.test.ts` 會像外部外掛作者的 pnpm 專案那樣安裝打包好的公開套件，所以需要 PATH 上有 `pnpm`；沒有時只有這一個測試失敗，`bun run test:run` 的其餘部分不受影響，CI 會為它提供 pnpm。詳見 [Contributing](../../CONTRIBUTING.md)。
+
 如果應用程式、Backend、CLI、Session Binding、Analyzer 或 Token Tracking 未正常啟動，請參考[疑難排解](troubleshooting.md)。

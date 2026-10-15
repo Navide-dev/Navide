@@ -77,4 +77,6 @@ bun run test:run
 uv --project backend run pytest backend/tests
 ```
 
+`src/main/plugins/pluginExternalWorkspace.test.ts` installs the packed public packages the way an external plugin author's pnpm project does, so it needs `pnpm` on PATH. Without it that one test fails and the rest of `bun run test:run` is unaffected; CI provides pnpm for it. See [Contributing](../../CONTRIBUTING.md).
+
 See [Troubleshooting](troubleshooting.md) if the app, backend, CLI, session binding, analyzer, or token tracking does not start as expected.
