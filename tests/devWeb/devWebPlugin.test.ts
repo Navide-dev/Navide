@@ -151,8 +151,9 @@ describe('createDevWebGate', () => {
   })
 })
 
+// POSIX permission bits; Windows has none to check (ensurePrivateDir skips them there).
 describe('ensurePrivateDir', () => {
-  it('creates a missing run dir owner-only', () => {
+  it.skipIf(process.platform === 'win32')('creates a missing run dir owner-only', () => {
     const base = mkdtempSync(join(tmpdir(), 'dev-web-dir-'))
     try {
       const dir = join(base, 'run')
@@ -163,7 +164,7 @@ describe('ensurePrivateDir', () => {
     }
   })
 
-  it('refuses a run dir others can write to, or a symlink', () => {
+  it.skipIf(process.platform === 'win32')('refuses a run dir others can write to, or a symlink', () => {
     const base = mkdtempSync(join(tmpdir(), 'dev-web-dir-'))
     try {
       const open = join(base, 'open')
