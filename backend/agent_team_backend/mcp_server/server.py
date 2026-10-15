@@ -1935,8 +1935,9 @@ async def _dispatch_delivery(
                 # a message that entered here never passed through that, so the
                 # receiving window has to apply it instead. Without this, two
                 # agents replying to each other through cli_send have no loop
-                # guard at all.
-                "rate_limit": True,
+                # guard at all. A chat channel is a person typing, capped by the
+                # channel layer instead (channels/manager.py CHAT_RATE_MAX).
+                "rate_limit": origin != "channel",
                 # Only present for a reply — see the docstring.
                 **({"reply_to": reply_to} if reply_to else {}),
                 # Only present for an ack — see the docstring.

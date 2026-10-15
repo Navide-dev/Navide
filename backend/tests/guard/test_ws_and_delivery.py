@@ -239,6 +239,8 @@ async def test_channel_delivery_payload_carries_origin_channel(captured):
     await default_seams().deliver("pb", "hello from phone", "telegram:alice")
     (event,) = [e for e in captured if e["type"] == "agent_msg.deliver"]
     assert event["payload"]["origin"] == "channel"
+    # A person's chat lines are capped by the channel layer, not the agent loop guard.
+    assert event["payload"]["rate_limit"] is False
 
 
 @pytest.mark.asyncio
