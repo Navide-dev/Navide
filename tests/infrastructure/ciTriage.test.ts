@@ -189,14 +189,19 @@ describe('test races without a timing word in the assertion', () => {
     })])
   })
 
-  it('reads a pytest-timeout stack dump as a race of the test it stopped', () => {
+  it('reads a pytest-timeout stack dump as the stopped test needing review: a real deadlock hangs the same way', () => {
     const [entry, ...rest] = classifyLog(PYTEST_TIMEOUT_DUMP)
     expect(rest).toEqual([])
     expect(entry).toMatchObject({
       test: 'backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal',
-      category: 'test-race',
+      category: 'needs-review',
     })
     expect(entry.evidence).toContain('test_db.py", line 230, in test_commits_are_not_blocked_by_a_reader_holding_the_journal')
+  })
+
+  it('keeps a timed-out test the ledger knows as a race a race', () => {
+    const known = new Set(['backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal'])
+    expect(classifyLog(PYTEST_TIMEOUT_DUMP, { knownRaces: known })[0].category).toBe('test-race')
   })
 
   it('still lets the environment win over a timeout dump', () => {

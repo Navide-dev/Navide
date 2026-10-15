@@ -10,9 +10,11 @@
 // Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
 //                   or a network/disk/cancel signature);
-//   test-race       a test failed on time: a timeout, a hang, a port race — rerun before blaming code;
-//   needs-review    an IndexError or KeyError raised in a backend/tests/ frame of a test the ledger
-//                   does not know as a race: the test may have read a list too early — a person decides;
+//   test-race       a test failed on time: a timeout signature, a wait that gave up, a port race,
+//                   or a test the ledger knows as a race — rerun before blaming code;
+//   needs-review    a test the ledger does not know as a race that either raised an IndexError or
+//                   KeyError in a backend/tests/ frame (it may have read a list too early) or was
+//                   stopped by pytest-timeout (a hang can be a real deadlock) — a person decides;
 //   product-defect  anything else: an assertion, a type error, a lint error — fix the code.
 // Local only, on purpose: it costs no runner minutes and posts nothing anywhere.
 
@@ -27,6 +29,8 @@ const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolv
 const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use|condition never became true/i
 // pytest-timeout dumps every thread's stack between these banners and ends
 // pytest, so the test it stopped has no FAILED line: name it from its frame.
+// A real deadlock surfaces exactly this way (#295, #303), so it needs review
+// unless the ledger already knows the test as a race.
 const PYTEST_TIMEOUT = /\+{3,} Timeout \+{3,}/
 const TEST_FRAME = /^\s*File ".*?[\\/](backend[\\/]tests[\\/][^"]+\.py)", line \d+, in (test_\w+)$/
 // The required-check job that fails whenever another job does; it is never the cause.
@@ -85,9 +89,11 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
       const env = lines.find((l) => ENVIRONMENT.test(l))
       const timedOut = !env && lines.some((l) => PYTEST_TIMEOUT.test(l))
       const frame = timedOut ? lines.map((l) => TEST_FRAME.exec(l)).find(Boolean) : null
+      const test = frame ? `${frame[1].replace(/\\+/g, '/')}::${frame[2]}` : '(job)'
       out.push({
-        test: frame ? `${frame[1].replace(/\\+/g, '/')}::${frame[2]}` : '(job)',
-        category: env || /canceled/i.test(failed) ? 'environment' : timedOut ? 'test-race' : 'product-defect',
+        test,
+        category: env || /canceled/i.test(failed) ? 'environment'
+          : timedOut ? (knownRaces.has(test) ? 'test-race' : 'needs-review') : 'product-defect',
         evidence: (env ?? frame?.[0] ?? failed).trim().slice(0, 400),
       })
     }
