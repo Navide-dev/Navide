@@ -951,6 +951,8 @@
     "minimize-selected": "Minimize selected",
     "mute": "Mute notifications",
     "unmute": "Unmute notifications",
+    "fit-width": "Fit to pane width",
+    "fit-width-title": "Use the pane's full width. Older output above may re-wrap a few lines.",
     "restore-selected": "Restore selected",
     "reclaim-selected": "Reclaim selected ({count})",
     "reclaim-selected-title": "Free memory from eligible selected CLIs; panes stay as click-to-resume placeholders. Busy or focused panes, unsent input, and sessions that cannot resume are skipped.",

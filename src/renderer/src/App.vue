@@ -19443,6 +19443,9 @@ function openTurnStats(): void {
 // raises an open request with the pane id and pointer coords.
 const paneCtxMenu = ref<{ paneId: string; x: number; y: number } | null>(null)
 const paneCtxMenuEl = ref<HTMLElement | null>(null)
+// Whether the right-clicked pane is held narrower than its container by the
+// layout-mode cols cap (see lockCols). Offers "Fit to pane width" when true.
+const paneCtxColsCapped = ref(false)
 
 const paneCtxView = computed<ActivePaneView | null>(() =>
   paneCtxMenu.value ? paneViews.value.find((v) => v.id === paneCtxMenu.value!.paneId) ?? null : null
@@ -19549,6 +19552,8 @@ async function mentionPaneInFocusedPane(paneId: string): Promise<void> {
 function openPaneCtxMenu(e: MouseEvent, paneId: string): void {
   e.preventDefault()
   paneCtxMenu.value = { paneId, x: e.clientX, y: e.clientY }
+  // The cap is not reactive, so read it once as the menu opens.
+  paneCtxColsCapped.value = !!paneRefs[paneId]?.isColsCapped?.()
   // Flip/clamp into the viewport once the menu has rendered, so items near the
   // bottom/right edge aren't clipped by the window.
   void nextTick(() => {
@@ -21944,6 +21949,12 @@ function paneIsCommander(p: ActivePane): boolean {
         >{{ $t('action.restore') }}</div>
         <div class="pane-ctx-item" @click="startRenamePane(paneCtxMenu!.paneId)">{{ $t('action.rename') }}</div>
         <div class="pane-ctx-item" @click="togglePaneMuted(paneCtxMenu!.paneId); closePaneCtxMenu()">{{ paneCtxView?.isMuted ? $t('action.unmute') : $t('action.mute') }}</div>
+        <div
+          v-if="paneCtxColsCapped"
+          class="pane-ctx-item"
+          :title="$t('action.fit-width-title')"
+          @click="paneRefs[paneCtxMenu!.paneId]?.unlockCols?.(); closePaneCtxMenu()"
+        >{{ $t('action.fit-width') }}</div>
         <div
           class="pane-ctx-item"
           :class="{ disabled: !ctxMentionAddress }"
