@@ -206,12 +206,48 @@ def test_commits_empty_the_journal_instead_of_deleting_it(db, tmp_path):
         assert journal.stat().st_size == 0
 
 
+#: Below the Windows shard's `--timeout=90`, so a run that slows down fails
+#: with the measurements below rather than as a bare pytest-timeout.
+_JOURNAL_BUDGET_S = 60.0
+
+
+def _commit_report(commits, journal, handle) -> str:
+    """The slowest commits and the journal's state, for a run over budget."""
+    slowest = sorted(commits, key=lambda c: c[2], reverse=True)[:10]
+    lines = [f"  #{index} {kind}: {seconds:.3f}s" for index, kind, seconds in slowest]
+    size = journal.stat().st_size if journal.exists() else None
+    held = f"open ({handle.name})" if handle is not None and not handle.closed else "none"
+    return "\n".join([
+        f"{len(commits)} commits, {sum(c[2] for c in commits):.1f}s in commits; slowest:",
+        *lines,
+        f"journal: exists={journal.exists()} size={size}; reader handle: {held}",
+    ])
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows sharing semantics")
 def test_commits_are_not_blocked_by_a_reader_holding_the_journal(db, tmp_path):
     # Python's open() on Windows does not share delete access — the same
     # handle an antivirus or indexer scan leaves on a freshly written file.
     journal = tmp_path / "navide.db-journal"
     db.kv_set("seed", 0, now=0)
+    # Every commit is timed, and the run fails itself past the budget with
+    # the slowest ones: a CI run once hit pytest-timeout here with nothing to
+    # tell one stuck commit (which the timeout's thread dump shows) from a
+    # cost every commit paid.
+    commits: list[tuple[int, str, float]] = []
+    began = time.perf_counter()
+
+    def commit(index, kind, key, handle=None) -> float:
+        started = time.perf_counter()
+        db.kv_set(key, index, now=index)
+        took = time.perf_counter() - started
+        commits.append((index, kind, took))
+        if time.perf_counter() - began > _JOURNAL_BUDGET_S:
+            pytest.fail(
+                f"over the {_JOURNAL_BUDGET_S:.0f}s budget\n" + _commit_report(commits, journal, handle)
+            )
+        return took
+
     # Each commit under the reader is paired with one just before it without:
     # a runner's disk speed drifts within a single test (a writer test with no
     # reader ran 3s on one run and 24s on another, and the CI failure saw its
@@ -221,14 +257,10 @@ def test_commits_are_not_blocked_by_a_reader_holding_the_journal(db, tmp_path):
     # one-off hiccup but not a cost every commit pays.
     extra = []
     for i in range(50):
-        started = time.perf_counter()
-        db.kv_set(f"base{i}", i, now=i)
-        free = time.perf_counter() - started
+        free = commit(i, "free", f"base{i}")
         journal.touch()  # DELETE mode has no journal between commits
-        with open(journal, "rb"):
-            started = time.perf_counter()
-            db.kv_set(f"k{i}", i, now=i)
-            held = time.perf_counter() - started
+        with open(journal, "rb") as handle:
+            held = commit(i, "held", f"k{i}", handle)
         extra.append(held - free)
     assert statistics.median(extra) < 0.1
     assert db.kv_get("k49") == 49
