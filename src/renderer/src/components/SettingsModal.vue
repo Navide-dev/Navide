@@ -909,7 +909,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'cross-device',
     section: 'general-p2p',
     title: t('settings.search.item.general-p2p.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.general-p2p.summary'),
     keywords: 'navide cloud p2p cross device remote server url access token navide-server connect link relay 雲端 跨裝置 遠端 伺服器 網址 權杖 連線 傳訊',
   },
@@ -918,7 +918,7 @@ const settingsSearchItems = computed<SettingsSearchItem[]>(() => [
     tab: 'cross-device',
     section: 'general-p2p-policy',
     title: t('settings.search.item.general-p2p-policy.title'),
-    group: t('settings.nav.group.accountsAgents'),
+    group: t('settings.nav.group.navidePlugins'),
     summary: t('settings.search.item.general-p2p-policy.summary'),
     keywords: 'navide cloud policy permission authorization allow rule deny default pane cross device remote rejected 雲端 政策 權限 授權 允許 規則 拒絕 跨裝置 被擋',
   },
@@ -2622,13 +2622,6 @@ watch(activeTab, (tab) => {
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 3.4h10.8v7.2H7l-3 2.4v-2.4H2.6Z"/><path d="M5.4 6.2h5.2M5.4 8.2h3.2"/></svg>
                 </template>
               </SettingsNavItem>
-              <SettingsNavItem :label="$t('settings.nav.crossDevice')" :active="activeTab === 'cross-device'" @select="activeTab = 'cross-device'">
-                <template #icon>
-                  <!-- The same mark as the titlebar and the page header: this
-                       row is how most people will first reach Navide Cloud. -->
-                  <NavideCloudMark variant="solid" class="nvc-nav-mark" />
-                </template>
-              </SettingsNavItem>
             </div>
 
             <div class="s-nav-group">
@@ -2667,6 +2660,13 @@ watch(activeTab, (tab) => {
 
             <div class="s-nav-group">
               <div class="s-nav-group-title">{{ $t('settings.nav.group.navidePlugins') }}</div>
+              <SettingsNavItem :label="$t('settings.nav.crossDevice')" :active="activeTab === 'cross-device'" @select="activeTab = 'cross-device'">
+                <template #icon>
+                  <!-- The same mark as the titlebar and the page header: this
+                       row is how most people will first reach Navide Cloud. -->
+                  <NavideCloudMark variant="solid" class="nvc-nav-mark" />
+                </template>
+              </SettingsNavItem>
               <SettingsNavItem :label="$t('settings.nav.extensions')" :active="activeTab === 'extensions'" :badge="pluginUpdates.count.value" @select="activeTab = 'extensions'">
                 <template #icon>
                   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 2.6h3.2v1.5a1.3 1.3 0 0 0 2.4 0V2.6h1.4v3.2h-1.5a1.3 1.3 0 0 0 0 2.4h1.5v3.2H6.4v-1.5a1.3 1.3 0 0 0-2.4 0v1.5H2.6V8.2h1.5a1.3 1.3 0 0 0 0-2.4H2.6V2.6h3.8Z"/></svg>
