@@ -19,7 +19,7 @@ import type { Connect, Plugin } from 'vite'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -187,6 +187,22 @@ function attachedBackend(env: NodeJS.ProcessEnv): DevWebBackend {
   }
 }
 
+/**
+ * Create `dir` owner-only, or accept it only if it already is: a real
+ * directory (not a symlink) owned by this user with no group/other access.
+ * The default lives under tmpdir(), which is shared /tmp on Linux, and its
+ * bin/ goes first on the backend's PATH — a dir someone else made first
+ * would let them plant executables there.
+ */
+export function ensurePrivateDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  const st = lstatSync(dir)
+  const mine = typeof process.getuid !== 'function' || st.uid === process.getuid()
+  if (!st.isDirectory() || st.isSymbolicLink() || !mine || (process.platform !== 'win32' && (st.mode & 0o077) !== 0)) {
+    throw new Error(`[navide-dev-web] run dir is not private (must be a 0700 directory you own): ${dir}`)
+  }
+}
+
 /** A backend of its own: separate data dir, HOME, TMPDIR and port; no reach to the real keychain. */
 function isolatedBackend(env: NodeJS.ProcessEnv, repoRoot: string): DevWebBackend & { stop(): void } {
   const port = Number(env.NAVIDE_DEV_WEB_BACKEND_PORT) || DEFAULT_BACKEND_PORT
@@ -195,6 +211,7 @@ function isolatedBackend(env: NodeJS.ProcessEnv, repoRoot: string): DevWebBacken
   const home = join(runDir, 'home')
   const tmp = join(runDir, 'tmp')
   const bin = join(runDir, 'bin')
+  ensurePrivateDir(runDir)
   for (const d of [dataDir, home, tmp, bin]) mkdirSync(d, { recursive: true })
   const isWin = process.platform === 'win32'
   const venvBin = join(repoRoot, 'backend', '.venv', isWin ? 'Scripts' : 'bin')

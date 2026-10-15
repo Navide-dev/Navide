@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { createDevWebGate, devWebPlugins, DEV_WEB_PREFIX } from '../../scripts/dev-web/devWebPlugin'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { createDevWebGate, devWebPlugins, DEV_WEB_PREFIX, ensurePrivateDir } from '../../scripts/dev-web/devWebPlugin'
 
 const TOKEN = 'a'.repeat(64)
 const HOST = '127.0.0.1:5274'
@@ -145,5 +148,33 @@ describe('createDevWebGate', () => {
     const cookie = await login(gate)
     const { res } = await call(gate, { method: 'POST', url: `${DEV_WEB_PREFIX}prove`, headers: { cookie }, body: JSON.stringify({ nonce: 'n1' }) })
     expect(JSON.parse(res.body)).toEqual({ proof: 'proof-xyz' })
+  })
+})
+
+describe('ensurePrivateDir', () => {
+  it('creates a missing run dir owner-only', () => {
+    const base = mkdtempSync(join(tmpdir(), 'dev-web-dir-'))
+    try {
+      const dir = join(base, 'run')
+      ensurePrivateDir(dir)
+      expect(statSync(dir).mode & 0o777).toBe(0o700)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a run dir others can write to, or a symlink', () => {
+    const base = mkdtempSync(join(tmpdir(), 'dev-web-dir-'))
+    try {
+      const open = join(base, 'open')
+      mkdirSync(open)
+      chmodSync(open, 0o777)
+      expect(() => ensurePrivateDir(open)).toThrow(/not private/)
+      const link = join(base, 'link')
+      symlinkSync(base, link)
+      expect(() => ensurePrivateDir(link)).toThrow(/not private/)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
   })
 })
