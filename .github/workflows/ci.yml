@@ -330,9 +330,15 @@ jobs:
       # hang sits where the signal cannot reach.
       # Four pytest-xdist workers, one test file at a time each (loadfile), so
       # a file's tests keep sharing their module state and fixtures in order.
+      # Tests marked `serial` (wall-clock timed, seen failing beside the
+      # workers) run alone afterwards; both passes always run.
       - name: Complete backend suite
         if: runner.os != 'Windows'
-        run: uv --project backend run --locked pytest backend/tests -n 4 --dist loadfile --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30
+        run: |
+          status=0
+          uv --project backend run --locked pytest backend/tests -n 4 --dist loadfile -m "not serial" --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend.xml --collection-report=test-results/ci/backend-collection.json --durations=30 || status=$?
+          uv --project backend run --locked pytest backend/tests -m serial --timeout=120 -o faulthandler_timeout=180 --junitxml=test-results/ci/backend-serial.xml --durations=10 || status=$?
+          exit $status
       - name: Linux runtime capabilities
         if: runner.os == 'Linux'
         run: uv --project backend run --locked python backend/linux_smoke.py
