@@ -356,6 +356,7 @@ import {
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
 import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
+import { setMainLedgerDataDir } from '../error-ledger'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
 import type { PlansBridgeContext } from './plansBridge'
@@ -702,6 +703,24 @@ describe('backend Host session registration', () => {
       ),
     }
   }
+
+  it('records a backend child it gave up restarting in main.log and the error ledger', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    try {
+      const { childBudgetSpent } = plansManagerWithHostObservers()
+      childBudgetSpent('headless-1')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`${PLANS_PLUGIN_ID} failed too often`))
+      const [entry] = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+      expect(entry).toMatchObject({ source: 'main', code: 'plugin.backend_gave_up' })
+      expect(entry.message).toContain(PLANS_PLUGIN_ID)
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
+  })
 
   it('restores Plans support when a failed child comes back after an automatic restart', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})

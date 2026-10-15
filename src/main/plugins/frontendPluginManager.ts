@@ -9,6 +9,7 @@
 
 import { BrowserWindow, WebContentsView, ipcMain, webFrameMain, type WebContents, type WebFrameMain } from 'electron'
 import { warnMain } from '../main-log'
+import { recordMainFault } from '../error-ledger'
 import { PDF_RENDER_REQUEST, handlePdfRenderRequest } from '../channel-pdf'
 import { validateSupportedLocale } from '../hostLocale'
 import { composePluginFrameQuery } from './pluginContributionQuery'
@@ -1279,6 +1280,12 @@ export class FrontendPluginManager {
     onBackendFailure: (runtime, error) => {
       if (error.cause) {
         this.emitHostBackendFailureDiagnostic(runtime.pluginId, error)
+      }
+      if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE) {
+        // The child stays stopped for good. Outside Plans nothing else tells
+        // anyone, and the host's own line went only to the console.
+        warnMain(`[plugin-backend] ${runtime.pluginId} failed too often; leaving it stopped (${error.code})`)
+        recordMainFault('plugin.backend_gave_up', `${runtime.pluginId} (${runtime.instanceId ?? 'no instance'}): ${error.code}`)
       }
       if (runtime.pluginId === PLANS_PLUGIN_ID && this.isPlansBackendAvailabilityError(error)) {
         if (error.message === BACKEND_RESTART_BUDGET_SPENT_MESSAGE && runtime.instanceId) {
