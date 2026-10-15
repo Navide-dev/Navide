@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "無法切換回原帳號：{detail}",
     "notice": {
       "wrote": "已依你允許的便利功能「{feature}」，寫入 {target}（為了{purpose}）",
       "repair-note": "這次是補回或修復 Navide 先前寫入的內容。",
@@ -164,6 +165,26 @@
     "restore": "還原"
   },
   "editorWindow": {
+    "paths-copied": "已複製 {count} 個路徑",
+    "path-copied": "已複製路徑",
+    "copy-failed": "複製失敗",
+    "replaced-occurrences": "已取代 {count} 處",
+    "search-stale": "內容已變更，請重新搜尋",
+    "ai-terminal-starting": "AI 終端機正在啟動 — 請稍後再試",
+    "ai-terminal-not-started": "請先啟動 AI 終端機，再重試",
+    "json-syntax-error": "JSON 語法錯誤：{message}",
+    "file-outside-workspace": "檔案不在此工作區內",
+    "no-indented-lines": "沒有偵測到縮排的行",
+    "indentation-tabs": "偵測到的縮排：Tab",
+    "indentation-spaces-size": "偵測到的縮排：{size} 個空格",
+    "indentation-spaces": "偵測到的縮排：空格",
+    "no-quick-fixes": "沒有可用的快速修正",
+    "create-file-failed": "無法建立檔案",
+    "saved": "已儲存",
+    "ai-rewrite-discarded": "文件已變更 — 已捨棄 AI 改寫結果",
+    "encoding-switch-failed": "切換編碼失敗",
+    "no-completion": "沒有可用的補全建議",
+    "reopen-encoding-failed": "無法以此編碼重新開啟",
     "close-editor": "關閉編輯器",
     "close-editor-dirty": "{count} 個檔案有未儲存的變更。仍要關閉編輯器嗎？",
     "close-file": "關閉檔案",
@@ -334,6 +355,12 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "遠端裝置 · {device}",
+    "external-toast-remote-body": "{from} 的指令已送達「{target}」",
+    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-body": "{from} 的訊息已送達「{target}」",
+    "workspace-toast-title": "其他工作區 · {name}",
+    "cross-workspace-unknown-sender": "未知",
     "panel-title": "CLI 互傳訊息",
     "pause": "暫停投遞",
     "resume": "恢復投遞",
@@ -436,6 +463,24 @@
     "setting-label": "關閉前顯示確認提醒"
   },
   "git": {
+    "abort-failed": "中止失敗",
+    "cherry-pick-failed": "Cherry-pick 失敗",
+    "revert-failed": "Revert 失敗",
+    "commit-id-copied": "已複製 Commit ID",
+    "commit-message-copied": "已複製 Commit 訊息",
+    "conflict-write-failed": "寫入失敗",
+    "conflict-stage-failed": "暫存失敗",
+    "conflict-apply-failed": "套用失敗",
+    "conflicts-resolved-file": "{name} 的衝突已解決",
+    "patch-apply-failed": "套用 patch 失敗",
+    "remote-op-done": {
+      "fetch": "Fetch 完成",
+      "pull": "Pull 完成",
+      "push": "Push 完成",
+      "sync": "同步完成",
+      "publish": "發佈完成"
+    },
+    "read-failed": "讀取失敗：{reason}",
     "account": {
       "selector-title": "此工作區使用的帳號",
       "unbound": "未綁定帳號",
@@ -726,7 +771,7 @@
       "clipboard-send-failed": "只有部分內容送達 {pane} — 其餘在傳送途中遺失",
       "clipboard-send-failed-all": "貼上的內容完全沒有送達 {pane} — {chars} 個字元在傳送途中遺失",
       "open-file-failed": "無法開啟 {file} — 編輯器沒有回應",
-      "idle-reclaimed": "已回收 {count} 個閒置的 CLI 以釋放記憶體 — 點一下即可繼續",
+      "idle-reclaimed": "已回收 {count} 個閒置的 CLI 以釋放記憶體 — 到該 pane 點「點擊以續接」卡片即可繼續",
       "click-to-resume": "點擊以續接",
       "interrupted-at-launch": "重開時工作中",
       "interrupted-at-launch-tooltip": "Navide 重新啟動時這個 pane 正在工作，回合被中斷；它沒有被自動接回（超過自動接回上限或接回失敗）。點擊即可接回。",
@@ -785,6 +830,10 @@
       "loop-capped-notify-title": "Loop 已停止 — 達續跑次數上限",
       "loop-capped-notify-body": "Loop 已送出上限次數的續跑提示，Agent 仍未回報任務完成 — 若工作方向正確請手動重新啟動",
       "login-expired-badge": "⚠ 登入過期",
+      "exit-fault-badge": "⚠ 已結束（代碼 {code}）",
+      "exit-fault-tooltip": "CLI 以結束代碼 {code} 結束，可能是當掉了；這個代碼也記錄在錯誤帳本裡。",
+      "stuck-badge": "⏳ 超過 {minutes} 分鐘沒有動靜",
+      "stuck-tooltip": "這個回合已超過 {minutes} 分鐘沒有任何紀錄或輸出，CLI 可能卡住了；Navide 沒有中斷它。",
       "usage-limit-badge": "⛔ {time} 恢復",
       "usage-limit-badge-unknown": "⛔ 額度用完",
       "usage-limit-tooltip": "此 CLI 的額度已用完 — 預計 {time} 恢復。點擊可清除",
@@ -951,6 +1000,8 @@
     "minimize-selected": "最小化所選",
     "mute": "靜音通知",
     "unmute": "取消靜音",
+    "fit-width": "填滿面板寬度",
+    "fit-width-title": "改用面板的完整寬度。上方較早的輸出可能會有幾行重新換行。",
     "restore-selected": "還原所選",
     "reclaim-selected": "回收所選（{count} 個）",
     "reclaim-selected-title": "回收所選中符合條件的 CLI 以釋放記憶體，面板會保留為可點擊接續的卡片；忙碌、聚焦、有未送出輸入或無法接續的面板會略過。",
@@ -1830,6 +1881,8 @@
         }
       },
       "getPrereleases": "接收預覽版",
+      "getPrereleasesFailed": "無法變更「接收預覽版」設定：{error}",
+      "inventoryRefreshFailed": "無法重新讀取已安裝的 Navide 外掛清單：{error}",
       "incompatibleInstalled": "需要 Navide ≥ {version}",
       "incompatibleReason": "這個版本宣告需要 Navide {version} 以上。它仍保持啟用，但在你更新 Navide 前可能無法正常運作。",
       "pack": {
@@ -2155,7 +2208,7 @@
         "general": "一般",
         "accountsAgents": "帳號與代理",
         "integration": "Agent 資產",
-        "navidePlugins": "Navide 外掛",
+        "navidePlugins": "Navide 支援",
         "system": "系統"
       },
       "general": "一般",
@@ -2707,8 +2760,8 @@
           "h6": "同步（讓幾台機器的設定一致）",
           "p11": "設定 ▸ Navide Cloud 最上面那一塊叫「同步」。<strong>它不是獨立分頁</strong>，就是這一頁的第一個區塊。每個可同步的範圍一列一個開關；打開之後那一塊會在登入<strong>同一個帳號</strong>的每台裝置上保持一致，內容<strong>在本機加密</strong>，伺服器只存它沒有金鑰的密文。",
           "sync": {
-            "scopes": "<strong>可以打開的有四個</strong>：<em>提示詞</em>（提示技能與 Loop 提示詞）、<em>MCP</em>（你在 Navide 加的 server，其中的秘密加密後才離開這台機器）、<em>技能</em>（哪些技能開著、各自送給哪幾家 CLI，以及在 Navide 建立的技能的檔案；你自己放進資料夾的技能只同步設定）、<em>記憶</em>（全域指示檔例如 <code>~/.claude/CLAUDE.md</code>；專案裡的那些留給 git）。",
-            "credentials": "<strong>憑證</strong>這一列<strong>列出來但停用</strong>，說明寫的是「尚未支援同步」。它不是「預設關閉、等你去打開」——現在按不動。",
+            "scopes": "<strong>共六列，跟側欄「Agent 資產」一頁一列、順序相同；可以打開的有三個</strong>：<em>MCP</em>（你在 Navide 加的 server，其中的秘密加密後才離開這台機器）、<em>技能</em>（哪些技能開著、各自送給哪幾家 CLI，以及在 Navide 建立的技能的檔案；你自己放進資料夾的技能只同步設定）、<em>Prompt 技能</em>（提示技能與 Loop 提示詞）。",
+            "credentials": "<em>記憶</em>、<em>憑證與金鑰</em>、<em>CLI 擴充</em>這三列<strong>列出來但呈灰色停用</strong>，說明寫的是「尚未支援同步」。它們不是「預設關閉、等你去打開」——現在按不動。舊版留下開著的記憶或憑證開關，仍可以關掉。",
             "states": "兩種狀態會寫在區塊底下：<em>未連線</em>（已開的範圍會在連線恢復後自動補上）與<em>這台裝置還沒有同步金鑰</em>（拿到之前不會上傳任何東西）。另有一顆<em>立即同步</em>，只有連線時能按。",
             "key": "<strong>同步金鑰只顯示 id 的前 8 碼</strong>，金鑰本身永遠不出現。<em>更換金鑰</em>是<strong>兩段式</strong>：按第一次會變成<em>立即更換</em>，旁邊多一顆<em>取消</em>。更換會讓現有金鑰退役、所有同步記錄改用新金鑰重新加密，其他裝置在下次交換金鑰時取得新的——懷疑金鑰外洩時才用它。",
             "legacy": "只有在「這台裝置上有一把帳號綁定之前的舊金鑰、而這個帳號還沒有金鑰」時，才會出現<em>採用為此帳號的金鑰</em>。它是一次性的：不採用就讀不到當初用那把金鑰同步過的內容，而直接發一把新的會讓那些記錄永久解不開。",
@@ -4944,7 +4997,7 @@
         },
         "s1": {
           "title": "方向一：Navide 提供給 CLI agent 的工具",
-          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>62 個</strong>（核心 56 個，加上 Navide 外掛「Plans」註冊的 6 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
+          "p1": "pane 一啟動，agent 的工具清單裡就會多出這些。你不需要教它，也不用設定——直接用中文交代就好，例如「幫我把這份計畫的第二階段標成完成」。目前一共 <strong>63 個</strong>（核心 56 個，加上 Navide 外掛「Plans」註冊的 7 個），另外還有 3 份唯讀資源與 3 個提示樣板。",
           "h1": "計畫文件",
           "planTools": {
             "plan_list": "列出這個工作區的所有計畫，含階段與待辦進度",
@@ -4952,7 +5005,8 @@
             "plan_create": "建立新計畫（從草稿開始）",
             "plan_update_stage": "推進階段：草稿 → 審查中 → 已核准 → 進行中 → 已完成",
             "plan_update_todo": "更新單一待辦的狀態",
-            "plan_add_note": "寫入發現或決策的紀錄"
+            "plan_add_note": "寫入發現或決策的紀錄",
+            "plan_add_todo": "在既有計畫裡新增一項待辦"
           },
           "note1": "計畫是 agent 用這些工具寫出來的 HTML，你在 Navide 的「計畫」視圖裡閱讀與核准。agent 只有在階段推進到「已核准」之後才會開始寫程式。",
           "h2": "工作區、Pipeline 編排與設定",
@@ -7071,6 +7125,10 @@
         "salvaged": "{device} 從受損的配對紀錄中救回，金鑰保留不變，但需要你重新核准",
         "sig2-missing": "{device} 送來的訊息少了時間簽章，可能是伺服器不轉送這個欄位，或在途中被移除。訊息已照常送達",
         "sig2-unusable": "{device} 送來的訊息時間簽章無效，或時間與這台機器差太多。已改用舊版簽章照常送達；請檢查兩台機器的時間",
+        "sig2-refused-missing": "{device} 送來的訊息少了時間簽章，已拒收：這台裝置會附時間簽章，所以是在途中被移除",
+        "sig2-refused-unusable": "{device} 送來的訊息時間簽章無效，已拒收",
+        "sig2-refused-clock-ahead": "{device} 的訊息因時鐘偏差被拒收：那台機器的時間比這台快 {minutes} 分鐘。請檢查兩台機器的時間",
+        "sig2-refused-clock-behind": "{device} 的訊息因時鐘偏差被拒收：那台機器的時間比這台慢 {minutes} 分鐘，或訊息在途中被延遲。請檢查兩台機器的時間",
         "full": "配對數已達上限，無法與 {device} 配對。需要升級 Navide 後才能新增。",
         "sending": "確認中…",
         "start": "配對",
@@ -8377,7 +8435,7 @@
       "grid-toolbar": "格線版面",
       "grid-custom-columns": "自訂欄數",
       "grid-custom-rows": "自訂列數",
-      "titlebar-settings": "設定（⌘,）",
+      "titlebar-settings": "設定（{key}）",
       "drag-reorder": "拖曳可重新排序，點一下可切換焦點",
       "docked-in-sidebar": "已收合到側欄",
       "stage-manager-tooltip": "階段管理者 — 負責控場，並決定何時輸出 ---STAGE-DONE---",
@@ -8595,13 +8653,13 @@
     "release-notes": "版本資訊",
     "error": "更新錯誤：{message}",
     "unsupported": "此組建不支援自動更新。",
-    "new-version-toast": "Agent-Team v{version} 可供更新",
+    "new-version-toast": "Navide v{version} 可供更新",
     "major-update-title": "有新版本可用",
-    "major-update-body": "Agent-Team v{version} 已推出（目前版本為 v{current}）。要現在下載嗎？",
+    "major-update-body": "Navide v{version} 已推出（目前版本為 v{current}）。要現在下載嗎？",
     "download-now": "下載更新",
     "later": "稍後再說",
     "restart-confirm-title": "重新啟動以安裝更新？",
-    "restart-confirm-body": "Agent-Team v{version} 已下載完成。App 會關閉並重新開啟以完成安裝。要現在重新啟動嗎？"
+    "restart-confirm-body": "Navide v{version} 已下載完成。App 會關閉並重新開啟以完成安裝。要現在重新啟動嗎？"
   },
   "announce": {
     "title": "公告通知",
@@ -8743,6 +8801,14 @@
     "duration-hours": "{count} 小時",
     "duration-minutes": "{count} 分"
   },
+  "notifyBar": {
+    "tooltip-on": "系統通知已開啟",
+    "tooltip-off": "系統通知已關閉",
+    "sound-off": "提示音已關閉",
+    "open-settings": "通知設定",
+    "close": "關閉",
+    "permission-line": "{label}：{status}"
+  },
   "time": {
     "ago-just-now": "剛剛",
     "ago-minutes": "{count} 分鐘前",
@@ -8835,6 +8901,7 @@
     "note": "名稱留空即使用內建翻譯。顏色透過主題 token 解析，因此在每個主題下都維持可讀。"
   },
   "preview": {
+    "copy-failed": "複製失敗",
     "binary-file": "二進位檔案",
     "cannot-display-text": "此檔案類型無法以文字顯示。",
     "open-externally": "以外部程式開啟",
@@ -10204,7 +10271,10 @@
       "disconnect-label": "關閉 {pane} 與 {channel} 的連線",
       "go-to": "跳到 {pane}",
       "auto-child": "自動子話題",
-      "auto-child-hint": "為子 pane 自動建立的話題；關閉父 pane 的連線時會一併關閉。"
+      "auto-child-hint": "為子 pane 自動建立的話題；關閉父 pane 的連線時會一併關閉。",
+      "unnamed-pane": "未命名 pane",
+      "pane-closed": "已關閉",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
@@ -10822,7 +10892,8 @@
       "budget": "今天的執行次數已達上限",
       "workspace_gone": "workspace 資料夾不存在",
       "workspace_not_open": "到點時沒有視窗開著這個 workspace，下次開啟時補跑",
-      "not_git": "不是 git repo，改用只提案"
+      "not_git": "不是 git repo，改用只提案",
+      "over_budget": "超過 1.5 倍 token 預算，已中斷並結束"
     },
     "notice": {
       "started": "自我優化開始 · {workspace}",
@@ -10847,7 +10918,7 @@
         "result": "看結果"
       },
       "over_budget": "自我優化超出預算 · {workspace}",
-      "over-budget-body": "這次執行超過 1.5 倍 token 預算，Navide 已送出一次中斷。"
+      "over-budget-body": "這次執行超過 1.5 倍 token 預算（不含從快取重讀的上下文）。Navide 已中斷並結束這次執行，並回收它的 pane。"
     }
   },
   "recentWorkspaces": {

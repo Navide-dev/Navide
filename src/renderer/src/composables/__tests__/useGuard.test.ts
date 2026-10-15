@@ -74,6 +74,7 @@ describe('useGuard', () => {
     const messages = useNotify().toasts.value.map((t) => t.message)
     expect(messages).toEqual(['Navide Guard blocked an action: rm outside workspace'])
     expect(useNotify().toasts.value[0].type).toBe('error')
+    expect(useNotify().toasts.value[0].variant).toBe('security')
   })
 
   it('announces a fail-open (action error) as an error notice', async () => {

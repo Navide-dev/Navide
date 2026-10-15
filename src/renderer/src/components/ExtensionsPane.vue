@@ -40,6 +40,17 @@ const nonFactoryInstalled = computed(() =>
 )
 const busy = ref(false)
 const error = ref('')
+// A failed inventory read, shown apart from the action error it may follow.
+const inventoryError = ref('')
+
+async function reloadInventory(): Promise<void> {
+  try {
+    await refreshInstalled()
+    inventoryError.value = ''
+  } catch (err) {
+    inventoryError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+  }
+}
 // Updates for installed Registry packages; the Update button reuses the
 // Marketplace's verified install flow (and its trust dialog).
 const pluginUpdates = usePluginUpdates()
@@ -134,8 +145,16 @@ async function remove(id: string): Promise<void> {
   const api = pluginsApi()
   if (!api) return
   if (!(await confirmUninstall(t, notify, id))) return
-  await api.remove(id)
-  await refreshInstalled()
+  busy.value = true
+  error.value = ''
+  try {
+    await api.remove(id)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
 }
 
 // Returning an installed package to what it displaced: the previous version, or
@@ -169,9 +188,7 @@ async function rollback(id: string, kind: 'factory' | 'previous', version?: stri
     error.value = pluginErrorMessage(err)
     // A rollback can fail after the Host already switched packages, so the
     // row is redrawn from the Host rather than left offering a stale action.
-    await refreshInstalled().catch((refreshErr: unknown) => {
-      console.warn('[extensions] inventory refresh after a failed rollback failed:', refreshErr)
-    })
+    await reloadInventory()
   } finally {
     busy.value = false
   }
@@ -263,7 +280,7 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 }
 
 onMounted(() => {
-  void refreshInstalled()
+  void reloadInventory()
   void pluginUpdates.refresh()
   void refreshPacks()
 })
@@ -274,6 +291,7 @@ watch(installed, () => void refreshPacks())
 <template>
   <div class="extensions-pane">
     <p v-if="error" class="ext-error" role="alert">{{ error }}</p>
+    <p v-if="inventoryError" class="ext-error" role="alert">{{ inventoryError }}</p>
     <p v-if="updateFlow.error.value" class="ext-error" role="alert">{{ updateFlow.error.value }}</p>
 
     <section class="ext-section">

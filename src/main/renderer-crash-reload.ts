@@ -15,6 +15,9 @@ export interface RendererCrashWatchOptions {
   /** Which kind of window this is ('main', 'plans', ...), for the log line. */
   kind: string
   log: (line: string) => void
+  /** Told about a renderer that died (anything but a clean exit), for the
+   *  on-disk error ledger. */
+  fault?: (line: string) => void
   now?: () => number
   /** At most this many automatic reloads inside `windowMs`. */
   maxReloads?: number
@@ -46,6 +49,7 @@ export function watchRendererCrashes(win: CrashWatchedWindow, opts: RendererCras
       opts.log(`${what}; not reloading`)
       return
     }
+    opts.fault?.(what)
     if (win.isDestroyed() || contents.isDestroyed()) {
       opts.log(`${what}; window already destroyed, not reloading`)
       return

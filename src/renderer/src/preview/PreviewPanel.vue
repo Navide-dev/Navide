@@ -10,7 +10,7 @@
 // panel is read-only, and pulling Monaco into the main window would cost every
 // workspace window. "Open in editor" is the escape hatch instead.
 import { computed, ref, toRef } from 'vue'
-import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import type { useBackend } from '../composables/useBackend'
 import { createHostGitFileAccessPort } from '../composables/hostSurfacePorts'
 import { createHostGitTransport } from '../composables/hostGitTransport'
@@ -79,7 +79,7 @@ async function copyContent(): Promise<void> {
       copied.value = false
     }, 1500)
   } catch {
-    notify.toast('Copy failed', { type: 'error' })
+    notify.toast(i18n.global.t('preview.copy-failed'), { type: 'error' })
   }
 }
 

@@ -62,6 +62,18 @@ const selected = ref<MarketplaceExtension | null>(null)
 const detail = ref<MarketplaceExtensionDetail | null>(null)
 const detailState = ref<'loading' | 'ready' | 'error'>('loading')
 const detailError = ref('')
+// A page-level failure that is not about the listing or the detail itself
+// (the installed inventory, the pre-release switch), shown in the top banner.
+const pageError = ref('')
+
+// The page keeps working on the last inventory it read; say that it is stale.
+async function refreshInventory(): Promise<void> {
+  try {
+    await inventory.refresh()
+  } catch (err) {
+    pageError.value = t('settings.extensions.inventoryRefreshFailed', { error: ipcErrorMessage(err) })
+  }
+}
 
 const installedById = computed(
   () => new Map(inventory.installed.value.map((plugin) => [plugin.id, plugin]))
@@ -308,20 +320,24 @@ const changelogLines = computed(() => (changelog.value ? renderLines(changelog.v
 // detail is re-read after a change.
 const hasPrereleases = computed(() => (detail.value?.versions ?? []).some((v) => v.channel === 'pre-release'))
 const prereleaseBusy = ref(false)
-async function setPrerelease(enabled: boolean): Promise<void> {
+async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promise<void> {
   const api = pluginsApi()
   const current = selected.value
   const d = detail.value
   if (!api?.setPrerelease || !current || !d) return
   prereleaseBusy.value = true
+  pageError.value = ''
   try {
     await api.setPrerelease(idOf(d), enabled)
     const next = await api.marketplaceDetail({ namespace: d.namespace, name: d.name })
     if (selected.value === current) detail.value = next
-    void inventory.refresh()
+    void refreshInventory()
     void pluginUpdates.refresh()
   } catch (err) {
-    detailError.value = ipcErrorMessage(err)
+    pageError.value = t('settings.extensions.getPrereleasesFailed', { error: ipcErrorMessage(err) })
+    // The bound value did not change, so Vue will not redraw the box the user
+    // just clicked: put it back to the state the page still shows.
+    if (input) input.checked = d.gets_prereleases === true
   } finally {
     prereleaseBusy.value = false
   }
@@ -432,7 +448,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 onMounted(() => {
-  void inventory.refresh()
+  void refreshInventory()
   void pluginUpdates.refresh()
   void loadCategories()
   void search()
@@ -455,6 +471,7 @@ watch(
   <div class="marketplace-pane">
     <p v-if="flow.error.value" class="ext-error" role="alert">{{ flow.error.value }}</p>
     <p v-if="packFlow.error.value" class="ext-error mkt-pack-error" role="alert">{{ packFlow.error.value }}</p>
+    <p v-if="pageError" class="ext-error mkt-page-error" role="alert">{{ pageError }}</p>
 
     <!-- Detail view -->
     <section v-if="selected" class="mkt-detail" :data-detail-id="idOf(selected)">
@@ -601,7 +618,7 @@ watch(
                 class="nv-check"
                 :checked="detail.gets_prereleases === true"
                 :disabled="prereleaseBusy || flow.busy.value"
-                @change="setPrerelease(($event.target as HTMLInputElement).checked)"
+                @change="setPrerelease(($event.target as HTMLInputElement).checked, $event.target as HTMLInputElement)"
               />
               {{ $t('settings.extensions.getPrereleases') }}
             </label>

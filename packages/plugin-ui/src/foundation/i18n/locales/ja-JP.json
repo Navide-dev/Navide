@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "元のアカウントに戻せませんでした：{detail}",
     "notice": {
       "wrote": "許可済みの便利機能「{feature}」により {target} に書き込みました（{purpose}ため）",
       "repair-note": "Navide が以前書き込んだ内容を戻す、または修復するための書き込みです。",
@@ -164,6 +165,26 @@
     "restore": "元のサイズに戻す"
   },
   "editorWindow": {
+    "paths-copied": "{count} 件のパスをコピーしました",
+    "path-copied": "パスをコピーしました",
+    "copy-failed": "コピーに失敗しました",
+    "replaced-occurrences": "{count} 件を置換しました",
+    "search-stale": "内容が変更されました。もう一度検索してください",
+    "ai-terminal-starting": "AI ターミナルを起動中です。少し待ってから再試行してください",
+    "ai-terminal-not-started": "先に AI ターミナルを起動してから再試行してください",
+    "json-syntax-error": "JSON 構文エラー：{message}",
+    "file-outside-workspace": "ファイルはこのワークスペースの外にあります",
+    "no-indented-lines": "インデントされた行が見つかりません",
+    "indentation-tabs": "検出されたインデント：タブ",
+    "indentation-spaces-size": "検出されたインデント：スペース {size} 個",
+    "indentation-spaces": "検出されたインデント：スペース",
+    "no-quick-fixes": "利用できるクイックフィックスはありません",
+    "create-file-failed": "ファイルを作成できませんでした",
+    "saved": "保存しました",
+    "ai-rewrite-discarded": "ドキュメントが変更されたため、AI の書き換えを破棄しました",
+    "encoding-switch-failed": "エンコードを切り替えられませんでした",
+    "no-completion": "利用できる補完はありません",
+    "reopen-encoding-failed": "このエンコードで開き直せませんでした",
     "close-editor": "エディターを閉じる",
     "close-editor-dirty": "{count} 個のファイルに未保存の変更があります。それでもエディターを閉じますか？",
     "close-file": "ファイルを閉じる",
@@ -334,6 +355,12 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "リモートデバイス · {device}",
+    "external-toast-remote-body": "{from} からの指示を「{target}」に届けました",
+    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-body": "{from} からのメッセージを「{target}」に届けました",
+    "workspace-toast-title": "他のワークスペース · {name}",
+    "cross-workspace-unknown-sender": "不明",
     "panel-title": "CLI 間メッセージ",
     "pause": "配信を一時停止",
     "resume": "配信を再開",
@@ -436,6 +463,24 @@
     "setting-label": "閉じる前に確認を表示"
   },
   "git": {
+    "abort-failed": "中止に失敗しました",
+    "cherry-pick-failed": "チェリーピックに失敗しました",
+    "revert-failed": "リバートに失敗しました",
+    "commit-id-copied": "コミット ID をコピーしました",
+    "commit-message-copied": "コミットメッセージをコピーしました",
+    "conflict-write-failed": "書き込みに失敗しました",
+    "conflict-stage-failed": "ステージに失敗しました",
+    "conflict-apply-failed": "適用に失敗しました",
+    "conflicts-resolved-file": "{name} の競合を解決しました",
+    "patch-apply-failed": "パッチを適用できませんでした",
+    "remote-op-done": {
+      "fetch": "フェッチが完了しました",
+      "pull": "プルが完了しました",
+      "push": "プッシュが完了しました",
+      "sync": "同期が完了しました",
+      "publish": "公開が完了しました"
+    },
+    "read-failed": "読み込みに失敗しました：{reason}",
     "account": {
       "selector-title": "このワークスペースのアカウント",
       "unbound": "アカウントなし",
@@ -726,7 +771,7 @@
       "clipboard-send-failed": "貼り付けた内容の一部だけが {pane} に届きました。残りは送信中に失われました",
       "clipboard-send-failed-all": "貼り付けた内容が {pane} に届きませんでした。{chars} 文字が送信中に失われました",
       "open-file-failed": "{file} を開けませんでした。エディタが応答しませんでした",
-      "idle-reclaimed": "メモリを解放するため、待機中の CLI ペイン {count} 個を休止しました。クリックすると再開できます",
+      "idle-reclaimed": "メモリを解放するため、待機中の CLI ペイン {count} 個を休止しました。各ペインの「クリックして再開」カードから再開できます",
       "click-to-resume": "クリックして再開",
       "interrupted-at-launch": "再起動時に作業中",
       "interrupted-at-launch-tooltip": "Navide の再起動時にこのペインは作業中で、ターンが中断されました。自動では再開されていません（自動再開の上限を超えたか、再開に失敗しました）。クリックすると再開します。",
@@ -785,6 +830,10 @@
       "loop-capped-notify-title": "ループを停止しました — 続行回数の上限",
       "loop-capped-notify-body": "タスク完了の報告がないまま、続行プロンプトの送信回数が上限に達しました。作業が順調であれば、ループを再開してください",
       "login-expired-badge": "⚠ ログイン期限切れ",
+      "exit-fault-badge": "⚠ 終了（コード {code}）",
+      "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
+      "stuck-badge": "⏳ {minutes} 分以上動きなし",
+      "stuck-tooltip": "このターンは {minutes} 分以上、ログにも画面にも動きがありません。CLI が止まっている可能性があります。Navide は中断していません。",
       "usage-limit-badge": "⛔ {time} に回復",
       "usage-limit-badge-unknown": "⛔ 利用枠なし",
       "usage-limit-tooltip": "この CLI の利用枠を使い切りました。{time} に回復する見込みです。クリックで閉じます",
@@ -951,6 +1000,8 @@
     "minimize-selected": "選択した項目を最小化",
     "mute": "通知をミュート",
     "unmute": "通知のミュートを解除",
+    "fit-width": "ペイン幅に合わせる",
+    "fit-width-title": "ペインの全幅を使います。上の古い出力は数行折り返し直される場合があります。",
     "restore-selected": "選択した項目を復元",
     "reclaim-selected": "選択した項目のメモリを解放 ({count})",
     "reclaim-selected-title": "選択した CLI のうち、条件を満たすもののメモリを解放します。ペインはクリックで再開できる状態で残ります。実行中またはフォーカス中のペイン、未送信の入力があるペイン、再開できないセッションは対象外です。",
@@ -1830,6 +1881,8 @@
         }
       },
       "getPrereleases": "プレリリースを受け取る",
+      "getPrereleasesFailed": "プレリリースの受け取り設定を変更できませんでした：{error}",
+      "inventoryRefreshFailed": "インストール済みの Navide プラグインの一覧を再読み込みできませんでした：{error}",
       "incompatibleInstalled": "Navide ≥ {version} が必要",
       "incompatibleReason": "このバージョンは Navide {version} 以降が必要と宣言しています。有効なままですが、Navide を更新するまで正しく動作しない可能性があります。",
       "pack": {
@@ -2155,7 +2208,7 @@
         "general": "一般",
         "accountsAgents": "アカウントとエージェント",
         "integration": "エージェント資産",
-        "navidePlugins": "Navide プラグイン",
+        "navidePlugins": "Navide サービス",
         "system": "システム"
       },
       "general": "一般",
@@ -2707,8 +2760,8 @@
           "h6": "同期（複数のマシンで同じ設定を使う）",
           "p11": "設定 ▸ Navide Cloud の最初の欄は「同期」です。<strong>独立したタブではなく</strong>、このページの最上部にあります。同期可能な範囲ごとに切り替えがあり、オンにすると、<strong>同じアカウント</strong>にサインインしたすべてのデバイスで内容がそろいます。記録は<strong>このマシン上で暗号化</strong>され、サーバーは復号鍵を持たず、暗号文だけを保存します。",
           "sync": {
-            "scopes": "<strong>4 つの範囲を有効にできます</strong>。<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）、<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI、そして Navide で作成したスキルのファイル。自分でフォルダーに置いたスキルは設定のみ）、<em>メモリ</em>（<code>~/.claude/CLAUDE.md</code> などのグローバル指示ファイル。プロジェクト内のものは git で管理）です。",
-            "credentials": "<strong>認証情報</strong>の行は<strong>表示されますが無効</strong>で、「まだ同期できません」と表示されます。既定でオフになっていて有効にできる、という意味ではありません。切り替えは操作できません。",
+            "scopes": "<strong>サイドバーの「エージェント資産」と同じ順に 1 ページ 1 行、計 6 行。有効にできるのは 3 つです</strong>。<em>MCP</em>（Navide で追加したサーバー。秘密情報は送信前に暗号化）、<em>スキル</em>（有効なスキルと配信先の CLI、そして Navide で作成したスキルのファイル。自分でフォルダーに置いたスキルは設定のみ）、<em>プロンプト</em>（プロンプトスキルとループ用プロンプト）です。",
+            "credentials": "<em>メモリ</em>、<em>認証情報とキー</em>、<em>CLI 拡張</em>の行は<strong>表示されますがグレーで無効</strong>で、「まだ同期できません」と表示されます。既定でオフになっていて有効にできる、という意味ではありません。切り替えは操作できません。古いビルドでオンのまま残ったメモリや認証情報のスイッチは、オフにはできます。",
             "states": "欄の下には 2 つの状態を明示します。<em>未接続</em>（接続が戻ると有効な範囲を同期）と、<em>このデバイスにはまだ同期鍵がありません</em>（鍵を持つまで何もアップロードしない）です。接続中にのみ使える<em>今すぐ同期</em>ボタンもあります。",
             "key": "<strong>同期鍵は ID の先頭 8 文字だけを表示</strong>し、鍵自体は表示しません。<em>鍵を更新</em>には<strong>2 回のクリック</strong>が必要です。最初のクリックで<em>今すぐ更新</em>に変わり、横に<em>キャンセル</em>が現れます。更新すると現在の鍵を廃止し、同期済みの全記録を新しい鍵で暗号化し直し、次の鍵交換時に他のデバイスに渡します。鍵の漏洩が疑われる場合に使います。",
             "legacy": "<em>このアカウントに引き継ぐ</em>は、アカウントに紐付けられる前の同期鍵がこのデバイスにあり、<em>かつ</em>このアカウントにまだ鍵がない場合にのみ表示されます。一度限りの選択です。引き継がなければその鍵で同期した記録を読めず、代わりに新しい鍵を作ると、それらの記録は永久に読めなくなります。",
@@ -4944,7 +4997,7 @@
         },
         "s1": {
           "title": "方向 1：Navide が CLI エージェントに提供するツール",
-          "p1": "ペインが起動すると、エージェントのツール一覧に表示されます。教え込んだり設定したりする必要はなく、「この計画の第 2 段階を完了にして」のように普通の言葉で依頼できます。現在は<strong>62 個</strong>（コア 56 個と Navide プラグイン「プラン」の 6 個）のツールに加え、読み取り専用リソース 3 個とプロンプトテンプレート 3 個があります。",
+          "p1": "ペインが起動すると、エージェントのツール一覧に表示されます。教え込んだり設定したりする必要はなく、「この計画の第 2 段階を完了にして」のように普通の言葉で依頼できます。現在は<strong>63 個</strong>（コア 56 個と Navide プラグイン「プラン」の 7 個）のツールに加え、読み取り専用リソース 3 個とプロンプトテンプレート 3 個があります。",
           "h1": "計画文書",
           "planTools": {
             "plan_list": "このワークスペースの全計画を、段階とタスクの進捗付きで一覧表示します",
@@ -4952,7 +5005,8 @@
             "plan_create": "新しい計画を作成します（下書きから開始）",
             "plan_update_stage": "段階を進めます：下書き → レビュー中 → 承認済み → 作業中 → 完了",
             "plan_update_todo": "1 つのタスクの状態を更新します",
-            "plan_add_note": "調査結果や判断を記録します"
+            "plan_add_note": "調査結果や判断を記録します",
+            "plan_add_todo": "既存の計画にタスクを追加します"
           },
           "note1": "計画は、これらのツールでエージェントが書く HTML 文書です。ユーザーは Navide の計画ビューで読み、承認します。エージェントがコードを書き始めるのは、「承認済み」に進んでからです。",
           "h2": "ワークスペース、パイプラインの制御と設定",
@@ -7071,6 +7125,10 @@
         "salvaged": "{device} を破損したペアリング記録から復元しました。キーはそのままですが、もう一度承認が必要です",
         "sig2-missing": "{device} から時刻署名のないメッセージが届きました。サーバーがこの項目を転送していないか、途中で削除された可能性があります。メッセージは通常どおり配信されました",
         "sig2-unusable": "{device} から届いたメッセージの時刻署名が無効か、このマシンの時刻と大きくずれていました。旧形式の署名で通常どおり配信しました。両方のマシンの時刻を確認してください",
+        "sig2-refused-missing": "{device} から時刻署名のないメッセージが届いたため、受信を拒否しました。このデバイスは時刻署名を付けるため、途中で削除された可能性があります",
+        "sig2-refused-unusable": "{device} から届いたメッセージの時刻署名が無効だったため、受信を拒否しました",
+        "sig2-refused-clock-ahead": "{device} からのメッセージを時刻のずれにより拒否しました。そのマシンの時刻がこのマシンより {minutes} 分進んでいます。両方のマシンの時刻を確認してください",
+        "sig2-refused-clock-behind": "{device} からのメッセージを時刻のずれにより拒否しました。そのマシンの時刻がこのマシンより {minutes} 分遅れているか、途中でメッセージが遅延しました。両方のマシンの時刻を確認してください",
         "full": "ペアリング数が上限に達したため、{device} とペアリングできませんでした。デバイスを追加するには Navide をアップデートしてください。",
         "sending": "確認中…",
         "start": "ペアリング",
@@ -8377,7 +8435,7 @@
     "grid-toolbar": "グリッドレイアウト",
     "grid-custom-columns": "列数を指定",
     "grid-custom-rows": "行数を指定",
-    "titlebar-settings": "設定 (⌘,)",
+    "titlebar-settings": "設定 ({key})",
     "drag-reorder": "ドラッグして並べ替え、クリックしてフォーカス",
     "docked-in-sidebar": "サイドバーに格納済み",
     "stage-manager-tooltip": "ステージマネージャー — 進行を制御し、---STAGE-DONE--- を判断",
@@ -8595,13 +8653,13 @@
     "release-notes": "リリースノート",
     "error": "アップデートエラー：{message}",
     "unsupported": "このビルドでは自動アップデートを利用できません。",
-    "new-version-toast": "Agent-Team v{version} が利用可能です",
+    "new-version-toast": "Navide v{version} が利用可能です",
     "major-update-title": "アップデートが利用可能です",
-    "major-update-body": "Agent-Team v{version} が利用可能です（現在は v{current}）。今すぐダウンロードしますか？",
+    "major-update-body": "Navide v{version} が利用可能です（現在は v{current}）。今すぐダウンロードしますか？",
     "download-now": "アップデートをダウンロード",
     "later": "後で",
     "restart-confirm-title": "再起動してアップデートをインストールしますか？",
-    "restart-confirm-body": "Agent-Team v{version} をダウンロードしました。インストールを完了するため、アプリを閉じて開き直します。今すぐ再起動しますか？"
+    "restart-confirm-body": "Navide v{version} をダウンロードしました。インストールを完了するため、アプリを閉じて開き直します。今すぐ再起動しますか？"
   },
   "announce": {
     "title": "お知らせ",
@@ -8743,6 +8801,14 @@
     "duration-hours": "{count} 時間",
     "duration-minutes": "{count} 分"
   },
+  "notifyBar": {
+    "tooltip-on": "システム通知オン",
+    "tooltip-off": "システム通知オフ",
+    "sound-off": "通知音オフ",
+    "open-settings": "通知の設定",
+    "close": "閉じる",
+    "permission-line": "{label}：{status}"
+  },
   "time": {
     "ago-just-now": "たった今",
     "ago-minutes": "{count} 分前 | {count} 分前",
@@ -8835,6 +8901,7 @@
     "note": "名前が空の場合は、組み込みの翻訳を使用します。色はテーマトークンに基づくため、どのテーマでも読みやすく表示されます。"
   },
   "preview": {
+    "copy-failed": "コピーに失敗しました",
     "binary-file": "バイナリファイル",
     "cannot-display-text": "このファイル形式はテキストとして表示できません。",
     "open-externally": "外部アプリで開く",
@@ -10204,7 +10271,10 @@
       "disconnect-label": "{pane} と {channel} の接続を切断",
       "go-to": "{pane} へ移動",
       "auto-child": "自動サブトピック",
-      "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。"
+      "auto-child-hint": "子ペイン用に自動作成されたトピックです。親ペインの接続を切ると一緒に閉じます。",
+      "unnamed-pane": "名前のないペイン",
+      "pane-closed": "閉じています",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
@@ -10822,7 +10892,8 @@
       "budget": "今日の実行回数の上限に達しました",
       "workspace_gone": "workspace フォルダが存在しません",
       "workspace_not_open": "その時刻にこの workspace を開いたウィンドウがありませんでした。次に開いたときに実行します",
-      "not_git": "git リポジトリではないため提案のみで実行しました"
+      "not_git": "git リポジトリではないため提案のみで実行しました",
+      "over_budget": "token 予算の 1.5 倍を超えたため、中断して終了しました"
     },
     "notice": {
       "started": "自己改善を開始 · {workspace}",
@@ -10847,7 +10918,7 @@
         "result": "結果を見る"
       },
       "over_budget": "自己改善が予算超過 · {workspace}",
-      "over-budget-body": "この実行は token 予算の 1.5 倍を超えたため、Navide が一度中断を送りました。"
+      "over-budget-body": "この実行は token 予算の 1.5 倍を超えました（キャッシュから再読み込みしたコンテキストは含みません）。Navide が中断して実行を終了し、pane を回収します。"
     }
   },
   "recentWorkspaces": {

@@ -13,7 +13,7 @@ type Listener = (...args: never[]) => unknown
 const appListeners: Array<[string, Listener]> = []
 const ipcListeners = new Map<string, Listener>()
 const windowSends: Array<[string, unknown]> = []
-const dialogState = vi.hoisted(() => ({ response: 0, prompts: 0, notices: [] as Array<{ message?: string; detail?: string }> }))
+const dialogState = vi.hoisted(() => ({ response: 0, prompts: 0, lastPrompt: null as { title?: string } | null, notices: [] as Array<{ message?: string; detail?: string }> }))
 
 // The last-window quit only exists off macOS; null keeps the host's answer.
 const osState = vi.hoisted(() => ({ mac: null as boolean | null }))
@@ -96,7 +96,7 @@ vi.mock('electron', () => {
       showMessageBox: (_win: unknown, opts?: { buttons?: unknown[] }) => {
         // Count only the quit prompt (two buttons), not the refusal notice.
         const options = (opts ?? _win) as { buttons?: unknown[] }
-        if (options?.buttons?.length === 2) dialogState.prompts++
+        if (options?.buttons?.length === 2) { dialogState.prompts++; dialogState.lastPrompt = options as { title?: string } }
         else {
           dialogState.notices.push(options as { message?: string; detail?: string })
           backendState.events.push('notice')
@@ -218,6 +218,13 @@ describe('embedded AI panels after a cancelled quit', () => {
     await beforeQuit({ preventDefault: vi.fn() })
     expect(dialogState.prompts).toBe(1)
     expect(appQuitting()).toBe(false)
+  })
+
+  it('titles the quit prompt Navide, not the package name Windows/Linux would show', { timeout: 60_000 }, async () => {
+    const { beforeQuit } = await boot()
+    dialogState.response = 1
+    await beforeQuit({ preventDefault: vi.fn() })
+    expect(dialogState.lastPrompt?.title).toBe('Navide')
   })
 
   it('a plugin veto on a quit without the prompt leaves the app not quitting', { timeout: 60_000 }, async () => {
@@ -343,7 +350,7 @@ describe('embedded AI panels after a quit cancelled while closing windows', () =
       expect(appQuitting()).toBe(false)
       expect(await panelEndingRuns()).toEqual({ endDockSurface: true, releaseAiTerminalOwner: true })
       expect(dialogState.notices).toEqual([
-        expect.objectContaining({ message: 'Navide did not quit', detail: 'Stopped by: Plans.' }),
+        expect.objectContaining({ title: 'Navide', message: 'Navide did not quit', detail: 'Stopped by: Plans.' }),
       ])
     } finally {
       vi.useRealTimers()

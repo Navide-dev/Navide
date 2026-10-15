@@ -36,7 +36,7 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
 from . import media, pdf, quick_menu, redact, relay, report, share_cmds
-from .. import prompt_skills
+from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
 )
@@ -1303,11 +1303,20 @@ class ChannelManager:
                     cut.insert(0, lines.pop())
                 rest = chunk_for(pending.loc.platform, "\n".join(cut)) + chunks[1:]
                 chunks = chunk_for(pending.loc.platform, "\n".join(lines + ["…", notice]))
-        for chunk in chunks:
+        for index, chunk in enumerate(chunks):
             try:
                 ids = await self.mirror.send(pending.loc, chunk)
             except Exception as exc:  # noqa: BLE001
-                log.warning("channels: reply to %s failed: %s", pending.loc.key(), share_cmds.mask_links(str(exc)))
+                why = share_cmds.mask_links(str(exc))
+                log.warning("channels: reply to %s failed: %s", pending.loc.key(), why)
+                # Neither the chat nor the app learns of this otherwise: keep it
+                # where ui_diagnostics (and self-evolution) can read it back.
+                error_ledger.record(
+                    "backend", "error", "channels.reply_failed",
+                    f"reply to {pending.loc.key()} failed at chunk {index + 1}/{len(chunks)}:"
+                    f" {type(exc).__name__}: {why}",
+                    pane_id=pending.owner,
+                )
                 return False
             if pending.owner:
                 self.mirror.owners.remember(pending.loc.key(), ids, pending.owner)

@@ -1,5 +1,6 @@
 {
   "convenience": {
+    "switch-back-failed": "Couldn't switch back: {detail}",
     "notice": {
       "wrote": "Wrote {target} under the convenience feature \"{feature}\" you allowed, so that {purpose}",
       "repair-note": "This put back or repaired what Navide wrote earlier.",
@@ -164,6 +165,26 @@
     "restore": "Restore"
   },
   "editorWindow": {
+    "paths-copied": "Copied {count} path(s)",
+    "path-copied": "Path copied",
+    "copy-failed": "Copy failed",
+    "replaced-occurrences": "Replaced {count} occurrence(s)",
+    "search-stale": "Content has changed, please search again",
+    "ai-terminal-starting": "AI terminal is starting — retry in a moment",
+    "ai-terminal-not-started": "Start the AI terminal first, then retry",
+    "json-syntax-error": "JSON syntax error: {message}",
+    "file-outside-workspace": "File is outside this workspace",
+    "no-indented-lines": "No indented lines detected",
+    "indentation-tabs": "Detected indentation: Tabs",
+    "indentation-spaces-size": "Detected indentation: {size} Spaces",
+    "indentation-spaces": "Detected indentation: Spaces",
+    "no-quick-fixes": "No quick fixes available",
+    "create-file-failed": "Failed to create file",
+    "saved": "Saved",
+    "ai-rewrite-discarded": "Document changed — AI rewrite discarded",
+    "encoding-switch-failed": "Encoding switch failed",
+    "no-completion": "No completion available",
+    "reopen-encoding-failed": "Failed to re-open with encoding",
     "close-editor": "Close Editor",
     "close-editor-dirty": "{count} file(s) have unsaved changes. Close the editor anyway?",
     "close-file": "Close File",
@@ -334,6 +355,12 @@
     }
   },
   "msg": {
+    "external-toast-remote-title": "Remote device · {device}",
+    "external-toast-remote-body": "Instruction from {from} delivered to “{target}”",
+    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-body": "Message from {from} delivered to “{target}”",
+    "workspace-toast-title": "Other workspace · {name}",
+    "cross-workspace-unknown-sender": "unknown",
     "panel-title": "Inter-CLI Messages",
     "pause": "Pause delivery",
     "resume": "Resume delivery",
@@ -436,6 +463,24 @@
     "setting-label": "Show a confirmation reminder before closing"
   },
   "git": {
+    "abort-failed": "Abort failed",
+    "cherry-pick-failed": "Cherry-pick failed",
+    "revert-failed": "Revert failed",
+    "commit-id-copied": "Commit ID copied",
+    "commit-message-copied": "Commit message copied",
+    "conflict-write-failed": "Write failed",
+    "conflict-stage-failed": "Stage failed",
+    "conflict-apply-failed": "Apply failed",
+    "conflicts-resolved-file": "{name} conflicts resolved",
+    "patch-apply-failed": "Failed to apply patch",
+    "remote-op-done": {
+      "fetch": "Fetch done",
+      "pull": "Pull done",
+      "push": "Push done",
+      "sync": "Sync done",
+      "publish": "Publish done"
+    },
+    "read-failed": "Read failed: {reason}",
     "account": {
       "selector-title": "Account for this workspace",
       "unbound": "No account",
@@ -726,7 +771,7 @@
       "clipboard-send-failed": "Only part of the paste reached {pane} — the rest was lost on the way",
       "clipboard-send-failed-all": "The paste never reached {pane} — {chars} characters were lost on the way",
       "open-file-failed": "Could not open {file} — the editor did not respond",
-      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click one to resume it",
+      "idle-reclaimed": "Reclaimed {count} idle CLI pane(s) to free memory — click the “Click to resume” card in a pane to bring it back",
       "click-to-resume": "Click to resume",
       "interrupted-at-launch": "Working at restart",
       "interrupted-at-launch-tooltip": "This pane was working when Navide restarted, and its turn was cut off. It was not resumed automatically (over the automatic-resume limit, or the resume failed). Click to resume it.",
@@ -785,6 +830,10 @@
       "loop-capped-notify-title": "Loop stopped — continue limit reached",
       "loop-capped-notify-body": "The loop sent its maximum number of continue prompts without the agent reporting the task done — restart it if the work is still on track",
       "login-expired-badge": "⚠ Login expired",
+      "exit-fault-badge": "⚠ Exited (code {code})",
+      "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
+      "stuck-badge": "⏳ No activity {minutes}+ min",
+      "stuck-tooltip": "This turn has shown no log activity and no output for over {minutes} minutes. The CLI may be stuck; nothing was interrupted.",
       "usage-limit-badge": "⛔ back {time}",
       "usage-limit-badge-unknown": "⛔ out of quota",
       "usage-limit-tooltip": "This CLI is out of quota — expected back at {time}. Click to dismiss",
@@ -951,6 +1000,8 @@
     "minimize-selected": "Minimize selected",
     "mute": "Mute notifications",
     "unmute": "Unmute notifications",
+    "fit-width": "Fit to pane width",
+    "fit-width-title": "Use the pane's full width. Older output above may re-wrap a few lines.",
     "restore-selected": "Restore selected",
     "reclaim-selected": "Reclaim selected ({count})",
     "reclaim-selected-title": "Free memory from eligible selected CLIs; panes stay as click-to-resume placeholders. Busy or focused panes, unsent input, and sessions that cannot resume are skipped.",
@@ -1830,6 +1881,8 @@
         }
       },
       "getPrereleases": "Get pre-releases",
+      "getPrereleasesFailed": "Could not change Get pre-releases: {error}",
+      "inventoryRefreshFailed": "Could not reload the installed Navide plugins: {error}",
       "incompatibleInstalled": "Needs Navide ≥ {version}",
       "incompatibleReason": "This version declares it needs Navide {version} or newer. It stays enabled, but may not work until you update Navide.",
       "pack": {
@@ -2155,7 +2208,7 @@
         "general": "General",
         "accountsAgents": "Accounts & Agents",
         "integration": "Agent Assets",
-        "navidePlugins": "Navide Plugins",
+        "navidePlugins": "Navide Services",
         "system": "System"
       },
       "general": "General",
@@ -2707,8 +2760,8 @@
           "h6": "Sync (keeping several machines the same)",
           "p11": "The first block on Settings ▸ Navide Cloud is called Sync. <strong>It is not a separate tab</strong> — it is the top section of this one page. Each syncable scope gets a row with a toggle; turn one on and that scope stays the same on every device signed in to the <strong>same account</strong>. Records are <strong>encrypted on this machine</strong>, and the server only stores ciphertext it has no key for.",
           "sync": {
-            "scopes": "<strong>Four scopes can be turned on</strong>: <em>Prompts</em> (prompt skills and the loop prompt), <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only), and <em>Memory</em> (global instruction files such as <code>~/.claude/CLAUDE.md</code>; the ones inside a project stay with git).",
-            "credentials": "The <strong>Credentials</strong> row is <strong>listed but disabled</strong>, and its line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move.",
+            "scopes": "<strong>Six rows, one per Agent Assets page and in the sidebar's order; three can be turned on</strong>: <em>MCP</em> (the servers you added in Navide; their secrets are encrypted before they leave), <em>Skills</em> (which skills are on and which CLIs each one goes to, plus the files of skills created in Navide; skills you put in the folder yourself sync their settings only) and <em>Prompts</em> (prompt skills and the loop prompt).",
+            "credentials": "<em>Memory</em>, <em>Credentials &amp; keys</em> and <em>CLI extensions</em> are <strong>listed but greyed out</strong>, and their line reads \"not syncable yet\". This is not \"off by default, waiting for you to turn it on\" — the toggle does not move. A Memory or Credentials switch an older build left on can still be turned off.",
             "states": "Two states are spelled out under the block: <em>not connected</em> (scopes you turned on catch up once the link is back) and <em>this device has no sync key yet</em> (nothing is uploaded until it has one). There is also a <em>Sync now</em> button, enabled only while connected.",
             "key": "<strong>The sync key is shown as the first 8 characters of its id</strong>, never as the key itself. <em>Rotate key</em> takes <strong>two clicks</strong>: the first turns it into <em>Rotate now</em> and adds a <em>Cancel</em> beside it. Rotating retires the current key, re-seals every synced record under a new one, and hands the new key to your other devices the next time they exchange keys — it is the move for a key you think has leaked.",
             "legacy": "<em>Adopt for this account</em> appears only when this device holds a sync key from before accounts were bound <em>and</em> this account has no key yet. It is a one-time choice: without adopting it you cannot read what was synced under that key, and minting a fresh key instead would leave those records permanently unreadable.",
@@ -4944,7 +4997,7 @@
         },
         "s1": {
           "title": "Direction 1: the tools Navide gives CLI agents",
-          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>62</strong> of them today (56 core, plus the 6 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
+          "p1": "The moment a pane starts, these appear in the agent's tool list. You do not have to teach it and there is nothing to configure — just say what you want in plain language, e.g. \"mark phase two of this plan as done\". There are <strong>63</strong> of them today (56 core, plus the 7 the Plans Navide plugin registers), alongside 3 read-only resources and 3 prompt templates.",
           "h1": "Plan documents",
           "planTools": {
             "plan_list": "List every plan in this workspace, with its stage and todo progress",
@@ -4952,7 +5005,8 @@
             "plan_create": "Create a new plan (starting as a draft)",
             "plan_update_stage": "Advance the stage: Draft → In Review → Approved → In Progress → Done",
             "plan_update_todo": "Update the status of a single todo",
-            "plan_add_note": "Record a finding or a decision"
+            "plan_add_note": "Record a finding or a decision",
+            "plan_add_todo": "Add a todo to an existing plan"
           },
           "note1": "Plans are HTML the agent writes with these tools; you read and approve them in Navide's Plans view. The agent only starts writing code once the stage has advanced to \"Approved\".",
           "h2": "Workspace, pipeline orchestration and settings",
@@ -7071,6 +7125,10 @@
         "salvaged": "{device} was recovered from a damaged pairing record. Its key is kept, but it needs your approval again",
         "sig2-missing": "{device} sent a message without its time signature — a server that does not pass it on, or something on the way removed it. It was delivered",
         "sig2-unusable": "{device} sent a message whose time signature did not check out, or was dated too far from this machine's clock. It was delivered on the older signature; check both machines' clocks",
+        "sig2-refused-missing": "{device} sent a message without its time signature, and it was refused: that device signs one, so something on the way removed it",
+        "sig2-refused-unusable": "{device} sent a message whose time signature did not check out, and it was refused",
+        "sig2-refused-clock-ahead": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes ahead of this one. Check both machines' clocks",
+        "sig2-refused-clock-behind": "A message from {device} was refused for clock skew: that machine's clock is {minutes} minutes behind this one, or the message was held back on the way. Check both machines' clocks",
         "full": "Pairing limit reached: {device} could not be paired. Update Navide to add more devices.",
         "sending": "Confirming…",
         "start": "Pair",
@@ -8377,7 +8435,7 @@
       "grid-toolbar": "Grid layout",
       "grid-custom-columns": "Custom columns",
       "grid-custom-rows": "Custom rows",
-      "titlebar-settings": "Settings (⌘,)",
+      "titlebar-settings": "Settings ({key})",
       "drag-reorder": "Drag to reorder or click to focus",
       "docked-in-sidebar": "Docked in sidebar",
       "stage-manager-tooltip": "Stage manager — controls flow and decides ---STAGE-DONE---",
@@ -8595,13 +8653,13 @@
     "release-notes": "Release notes",
     "error": "Update error: {message}",
     "unsupported": "Automatic updates aren't available in this build.",
-    "new-version-toast": "Agent-Team v{version} is available",
+    "new-version-toast": "Navide v{version} is available",
     "major-update-title": "Update available",
-    "major-update-body": "Agent-Team v{version} is available (you're on v{current}). Download it now?",
+    "major-update-body": "Navide v{version} is available (you're on v{current}). Download it now?",
     "download-now": "Download update",
     "later": "Later",
     "restart-confirm-title": "Restart to install update?",
-    "restart-confirm-body": "Agent-Team v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
+    "restart-confirm-body": "Navide v{version} is downloaded. The app will close and reopen to finish installing. Restart now?"
   },
   "announce": {
     "title": "Announcements",
@@ -8743,6 +8801,14 @@
     "duration-hours": "{count}h",
     "duration-minutes": "{count}m"
   },
+  "notifyBar": {
+    "tooltip-on": "System notifications on",
+    "tooltip-off": "System notifications off",
+    "sound-off": "Notification sound off",
+    "open-settings": "Notification settings",
+    "close": "Close",
+    "permission-line": "{label}: {status}"
+  },
   "time": {
     "ago-just-now": "Just now",
     "ago-minutes": "{count} minute ago | {count} minutes ago",
@@ -8835,6 +8901,7 @@
     "note": "An empty name falls back to the built-in translation. Colours resolve through theme tokens, so a choice stays readable in every theme."
   },
   "preview": {
+    "copy-failed": "Copy failed",
     "binary-file": "Binary file",
     "cannot-display-text": "This file type cannot be displayed as text.",
     "open-externally": "Open externally",
@@ -10204,7 +10271,10 @@
       "disconnect-label": "Disconnect {pane} from {channel}",
       "go-to": "Go to {pane}",
       "auto-child": "Auto sub-topic",
-      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too."
+      "auto-child-hint": "Created automatically for a child pane. Disconnecting the parent pane closes it too.",
+      "unnamed-pane": "Unnamed pane",
+      "pane-closed": "Closed",
+      "chat-id": "chat {id}"
     }
   },
   "guard": {
@@ -10822,7 +10892,8 @@
       "budget": "Today's run limit is reached",
       "workspace_gone": "The workspace folder no longer exists",
       "workspace_not_open": "No window had this workspace open at the time; it catches up the next time it opens",
-      "not_git": "Not a git repo; ran as propose-only"
+      "not_git": "Not a git repo; ran as propose-only",
+      "over_budget": "Passed 1.5× its token budget; interrupted and ended"
     },
     "notice": {
       "started": "Self-evolution started · {workspace}",
@@ -10847,7 +10918,7 @@
         "result": "See result"
       },
       "over_budget": "Self-evolution over budget · {workspace}",
-      "over-budget-body": "This run passed 1.5× its token budget; Navide sent one interrupt."
+      "over-budget-body": "This run passed 1.5× its token budget (context re-read from cache not counted). Navide interrupted it, ended the run and reclaims its pane."
     }
   },
   "recentWorkspaces": {

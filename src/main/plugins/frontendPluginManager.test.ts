@@ -356,6 +356,7 @@ import {
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
 import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
+import { setMainLedgerDataDir } from '../error-ledger'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
 import type { PlansBridgeContext } from './plansBridge'
@@ -702,6 +703,24 @@ describe('backend Host session registration', () => {
       ),
     }
   }
+
+  it('records a backend child it gave up restarting in main.log and the error ledger', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    try {
+      const { childBudgetSpent } = plansManagerWithHostObservers()
+      childBudgetSpent('headless-1')
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(`${PLANS_PLUGIN_ID} failed too often`))
+      const [entry] = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l))
+      expect(entry).toMatchObject({ source: 'main', code: 'plugin.backend_gave_up' })
+      expect(entry.message).toContain(PLANS_PLUGIN_ID)
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
+  })
 
   it('restores Plans support when a failed child comes back after an automatic restart', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
@@ -7342,6 +7361,64 @@ describe('view lifecycle (open / hideSelf / resize / death paths)', () => {
     expect(view.bounds).toEqual({ x: 0, y: 0, width: 1024, height: 768 })
   })
 
+  describe('fill view across window-state changes off macOS', () => {
+    const baseline = platformId()
+    afterEach(() => {
+      setPlatformId(baseline)
+      vi.useRealTimers()
+    })
+
+    it.each(['linux', 'win32'] as const)('follows a maximize that fires no resize (%s)', (platform) => {
+      setPlatformId(platform)
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 1100, height: 694 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+
+      host.contentBounds = { x: 0, y: 0, width: 1214, height: 702 }
+      host.emit('maximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+      mgr.deactivate('acme.editor')
+    })
+
+    it('reads the bounds again once the window manager has settled (GNOME reports stale bounds)', () => {
+      setPlatformId('linux')
+      vi.useFakeTimers()
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 1100, height: 694 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+
+      host.emit('resize') // fired while the old size is still reported
+      host.contentBounds = { x: 0, y: 0, width: 1214, height: 702 }
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1100, height: 694 })
+      vi.advanceTimersByTime(200)
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+
+      // Hidden views stop tracking, settle timer included.
+      host.emit('maximize')
+      mgr.deactivate('acme.editor')
+      host.contentBounds = { x: 0, y: 0, width: 500, height: 400 }
+      vi.advanceTimersByTime(200)
+      host.emit('unmaximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1214, height: 702 })
+    })
+
+    it('keeps macOS on the resize event alone', () => {
+      setPlatformId('darwin')
+      const mgr = new FrontendPluginManager()
+      const host = new FakeBrowserWindow()
+      host.contentBounds = { x: 0, y: 0, width: 800, height: 600 }
+      const view = openView(mgr, host, 'acme.editor', '?workspace_path=/ws')
+      host.contentBounds = { x: 0, y: 0, width: 1024, height: 768 }
+      host.emit('maximize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 800, height: 600 })
+      host.emit('resize')
+      expect(view.bounds).toEqual({ x: 0, y: 0, width: 1024, height: 768 })
+      mgr.deactivate('acme.editor')
+    })
+  })
+
   it('re-opening a running view reveals and focuses the hosting window', () => {
     const mgr = new FrontendPluginManager()
     const host = new FakeBrowserWindow()
@@ -11097,7 +11174,13 @@ describe('first-party Git private bridge', () => {
       await mgr.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
-  })
+    // Copies and removes the Node binary (~110 MB) as the package's backend: a
+    // file write the size of which no other test here makes. 40–140 ms on an
+    // idle machine, 5.4 s on a loaded Linux runner (PR #241), past the 5 s
+    // default. Every await above takes the previous step's result, so there is
+    // no ordering to fix: the time is the disk's. 30 s, as
+    // pluginBackendEscape.test.ts gives its real backend runs.
+  }, 30_000)
 
   it('retains Plans shell actions through the authenticated private bridge', async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'plans-shell-')))
@@ -11190,6 +11273,34 @@ describe('first-party Git private bridge', () => {
       ok: false,
       error: { code: 'BAD_REQUEST' },
     })
+  })
+
+  it('still denies when the policy resolver throws, but says why once in main.log and the ledger', async () => {
+    const { mgr, instanceId } = await openGitView()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const dataDir = mkdtempSync(join(tmpdir(), 'ledger-'))
+    setMainLedgerDataDir(dataDir)
+    mgr.setExecutionPolicyResolver(() => {
+      throw new Error('policy file unreadable')
+    })
+    const handler = vi.fn()
+    mgr.setPublicCapabilityHandler(handler)
+    const call = (reqId: string) => mgr.executeAgentCapability(instanceId, {
+      reqId, ns: 'fs', method: 'listFilesFlat', args: { query: '', maxResults: 1 },
+    })
+    try {
+      await expect(call('throwing-1')).resolves.toMatchObject({ ok: false })
+      await expect(call('throwing-2')).resolves.toMatchObject({ ok: false })
+      expect(handler).not.toHaveBeenCalled()
+      const warned = warnSpy.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('policy file unreadable'))
+      expect(warned).toHaveLength(1)
+      const lines = readFileSync(join(dataDir, 'logs', 'errors.jsonl'), 'utf8').trim().split('\n')
+      expect(lines.map((l) => JSON.parse(l).code)).toEqual(['plugin.policy_resolver_failed'])
+    } finally {
+      setMainLedgerDataDir(null)
+      rmSync(dataDir, { recursive: true, force: true })
+      warnSpy.mockRestore()
+    }
   })
 
   it('rechecks a stale agent policy before invoking the public handler', async () => {
@@ -11780,7 +11891,7 @@ describe('first-party Git private bridge', () => {
     })
     expect(opens).toEqual([{
       workspacePath,
-      relPath: join('.agent-team', 'plans', 'feature.html'),
+      relPath: '.agent-team/plans/feature.html',
     }])
   })
 
@@ -12021,7 +12132,7 @@ describe('first-party Git private bridge', () => {
       })
       expect(opens).toContainEqual({
         workspacePath: tempDir,
-        relPath: join('packages', 'subrepo', '.agent-team', 'plans', 'nested.html'),
+        relPath: 'packages/subrepo/.agent-team/plans/nested.html',
       })
 
       // 2. Nested repo with .git FILE (submodule/worktree): REJECTED

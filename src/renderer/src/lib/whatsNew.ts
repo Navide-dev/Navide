@@ -111,6 +111,76 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.23',
+    title: {
+      'zh-TW': '解除綁定的頻道聊天不再收到 pane 的回覆、狀態列通知鈴鐺、Windows 與 Linux 的快速鍵和視窗修正、安全性加強',
+      'en-US': 'Unbound Channel Chats Stay Unbound, a Notifications Bell, Windows and Linux Shortcut and Window Fixes, and Security Hardening',
+      'ja-JP': '紐づけを解除したチャットにペインの返信が届かなくなりました、ステータスバーの通知ベル、Windows と Linux のショートカットとウィンドウの修正、セキュリティの強化',
+    },
+    highlights: [
+      {
+        'zh-TW': 'Telegram 等頻道聊天：pane 的回合結束時沒有文字，Navide 會先保留這則請求，最多等 120 秒讓文字送到。在 0.2.22 裡，如果在這段等待中解除綁定（或 pane 關掉了），pane 的下一則回覆，連你在鍵盤上打的那一則，都可能被送到已解除綁定的聊天。現在解除綁定會一併丟掉保留的請求，不會再有任何內容送到那個聊天。「Channel 連線監控」的每一列現在會同時顯示連線的兩端：pane（已關閉的會標上「已關閉」）以及平台、bot 和聊天名稱。',
+        'en-US': 'Telegram and other channel chats: when a pane’s turn ends without text, Navide holds the chat request for up to 120 s for that text. In 0.2.22, if the chat was unbound (or the pane went away) during that wait, the pane’s next reply, even one typed at the keyboard, could be sent to the unbound chat. Unbinding now drops the held request, so nothing more is sent to that chat. Each row in Channel connections now shows both ends of its link: the pane (marked “Closed” when it is gone) and the platform, bot and chat name.',
+        'ja-JP': 'Telegram などのチャンネルのチャット：ペインのターンがテキストなしで終わると、Navide はそのテキストを最大 120 秒待つあいだリクエストを保留します。0.2.22 では、この待ち時間中にチャットの紐づけを解除する（またはペインがなくなる）と、ペインの次の返信が、キーボードから入力したものも含めて、紐づけを解除したチャットに送られることがありました。紐づけを解除すると保留中のリクエストも破棄されるようになり、そのチャットには何も送られなくなりました。「チャンネル接続」の各行には接続の両端が表示されるようになりました。ペイン（なくなったものは「閉じています」と表示）と、プラットフォーム、bot、チャット名です。',
+      },
+      {
+        'zh-TW': 'Windows 與 Linux 快速鍵改變：主視窗側欄分頁改成 Ctrl+Alt+1–5，設定改成 Ctrl+,。這些按鍵不會再傳給終端機 pane 裡的 CLI。Ctrl+1–9 仍然是選擇 CLI 類型。在 AltGr+數字會打出字元的鍵盤配置上（例如德文的 ² 和 ³），那個數字鍵照樣打出字元，不會切換分頁。macOS 不變。',
+        'en-US': 'Windows and Linux shortcuts change: the main window’s sidebar tabs are now Ctrl+Alt+1–5 and Settings is Ctrl+,. Those keys no longer reach the CLI in a terminal pane. Ctrl+1–9 still selects the CLI type. On keyboard layouts where AltGr+digit types a character (German ² and ³, for example), that digit keeps typing the character and does not switch tabs. macOS is unchanged.',
+        'ja-JP': 'Windows と Linux のショートカットが変わりました：メインウィンドウのサイドバーのタブは Ctrl+Alt+1〜5、設定は Ctrl+, になりました。これらのキーはターミナルのペインの CLI には送られなくなります。Ctrl+1〜9 は引き続き CLI の種類を選びます。AltGr+数字で文字が入力されるキーボード配列（たとえばドイツ語の ² と ³）では、その数字キーはこれまでどおり文字を入力し、タブは切り替わりません。macOS は変わりません。',
+      },
+      {
+        'zh-TW': '狀態列新增通知鈴鐺：一眼就能看出系統通知和提示音是否開著，系統拒絕通知權限時會顯示警示點。點一下就能直接切換「系統通知」和「提示音」，也能看到通知權限狀態，或前往通知設定。',
+        'en-US': 'A notifications bell in the status bar shows at a glance whether system notifications and the notification sound are on, with a warning dot when the system has denied notifications. Click it to switch “System notifications” and “Notification sound” on the spot, see the permission status, or go to Notification settings.',
+        'ja-JP': 'ステータスバーに通知ベルが加わりました。システム通知と通知音がオンかどうかがひと目でわかり、システムが通知を許可していないときは警告の点が付きます。クリックすると「システム通知」と「通知音」をその場で切り替えられ、通知の許可状態の確認や通知の設定への移動もできます。',
+      },
+      {
+        'zh-TW': '更容易看出 pane 出了問題：agent CLI 以非 0 代碼結束時，標題列會顯示「⚠ 已結束（代碼 N）」；回合進行中超過 20 分鐘沒有任何紀錄或輸出時，會顯示「⏳ 超過 20 分鐘沒有動靜」，只是提醒，不會中斷任何東西。Git 面板讀不到歷史或某個 commit 時，會顯示「讀取失敗：原因」，不再看起來像沒有新 commit。',
+        'en-US': 'Easier to see when a pane is in trouble: an agent CLI that ends with a non-zero code shows “⚠ Exited (code N)” in its title bar, and a turn with no log activity and no output for 20 minutes shows “⏳ No activity 20+ min”, as a reminder only; nothing is interrupted. When the Git panel cannot read the history or a commit, it says “Read failed: <reason>” instead of looking like there are no new commits.',
+        'ja-JP': 'ペインの問題に気づきやすくなりました：エージェントの CLI が 0 以外のコードで終了すると、タイトルバーに「⚠ 終了（コード N）」と表示されます。ターンの途中で 20 分以上ログにも画面にも動きがないと「⏳ 20 分以上動きなし」と表示されますが、通知だけで何も中断しません。Git パネルが履歴やコミットを読み込めないときは、新しいコミットがないように見えるのではなく「読み込みに失敗しました：理由」と表示します。',
+      },
+      {
+        'zh-TW': '沒有 pane 的工作區分頁只顯示一句說明、一個「開啟 Agent」按鈕（打開側欄的 Agents 分頁），以及「或執行流程 ▶」連結。歡迎視窗的最近清單中，狀態標籤、時間和「找不到資料夾」提示都會依介面語言顯示，主要按鈕改用強調色。',
+        'en-US': 'A workspace tab with no panes shows one sentence, an “Open Agent” button that opens the sidebar’s Agents tab, and an “or run the pipeline ▶” link. In the Welcome window, the recent list’s state badges, times and “Folder not found” tooltip are translated, and the primary button uses the accent colour.',
+        'ja-JP': 'ペインのないワークスペースのタブには、一文の説明と、サイドバーの「エージェント」タブを開く「エージェントを開く」ボタン、「またはパイプラインを実行 ▶」のリンクだけが表示されます。ようこそ画面の最近使用した項目では、状態の表示、時刻、「フォルダが見つかりません」の表示が日本語になり、主ボタンはアクセントカラーになりました。',
+      },
+      {
+        'zh-TW': '設定：Navide Cloud 移到原本的「Navide 外掛」群組，群組改名為「Navide 支援」。Navide Cloud › 同步依照側欄「Agent 資產」的順序和名稱，每一頁列一列；MCP、技能和 Prompt 技能可以打開，記憶、憑證與金鑰和擴充呈灰色，標示「尚未支援同步」。',
+        'en-US': 'Settings: Navide Cloud moves into the group formerly called “Navide Plugins”, now “Navide Services”. Navide Cloud › Sync lists one row per Agent Assets page, in the sidebar’s order and under its names: MCP, Skills and Prompts can be turned on, while Memory, Credentials & keys and Extensions are greyed out as “not syncable yet”.',
+        'ja-JP': '設定：Navide Cloud は、以前「Navide プラグイン」だったグループに移り、グループ名は「Navide サービス」になりました。Navide Cloud › 同期には、サイドバーの「エージェント資産」と同じ順序と名前で 1 ページ 1 行が並びます。MCP、スキル、プロンプトはオンにでき、メモリ、認証情報とキー、拡張機能はグレーで「まだ同期できません」と表示されます。',
+      },
+      {
+        'zh-TW': 'Navide 外掛更可靠：連不上 Registry 時，之前找到的外掛更新不會再消失，每個套件都會保留最後一次找到的更新。在「Navide 外掛」和「Navide 市集」裡，移除外掛、重新讀取已安裝清單或切換「接收預覽版」失敗時，現在會顯示錯誤，不會再默默失敗。',
+        'en-US': 'More reliable Navide plugins: when the Registry cannot be reached, updates found earlier no longer disappear; each package keeps its last known update. In Navide Plugins and Navide Marketplace, a failed plugin removal, installed-list reload or “Get pre-releases” switch now shows an error instead of failing silently.',
+        'ja-JP': 'Navide プラグインの信頼性を改善：Registry に接続できないときも、以前見つかったプラグインの更新が消えなくなり、各パッケージは最後に見つかった更新を保持します。「Navide プラグイン」と「Navide マーケットプレイス」で、プラグインの削除、インストール済み一覧の再読み込み、「プレリリースを受け取る」の切り替えに失敗したときは、黙って失敗せずにエラーを表示するようになりました。',
+      },
+      {
+        'zh-TW': '切換版面（從格線改成側欄、聚焦或全螢幕）後，終端機 pane 的欄寬可能被鎖得比 pane 窄。這時在 pane 的右鍵選單選「填滿面板寬度」，就能改用 pane 的完整寬度；這個選項只在欄寬被鎖住時出現，上方較早的輸出可能會有幾行重新換行。',
+        'en-US': 'After switching the layout from Grid to sidebar, spotlight or fullscreen, a terminal pane’s columns can stay locked narrower than the pane. Its right-click menu now offers “Fit to pane width” to use the full width; it appears only while the pane is capped, and older output above may re-wrap a few lines.',
+        'ja-JP': 'レイアウトをグリッドからサイドバー、スポットライト、フルスクリーンに切り替えたあと、ターミナルのペインの桁数がペインより狭く固定されることがあります。そのときはペインの右クリックメニューの「ペイン幅に合わせる」でペインの全幅を使えます。この項目は桁数が固定されているときだけ表示され、上の古い出力は数行折り返し直される場合があります。',
+      },
+      {
+        'zh-TW': '通知更好分辨：從其他裝置（透過 Navide Cloud）或聊天頻道（Telegram、LINE 等）送來的訊息，改用專屬的紅色「外部」通知，顯示 8 秒，取代原本誤標成「來自其他工作區」的那則。Navide Guard 的通知加上紅框，其他本機工作區的通知改成靛藍色，其餘通知不變。通知文字也都依介面語言顯示，更新提示改稱「Navide」而不是「Agent-Team」，閒置回收的通知也改正為請你點 pane 上的「點擊以續接」卡片。',
+        'en-US': 'Toasts that tell you where they come from: messages from another device through Navide Cloud, or from a chat channel (Telegram, LINE and others), get a dedicated red “external” toast for 8 s, in place of the mislabeled “other workspace” one. Navide Guard toasts get a red frame, toasts from another local workspace are indigo, and every other toast is unchanged. Toast text is translated throughout, update prompts say “Navide” instead of “Agent-Team”, and the idle-reclaim toast now points at the pane’s “Click to resume” card.',
+        'ja-JP': '通知の出どころがわかりやすくなりました：Navide Cloud を通じた別のデバイスや、チャットのチャンネル（Telegram、LINE など）からのメッセージは、誤って「別のワークスペース」と表示されていた通知の代わりに、専用の赤い「外部」通知で 8 秒表示されます。Navide Guard の通知には赤い枠が付き、ローカルの別のワークスペースからの通知は藍色になり、それ以外の通知は変わりません。通知の文言も日本語で表示されるようになり、アップデートの確認は「Agent-Team」ではなく「Navide」と表示し、アイドル回収の通知はペインの「クリックして再開」カードを案内するようになりました。',
+      },
+      {
+        'zh-TW': 'Windows 與 Linux 修正：在終端機按住 Ctrl 點檔案路徑就能開啟（macOS 仍是 Cmd），也認得 C:\\ 這類 Windows 路徑。可以拖曳標題列上的工作區名稱來移動視窗。外掛視圖在最大化、還原或全螢幕後會跟著視窗大小。結束確認視窗的標題是「Navide」，不再是「agent-team」；Linux 上的最大化按鈕也不會再停在「還原」。在 Windows 上，以反斜線路徑開啟 Plan 會開到正確的 Plan。',
+        'en-US': 'Windows and Linux fixes: Ctrl+click on a file path in the terminal opens it (Cmd+click on macOS), and Windows paths such as C:\\… are recognised. The window can be dragged by the workspace name in the title bar. Plugin views keep the window’s size after maximize, restore or full screen. The quit prompts are titled “Navide” instead of “agent-team”, and on Linux the maximize button no longer gets stuck on “Restore”. On Windows, a plan opened by a backslash path opens the right plan.',
+        'ja-JP': 'Windows と Linux の修正：ターミナルでファイルのパスを Ctrl+クリックすると開けるようになり（macOS は Cmd+クリック）、C:\\… のような Windows のパスも認識します。タイトルバーのワークスペース名をドラッグしてウィンドウを動かせます。プラグインのビューは、最大化、元に戻す、フルスクリーンのあともウィンドウの大きさに合わせます。終了の確認の題名は「agent-team」ではなく「Navide」になり、Linux では最大化ボタンが「元に戻す」のまま残らなくなりました。Windows では、バックスラッシュのパスで開いた Plan が正しく開きます。',
+      },
+      {
+        'zh-TW': '安全性加強：pane 連到 Navide MCP 的憑證不再出現在命令列（`ps` 對這台電腦上的每個帳號都看得到），改放在只有你能讀的檔案或環境變數裡。在規則編輯器封鎖的裝置，伺服器停止提供規則時仍然會被拒絕。跨裝置訊息要先通過簽章驗證才會記入防重送紀錄，訊息通道也不再接受配對訊息；配對只能在帳號視窗完成。已使用時間簽章（sig2）的裝置，若訊息缺少或附上無效的時間簽章，改為拒收（不再退回舊版簽章）；從未使用時間簽章的裝置照舊。若是兩台機器時鐘差距過大，帳號視窗會說明對方那台快或慢了幾分鐘。',
+        'en-US': 'Security hardening: a pane’s credential for Navide’s MCP server is no longer in its command line, where ps shows it to every account on the computer; it is in a file only you can read, or in the environment. A device blocked in the policy editor stays refused when the server stops serving the policy. A cross-device message goes into the replay record only after its signature verifies, and the message channel no longer carries pairing; pairing is done only in the account window. A device that signs with the time signature (sig2) now has messages without a usable one refused instead of falling back to the older signature; devices that have never used it behave as before. When the cause is clock skew, the account window says whether the other machine is ahead or behind, and by how many minutes.',
+        'ja-JP': 'セキュリティの強化：ペインが Navide の MCP サーバーに接続するための認証情報はコマンドラインに含まれなくなりました（コマンドラインは ps でこのコンピューターのすべてのアカウントから見えます）。代わりに本人だけが読めるファイルか環境変数に入ります。ルールの編集画面でブロックしたデバイスは、サーバーがルールを提供しなくなっても拒否されたままです。デバイス間のメッセージは署名を確認してから再送防止の記録に入り、メッセージのチャンネルではペアリングを扱わなくなりました。ペアリングはアカウント画面でのみ行えます。時刻署名（sig2）を使っているデバイスから、時刻署名がないか無効なメッセージが届いた場合は、旧形式の署名に戻さずに受信を拒否するようになりました。時刻署名を使ったことのないデバイスはこれまでどおりです。原因が時刻のずれの場合は、相手のマシンが何分進んでいるか遅れているかをアカウント画面で説明します。',
+      },
+      {
+        'zh-TW': 'Plan：Plan 視圖現在也會算出太大、無法放進一頁清單的 Plan 中「待你」的待辦。Agent 的 plan_list 和 plan_read 遇到 Navide 回應逾時會自動重試一次；Navide 沒有開啟時，錯誤訊息會請 agent 先開啟 Navide 再重試。Agent 現在可以用 plan_add_todo 在既有的 Plan 文件新增待辦，畫面同步顯示。',
+        'en-US': 'Plans: the Plans view now counts “for you” todos for a plan too big for one page of the list. An agent’s plan_list and plan_read retry once when Navide’s answer times out, and when Navide is not open the error tells the agent to open it and retry. Agents can now add todos to an existing plan with plan_add_todo; the new row appears in the Plan view.',
+        'ja-JP': 'Plan：一覧の 1 ページに収まらない大きな Plan でも、Plan ビューが「あなたの対応待ち」の ToDo を数えるようになりました。エージェントの plan_list と plan_read は、Navide の応答がタイムアウトしたときに一度だけ再試行し、Navide が開いていないときは、Navide を開いてから再試行するようエラーで伝えます。エージェントは plan_add_todo で既存の Plan に ToDo を追加できるようになり、追加した行は Plan ビューにすぐ表示されます。',
+      },
+    ],
+  },
+  {
     version: '0.2.22',
     title: {
       'zh-TW': '設定頁全面整理、語音朗讀通知、頻道聊天不再卡在「仍在執行」',

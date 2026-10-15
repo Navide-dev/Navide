@@ -775,6 +775,24 @@ describe('MarketplacePane', () => {
     stop()
   })
 
+  it('badges the merged answer the main process kept when a check fails', async () => {
+    const merged = [
+      { id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.2.0' },
+      { id: 'acme.two', namespace: 'acme', name: 'two', installedVersion: '1.0.0', latestVersion: '2.0.0' },
+    ]
+    const pendingUpdates = vi.fn().mockResolvedValue(merged)
+    mockPlugins({
+      checkUpdates: vi.fn().mockRejectedValue(new Error('update check failed for acme.two (HTTP 503)')),
+      pendingUpdates,
+    })
+    const pluginUpdates = usePluginUpdates()
+    pluginUpdates.updates.value = []
+    await pluginUpdates.refresh()
+    expect(pendingUpdates).toHaveBeenCalled()
+    expect(pluginUpdates.updates.value).toEqual(merged)
+    expect(pluginUpdates.count.value).toBe(2)
+  })
+
   it('formats counts with the app locale and shows the rating on list cards', async () => {
     mockPlugins({
       marketplaceSearch: vi.fn().mockResolvedValue({
@@ -1155,6 +1173,64 @@ describe('MarketplacePane', () => {
     await wrapper.get('.mkt-actions .ext-install').trigger('click')
     await flushPromises()
     expect(api.prepareInstall).toHaveBeenCalledWith({ namespace: 'acme', name: 'demo', version: '2.5.0-beta.1' })
+  })
+
+  it('shows a failed pre-release switch and puts the switch back', async () => {
+    const rows = [
+      { version: '2.5.0-beta.1', channel: 'pre-release' },
+      { version: '2.4.0', channel: 'stable' },
+    ].map((row) => ({
+      published_at: '2026-09-29T00:00:00Z',
+      target: 'universal',
+      yanked: false,
+      trust_tier: 'signed-verified',
+      capabilities: [],
+      sensitive_capabilities: [],
+      download_count: 0,
+      installable: true,
+      ...row,
+    }))
+    mockPlugins({
+      marketplaceDetail: vi
+        .fn()
+        .mockResolvedValue(
+          demoDetail({ latest_version: '2.4.0', latest_installable_version: '2.4.0', gets_prereleases: false, versions: rows })
+        ),
+      setPrerelease: vi
+        .fn()
+        .mockRejectedValue(new Error("Error invoking remote method 'plugins:setPrerelease': Error: store locked")),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const toggle = wrapper.get('.mkt-prerelease-toggle input')
+    await toggle.setValue(true)
+    await flushPromises()
+    expect(wrapper.get('.ext-error[role="alert"]').text()).toBe('Could not change Get pre-releases: store locked')
+    expect((toggle.element as HTMLInputElement).checked).toBe(false)
+    // The detail page stays up rather than turning into the load error.
+    expect(wrapper.find('.mkt-detail-error').exists()).toBe(false)
+  })
+
+  it('shows an inventory that fails to load instead of leaving the rejection unhandled', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason)
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      mockPlugins({ listInstalled: vi.fn().mockRejectedValue(new Error('backend gone')) })
+      wrapper = mountMarketplace()
+      await flushPromises()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(wrapper.get('.ext-error[role="alert"]').text()).toBe(
+        'Could not reload the installed Navide plugins: backend gone'
+      )
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
   })
 
   it('hides the pre-release switch when no pre-release exists', async () => {

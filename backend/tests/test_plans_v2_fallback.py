@@ -211,3 +211,50 @@ async def test_no_host_session_fails_with_an_actionable_message_and_stable_code(
 
     assert raised.value.code == code
     assert "open Navide" in str(raised.value) and "retry" in str(raised.value)
+
+
+
+def _route_sequence(monkeypatch: pytest.MonkeyPatch, replies: list[Any]) -> list[str]:
+    calls: list[str] = []
+
+    async def route(_plugin: str, _workspace: str, payload: dict[str, Any], **_kwargs: Any) -> Any:
+        calls.append(payload["name"])
+        return replies[min(len(calls), len(replies)) - 1]
+
+    monkeypatch.setattr(plan_mcp, "request_host_agent_workspace_backend", route)
+    return calls
+
+
+_HOST_TIMEOUT = {"ok": False, "error": "Navide Host did not answer the backend request", "error_code": "host_timeout"}
+
+
+@pytest.mark.asyncio
+async def test_a_read_is_retried_once_after_a_host_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    calls = _route_sequence(monkeypatch, [_HOST_TIMEOUT, {"ok": True, "result": []}])
+
+    assert await plan_tools.plan_list(_host_context(), workspace_path=str(tmp_path)) == []
+    assert calls == ["plans.list", "plans.list"]
+
+
+@pytest.mark.asyncio
+async def test_a_read_that_times_out_twice_still_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    calls = _route_sequence(monkeypatch, [_HOST_TIMEOUT, _HOST_TIMEOUT, {"ok": True, "result": []}])
+
+    with pytest.raises(FsError) as raised:
+        await plan_tools.plan_list(_host_context(), workspace_path=str(tmp_path))
+
+    assert raised.value.code == "host_timeout"
+    assert calls == ["plans.list", "plans.list"]
+
+
+@pytest.mark.asyncio
+async def test_a_mutation_is_never_retried_after_a_host_timeout(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    calls = _route_sequence(monkeypatch, [_HOST_TIMEOUT, {"ok": True, "result": {"stage": "done"}}])
+
+    with pytest.raises(FsError) as raised:
+        await plan_tools.plan_update_stage(
+            ".agent-team/plans/example.html", "done", _host_context(), workspace_path=str(tmp_path),
+        )
+
+    assert raised.value.code == "host_timeout"
+    assert calls == ["plans.update_stage"]

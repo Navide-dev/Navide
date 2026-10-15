@@ -9,7 +9,7 @@ export {
 export type { ThemeMeta } from './composables/useTheme'
 
 export { useNotify } from './composables/useNotify'
-export type { DialogState, Toast, ToastType } from './composables/useNotify'
+export type { DialogState, Toast, ToastType, ToastVariant } from './composables/useNotify'
 
 export {
   TRUNCATE_ATTR,

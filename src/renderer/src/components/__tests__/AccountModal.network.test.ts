@@ -651,6 +651,13 @@ describe('account modal — your network', () => {
       // Review B4-1: a time signature that does not verify or is outside the
       // window (usually a clock that is off) is decided on v1, and said once.
       expect(strings.settings.p2p.pair['sig2-unusable'], locale).toContain('{device}')
+      // 0.2.23 (plan 797ad7, Q4): a device that signs v2 is refused without a
+      // usable sig2, and a refusal for its send time names the clock skew.
+      for (const cause of ['missing', 'unusable', 'clock-ahead', 'clock-behind']) {
+        expect(strings.settings.p2p.pair[`sig2-refused-${cause}`], locale).toContain('{device}')
+      }
+      expect(strings.settings.p2p.pair['sig2-refused-clock-ahead'], locale).toContain('{minutes}')
+      expect(strings.settings.p2p.pair['sig2-refused-clock-behind'], locale).toContain('{minutes}')
     }
   })
 

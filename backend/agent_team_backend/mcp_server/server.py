@@ -109,7 +109,8 @@ server = FastMCP(
         "the stage is \"approved\" or later, and use plan_update_stage to move "
         "it through draft, in-review, approved, in-progress, done, abandoned. "
         "Mark each step with plan_update_todo (pending, in-progress, done, "
-        "skipped) as you go, and record findings or decisions with "
+        "skipped) as you go, add a step the plan is missing with "
+        "plan_add_todo, and record findings or decisions with "
         "plan_add_note. Always edit through these tools — writing the HTML "
         "yourself corrupts the plan-meta island Navide reads.\n"
         "\n"
@@ -290,6 +291,10 @@ def _workspace_mismatch_warning(workspace_path: str) -> str | None:
         return None
     target = _norm_workspace(workspace_path)
     if any(_norm_workspace(pane) == target for pane in panes):
+        return None
+    # A pane in a repository subfolder has the git root as its plan root (the
+    # root its plan window resolves to), so a plan written there is visible.
+    if any(_norm_workspace(resolve_plan_root(pane)) == target for pane in set(panes)):
         return None
     known = ", ".join(sorted(set(panes)))
     return (
@@ -5456,18 +5461,66 @@ async def ui_diagnostics(
     re-reading old entries. `pane_id` filters to one pane; `limit` caps how
     many entries come back. Errors if no window owns workspace_path within 15s.
 
+    The answer also carries `persisted`: the newest entries (up to `limit`,
+    `pane_id` applied) of the on-disk error ledger, which outlives a window
+    reload and also holds backend faults — exceptions no task retrieved and
+    request handlers that failed. A pane sees only entries recorded for its
+    own workspace, and none when it asks about another workspace; a refused
+    request carries none. It is there even when no window answered.
+
     Called from a CLI pane, this reads that pane's own window when
     workspace_path names that pane's own workspace (or is empty) — see
     ui_invoke.
     """
+    from agent_team_backend import error_ledger
+
     caller = _resolve_caller(ctx)
-    return await _ui_request(
+    answer = await _ui_request(
         workspace_path,
         "invoke",
         caller=caller,
         action="ui.diagnostics.read",
         args={"sinceSeq": since_seq, "paneId": pane_id, "limit": limit},
     )
+    if not answer.get("ok") and answer.get("error_code") not in _DIAGNOSTICS_UNANSWERED:
+        return answer  # refused: nothing from the ledger either
+    scope = _persisted_scope(caller, workspace_path)
+    if scope is None:
+        return answer
+    try:
+        persisted = await asyncio.to_thread(
+            error_ledger.get().read, limit=max(0, min(int(limit), 500)), pane_id=pane_id, workspace=scope
+        )
+    except Exception as err:  # noqa: BLE001 — the window's answer still goes back
+        persisted = [{"source": "backend", "level": "warn", "code": "ledger.unreadable", "message": str(err)}]
+    return {**answer, "persisted": persisted}
+
+
+#: ui_diagnostics answers that mean "no window answered", not "refused": the
+#: ledger is still worth handing back for those.
+_DIAGNOSTICS_UNANSWERED = frozenset({"ui_action_timeout", "ui_no_window_known", "ui_no_window"})
+
+
+def _persisted_scope(caller: "_Caller | None", workspace_path: str) -> str | None:
+    """Which ledger entries a caller may read: "" for all (host and external
+    callers, which already reach every window), a pane's own workspace for a
+    pane, or None for none. A pane asking about another workspace gets none,
+    and entries no workspace was recorded for are left out for it."""
+    if caller is None:
+        return None
+    if caller.kind in ("host", "external"):
+        return ""
+    if caller.kind != "pane":
+        return None
+    from agent_team_backend import agent_messaging
+
+    pane = agent_messaging.get(caller.pane_id)
+    if pane is None or not pane.workspace_path:
+        return None
+    own = _norm_workspace(pane.workspace_path)
+    if workspace_path and _norm_workspace(workspace_path) != own:
+        return None
+    return own
 
 
 # ── Preview record (preview_record / preview_list / preview_show) ───────────

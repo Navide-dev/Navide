@@ -251,6 +251,24 @@ describe('PlansApp', () => {
     state.documents[existingPath].html = '<html><body><section><h2>Scope</h2><p>Body</p></section></body></html>'
   }
 
+  it('opens the requested plan when the Host hands over a Windows backslash rel_path', async () => {
+    window.history.replaceState({}, '', `/?workspace_path=C%3A%5Cws&rel_path=${encodeURIComponent(existingPath.replace(/\//g, '\\'))}`)
+    await mountPlans()
+    expect(state.calls.some((call) => call.name.startsWith('plans.read') && call.args.rel_path === existingPath)).toBe(true)
+  })
+
+  it('opens a backslash rel_path handed to an already open window', async () => {
+    state.list.push({ ...state.list[0], rel_path: '.agent-team/plans/other_d4e5f6.html', name: 'Other plan' })
+    state.documents['.agent-team/plans/other_d4e5f6.html'] = { ...state.documents[existingPath], rel_path: '.agent-team/plans/other_d4e5f6.html' }
+    let deliver: ((target: Record<string, string>) => void) | undefined
+    ;(globalThis as any).nav.onOpenTarget = vi.fn((listener: (target: Record<string, string>) => void) => { deliver = listener; return vi.fn() })
+    await mountPlans()
+    state.calls.length = 0
+    deliver?.({ rel_path: '.agent-team\\plans\\other_d4e5f6.html' })
+    await flushPromises()
+    expect(state.calls.some((call) => call.name.startsWith('plans.read') && call.args.rel_path === '.agent-team/plans/other_d4e5f6.html')).toBe(true)
+  })
+
   it('parity: real Notes click opens the v1 panel inside the toolbar immediately above preview', async () => {
     reviewFixture()
     const view = await mountPlans({ attachTo: document.body })

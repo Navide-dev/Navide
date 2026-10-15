@@ -286,7 +286,9 @@ export interface PluginTrustRefreshController {
     activationCatalog: ReturnType<FrontendPluginManager['loadInstalledPlugins']>['activationCatalog']
   }>
   /** Detect newer installable Registry versions of installed packages and
-   *  remember the answer for `plugins:pendingUpdates`. Detection only. */
+   *  remember the answer for `plugins:pendingUpdates`. Detection only.
+   *  Rejects when the Registry did not answer for some package, after
+   *  remembering the merged answer (those packages keep their last update). */
   checkUpdates(): Promise<PluginUpdateInfo[]>
 }
 
@@ -855,7 +857,7 @@ export function registerPluginIpc(
           const res = await fetch(
             `${base}/api/extensions/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}`
           )
-          if (!res.ok) return null
+          if (!res.ok) return { failed: pkg.id, reason: `HTTP ${res.status}` }
           const detail = (await res.json()) as {
             versions?: Array<{
               version?: unknown
@@ -881,13 +883,41 @@ export function registerPluginIpc(
             installedVersion: pkg.packageVersion!,
             latestVersion,
           }
-        } catch {
+        } catch (error) {
           // One unreachable package must not hide updates for the others.
-          return null
+          return { failed: pkg.id, reason: error instanceof Error ? error.message : String(error) }
         }
       })
     )
-    pendingUpdates = checked.filter((entry) => entry !== null)
+    // A package the Registry did not answer for keeps its last known update
+    // (while it is still newer than what is installed) instead of reading as
+    // "up to date".
+    const failures = checked.filter(
+      (entry): entry is { failed: string; reason: string } => entry !== null && 'failed' in entry
+    )
+    const next: PluginUpdateInfo[] = []
+    for (const [index, entry] of checked.entries()) {
+      if (entry === null) continue
+      if (!('failed' in entry)) {
+        next.push(entry)
+        continue
+      }
+      const pkg = candidates[index]
+      const previous = pendingUpdates.find((update) => update.id === pkg.id)
+      if (previous && isUpdateAvailable(pkg.packageVersion!, previous.latestVersion)) {
+        next.push({ ...previous, installedVersion: pkg.packageVersion! })
+      }
+    }
+    pendingUpdates = next
+    // The merged answer is kept for `plugins:pendingUpdates`; the caller still
+    // learns that the check was incomplete.
+    if (failures.length > 0) {
+      throw new Error(
+        `update check failed for ${failures
+          .map((failure) => `${failure.failed} (${failure.reason})`)
+          .join(', ')}; their last known updates were kept`
+      )
+    }
     return pendingUpdates
   }
 
