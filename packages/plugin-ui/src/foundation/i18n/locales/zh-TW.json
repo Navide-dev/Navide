@@ -355,6 +355,13 @@
     }
   },
   "msg": {
+    "external-toast": {
+      "remote-title": "遠端裝置 · {device}",
+      "remote-body": "{from} 的指令已送達「{target}」",
+      "channel-title": "{platform} · {sender}",
+      "channel-body": "{from} 的訊息已送達「{target}」"
+    },
+    "workspace-toast-title": "其他工作區 · {name}",
     "cross-workspace-unknown-sender": "未知",
     "panel-title": "CLI 互傳訊息",
     "pause": "暫停投遞",
