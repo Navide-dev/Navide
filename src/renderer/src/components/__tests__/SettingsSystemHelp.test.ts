@@ -155,7 +155,10 @@ describe('SettingsSystemHelp', () => {
       ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'].map((k) => t(`settings.nav.${k}`))
     )
     expect(group('settings.nav.group.accountsAgents')).toEqual(
-      ['settings.nav.accounts', 'settings.nav.cliAgents', 'settings.nav.analyzer', 'guard.nav', 'channels.nav', 'settings.nav.crossDevice'].map(t)
+      ['settings.nav.accounts', 'settings.nav.cliAgents', 'settings.nav.analyzer', 'guard.nav', 'channels.nav'].map(t)
+    )
+    expect(group('settings.nav.group.navidePlugins')).toEqual(
+      ['settings.nav.crossDevice', 'settings.nav.extensions', 'settings.nav.marketplace'].map(t)
     )
     expect(unexpectedWarnings(warn)).toEqual([])
   })

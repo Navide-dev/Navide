@@ -51,22 +51,22 @@ const tabs: TabRow[] = [
   { key: 'layout', navKey: 'settings.nav.layout' },
   { key: 'notifications', navKey: 'settings.nav.notifications' },
   { key: 'voice', navKey: 'settings.nav.voice' },
-  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 6, navKey: 'settings.nav.accounts' },
+  { key: 'accounts', groupKey: 'settings.nav.group.accountsAgents', groupSpan: 5, navKey: 'settings.nav.accounts' },
   { key: 'cliAgents', navKey: 'settings.nav.cliAgents' },
   { key: 'analyzer', navKey: 'settings.nav.analyzer' },
   { key: 'security', navKey: 'guard.nav' },
   { key: 'channels', navKey: 'channels.nav' },
-  { key: 'cloud', navKey: 'settings.nav.crossDevice' },
   { key: 'mcp', groupKey: 'settings.nav.group.integration', groupSpan: 6, navKey: 'settings.nav.mcp' },
   { key: 'skills', navKey: 'settings.nav.skills' },
   { key: 'prompts', navKey: 'settings.nav.prompts' },
   { key: 'memory', navKey: 'settings.nav.memory' },
   { key: 'credentials', navKey: 'settings.nav.credentials' },
   { key: 'cliExtensions', navKey: 'settings.nav.cliExtensions' },
-  // Navide Plugins and Navide Marketplace are the fourth `.s-nav-group` in
-  // SettingsModal.vue, System the fifth. The execution policy is not a page of
-  // its own: it is the editable block at the top of Navide Plugins.
-  { key: 'extensions', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 2, navKey: 'settings.nav.extensions' },
+  // Navide Cloud, Navide Plugins and Navide Marketplace are the fourth
+  // `.s-nav-group` in SettingsModal.vue, System the fifth. The execution policy
+  // is not a page of its own: it is the editable block at the top of Navide Plugins.
+  { key: 'cloud', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 3, navKey: 'settings.nav.crossDevice' },
+  { key: 'extensions', navKey: 'settings.nav.extensions' },
   { key: 'marketplace', navKey: 'settings.nav.marketplace' },
   { key: 'shortcuts', groupKey: 'settings.nav.group.system', groupSpan: 3, navKey: 'settings.nav.keybindings' },
   { key: 'updates', navKey: 'settings.nav.updates' },
@@ -322,7 +322,6 @@ const settingsGroups = computed(() => [
       { label: t('settings.nav.analyzer') },
       { label: t('guard.nav') },
       { label: t('channels.nav') },
-      { label: t('settings.nav.crossDevice') },
     ],
   },
   {
@@ -339,6 +338,7 @@ const settingsGroups = computed(() => [
   {
     title: t('settings.nav.group.navidePlugins'),
     items: [
+      { label: t('settings.nav.crossDevice') },
       { label: t('settings.nav.extensions') },
       { label: t('settings.nav.marketplace') },
     ],

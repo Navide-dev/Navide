@@ -137,12 +137,13 @@ const results = ref<Record<string, ScopeResult>>({})
 const READY: ReadonlySet<string> = new Set(['prompts', 'mcp', 'skills'])
 
 /** Scopes sync no longer offers (2026-10-09: memory — sync covers assets and
- *  extensions only). Listed only while an older build's switch is still on,
- *  so it can be switched off; the backend never runs them either way. */
+ *  extensions only). A switch an older build left on stays reachable so it
+ *  can be switched off; the backend never runs them either way. */
 const RETIRED: ReadonlySet<string> = new Set(['memory'])
 
-/** The rows to list: a retired scope only while its switch is on. */
-const listed = computed(() => available.value.filter((scope) => !RETIRED.has(scope) || Boolean(scopes.value[scope])))
+/** The rows to list: one per Agent Assets page, in the sidebar's order and
+ *  under the sidebar's names. Rows outside READY show greyed out. */
+const listed = ['mcp', 'skills', 'prompts', 'memory', 'credentials', 'cliExtensions'] as const
 
 const connected = computed(() => linkState.value === 'connected')
 
@@ -549,11 +550,12 @@ onBeforeUnmount(() => offResult?.())
       <SettingRow
         v-for="scope in listed"
         :key="scope"
-        :title="t('settings.sync.scope-' + scope)"
+        :class="{ 'sync-row-off': !canToggle(scope) }"
+        :title="t('settings.nav.' + scope)"
         :description="
           READY.has(scope)
             ? t('settings.sync.scope-hint-' + scope)
-            : RETIRED.has(scope)
+            : RETIRED.has(scope) && scopes[scope]
               ? t('settings.sync.retired-' + scope)
               : t('settings.sync.not-yet')
         "
@@ -562,7 +564,7 @@ onBeforeUnmount(() => offResult?.())
           <ToggleSwitch
             :model-value="Boolean(scopes[scope])"
             :disabled="busy === scope || !canToggle(scope)"
-            :aria-label="t('settings.sync.scope-' + scope)"
+            :aria-label="t('settings.nav.' + scope)"
             @update:model-value="(v: boolean) => setScope(scope, v)"
           />
         </template>
@@ -727,6 +729,10 @@ onBeforeUnmount(() => offResult?.())
 </template>
 
 <style scoped>
+.sync-row-off :deep(.setting-row-title) {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
 .sync-hint {
   font-size: var(--font-row-desc);
   color: var(--text-secondary);
