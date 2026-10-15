@@ -130,6 +130,8 @@ echo "=== Building release artifacts ==="
   uv run --locked pyinstaller --noconfirm agent_team_backend.spec
 )
 CSC_IDENTITY_AUTO_DISCOVERY=false bun run dist
+# The dev-only web mode (NAVIDE_DEV_WEB=1) must never reach a release build.
+bun scripts/check-no-dev-web.mjs out
 
 unexpected_changes="$(
   git status --porcelain --untracked-files=all \

@@ -16,15 +16,30 @@ describe('deliveryToast', () => {
     })
   })
 
-  it('turns a chat-channel delivery into an external toast naming the platform and sender', () => {
+  it('turns a chat-channel delivery into a channel toast naming the platform and sender', () => {
     const viaOrigin = deliveryToast({ origin: 'channel', from_display: 'telegram:alice', cross_workspace: true }, 'notify')
     expect(viaOrigin).toEqual({
       message: 'Message from telegram:alice delivered to “notify”',
-      opts: { type: 'info', variant: 'external', icon: '✉', title: 'Telegram · alice', duration: 8000 },
+      opts: { type: 'info', variant: 'channel', icon: '✉', title: 'External channel · Telegram · alice', duration: 8000 },
     })
     // An older backend without `origin` is still recognised by the sender display.
     const viaDisplay = deliveryToast({ from_display: 'telegram:alice', cross_workspace: true }, 'notify')
-    expect(viaDisplay?.opts.variant).toBe('external')
+    expect(viaDisplay?.opts.variant).toBe('channel')
+  })
+
+  it('titles a chat-channel delivery without a sender by its platform alone', () => {
+    const toast = deliveryToast({ origin: 'channel', from_display: 'discord', cross_workspace: true }, 'notify')
+    expect(toast?.opts).toEqual({ type: 'info', variant: 'channel', icon: '✉', title: 'External channel · Discord', duration: 8000 })
+  })
+
+  it('uses the localized channel header', () => {
+    i18n.global.locale.value = 'zh-TW'
+    try {
+      const toast = deliveryToast({ origin: 'channel', from_display: 'telegram:alice' }, 'notify')
+      expect(toast?.opts.title).toBe('外部頻道 · Telegram · alice')
+    } finally {
+      i18n.global.locale.value = 'en-US'
+    }
   })
 
   it('keeps a local cross-workspace delivery on its message, as a workspace toast', () => {

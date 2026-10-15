@@ -357,7 +357,8 @@
   "msg": {
     "external-toast-remote-title": "リモートデバイス · {device}",
     "external-toast-remote-body": "{from} からの指示を「{target}」に届けました",
-    "external-toast-channel-title": "{platform} · {sender}",
+    "external-toast-channel-title": "外部チャンネル · {platform} · {sender}",
+    "external-toast-channel-platform-title": "外部チャンネル · {platform}",
     "external-toast-channel-body": "{from} からのメッセージを「{target}」に届けました",
     "workspace-toast-title": "他のワークスペース · {name}",
     "cross-workspace-unknown-sender": "不明",

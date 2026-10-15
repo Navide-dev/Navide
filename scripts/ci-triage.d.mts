@@ -13,5 +13,5 @@ export interface TriageRun {
   at: string
 }
 
-export function classifyLog(text: string): TriageEntry[]
+export function classifyLog(text: string, options?: { knownRaces?: Set<string> }): TriageEntry[]
 export function mergeIntoLedger(path: string, entries: TriageEntry[], run: TriageRun): unknown
