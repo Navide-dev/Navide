@@ -297,6 +297,9 @@ const resetCancelledQuit = createQuitCancelReset({
 // A quit that before-quit let through can still be cancelled while Electron
 // closes the windows, silently. Clear what the quit set and say which window
 // stopped it, as an abandoned update install does.
+// Windows/Linux title a message box with app.getName(), which is the package
+// name ("agent-team"); macOS ignores the field.
+const QUIT_DIALOG_TITLE = 'Navide'
 const quitCancelWatch = createQuitCancelWatch({
   timeoutMs: 5000,
   openWindowTitles: () => BrowserWindow.getAllWindows()
@@ -310,7 +313,7 @@ const quitCancelWatch = createQuitCancelWatch({
       await resetCancelledQuit()
       await dialog.showMessageBox({
         type: 'warning',
-        title: 'Navide',
+        title: QUIT_DIALOG_TITLE,
         message: quitConfirm.cancelledMessage,
         detail: quitConfirm.cancelledDetail.replace('{windows}', windows),
       })
@@ -5690,9 +5693,7 @@ app.on('quit', () => {
 async function askQuitConfirm(win: BrowserWindow | undefined): Promise<boolean> {
   const opts = {
     type: 'question' as const,
-    // Windows/Linux title a message box with app.getName(), which is the
-    // package name ("agent-team"); macOS ignores the field.
-    title: 'Navide',
+    title: QUIT_DIALOG_TITLE,
     buttons: [quitConfirm.quitLabel, quitConfirm.cancelLabel],
     defaultId: 0,
     cancelId: 1,
