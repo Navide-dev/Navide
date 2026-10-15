@@ -25,6 +25,27 @@ warn_missing_announcement() {
   fi
 }
 
+# Runs the command before `--` in the background and the one after it in the
+# foreground, waits for both, and fails naming each that failed: neither is
+# left running and neither exit code is lost. The background output is held
+# and printed when both are done, so the two never interleave.
+run_concurrently() {
+  local IFS=' ' background=() log pid background_status=0 foreground_status=0
+  while [[ $# -gt 0 && "$1" != -- ]]; do background+=("$1"); shift; done
+  shift
+  log="$(mktemp "${TMPDIR:-/tmp}/navide-release-gate.XXXXXX")"
+  "${background[@]}" > "$log" 2>&1 &
+  pid=$!
+  "$@" || foreground_status=$?
+  wait "$pid" || background_status=$?
+  echo "--- ${background[*]} (exit ${background_status}) ---"
+  cat "$log"
+  rm -f "$log"
+  [[ $background_status -eq 0 ]] || echo "ERROR: ${background[*]} failed (exit ${background_status})" >&2
+  [[ $foreground_status -eq 0 ]] || echo "ERROR: $* failed (exit ${foreground_status})" >&2
+  [[ $background_status -eq 0 && $foreground_status -eq 0 ]] || exit 1
+}
+
 [[ $# -eq 1 ]] || fail "usage: ./release.sh <X.Y.Z | patch | minor | major>"
 
 REQUEST="${1#v}"
@@ -118,10 +139,12 @@ pnpm release:check "$TAG"
 echo ""
 echo "=== Release gates ==="
 uv --project backend run --locked ruff check backend
-pnpm typecheck
+# The type check overlaps the backend tests only: it rebuilds packages/*/dist,
+# which the artifacts project of `pnpm test:run` reads, and the backend tests
+# touch neither. Backend tests run with a throwaway HOME and no reach to the
+# real keychain.
+run_concurrently pnpm typecheck -- scripts/release-backend-tests.sh
 pnpm test:run
-# Backend tests run with a throwaway HOME and no reach to the real keychain.
-scripts/release-backend-tests.sh
 
 echo ""
 echo "=== Building release artifacts ==="

@@ -29,7 +29,10 @@ in-repo docs above.
 1. **Tests**: `pnpm test:run`, never `pnpm test` (watch mode hangs). Backend:
    `uv --project backend run pytest backend/tests` (the path argument is
    required — without it pytest misses backend's ini config). Run verification
-   commands bare — no pipe to tail/head (it eats the exit code).
+   commands bare — no pipe to tail/head (it eats the exit code). While
+   iterating, `pnpm vitest run --changed origin/main` and
+   `node scripts/changed-backend-tests.mjs` run only the affected tests
+   (see `CONTRIBUTING.md`); the full suites stay the CI and release default.
 2. **Never clear terminal scrollback** — no `term.clear()` in any
    resize/redraw path.
 3. **No self-initiated commits** — the user decides when to commit, unless
