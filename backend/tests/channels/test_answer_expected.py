@@ -57,7 +57,8 @@ async def test_a_menu_that_changed_under_the_same_prompt_is_refused(env: Env) ->
     env.fake.options = ["Discard", "Keep"]  # same question, reordered menu
     await env.inbound(f"1 {rid}")
     assert env.fake.answers == []
-    assert env.tg.texts()[-1] == mgr_mod.MSG_RELAY_PROMPT_CHANGED
+    # The current prompt is relayed again right after; on a slow runner it may already be in.
+    assert mgr_mod.MSG_RELAY_PROMPT_CHANGED in env.tg.texts()
     assert rid not in env.m.relay._by_id  # stale: the old id cannot be retried
     await _until(lambda: (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_SUPERSEDED}") in env.tg.edits)
 
@@ -69,7 +70,8 @@ async def test_the_window_refusing_a_changed_prompt_asks_to_pick_again(env: Env)
     env.fake.answer_result = {"ok": False, "error": "the prompt on screen changed since it was checked",
                               "error_code": "prompt-changed"}
     await _press(env, f"nv1:{rid}:2")
-    assert env.tg.texts()[-1] == mgr_mod.MSG_RELAY_PROMPT_CHANGED
+    # The current prompt is relayed again right after; on a slow runner it may already be in.
+    assert mgr_mod.MSG_RELAY_PROMPT_CHANGED in env.tg.texts()
     assert rid not in env.m.relay._by_id
     await _until(lambda: (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_SUPERSEDED}") in env.tg.edits)
 
