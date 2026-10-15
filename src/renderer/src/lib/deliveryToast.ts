@@ -33,12 +33,12 @@ export function deliveryToast(ev: DeliveryToastEvent, targetName: string): Deliv
   if (isExternalDelivery(ev)) {
     if (ev.origin === 'remote') {
       return {
-        message: t('msg.external-toast.remote-body', { from, target: targetName }),
+        message: t('msg.external-toast-remote-body', { from, target: targetName }),
         opts: {
           type: 'info',
           variant: 'external',
           icon: '⇄',
-          title: t('msg.external-toast.remote-title', { device: from.split('/')[0] }),
+          title: t('msg.external-toast-remote-title', { device: from.split('/')[0] }),
           duration: 8000,
         },
       }
@@ -49,12 +49,12 @@ export function deliveryToast(ev: DeliveryToastEvent, targetName: string): Deliv
     const platformKey = `channels.platform.${platform}`
     const platformLabel = i18n.global.te(platformKey) ? t(platformKey) : platform
     return {
-      message: t('msg.external-toast.channel-body', { from, target: targetName }),
+      message: t('msg.external-toast-channel-body', { from, target: targetName }),
       opts: {
         type: 'info',
         variant: 'external',
         icon: '✉',
-        title: sender ? t('msg.external-toast.channel-title', { platform: platformLabel, sender }) : platformLabel,
+        title: sender ? t('msg.external-toast-channel-title', { platform: platformLabel, sender }) : platformLabel,
         duration: 8000,
       },
     }
