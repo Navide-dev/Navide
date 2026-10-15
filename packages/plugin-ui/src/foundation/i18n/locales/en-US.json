@@ -8743,6 +8743,14 @@
     "duration-hours": "{count}h",
     "duration-minutes": "{count}m"
   },
+  "notifyBar": {
+    "tooltip-on": "System notifications on",
+    "tooltip-off": "System notifications off",
+    "sound-off": "Notification sound off",
+    "open-settings": "Notification settings",
+    "close": "Close",
+    "permission-line": "{label}: {status}"
+  },
   "time": {
     "ago-just-now": "Just now",
     "ago-minutes": "{count} minute ago | {count} minutes ago",

@@ -8743,6 +8743,14 @@
     "duration-hours": "{count} 小時",
     "duration-minutes": "{count} 分"
   },
+  "notifyBar": {
+    "tooltip-on": "系統通知已開啟",
+    "tooltip-off": "系統通知已關閉",
+    "sound-off": "提示音已關閉",
+    "open-settings": "通知設定",
+    "close": "關閉",
+    "permission-line": "{label}：{status}"
+  },
   "time": {
     "ago-just-now": "剛剛",
     "ago-minutes": "{count} 分鐘前",
