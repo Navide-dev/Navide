@@ -83,7 +83,29 @@ async def test_offline_pane_and_buttonless_platform(env: Env) -> None:
     env.tg.capabilities = Capabilities(threads=True, create_location=True, edit=True, typing=True,
                                        buttons=False, text_limit=4000)
     await env.inbound("/menu")
-    assert env.tg.texts()[-1] == qm.text("zh-TW", "no_buttons")
+    assert env.tg.menus == [] and qm.text("zh-TW", "pick_hint") in env.tg.texts()[-1]
+
+
+async def test_a_buttonless_platform_gets_a_numbered_menu_and_picks_by_number(env: Env) -> None:
+    env.tg.capabilities = Capabilities(threads=True, create_location=True, edit=True, typing=True,
+                                       buttons=False, text_limit=4000)
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/menu")
+    body = env.tg.texts()[-1]
+    assert "1. 💬 Fix it" in body and "2. 💬 Docs" in body and "3. 🧩 deploy" in body
+    await env.inbound("/menu 3")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "/deploy")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "sent", name="🧩 deploy")
+    await env.inbound("/menu 9")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "bad_pick")
+    assert len(env.fake.delivered) == 1
+
+
+async def test_a_pick_without_a_menu_is_expired(env: Env) -> None:
+    await env.inbound("/menu 1")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "expired") and env.fake.delivered == []
 
 
 async def test_expired_unknown_and_moved_menus(env: Env, monkeypatch) -> None:

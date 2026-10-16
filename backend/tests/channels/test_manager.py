@@ -14,7 +14,13 @@ from agent_team_backend.channels import manager as mgr_mod
 from agent_team_backend.channels import relay as relay_mod
 from agent_team_backend.channels.base import AdapterStatus, Capabilities, InboundMessage, Location
 from agent_team_backend.channels.manager import (
+    BUSY_BUTTONS,
+    CANCEL_CALLBACK,
     MSG_INTERRUPTED,
+    MSG_NOT_STOPPED,
+    MSG_RESUMED,
+    RESUME_BUTTONS,
+    RESUME_CALLBACK,
     MSG_NOT_BOUND,
     MSG_RECEIVED_BUSY,
     MSG_WORKING,
@@ -38,6 +44,7 @@ class FakeAdapter:
         self.token = token
         self.status = AdapterStatus()
         self.sent: list[tuple[Location, str]] = []
+        self.buttons: dict[str, list] = {}  # text -> the buttons it was sent with
         self.edits: list[tuple[str, str]] = []
         self.typing = 0
         self.fail_edits = False
@@ -56,6 +63,8 @@ class FakeAdapter:
 
     async def send_text(self, loc: Location, text: str, *, buttons=None) -> list[str]:
         self.sent.append((loc, text))
+        if buttons:
+            self.buttons[text] = buttons
         return [str(len(self.sent))]
 
     async def edit_text(self, loc: Location, message_id: str, text: str) -> None:
@@ -93,6 +102,9 @@ class FakeSeams:
         self.delivered: list[tuple[str, str, str]] = []
         self.verdicts: dict[str, dict[str, Any]] = {}
         self.interrupts: list[str] = []
+        self.cancels: list[str] = []
+        self.resumes: list[str] = []
+        self.cancel_results: dict[str, str] = {}
         self.states: dict[str, dict[str, Any]] = {}
         self.aliases: dict[str, str] = {}
         self.events: list[tuple[str, dict[str, Any]]] = []
@@ -123,6 +135,17 @@ class FakeSeams:
     async def interrupt(self, pane_id: str) -> dict[str, Any]:
         self.interrupts.append(pane_id)
         return {"ok": True, "sent": True}
+
+    async def cancel(self, msg_key: str) -> str:
+        self.cancels.append(msg_key)
+        status = self.cancel_results.get(msg_key, "cancelled")
+        self.verdicts[msg_key] = {"status": status}
+        return status
+
+    async def resume(self, pane_id: str) -> dict[str, Any]:
+        self.resumes.append(pane_id)
+        self.states[pane_id] = {"exists": True, "busy": False, "display_status": "idle"}
+        return {"ok": True}
 
     def pane_state(self, pane_id: str) -> dict[str, Any]:
         return self.states.get(pane_id, {"exists": True, "busy": False, "display_status": "idle"})
@@ -158,12 +181,21 @@ class FakeSeams:
                      resolve_pane=self.resolve_pane, broadcast=self.broadcast,
                      read_secret=self.read_secret, write_secret=self.write_secret,
                      ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
-                     agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info)
+                     agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info,
+                     cancel=self.cancel, resume=self.resume)
 
 
 def _said(env: "Env", needle: str) -> bool:
     """Some sent message contains ``needle`` (replies now carry a source header)."""
     return any(needle in t for t in env.tg.texts())
+
+
+def _status_posted(env: "Env", pane_id: str = "pane-1") -> bool:
+    """The working status is visible AND the manager holds its id. The fake
+    records the text before the id comes back through the outbox, and a turn
+    that ends in between has no status to edit to done."""
+    pending = env.m._pending.get(pane_id)
+    return MSG_WORKING in env.tg.texts() and bool(pending and pending.status_id)
 
 
 async def _until(pred, timeout: float = 3.0) -> None:
@@ -305,6 +337,174 @@ async def test_stop_words_interrupt_instead_of_delivering(env: Env, word: str) -
     assert env.tg.texts()[-1] == MSG_INTERRUPTED
 
 
+# --- /cancel, the stop reply and the busy acknowledgement's buttons ----------------
+
+async def test_cancel_withdraws_this_chats_queued_messages(env: Env) -> None:
+    await env.inbound("wrong one")
+    await env.inbound("wrong two")
+    await env.inbound("/cancel")
+    assert sorted(env.fake.cancels) == ["k1", "k2"] and len(env.fake.delivered) == 2
+    assert "已撤回 2 則" in env.tg.texts()[-1]
+
+
+@pytest.mark.parametrize("word", ["/cancel", "/CANCEL", "/cancel@navide_bot"])
+async def test_cancel_word_forms(env: Env, word: str) -> None:
+    await env.inbound("wrong")
+    await env.inbound(word)
+    assert env.fake.cancels == ["k1"] and len(env.fake.delivered) == 1
+
+
+async def test_cancel_with_nothing_queued_says_so(env: Env) -> None:
+    await env.inbound("/cancel")
+    assert env.fake.cancels == [] and env.fake.delivered == []
+    assert "沒有可以撤回" in env.tg.texts()[-1]
+
+
+async def test_cancel_reports_a_message_that_already_went_in(env: Env) -> None:
+    await env.inbound("first")
+    await env.inbound("second")
+    env.fake.cancel_results["k1"] = "delivered"
+    await env.inbound("/cancel")
+    # Not texts()[-1]: k1 now reads as delivered, so the pane's working status may follow.
+    reply = next(t for t in env.tg.texts() if "已撤回" in t)
+    assert "已撤回 1 則" in reply and "1 則已經送進 pane" in reply
+
+
+async def test_cancel_leaves_another_chats_messages_alone(env: Env) -> None:
+    env.store.bind("pane-2", Location("telegram", "default", "-100", "51", "web"))
+    await env.inbound("for web", thread="51")
+    await env.inbound("for api")
+    await env.inbound("/cancel")
+    assert env.fake.cancels == ["k2"]
+
+
+async def test_cancel_from_a_stranger_does_nothing(env: Env) -> None:
+    await env.inbound("mine")
+    await env.inbound("/cancel", sender="99")
+    assert env.fake.cancels == []
+
+
+async def test_cancel_drops_lines_still_being_joined(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "DEBOUNCE_S", 0.2)
+    await env.inbound("typo line", wait=False)
+    await env.inbound("/cancel")
+    await asyncio.sleep(0.3)
+    assert env.fake.delivered == [] and "已撤回 1 則" in env.tg.texts()[-1]
+
+
+async def test_stop_reply_says_how_many_are_still_queued(env: Env) -> None:
+    await env.inbound("queued one")
+    await env.inbound("stop")
+    assert env.fake.interrupts == ["pane-1"]
+    assert env.tg.texts()[-1] == MSG_INTERRUPTED + "（還有 1 則在排隊；傳 /cancel 撤回）"
+
+
+async def test_busy_acknowledgement_carries_cancel_and_stop_buttons(env: Env) -> None:
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    await env.inbound("while busy")
+    assert env.tg.buttons[MSG_RECEIVED_BUSY] == BUSY_BUTTONS
+
+
+NO_BUTTONS = Capabilities(threads=True, create_location=True, edit=True, typing=True,
+                          buttons=False, text_limit=4000)
+
+
+async def test_without_buttons_the_busy_reply_says_what_to_type(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    await env.inbound("while busy")
+    assert env.tg.buttons == {}
+    assert env.tg.texts()[-1] == MSG_RECEIVED_BUSY + "\n可直接輸入：/cancel 撤回排隊中的訊息 · stop 中斷 pane"
+
+
+async def test_without_buttons_the_stop_reply_says_how_to_resume(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    await env.inbound("stop")
+    assert env.tg.texts()[-1] == MSG_INTERRUPTED + "\n可直接輸入：/resume 繼續"
+
+
+@pytest.mark.parametrize("text", ["<@U123> stop", "@navide_bot stop", "@navide_bot /stop"])
+async def test_a_stop_addressed_to_the_bot_still_stops(env: Env, text: str) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound(text)
+    assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
+
+
+async def test_cancel_and_resume_addressed_to_the_bot_are_commands(env: Env) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound("wrong")
+    await env.inbound("<@U123> /cancel")
+    assert env.fake.cancels == ["k1"]
+    env.fake.states["pane-1"] = {"exists": True, "busy": False, "display_status": "stopped"}
+    await env.inbound("@navide_bot /resume")
+    assert env.fake.resumes == ["pane-1"] and len(env.fake.delivered) == 1
+
+
+async def test_cancel_button_withdraws_like_the_command(env: Env) -> None:
+    await env.inbound("wrong")
+    await env.inbound("", callback=CANCEL_CALLBACK)
+    assert env.fake.cancels == ["k1"] and "已撤回 1 則" in env.tg.texts()[-1]
+
+
+async def test_stop_button_interrupts_like_the_command(env: Env) -> None:
+    stop_cb = next(data for _, data in BUSY_BUTTONS if data != CANCEL_CALLBACK)
+    await env.inbound("", callback=stop_cb)
+    assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
+
+
+async def test_buttons_from_a_stranger_do_nothing(env: Env) -> None:
+    await env.inbound("mine")
+    for _, data in BUSY_BUTTONS:
+        await env.inbound("", callback=data, sender="99")
+    assert env.fake.cancels == [] and env.fake.interrupts == []
+
+
+# --- a stopped pane is not left deaf to the chat ------------------------------------
+
+STOPPED = {"exists": True, "busy": False, "display_status": "stopped"}
+
+
+async def test_a_chat_message_resumes_a_stopped_pane(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("the right one")
+    assert env.fake.resumes == ["pane-1"] and len(env.fake.delivered) == 1
+
+
+async def test_a_pane_that_is_not_stopped_is_not_resumed(env: Env) -> None:
+    await env.inbound("hello")
+    assert env.fake.resumes == [] and len(env.fake.delivered) == 1
+
+
+@pytest.mark.parametrize("word", ["stop", "/cancel"])
+async def test_commands_leave_a_stopped_pane_stopped(env: Env, word: str) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound(word)
+    assert env.fake.resumes == []
+
+
+async def test_stop_reply_offers_a_resume_button(env: Env) -> None:
+    await env.inbound("stop")
+    assert env.tg.buttons[MSG_INTERRUPTED] == RESUME_BUTTONS
+
+
+async def test_resume_button_resumes_without_delivering_anything(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("", callback=RESUME_CALLBACK)
+    assert env.fake.resumes == ["pane-1"] and env.fake.delivered == []
+    assert env.tg.texts()[-1] == MSG_RESUMED
+
+
+async def test_resume_button_on_a_pane_that_is_not_stopped_says_so(env: Env) -> None:
+    await env.inbound("", callback=RESUME_CALLBACK)
+    assert env.fake.resumes == [] and env.tg.texts()[-1] == MSG_NOT_STOPPED
+
+
+async def test_resume_button_from_a_stranger_does_nothing(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("", callback=RESUME_CALLBACK, sender="99")
+    assert env.fake.resumes == []
+
+
 async def test_binding_routing_and_unbound_topic(env: Env) -> None:
     env.store.bind("pane-2", Location("telegram", "default", "-100", "51", "web"))
     await env.inbound("to one", thread="50")
@@ -328,7 +528,7 @@ async def test_outbound_after_turn_complete_only(env: Env) -> None:
     env.turn_complete("pane-1", "not the reply")
     await _until(lambda: "✅ 完成 · 🖥 本機\nnot the reply" in env.tg.texts())
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "the **answer**")
     await _until(lambda: "✅ 完成 · 💬 alice\nthe **answer**" in env.tg.texts())
     loc = next(loc for loc, t in env.tg.sent if t.endswith("the **answer**"))
@@ -364,6 +564,72 @@ async def test_status_edits_stop_after_three_failures(env: Env) -> None:
     env.fake.verdicts["k1"] = {"status": "delivered"}
     await asyncio.sleep(0.4)
     assert len(env.tg.edits) == 3
+
+
+def _slow_status(env: Env, delay: float, *, fail: bool = False) -> list[tuple[str, str, str]]:
+    """Make the status message's send hang ``delay`` s after its text reached the chat
+    (then fail, if ``fail``); returns one log of ("send"/"edit", id, text) in wire order."""
+    wire: list[tuple[str, str, str]] = []
+    send_text, edit_text = env.tg.send_text, env.tg.edit_text
+
+    async def send(loc, text, *, buttons=None):
+        ids = await send_text(loc, text, buttons=buttons)
+        wire.append(("send", ids[0], text))
+        if text == MSG_WORKING:
+            await asyncio.sleep(delay)
+            if fail:
+                raise RuntimeError("status send timed out")
+        return ids
+
+    async def edit(loc, message_id, text):
+        await edit_text(loc, message_id, text)
+        wire.append(("edit", message_id, text))
+
+    env.tg.send_text, env.tg.edit_text = send, edit
+    return wire
+
+
+async def test_a_turn_ending_while_the_status_send_is_in_flight_still_marks_it_done(env: Env) -> None:
+    wire = _slow_status(env, 0.05)
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "the answer")  # before the status message's id is back
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    status_id = next(mid for kind, mid, text in wire if kind == "send" and text == MSG_WORKING)
+    done = [i for i, (kind, mid, text) in enumerate(wire)
+            if kind == "edit" and mid == status_id and text.startswith("✅ 完成（")]
+    assert done, wire  # edited in place, as when the id was back in time
+    assert done[0] < wire.index(("send", wire[-1][1], reply)), wire  # still ahead of the reply
+    assert [t for t in env.tg.texts() if t.startswith("✅ 完成（")] == []  # no second status
+    assert env.tg.texts()[-1] == reply
+
+
+async def test_a_status_send_that_never_returns_its_id_gets_a_fresh_done(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "STATUS_SEND_WAIT_S", 0.2, raising=False)
+    wire = _slow_status(env, 1.5, fail=True)
+    submitted: dict[str, float] = {}
+    send = env.m.mirror.send
+
+    async def timed(loc, text, **kw):
+        submitted.setdefault(text, time.monotonic())
+        return await send(loc, text, **kw)
+
+    env.m.mirror.send = timed
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    ended = time.monotonic()
+    env.turn_complete("pane-1", "the answer")
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    # The reply waited out the bound, not the stuck send (which took 1.5 s on the wire).
+    assert submitted[reply] - ended < 1.0
+    texts = env.tg.texts()
+    fresh = [i for i, t in enumerate(texts) if t.startswith("✅ 完成（")]
+    assert len(fresh) == 1 and fresh[0] < texts.index(reply), wire
+    assert texts[-1] == reply
 
 
 async def test_delivery_failure_posts_notice(env: Env) -> None:
@@ -636,7 +902,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
     # (2026-10-14 09:36:47 / 09:36:52). The first must not answer the chat with nothing.
     await env.inbound("你有什麼建議")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await asyncio.sleep(0.05)
     env.turn_complete("pane-1", "我的建議")
@@ -650,7 +916,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
 async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: Env) -> None:
     await env.inbound("go")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
     assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
@@ -832,11 +1098,19 @@ def _relay_id(env: Env) -> str:
     return next(iter(env.m.relay._by_id))
 
 
+def _relay_posted(env: Env) -> bool:
+    """The relay prompt's message id is recorded. It comes back through the
+    outbox after the fake has recorded the text, and an answer or a turn end
+    in between finds no message to edit."""
+    return any(req.message_id for req in env.m.relay._by_id.values())
+
+
 async def _until_relay_prompt(env: Env) -> None:
     # The relay registers its id before the prompt is sent, so waiting on the id
     # alone lets a slow runner assert (or send the next message) before the
-    # prompt has reached the chat. Wait for the prompt itself.
-    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts()))
+    # prompt has reached the chat. Wait for the prompt itself, and its message id.
+    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts())
+                 and _relay_posted(env))
 
 
 async def test_stale_relay_off_config_is_ignored(env: Env) -> None:
@@ -850,7 +1124,7 @@ async def test_relay_on_prompt_buttons_and_yes(env: Env) -> None:
     import re
 
     await _awaiting(env)
-    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()))
+    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()) and _relay_posted(env))
     rid = _relay_id(env)
     assert re.fullmatch(r"[a-km-z]{5}", rid)
     text = next(t for t in env.tg.texts() if t.startswith("⏸"))
@@ -877,7 +1151,7 @@ async def test_relay_buttons_via_callback_and_question_option(env: Env) -> None:
 
     env.tg.send_text = capture
     await _awaiting(env)
-    await _until(lambda: sent_buttons)
+    await _until(lambda: sent_buttons and _relay_posted(env))
     rid = _relay_id(env)
     assert sent_buttons[0] == [("1. Keep", f"nv1:{rid}:1"), ("2. Discard", f"nv1:{rid}:2")]
     assert all(len(data.encode()) <= 64 for _, data in sent_buttons[0])

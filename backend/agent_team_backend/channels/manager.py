@@ -50,6 +50,14 @@ from .text import chunk_for, msg_blocks, strip_msg_markers
 log = logging.getLogger(__name__)
 
 STOP_WORDS = {"stop", "停止", "/stop", "esc"}
+CANCEL_WORDS = {"/cancel"}
+RESUME_WORDS = {"/resume"}
+# The busy acknowledgement's and the stop reply's buttons; a press is handled exactly as
+# the typed command.
+CANCEL_CALLBACK = "nv4:cancel"
+STOP_CALLBACK = "nv4:stop"
+RESUME_CALLBACK = "nv4:resume"
+_CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -59,6 +67,7 @@ CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
+STATUS_SEND_WAIT_S = 5.0  # how long a turn's end waits for a status message still on its way
 TYPING_EVERY_S = 4.0
 AWAITING_PROBE_EVERY_S = 5.0
 AWAITING_RETRY_MAX = 3  # relay attempts per awaiting prompt before giving up
@@ -87,6 +96,17 @@ MSG_RECEIVED_BUSY = "已收到，等 pane 空檔…"
 MSG_WORKING = "⏳ pane 處理中…"
 MSG_NOT_BOUND = "此主題尚未連接 pane"
 MSG_INTERRUPTED = "⏹ 已送出中斷"
+MSG_INTERRUPTED_QUEUED = "（還有 {n} 則在排隊；傳 /cancel 撤回）"
+MSG_CANCELLED = "↩️ 已撤回 {n} 則還沒送進 pane 的訊息"
+MSG_CANCEL_NONE = "沒有可以撤回的訊息（已經送進 pane 的不能撤回）"
+MSG_CANCEL_LATE = "；{n} 則已經送進 pane，來不及撤回"
+MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
+MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
+MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
+RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
+# Where a platform has no buttons, the reply names the commands they stand for.
+MSG_TYPED_HINT = "可直接輸入：{commands}"
+BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
 MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pane 解除連接"
@@ -192,10 +212,23 @@ class Seams:
     # pane_id -> {until: ms | None, buffer: str}: the pane's usage-limit reading and screen
     # tail, via the UI probe; read-only, never a quota fetch
     limit_info: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_limit()
+    # msg_key -> its settled status after asking the window to withdraw it ("cancelled" when it
+    # did; "delivered"/"failed" when too late; "queued" when no window answered; "unknown")
+    cancel: Callable[[str], Awaitable[str]] = lambda _msg_key: _no_cancel()
+    # pane_id -> {ok, error?}: clear the pane's stopped flag, as the user typing into it does
+    resume: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_resume()
 
 
 async def _no_limit() -> dict[str, Any]:
     return {}
+
+
+async def _no_cancel() -> str:
+    return "unknown"
+
+
+async def _no_resume() -> dict[str, Any]:
+    return {"ok": False, "error": "not supported"}
 
 
 AdapterFactory = Callable[[dict[str, Any], dict[str, Any], ChannelStore], ChannelAdapter]
@@ -235,6 +268,7 @@ class _Pending:
     loc: Location
     armed_at: float | None = None  # monotonic time the message went in; None while queued
     status_id: str = ""
+    status_send: asyncio.Task[str] | None = None  # the status message's send, while its id is not back
     status_failures: int = 0
     last_edit: float = 0.0
     started: float = field(default_factory=time.monotonic)
@@ -313,6 +347,7 @@ class ChannelManager:
         # pane_id -> a run whose turn ended with no text, and the timer that answers it empty
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
+        self._queued_loc: dict[str, str] = {}  # msg_key -> the chat location that sent it
         self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
         self._last_status: dict[BotKey, dict[str, Any]] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
@@ -529,6 +564,7 @@ class ChannelManager:
         status: dict[str, Any] = {
             "lifecycle": "stopped", "connected": False, "reconnect_attempts": 0,
             "last_error": "", "last_connected_at": None, "last_inbound_at": None, "identity": "",
+            "display_name": "",
         }
         if bot in self._errors:
             status["lifecycle"] = "blocked"
@@ -1262,7 +1298,7 @@ class ChannelManager:
                 log.warning("channels: MSG reply for %s dropped: %s is not connected",
                             pending.loc.key(), pending.loc.platform)
             return
-        if pending.status_id:
+        if pending.status_id or pending.status_send is not None:
             elapsed = int(self._clock() - pending.started)
             await self._edit_status(adapter, pending, f"✅ 完成（{elapsed}s）", force=True)
         bodies = _chat_msg_bodies(text)
@@ -1392,13 +1428,17 @@ class ChannelManager:
                 return b
         return None
 
-    async def _reply(self, msg: InboundMessage, text: str) -> str:
+    async def _reply(self, msg: InboundMessage, text: str,
+                     buttons: list[tuple[str, str]] | None = None) -> str:
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             return ""
         loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
+        if not adapter.capabilities.buttons:
+            text += _typed_hint(buttons or [])
+            buttons = None
         try:
-            ids = await self.mirror.send(loc, text)
+            ids = await self.mirror.send(loc, text, buttons=buttons)
             return ids[0] if ids else ""
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: reply on %s failed: %s", msg.platform, exc)
@@ -1446,8 +1486,15 @@ class ChannelManager:
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
+        if msg.callback_data in _CALLBACK_COMMANDS:
+            # Then on through the binding checks below, as if the command had been typed.
+            msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
         if msg.callback_data and not msg.text:
             return  # a button press with the relay off, or not ours
+        pick = quick_menu.menu_pick(msg.text, self._identity(msg))
+        if pick is not None:
+            await self._quick_pick(msg, pick)
+            return
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
             await self._quick_menu(msg)
             return
@@ -1473,8 +1520,16 @@ class ChannelManager:
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
-        if _is_stop_word(msg.text):
-            await self._interrupt(msg, pane_id)
+        # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
+        command = quick_menu.strip_mention(msg.text, self._identity(msg))
+        if _is_stop_word(command):
+            await self._interrupt(msg, pane_id, buttons=RESUME_BUTTONS)
+            return
+        if _command_word(command) in CANCEL_WORDS:
+            await self._cancel_queued(msg)
+            return
+        if _command_word(command) in RESUME_WORDS:
+            await self._resume(msg, pane_id)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
@@ -1726,15 +1781,66 @@ class ChannelManager:
             })
             await self._changed()
 
-    async def _interrupt(self, msg: InboundMessage, pane_id: str, ok_text: str = MSG_INTERRUPTED) -> None:
+    async def _interrupt(self, msg: InboundMessage, pane_id: str, ok_text: str = MSG_INTERRUPTED,
+                         buttons: list[tuple[str, str]] | None = None) -> None:
         try:
             result = await self._seams.interrupt(pane_id)
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
         if result.get("ok") and result.get("sent", True):
-            await self._reply(msg, ok_text)
+            waiting = len(self._joining(msg)) + len(self._queued_from(msg))
+            await self._reply(msg, ok_text + (MSG_INTERRUPTED_QUEUED.format(n=waiting) if waiting else ""),
+                              buttons=buttons)
         else:
             await self._reply(msg, f"⚠️ 中斷失敗：{result.get('error') or 'not sent'}")
+
+    def _joining(self, msg: InboundMessage) -> list[tuple[str, str]]:
+        """Debounce buffers of this chat: lines not handed to any pane yet."""
+        return [key for key in self._debounce if key[0] == msg.location_key()]
+
+    def _queued_from(self, msg: InboundMessage) -> list[str]:
+        """This chat's own messages still queued in a pane, whichever pane they went to."""
+        loc = msg.location_key()
+        return [key for keys in self._queued.values() for key in keys if self._queued_loc.get(key) == loc]
+
+    async def _resume(self, msg: InboundMessage, pane_id: str) -> None:
+        """``/resume`` or the stop reply's button: let a stopped pane take messages again."""
+        if self._seams.pane_state(pane_id).get("display_status") != "stopped":
+            await self._reply(msg, MSG_NOT_STOPPED)
+            return
+        result = await self._seams.resume(pane_id)
+        await self._reply(msg, MSG_RESUMED if result.get("ok") else f"⚠️ 恢復失敗：{result.get('error') or 'unknown'}")
+
+    async def _cancel_queued(self, msg: InboundMessage) -> None:
+        """``/cancel``: withdraw what this chat sent that has not gone into a pane yet."""
+        withdrawn = 0
+        for key in self._joining(msg):
+            buf = self._debounce.pop(key)
+            if buf.task is not None:
+                buf.task.cancel()
+            withdrawn += len(buf.texts)
+        late = unsure = 0
+        for msg_key in self._queued_from(msg):
+            try:
+                status = await self._seams.cancel(msg_key)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("channels: withdrawing %s failed: %s", msg_key, exc)
+                status = "unknown"
+            if status == "cancelled":
+                withdrawn += 1
+            elif status in ("delivered", "failed"):
+                late += 1
+            else:
+                unsure += 1
+        if not (withdrawn or late or unsure):
+            await self._reply(msg, MSG_CANCEL_NONE)
+            return
+        text = MSG_CANCELLED.format(n=withdrawn)
+        if late:
+            text += MSG_CANCEL_LATE.format(n=late)
+        if unsure:
+            text += MSG_CANCEL_UNSURE.format(n=unsure)
+        await self._reply(msg, text)
 
     async def _fetch_attachments(self, msg: InboundMessage, pane_id: str) -> list[str]:
         """Download ``msg``'s files into the media folder; one ``[附件]`` line each.
@@ -1902,6 +2008,12 @@ class ChannelManager:
             await self._reply(msg, MSG_CHAT_RATE.format(max=CHAT_RATE_MAX, wait=wait))
             return False
         state = self._seams.pane_state(pane_id)
+        if state.get("display_status") == "stopped":
+            # The chat's own next message is the user carrying on, as typing in the pane is;
+            # left stopped, the pane would hold it (and every later one) as not ready.
+            resumed = await self._seams.resume(pane_id)
+            if not resumed.get("ok"):
+                log.info("channels: resuming stopped pane %s failed: %s", pane_id, resumed.get("error"))
         files = await self._fetch_attachments(msg, pane_id)
         text = "\n".join(part for part in (msg.text, *files) if part)
         if msg.attachments and not text:
@@ -1931,8 +2043,9 @@ class ChannelManager:
             route = self.mirror.route(pane_id)
             pending.child = route.child if route is not None else ""
         if state.get("busy") and not pending.status_id:
-            pending.status_id = await self._reply(msg, MSG_RECEIVED_BUSY)
+            pending.status_id = await self._reply(msg, MSG_RECEIVED_BUSY, buttons=BUSY_BUTTONS)
         queued.add(msg_key)
+        self._queued_loc[msg_key] = msg.location_key()
         self._spawn(self._watch_delivery(pane_id, msg_key, pending))
         return True
 
@@ -1975,9 +2088,6 @@ class ChannelManager:
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             return
-        if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
-            await self._reply(msg, quick_menu.text(lang, "no_buttons"))
-            return
         agent_key = self._seams.pane_agent(pane_id)
         menu = self.quick.create(
             platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
@@ -1987,6 +2097,10 @@ class ChannelManager:
         )
         if menu is None:
             await self._reply(msg, quick_menu.text(lang, "empty"))
+            return
+        if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
+            # No buttons: the same menu as numbered lines, picked with "/menu <n>".
+            await self._reply(msg, redact.redact_text(self.quick.render_text(menu)))
             return
         body, rows = self.quick.render(menu, 0)
         try:
@@ -2009,6 +2123,32 @@ class ChannelManager:
         if press.kind == "g":
             await self._quick_page(msg, press.menu, int(press.key))
             return
+        await self._quick_cast(msg, press, binding, pane_id, settings, lang)
+
+    async def _quick_pick(self, msg: InboundMessage, number: int) -> None:
+        """``/menu <n>``: item ``n`` of the text menu this chat was sent."""
+        settings = await self._ui_settings()
+        menu = self.quick.latest(msg.location_key())
+        lang = menu.lang if menu is not None else prompt_skills.language(settings)
+        binding = self._binding_for(msg)
+        if binding is None:
+            # As /menu: a bot sharing a group with others stays quiet.
+            if msg.is_direct or self._sole_bot(msg.platform):
+                await self._reply(msg, quick_menu.text(lang, "not_bound"))
+            return
+        pane_id = self._seams.resolve_pane(binding.pane_id)
+        if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
+            await self._reply(msg, quick_menu.text(lang, "expired"))
+            return
+        press = self.quick.pick(msg.location_key(), number)
+        if press is None:
+            await self._reply(msg, quick_menu.text(lang, "bad_pick"))
+            return
+        await self._quick_cast(msg, press, binding, pane_id, settings, lang)
+
+    async def _quick_cast(self, msg: InboundMessage, press: quick_menu.Press, binding: Binding,
+                          pane_id: str, settings: dict[str, Any], lang: str) -> None:
+        """Send the prompt or skill ``press`` stands for to ``pane_id``, once."""
         if press.kind == "p":
             prompt = next((p for p in prompt_skills.castable(prompt_skills.effective(settings))
                            if p["id"] == press.key), None)
@@ -2262,6 +2402,7 @@ class ChannelManager:
                 q.discard(msg_key)
                 if not q:
                     self._queued.pop(pane_id, None)
+            self._queued_loc.pop(msg_key, None)
 
     def _arm(self, pane_id: str, pending: _Pending) -> None:
         """The message is in the pane: its next turn_complete is the reply.
@@ -2300,11 +2441,17 @@ class ChannelManager:
             if pending.status_id:
                 await self._edit_status(adapter, pending, MSG_WORKING, force=True)
             else:
-                try:
-                    ids = await self.mirror.send(pending.loc, MSG_WORKING)
-                    pending.status_id = ids[0] if ids else ""
-                except Exception:  # noqa: BLE001
-                    pending.status_id = ""
+                async def send_status() -> str:
+                    try:
+                        ids = await self.mirror.send(pending.loc, MSG_WORKING)
+                    except Exception:  # noqa: BLE001
+                        return ""
+                    return ids[0] if ids else ""
+
+                # Its own task: a turn end cancels this run, not the send, and settles it.
+                pending.status_send = self._spawn(send_status())
+                pending.status_id = await asyncio.shield(pending.status_send)
+                pending.status_send = None
         next_typing = next_edit = next_probe = self._clock()
         capped = False
         while self._pending.get(pane_id) is pending:
@@ -2365,6 +2512,17 @@ class ChannelManager:
         await self._notice(adapter, pending.loc, "\n".join(lines))
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
+        if not pending.status_id and pending.status_send is not None:
+            # The turn ended before the status message's id came back: wait for it, bounded.
+            # No id in time, and the text goes as a fresh message, ahead of the reply.
+            send, pending.status_send = pending.status_send, None
+            try:
+                pending.status_id = await asyncio.wait_for(asyncio.shield(send), STATUS_SEND_WAIT_S)
+            except asyncio.TimeoutError:
+                pass
+            if not pending.status_id:
+                self.mirror.post(pending.loc, text)
+                return
         if not pending.status_id or pending.status_failures >= STATUS_EDIT_MAX_FAILURES:
             return
         now = self._clock()
@@ -2716,6 +2874,21 @@ def _strip_controls(text: str, keep: str = "\t") -> str:
     return "".join(
         ch if ch in keep or unicodedata.category(ch) != "Cc" else (" " if ch in "\t\n\r" else "")
         for ch in text)
+
+
+def _typed_hint(buttons: list[tuple[str, str]]) -> str:
+    """The commands ``buttons`` stand for, for a platform that cannot show them; "" when
+    none of them has a typed form."""
+    commands = [f"{_CALLBACK_COMMANDS[data]} {label.split(' ', 1)[-1]}"
+                for label, data in buttons if data in _CALLBACK_COMMANDS]
+    return "\n" + MSG_TYPED_HINT.format(commands=" · ".join(commands)) if commands else ""
+
+
+def _command_word(text: str) -> str:
+    word = (text or "").strip().lower()
+    if word.startswith("/") and "@" in word:
+        word = word.split("@", 1)[0]
+    return word
 
 
 def _is_stop_word(text: str) -> bool:

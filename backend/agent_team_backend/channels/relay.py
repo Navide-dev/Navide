@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from .base import Location
+from .quick_menu import strip_mention
 
 ID_ALPHABET = "abcdefghijkmnopqrstuvwxyz"
 ID_LENGTH = 5
@@ -221,8 +222,9 @@ def answer_hint(request: RelayRequest) -> str:
 
 
 def is_pending_command(body: str, identity: str = "") -> bool:
-    """``/pending``, optionally ``@bot``-addressed; one addressed to another bot is not ours."""
-    rest = (body or "").strip()
+    """``/pending``, optionally ``@bot``-addressed or after a mention; one addressed to
+    another bot is not ours."""
+    rest = strip_mention(body, identity)
     if not rest.startswith("/") or " " in rest:
         return False
     head, _, bot = rest.partition("@")

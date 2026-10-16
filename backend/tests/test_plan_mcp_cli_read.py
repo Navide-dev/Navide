@@ -505,7 +505,9 @@ async def test_wait_idle_returns_immediately_on_turn_complete() -> None:
 
     assert result["idle"] is True
     assert result["source"] == "turn_complete"
-    assert result["waited_s"] == 0.0
+    # waited_s is rounded to 0.1 s, and a slow runner turns the fast path's
+    # few milliseconds into 0.1: bound it, the fast path is asserted below.
+    assert result["waited_s"] < 1.0
     # The fast path answers from recorded activity alone: an idle pane must not
     # cost a round-trip to its window.
     assert "ui_status" not in result

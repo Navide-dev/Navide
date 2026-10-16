@@ -244,6 +244,53 @@ async def test_channel_delivery_payload_carries_origin_channel(captured):
 
 
 @pytest.mark.asyncio
+async def test_channel_cancel_asks_the_window_to_withdraw_a_queued_message(captured, monkeypatch):
+    from agent_team_backend.channels import default_seams
+
+    monkeypatch.setattr(mcp, "_CANCEL_VERDICT_TIMEOUT_S", 0.05)
+    _seed()
+    seams = default_seams()
+    sent = await seams.deliver("pb", "wrong one", "telegram:alice")
+    status = await seams.cancel(sent["msg_key"])
+    cancels = [e for e in captured if e["type"] == "agent_msg.cancel"]
+    assert [e["payload"]["msg_key"] for e in cancels] == [sent["msg_key"]]
+    assert status == "queued"  # no window answered within the timeout
+
+
+@pytest.mark.asyncio
+async def test_channel_cancel_of_an_untracked_key_sends_nothing(captured):
+    from agent_team_backend.channels import default_seams
+
+    _seed()
+    assert await default_seams().cancel("host:mcp:nope") == "unknown"
+    assert not [e for e in captured if e["type"] == "agent_msg.cancel"]
+
+
+@pytest.mark.asyncio
+async def test_channel_resume_clears_the_stopped_flag_like_the_window_does(captured, monkeypatch):
+    from types import SimpleNamespace
+
+    from agent_team_backend.channels import default_seams
+
+    calls: list[tuple[str, str, bool]] = []
+    store = SimpleNamespace(set_pane_stopped=lambda ws, *, pane_id, stopped: calls.append((ws, pane_id, stopped)))
+    monkeypatch.setattr(app, "project_store", store, raising=False)
+    _seed()
+    assert (await default_seams().resume("pb"))["ok"] is True
+    assert calls == [("/ws/beta", "pb", False)]
+    (event,) = [e for e in captured if e["type"] == "pane.stopped"]
+    assert event["payload"] == {"workspace_path": "/ws/beta", "pane_id": "pb", "stopped": False}
+
+
+@pytest.mark.asyncio
+async def test_channel_resume_of_a_gone_pane_fails(captured):
+    from agent_team_backend.channels import default_seams
+
+    assert (await default_seams().resume("nope"))["ok"] is False
+    assert not [e for e in captured if e["type"] == "pane.stopped"]
+
+
+@pytest.mark.asyncio
 async def test_remote_device_delivery_payload_carries_origin_remote(captured):
     from agent_team_backend import server_link
 

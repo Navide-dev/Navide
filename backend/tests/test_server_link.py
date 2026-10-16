@@ -464,7 +464,7 @@ async def test_authenticates_and_publishes_the_roster():
     link = make_link(server)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
         assert server.urls == [CONFIG.url]
 
@@ -516,7 +516,7 @@ async def test_auth_hello_rejection_stops_the_link(code):
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
         assert code in link.terminated_reason
         # Terminal: no second dial, however long the backoff had to run.
         await asyncio.sleep(0.15)
@@ -544,7 +544,7 @@ async def test_transport_failure_reconnects():
     )
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].hellos))
+        await _until(lambda: bool(server.opened and server.opened[0].hellos), timeout=CONNECT_TIMEOUT_S)
         assert attempts["n"] >= 2
         assert not link.terminated_reason
     finally:
@@ -561,7 +561,7 @@ async def test_auth_revoked_clears_the_token_and_stops_reconnecting():
     link = make_link(server, cleared=cleared)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         await server.opened[0].push(
             {"type": "auth.revoked", "payload": {"memberId": "m1", "reason": "disabled"}}
         )
@@ -587,13 +587,13 @@ async def test_reconnect_reauthenticates_and_republishes_the_roster():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         first = server.opened[0]
         assert first.syncs[0]["sessions"][0].get("sessionId") is None  # server issues it
 
         await first.close()
 
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs))
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs), timeout=CONNECT_TIMEOUT_S)
         second = server.opened[1]
         assert second.hellos[0]["credential"] == CONFIG.token
         # Reconnecting flattens the roster again rather than diffing against
@@ -617,7 +617,7 @@ async def test_roster_additions_renames_and_removals_are_published():
     await link.start()
     try:
         conn = None
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
 
         agent_messaging.register("p2", "builder", "/tmp/proj-a", agent_key="codex")
@@ -674,7 +674,7 @@ async def test_a_session_the_server_no_longer_has_counts_as_removed(caplog):
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
         caplog.set_level(logging.WARNING, logger="agent_team_backend.server_link")
         agent_messaging.unregister("p1")
@@ -694,7 +694,7 @@ async def test_updates_reuse_the_session_id_the_server_issued():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
         assert "sessionId" not in conn.syncs[0]["sessions"][0]
         agent_messaging.set_busy("p1", True)
@@ -723,7 +723,7 @@ async def test_a_rejected_upsert_does_not_break_the_link():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         agent_messaging.set_busy("p1", True)
         link.notify_roster_changed()
         # Retried on the next sweep rather than treated as a lost connection.
@@ -748,7 +748,7 @@ async def test_a_restore_placeholder_is_published_as_disconnected_not_running():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
         published = {s["paneId"]: s for s in conn.syncs[0]["sessions"]}
         assert published["p1"]["status"] == "disconnected"
@@ -779,7 +779,7 @@ async def test_the_published_status_is_the_word_the_sidebar_is_showing():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
 
         def published(badge: str) -> bool:
@@ -809,7 +809,7 @@ async def test_a_window_that_reports_no_badge_word_falls_back_to_the_busy_flag()
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         published = {s["paneId"]: s for s in server.opened[0].syncs[0]["sessions"]}
         assert published["p1"]["status"] == "running"
     finally:
@@ -826,7 +826,7 @@ async def test_a_placeholder_stays_disconnected_whatever_word_arrives():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         published = {s["paneId"]: s for s in server.opened[0].syncs[0]["sessions"]}
         assert published["p1"]["status"] == "disconnected"
     finally:
@@ -1122,7 +1122,7 @@ async def test_an_incoming_sealed_message_is_opened_and_delivered(broadcasts):
             )
         )
         await server.opened[0].push({"type": "messages.pending", "payload": payload})
-        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts))
+        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts), timeout=CONNECT_TIMEOUT_S)
         delivered = next(e for e in broadcasts if e["type"] == "agent_msg.deliver")
         assert delivered["payload"]["content"] == "please review"
     finally:
@@ -1183,7 +1183,7 @@ async def test_a_disconnected_link_fails_fast_and_recovers_on_its_own():
 
         # The reconnect loop is what changes the answer, and it does so without
         # anything reaching in to restart it.
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs))
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].syncs), timeout=CONNECT_TIMEOUT_S)
         resumed = await link.send_message(
             to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
             sender=None,
@@ -1218,7 +1218,7 @@ async def test_a_revoked_credential_says_so_instead_of_promising_a_retry():
     link = make_link(server)
     await link.start()
     try:
-        await _until(lambda: bool(link.terminated_reason))
+        await _until(lambda: bool(link.terminated_reason), timeout=CONNECT_TIMEOUT_S)
         reply = await link.send_message(
             to={"deviceId": "dev-b", "workspace": "beta", "paneName": "builder"},
             sender=None,
@@ -1864,7 +1864,7 @@ async def test_the_remote_roster_outlives_the_connection_that_fetched_it():
 
         # And the reconnect re-reads it, because pushes sent while this device
         # was away were missed.
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].directories))
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].directories), timeout=CONNECT_TIMEOUT_S)
     finally:
         await link.stop()
         remote_roster._reset_for_test()
@@ -2063,7 +2063,7 @@ async def test_reconfigure_dials_once_the_settings_are_filled_in(module_link, mo
         monkeypatch.setenv(server_link.SERVER_URL_ENV, CONFIG.url)
         state["config"] = CONFIG
         await server_link.reconfigure()
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         assert server.urls == [CONFIG.url]
         status = await server_link.status()
         assert status["state"] == server_link.STATE_CONNECTED
@@ -2081,11 +2081,11 @@ async def test_reconfigure_replaces_the_link_rather_than_adding_one(module_link)
     await server_link.start()
     try:
         first = server_link._link
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
 
         state["config"] = ServerLinkConfig(url="ws://elsewhere/ws", token="tok-2")
         await server_link.reconfigure()
-        await _until(lambda: len(server.opened) == 2 and bool(server.opened[1].syncs))
+        await _until(lambda: len(server.opened) == 2 and bool(server.opened[1].syncs), timeout=CONNECT_TIMEOUT_S)
 
         assert server_link._link is not first
         assert first is not None and first._task is None
@@ -2101,7 +2101,7 @@ async def test_clearing_the_settings_takes_the_link_back_to_inert(module_link):
     state["config"] = CONFIG
     await server_link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
 
         state["config"] = ServerLinkConfig()
         await server_link.reconfigure()
@@ -2128,7 +2128,8 @@ async def test_status_reports_a_rejected_token_as_unauthorized(module_link):
     try:
         await _until(
             lambda: server_link._link is not None
-            and server_link._link.state() == server_link.STATE_UNAUTHORIZED
+            and server_link._link.state() == server_link.STATE_UNAUTHORIZED,
+            timeout=CONNECT_TIMEOUT_S,
         )
         status = await server_link.status()
         assert status["state"] == server_link.STATE_UNAUTHORIZED
@@ -2143,7 +2144,7 @@ async def test_status_never_carries_the_access_token(module_link):
     state["config"] = CONFIG
     await server_link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         status = await server_link.status()
         assert CONFIG.token not in json.dumps(status)
         assert "token" not in status
@@ -2158,7 +2159,7 @@ async def test_link_state_agrees_with_status_on_a_live_link(module_link):
     state["config"] = CONFIG
     await server_link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         assert server_link.link_state() == server_link.STATE_CONNECTED
         assert (await server_link.status())["state"] == server_link.STATE_CONNECTED
     finally:
@@ -2203,7 +2204,7 @@ async def test_a_reconnect_clears_the_stale_error():
     await link.start()
     try:
         await _until(lambda: link.state() == server_link.STATE_UNREACHABLE)
-        await _until(lambda: link.state() == server_link.STATE_CONNECTED)
+        await _until(lambda: link.state() == server_link.STATE_CONNECTED, timeout=CONNECT_TIMEOUT_S)
         assert link.last_error == ""
     finally:
         await link.stop()
@@ -2259,7 +2260,7 @@ async def test_configure_handler_stores_the_token_and_reconnects(
         assert vault.read_app_secret(server_link.ACCESS_TOKEN_SECRET) == "tok-abc"
         # The typo'd address was ignored; the build's own value is in effect.
         assert server_link.server_url() == CONFIG.url
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
 
         session2 = _ws_session()
         await app.handle_message(session2, {"id": "s1", "type": "p2p.link.status", "payload": {}})
@@ -2372,7 +2373,7 @@ async def test_policy_get_and_set_round_trip_through_the_handlers(module_link):
     state["config"] = CONFIG
     await server_link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         remote_roster.replace(
             [
                 {
@@ -2424,7 +2425,7 @@ async def test_a_policy_this_build_would_not_honour_never_reaches_the_server(mod
     state["config"] = CONFIG
     await server_link.start()
     try:
-        await _until(lambda: bool(server.opened and server.opened[0].syncs))
+        await _until(lambda: bool(server.opened and server.opened[0].syncs), timeout=CONNECT_TIMEOUT_S)
         session = _ws_session()
 
         rejected = {
@@ -2943,7 +2944,7 @@ def _authed(server: FakeServer) -> bool:
 async def _reconnect(server: FakeServer, link: ServerLink) -> None:
     n = len(server.opened)
     await server.opened[-1].close()
-    await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs))
+    await _until(lambda: len(server.opened) > n and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
 
 
 @pytest.mark.parametrize(
@@ -2980,7 +2981,7 @@ async def test_rotation_writes_next_reads_back_confirms_then_promotes():
     try:
         # The promotion and the .next clear are two writes; wait for both before
         # reading the order (a slow runner showed the first without the second).
-        await _until(lambda: store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == "" and len(store.writes) >= 3)
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == "" and len(store.writes) >= 3, timeout=CONNECT_TIMEOUT_S)
         conn = server.opened[0]
         assert [w[0] for w in store.writes] == [NXT, CUR, NXT]  # next, promote, clear next
         assert store.slots[NXT] == ""
@@ -2998,7 +2999,7 @@ async def test_a_token_older_than_thirty_days_by_the_server_clock_is_rotated():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"))
+        await _until(lambda: store.slots[CUR].startswith("nvd_rotated"), timeout=CONNECT_TIMEOUT_S)
     finally:
         await link.stop()
 
@@ -3010,7 +3011,7 @@ async def test_a_young_token_and_a_server_without_an_age_are_left_alone():
         link = token_link(server, store)
         assert await link.start() is True
         try:
-            await _until(lambda: _authed(server))
+            await _until(lambda: _authed(server), timeout=CONNECT_TIMEOUT_S)
             await asyncio.sleep(0.05)
             assert _sent(server.opened[0], "auth.token.rotate") == []
             assert store.writes == []
@@ -3026,7 +3027,7 @@ async def test_a_bad_next_write_never_costs_the_current_token(failure):
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
         assert _sent(server.opened[0], "auth.token.confirm") == []
         assert store.slots[CUR] == CONFIG.token  # untouched
@@ -3042,8 +3043,8 @@ async def test_a_refused_confirm_drops_next_and_keeps_the_current_token():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
-        await _until(lambda: store.slots[NXT] == "" and len(store.writes) == 2)
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")), timeout=CONNECT_TIMEOUT_S)
+        await _until(lambda: store.slots[NXT] == "" and len(store.writes) == 2, timeout=CONNECT_TIMEOUT_S)
         assert store.slots[CUR] == CONFIG.token
         ts.rotate_code = "UNKNOWN_TYPE"
         await _reconnect(server, link)
@@ -3060,7 +3061,7 @@ async def test_a_confirm_applied_but_never_answered_is_settled_by_the_next_hello
     try:
         # The server applied it, the answer was lost with the connection: the old
         # token is now refused and only .next works.
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs))
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
         assert store.slots[CUR].startswith("nvd_rotated")  # promoted
         assert store.slots[NXT] == ""
         assert [h["credential"] for h in server.opened[-1].hellos][-2:] == [CONFIG.token, store.slots[CUR]]
@@ -3073,15 +3074,15 @@ async def test_an_app_stopped_between_write_and_confirm_still_connects():
     server = FakeServer(responder=ts.responder)
     link = token_link(server, store)
     assert await link.start() is True
-    await _until(lambda: store.slots[NXT].startswith("nvd_rotated"))
+    await _until(lambda: store.slots[NXT].startswith("nvd_rotated"), timeout=CONNECT_TIMEOUT_S)
     await link.stop()  # the App quits before any confirm answer
     ts.confirm, ts.rotate_code = "ok", "UNKNOWN_TYPE"
     link2 = token_link(server, store)
     assert await link2.start() is True
     try:
-        await _until(lambda: bool(server.opened[-1].syncs))
+        await _until(lambda: bool(server.opened[-1].syncs), timeout=CONNECT_TIMEOUT_S)
         assert server.opened[-1].hellos[-1]["credential"] == CONFIG.token  # the current one still works
-        await _until(lambda: store.slots[NXT] == "")  # the unconfirmed one is dropped
+        await _until(lambda: store.slots[NXT] == "", timeout=CONNECT_TIMEOUT_S)  # the unconfirmed one is dropped
     finally:
         await link2.stop()
 
@@ -3093,7 +3094,7 @@ async def test_a_sign_out_during_rotation_writes_nothing_back():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
         assert store.slots == {CUR: "", NXT: ""}
         assert store.writes == []
@@ -3108,7 +3109,7 @@ async def test_an_old_server_without_rotate_is_not_asked_again_by_this_link():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")), timeout=CONNECT_TIMEOUT_S)
         await _reconnect(server, link)
         await asyncio.sleep(0.05)
         assert _sent(server.opened[-1], "auth.token.rotate") == []
@@ -3122,7 +3123,7 @@ async def test_logout_on_server_sends_auth_logout_when_connected():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: _authed(server))
+        await _until(lambda: _authed(server), timeout=CONNECT_TIMEOUT_S)
         assert await link.logout_on_server() is True
         assert len(_sent(server.opened[0], "auth.logout")) == 1
     finally:
@@ -3216,13 +3217,13 @@ async def test_rotation_carries_the_member_pin_to_the_new_token(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: _stored_token().startswith("nvd_rotated"))
+        await _until(lambda: _stored_token().startswith("nvd_rotated"), timeout=CONNECT_TIMEOUT_S)
         new = server_link.access_token()
         assert trust_store.member_for_credential(CONFIG.url, new) == "m1"  # pinned before confirm (N1b: node hint kept)
         ts.rotate_code = "UNKNOWN_TYPE"
         await server.opened[0].close()
-        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos))
-        await _until(lambda: bool(link._trust_locked))
+        await _until(lambda: len(server.opened) >= 2 and bool(server.opened[1].hellos), timeout=CONNECT_TIMEOUT_S)
+        await _until(lambda: bool(link._trust_locked), timeout=CONNECT_TIMEOUT_S)
         assert link._own_member == ""  # the renamed member is not trusted
     finally:
         await link.stop()
@@ -3240,7 +3241,7 @@ async def test_no_rotation_without_a_pinned_member(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: _authed(server))
+        await _until(lambda: _authed(server), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
         assert _sent(server.opened[0], "auth.token.rotate") == []
         assert server_link.access_token() == CONFIG.token
@@ -3266,7 +3267,7 @@ async def test_a_confirm_error_after_the_server_applied_keeps_next(monkeypatch):
     server = FakeServer(responder=apply_then_error)
     link = token_link(server, store)
     assert await link.start() is True
-    await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")))
+    await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.confirm")), timeout=CONNECT_TIMEOUT_S)
     await asyncio.sleep(0.1)
     await link.stop()
     assert store.slots[NXT].startswith("nvd_rotated")  # kept
@@ -3274,7 +3275,7 @@ async def test_a_confirm_error_after_the_server_applied_keeps_next(monkeypatch):
     link2 = token_link(server, store)
     assert await link2.start() is True
     try:
-        await _until(lambda: any(c.syncs for c in server.opened[1:]))
+        await _until(lambda: any(c.syncs for c in server.opened[1:]), timeout=CONNECT_TIMEOUT_S)
         assert store.slots[CUR].startswith("nvd_rotated") and store.slots[NXT] == ""
     finally:
         await link2.stop()
@@ -3291,7 +3292,7 @@ async def test_a_sign_change_during_hello_fences_the_rotation(kind, monkeypatch)
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
         assert server_link.access_token() == ("" if kind == "logout" else "tok-B")
         assert server_link.next_access_token() == ""
@@ -3308,7 +3309,7 @@ async def test_a_sign_out_during_hello_fences_the_settle(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: len(server.opened[0].hellos) >= 2 if server.opened else False)
+        await _until(lambda: len(server.opened[0].hellos) >= 2 if server.opened else False, timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
         assert server_link.access_token() == ""
     finally:
@@ -3334,11 +3335,11 @@ async def test_rotations_do_not_grow_the_member_pins(monkeypatch):
     try:
         seen = []
         for _ in range(3):
-            await _until(lambda: _stored_token() not in seen and _stored_token().startswith("nvd_rotated"))
+            await _until(lambda: _stored_token() not in seen and _stored_token().startswith("nvd_rotated"), timeout=CONNECT_TIMEOUT_S)
             seen.append(server_link.access_token())
-            await _until(lambda: len(_own_members()) == 1)
+            await _until(lambda: len(_own_members()) == 1, timeout=CONNECT_TIMEOUT_S)
             await server.opened[-1].close()
-            await _until(lambda: bool(server.opened[-1].syncs) and _stored_token() not in seen, timeout=5)
+            await _until(lambda: bool(server.opened[-1].syncs) and _stored_token() not in seen, timeout=CONNECT_TIMEOUT_S)
         owners = _own_members()
         assert len(owners) == 1 and list(owners.values()) == ["m1"]
         assert trust_store.member_for_credential(CONFIG.url, server_link.access_token()) == "m1"
@@ -3357,7 +3358,7 @@ async def test_a_settled_promotion_forgets_the_old_pin(monkeypatch):
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: _stored_token() == "nvd_next-live")
+        await _until(lambda: _stored_token() == "nvd_next-live", timeout=CONNECT_TIMEOUT_S)
         await _until(lambda: trust_store.member_for_credential(CONFIG.url, "tok-old-revoked") == "")
         assert trust_store.member_for_credential(CONFIG.url, "nvd_next-live") == "m1"
         assert len(_own_members()) == 1
@@ -3382,7 +3383,7 @@ async def test_a_rotation_whose_pin_does_not_fit_stops_before_the_confirm(monkey
     link = _real_token_link(server, monkeypatch)
     assert await link.start() is True
     try:
-        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")))
+        await _until(lambda: bool(server.opened and _sent(server.opened[0], "auth.token.rotate")), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.1)
         assert _sent(server.opened[0], "auth.token.confirm") == []
         assert server_link.access_token() == CONFIG.token
@@ -3402,7 +3403,7 @@ async def test_against_an_old_server_nothing_rotates_and_nothing_is_written():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: _authed(server))
+        await _until(lambda: _authed(server), timeout=CONNECT_TIMEOUT_S)
         await asyncio.sleep(0.05)
         kinds = {m.get("type") for m in server.opened[0].sent}
         assert not any(k.startswith("auth.token") for k in kinds)
@@ -3426,7 +3427,7 @@ async def test_against_an_old_server_logout_is_a_quiet_false():
     link = token_link(server, store)
     assert await link.start() is True
     try:
-        await _until(lambda: _authed(server))
+        await _until(lambda: _authed(server), timeout=CONNECT_TIMEOUT_S)
         assert await link.logout_on_server() is False
     finally:
         await link.stop()

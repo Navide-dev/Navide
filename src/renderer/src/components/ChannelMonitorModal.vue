@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, watch } from 'vue'
 import { i18n, vTruncate } from '@navide/plugin-ui/foundation'
 import type { ChannelBinding, ChannelOverviewBinding, ChannelsStore } from '../composables/useChannels'
+import { formatChannelIdentity } from '../lib/channelIdentity'
 
 /**
  * In-app overlay listing every pane↔channel link with its live status. Rows
@@ -66,14 +67,11 @@ function paneText(binding: ChannelBinding, local: string): { pane: string; close
 }
 
 function channelText(binding: ChannelBinding, state: ReturnType<ChannelsStore['accountState']>): string {
-  const parts = [t(`channels.platform.${binding.platform}`)]
-  const bot = state?.status.identity || state?.name
-  if (bot) parts.push(bot)
-  parts.push(overview.value.chatTitles.get(chatKey(binding)) || t('channels.monitor.chat-id', { id: binding.chat_id }))
+  const chat = overview.value.chatTitles.get(chatKey(binding)) || t('channels.monitor.chat-id', { id: binding.chat_id })
   // The title is the topic's name only when the link is to a topic; otherwise it is
   // just the pane name copied at bind time, which the first line already shows.
-  if (binding.thread_id && binding.title) parts.push(binding.title)
-  return parts.join(' · ')
+  const topic = binding.thread_id && binding.title ? binding.title : ''
+  return formatChannelIdentity(binding, { t, state, chat, extra: [topic] }, 'full')
 }
 
 function toRow(binding: ChannelBinding): Row {

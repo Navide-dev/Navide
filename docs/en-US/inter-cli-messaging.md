@@ -994,7 +994,27 @@ not grant access.
 - Inbound messages are de-duplicated by platform message id. Lines from one
   sender to one topic arriving within 500 ms are joined into one message.
 - `stop`, `停止`, `/stop` or `esc` interrupts the pane (same as `cli_interrupt`)
-  instead of being delivered.
+  instead of being delivered. The reply says how many of this chat's messages
+  are still waiting and carries a "▶️ 繼續" button.
+- An interrupted pane stays stopped, which holds every message to it, until
+  the user carries on. From the chat that is the next ordinary message (it
+  clears the stop first, as typing in the pane does), `/resume`, or the
+  "▶️ 繼續" button; commands such as `stop` and `/cancel` leave it stopped.
+- `/cancel` withdraws this chat's messages that have not gone into a pane yet,
+  including lines still being joined, through the same withdrawal as
+  `cli_cancel_message`. It never touches another chat's or an agent's
+  messages, and a message already delivered cannot be taken back. The
+  "已收到，等 pane 空檔…" acknowledgement carries two buttons doing the same as
+  `/cancel` and `stop`; a press passes the same allowlist and binding checks
+  as the typed command.
+- A command may be addressed to the bot: a leading mention (`<@bot>` on Slack
+  and Discord, `@bot` elsewhere) is ignored, so `@navide_bot stop` stops the
+  pane. Telegram's `/` menu gains `/resume` alongside the other commands
+  (added only when missing).
+- On a platform without buttons, a reply that would carry them names the
+  commands they stand for instead ("可直接輸入：/cancel 撤回排隊中的訊息 · stop
+  中斷 pane"), and `/menu` lists the prompt skills and skills as numbered
+  lines; `/menu <n>` sends item n.
 - A busy pane queues the message as usual (holds and the Messages panel are
   unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most 20 chat
   messages may wait per pane.
