@@ -13,6 +13,7 @@ import {
   type PluginSystemNamespace,
 } from '../../../packages/plugin-contracts/src/index'
 import { validateAgentTools } from '../../shared/pluginAgentTools'
+import { isMethodName } from './pluginBackendSupervisor'
 import { InstalledPluginError } from './pluginManifestErrors'
 
 export {
@@ -51,6 +52,21 @@ export function parseManifestV2(raw: Record<string, unknown>): PluginManifestV2 
   if (first) {
     const at = first.index === null ? '' : `[${first.index}]${first.field ? `.${first.field}` : ''}`
     throw new InstalledPluginError(`manifest backend.agentTools${at} is invalid: ${first.code}`)
+  }
+  // The backend supervisor accepts only lower-case method names
+  // (isMethodName), so a tool forwarded to a camelCase method could never be
+  // served: refuse it here, at install, instead of at activation.
+  const backend = raw.backend as { agentTools?: unknown } | undefined
+  if (backend && Array.isArray(backend.agentTools)) {
+    backend.agentTools.forEach((tool, index) => {
+      const method = (tool as { method?: unknown }).method
+      if (!isMethodName(method)) {
+        throw new InstalledPluginError(
+          `manifest backend.agentTools[${index}].method '${String(method)}' is not a backend method name ` +
+          'the Host accepts (lower-case dotted segments of a-z, 0-9 and _)'
+        )
+      }
+    })
   }
   try {
     return parsePublicManifestV2(raw)

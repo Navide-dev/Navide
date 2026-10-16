@@ -47,6 +47,11 @@ def test_a_manifest_without_agent_tools_dumps_as_before() -> None:
         (lambda m: m["backend"]["agentTools"][0].update(method="devmap.delete"), "AGENT_TOOL_METHOD_UNDECLARED"),
         (lambda m: m["backend"]["agentTools"][0].update(description="a b"), "AGENT_TOOL_TEXT_INVALID"),
         (lambda m: m["backend"]["agentTools"][1].update(timeoutMs=True), "AGENT_TOOL_TIMEOUT_INVALID"),
+        (
+            lambda m: (m["backend"].update(methods=["devmap.read", "devmap.setStatus"]),
+                       m["backend"]["agentTools"][1].update(method="devmap.setStatus")),
+            "not a backend method name the App accepts",
+        ),
     ],
 )
 def test_publish_refuses_with_the_contract_error_code(change, code: str) -> None:

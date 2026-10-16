@@ -20,7 +20,7 @@
     "activation": "startup",
     "methods": [
       "devmap.read",
-      "devmap.setStatus"
+      "devmap.status"
     ],
     "agentTools": []
   }

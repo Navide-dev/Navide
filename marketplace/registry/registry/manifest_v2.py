@@ -17,6 +17,10 @@ PACKAGE_ID_BODY_PATTERN = r"[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+"
 PACKAGE_ID_RE = re.compile(rf"^{PACKAGE_ID_BODY_PATTERN}$")
 _V2_DISPLAY_TEXT_RE = r"^[^\r\n<>]+$"
 _V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
+# The App's backend supervisor accepts only these method names (isMethodName,
+# src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
+# other name could never be served, so publish refuses it.
+_AGENT_TOOL_METHOD_RE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 V2_SYSTEM_NAMESPACES: frozenset[str] = frozenset({"fs", "ui", "aiCli"})
 V2_SHELL_MODES: frozenset[str] = frozenset({"allowlist", "full"})
 MAX_EXTENSION_PACK_MEMBERS = 20
@@ -323,6 +327,15 @@ class ManifestV2(ManifestV2Model):
                 where = "" if first["index"] is None else f"[{first['index']}]"
                 field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
                 raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}")
+            backend = value.get("backend")
+            declared = backend.get("agentTools") if isinstance(backend, Mapping) else None
+            for index, tool in enumerate(declared if isinstance(declared, list) else []):
+                method = tool.get("method") if isinstance(tool, Mapping) else None
+                if not isinstance(method, str) or _AGENT_TOOL_METHOD_RE.fullmatch(method) is None:
+                    raise ValueError(
+                        f"backend.agentTools[{index}].method {method!r} is not a backend method name the "
+                        "App accepts (lower-case dotted segments of a-z, 0-9 and _)"
+                    )
         return value
 
     @model_validator(mode="after")

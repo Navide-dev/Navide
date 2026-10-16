@@ -23,7 +23,7 @@ const TOOLS = [
   },
   {
     name: 'devmap_set_status',
-    method: 'devmap.setStatus',
+    method: 'devmap.status',
     risk: 'write' as const,
     title: 'Set block status',
     description: LONG_DESCRIPTION,

@@ -637,6 +637,10 @@ function parseBackend(value: unknown): PluginManifestV2['backend'] {
 
 const AGENT_TOOL_KEYS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema', 'timeoutMs'] as const
 const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
+// The Host backend supervisor's method-name rule (isMethodName in
+// src/main/plugins/pluginBackendSupervisor.ts): stricter than the manifest
+// schema's backend name pattern, and what activation enforces.
+const AGENT_TOOL_METHOD_PATTERN = /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/
 // eslint-disable-next-line no-control-regex
 const AGENT_TOOL_TEXT_PATTERN = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029<>]+$/
 
@@ -649,8 +653,8 @@ function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
     assertOnlyKeys(tool, AGENT_TOOL_KEYS, label)
     for (const key of AGENT_TOOL_KEYS.slice(0, 6)) required(tool, key, label)
     if (typeof tool.name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(tool.name)) fail(`${label}.name is invalid`)
-    if (typeof tool.method !== 'string' || tool.method.length > 128 || !BACKEND_NAME_PATTERN.test(tool.method)) {
-      fail(`${label}.method is invalid`)
+    if (typeof tool.method !== 'string' || tool.method.length > 128 || !AGENT_TOOL_METHOD_PATTERN.test(tool.method)) {
+      fail(`${label}.method must be a lower-case backend method name (a-z, 0-9, _ and dots), as the Host accepts`)
     }
     if (tool.risk !== 'read' && tool.risk !== 'write') fail(`${label}.risk must be 'read' or 'write'`)
     for (const key of ['title', 'description'] as const) {

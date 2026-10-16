@@ -395,11 +395,11 @@ the manifest side is:
   "entry": "backend/devmap",
   "protocolVersion": 1,
   "activation": "startup",
-  "methods": ["devmap.read", "devmap.setStatus"],
+  "methods": ["devmap.read", "devmap.status"],
   "agentTools": [
     {
       "name": "devmap_set_status",
-      "method": "devmap.setStatus",
+      "method": "devmap.status",
       "risk": "write",
       "title": "Set block status",
       "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
@@ -417,7 +417,7 @@ the manifest side is:
 | Tool field | Required | Rule |
 |---|---|---|
 | `name` | yes | `^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$`, unique in the package, and starting with the prefix derived from the plugin id: its last dot segment with every `-` removed (`nerdtechnic.dev-map` → `devmap_`). A prefix that cannot be derived, a reserved prefix (`cli_`, `plan_`, `navide_`, ... see the contract) and every core tool name are refused |
-| `method` | yes | One of `backend.methods`; the Host forwards the call to it |
+| `method` | yes | One of `backend.methods`, the Host forwards the call to it. It must also be a name the backend supervisor accepts (`isMethodName` in `src/main/plugins/pluginBackendSupervisor.ts`): lower-case dotted segments such as `devmap.read` or `devmap.block.status`. A camelCase method (`devmap.setStatus`) passes the `backend.methods` pattern but is refused at activation, so a tool naming one is refused at install and publish |
 | `risk` | yes | `read` or `write`; shown wherever the tool is disclosed, and `write` makes the package high risk |
 | `title`, `description` | yes | Non-empty plain text with no control characters, no U+2028/U+2029 and no `<` or `>`; no length limit apart from the 1 MiB stability cap on `description` |
 | `inputSchema` | yes | JSON Schema whose `type` is `"object"`; every number in it must be a safe integer; its canonical spelling is capped at 1 MiB |

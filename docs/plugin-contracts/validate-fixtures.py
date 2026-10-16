@@ -94,6 +94,11 @@ def _validate_manifest_semantics(manifest: Any) -> None:
     agent_tool_errors = _AGENT_TOOLS.validate_agent_tools(manifest)
     if agent_tool_errors:
         raise ValueError(f"backend.agentTools: {agent_tool_errors[0]['code']}")
+    backend = manifest.get("backend")
+    for tool in (backend.get("agentTools") or []) if isinstance(backend, dict) else []:
+        # The Host supervisor's method-name rule (isMethodName).
+        if not re.fullmatch(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*", str(tool.get("method"))):
+            raise ValueError("backend.agentTools method is not a name the Host accepts")
     pack = manifest.get("extensionPack")
     if isinstance(pack, list) and manifest.get("id") in pack:
         raise ValueError("extensionPack must not list the pack itself")

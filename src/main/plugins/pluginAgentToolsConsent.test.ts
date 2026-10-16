@@ -35,7 +35,7 @@ const READ_TOOL: Tool = {
 }
 const WRITE_TOOL: Tool = {
   name: 'devmap_set_status',
-  method: 'devmap.setStatus',
+  method: 'devmap.status',
   risk: 'write',
   title: 'Set block status',
   description: "Set one block's status (done|wip|plan) in this workspace's dev map.",
@@ -57,7 +57,7 @@ function manifest(id: string, agentTools?: Tool[]) {
       entry: 'backend/devmap',
       protocolVersion: 1,
       activation: 'startup',
-      methods: ['devmap.read', 'devmap.setStatus'],
+      methods: ['devmap.read', 'devmap.status'],
       events: ['devmap.changed'],
       ...(agentTools ? { agentTools } : {}),
     },
@@ -113,7 +113,7 @@ describe('consent key (contract section 2.8)', () => {
     expect(spec.thirdParty).not.toHaveProperty('agentTools')
     // The exact key main produced, so existing consent records stay valid.
     expect(backendPermissionsKey(spec)).toBe(
-      '{"system":["fs"],"shell":null,"methods":["devmap.read","devmap.setStatus"],"events":["devmap.changed"]}'
+      '{"system":["fs"],"shell":null,"methods":["devmap.read","devmap.status"],"events":["devmap.changed"]}'
     )
   })
 
@@ -129,7 +129,7 @@ describe('consent key (contract section 2.8)', () => {
     expect(JSON.parse(backendPermissionsKey(spec))).toEqual({
       system: ['fs'],
       shell: null,
-      methods: ['devmap.read', 'devmap.setStatus'],
+      methods: ['devmap.read', 'devmap.status'],
       events: ['devmap.changed'],
       agentTools: digest,
     })
@@ -142,7 +142,7 @@ describe('consent key (contract section 2.8)', () => {
       [{ ...READ_TOOL, description: 'Read the dev map, then do more.' }, WRITE_TOOL],
       [{ ...READ_TOOL, title: 'Read' }, WRITE_TOOL],
       [{ ...READ_TOOL, risk: 'write' }, WRITE_TOOL],
-      [{ ...READ_TOOL, method: 'devmap.setStatus' }, WRITE_TOOL],
+      [{ ...READ_TOOL, method: 'devmap.status' }, WRITE_TOOL],
       [{ ...READ_TOOL, timeoutMs: 30001 }, WRITE_TOOL],
       [{ ...READ_TOOL, inputSchema: { type: 'object', properties: { id: { type: 'string' } } } }, WRITE_TOOL],
       [READ_TOOL],
@@ -198,6 +198,19 @@ describe('manifest validation uses the contract', () => {
       'AGENT_TOOL_TEXT_INVALID'
     )
     expect(() => writePackage('acme.devmap', [])).toThrow('manifest backend.agentTools must be a non-empty array')
+  })
+
+  it('refuses a tool method the backend supervisor would refuse at activation', () => {
+    const packageDir = join(root, 'plugins', 'acme.devmap', '1.0.0')
+    mkdirSync(join(packageDir, 'backend'), { recursive: true })
+    const raw = manifest('acme.devmap', [{ ...WRITE_TOOL, method: 'devmap.setStatus' }])
+    raw.backend.methods = ['devmap.read', 'devmap.setStatus']
+    writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify(raw))
+    writeFileSync(join(packageDir, 'backend', 'devmap'), 'binary', { mode: 0o700 })
+    expect(() => thirdPartyBackendLaunchSpec({
+      pluginId: 'acme.devmap', packageVersion: '1.0.0', packageDir, views: [],
+      backend: { entryFile: join(packageDir, 'backend', 'devmap'), protocolVersion: 1, activation: 'startup' },
+    })).toThrow("manifest backend.agentTools[0].method 'devmap.setStatus' is not a backend method name the Host accepts")
   })
 
   it('refuses a description over the 1 MiB stability cap', () => {

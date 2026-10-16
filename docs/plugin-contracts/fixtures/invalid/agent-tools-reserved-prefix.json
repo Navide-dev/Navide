@@ -20,7 +20,7 @@
     "activation": "startup",
     "methods": [
       "devmap.read",
-      "devmap.setStatus"
+      "devmap.status"
     ],
     "agentTools": [
       {
@@ -36,7 +36,7 @@
       },
       {
         "name": "plan_set_status",
-        "method": "devmap.setStatus",
+        "method": "devmap.status",
         "risk": "write",
         "title": "Set block status",
         "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
