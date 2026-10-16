@@ -53,8 +53,8 @@ function parseState(path: string): ParsedFactoryOptOutState {
 export class PluginFactoryOptOutStore {
   private readonly file: string
 
-  constructor(private readonly root: string) {
-    this.file = join(root, OPT_OUTS_FILE)
+  constructor(private readonly root: string, fileName = OPT_OUTS_FILE) {
+    this.file = join(root, fileName)
   }
 
   has(pluginId: string): boolean {

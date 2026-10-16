@@ -264,6 +264,25 @@ async function uninstallPack(members: string[]): Promise<void> {
   }
 }
 
+// The user's "Disabled" switch. A disabled package keeps its files, grant and
+// stored data; the Host only stops loading its views and backend. The row says
+// so with a badge and an Enable button, never silently.
+async function setDisabled(id: string, disabled: boolean): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.setDisabled) return
+  busy.value = true
+  error.value = ''
+  try {
+    await api.setDisabled(id, disabled)
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+    await reloadInventory()
+  } finally {
+    busy.value = false
+  }
+}
+
 async function restoreFactoryPackage(id: string): Promise<void> {
   const api = pluginsApi()
   if (!api) return
@@ -418,6 +437,9 @@ watch(installed, () => void refreshPacks())
               <span v-else-if="updatesById.get(p.id)" class="ext-badge ext-update-badge">
                 {{ $t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' }) }}
               </span>
+              <span v-if="p.disabled" class="ext-badge ext-disabled-badge" :title="$t('settings.extensions.disabledNote')">
+                {{ $t('settings.extensions.disabledBadge') }}
+              </span>
               <!-- Label only: the Host keeps running the package (no silent disable). -->
               <span
                 v-if="p.engineCompatible === false"
@@ -445,6 +467,7 @@ watch(installed, () => void refreshPacks())
                 {{ p.provenance === 'developer-local-unpacked' ? $t('settings.extensions.devUnpacked') : p.warning }}
               </span>
             </div>
+            <p v-if="p.disabled" class="ext-disabled-note">{{ $t('settings.extensions.disabledNote') }}</p>
             <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
               {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
             </p>
@@ -504,6 +527,22 @@ watch(installed, () => void refreshPacks())
                   ? $t('settings.extensions.rollback.toBundled')
                   : $t('settings.extensions.rollback.toVersion', { version: p.rollbackToVersion })
               }}
+            </button>
+            <button
+              v-if="p.disabled === false"
+              class="ext-disable nv-btn nv-btn--sm"
+              :disabled="busy || updateFlow.busy.value"
+              @click="setDisabled(p.id, true)"
+            >
+              {{ $t('settings.extensions.disable') }}
+            </button>
+            <button
+              v-else-if="p.disabled"
+              class="ext-enable nv-btn nv-btn--primary nv-btn--sm"
+              :disabled="busy || updateFlow.busy.value"
+              @click="setDisabled(p.id, false)"
+            >
+              {{ $t('settings.extensions.enable') }}
             </button>
             <button class="ext-remove nv-btn nv-btn--sm ext-btn-danger" :disabled="busy || updateFlow.busy.value" @click="remove(p.id)">
               {{ $t('settings.extensions.marketplace.uninstall') }}
@@ -841,6 +880,15 @@ watch(installed, () => void refreshPacks())
 .ext-incompatible-reason {
   margin: 0;
   color: var(--danger-bright);
+  font-size: var(--font-xs);
+}
+.ext-badge.ext-disabled-badge {
+  color: var(--risk-fg);
+  background: var(--risk-subtle);
+}
+.ext-disabled-note {
+  margin: 0;
+  color: var(--text-secondary);
   font-size: var(--font-xs);
 }
 .ext-pack-includes {

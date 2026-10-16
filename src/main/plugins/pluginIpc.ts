@@ -67,6 +67,7 @@ import type {
 } from './frontendPluginManager'
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
+import { PluginDisabledStore } from './pluginDisabledStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 import {
@@ -147,6 +148,8 @@ interface InstalledSummary {
   engineCompatible?: boolean
   /** The user's per-extension "Get pre-releases" switch (default off). */
   getsPrereleases?: boolean
+  /** The user's "Disabled" switch; present only on rows it applies to. */
+  disabled?: boolean
 }
 
 export interface FactoryPackageSummary {
@@ -424,6 +427,20 @@ export function registerPluginIpc(
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
   const packs = new PluginPackStore(pluginsRoot)
+  // The manager reads the same file through the resolver the Host installs
+  // before the first package load; this handle only records the user's switch.
+  const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // Update, rollback and restart re-register a package. While it is disabled
+  // they may change which version is selected, but they never hand the Host an
+  // activation to start.
+  const activationChange = options.onActivationChange
+  if (activationChange) {
+    options = {
+      ...options,
+      onActivationChange: (change) =>
+        activationChange(manager.isPluginDisabled(change.pluginId) ? { pluginId: change.pluginId } : change),
+    }
+  }
   // Pack installs in progress, keyed by pack id: the verified member list and
   // which members were installed before the pack flow started.
   const packSessions = new Map<
@@ -562,6 +579,9 @@ export function registerPluginIpc(
       })(),
       ...(summary.provenance === 'official-registry'
         ? { getsPrereleases: optedIn.has(summary.id) }
+        : {}),
+      ...(summary.provenance === 'official-registry' && manager.canDisablePlugin(summary.id)
+        ? { disabled: disabledPlugins.has(summary.id) }
         : {}),
       ...(() => {
         const rollback = rollbackTargetFor(summary.id)
@@ -2094,6 +2114,7 @@ export function registerPluginIpc(
       capabilityGrants.remove(id)
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
+      disabledPlugins.remove(id)
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')
@@ -2115,6 +2136,81 @@ export function registerPluginIpc(
     assertAuthorized(event)
     return uninstallPlugin(args?.id)
   })
+
+  // The user's "Disabled" switch for an installed Marketplace package. Disable
+  // stops the package and unregisters its views and backend; its files, grant,
+  // storage and lifecycle selection stay. Enable re-verifies the selected
+  // package and registers it again under the grant it already holds.
+  ipcMain.handle(
+    'plugins:setDisabled',
+    async (event, args: { id?: unknown; disabled?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      const disabled = args?.disabled
+      if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
+      if (!manager.canDisablePlugin(id)) throw new Error(`first-party plugin ${id} cannot be disabled`)
+      if (activeTransactions.has(id)) {
+        throw new Error(`plugin transaction already in progress for ${id}`)
+      }
+      const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
+      if (!installed || installed.provenance !== 'official-registry') {
+        throw new Error(`plugin ${id} is not an installed Marketplace package`)
+      }
+      if (disabledPlugins.has(id) === disabled) return { id, disabled }
+      activeTransactions.add(id)
+      try {
+        if (disabled) {
+          // Recorded first so that nothing re-registered during the drain can
+          // start again.
+          disabledPlugins.add(id)
+          await revokeInstalledPackageRuntime(manager, pluginsRoot, id)
+          manager.suspendDisabledPlugin(id)
+          options.onActivationChange?.({ pluginId: id })
+          return { id, disabled }
+        }
+        const selected = lifecycleSelector.read(id)
+        const packageDir = selected?.active
+          ? lifecycleSelector.packageDir(id, selected.active)
+          : join(pluginsRoot, id)
+        const decision = verifyCommittedInstall(packageDir, id, resolveConfiguredMarketplace(trust).trust)
+        if (decision.action === 'quarantine') {
+          throw new Error(`plugin ${id} cannot be enabled: ${decision.reason}`)
+        }
+        if (selected?.active && decision.artifactDigest !== selected.active.artifactDigest) {
+          throw new Error(`plugin ${id} cannot be enabled: artifact identity changed`)
+        }
+        const scanned = loadPluginDir(packageDir)
+        if (scanned.error || !scanned.packageSummary) {
+          throw new Error(`plugin ${id} cannot be enabled${scanned.error ? `: ${scanned.error}` : ''}`)
+        }
+        disabledPlugins.remove(id)
+        try {
+          manager.registerInstalledPackage(
+            { ...scanned.packageSummary, provenance: 'official-registry' },
+            scanned.descriptor,
+            {},
+            packageDir,
+          )
+        } catch (error) {
+          disabledPlugins.add(id)
+          throw error
+        }
+        if (scanned.activation) {
+          options.onActivationChange?.({
+            pluginId: id,
+            activation: {
+              ...scanned.activation,
+              provenance: 'official-registry',
+              artifactDigest: decision.artifactDigest,
+            },
+          })
+        }
+        return { id, disabled }
+      } finally {
+        activeTransactions.delete(id)
+      }
+    }
+  )
 
   return {
     checkUpdates: checkInstalledUpdates,

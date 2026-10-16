@@ -31,6 +31,7 @@ import { makeZip } from './zipFixture'
 import { readZipEntries } from './pluginPackage'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
+import { PluginDisabledStore } from './pluginDisabledStore'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
 
 const { handlers, browserWindowFromWebContents } = vi.hoisted(() => ({
@@ -505,6 +506,7 @@ describe('plugin management sender authorization', () => {
       ['plugins:prepareInstall', { namespace: 'acme', name: 'demo' }],
       ['plugins:commitInstall', { id: 'acme.demo', confirmed: true }],
       ['plugins:remove', { id: 'acme.demo' }],
+      ['plugins:setDisabled', { id: 'acme.demo', disabled: true }],
     ]
     try {
       for (const [channel, args] of calls) {
@@ -4640,6 +4642,175 @@ describe('plugins:listInstalled scope disclosure', () => {
         },
       }])
     } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('plugins:setDisabled', () => {
+  const coldStartSource = (root: string) => ({
+    provenance: 'official-registry' as const,
+    trust: {
+      pinnedRootKey: registryRoot.pubPem,
+      snapshot: readRegistryTrustSnapshot(root),
+      registryAuthority: 'self-hosted' as const,
+      now: FIXED_NOW,
+    },
+  })
+
+  async function installVersion(version: string, pkg = buildPkg('acme.demo', 'acme', {}, version)): Promise<void> {
+    installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', version), pkg.bytes, pkg.digest)
+    await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version })
+    await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+    await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+  }
+
+  function setup(prefix: string) {
+    const root = mkdtempSync(join(tmpdir(), prefix))
+    const manager = new FrontendPluginManager()
+    const changes: Array<{ pluginId: string; activation?: PluginActivationCatalogEntry }> = []
+    // The Host installs this resolver before its first package load.
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+      onActivationChange: (change) => changes.push(change),
+    })
+    return { root, manager, changes, setDisabled: handlers.get('plugins:setDisabled')!, list: handlers.get('plugins:listInstalled')! }
+  }
+
+  it('disables a package without removing its files, grant or selection, and enables it with the same grant', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const { root, manager, changes, setDisabled, list } = setup('navide-plugin-disable-')
+    try {
+      await installVersion('1.0.0', first)
+      const grant = new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')
+      expect(grant).not.toBeNull()
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', disabled: false }])
+      changes.length = 0
+
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true }))
+        .resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(manager.listContributionCatalog().some((entry) => entry.pluginId === 'acme.demo')).toBe(false)
+      expect(changes).toEqual([{ pluginId: 'acme.demo' }])
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toEqual(grant)
+      expect(existsSync(immutablePluginPackageDir(root, 'acme.demo', '1.0.0', 'universal'))).toBe(true)
+      expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
+        active: { packageVersion: '1.0.0', artifactDigest: first.digest },
+      })
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0', disabled: true }])
+      changes.length = 0
+
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false }))
+        .resolves.toEqual({ id: 'acme.demo', disabled: false })
+      expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
+      expect(manager.listContributionCatalog().some((entry) => entry.pluginId === 'acme.demo')).toBe(true)
+      expect(changes).toMatchObject([{
+        pluginId: 'acme.demo',
+        activation: { packageVersion: '1.0.0', artifactDigest: first.digest },
+      }])
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toEqual(grant)
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', disabled: false }])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a disabled package unloaded on a cold start while still verifying it', async () => {
+    const { root, manager, setDisabled } = setup('navide-plugin-disable-cold-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+
+      const reloaded = new FrontendPluginManager()
+      reloaded.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const loaded = reloaded.loadInstalledPlugins(root, coldStartSource(root))
+      expect(loaded.errors).toEqual([])
+      expect(loaded.loaded).not.toContain('acme.demo')
+      expect(loaded.activationCatalog.map((entry) => entry.pluginId)).not.toContain('acme.demo')
+      expect(reloaded.getDescriptor('acme.demo')).toBeUndefined()
+      expect(reloaded.listInstalledPackages()).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0' }])
+
+      // A disabled package is not exempt from integrity verification.
+      writeFileSync(
+        join(immutablePluginPackageDir(root, 'acme.demo', '1.0.0', 'universal'), REGISTRY_ARTIFACT_NAME),
+        'tampered',
+      )
+      const tampered = new FrontendPluginManager()
+      tampered.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+      const quarantined = tampered.loadInstalledPlugins(root, coldStartSource(root))
+      expect(quarantined.errors.join(' ')).toMatch(/quarantined/)
+      expect(tampered.listInstalledPackages()).toEqual([])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a disabled package disabled through an update and a rollback', async () => {
+    const { root, manager, changes, setDisabled, list } = setup('navide-plugin-disable-update-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      changes.length = 0
+
+      await installVersion('1.0.1')
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(changes.every((change) => change.activation === undefined)).toBe(true)
+      expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
+        active: { packageVersion: '1.0.1' },
+        previous: { packageVersion: '1.0.0' },
+      })
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).not.toBeNull()
+      expect(list(null)).toMatchObject([{
+        id: 'acme.demo',
+        packageVersion: '1.0.1',
+        disabled: true,
+        rollbackKind: 'previous',
+        rollbackToVersion: '1.0.0',
+      }])
+
+      await expect(handlers.get('plugins:rollback')!(null, { id: 'acme.demo' }))
+        .resolves.toMatchObject({ id: 'acme.demo', packageVersion: '1.0.0' })
+      expect(manager.getDescriptor('acme.demo')).toBeUndefined()
+      expect(changes.every((change) => change.activation === undefined)).toBe(true)
+      expect(list(null)).toMatchObject([{ id: 'acme.demo', packageVersion: '1.0.0', disabled: true }])
+
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+      expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('removes a disabled package and forgets that it was disabled', async () => {
+    const { root, manager, setDisabled, list } = setup('navide-plugin-disable-remove-')
+    try {
+      await installVersion('1.0.0')
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      await expect(handlers.get('plugins:remove')!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(list(null)).toEqual([])
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(false)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses first-party ids, packages that are not installed and malformed requests', async () => {
+    const { root, manager, setDisabled } = setup('navide-plugin-disable-refuse-')
+    try {
+      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/first-party/)
+      await expect(setDisabled(null, { id: 'acme.missing', disabled: true })).rejects.toThrow(/not an installed/)
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: 'yes' })).rejects.toThrow(/invalid/)
+      await expect(setDisabled(null, { id: '../escape', disabled: true })).rejects.toThrow(/invalid plugin id/)
+      expect(new PluginDisabledStore(root).has('navide.git')).toBe(false)
+      expect(new PluginDisabledStore(root).has('acme.missing')).toBe(false)
+    } finally {
+      await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
   })

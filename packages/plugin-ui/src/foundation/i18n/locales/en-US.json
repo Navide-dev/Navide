@@ -1736,6 +1736,10 @@
       "restore": "Restore",
       "candidateReady": "Update {version} is ready",
       "restartPlugin": "Restart Navide plugin",
+      "disable": "Disable",
+      "enable": "Enable",
+      "disabledBadge": "Disabled",
+      "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
       "rollback": {
         "toBundled": "Roll back to bundled",
         "toVersion": "Roll back to {version}",

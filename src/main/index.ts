@@ -51,6 +51,7 @@ import {
 import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
+import { PluginDisabledStore } from './plugins/pluginDisabledStore'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import {
@@ -1082,6 +1083,10 @@ async function preflightCandidateBackend(
 const pluginCapabilityGrants = new PluginCapabilityGrantStore(pluginsRoot())
 const executionPolicySourceStore = new ExecutionPolicySourceStore(app.getPath('userData'))
 const pluginFactoryOptOuts = new PluginFactoryOptOutStore(pluginsRoot())
+// Installed before the first load: a package the user disabled is still
+// verified, but its views and backend are never registered.
+const pluginDisabledSwitch = new PluginDisabledStore(pluginsRoot())
+frontendPluginManager.setDisabledPluginResolver((pluginId) => pluginDisabledSwitch.has(pluginId))
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
   provenance: 'official-registry',
   trust: installedPluginTrust,

@@ -3640,6 +3640,37 @@ describe('devPlansPluginDescriptor', () => {
     await mgr.closeBackendPlugins()
   })
 
+  it('keeps a disabled package in the inventory but registers neither its views nor its backend', () => {
+    const mgr = new FrontendPluginManager()
+    const disabled = new Set(['acme.disabled', 'navide.git'])
+    mgr.setDisabledPluginResolver((id) => disabled.has(id))
+    const packageDir = process.cwd()
+    const viewDescriptor: PluginLaunchDescriptor = { ...descriptor('acme.disabled'), packageVersion: '1.0.0', packageDir }
+
+    mgr.registerInstalledPackage({ id: 'acme.disabled', packageVersion: '1.0.0', requires: [] }, viewDescriptor, {}, packageDir)
+
+    expect(mgr.isPluginDisabled('acme.disabled')).toBe(true)
+    expect(mgr.getDescriptor('acme.disabled')).toBeUndefined()
+    expect(mgr.listInstalledPackages()).toMatchObject([{ id: 'acme.disabled', packageVersion: '1.0.0' }])
+    expect(() => mgr.registerBackendActivation({
+      pluginId: 'acme.disabled',
+      packageVersion: '1.0.0',
+      packageDir,
+      entryFile: '/plugins/acme.disabled/backend',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: [],
+      approvedEvents: [],
+    })).toThrowError(expect.objectContaining({ code: 'INVALID_ACTIVATION', message: 'Backend plugin is disabled.' }))
+    expect(mgr.hasBackendActivation('acme.disabled', '1.0.0')).toBe(false)
+    // First-party ids are never disabled by this switch.
+    expect(mgr.isPluginDisabled('navide.git')).toBe(false)
+
+    disabled.delete('acme.disabled')
+    mgr.registerInstalledPackage({ id: 'acme.disabled', packageVersion: '1.0.0', requires: [] }, viewDescriptor, {}, packageDir)
+    expect(mgr.getDescriptor('acme.disabled')?.packageVersion).toBe('1.0.0')
+  })
+
   it('rejects a backend-only activation with a mismatched installed package root', () => {
     const mgr = new FrontendPluginManager()
     const pluginId = 'acme.backend-only'

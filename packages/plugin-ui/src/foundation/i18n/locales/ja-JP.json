@@ -1736,6 +1736,10 @@
       "restore": "復元",
       "candidateReady": "アップデート {version} の準備ができました",
       "restartPlugin": "Navide プラグインを再起動",
+      "disable": "無効化",
+      "enable": "有効化",
+      "disabledBadge": "無効",
+      "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
       "rollback": {
         "toBundled": "同梱版に戻す",
         "toVersion": "{version} に戻す",
