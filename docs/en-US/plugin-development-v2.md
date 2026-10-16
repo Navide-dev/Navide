@@ -411,6 +411,17 @@ refused the port. `shell: "full"` is not available to a backend: the broker
 serves only the allowlist, and such a backend is not started
 (`shell-not-allowed`).
 
+**Network reach.** The sandbox still denies the backend process every network
+connection, but a backend with `shell: "allowlist"` is **not** a backend
+without network access: the broker's `git`, `gh` and `glab` commands contact
+network hosts (`git fetch`/`push` to any URL the repository or command names,
+`gh api`, `glab api`), so the backend can send workspace data off the machine
+through them. The consent dialog says so plainly instead of "it has no
+network access", which it keeps only for backends without shell; the
+disclosure data's `network` field is still `"none"` in contract v1 and is
+being revisited separately. The broker rules are exactly those of a view's
+`shell.run`.
+
 Planned, not yet accepted: a `backend.agentTools` manifest field that lets a
 package offer consented agent tools on the core MCP server, and the disclosure
 data computed from every manifest. Their interface contract (field rules,

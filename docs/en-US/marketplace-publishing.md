@@ -136,7 +136,8 @@ and only answers the methods and events it declares. Publishing one also needs
 an administrator to allow your namespace for native backends, a verified
 publisher domain, `engines.navide` of at least `>=0.2.14`, and a non-empty
 `backend.methods`. A backend package may also declare `shell: "allowlist"`
-(shown to users as high risk); it then needs `engines.navide` of at least
+(shown to users as high risk, including that git/gh/glab can contact network
+hosts and send workspace data); it then needs `engines.navide` of at least
 `>=0.2.25`. `shell: "full"` is not available with a backend. See
 [plugin-development-v2.md](plugin-development-v2.md), "Third-party backends".
 

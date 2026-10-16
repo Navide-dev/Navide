@@ -11,6 +11,7 @@ import { isWindows } from '../../shared/osplat'
 import {
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
+  nativeBackendConsentText,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -704,5 +705,31 @@ describe('NativeBackendStore', () => {
     writeFileSync(file, JSON.stringify({ schemaVersion: 1, enabled: true, plugins: { x: { consent: { binarySha256: 'short' } } } }))
     expect(new NativeBackendStore(join(root, 'store')).record('x').consent).toBeUndefined()
     expect(readFileSync(file, 'utf8')).toContain('short')
+  })
+})
+
+describe('native backend consent text', () => {
+  const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
+
+  it('says "no network access" only for a package without shell', () => {
+    for (const system of [[], ['fs']] as const) {
+      const { message, detail } = nativeBackendConsentText({ ...base, system: [...system] })
+      expect(message).toBe('Indexer contains native code that runs on your computer. Allow it to run?')
+      expect(detail).toContain('it has no network access')
+      expect(detail).not.toMatch(/git|gh|glab|high risk/i)
+    }
+  })
+
+  it('discloses shell as high risk that can contact network hosts and send workspace data, and never claims no network', () => {
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' })
+    expect(detail).not.toMatch(/no network/i)
+    expect(detail).toContain('High risk')
+    expect(detail).toContain('git, gh and glab')
+    expect(detail).toContain('can contact network hosts')
+    expect(detail).toContain('send data from this workspace')
+    expect(detail).toContain('cannot open network connections itself')
+    const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
+    expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
+    expect(update.detail).not.toMatch(/no network/i)
   })
 })

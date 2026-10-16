@@ -211,6 +211,36 @@ export interface NativeBackendConsentPrompt {
   update: boolean
 }
 
+/** The native-backend consent dialog's text. A package that declares shell
+ * reaches the network through git/gh/glab (push, fetch, `gh api`), so the
+ * "no network access" sentence is only true without shell: saying it there
+ * would deceive the user (anti-deception, not a restriction). */
+export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { message: string; detail: string } {
+  const access = prompt.system.includes('fs')
+    ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
+    : 'It asks for no access to your files.'
+  const sandbox = prompt.shell
+    ? 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.'
+    : 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.'
+  // DB5: shell is allowed for a backend and disclosed as high risk.
+  const shell = prompt.shell
+    ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
+      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
+      + 'this workspace to them, and it can change the repository.'
+    : ''
+  return {
+    message: prompt.update
+      ? `${prompt.name} ${prompt.packageVersion} changed its native code or permissions. Allow it to run?`
+      : `${prompt.name} contains native code that runs on your computer. Allow it to run?`,
+    detail: [
+      sandbox,
+      access,
+      shell,
+      'You can disable it at any time in Settings → Extensions.',
+    ].filter(Boolean).join('\n\n'),
+  }
+}
+
 export interface NativeBackendWritePrompt {
   pluginId: string
   name: string
