@@ -232,6 +232,20 @@ def test_an_activity_row_keeps_a_relative_path_and_only_executable_and_subcomman
     assert all(row["at"] == NOW for row in rows)
 
 
+def test_a_relative_fs_path_is_spelled_with_forward_slashes(
+    audit: PluginAuditLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows CI: os.path.relpath answers with backslashes there."""
+    import ntpath
+
+    from agent_team_backend.plugins import audit_log
+
+    monkeypatch.setattr(audit_log, "os", type("WinOs", (), {"path": ntpath, "sep": "\\"}))
+    _activity(audit, workspace="C:\\Users\\me\\project", fs_path="C:\\Users\\me\\project\\.navide\\devmap.json")
+    _activity(audit, workspace="C:\\Users\\me\\project", fs_path="D:\\elsewhere\\x.json")
+    assert [row["fs_path"] for row in _rows(audit, "plugin_activity")] == [".navide/devmap.json", ""]
+
+
 @pytest.mark.parametrize("overrides", [{"source": "ipc"}, {"outcome": "ok"}, {"address": ""}])
 def test_a_bad_activity_row_is_dropped(audit: PluginAuditLog, overrides: dict[str, Any]) -> None:
     assert _activity(audit, **overrides) is None

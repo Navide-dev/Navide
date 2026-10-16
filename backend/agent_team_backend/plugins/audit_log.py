@@ -80,19 +80,22 @@ def _non_negative_int(value: Any) -> int:
 
 
 def _relative_path(path: str, workspace: str) -> str:
-    """``path`` relative to ``workspace``; "" when it is not inside it."""
+    """``path`` relative to ``workspace``, spelled with ``/`` on every
+    platform; "" when it is not inside it."""
     if not path:
         return ""
     if not os.path.isabs(path):
-        normalized = os.path.normpath(path)
-        return "" if normalized == ".." or normalized.startswith(".." + os.sep) else normalized
-    if not workspace or not os.path.isabs(workspace):
+        relative = os.path.normpath(path)
+    elif not workspace or not os.path.isabs(workspace):
         return ""
-    try:
-        relative = os.path.relpath(path, workspace)
-    except ValueError:  # another drive on Windows
+    else:
+        try:
+            relative = os.path.relpath(path, workspace)
+        except ValueError:  # another drive on Windows
+            return ""
+    if relative == ".." or relative.startswith(".." + os.sep):
         return ""
-    return "" if relative == ".." or relative.startswith(".." + os.sep) else relative
+    return relative.replace(os.sep, "/")
 
 
 def _executable_and_subcommand(command: str) -> str:
