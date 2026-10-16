@@ -72,6 +72,7 @@ import {
   type DisclosureManifestInput,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
+import type { ScanReport } from '../../shared/pluginDisclosureScan'
 import type { PluginLaunchDescriptor } from './frontendPluginManager'
 import { UNIVERSAL_PLUGIN_TARGET, currentPluginHostTarget } from './pluginTarget'
 import {
@@ -111,6 +112,8 @@ export interface InstallRequest {
   disclosure?: unknown
   disclosureEnvelope?: unknown
   disclosureSignature?: unknown
+  /** The version row's `scan` (contract 3.8), bound by `scanDigest`. */
+  scan?: unknown
   /** Install provenance selected by the Host, never inferred from schemaVersion. */
   provenance: 'official-registry' | 'developer-local-unpacked'
 }
@@ -176,6 +179,9 @@ export interface PreparedInstall {
   /** The Registry-signed disclosure, verified against the package's own
    * manifest; null when the version carries none. */
   disclosure?: ManifestDisclosure | null
+  /** The Registry-signed scan report (contract 3.8); null when the version
+   * has none. Informational: it never decides the install. */
+  scan?: ScanReport | null
 }
 
 export class InstallError extends Error {
@@ -376,6 +382,7 @@ export async function prepareInstall(
   let registryEvidence: PreparedInstall['registryEvidence']
   let official = false
   let disclosure: ManifestDisclosure | null = null
+  let scan: ScanReport | null = null
 
   if (provenance === 'official-registry') {
     if (!req.registryEnvelope || !req.trustMetadata || !req.target) {
@@ -410,14 +417,16 @@ export async function prepareInstall(
     })
     // Contract 3.5: the signed disclosure must be what this package's own
     // manifest discloses. A version without one installs as before.
-    const signedDisclosure = verifyRegistryDisclosure({
+    const signed = verifyRegistryDisclosure({
       disclosure: req.disclosure,
       disclosureEnvelope: req.disclosureEnvelope,
       disclosureSignature: req.disclosureSignature,
+      scan: req.scan,
       packageEnvelope: req.registryEnvelope,
       trustMetadata: req.trustMetadata,
     })
-    if (signedDisclosure !== null) {
+    if (signed !== null) {
+      const signedDisclosure = signed.disclosure
       if (!v2) {
         throw new RegistryTrustError(
           'DISCLOSURE_INVALID',
@@ -437,6 +446,7 @@ export async function prepareInstall(
         )
       }
       disclosure = signedDisclosure
+      scan = signed.scan
     }
     const requestedRegistryUrl = new URL(req.registryUrl).toString().replace(/\/+$/, '')
     const officialRegistryUrl = trust.officialRegistryUrl
@@ -506,6 +516,7 @@ export async function prepareInstall(
     registryEvidence,
     provenance,
     disclosure,
+    scan,
   }
 }
 

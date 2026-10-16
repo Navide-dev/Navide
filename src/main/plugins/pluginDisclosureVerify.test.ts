@@ -14,6 +14,17 @@ import {
 } from './pluginRegistryTrust'
 import { makeZip } from './zipFixture'
 import { canonicalContractJson, computeDisclosure, type ManifestDisclosure } from '../../shared/pluginDisclosure'
+import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const SCAN_FIXTURE = JSON.parse(readFileSync(
+  join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8'))
+const scanFor = (digest: string): ScanReport => ({
+  ...(SCAN_FIXTURE.cases.find((c: { name: string }) => c.name === SCAN_FIXTURE.scanDigestCase).scan as ScanReport),
+  artifactDigest: digest,
+  target: 'universal',
+})
 
 const root = generateKeyPairSync('ed25519')
 const signer = generateKeyPairSync('ed25519')
@@ -53,7 +64,11 @@ const signCanonical = (value: unknown, key: KeyObject): string =>
 const disclosureDigest = (disclosure: unknown): string =>
   createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex')
 
-function request(digest: string, disclosureManifest: Record<string, unknown> | null = manifestV2()) {
+function request(
+  digest: string,
+  disclosureManifest: Record<string, unknown> | null = manifestV2(),
+  scan: ScanReport | null = null
+) {
   const envelope: RegistryPackageEnvelope = {
     schemaVersion: 1,
     artifactDigest: digest,
@@ -94,6 +109,7 @@ function request(digest: string, disclosureManifest: Record<string, unknown> | n
       keyId: 'registry-2026',
       signedAt: envelope.signedAt,
       disclosureDigest: disclosureDigest(disclosure),
+      scanDigest: scan === null ? null : disclosureDigest(scan),
     }
     disclosureSignature = signCanonical(disclosureEnvelope, signer.privateKey)
   }
@@ -112,6 +128,7 @@ function request(digest: string, disclosureManifest: Record<string, unknown> | n
     disclosure: disclosure as unknown,
     disclosureEnvelope: disclosureEnvelope as unknown,
     disclosureSignature: disclosureSignature as unknown,
+    scan: (disclosureManifest ? scan : null) as unknown,
   }
 }
 
@@ -200,6 +217,8 @@ describe('prepareInstall disclosure verification', () => {
   it.each([
     ['an extra field', (e: Record<string, unknown>) => ({ ...e, extra: 'x' })],
     ['a missing field', (e: Record<string, unknown>) => { const { signedAt: _s, ...rest } = e; return rest }],
+    ['the 8-field shape of contract v1 (no scanDigest)', (e: Record<string, unknown>) => { const { scanDigest: _s, ...rest } = e; return rest }],
+    ['a malformed scanDigest', (e: Record<string, unknown>) => ({ ...e, scanDigest: 'XYZ' })],
     ['an unsupported schemaVersion', (e: Record<string, unknown>) => ({ ...e, schemaVersion: 2 })],
     ['a malformed digest', (e: Record<string, unknown>) => ({ ...e, disclosureDigest: 'ABC' })],
   ])('refuses with DISCLOSURE_INVALID for a disclosure envelope with %s', async (_label, mutate) => {
@@ -221,6 +240,39 @@ describe('prepareInstall disclosure verification', () => {
     const { bytes, digest } = v2Pkg()
     const req = { ...request(digest), [field]: value }
     await expect(prepareInstall(req, deps(bytes).deps, TRUST))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_INVALID' })
+  })
+
+  it('accepts a scan report whose digest the disclosure envelope signs, and returns it', async () => {
+    const { bytes, digest } = v2Pkg()
+    const prepared = await prepareInstall(request(digest, manifestV2(), scanFor(digest)), deps(bytes).deps, TRUST)
+    expect(prepared.scan).toEqual(scanFor(digest))
+    expect(prepared.disclosure).toEqual(computeDisclosure(manifestV2() as never))
+  })
+
+  it('returns a null scan when the envelope carries scanDigest: null', async () => {
+    const { bytes, digest } = v2Pkg()
+    const prepared = await prepareInstall(request(digest), deps(bytes).deps, TRUST)
+    expect(prepared.scan).toBeNull()
+  })
+
+  it.each([
+    ['a tampered scan report', (req: ReturnType<typeof request>, digest: string) => ({
+      ...req, scan: { ...scanFor(digest), network: { hosts: [] } },
+    })],
+    ['a scan report without a signed scanDigest', (req: ReturnType<typeof request>, digest: string) => ({
+      ...request(digest), scan: scanFor(digest),
+    })],
+    ['a signed scanDigest without its scan report', (req: ReturnType<typeof request>) => ({ ...req, scan: null })],
+    ['a scan report of another artifact', (_req: ReturnType<typeof request>, digest: string) => {
+      const other = { ...scanFor(digest), artifactDigest: 'e'.repeat(64) }
+      const signed = request(digest, manifestV2(), other)
+      return signed
+    }],
+  ])('refuses with DISCLOSURE_INVALID for %s', async (_label, mutate) => {
+    const { bytes, digest } = v2Pkg()
+    const req = mutate(request(digest, manifestV2(), scanFor(digest)), digest)
+    await expect(prepareInstall(req as never, deps(bytes).deps, TRUST))
       .rejects.toMatchObject({ code: 'DISCLOSURE_INVALID' })
   })
 

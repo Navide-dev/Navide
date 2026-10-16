@@ -859,6 +859,7 @@ export function registerPluginIpc(
           channel: typeof v.version === 'string' && isPrereleaseVersion(v.version) ? 'pre-release' : 'stable',
           // Contract 3.4/3.5: shown before download, verified at prepareInstall.
           disclosure: jsonObjectOrNull(v.disclosure),
+          scan: jsonObjectOrNull(v.scan),
           registry: jsonObjectOrNull(v.registry),
         })),
         readme,
@@ -1202,6 +1203,7 @@ export function registerPluginIpc(
         disclosure?: unknown
         disclosure_envelope?: unknown
         disclosure_signature?: unknown
+        scan?: unknown
         registry?: unknown
       }>
     }
@@ -1241,6 +1243,7 @@ export function registerPluginIpc(
       disclosure: versionRow.disclosure,
       disclosureEnvelope: versionRow.disclosure_envelope,
       disclosureSignature: versionRow.disclosure_signature,
+      scan: versionRow.scan,
       provenance: 'official-registry',
     }, undefined, marketplace.trust)
     assertEngineCompatible(result.id, result.version, result.manifest, appVersion)
@@ -1273,6 +1276,7 @@ export function registerPluginIpc(
           !publisherTrust.isTrusted(result.publisherId, result.id),
         requiresRiskConfirmation: result.requiresConfirmation,
         disclosure: result.disclosure ?? null,
+        scan: result.scan ?? null,
         registry: result.registryFacts,
       }
     }

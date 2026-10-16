@@ -3,6 +3,7 @@ import { assertExactTrustFields, requireTrustObject } from './pluginTrustJson'
 import { assertPluginTargetCompatible, currentPluginHostTarget } from './pluginTarget'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { canonicalContractJson, type ManifestDisclosure } from '../../shared/pluginDisclosure'
+import { DISCLOSURE_ENVELOPE_FIELDS, type ScanReport } from '../../shared/pluginDisclosureScan'
 
 export type RegistryAuthority = 'official' | 'self-hosted'
 
@@ -31,6 +32,9 @@ export interface RegistryDisclosureEnvelope {
   keyId: string
   signedAt: string
   disclosureDigest: string
+  /** SHA-256 of the Registry's scan report (contract 3.8), or null when the
+   * version has none. */
+  scanDigest: string | null
 }
 
 export interface RegistrySignerTrust {
@@ -421,30 +425,34 @@ export interface VerifyRegistryDisclosureInput {
   disclosure: unknown
   disclosureEnvelope: unknown
   disclosureSignature: unknown
+  /** The version row's `scan`: bound by the envelope's `scanDigest`. */
+  scan: unknown
   /** The package envelope and trust metadata, both already verified by
    * verifyRegistryPackageTrust. */
   packageEnvelope: RegistryPackageEnvelope
   trustMetadata: RegistryTrustMetadata
 }
 
-const DISCLOSURE_ENVELOPE_FIELDS = [
-  'schemaVersion',
-  'artifactDigest',
-  'packageId',
-  'version',
-  'target',
-  'keyId',
-  'signedAt',
-  'disclosureDigest',
-] as const
+export interface VerifiedRegistryDisclosure {
+  disclosure: ManifestDisclosure
+  /** The signed scan report, or null when the envelope's scanDigest is null. */
+  scan: ScanReport | null
+}
+
+const HEX_DIGEST = /^[0-9a-f]{64}$/
+
+const sha256Canonical = (value: unknown): string =>
+  createHash('sha256').update(canonicalContractJson(value), 'utf8').digest('hex')
 
 /** Verify the disclosure envelope of an already verified package envelope
- * (contract 3.5, D-b step 2). Returns the signed disclosure, or null when the
- * version carries no disclosure envelope at all (published before D-a). The
- * caller still compares it with the disclosure recomputed from the package. */
+ * (contract 3.5, D-b step 2). Returns the signed disclosure and scan report,
+ * or null when the version carries no disclosure envelope at all (published
+ * before D-a). The caller still compares the disclosure with the one
+ * recomputed from the package; the scan cannot be recomputed and is trusted
+ * only through the Registry signature over its digest. */
 export function verifyRegistryDisclosure(
   input: VerifyRegistryDisclosureInput
-): ManifestDisclosure | null {
+): VerifiedRegistryDisclosure | null {
   const present = [input.disclosure, input.disclosureEnvelope, input.disclosureSignature].filter(
     (value) => value !== null && value !== undefined
   ).length
@@ -459,10 +467,14 @@ export function verifyRegistryDisclosure(
     assertExactTrustFields(value, 'registry disclosure envelope', DISCLOSURE_ENVELOPE_FIELDS)
     if (value.schemaVersion !== 1) throw new Error('registry disclosure envelope schemaVersion is unsupported')
     for (const field of DISCLOSURE_ENVELOPE_FIELDS.slice(1)) {
+      if (field === 'scanDigest' && value[field] === null) continue
       requiredString(value[field], `registry disclosure envelope.${field}`)
     }
-    if (!/^[0-9a-f]{64}$/.test(value.disclosureDigest as string)) {
+    if (!HEX_DIGEST.test(value.disclosureDigest as string)) {
       throw new Error('registry disclosure envelope.disclosureDigest is invalid')
+    }
+    if (value.scanDigest !== null && !HEX_DIGEST.test(value.scanDigest as string)) {
+      throw new Error('registry disclosure envelope.scanDigest is invalid')
     }
     envelope = value as unknown as RegistryDisclosureEnvelope
   } catch (error) {
@@ -493,5 +505,24 @@ export function verifyRegistryDisclosure(
   if (createHash('sha256').update(spelling, 'utf8').digest('hex') !== envelope.disclosureDigest) {
     throw invalid('does not match its signed digest')
   }
-  return input.disclosure as ManifestDisclosure
+  const scan = input.scan ?? null
+  if (envelope.scanDigest === null) {
+    if (scan !== null) throw invalid('carries a scan report its envelope does not sign')
+    return { disclosure: input.disclosure as ManifestDisclosure, scan: null }
+  }
+  if (typeof scan !== 'object' || scan === null || Array.isArray(scan)) {
+    throw invalid('envelope signs a scan report that is missing')
+  }
+  let scanSpelling: string
+  try {
+    scanSpelling = sha256Canonical(scan)
+  } catch {
+    throw invalid('scan report has no canonical spelling')
+  }
+  if (scanSpelling !== envelope.scanDigest) throw invalid('scan report does not match its signed digest')
+  const report = scan as Record<string, unknown>
+  if (report.artifactDigest !== envelope.artifactDigest || report.target !== envelope.target) {
+    throw invalid('scan report describes another artifact')
+  }
+  return { disclosure: input.disclosure as ManifestDisclosure, scan: scan as ScanReport }
 }
