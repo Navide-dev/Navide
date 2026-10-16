@@ -995,7 +995,11 @@ not grant access.
   sender to one topic arriving within 500 ms are joined into one message.
 - `stop`, `停止`, `/stop` or `esc` interrupts the pane (same as `cli_interrupt`)
   instead of being delivered. The reply says how many of this chat's messages
-  are still waiting.
+  are still waiting and carries a "▶️ 繼續" button.
+- An interrupted pane stays stopped, which holds every message to it, until
+  the user carries on. From the chat that is the next ordinary message (it
+  clears the stop first, as typing in the pane does), `/resume`, or the
+  "▶️ 繼續" button; commands such as `stop` and `/cancel` leave it stopped.
 - `/cancel` withdraws this chat's messages that have not gone into a pane yet,
   including lines still being joined, through the same withdrawal as
   `cli_cancel_message`. It never touches another chat's or an agent's

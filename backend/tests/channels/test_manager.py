@@ -17,6 +17,10 @@ from agent_team_backend.channels.manager import (
     BUSY_BUTTONS,
     CANCEL_CALLBACK,
     MSG_INTERRUPTED,
+    MSG_NOT_STOPPED,
+    MSG_RESUMED,
+    RESUME_BUTTONS,
+    RESUME_CALLBACK,
     MSG_NOT_BOUND,
     MSG_RECEIVED_BUSY,
     MSG_WORKING,
@@ -99,6 +103,7 @@ class FakeSeams:
         self.verdicts: dict[str, dict[str, Any]] = {}
         self.interrupts: list[str] = []
         self.cancels: list[str] = []
+        self.resumes: list[str] = []
         self.cancel_results: dict[str, str] = {}
         self.states: dict[str, dict[str, Any]] = {}
         self.aliases: dict[str, str] = {}
@@ -137,6 +142,11 @@ class FakeSeams:
         self.verdicts[msg_key] = {"status": status}
         return status
 
+    async def resume(self, pane_id: str) -> dict[str, Any]:
+        self.resumes.append(pane_id)
+        self.states[pane_id] = {"exists": True, "busy": False, "display_status": "idle"}
+        return {"ok": True}
+
     def pane_state(self, pane_id: str) -> dict[str, Any]:
         return self.states.get(pane_id, {"exists": True, "busy": False, "display_status": "idle"})
 
@@ -172,7 +182,7 @@ class FakeSeams:
                      read_secret=self.read_secret, write_secret=self.write_secret,
                      ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
                      agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info,
-                     cancel=self.cancel)
+                     cancel=self.cancel, resume=self.resume)
 
 
 def _said(env: "Env", needle: str) -> bool:
@@ -403,6 +413,52 @@ async def test_buttons_from_a_stranger_do_nothing(env: Env) -> None:
     for _, data in BUSY_BUTTONS:
         await env.inbound("", callback=data, sender="99")
     assert env.fake.cancels == [] and env.fake.interrupts == []
+
+
+# --- a stopped pane is not left deaf to the chat ------------------------------------
+
+STOPPED = {"exists": True, "busy": False, "display_status": "stopped"}
+
+
+async def test_a_chat_message_resumes_a_stopped_pane(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("the right one")
+    assert env.fake.resumes == ["pane-1"] and len(env.fake.delivered) == 1
+
+
+async def test_a_pane_that_is_not_stopped_is_not_resumed(env: Env) -> None:
+    await env.inbound("hello")
+    assert env.fake.resumes == [] and len(env.fake.delivered) == 1
+
+
+@pytest.mark.parametrize("word", ["stop", "/cancel"])
+async def test_commands_leave_a_stopped_pane_stopped(env: Env, word: str) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound(word)
+    assert env.fake.resumes == []
+
+
+async def test_stop_reply_offers_a_resume_button(env: Env) -> None:
+    await env.inbound("stop")
+    assert env.tg.buttons[MSG_INTERRUPTED] == RESUME_BUTTONS
+
+
+async def test_resume_button_resumes_without_delivering_anything(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("", callback=RESUME_CALLBACK)
+    assert env.fake.resumes == ["pane-1"] and env.fake.delivered == []
+    assert env.tg.texts()[-1] == MSG_RESUMED
+
+
+async def test_resume_button_on_a_pane_that_is_not_stopped_says_so(env: Env) -> None:
+    await env.inbound("", callback=RESUME_CALLBACK)
+    assert env.fake.resumes == [] and env.tg.texts()[-1] == MSG_NOT_STOPPED
+
+
+async def test_resume_button_from_a_stranger_does_nothing(env: Env) -> None:
+    env.fake.states["pane-1"] = dict(STOPPED)
+    await env.inbound("", callback=RESUME_CALLBACK, sender="99")
+    assert env.fake.resumes == []
 
 
 async def test_binding_routing_and_unbound_topic(env: Env) -> None:
