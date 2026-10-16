@@ -212,6 +212,11 @@ stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
+# Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
+# write-only, pruned to the contract's retention.
+from .plugins.audit_log import PluginAuditLog  # noqa: E402
+
+plugin_audit_log = PluginAuditLog(db=database)
 # Quota cycles per account: the usage poller files samples here; an open
 # cycle's token side is summed from the store's per-account slices.
 quota_ledger = QuotaLedger(db=database, totals_provider=tokens_store.account_window_totals)
