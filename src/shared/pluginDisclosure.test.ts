@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -39,7 +40,7 @@ describe('risk level', () => {
 })
 
 describe('canonicalContractJson', () => {
-  const canonical = load('canonical.json') as { values: Array<{ value: unknown; expected: string | null }>; disclosureCase: string; disclosureExpected: string }
+  const canonical = load('canonical.json') as { values: Array<{ value: unknown; expected: string | null }>; disclosureCase: string; disclosureExpected: string; disclosureDigestExpected: string }
 
   it.each(canonical.values)('spells %j', ({ value, expected }) => {
     if (expected === null) expect(() => canonicalContractJson(value)).toThrow(TypeError)
@@ -49,6 +50,12 @@ describe('canonicalContractJson', () => {
   it('pins the canonical spelling of a computed disclosure', () => {
     const { manifest } = byName.get(canonical.disclosureCase)!
     expect(canonicalContractJson(computeDisclosure(manifest as never))).toBe(canonical.disclosureExpected)
+  })
+
+  it('pins the disclosureDigest: lowercase hex SHA-256 of the canonical spelling (section 3.5)', () => {
+    const { manifest } = byName.get(canonical.disclosureCase)!
+    const spelling = canonicalContractJson(computeDisclosure(manifest as never))
+    expect(createHash('sha256').update(spelling, 'utf8').digest('hex')).toBe(canonical.disclosureDigestExpected)
   })
 })
 

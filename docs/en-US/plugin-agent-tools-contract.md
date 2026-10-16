@@ -307,18 +307,91 @@ recompute them. They travel beside it:
 ```
 
 `review.status` is `approved` | `pending` | `rejected` | `not-required`;
-`nativeCodeInspected` is `null` for a package without a backend;
 `scan.secretScan` is `clean` | `findings` | `not-run`. `registry` is `null`
 where no Registry is involved. This `DisclosureCard` is what every surface
 renders: list card (summary and level), detail page, consent dialog and the B2
 approval card.
 
-### 3.5 Trust check
+`nativeCodeInspected` is derived, never entered by hand:
 
-D-a computes the manifest disclosure at publish time and puts its canonical
-spelling inside the signed envelope. D-b recomputes it at `prepareInstall` from
-the manifest inside the downloaded package; if the two canonical strings
-differ, the install is refused. This is the only new install-blocking rule.
+| Value | When |
+|---|---|
+| `true` | the version has a `backend` and an administrator approved it in review |
+| `false` | the version has a `backend` and was published without review (auto-published) |
+| `null` | the version has no `backend` |
+
+A version published without review has no submission scan, so its
+`scan.secretScan` is `not-run` and its counts are `0`. `scan` carries counts,
+status and the name of a similar package only, never a secret value or file
+content.
+
+Surfaces state these values as facts (for example "自動發佈，未經人工審核" /
+"Published automatically, not reviewed by a person"), not as warnings. Red
+stays reserved for the three anomalies of D5.
+
+### 3.5 Trust check: the disclosure envelope
+
+The existing package envelope stays exactly as it is. Every App since v0.1.86
+accepts only its eight fields (`assertRegistryPackageEnvelopeShape` in
+`src/main/plugins/pluginRegistryTrust.ts`), so adding a field to it would make
+every released App refuse every newly published version. The disclosure is
+signed in a **separate disclosure envelope** instead:
+
+```json
+{
+  "schemaVersion": 1,
+  "artifactDigest": "<the package envelope's artifactDigest>",
+  "packageId": "nerdtechnic.devmap",
+  "version": "0.2.0",
+  "target": "universal",
+  "keyId": "registry-2026",
+  "signedAt": "2026-10-16T09:00:00Z",
+  "disclosureDigest": "<64 lowercase hex characters>"
+}
+```
+
+- `disclosureDigest` is the lowercase hex SHA-256 of the UTF-8 bytes of
+  `canonicalContractJson(disclosure)` (all ASCII, see 3.7);
+  `canonical.json` pins one value as `disclosureDigestExpected`.
+- `artifactDigest`, `packageId`, `version`, `target` and `keyId` equal the
+  package envelope of the same artifact. The disclosure envelope is signed by
+  the **same Registry signer key** and in the same way (detached Ed25519 over
+  the canonical JSON of the envelope), at the same moment the package envelope
+  is signed: at publish, or at review approval for a review-required
+  namespace. An unsigned (pending) version has neither envelope.
+- The Registry version API (`VersionInfo`) gains four fields beside the
+  unchanged `registry_envelope` / `registry_signature`:
+
+| Field | Value |
+|---|---|
+| `disclosure` | the `ManifestDisclosure` (3.1), or `null` |
+| `disclosure_envelope` | the object above, or `null` |
+| `disclosure_signature` | base64 detached signature over it, or `null` |
+| `registry` | the Registry facts of 3.4, or `null` |
+
+A version published before D-a has `null` in all three disclosure fields.
+`registry` does not depend on the manifest and may be present for any
+version. It is **not signed**: its values change after publish (a domain gets
+verified, a review completes), it is informational, and nothing in the App
+decides on it.
+
+**D-b** at `prepareInstall`, after the existing package-envelope verification:
+
+1. No disclosure envelope (all three fields `null`): install exactly as today.
+   No disclosure card is shown for that version; its absence is shown as
+   absence, never as a computed card.
+2. Otherwise all three must be present. The disclosure envelope must match the
+   verified package envelope on `artifactDigest`, `packageId`, `version`,
+   `target` and `keyId`, and its signature must verify against that same
+   signer; `sha256(canonicalContractJson(disclosure))` must equal
+   `disclosureDigest`.
+3. D-b recomputes the disclosure from the manifest inside the downloaded
+   package. If its canonical spelling differs from the signed one, the install
+   is refused with `DISCLOSURE_MISMATCH`. A malformed, unsigned, mismatched or
+   partly missing disclosure envelope is refused with `DISCLOSURE_INVALID`.
+
+These two codes are the only new install-blocking rules. An App that predates
+D-b ignores the new fields and verifies the package envelope as before.
 
 ### 3.6 Diff
 
@@ -593,6 +666,8 @@ by editing the fixture.
 | `timeoutMs` range | 1–120000 | the Host's existing backend-call bound; no new policy |
 | Numbers in `inputSchema` | safe integers only | both languages must spell the signed disclosure identically |
 | Publisher verification and review/scan | beside the disclosure (`registry`), not inside | the App cannot recompute them, and the trust check compares recomputable data only |
+| Where the disclosure is signed | a separate disclosure envelope, same signer key; the 8-field package envelope is unchanged | released Apps reject any extra package-envelope field; user decision 2026-10-17 (option B) |
+| `nativeCodeInspected` | `true` = backend + admin-approved, `false` = backend auto-published, `null` = no backend | the Registry records review per version but no separate inspection flag; user decision 2026-10-17 |
 | Shell executables | `allowlist` → the Host allowlist `gh, git, glab`; `full` → `null` (any) | a manifest declares only the mode |
 | `host` caller kind | gated by the DB4 switch, like `external` | it is not attributable to a pane either |
 | Daily rollup retention | 90 days | the 30-day "never used" signal needs more than 7 days of history |
