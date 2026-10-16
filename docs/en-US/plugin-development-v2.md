@@ -36,6 +36,41 @@
 > open third-party publishing or complete the later Skills migration,
 > marketplace lifecycle, or legacy-removal work.
 
+## Design principle: disclose, don't restrict
+
+This is the governing rule for every plugin, permission, capability and
+Marketplace decision. The product owner set it on 2026-10-04 and restated it on
+2026-10-17: "disclose every permission absolutely; don't restrict", and
+"disclosure means more than restriction". Effective disclosure is the core
+value of the Navide Marketplace.
+
+- **A plugin is a full program.** Each plugin has its own frontend and backend.
+  The platform does not cap what a plugin may do with framework limits,
+  capability allowlists or mutually exclusive permissions.
+- **Every power is declared, disclosed and consented to.** Anything a plugin
+  can do (files, shell commands, a native backend, network, tools offered to
+  agents) is declared in its manifest. The user sees it in plain language,
+  with its risk level, before installing, and grants it explicitly. A version
+  that adds a power asks again and shows exactly what changed.
+- **Disclosure must be effective, not merely present.** Show the disclosure
+  where the decision is made (the listing and detail page, not only a dialog
+  after "Install"). Show what a plugin actually did at run time, not only what
+  it declared. Interrupt the user only when something changes, so warnings do
+  not wear out.
+- **What the platform keeps is protection against deception, not
+  restriction.** Signatures and digests, the reserved `navide.` namespace,
+  tool names that cannot impersonate built-in tools, caller identity, and
+  labelling third-party output as external stay in force. They stop one party
+  from pretending to be another; they do not limit what an honest plugin can
+  do. Each such rule must state why it is protection rather than restriction.
+
+When a new design would add a restriction, turn it into a declaration plus
+disclosure instead, or bring it to the product owner as an explicit decision.
+Some existing rules in this spec predate the principle and are under review:
+a backend package may not also declare `shell`, and third-party methods are
+never callable by MCP agents. Until they change, they are documented as they
+stand.
+
 ## What is public
 
 Third-party plugins may depend only on these public package names:

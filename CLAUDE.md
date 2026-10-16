@@ -12,6 +12,7 @@ This file is a router — read the referenced file BEFORE doing the matching wor
 | Adding or changing an agent CLI integration | `docs/en-US/cli-extension-guide.md` |
 | Building or changing a plugin | `docs/en-US/plugin-development.md` |
 | Changing the plugin SDK, manifest schema or capability catalog | `docs/en-US/plugin-development-v2.md` (update it in the same PR) |
+| Any plugin permission, capability or Marketplace rule | "Design principle: disclose, don't restrict" in `docs/en-US/plugin-development-v2.md` |
 | Naming anything plugin-, extension- or marketplace-like in UI text or docs | `docs/en-US/glossary.md` |
 | Inter-CLI messaging: the bare-line protocol, handles, delivery rules | `docs/en-US/inter-cli-messaging.md` |
 | Editor, diff, or plan surfaces | `docs/en-US/editor-design.md` |
