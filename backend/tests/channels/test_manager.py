@@ -467,6 +467,72 @@ async def test_status_edits_stop_after_three_failures(env: Env) -> None:
     assert len(env.tg.edits) == 3
 
 
+def _slow_status(env: Env, delay: float, *, fail: bool = False) -> list[tuple[str, str, str]]:
+    """Make the status message's send hang ``delay`` s after its text reached the chat
+    (then fail, if ``fail``); returns one log of ("send"/"edit", id, text) in wire order."""
+    wire: list[tuple[str, str, str]] = []
+    send_text, edit_text = env.tg.send_text, env.tg.edit_text
+
+    async def send(loc, text, *, buttons=None):
+        ids = await send_text(loc, text, buttons=buttons)
+        wire.append(("send", ids[0], text))
+        if text == MSG_WORKING:
+            await asyncio.sleep(delay)
+            if fail:
+                raise RuntimeError("status send timed out")
+        return ids
+
+    async def edit(loc, message_id, text):
+        await edit_text(loc, message_id, text)
+        wire.append(("edit", message_id, text))
+
+    env.tg.send_text, env.tg.edit_text = send, edit
+    return wire
+
+
+async def test_a_turn_ending_while_the_status_send_is_in_flight_still_marks_it_done(env: Env) -> None:
+    wire = _slow_status(env, 0.05)
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "the answer")  # before the status message's id is back
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    status_id = next(mid for kind, mid, text in wire if kind == "send" and text == MSG_WORKING)
+    done = [i for i, (kind, mid, text) in enumerate(wire)
+            if kind == "edit" and mid == status_id and text.startswith("✅ 完成（")]
+    assert done, wire  # edited in place, as when the id was back in time
+    assert done[0] < wire.index(("send", wire[-1][1], reply)), wire  # still ahead of the reply
+    assert [t for t in env.tg.texts() if t.startswith("✅ 完成（")] == []  # no second status
+    assert env.tg.texts()[-1] == reply
+
+
+async def test_a_status_send_that_never_returns_its_id_gets_a_fresh_done(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "STATUS_SEND_WAIT_S", 0.2, raising=False)
+    wire = _slow_status(env, 1.5, fail=True)
+    submitted: dict[str, float] = {}
+    send = env.m.mirror.send
+
+    async def timed(loc, text, **kw):
+        submitted.setdefault(text, time.monotonic())
+        return await send(loc, text, **kw)
+
+    env.m.mirror.send = timed
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    ended = time.monotonic()
+    env.turn_complete("pane-1", "the answer")
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    # The reply waited out the bound, not the stuck send (which took 1.5 s on the wire).
+    assert submitted[reply] - ended < 1.0
+    texts = env.tg.texts()
+    fresh = [i for i, t in enumerate(texts) if t.startswith("✅ 完成（")]
+    assert len(fresh) == 1 and fresh[0] < texts.index(reply), wire
+    assert texts[-1] == reply
+
+
 async def test_delivery_failure_posts_notice(env: Env) -> None:
     await env.inbound("go")
     env.fake.verdicts["k1"] = {"status": "failed", "reason": "pane-closed"}
