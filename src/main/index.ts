@@ -179,10 +179,12 @@ import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
+import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
+  type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
   type NativeBackendConsentPrompt,
   type NativeBackendWritePrompt,
@@ -975,6 +977,8 @@ function verifyCurrentInstalledBackendTrust(
 function scheduleDeniedBackendRuntimeQuarantine(
   activation: Pick<BackendPluginLaunchSpec, 'pluginId' | 'packageVersion' | 'packageDir'>,
 ): void {
+  agentToolsHost?.mark(activation.pluginId, 'revoked')
+  void agentToolsHost?.refresh().catch(() => undefined)
   void frontendPluginManager
     .revokePackageVersion(activation.pluginId, activation.packageVersion)
     .catch((drainError: unknown) => {
@@ -1134,6 +1138,9 @@ frontendPluginManager.setBackendSpawnTrustVerifier((activation) => {
 // permission set, behind a global switch that is off by default.
 const nativeBackendRoot = join(app.getPath('userData'), 'plugin-native-backends')
 const nativeBackendStore = new NativeBackendStore(nativeBackendRoot)
+// Plan B1-b: the third-party agent-tool catalog. Created once the installed
+// activation catalog exists (below); until then nothing can change it.
+let agentToolsHost: PluginAgentToolsHost | null = null
 const thirdPartyBackends = new ThirdPartyBackendController({
   store: nativeBackendStore,
   dataRoot: join(nativeBackendRoot, 'data'),
@@ -1141,6 +1148,9 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
+  onConsentGranted: () => {
+    void agentToolsHost?.refresh().catch(() => undefined)
+  },
 })
 frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath) =>
   isThirdPartyLaunchSpec(activation)
@@ -1196,7 +1206,9 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Allow file changes',
-    message: `Allow ${prompt.name} to change files in this workspace?`,
+    message: prompt.agentTool
+      ? `An agent called "${prompt.agentTool.title}" (${prompt.agentTool.name}) from ${prompt.name}. Allow ${prompt.name} to change files in this workspace?`
+      : `Allow ${prompt.name} to change files in this workspace?`,
     detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Extensions.`,
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
@@ -1543,6 +1555,7 @@ const applyPluginActivationChange = ({
     (entry) => entry.pluginId !== pluginId
   )
   if (activation) approvedInstalledPluginActivations.push(activation)
+  void agentToolsHost?.refresh().catch(() => undefined)
   for (const win of mainWindows) {
     if (!win.isDestroyed() && !detachedWindowIds.has(win.id)) {
       win.webContents.send('plugins:contributionsChanged')
@@ -1603,16 +1616,42 @@ ipcMain.handle('git:retryV2', (event) => {
   return retryGitV2AfterRecovery()
 })
 
+const registeredThirdPartySpecs = (): ThirdPartyLaunchSpec[] =>
+  approvedInstalledPluginActivations.flatMap((activation) => {
+    if (!activation.backend || activation.pluginId === 'navide.plans') return []
+    const spec = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
+    return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
+  })
+agentToolsHost = new PluginAgentToolsHost({
+  switches: () => nativeBackendStore.agentToolSwitches(),
+  setSwitches: (change) => nativeBackendStore.setAgentToolSwitches(change),
+  listPackages: registeredThirdPartySpecs,
+  // Native backends turned off globally or for the package count as disabled.
+  isDisabled: (pluginId) =>
+    !nativeBackendStore.isEnabled() ||
+    frontendPluginManager.isPluginDisabled(pluginId) ||
+    nativeBackendStore.record(pluginId).disabled === true,
+  hasConsent: (spec) => thirdPartyBackends.hasConsent(spec),
+  consentGrantedAt: (pluginId) => nativeBackendStore.record(pluginId).consent?.grantedAt ?? null,
+  setAgentMethods: (pluginId, packageVersion, methods) =>
+    frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
+  confirmWrite: (spec, tool, workspaceRoot) =>
+    thirdPartyBackends.confirmAgentToolWrite(spec, workspaceRoot, tool),
+  send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
+})
+frontendPluginManager.setAgentToolsHost(agentToolsHost)
+const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
   (channel, listener) => ipcMain.handle(channel, listener),
   (event) => isTrustedPluginManagementSender(event, mainWindows),
   thirdPartyBackends,
-  () => approvedInstalledPluginActivations.flatMap((activation) => {
-    if (!activation.backend || activation.pluginId === 'navide.plans') return []
-    const spec = frontendPluginManager.getBackendActivation(activation.pluginId, activation.packageVersion)
-    return spec && isThirdPartyLaunchSpec(spec) ? [spec] : []
-  }),
+  registeredThirdPartySpecs,
   () => nativeBackendStore.isEnabled(),
+  {
+    switches: () => agentToolsControls.switches(),
+    setSwitches: (change) => agentToolsControls.setSwitches(change),
+    refresh: () => agentToolsControls.refresh(),
+  },
 )
 
 const pluginTrustRefresh = registerPluginIpc(
@@ -1843,11 +1882,13 @@ async function refreshInstalledPluginTrust(): Promise<void> {
       )
       for (const decision of decisions) {
         if (decision.action === 'quarantine') {
+          agentToolsHost?.mark(decision.pluginId, 'quarantined')
           console.warn(
             `[main] installed plugin quarantined after trust refresh: ${decision.pluginId}: ${decision.reason ?? 'trust verification failed'}`
           )
         }
       }
+      void agentToolsHost?.refresh().catch(() => undefined)
     }
   } catch (error) {
     // The refresh controller re-evaluates cached trust before surfacing a

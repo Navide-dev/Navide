@@ -42,6 +42,8 @@ import { isManifestV2, parseInstalledManifest } from './pluginManifest'
 import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
+import { validateAgentTools } from '../../shared/pluginAgentTools'
+import { computeDisclosure, type DisclosureManifestInput } from '../../shared/pluginDisclosure'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -53,7 +55,10 @@ import { canonicalExistingDirectory } from './workspacePathPolicy'
  * platform sandbox is available, and the crash breaker is closed. The child
  * then runs under the OS sandbox and the resource watchdog, and reaches the
  * Host only through a filesystem bridge limited to its bound workspace.
- * MCP agents never reach third-party methods (no `agentMethods`).
+ * MCP agents reach a third-party method only through a consented agent tool
+ * (`backend.agentTools`), and only while the "let agents call tools from
+ * third-party Navide plugins" switch is on: `agentMethods` stays empty here
+ * and is set by the Host's agent-tool catalog (pluginAgentToolsHost.ts).
  */
 
 export type ThirdPartyBackendInfo = NonNullable<BackendPluginLaunchSpec['thirdParty']>
@@ -71,6 +76,26 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
   return manifest
 }
 
+/**
+ * The agent tools a manifest declares, with their disclosure `permissions`,
+ * or null when it declares none. `backend.agentTools` is read defensively
+ * from the parsed manifest: a package whose declaration fails any contract
+ * rule (validateAgentTools) contributes no tools at all.
+ */
+export function declaredAgentTools(manifest: PluginManifestV2): Pick<ThirdPartyBackendInfo, 'agentTools' | 'permissions'> | null {
+  const declared = (manifest.backend as { agentTools?: unknown } | undefined)?.agentTools
+  if (declared === undefined) return null
+  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend })
+  if (errors.length > 0 || !Array.isArray(declared) || declared.length === 0) {
+    if (errors.length > 0) {
+      console.warn(`[plugin-backend] ${manifest.id} declares invalid agent tools: ${errors.map((error) => error.code).join(', ')}`)
+    }
+    return null
+  }
+  const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
+  return { agentTools: disclosure.agentTools, permissions: disclosure.permissions }
+}
+
 /** Project one installed package's backend into a sandboxed launch spec. The
  * method/event allowlists come from the manifest; the only bridge port is the
  * workspace filesystem, and only when the package declares `fs`. A backend
@@ -82,6 +107,7 @@ export function thirdPartyBackendLaunchSpec(
   if (!activation.backend || !manifest.backend || manifest.id !== activation.pluginId) return null
   if (!manifest.backend.methods?.length) return null
   const system = [...(manifest.permissions.system ?? [])]
+  const agentTools = declaredAgentTools(manifest)
   return {
     pluginId: activation.pluginId,
     packageVersion: activation.packageVersion,
@@ -97,8 +123,23 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
+      ...(agentTools ?? {}),
     },
   }
+}
+
+/**
+ * The methods an MCP agent may reach on one third-party backend: the methods
+ * of its declared agent tools, and only while the master switch is on and the
+ * user's consent matches this exact package. Anything else yields `[]`, which
+ * is what every third-party backend has on main.
+ */
+export function consentedAgentMethods(
+  spec: ThirdPartyLaunchSpec,
+  gates: { masterSwitch: boolean; consentMatches: boolean },
+): string[] {
+  if (!gates.masterSwitch || !gates.consentMatches) return []
+  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
 }
 
 /** Canonical permission set a consent is bound to. */
@@ -204,6 +245,8 @@ export interface NativeBackendWritePrompt {
   pluginId: string
   name: string
   workspacePath: string
+  /** Set when an agent's first write-risk tool call asks (DB3). */
+  agentTool?: { name: string; title: string }
 }
 
 export interface ThirdPartyAdmission {
@@ -235,6 +278,8 @@ export interface ThirdPartyBackendControllerOptions {
     dataDir: string,
     onViolation: (violation: ResourceViolation) => void,
   ) => BackendResourceWatch
+  /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
+  onConsentGranted?: (pluginId: string) => void
   /** Digest the consent binds to (default: packageContentDigest). */
   digestBackend?: (spec: ThirdPartyLaunchSpec) => Promise<string>
   /** Kill what is left of one sandbox after its child exits (default: killSandboxProcessesSync). */
@@ -345,6 +390,28 @@ export class ThirdPartyBackendController {
     return consent?.binarySha256 === digest && consent.permissionsKey === backendPermissionsKey(spec)
   }
 
+  /** True when the user's consent covers this exact package content and
+   * permission set (never prompts). Unreadable content reads as "no". */
+  async hasConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    try {
+      return this.consentMatches(spec, await this.digestBackend(spec))
+    } catch {
+      return false
+    }
+  }
+
+  /** DB3: ask once per (package, workspace) before an agent's first write-risk
+   * tool call there. It is the same per-workspace file-change grant the
+   * filesystem bridge enforces, so an answer covers both; a "no" is kept for
+   * the session. */
+  confirmAgentToolWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+  ): Promise<boolean> {
+    return this.ensureWorkspaceWrite(spec, workspacePath, tool)
+  }
+
   /** Decide whether the child may start; asks for consent when `prompt`
    * allows it. The global switch is never turned on from here: off means off. */
   async admit(
@@ -450,6 +517,7 @@ export class ThirdPartyBackendController {
         permissionsKey: backendPermissionsKey(spec),
         packageVersion: spec.packageVersion,
       })
+      this.options.onConsentGranted?.(spec.pluginId)
     }
   }
 
@@ -494,7 +562,11 @@ export class ThirdPartyBackendController {
     })
   }
 
-  private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {
+  private async ensureWorkspaceWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    agentTool?: { name: string; title: string },
+  ): Promise<boolean> {
     if (this.store.allowsWorkspaceWrite(spec.pluginId, workspacePath)) return true
     const identity = `${spec.pluginId}\n${workspacePath}`
     if (this.declinedWrite.has(identity) || !this.options.promptWorkspaceWrite) return false
@@ -504,6 +576,7 @@ export class ThirdPartyBackendController {
         pluginId: spec.pluginId,
         name: spec.thirdParty.name,
         workspacePath,
+        ...(agentTool ? { agentTool: { name: agentTool.name, title: agentTool.title } } : {}),
       }).catch(() => false)
       this.pendingPrompts.set(`write\n${identity}`, pending)
       void pending.finally(() => this.pendingPrompts.delete(`write\n${identity}`))

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -386,6 +386,9 @@ import type { JsonValue } from '../../../packages/plugin-contracts/src/index'
 import type { FilePickerInvocation } from '../filePicker'
 import { NativeBackendStore } from './pluginNativeBackendStore'
 import { ThirdPartyBackendController, thirdPartyBackendLaunchSpec } from './pluginThirdPartyBackends'
+import { readInstalledManifestV2, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
+import { PluginAgentToolsHost } from './pluginAgentToolsHost'
+import { HOST_DEFAULT_EXECUTION_POLICY, FAIL_CLOSED_EXECUTION_POLICY } from './executionPolicy'
 
 interface FakeWebContentsLike {
   id: number
@@ -15663,6 +15666,373 @@ describe('FrontendPluginManager — ending a closed window\'s AI panels', () => 
         expect.stringContaining('terminal.kill_surface'), expect.any(Error)))
     } finally {
       warn.mockRestore()
+    }
+  })
+})
+
+// Plan B1-b: the generalized Host route for third-party agent tools.
+describe('third-party agent tool calls (contract 4.2)', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+  }
+  const settle = async (): Promise<void> => {
+    await flush()
+    await new Promise((done) => setTimeout(done, 0))
+    await flush()
+  }
+
+  interface Fixture {
+    mgr: FrontendPluginManager
+    socket: InstanceType<typeof wsMock.FakeNodeWebSocket>
+    root: string
+    workspace: string
+    spec: () => ThirdPartyLaunchSpec
+    switches: { enabled: boolean; externalCallers: boolean }
+    disabled: Set<string>
+    consented: { value: boolean }
+    confirmWrite: ReturnType<typeof vi.fn>
+    gate: PluginAgentToolsHost
+    bind: MockInstance<PluginBackendHost['bindWorkspace']>
+    call: MockInstance<PluginBackendHost['call']>
+    policy: { value: ExecutionPolicySnapshot }
+    grant: { value: { packageVersion: string; system: Array<'fs'>; storage: boolean } | null }
+    cleanup: () => Promise<void>
+  }
+
+  function sentOf(socket: InstanceType<typeof wsMock.FakeNodeWebSocket>): SentMessage[] {
+    return socket.sent.map((raw) => JSON.parse(raw) as SentMessage)
+  }
+
+  async function fixture(options: { enabled?: boolean; register?: boolean } = {}): Promise<Fixture> {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tools-')))
+    const workspace = join(root, 'workspace')
+    const packageDir = join(root, 'package')
+    mkdirSync(workspace)
+    mkdirSync(join(packageDir, 'backend'), { recursive: true })
+    writeFileSync(join(packageDir, 'backend', 'devmap'), 'binary', { mode: 0o700 })
+    writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify({
+      schemaVersion: 2, apiVersion: '^1.0.0', id: 'nerdtechnic.devmap', name: 'Dev map', version: '0.2.0', publisher: 'nerdtechnic',
+      permissions: { system: ['fs'] },
+      marketplace: { description: 'Dev map.', license: 'MIT' },
+      backend: { entry: 'backend/devmap', protocolVersion: 1, activation: 'startup', methods: ['devmap.read', 'devmap.setStatus'] },
+    }))
+    const parsed = readInstalledManifestV2(packageDir)
+    const agentTools = [
+      { name: 'devmap_read', method: 'devmap.read', risk: 'read', title: 'Read dev map', description: 'Read the dev map.', inputSchema: { type: 'object', properties: {} } },
+      { name: 'devmap_set_status', method: 'devmap.setStatus', risk: 'write', title: 'Set block status', description: 'Set a block status.', inputSchema: { type: 'object', required: ['block_id'], properties: { block_id: { type: 'string' } } } },
+    ]
+    const registered = thirdPartyBackendLaunchSpec(
+      { pluginId: 'nerdtechnic.devmap', packageVersion: '0.2.0', packageDir, views: [], backend: { entryFile: join(packageDir, 'backend', 'devmap'), protocolVersion: 1, activation: 'startup' } },
+      { ...parsed, backend: { ...parsed.backend!, agentTools } as never },
+    )!
+    const mgr = new FrontendPluginManager()
+    const grant: Fixture['grant'] = { value: { packageVersion: '0.2.0', system: ['fs'], storage: true } }
+    mgr.setCapabilityGrantResolver(() => grant.value)
+    const policy: Fixture['policy'] = { value: { policy: HOST_DEFAULT_EXECUTION_POLICY, revision: 1, state: 'default' } }
+    mgr.setExecutionPolicyResolver(() => policy.value)
+    mgr.registerDescriptor({
+      id: 'nerdtechnic.devmap', packageVersion: '0.2.0', packageDir, requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }), devUrl: '', entryFile: join(packageDir, 'index.html'), views: [],
+    }, { builtin: true })
+    mgr.registerBackendActivation(registered)
+    const spec = () => mgr.getBackendActivation('nerdtechnic.devmap', '0.2.0') as ThirdPartyLaunchSpec
+    const switches = { enabled: options.enabled ?? true, externalCallers: false }
+    const disabled = new Set<string>()
+    const consented = { value: true }
+    const confirmWrite = vi.fn(async () => true)
+    const gate = new PluginAgentToolsHost({
+      switches: () => ({ ...switches }),
+      setSwitches: (change) => Object.assign(switches, change),
+      listPackages: () => (spec() ? [spec()] : []),
+      isDisabled: (pluginId) => disabled.has(pluginId),
+      hasConsent: async () => consented.value,
+      consentGrantedAt: () => '2026-10-01T00:00:00.000Z',
+      setAgentMethods: (pluginId, version, methods) => mgr.setThirdPartyAgentMethods(pluginId, version, methods),
+      confirmWrite,
+      send: (payload) => mgr.sendAgentToolsSync(payload),
+    })
+    mgr.setAgentToolsHost(gate)
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace').mockResolvedValue('headless-1')
+    const isBound = vi.spyOn(PluginBackendHost.prototype, 'isBound').mockReturnValue(true)
+    const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockResolvedValue({ status: 'done' } as never)
+    // A running view is what opens the backend connection.
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { id: 'acme.agent-tools-anchor', requires: ['terminal'], devUrl: '', entryFile: '/plugins/acme.agent-tools-anchor/index.html' },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl(`ws://agent-tools-${Math.random()}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    if (options.register !== false) {
+      const registration = sentOf(socket).find((message) => message.type === 'host.register')!
+      socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+      await settle()
+    }
+    return {
+      mgr, socket, root, workspace, spec, switches, disabled, consented, confirmWrite, gate, bind, call, policy, grant,
+      cleanup: async () => {
+        bind.mockRestore()
+        isBound.mockRestore()
+        call.mockRestore()
+        await mgr.closeBackendPlugins()
+        rmSync(root, { recursive: true, force: true })
+      },
+    }
+  }
+
+  function toolRequest(f: Fixture, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      request_id: 'mcp:1',
+      operation: 'agentTool',
+      target: { plugin_id: 'nerdtechnic.devmap', workspace_path: f.workspace },
+      tool: { name: 'devmap_set_status', plugin_version: '0.2.0', sync_revision: 1 },
+      caller: { kind: 'pane', paneId: 'p-41', workspace: f.workspace },
+      payload: { arguments: { block_id: 'b1', status: 'done' } },
+      ...overrides,
+    }
+  }
+
+  async function ask(f: Fixture, request: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const before = sentOf(f.socket).filter((message) => message.type === 'agent.capability.result').length
+    f.socket.receive({ type: 'agent.capability.request', payload: request })
+    for (let i = 0; i < 20; i++) {
+      await settle()
+      const results = sentOf(f.socket).filter((message) => message.type === 'agent.capability.result')
+      if (results.length > before) {
+        expect(results.at(-1)!.payload.request_id).toBe(request.request_id)
+        return results.at(-1)!.payload.response as Record<string, unknown>
+      }
+    }
+    throw new Error('no agent.capability.result')
+  }
+
+  it('golden: with the master switch off nothing is pushed, agentMethods stay empty, and calls are refused', async () => {
+    const f = await fixture({ enabled: false })
+    try {
+      expect(sentOf(f.socket).some((message) => message.type === 'plugins.agentTools.sync')).toBe(false)
+      expect(f.spec().agentMethods).toEqual([])
+      await expect(ask(f, toolRequest(f))).resolves.toEqual({
+        ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'master-switch-off', error: expect.any(String),
+      })
+      expect(f.bind).not.toHaveBeenCalled()
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('pushes the catalog when the Host session registers and serves a consented tool with the pane identity', async () => {
+    const f = await fixture()
+    try {
+      const sync = sentOf(f.socket).filter((message) => message.type === 'plugins.agentTools.sync')
+      expect(sync).toHaveLength(1)
+      expect(sync[0].payload).toMatchObject({ revision: 1, enabled: true, externalCallers: false })
+      expect((sync[0].payload.tools as Array<{ name: string; state: string }>).map((entry) => [entry.name, entry.state]))
+        .toEqual([['devmap_read', 'available'], ['devmap_set_status', 'available']])
+      expect(f.spec().agentMethods).toEqual(['devmap.read', 'devmap.setStatus'])
+
+      const response = await ask(f, toolRequest(f))
+      expect(response).toEqual({
+        ok: true, result: { status: 'done' }, meta: { durationMs: expect.any(Number), resultBytes: 17, crossWorkspace: false },
+      })
+      expect(f.confirmWrite).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'nerdtechnic.devmap' }), expect.objectContaining({ name: 'devmap_set_status' }), f.workspace)
+      expect(f.bind).toHaveBeenCalledWith(
+        expect.objectContaining({ pluginId: 'nerdtechnic.devmap', packageVersion: '0.2.0', initiator: { kind: 'user', id: 'host-user' } }),
+        expect.any(String),
+        f.workspace,
+      )
+      const [instanceId, method, args, callOptions] = f.call.mock.calls[0] as unknown as [string, string, unknown, { initiator: unknown; timeoutMs: number }]
+      expect([instanceId, method, args]).toEqual(['headless-1', 'devmap.setStatus', { block_id: 'b1', status: 'done' }])
+      expect(callOptions.timeoutMs).toBe(30_000)
+      expect(callOptions.initiator).toEqual({
+        kind: 'agent', source: 'mcp', id: expect.any(String),
+        caller: { kind: 'pane', paneId: 'p-41', workspace: f.workspace, verifiedTo: 'pane' },
+      })
+      // One headless binding per package version and workspace.
+      await ask(f, toolRequest(f, { request_id: 'mcp:2', tool: { name: 'devmap_read', plugin_version: '0.2.0', sync_revision: 1 }, payload: { arguments: {} } }))
+      expect(f.bind).toHaveBeenCalledTimes(1)
+      expect(f.confirmWrite).toHaveBeenCalledTimes(1)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('marks a call into another workspace and gates external callers behind DB4', async () => {
+    const f = await fixture()
+    try {
+      const other = join(f.root, 'other')
+      mkdirSync(other)
+      const cross = await ask(f, toolRequest(f, { caller: { kind: 'pane', paneId: 'p-41', workspace: other } }))
+      expect(cross).toMatchObject({ ok: true, meta: { crossWorkspace: true } })
+      const external = { kind: 'external', paneId: null, workspace: null }
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:ext', caller: external })))
+        .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'external-callers-off' })
+      await f.gate.setSwitches({ externalCallers: true })
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:ext2', caller: external }))).resolves.toMatchObject({ ok: true })
+      const last = f.call.mock.calls.at(-1) as unknown as [string, string, unknown, { initiator: { caller: unknown } }]
+      expect(last[3].initiator.caller).toEqual({ kind: 'external', paneId: null, workspace: null, verifiedTo: 'caller-kind' })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('refuses before binding: malformed, unknown tool, no grant, declined first write, policy, missing argument', async () => {
+    const f = await fixture()
+    try {
+      await expect(ask(f, toolRequest(f, { caller: { kind: 'pane', paneId: 'p', workspace: f.workspace, extra: 1 } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'BAD_REQUEST' })
+      await expect(ask(f, toolRequest(f, { caller: { kind: 'external', paneId: 'spoofed', workspace: null } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'BAD_REQUEST' })
+      await expect(ask(f, toolRequest(f, { tool: { name: 'devmap_nuke', plugin_version: '0.2.0', sync_revision: 1 } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'tool-not-consented' })
+      await expect(ask(f, toolRequest(f, { payload: { arguments: {} } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_INVALID_ARGUMENTS' })
+      await expect(ask(f, toolRequest(f, { target: { plugin_id: 'nerdtechnic.devmap', workspace_path: join(f.root, 'missing') } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      f.grant.value = null
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
+      f.confirmWrite.mockResolvedValueOnce(false)
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_WRITE_DECLINED' })
+      f.policy.value = { policy: FAIL_CLOSED_EXECUTION_POLICY, revision: 2, state: 'corrupt' }
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'EXECUTION_POLICY_DENIED' })
+      f.consented.value = false
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'consent-required' })
+      expect(f.bind).not.toHaveBeenCalled()
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('race: a disable while the first-write dialog is open wins over the earlier checks', async () => {
+    const f = await fixture()
+    try {
+      f.confirmWrite.mockImplementationOnce(async () => {
+        f.disabled.add('nerdtechnic.devmap')
+        return true
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-disabled',
+      })
+      expect(f.bind).not.toHaveBeenCalled()
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('race: a quarantine while the headless backend binds stops the call before dispatch', async () => {
+    const f = await fixture()
+    try {
+      f.bind.mockImplementationOnce(async () => {
+        f.gate.mark('nerdtechnic.devmap', 'quarantined')
+        return 'headless-1'
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-quarantined',
+      })
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('race: a removal while the call runs answers plugin-stopping, and the closed tool stays closed', async () => {
+    const f = await fixture()
+    try {
+      f.call.mockImplementationOnce(async () => {
+        // revokePackageVersion drains the child under the call.
+        throw new BackendPluginError('PLUGIN_STOPPING')
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-stopping',
+      })
+      // The switch turned off afterwards: the methods close and a cached CLI
+      // catalog cannot reach the tool any more.
+      await f.gate.setSwitches({ enabled: false })
+      expect(f.spec().agentMethods).toEqual([])
+      const sync = sentOf(f.socket).filter((message) => message.type === 'plugins.agentTools.sync')
+      expect(sync.at(-1)!.payload).toMatchObject({ enabled: false, tools: [] })
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:after' }))).resolves.toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'master-switch-off',
+      })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('maps backend failures to the contract codes', async () => {
+    const f = await fixture()
+    try {
+      f.call.mockRejectedValueOnce(new BackendPluginError('TIMEOUT'))
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_TIMEOUT' })
+      f.call.mockRejectedValueOnce(new BackendPluginError('PLUGIN_ERROR', 'boom', { pluginCode: 'DEVMAP_LOCKED' }))
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:2' }))).resolves.toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_FAILED', plugin_error: 'DEVMAP_LOCKED',
+      })
+      f.call.mockResolvedValueOnce('x'.repeat(1_048_577) as never)
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:3' }))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_RESULT_TOO_LARGE' })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('lets only the headless agent-tool binding, with an agent initiator, reach the workspace filesystem', async () => {
+    const f = await fixture()
+    try {
+      await ask(f, toolRequest(f))
+      const internals = f.mgr as unknown as {
+        thirdPartyFilesystemGrantAllows: (payload: Record<string, unknown>, context: PlansBridgeContext) => boolean
+      }
+      const context = (instanceId: string, initiator: unknown): PlansBridgeContext => ({
+        runtime: {
+          pluginId: 'nerdtechnic.devmap', packageVersion: '0.2.0', workspaceId: f.mgr.workspaceIdForPath(f.workspace),
+          instanceId, contributionKey: 'nerdtechnic.devmap.agent-tools', hostWindowId: null, initiator: initiator as never,
+        },
+        workspacePath: f.workspace,
+        authorizedPlanRoot: f.workspace,
+        requestId: 'bridge:1',
+        signal: new AbortController().signal,
+        emit: () => undefined,
+      } as PlansBridgeContext)
+      const agent = { kind: 'agent', source: 'mcp', id: 'a' }
+      const payload = { rel_path: 'a.txt', workspace_path: f.workspace }
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(true)
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('other-instance', agent))).toBe(false)
+      expect(internals.thirdPartyFilesystemGrantAllows({ ...payload, workspace_path: f.root }, context('headless-1', agent))).toBe(false)
+      f.grant.value = null
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
+      f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
+      await f.gate.setSwitches({ enabled: false })
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('keeps the Plans workspace route on its own path', async () => {
+    const f = await fixture()
+    const plansRoute = vi.spyOn(f.mgr, 'executeAgentBackendCallForWorkspace')
+    try {
+      f.socket.receive({
+        type: 'agent.capability.request',
+        payload: {
+          request_id: 'plans-1',
+          operation: 'backend',
+          target: { plugin_id: 'navide.plans', workspace_path: f.workspace },
+          payload: { reqId: 'r', name: 'plans.list', args: {} },
+        },
+      })
+      await settle()
+      expect(plansRoute).toHaveBeenCalledWith('navide.plans', f.workspace, { reqId: 'r', name: 'plans.list', args: {} })
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      plansRoute.mockRestore()
+      await f.cleanup()
     }
   })
 })

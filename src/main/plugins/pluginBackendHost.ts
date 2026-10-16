@@ -321,6 +321,37 @@ export class PluginBackendHost {
     this.backends.set(key, { activation: normalizedActivation })
   }
 
+  /**
+   * Replace the agent-callable method set of one registered third-party
+   * package version, for new binds and for views already bound. The set must
+   * be a subset of the package's approved methods. Plans and other
+   * first-party activations keep the allowlist they were registered with.
+   * Returns false when no such third-party activation is registered.
+   */
+  setAgentMethods(pluginId: string, packageVersion: string, methods: readonly string[]): boolean {
+    const backend = this.backends.get(backendKey(pluginId, packageVersion))
+    if (!backend || backend.activation.thirdParty === undefined) return false
+    if (!methods.every((method) => backend.activation.approvedMethods.includes(method))) {
+      throw new BackendPluginError('INVALID_ACTIVATION', 'Agent methods must be approved backend methods.')
+    }
+    const next = [...new Set(methods)].sort()
+    const current = backend.activation.agentMethods ?? []
+    if (current.length === next.length && current.every((method, index) => method === next[index])) return true
+    const previous = backend.activation
+    const activation: BackendPluginLaunchSpec = { ...previous, agentMethods: Object.freeze(next) }
+    backend.activation = activation
+    for (const view of this.views.values()) {
+      if (view.activation === previous) view.activation = activation
+    }
+    return true
+  }
+
+  /** True while `instanceId` names a bound (or binding) view. */
+  isBound(instanceId: string): boolean {
+    const view = this.views.get(instanceId)
+    return view !== undefined && !view.closing
+  }
+
   hasActivation(pluginId: string, packageVersion: string): boolean {
     return this.backends.has(backendKey(pluginId, packageVersion))
   }

@@ -370,6 +370,30 @@ describe('B0 capability and Backend Wire contract gate', () => {
     )
   })
 
+  it('answers a call whose agent initiator carries the additive agent-tool caller', () => {
+    const raw = readFileSync(join(WIRE_FIXTURES, 'valid', 'call-agent-tool-caller.json'), 'utf8').trimEnd()
+    const result = spawnSync(process.execPath, [BACKEND_WIRE_CHILD], {
+      encoding: 'utf8',
+      input: `${raw}\n`,
+      maxBuffer: 1_000_000,
+      timeout: 5_000,
+    })
+
+    expect(result.status).toBe(0)
+    const response = JSON.parse(result.stdout.trim()) as { id: string; error?: unknown; result?: { value?: { runtime?: unknown } } }
+    expect(response.error).toBeUndefined()
+    expect(response.id).toBe('req-3')
+    expect(response.result?.value?.runtime).toEqual(
+      (JSON.parse(raw) as { params: { runtime: unknown } }).params.runtime
+    )
+    const schema = JSON.parse(
+      readFileSync(join(CONTRACT_FIXTURES, 'backend-wire-v1.schema.json'), 'utf8')
+    ) as { $defs: { initiator: { oneOf: Array<{ required: string[]; properties: Record<string, unknown> }> } } }
+    const agent = schema.$defs.initiator.oneOf[1]
+    expect(agent.properties.caller).toBeDefined()
+    expect(agent.required).not.toContain('caller')
+  })
+
   it.each(rawWireFixtures)('rejects raw Backend Wire input %s at the Host framing seam', (name) => {
     const raw = readFileSync(join(WIRE_FIXTURES, 'invalid-raw', name), 'utf8')
     expect(() => parseBackendWireFrame(raw)).toThrow(

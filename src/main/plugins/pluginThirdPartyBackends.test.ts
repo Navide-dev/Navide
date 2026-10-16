@@ -11,6 +11,8 @@ import { isWindows } from '../../shared/osplat'
 import {
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
+  consentedAgentMethods,
+  readInstalledManifestV2,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -602,5 +604,139 @@ describe('NativeBackendStore', () => {
     writeFileSync(file, JSON.stringify({ schemaVersion: 1, enabled: true, plugins: { x: { consent: { binarySha256: 'short' } } } }))
     expect(new NativeBackendStore(join(root, 'store')).record('x').consent).toBeUndefined()
     expect(readFileSync(file, 'utf8')).toContain('short')
+  })
+})
+
+describe('agent tools on the launch spec (plan B1-b)', () => {
+  const devmapTools = [
+    {
+      name: 'indexer_search', method: 'files.search', risk: 'read', title: 'Search', description: 'Search indexed files.',
+      inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' } } },
+    },
+  ]
+  // B1-a teaches the manifest parser `backend.agentTools`; until then the
+  // field is read defensively from the parsed manifest, as here.
+  function withTools(agentTools: unknown, id = 'acme.indexer') {
+    writePackage({ system: ['fs'] })
+    const parsed = readInstalledManifestV2(packageDir)
+    return thirdPartyBackendLaunchSpec(
+      {
+        pluginId: id, packageVersion: '1.0.0', packageDir, views: [],
+        backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' },
+      },
+      { ...parsed, id, backend: { ...parsed.backend!, agentTools } as never },
+    )!
+  }
+
+  it('is unchanged for a package without agent tools (golden: same spec as main)', () => {
+    const spec = writePackage({ system: ['fs'] })
+    expect(spec.agentMethods).toEqual([])
+    expect(Object.keys(spec.thirdParty).sort()).toEqual(['name', 'system'])
+    expect(backendPermissionsKey(spec)).toBe(JSON.stringify({
+      system: ['fs'], shell: null, methods: ['files.search'], events: ['files.indexProgress'],
+    }))
+  })
+
+  it('projects valid declarations with defaults and the disclosure permissions, but no agent methods', () => {
+    const spec = withTools(devmapTools)
+    expect(spec.agentMethods).toEqual([])
+    expect(spec.thirdParty.agentTools).toEqual([{ ...devmapTools[0], timeoutMs: 30_000 }])
+    expect(spec.thirdParty.permissions).toEqual({ system: ['fs'], shell: null, scopes: null })
+  })
+
+  it('drops every tool of a package whose declaration breaks a contract rule', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      // A bad name, an undeclared method, a reserved prefix, or nothing at all.
+      expect(withTools([{ ...devmapTools[0], name: 'indexer_search\n' }]).thirdParty.agentTools).toBeUndefined()
+      expect(withTools([{ ...devmapTools[0], method: 'files.delete' }]).thirdParty.agentTools).toBeUndefined()
+      expect(withTools(devmapTools, 'acme.cli').thirdParty.agentTools).toBeUndefined()
+      expect(withTools([]).thirdParty.agentTools).toBeUndefined()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('opens agent methods only with the master switch on and a matching consent', () => {
+    const spec = withTools(devmapTools)
+    expect(consentedAgentMethods(spec, { masterSwitch: false, consentMatches: true })).toEqual([])
+    expect(consentedAgentMethods(spec, { masterSwitch: true, consentMatches: false })).toEqual([])
+    expect(consentedAgentMethods(spec, { masterSwitch: true, consentMatches: true })).toEqual(['files.search'])
+    expect(consentedAgentMethods(writePackage({ system: ['fs'] }), { masterSwitch: true, consentMatches: true })).toEqual([])
+  })
+})
+
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confirmation', () => {
+  it('reports consent for this exact package without prompting', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const { instance } = controller({ promptConsent: allow })
+    await expect(instance.hasConsent(spec)).resolves.toBe(false)
+    await instance.allow(spec)
+    await expect(instance.hasConsent(spec)).resolves.toBe(true)
+    expect(allow).not.toHaveBeenCalled()
+    writePackage({ system: ['fs'] }, 'binary-v2')
+    await expect(instance.hasConsent(spec)).resolves.toBe(false)
+  })
+
+  it('asks once per workspace naming the tool, records the grant, and remembers a "no"', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const promptWorkspaceWrite = vi.fn(async () => true)
+    const { instance } = controller({ promptWorkspaceWrite })
+    const tool = { name: 'indexer_search', title: 'Search' }
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
+    expect(promptWorkspaceWrite).toHaveBeenCalledTimes(1)
+    expect(promptWorkspaceWrite).toHaveBeenCalledWith({ pluginId: 'acme.indexer', name: 'Indexer', workspacePath: '/w1', agentTool: tool })
+    expect(store.allowsWorkspaceWrite('acme.indexer', '/w1')).toBe(true)
+
+    promptWorkspaceWrite.mockResolvedValue(false)
+    await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
+    await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
+    expect(promptWorkspaceWrite).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells the agent-tool catalog when the first-use dialog grants consent', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const onConsentGranted = vi.fn()
+    const { instance } = controller({ promptConsent: allow, onConsentGranted })
+    await instance.admit(spec, undefined)
+    expect(onConsentGranted).toHaveBeenCalledWith('acme.indexer')
+  })
+})
+
+describe('NativeBackendStore agent-tool switches', () => {
+  it('are off by default and leave the file as on main until changed', () => {
+    const fresh = new NativeBackendStore(join(root, 'switch-store'))
+    expect(fresh.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    fresh.setEnabled(true)
+    const file = JSON.parse(readFileSync(join(root, 'switch-store', 'native-backends.json'), 'utf8'))
+    expect(file).toEqual({ schemaVersion: 1, enabled: true, plugins: {} })
+  })
+
+  it('persist each switch and read a malformed value as off', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    switches.setAgentToolSwitches({ externalCallers: true })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: true, externalCallers: true })
+    writeFileSync(join(root, 'switch-store', 'native-backends.json'), JSON.stringify({
+      schemaVersion: 1, enabled: false, plugins: {}, agentTools: { enabled: 'yes', externalCallers: 1 },
+    }))
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+  })
+
+  it('turns a switch off in memory even when the save fails', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    const write = vi.spyOn(OwnerOnlyJsonPersistence.prototype, 'write').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+    try {
+      expect(() => switches.setAgentToolSwitches({ enabled: false })).toThrow('disk full')
+      expect(switches.agentToolSwitches().enabled).toBe(false)
+      expect(() => switches.setAgentToolSwitches({ enabled: true })).toThrow('disk full')
+      expect(switches.agentToolSwitches().enabled).toBe(false)
+    } finally {
+      write.mockRestore()
+    }
   })
 })

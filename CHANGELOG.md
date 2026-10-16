@@ -7,6 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Extensions: a Navide plugin installed from the Navide Marketplace can be disabled and enabled again. A disabled Navide plugin is still verified at startup, but its views and backend are not loaded, now or after a restart; its files, Grant and stored data are kept, and its row shows a Disabled badge and an Enable button. Enabling restores it under the Grant it already has. Update, rollback and remove keep working while it is disabled, and an update stays disabled. The bundled Plans, Git and Mini-IDE packages are not covered by this switch.
+- Navide plugins (plan B1-b, Host side): Settings → Extensions → Native backends has a "Let agents call tools from third-party Navide plugins" switch and, under it, "Let external MCP clients call them too"; both are off by default, and with the first off nothing changes. When on, the Host serves the agent tools a third-party Navide plugin declares only after the user allowed that exact package, keeps a catalog of them for the core MCP server (`plugins.agentTools.sync`), and re-checks every call: switch, caller, disabled, quarantined, revoked or stopping package, consent, workspace grant, a one-time "allow file changes in this workspace" question before the first write-risk tool there, and the agent execution policy. The plugin backend receives the calling pane, verified to the pane only. Declaring agent tools in a manifest and the MCP tools themselves come with B1-a and B1-c.
 
 ## [0.2.24] — 2026-10-16 — signed release
 

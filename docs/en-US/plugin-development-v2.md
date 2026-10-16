@@ -550,7 +550,17 @@ authenticated binding. The frontend cannot set or override `pluginId`,
 `hostWindowId`. It also carries the Host-authenticated `initiator`: a `user`
 initiator has `kind` and `id`, while an MCP-routed agent has `kind: "agent"`,
 `source: "mcp"`, and an opaque `id`. The Host mints both forms from the
-authenticated caller and rejects package-supplied identity fields. `initiator`
+authenticated caller and rejects package-supplied identity fields. A call that
+reaches the backend through one of its consented agent tools
+(`backend.agentTools`, see `plugin-agent-tools-contract.md`) also carries
+`initiator.caller`: `{kind, paneId, workspace, verifiedTo}`, where `kind` is
+`pane`, `external` or `host`. It is verified only as far as `verifiedTo` says:
+`pane` means the pane's own MCP token named that pane (nothing about the model
+or the person behind it); `caller-kind` means only that the caller was an
+external MCP client or the Host, which share one credential each. Use it for
+display and your own records, not as an authorization decision; the Host has
+already made that one. `caller` is additive and optional, and only packages
+that declare agent tools ever receive it. `initiator`
 was added after Backend Wire v1 shipped, so the v1 schema keeps it an additive
 optional field: the Host always sends it, and a v1 backend must accept a
 `runtime` both with and without it. Optional view/workspace fields are `null`

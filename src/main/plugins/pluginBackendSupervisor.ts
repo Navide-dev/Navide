@@ -26,6 +26,7 @@ import {
 } from './pluginCapabilityBroker'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import type { PluginSystemNamespace } from './pluginManifestV2'
+import type { DisclosureAgentTool, DisclosurePermissions } from '../../shared/pluginDisclosure'
 
 /** Private Electron-main seam for Backend Wire v1 conformance tests. */
 export const MCP_PROTOCOL_REVISION = '2026-07-28'
@@ -97,6 +98,10 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** Declared `backend.agentTools` (disclosure form); absent when none. */
+    agentTools?: readonly DisclosureAgentTool[]
+    /** The package's disclosure `permissions`; present with `agentTools`. */
+    permissions?: DisclosurePermissions
   }
 }
 
@@ -979,6 +984,7 @@ export function createAuthenticatedBackendRuntime(
         kind: 'agent' as const,
         source: 'mcp' as const,
         id: runtime.initiator.id,
+        ...(runtime.initiator.caller ? { caller: Object.freeze({ ...runtime.initiator.caller }) } : {}),
       })
     : Object.freeze({
         kind: 'user' as const,

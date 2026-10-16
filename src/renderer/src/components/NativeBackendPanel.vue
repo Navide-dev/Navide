@@ -78,6 +78,32 @@ watch(installed, refresh)
       />
       {{ $t('settings.extensions.nativeBackends.enable') }}
     </label>
+    <template v-if="overview.agentTools && api()?.setAgentTools">
+      <label class="native-backends-switch">
+        <input
+          type="checkbox"
+          class="nv-check"
+          data-agent-tools-switch="enabled"
+          :checked="overview.agentTools.enabled"
+          :disabled="busy"
+          @change="run(() => api()!.setAgentTools!({ enabled: ($event.target as HTMLInputElement).checked }))"
+        />
+        {{ $t('settings.extensions.nativeBackends.agentTools.enable') }}
+      </label>
+      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.description') }}</p>
+      <label class="native-backends-switch">
+        <input
+          type="checkbox"
+          class="nv-check"
+          data-agent-tools-switch="externalCallers"
+          :checked="overview.agentTools.externalCallers"
+          :disabled="busy || !overview.agentTools.enabled"
+          @change="run(() => api()!.setAgentTools!({ externalCallers: ($event.target as HTMLInputElement).checked }))"
+        />
+        {{ $t('settings.extensions.nativeBackends.agentTools.externalCallers') }}
+      </label>
+      <p class="native-backends-description">{{ $t('settings.extensions.nativeBackends.agentTools.externalCallersDisclosure') }}</p>
+    </template>
     <p v-if="overview.plugins.length === 0" class="native-backends-empty">
       {{ $t('settings.extensions.nativeBackends.empty') }}
     </p>

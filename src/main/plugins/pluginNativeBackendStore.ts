@@ -10,6 +10,11 @@ import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
  * A consent is valid only for the exact binary and permission set it was
  * given for, so a new version that changes either needs a new consent.
  * Anything unreadable reads as "nothing allowed".
+ *
+ * It also keeps the two agent-tool switches (plan B, DB8 and DB4), both off
+ * by default: "let agents call tools from third-party Navide plugins", and
+ * "external MCP clients may call them too". They are written only once the
+ * user changes one, so a profile that never did keeps its file as on main.
  */
 
 export interface NativeBackendConsent {
@@ -26,10 +31,18 @@ export interface NativeBackendPluginRecord {
   workspaceWrite?: string[]
 }
 
+export interface AgentToolSwitches {
+  /** DB8: agents may call consented third-party agent tools. */
+  enabled: boolean
+  /** DB4: external MCP clients (and the Host credential) may call them too. */
+  externalCallers: boolean
+}
+
 export interface NativeBackendState {
   schemaVersion: 1
   enabled: boolean
   plugins: Record<string, NativeBackendPluginRecord>
+  agentTools?: AgentToolSwitches
 }
 
 const FILE_NAME = 'native-backends.json'
@@ -70,7 +83,10 @@ function parseState(value: unknown): NativeBackendState {
     }
     plugins[pluginId] = record
   }
-  return { schemaVersion: 1, enabled: value.enabled === true, plugins }
+  const agentTools = isRecord(value.agentTools)
+    ? { enabled: value.agentTools.enabled === true, externalCallers: value.agentTools.externalCallers === true }
+    : undefined
+  return { schemaVersion: 1, enabled: value.enabled === true, plugins, ...(agentTools ? { agentTools } : {}) }
 }
 
 export class NativeBackendStore {
@@ -128,6 +144,18 @@ export class NativeBackendStore {
 
   setEnabled(enabled: boolean): void {
     this.save({ ...this.state, enabled }, !enabled)
+  }
+
+  agentToolSwitches(): AgentToolSwitches {
+    return { enabled: this.state.agentTools?.enabled === true, externalCallers: this.state.agentTools?.externalCallers === true }
+  }
+
+  /** Turning a switch off takes effect in memory even when the save fails. */
+  setAgentToolSwitches(change: Partial<AgentToolSwitches>): void {
+    const current = this.agentToolSwitches()
+    const next = { ...current, ...change }
+    const restricting = (current.enabled && !next.enabled) || (current.externalCallers && !next.externalCallers)
+    this.save({ ...this.state, agentTools: next }, restricting)
   }
 
   record(pluginId: string): NativeBackendPluginRecord {
