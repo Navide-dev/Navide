@@ -18,6 +18,8 @@ import logging
 import re
 from collections.abc import Mapping
 
+from agent_team_backend import ws_auth
+
 _PARAM = r"([?&](?:t|token)=)"
 _VALUE = r"[^&#\s\"']+"
 _TOKEN_PARAM = re.compile(_PARAM + _VALUE)
@@ -31,7 +33,14 @@ def redact(text: str) -> str:
 
 
 def _redact_arg(value: object) -> object:
-    return redact(value) if isinstance(value, str) else value
+    if not isinstance(value, str):
+        return value
+    # The bare token, too: when the format and args do not match, logging's
+    # error report prints the raw args, so there is no rendered "t=" to catch.
+    token = ws_auth.current_token()
+    if token and token in value:
+        value = value.replace(token, "***")
+    return redact(value)
 
 
 class TokenRedactionFilter(logging.Filter):
@@ -67,12 +76,32 @@ _FILTER = TokenRedactionFilter()
 _LOGGERS = ("", "uvicorn", "uvicorn.error", "uvicorn.access", "uvicorn.asgi", "agent_team_backend")
 
 
+def _redacting_factory(previous):
+    def factory(*args, **kwargs) -> logging.LogRecord:
+        record = previous(*args, **kwargs)
+        _FILTER.filter(record)
+        return record
+
+    factory.redacts_tokens = True  # type: ignore[attr-defined]
+    return factory
+
+
 def install() -> None:
-    """Attach the filter to the backend's and uvicorn's loggers and handlers.
+    """Redact every record this process creates, and keep the filter on the
+    loggers and handlers that exist now.
+
+    The record factory is what reaches handlers added later, on any logger:
+    a filter on a logger never sees records propagated from its children, and
+    a handler only has the filters it was given. It is logging's own hook,
+    called once per record after the level check, and per interpreter, so it
+    covers this process and nothing else. It wraps whatever factory was set.
 
     Call after ``uvicorn.Config`` is built: its dictConfig replaces the
     uvicorn handlers, dropping any filter put on them earlier.
     """
+    current = logging.getLogRecordFactory()
+    if not getattr(current, "redacts_tokens", False):
+        logging.setLogRecordFactory(_redacting_factory(current))
     for name in _LOGGERS:
         logger = logging.getLogger(name)
         for target in (logger, *logger.handlers):

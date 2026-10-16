@@ -14,9 +14,12 @@ import logging
 import os
 import subprocess
 import sys
+import io
 import textwrap
 
-from agent_team_backend import osplat
+import pytest
+
+from agent_team_backend import log_redaction, osplat, ws_auth
 from agent_team_backend.log_redaction import TokenRedactionFilter
 
 # Concatenated so secret scanners do not read it as a real credential.
@@ -83,6 +86,66 @@ def test_a_record_without_a_token_is_unchanged() -> None:
     assert _filtered(_record("format=json limit=3 next_token=abc")) == "format=json limit=3 next_token=abc"
 
 
+@pytest.fixture
+def installed():
+    """install() on a root with no handlers of its own, restored afterwards.
+
+    Emptied first because a filtered handler rewrites the record in place: a
+    handler that runs after it would see a redacted record by accident.
+    """
+    root = logging.getLogger()
+    saved_handlers = list(root.handlers)
+    saved_factory = logging.getLogRecordFactory()
+    root.handlers = []
+    log_redaction.install()
+    yield
+    logging.setLogRecordFactory(saved_factory)
+    for name in log_redaction._LOGGERS:
+        logger = logging.getLogger(name)
+        for target in (logger, *logger.handlers):
+            target.removeFilter(log_redaction._FILTER)
+    root.handlers = saved_handlers
+
+
+def test_a_root_handler_added_after_install_is_redacted(installed) -> None:
+    out = io.StringIO()
+    late = logging.StreamHandler(out)
+    root = logging.getLogger()
+    root.addHandler(late)
+    try:
+        child = logging.getLogger("some.plugin.child")
+        child.warning("late /ws?t=%s", SECRET)
+        child.warning(f"late2 /plan-mcp?pane=p&token={SECRET}")
+    finally:
+        root.removeHandler(late)
+    text = out.getvalue()
+    assert SECRET not in text
+    assert "late /ws?t=***" in text
+    assert "late2 /plan-mcp?pane=p&token=***" in text
+
+
+def test_a_format_error_report_does_not_print_the_active_token(installed, capsys) -> None:
+    token = "act" + "ive-" + "Tk9" * 8
+    ws_auth._reset_for_test(token)
+    logger = logging.getLogger("agent_team_backend.format_error_probe")
+    handler = logging.StreamHandler(io.StringIO())
+    logger.addHandler(handler)
+    logger.propagate = False
+    try:
+        # Two placeholders, one arg: format() raises and handleError prints
+        # the raw args to stderr.
+        logger.warning("connected %s with %s", token)
+        logger.warning("bearer %s and %s", "Bearer " + token)
+    finally:
+        logger.removeHandler(handler)
+        logger.propagate = True
+        ws_auth._reset_for_test()
+    err = capsys.readouterr().err
+    assert "Message:" in err, "the format error was not reported"
+    assert token not in err
+    assert "***" in err
+
+
 # The real entrypoint, in a child process so its logging config cannot leak
 # into this one. uvicorn.Server.run is replaced with a function that emits the
 # lines uvicorn and the backend would, through the loggers main() configured,
@@ -104,6 +167,10 @@ _CHILD = textwrap.dedent(
         logging.getLogger("uvicorn").warning("url /ws?token=" + SECRET)
         logging.getLogger().warning("root %s", "/ws?t=" + SECRET)
         logging.getLogger("agent_team_backend.app").info("app /ws?t=%s", SECRET)
+        late = logging.getLogger("late.plugin")
+        late.propagate = False
+        late.addHandler(logging.StreamHandler(sys.stdout))
+        late.warning("late /ws?t=%s", SECRET)
         def has(f): return any(isinstance(x, TokenRedactionFilter) for x in f.filters)
         report = {}
         for name in ("", "uvicorn", "uvicorn.error", "uvicorn.access", "agent_team_backend"):
@@ -158,6 +225,7 @@ def test_the_real_startup_path_never_prints_or_writes_the_token(tmp_path) -> Non
     assert "url /ws?token=***" in output
     assert "root /ws?t=***" in output
     assert "app /ws?t=***" in output
+    assert "late /ws?t=***" in output
 
     files = [p for p in tmp_path.rglob("*") if p.is_file() and p.suffix in {".log", ".txt", ""}]
     assert any(p.name.endswith(".log") for p in files), "the backend log file was not written"
