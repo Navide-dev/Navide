@@ -569,6 +569,32 @@ def test_seed_hook_trust_escapes_backslashes_in_toml_keys(tmp_path: Path) -> Non
     assert state[f'{pane / "hooks.json"}:stop:0:0'] == {"trusted_hash": "sha256:aaaa"}
 
 
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="Android fallback: POSIX modes and os.fchmod")
+def test_promote_stranded_auth_copies_without_hard_links(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Android's CPython has no os.link; promotion must still adopt the login.
+    from agent_team_backend.cli_vendors import codex as codex_vendor
+
+    monkeypatch.delattr(codex_vendor.os, "link")
+    real = tmp_path / "real-codex"
+    panes = tmp_path / "panes"
+    manager = CodexHomeManager(real_home=real, panes_root=panes)
+    stranded = panes / "pane-1" / "auth.json"
+    _write_pane_auth(stranded, "pane-token")
+    stranded.chmod(0o600)
+
+    assert manager.promote_stranded_auth() is True
+
+    real_auth = real / "auth.json"
+    assert real_auth.is_file() and not real_auth.is_symlink()
+    assert "pane-token" in real_auth.read_text(encoding="utf-8")
+    assert os.stat(real_auth).st_mode & 0o777 == 0o600
+    assert stranded.is_symlink() and stranded.resolve() == real_auth
+    assert manager.promote_stranded_auth() is False
+
+
+
 def _trust_headers(path: Path) -> list[str]:
     """The same table header in the shapes TOML allows: a trailing comment,
     spacing inside the brackets, a literal (single-quoted) key."""

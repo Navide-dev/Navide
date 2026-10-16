@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_team_backend import skills_store
+from agent_team_backend import osplat, skills_store
 from agent_team_backend.skills_store import (
     SKILL_FILE_SIZE_LIMIT,
     SkillConflictError,
@@ -922,3 +922,42 @@ def test_migrate_then_restore_round_trips_the_state_file(
 
     store.restore_native("bug-buster")
     assert store.targets_for("claude") == []
+
+
+# ── platforms without hard links (Android's CPython has no os.link) ──────────
+
+def test_module_imports_without_os_link() -> None:
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import os; del os.link; import agent_team_backend.skills_store"],
+        capture_output=True, text=True, cwd=Path(__file__).resolve().parents[1],
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="Android fallback: POSIX modes and os.fchmod")
+@pytest.mark.parametrize("directory_fds", [True, False])
+def test_install_bundle_copies_when_hard_links_are_unavailable(
+    store: SkillsStore, monkeypatch: pytest.MonkeyPatch, directory_fds: bool,
+) -> None:
+    if directory_fds and not skills_store._DIRECTORY_FDS:
+        pytest.skip("directory file descriptors are unavailable here")
+    monkeypatch.delattr(skills_store.os, "link")
+    monkeypatch.setattr(skills_store, "_HARD_LINKS", False)
+    monkeypatch.setattr(skills_store, "_DIRECTORY_FDS", directory_fds)
+    skill = b"---\nname: copied\ndescription: Copied skill\n---\nBody.\n"
+    files = {
+        "SKILL.md": {"data": skill, "executable": False},
+        "bin/run.sh": {"data": b"#!/bin/sh\necho hi\n", "executable": True},
+    }
+
+    store.install_bundle("copied", files, targets=None, consent=True)
+
+    root = store.root / "copied"
+    assert (root / "SKILL.md").read_bytes() == skill
+    assert (root / "bin" / "run.sh").read_bytes() == b"#!/bin/sh\necho hi\n"
+    assert os.stat(root / "bin" / "run.sh").st_mode & 0o777 == 0o755
+    assert os.stat(root / "SKILL.md").st_mode & 0o777 == 0o644
+    assert store.get_skill("copied")["skill"]["name"] == "copied"

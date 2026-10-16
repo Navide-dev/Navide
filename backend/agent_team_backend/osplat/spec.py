@@ -263,6 +263,14 @@ class Paths(Protocol):
         """
         ...
 
+    def needs_loopback_dns_proxy(self) -> bool:
+        """Whether static (musl) CLI binaries need a loopback proxy to reach the network.
+
+        True only on Android, where `/etc/resolv.conf` does not exist; false on
+        every desktop platform, so their spawns never change.
+        """
+        ...
+
     def shell_command(self, command: str) -> list[str]:
         """argv that runs `command` through the platform's shell.
 
