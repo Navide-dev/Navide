@@ -60,7 +60,7 @@ import uvicorn  # noqa: E402
 from . import __version__, osplat  # noqa: E402
 from .app import app as _fastapi_app, cli_risk_service  # noqa: E402
 from . import app as _app_module  # noqa: E402
-from . import confirm_token, ws_auth  # noqa: E402
+from . import confirm_token, log_redaction, ws_auth  # noqa: E402
 from .applog import backend_port_file, setup_file_logging  # noqa: E402
 
 
@@ -285,6 +285,9 @@ def main() -> int:
         # lifespan teardown runs.
         timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_S,
     )
+    # After Config, whose dictConfig replaces the uvicorn handlers: uvicorn logs
+    # every ws handshake at INFO with its query, and the query is the token.
+    log_redaction.install()
     server = uvicorn.Server(config)
     threading.Thread(
         target=_watch_stdin_for_shutdown, args=(server,), name="stdin-shutdown", daemon=True
