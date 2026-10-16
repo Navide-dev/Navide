@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } fr
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { isWindows, platformId, setPlatformId } from '../../shared/osplat'
 import { AI_CLI_PROFILES } from '../../shared/aiCliProfiles'
 import { backendEntryOnDisk } from './installedPlugins'
@@ -15693,10 +15693,11 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     consented: { value: boolean }
     confirmWrite: ReturnType<typeof vi.fn>
     gate: PluginAgentToolsHost
-    bind: MockInstance<PluginBackendHost['bindWorkspace']>
+    bind: MockInstance<PluginBackendHost['bindAgentToolWorkspace']>
     call: MockInstance<PluginBackendHost['call']>
     policy: { value: ExecutionPolicySnapshot }
     grant: { value: { packageVersion: string; system: Array<'fs'>; storage: boolean } | null }
+    openWorkspaces: Set<string>
     cleanup: () => Promise<void>
   }
 
@@ -15753,7 +15754,9 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       send: (payload) => mgr.sendAgentToolsSync(payload),
     })
     mgr.setAgentToolsHost(gate)
-    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindWorkspace').mockResolvedValue('headless-1')
+    const openWorkspaces = new Set([workspace])
+    mgr.setAgentToolWorkspaceResolver((candidate) => openWorkspaces.has(candidate))
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindAgentToolWorkspace').mockResolvedValue('headless-1')
     const isBound = vi.spyOn(PluginBackendHost.prototype, 'isBound').mockReturnValue(true)
     const call = vi.spyOn(PluginBackendHost.prototype, 'call').mockResolvedValue({ status: 'done' } as never)
     // A running view is what opens the backend connection.
@@ -15772,7 +15775,7 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       await settle()
     }
     return {
-      mgr, socket, root, workspace, spec, switches, disabled, consented, confirmWrite, gate, bind, call, policy, grant,
+      mgr, socket, root, workspace, spec, switches, disabled, consented, confirmWrite, gate, bind, call, policy, grant, openWorkspaces,
       cleanup: async () => {
         bind.mockRestore()
         isBound.mockRestore()
@@ -15814,6 +15817,9 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     try {
       expect(sentOf(f.socket).some((message) => message.type === 'plugins.agentTools.sync')).toBe(false)
       expect(f.spec().agentMethods).toEqual([])
+      expect(PluginBackendHost.prototype.agentToolMethodsFor.call(
+        (f.mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost, 'nerdtechnic.devmap', '0.2.0',
+      )).toEqual([])
       await expect(ask(f, toolRequest(f))).resolves.toEqual({
         ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'master-switch-off', error: expect.any(String),
       })
@@ -15832,7 +15838,11 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       expect(sync[0].payload).toMatchObject({ revision: 1, enabled: true, externalCallers: false })
       expect((sync[0].payload.tools as Array<{ name: string; state: string }>).map((entry) => [entry.name, entry.state]))
         .toEqual([['devmap_read', 'available'], ['devmap_set_status', 'available']])
-      expect(f.spec().agentMethods).toEqual(['devmap.read', 'devmap.setStatus'])
+      // Views and the registered activation stay closed to agents; only the
+      // agent-tool bindings get the served methods.
+      expect(f.spec().agentMethods).toEqual([])
+      expect((f.mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost
+        .agentToolMethodsFor('nerdtechnic.devmap', '0.2.0')).toEqual(['devmap.read', 'devmap.setStatus'])
 
       const response = await ask(f, toolRequest(f))
       expect(response).toEqual({
@@ -15860,20 +15870,68 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     }
   })
 
-  it('marks a call into another workspace and gates external callers behind DB4', async () => {
+  it('targets only open Navide workspaces: never home, a filesystem root or any other directory', async () => {
     const f = await fixture()
     try {
       const other = join(f.root, 'other')
       mkdirSync(other)
-      const cross = await ask(f, toolRequest(f, { caller: { kind: 'pane', paneId: 'p-41', workspace: other } }))
+      for (const target of [homedir(), '/', other]) {
+        await expect(ask(f, toolRequest(f, { target: { plugin_id: 'nerdtechnic.devmap', workspace_path: target } })))
+          .resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      }
+      // Even when a window has the home folder or the root open.
+      f.openWorkspaces.add(realpathSync(homedir()))
+      f.openWorkspaces.add('/')
+      for (const target of [homedir(), '/']) {
+        await expect(ask(f, toolRequest(f, { target: { plugin_id: 'nerdtechnic.devmap', workspace_path: target } })))
+          .resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      }
+      // An open workspace the package has no fs Grant for.
+      f.openWorkspaces.add(other)
+      f.grant.value = { packageVersion: '0.2.0', system: [] as never, storage: true }
+      await expect(ask(f, toolRequest(f, { target: { plugin_id: 'nerdtechnic.devmap', workspace_path: other } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      expect(f.bind).not.toHaveBeenCalled()
+      // Granted: another open workspace than the caller's is served and flagged.
+      f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
+      const cross = await ask(f, toolRequest(f, { target: { plugin_id: 'nerdtechnic.devmap', workspace_path: other } }))
       expect(cross).toMatchObject({ ok: true, meta: { crossWorkspace: true } })
+      expect(f.bind).toHaveBeenLastCalledWith(expect.anything(), expect.any(String), other)
+      const same = await ask(f, toolRequest(f, { request_id: 'mcp:same' }))
+      expect(same).toMatchObject({ ok: true, meta: { crossWorkspace: false } })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('gates external and host callers behind DB4', async () => {
+    const f = await fixture()
+    try {
       const external = { kind: 'external', paneId: null, workspace: null }
       await expect(ask(f, toolRequest(f, { request_id: 'mcp:ext', caller: external })))
+        .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'external-callers-off' })
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:host', caller: { kind: 'host', paneId: null, workspace: null } })))
         .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'external-callers-off' })
       await f.gate.setSwitches({ externalCallers: true })
       await expect(ask(f, toolRequest(f, { request_id: 'mcp:ext2', caller: external }))).resolves.toMatchObject({ ok: true })
       const last = f.call.mock.calls.at(-1) as unknown as [string, string, unknown, { initiator: { caller: unknown } }]
       expect(last[3].initiator.caller).toEqual({ kind: 'external', paneId: null, workspace: null, verifiedTo: 'caller-kind' })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('refuses agent calls into a third-party view by instance id (only agent tools reach third-party code)', async () => {
+    const f = await fixture()
+    try {
+      const instanceId = f.mgr.open(
+        asHost(new FakeBrowserWindow()),
+        { id: 'nerdtechnic.devmap', requires: ['terminal'], devUrl: '', entryFile: '/plugins/nerdtechnic.devmap/index.html' },
+        { x: 0, y: 0, width: 10, height: 10 },
+      )!
+      await expect(f.mgr.executeAgentBackendCall(instanceId, { reqId: 'r-1', name: 'devmap.read', args: {} }))
+        .resolves.toMatchObject({ ok: false, error: { code: 'CAPABILITY_DENIED' } })
+      expect(f.call).not.toHaveBeenCalled()
     } finally {
       await f.cleanup()
     }
@@ -15954,7 +16012,8 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       // The switch turned off afterwards: the methods close and a cached CLI
       // catalog cannot reach the tool any more.
       await f.gate.setSwitches({ enabled: false })
-      expect(f.spec().agentMethods).toEqual([])
+      expect((f.mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost
+        .agentToolMethodsFor('nerdtechnic.devmap', '0.2.0')).toEqual([])
       const sync = sentOf(f.socket).filter((message) => message.type === 'plugins.agentTools.sync')
       expect(sync.at(-1)!.payload).toMatchObject({ enabled: false, tools: [] })
       await expect(ask(f, toolRequest(f, { request_id: 'mcp:after' }))).resolves.toMatchObject({
@@ -16007,6 +16066,11 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       f.grant.value = null
       expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
       f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
+      // The workspace closed since the binding was made.
+      f.openWorkspaces.delete(f.workspace)
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
+      f.openWorkspaces.add(f.workspace)
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(true)
       await f.gate.setSwitches({ enabled: false })
       expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
     } finally {

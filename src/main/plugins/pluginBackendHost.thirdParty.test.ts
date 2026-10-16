@@ -335,22 +335,45 @@ describe('agent methods of a third-party backend (plan B1-b)', () => {
     return { supervisor, call }
   }
 
-  it('starts with none, opens exactly the set it is given (also for a bound view), and closes again', async () => {
+  it('opens exactly the given set on agent-tool bindings only, never on views or the activation', async () => {
     const { supervisor, call } = callingSupervisor()
     const host = new PluginBackendHost({ admitThirdParty: async () => admission(), createSupervisor: () => supervisor })
     hosts.push(host)
     host.register(thirdParty())
     await host.bindView(runtime('acme.indexer'), workspace, workspace)
-    await expect(host.call('view-1', 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('acme.indexer'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
 
     expect(host.setAgentMethods('acme.indexer', '1.0.0', ['fixture.echo'])).toBe(true)
-    await expect(host.call('view-1', 'fixture.echo', null, { initiator: agent })).resolves.toBe('ok')
-    await expect(host.call('view-1', 'fixture.exit', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
-    expect(host.activationForPlugin('acme.indexer')?.agentMethods).toEqual(['fixture.echo'])
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).resolves.toBe('ok')
+    await expect(host.call(headless, 'fixture.exit', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    // The view the user opened stays closed to agents, and so does the activation.
+    await expect(host.call('view-1', 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    expect(host.activationForPlugin('acme.indexer')?.agentMethods).toEqual([])
+    expect(host.agentToolMethodsFor('acme.indexer', '1.0.0')).toEqual(['fixture.echo'])
 
     host.setAgentMethods('acme.indexer', '1.0.0', [])
-    await expect(host.call('view-1', 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    await expect(host.call(headless, 'fixture.echo', null, { initiator: agent })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
     expect(call).toHaveBeenCalledTimes(1)
+  })
+
+  it('binds agent-tool workspaces for third-party packages only', async () => {
+    const host = new PluginBackendHost({
+      admitThirdParty: async () => admission(),
+      resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+      createSupervisor: () => fakeSupervisor(),
+    })
+    hosts.push(host)
+    host.register(plans)
+    await expect(host.bindAgentToolWorkspace(
+      { ...runtime('navide.plans'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )).rejects.toMatchObject({ code: 'INVALID_RUNTIME' })
   })
 
   it('refuses a method the package did not declare, and never touches Plans', () => {
@@ -359,7 +382,7 @@ describe('agent methods of a third-party backend (plan B1-b)', () => {
     host.register(thirdParty())
     host.register({ ...plans, agentMethods: ['fixture.echo'] })
     expect(() => host.setAgentMethods('acme.indexer', '1.0.0', ['not.declared'])).toThrow(BackendPluginError)
-    expect(host.activationForPlugin('acme.indexer')?.agentMethods).toEqual([])
+    expect(host.agentToolMethodsFor('acme.indexer', '1.0.0')).toEqual([])
     expect(host.setAgentMethods('navide.plans', '1.0.0', [])).toBe(false)
     expect(host.activationForPlugin('navide.plans')?.agentMethods).toEqual(['fixture.echo'])
     expect(host.setAgentMethods('acme.missing', '1.0.0', [])).toBe(false)
@@ -385,9 +408,13 @@ describe('agent-tool caller on the runtime the child receives (plan B1-b)', () =
     hosts.push(host)
     host.register(thirdParty())
     host.setAgentMethods('acme.indexer', '1.0.0', ['fixture.echo'])
-    await host.bindView(runtime('acme.indexer'), workspace, workspace)
+    const headless = await host.bindAgentToolWorkspace(
+      { ...runtime('acme.indexer'), instanceId: null, contributionKey: null, hostWindowId: null },
+      workspace,
+      workspace,
+    )
     const caller = { kind: 'pane', paneId: 'p-1', workspace, verifiedTo: 'pane' } as const
-    await host.call('view-1', 'fixture.echo', null, { initiator: { kind: 'agent', source: 'mcp', id: 'a-2', caller } })
+    await host.call(headless, 'fixture.echo', null, { initiator: { kind: 'agent', source: 'mcp', id: 'a-2', caller } })
     const [childRuntime] = clientFor.mock.calls[0] as unknown as [{ initiator: { caller?: unknown } }]
     expect(childRuntime.initiator).toEqual({ kind: 'agent', source: 'mcp', id: 'a-2', caller })
     expect(Object.isFrozen(childRuntime.initiator.caller)).toBe(true)

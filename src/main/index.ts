@@ -180,6 +180,7 @@ import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { PluginAgentToolsHost } from './plugins/pluginAgentToolsHost'
+import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
@@ -1640,6 +1641,14 @@ agentToolsHost = new PluginAgentToolsHost({
   send: (payload) => frontendPluginManager.sendAgentToolsSync(payload),
 })
 frontendPluginManager.setAgentToolsHost(agentToolsHost)
+// An agent tool may target only a workspace open in a Navide window.
+frontendPluginManager.setAgentToolWorkspaceResolver((root) => {
+  const open = [
+    ...[...mainWindowWorkspaces].filter(([win]) => !win.isDestroyed()).map(([, path]) => path),
+    ...[...adoptedWorkspaces].filter(([win]) => !win.isDestroyed()).flatMap(([, paths]) => paths),
+  ]
+  return open.some((path) => canonicalExistingDirectory(path) === root)
+})
 const agentToolsControls = agentToolsHost
 registerNativeBackendIpc(
   (channel, listener) => ipcMain.handle(channel, listener),

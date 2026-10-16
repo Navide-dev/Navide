@@ -16,6 +16,7 @@ import { composePluginFrameQuery } from './pluginContributionQuery'
 import { systemFrameUnlessMac } from '../window-controls'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, lstatSync, realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isMac } from '../../shared/osplat'
 import { URL, pathToFileURL } from 'node:url'
@@ -1374,6 +1375,9 @@ export class FrontendPluginManager {
   private readonly pendingHeadlessBackendBinds = new Map<string, Promise<string>>()
   /** Third-party agent-tool catalog (plan B1-b); null = never wired, every call refused. */
   private agentToolsHost: PluginAgentToolsHost | null = null
+  /** True when a canonical directory is a workspace open in a Navide window
+   * (plan B1-b target rule); unset = no workspace qualifies. */
+  private agentToolWorkspaceResolver: ((root: string) => boolean) | null = null
   /** Headless third-party bindings created for agent-tool calls, by package/version/workspace. */
   private readonly headlessAgentToolInstances = new Map<string, string>()
   private readonly pendingHeadlessAgentToolBinds = new Map<string, Promise<string>>()
@@ -2324,6 +2328,23 @@ export class FrontendPluginManager {
     this.agentToolsHost = host
   }
 
+  /** Which canonical directories are Navide workspaces an agent tool may target. */
+  setAgentToolWorkspaceResolver(resolver: ((root: string) => boolean) | null): void {
+    this.agentToolWorkspaceResolver = resolver
+  }
+
+  /** A target an agent tool may use: an open Navide workspace, never the home
+   * folder or a filesystem root, whatever the resolver says. */
+  private isAgentToolWorkspace(root: string): boolean {
+    const home = canonicalExistingDirectory(homedir()) ?? resolve(homedir())
+    if (root === home || root === resolve(root, '..')) return false
+    try {
+      return this.agentToolWorkspaceResolver?.(root) === true
+    } catch {
+      return false
+    }
+  }
+
   /** Set the agent-callable methods of one registered third-party backend. */
   setThirdPartyAgentMethods(pluginId: string, packageVersion: string, methods: string[]): void {
     this.pluginBackendHost.setAgentMethods(pluginId, packageVersion, methods)
@@ -2431,7 +2452,8 @@ export class FrontendPluginManager {
       activation.packageVersion !== runtime.packageVersion ||
       !this.agentToolsHost?.switches().enabled ||
       this.isPackageVersionStopping(runtime.pluginId, runtime.packageVersion) ||
-      runtime.workspaceId !== this.workspaceIdForPath(boundRoot)
+      runtime.workspaceId !== this.workspaceIdForPath(boundRoot) ||
+      !this.isAgentToolWorkspace(boundRoot)
     ) return false
     const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
     if (!grant || grant.packageVersion !== runtime.packageVersion || !grant.system.includes('fs')) return false
@@ -6767,19 +6789,26 @@ export class FrontendPluginManager {
       const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
       if (!current.ok) return agentToolUnavailable(current.reason)
       const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
-      if (!activation?.agentMethods?.includes(tool.method)) return agentToolUnavailable('tool-not-consented')
+      if (
+        !activation ||
+        !this.pluginBackendHost.agentToolMethodsFor(spec.pluginId, spec.packageVersion).includes(tool.method)
+      ) return agentToolUnavailable('tool-not-consented')
       return null
     }
     const early = recheck()
     if (early) return early
 
-    // Target workspace grant: an existing directory, and the user Grant for
-    // this exact version, which includes `fs` when the package declares it.
+    // Target workspace grant: a Navide workspace open in a window (never the
+    // home folder, a filesystem root or any other directory), and the user
+    // Grant for this exact version, which includes `fs` when the package
+    // declares it. Another open workspace than the caller's is allowed and
+    // flagged as cross-workspace.
     const root = canonicalExistingDirectory(parsed.workspacePath)
     const workspaceId = root ? this.workspaceIdForPath(root) : null
     const grant = this.capabilityGrantResolver?.(spec.pluginId, spec.packageVersion) ?? null
     if (
-      !root || !workspaceId || !grant || grant.packageVersion !== spec.packageVersion ||
+      !root || !workspaceId || !this.isAgentToolWorkspace(root) ||
+      !grant || grant.packageVersion !== spec.packageVersion ||
       (spec.thirdParty.system.includes('fs') && !grant.system.includes('fs'))
     ) {
       return agentToolError('WORKSPACE_NOT_AUTHORIZED', 'The Navide plugin has no grant for this workspace.')
@@ -6889,7 +6918,7 @@ export class FrontendPluginManager {
     const pending = this.pendingHeadlessAgentToolBinds.get(key)
     if (pending) return pending
     let task!: Promise<string>
-    task = this.pluginBackendHost.bindWorkspace(
+    task = this.pluginBackendHost.bindAgentToolWorkspace(
       {
         pluginId: spec.pluginId,
         packageVersion: spec.packageVersion,
@@ -6930,6 +6959,11 @@ export class FrontendPluginManager {
     if (!plugin) return buildError(reqId, 'BAD_REQUEST', 'unknown plugin instance')
     if (this.isPluginStopping(plugin)) {
       return buildError(reqId, 'PLUGIN_STOPPING', 'plugin runtime is stopping')
+    }
+    // Agents reach third-party package code only through consented agent
+    // tools (executeAgentToolCall), never through a view's instance id.
+    if (this.pluginBackendHost.activationForPlugin(plugin.id)?.thirdParty !== undefined) {
+      return buildError(reqId, 'CAPABILITY_DENIED', 'third-party backend methods are reachable only through agent tools')
     }
     if (
       !record ||
