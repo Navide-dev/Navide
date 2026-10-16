@@ -299,6 +299,23 @@ describe('ChannelsPane', () => {
       })
     })
 
+    it("names an unnamed bot by the platform's display name, as every channel label does", async () => {
+      seedTwoBots()
+      mock.setResponse('channels.list', {
+        ok: true,
+        enabled: true,
+        platforms: [{
+          platform: 'telegram', configured: true, enabled: true, status: { ...ready, identity: '@main_bot' }, config: {}, capabilities: null,
+          accounts: [
+            { account: 'default', name: '', configured: true, enabled: true, status: { ...ready, identity: '@main_bot', display_name: 'Neil M4' }, config: {}, capabilities: null },
+          ],
+        }],
+      })
+      const w = await render()
+      expect(bot(w, 'default').get('[data-testid="channel-bot-name"]').text()).toBe('Neil M4')
+      expect(bot(w, 'default').get('[data-testid="channel-status"]').text()).toBe('Connected @main_bot')
+    })
+
     it('adds a bot with its own id, name (under Advanced) and token', async () => {
       seedTwoBots()
       mock.setResponse('channels.quick_add', { ok: false, error: 'nope', reason: 'invalid' })

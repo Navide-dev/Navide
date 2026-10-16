@@ -222,6 +222,7 @@ class TelegramAdapter:
         me = await self._call("getMe")
         username = me.get("username") or ""
         self.status.identity = f"@{username}" if username else str(me.get("id", ""))
+        self.status.display_name = str(me.get("first_name") or "")
         self.status.can_manage_bots = me.get("can_manage_bots") is True
         if me.get("id"):
             self.bot_id = str(me["id"])

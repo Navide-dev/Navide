@@ -529,6 +529,7 @@ class ChannelManager:
         status: dict[str, Any] = {
             "lifecycle": "stopped", "connected": False, "reconnect_attempts": 0,
             "last_error": "", "last_connected_at": None, "last_inbound_at": None, "identity": "",
+            "display_name": "",
         }
         if bot in self._errors:
             status["lifecycle"] = "blocked"
