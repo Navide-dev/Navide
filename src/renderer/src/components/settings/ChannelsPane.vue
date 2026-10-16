@@ -20,6 +20,7 @@ import {
   clipboardTokenField,
   type RegisteredChannelPlatform,
 } from '../../platform/channels'
+import { channelBotLabel } from '../../lib/channelIdentity'
 import ChannelLinkGuide from '../ChannelLinkGuide.vue'
 import ChannelChatBindings from './ChannelChatBindings.vue'
 import SettingsSection from './SettingsSection.vue'
@@ -115,9 +116,8 @@ function botsOf(platform: ChannelPlatform): BotRow[] {
   return rows
 }
 
-function botLabel(bot: Pick<BotRow, 'name' | 'account'>): string {
-  if (bot.name) return bot.name
-  return bot.account === DEFAULT_ACCOUNT ? t('channels.bot.default') : bot.account
+function botLabel(bot: BotRow | ChannelAccountState): string {
+  return channelBotLabel(bot, bot.account, t)
 }
 
 /** Which bot a pairing request or allowed sender belongs to, named only when
@@ -126,7 +126,7 @@ function entryBot(platform: ChannelPlatform, account: string | undefined): strin
   const bots = store.platformState(platform)?.accounts ?? []
   if (bots.length < 2) return ''
   const id = account ?? DEFAULT_ACCOUNT
-  return botLabel(bots.find((b) => b.account === id) ?? { name: '', account: id })
+  return channelBotLabel(bots.find((b) => b.account === id), id, t)
 }
 
 function badgeOf(platform: string): string {

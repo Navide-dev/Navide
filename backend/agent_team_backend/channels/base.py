@@ -97,6 +97,7 @@ class AdapterStatus:
     last_connected_at: float | None = None
     last_inbound_at: float | None = None
     identity: str = ""  # e.g. "@navide_bot"
+    display_name: str = ""  # the bot's own name where the platform reports one, e.g. "Navide"
 
 
 @dataclass(frozen=True)
