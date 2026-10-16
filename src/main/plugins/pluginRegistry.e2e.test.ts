@@ -11,7 +11,7 @@
 
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
-import { createHash, createPublicKey } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey, sign as edSign } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -44,6 +44,74 @@ import { FrontendPluginManager } from './frontendPluginManager'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
 import { registryRootFingerprint } from './pluginRegistryRootApproval'
+import { canonicalTrustJson } from './pluginRegistryTrust'
+import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
+import { DISCLOSURE_ENVELOPE_FIELDS } from '../../shared/pluginDisclosureScan'
+
+// -- The package-envelope shape check of the released App, copied verbatim
+// from tag v0.2.24 (src/main/plugins/pluginTrustJson.ts requireTrustObject and
+// assertExactTrustFields, src/main/plugins/pluginRegistryTrust.ts
+// assertRegistryPackageEnvelopeShape, packages/plugin-contracts/src/index.ts
+// PLUGIN_ID). Every App since v0.1.86 runs it on `registry_envelope`; the
+// Registry's output must keep passing it (contract 3.5).
+type V0224TrustJsonObject = Record<string, unknown>
+function v0224IsObject(value: unknown): value is V0224TrustJsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+function v0224AssertExactTrustFields(
+  value: V0224TrustJsonObject,
+  label: string,
+  required: readonly string[],
+  optional: readonly string[] = []
+): void {
+  const allowed = new Set([...required, ...optional])
+  const actual = Object.keys(value)
+  const missing = required.filter((key) => !Object.prototype.hasOwnProperty.call(value, key))
+  const unknown = actual.filter((key) => !allowed.has(key))
+  if (missing.length > 0 || unknown.length > 0) {
+    const details: string[] = []
+    if (missing.length > 0) details.push(`missing ${missing.join(', ')}`)
+    if (unknown.length > 0) details.push(`unknown fields ${unknown.join(', ')}`)
+    throw new Error(`${label} has ${details.join('; ')}`)
+  }
+}
+function v0224RequireTrustObject(value: unknown, label: string): V0224TrustJsonObject {
+  if (!v0224IsObject(value)) throw new Error(`${label} must be a JSON object`)
+  return value
+}
+const V0224_PLUGIN_ID = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+$/
+function v0224RequiredString(value: unknown, label: string): string {
+  if (typeof value !== 'string') throw new Error(`${label} must be a string`)
+  return value
+}
+function v0224AssertRegistryPackageEnvelopeShape(value: unknown, label = 'registry envelope'): void {
+  const envelope = v0224RequireTrustObject(value, label)
+  v0224AssertExactTrustFields(envelope, label, [
+    'schemaVersion',
+    'artifactDigest',
+    'packageId',
+    'version',
+    'target',
+    'publisherId',
+    'keyId',
+    'signedAt',
+  ])
+  if (envelope.schemaVersion !== 1) throw new Error(`${label} schemaVersion is unsupported`)
+  for (const field of [
+    'artifactDigest',
+    'packageId',
+    'version',
+    'target',
+    'publisherId',
+    'keyId',
+    'signedAt',
+  ]) {
+    v0224RequiredString(envelope[field], `${label}.${field}`)
+  }
+  if (!(typeof envelope.packageId === 'string' && V0224_PLUGIN_ID.test(envelope.packageId))) {
+    throw new Error(`${label}.packageId is invalid`)
+  }
+}
 
 // Generous: the Registry is a separate Python process on a shared runner.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 })
@@ -117,6 +185,10 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     '0.1.1': { system: ['fs'], scopes: { fs: { root: 'workspace', read: ['README.md'] } }, shell: 'allowlist' },
   }
   const vsixPath = (version: string): string => join(work, `${ID}-${version}.vsix`)
+  /** The manifest fields the disclosure is computed from, as published. */
+  const disclosedManifest = (version: string): Record<string, unknown> => ({
+    schemaVersion: 2, id: ID, version, publisher: PUBLISHER, permissions: PERMISSIONS[version],
+  })
 
   /** Generate publisher keys, then pack and sign both versions with the
    *  Registry's own tooling. */
@@ -462,5 +534,89 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     vi.setSystemTime(Date.now() + 25 * 60 * 60 * 1000)
     await expect(h.controller.refreshRegistryTrust()).rejects.toThrow(/expire/i)
     expect(h.manager.listInstalledPackages().map((pkg) => pkg.id)).not.toContain(ID)
+  })
+
+  /** Serve the detail endpoint with every version row passed through `mutate`. */
+  function tamperDetail(mutate: (row: Record<string, unknown>) => void): void {
+    const realFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const response = await realFetch(input, init)
+      if (!String(input).endsWith(`/api/extensions/${PUBLISHER}/${NAME}`)) return response
+      const body = (await response.json()) as { versions: Array<Record<string, unknown>> }
+      for (const row of body.versions) mutate(row)
+      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+  }
+
+  it('(11) the new Registry keeps the v0.2.24 package envelope and signs a 9-field disclosure envelope', async () => {
+    const detail = (await (await fetch(`${registryUrl}/api/extensions/${PUBLISHER}/${NAME}`)).json()) as {
+      versions: Array<Record<string, any>>
+    }
+    expect(detail.versions.map((row) => row.version).sort()).toEqual(['0.1.0', '0.1.1'])
+    for (const row of detail.versions) {
+      expect(() => v0224AssertRegistryPackageEnvelopeShape(row.registry_envelope)).not.toThrow()
+      expect(Object.keys(row.disclosure_envelope).sort()).toEqual([...DISCLOSURE_ENVELOPE_FIELDS].sort())
+      expect(row.disclosure_envelope.scanDigest).toBeNull()
+      expect(row.scan).toBeNull()
+      expect(row.disclosure).toEqual(computeDisclosure(disclosedManifest(row.version) as never))
+    }
+
+    const h = host('disclosure')
+    const shown = await h.call('plugins:marketplaceDetail', { namespace: PUBLISHER, name: NAME })
+    const listed = shown.versions.find((row: { version: string }) => row.version === '0.1.1')
+    expect(listed.disclosure).toEqual(computeDisclosure(disclosedManifest('0.1.1') as never))
+    expect(listed.registry).toMatchObject({ review: { status: 'not-required', nativeCodeInspected: null } })
+    expect(listed).not.toHaveProperty('disclosure_envelope')
+
+    const before = tree(h.root)
+    const prepared = await h.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.1' })
+    expect(prepared.disclosure).toEqual(computeDisclosure(disclosedManifest('0.1.1') as never))
+    expect(prepared.disclosure.network).toBe('via-shell')
+    expect(prepared.scan).toBeNull()
+    expect(tree(h.root)).toEqual(before)
+  })
+
+  it('(12) a tampered disclosure is refused; a stripped one installs as before; a forged one is refused', async () => {
+    const h = host('disclosure-tamper')
+    const before = tree(h.root)
+
+    tamperDetail((row) => {
+      const disclosure = row.disclosure as { permissions: { system: string[] } }
+      disclosure.permissions.system = ['ui']
+    })
+    await expect(h.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.0' }))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_INVALID' })
+    vi.restoreAllMocks()
+
+    // A Registry (or a mirror) that drops the disclosure: the version is
+    // treated like one published before D-a and installs as before.
+    tamperDetail((row) => {
+      row.disclosure = null
+      row.disclosure_envelope = null
+      row.disclosure_signature = null
+    })
+    const stripped = await h.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.0' })
+    expect(stripped).toMatchObject({ id: ID, version: '0.1.0', trustTier: 'signed-verified', disclosure: null })
+    vi.restoreAllMocks()
+
+    // A correctly signed disclosure that understates the package (the
+    // Registry signer itself signs a disclosure without the fs permission).
+    const signerKey = createPrivateKey(readFileSync(join(dataDir, 'trust', 'registry-signer.pem'), 'utf8'))
+    tamperDetail((row) => {
+      const narrower = computeDisclosure({ ...disclosedManifest(String(row.version)), permissions: {} } as never)
+      const envelope = {
+        ...(row.disclosure_envelope as Record<string, unknown>),
+        disclosureDigest: createHash('sha256').update(canonicalContractJson(narrower), 'utf8').digest('hex'),
+      }
+      row.disclosure = narrower
+      row.disclosure_envelope = envelope
+      row.disclosure_signature = edSign(null, Buffer.from(canonicalTrustJson(envelope), 'utf8'), signerKey).toString('base64')
+    })
+    await expect(h.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.0' }))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_MISMATCH' })
+    vi.restoreAllMocks()
+
+    // Preparing never writes, accepted or refused.
+    expect(tree(h.root)).toEqual(before)
   })
 })
