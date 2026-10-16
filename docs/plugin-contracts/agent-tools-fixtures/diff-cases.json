@@ -1,0 +1,514 @@
+{
+  "$comment": "diffDisclosure(computeDisclosure(cases[from]), computeDisclosure(cases[to])) where from/to name entries of disclosure-cases.json. Items are sorted by kind, then key; an item is identical only when kind, key and detail are all equal.",
+  "cases": [
+    {
+      "name": "devmap 0.1.0 -> 0.2.0 adds a backend, shell and agent tools",
+      "from": "devmap-0.1.0",
+      "to": "devmap-0.2.0",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.1.0",
+          "risk": "medium"
+        },
+        "to": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.0",
+          "risk": "high"
+        },
+        "added": [
+          {
+            "kind": "agentTool",
+            "key": "devmap_read",
+            "detail": {
+              "method": "devmap.read",
+              "risk": "read",
+              "title": "Read dev map",
+              "description": "Read this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              },
+              "timeoutMs": 30000
+            }
+          },
+          {
+            "kind": "agentTool",
+            "key": "devmap_set_status",
+            "detail": {
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "kind": "backendEvent",
+            "key": "devmap.changed",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.read",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.setStatus",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.git/**",
+            "detail": null
+          },
+          {
+            "kind": "nativeBackend",
+            "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "shell",
+            "key": "allowlist",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "gh",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "git",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "glab",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "devmap 0.2.0 -> 0.2.1 changes one tool description: removed old + added new, re-consent",
+      "from": "devmap-0.2.0",
+      "to": "devmap-0.2.1",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.0",
+          "risk": "high"
+        },
+        "to": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.1",
+          "risk": "high"
+        },
+        "added": [
+          {
+            "kind": "agentTool",
+            "key": "devmap_set_status",
+            "detail": {
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "removed": [
+          {
+            "kind": "agentTool",
+            "key": "devmap_set_status",
+            "detail": {
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "agentTool",
+            "key": "devmap_read",
+            "detail": {
+              "method": "devmap.read",
+              "risk": "read",
+              "title": "Read dev map",
+              "description": "Read this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              },
+              "timeoutMs": 30000
+            }
+          },
+          {
+            "kind": "backendEvent",
+            "key": "devmap.changed",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.read",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.setStatus",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.git/**",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "nativeBackend",
+            "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "shell",
+            "key": "allowlist",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "gh",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "git",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "glab",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": true
+      }
+    },
+    {
+      "name": "devmap 0.2.1 -> 0.1.0 (rollback) only removes: no dialog, risk drops",
+      "from": "devmap-0.2.1",
+      "to": "devmap-0.1.0",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.1",
+          "risk": "high"
+        },
+        "to": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.1.0",
+          "risk": "medium"
+        },
+        "added": [],
+        "removed": [
+          {
+            "kind": "agentTool",
+            "key": "devmap_read",
+            "detail": {
+              "method": "devmap.read",
+              "risk": "read",
+              "title": "Read dev map",
+              "description": "Read this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              },
+              "timeoutMs": 30000
+            }
+          },
+          {
+            "kind": "agentTool",
+            "key": "devmap_set_status",
+            "detail": {
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "kind": "backendEvent",
+            "key": "devmap.changed",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.read",
+            "detail": null
+          },
+          {
+            "kind": "backendMethod",
+            "key": "devmap.setStatus",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.git/**",
+            "detail": null
+          },
+          {
+            "kind": "nativeBackend",
+            "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "shell",
+            "key": "allowlist",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "gh",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "git",
+            "detail": null
+          },
+          {
+            "kind": "shellExecutable",
+            "key": "glab",
+            "detail": null
+          }
+        ],
+        "unchanged": [
+          {
+            "kind": "fsScopeRead",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeRoot",
+            "key": "repository",
+            "detail": null
+          },
+          {
+            "kind": "fsScopeWrite",
+            "key": "**/.navide/devmap.json",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "fs",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "name": "identical versions: everything unchanged",
+      "from": "ui-only",
+      "to": "ui-only",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.views",
+          "version": "1.0.0",
+          "risk": "low"
+        },
+        "to": {
+          "id": "acme.views",
+          "version": "1.0.0",
+          "risk": "low"
+        },
+        "added": [],
+        "removed": [],
+        "unchanged": [
+          {
+            "kind": "system",
+            "key": "ui",
+            "detail": null
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "name": "shell full + aiCli items",
+      "from": "pack-no-permissions",
+      "to": "shell-full-ai-cli",
+      "expected": {
+        "schemaVersion": 1,
+        "from": {
+          "id": "acme.pack",
+          "version": "1.0.0",
+          "risk": "low"
+        },
+        "to": {
+          "id": "acme.agentic",
+          "version": "3.0.0",
+          "risk": "highest"
+        },
+        "added": [
+          {
+            "kind": "shell",
+            "key": "full",
+            "detail": null
+          },
+          {
+            "kind": "system",
+            "key": "aiCli",
+            "detail": null
+          }
+        ],
+        "removed": [],
+        "unchanged": [],
+        "widened": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,1207 @@
+{
+  "$comment": "computeDisclosure(manifest) must equal expected exactly, in both implementations. Inputs are manifests that already passed Manifest v2 validation plus validateAgentTools (agentTools is not yet accepted by plugin-manifest-v2.schema.json; see the contract doc, section 2.6).",
+  "cases": [
+    {
+      "name": "pack-no-permissions",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.pack",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {},
+        "extensionPack": [
+          "acme.one",
+          "acme.two"
+        ]
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.pack",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "noPermissions",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "low",
+          "reasons": []
+        },
+        "permissions": {
+          "system": [],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "ui-only",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.views",
+        "name": "Example",
+        "version": "1.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.views",
+          "version": "1.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "low",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "fs-read-only-scopes",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.reader",
+        "name": "Example",
+        "version": "1.2.3",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "scopes": {
+            "fs": {
+              "read": [
+                "docs/**",
+                "README.md"
+              ]
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.reader",
+          "version": "1.2.3",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "README.md",
+                "docs/**"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "fs-undeclared-ui",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.notes",
+        "name": "Example",
+        "version": "0.1.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui",
+            "fs"
+          ]
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.notes",
+          "version": "0.1.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "undeclared"
+        }
+      }
+    },
+    {
+      "name": "shell-allowlist-no-backend",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.gitlike",
+        "name": "Example",
+        "version": "2.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": "allowlist",
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**"
+              ],
+              "write": [
+                "**/.acme/*"
+              ]
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.gitlike",
+          "version": "2.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab"
+                ]
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab"
+            ]
+          },
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**"
+              ],
+              "write": [
+                "**/.acme/*"
+              ]
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": {
+            "root": "repository",
+            "patterns": [
+              "**/.acme/*"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "shell-full-ai-cli",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.agentic",
+        "name": "Example",
+        "version": "3.0.0",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "aiCli"
+          ],
+          "shell": "full"
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.agentic",
+          "version": "3.0.0",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "shell",
+              "params": {
+                "mode": "full",
+                "executables": null
+              }
+            },
+            {
+              "key": "aiCli",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "highest",
+          "reasons": [
+            {
+              "key": "system.aiCli",
+              "level": "high"
+            },
+            {
+              "key": "shell.full",
+              "level": "highest"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "aiCli"
+          ],
+          "shell": {
+            "mode": "full",
+            "executables": null
+          },
+          "scopes": null
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "backend-without-names",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.engine",
+        "name": "Example",
+        "version": "0.0.1",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {},
+        "backend": {
+          "entry": "bin/engine",
+          "protocolVersion": 1,
+          "activation": "startup"
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.engine",
+          "version": "0.0.1",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "nativeBackend",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "nativeBackend",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [],
+          "shell": null,
+          "scopes": null
+        },
+        "nativeBackend": {
+          "methods": [],
+          "events": []
+        },
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": true,
+          "projectWrites": "none"
+        }
+      }
+    },
+    {
+      "name": "devmap-0.1.0",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "nerdtechnic.devmap",
+        "name": "Example",
+        "version": "0.1.0",
+        "publisher": "nerdtechnic",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.navide/devmap.json"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.1.0",
+          "publisher": "nerdtechnic"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.navide/devmap.json"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": {
+            "root": "repository",
+            "patterns": [
+              "**/.navide/devmap.json"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "devmap-0.2.0",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "nerdtechnic.devmap",
+        "name": "Example",
+        "version": "0.2.0",
+        "publisher": "nerdtechnic",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui",
+            "fs"
+          ],
+          "shell": "allowlist",
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.navide/devmap.json",
+                "**/.git/**"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        },
+        "backend": {
+          "entry": "bin/devmap",
+          "protocolVersion": 1,
+          "activation": "startup",
+          "methods": [
+            "devmap.setStatus",
+            "devmap.read"
+          ],
+          "events": [
+            "devmap.changed"
+          ],
+          "agentTools": [
+            {
+              "name": "devmap_set_status",
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "name": "devmap_read",
+              "method": "devmap.read",
+              "risk": "read",
+              "title": "Read dev map",
+              "description": "Read this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.0",
+          "publisher": "nerdtechnic"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "nativeBackend",
+              "params": {}
+            },
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab"
+                ]
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            },
+            {
+              "key": "agentTools",
+              "params": {
+                "read": 1,
+                "write": 1
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "nativeBackend",
+              "level": "high"
+            },
+            {
+              "key": "agentTools.write",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab"
+            ]
+          },
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.git/**",
+                "**/.navide/devmap.json"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "nativeBackend": {
+          "methods": [
+            "devmap.read",
+            "devmap.setStatus"
+          ],
+          "events": [
+            "devmap.changed"
+          ]
+        },
+        "network": "none",
+        "agentTools": [
+          {
+            "name": "devmap_read",
+            "method": "devmap.read",
+            "risk": "read",
+            "title": "Read dev map",
+            "description": "Read this workspace's dev map.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {}
+            },
+            "timeoutMs": 30000
+          },
+          {
+            "name": "devmap_set_status",
+            "method": "devmap.setStatus",
+            "risk": "write",
+            "title": "Set block status",
+            "timeoutMs": 30000,
+            "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "block_id",
+                "status"
+              ],
+              "properties": {
+                "block_id": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "done",
+                    "wip",
+                    "plan"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": true,
+          "projectWrites": {
+            "root": "repository",
+            "patterns": [
+              "**/.navide/devmap.json"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "devmap-0.2.1",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "nerdtechnic.devmap",
+        "name": "Example",
+        "version": "0.2.1",
+        "publisher": "nerdtechnic",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "ui",
+            "fs"
+          ],
+          "shell": "allowlist",
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.navide/devmap.json",
+                "**/.git/**"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        },
+        "backend": {
+          "entry": "bin/devmap",
+          "protocolVersion": 1,
+          "activation": "startup",
+          "methods": [
+            "devmap.setStatus",
+            "devmap.read"
+          ],
+          "events": [
+            "devmap.changed"
+          ],
+          "agentTools": [
+            {
+              "name": "devmap_set_status",
+              "method": "devmap.setStatus",
+              "risk": "write",
+              "title": "Set block status",
+              "timeoutMs": 30000,
+              "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "required": [
+                  "block_id",
+                  "status"
+                ],
+                "properties": {
+                  "block_id": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "done",
+                      "wip",
+                      "plan"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "name": "devmap_read",
+              "method": "devmap.read",
+              "risk": "read",
+              "title": "Read dev map",
+              "description": "Read this workspace's dev map.",
+              "inputSchema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "nerdtechnic.devmap",
+          "version": "0.2.1",
+          "publisher": "nerdtechnic"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "nativeBackend",
+              "params": {}
+            },
+            {
+              "key": "files",
+              "params": {
+                "access": "readWrite"
+              }
+            },
+            {
+              "key": "shell",
+              "params": {
+                "mode": "allowlist",
+                "executables": [
+                  "gh",
+                  "git",
+                  "glab"
+                ]
+              }
+            },
+            {
+              "key": "ui",
+              "params": {}
+            },
+            {
+              "key": "agentTools",
+              "params": {
+                "read": 1,
+                "write": 1
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "high",
+          "reasons": [
+            {
+              "key": "system.ui",
+              "level": "low"
+            },
+            {
+              "key": "system.fs",
+              "level": "medium"
+            },
+            {
+              "key": "shell.allowlist",
+              "level": "high"
+            },
+            {
+              "key": "nativeBackend",
+              "level": "high"
+            },
+            {
+              "key": "agentTools.write",
+              "level": "high"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs",
+            "ui"
+          ],
+          "shell": {
+            "mode": "allowlist",
+            "executables": [
+              "gh",
+              "git",
+              "glab"
+            ]
+          },
+          "scopes": {
+            "fs": {
+              "root": "repository",
+              "read": [
+                "**/.git/**",
+                "**/.navide/devmap.json"
+              ],
+              "write": [
+                "**/.navide/devmap.json"
+              ]
+            }
+          }
+        },
+        "nativeBackend": {
+          "methods": [
+            "devmap.read",
+            "devmap.setStatus"
+          ],
+          "events": [
+            "devmap.changed"
+          ]
+        },
+        "network": "none",
+        "agentTools": [
+          {
+            "name": "devmap_read",
+            "method": "devmap.read",
+            "risk": "read",
+            "title": "Read dev map",
+            "description": "Read this workspace's dev map.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {}
+            },
+            "timeoutMs": 30000
+          },
+          {
+            "name": "devmap_set_status",
+            "method": "devmap.setStatus",
+            "risk": "write",
+            "title": "Set block status",
+            "timeoutMs": 30000,
+            "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+            "inputSchema": {
+              "type": "object",
+              "required": [
+                "block_id",
+                "status"
+              ],
+              "properties": {
+                "block_id": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "done",
+                    "wip",
+                    "plan"
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": true,
+          "projectWrites": {
+            "root": "repository",
+            "patterns": [
+              "**/.navide/devmap.json"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
