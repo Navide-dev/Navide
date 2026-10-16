@@ -384,6 +384,25 @@ describe('ExtensionsPane', () => {
     )
   })
 
+  it('passes the native backend data choice from the remove dialog', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{ id: 'acme.backend', requires: [], sensitive: [] }]),
+      nativeBackendData: vi
+        .fn()
+        .mockResolvedValue({ exists: true, bytes: 5 * 1024 * 1024, path: '/userData/plugin-native-backends/data/acme.backend' }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.backend"] .ext-remove').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.message).toContain('5.0 MB')
+    expect(useNotify().dialog.value?.checkboxLabel).toBeTruthy()
+    expect(useNotify().dialogCheckbox.value).toBe(false)
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('acme.backend', 'delete')
+  })
+
   it('shows and removes a backend-only package with no capabilities', async () => {
     const listInstalled = vi
       .fn()

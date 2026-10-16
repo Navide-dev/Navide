@@ -418,6 +418,43 @@ secret scan reads backend executables in full (up to 512 MiB uncompressed per
 file) instead of the first 5 MiB, and name similarity also warns on names
 within two edits of another publisher's extension.
 
+### Removing a plugin
+
+Removing a plugin (Settings → Navide Plugins, or the Navide Marketplace detail
+page) stops its views and backend, then deletes the package files, its
+capability grant, its native-backend consent, disable switch and per-workspace
+"allow file changes" grants, all of its Host-managed storage (see "Host-managed
+storage partitions"), and its activation record. A reinstall asks for every
+capability and native-backend consent again.
+
+A third-party native backend also keeps private data in
+`<userData>/plugin-native-backends/data/<pluginId>/` (its `HOME`, `TMPDIR` and
+`XDG_*` directories, see above). The remove dialog asks about it only when that
+directory exists: it says how large the data is and where it lives, and offers
+"Keep this data so a reinstall can use it again". That box starts unticked, so
+the data is deleted by default. When there is no such directory the dialog is
+the plain remove confirmation. Deletion removes exactly that one directory: the
+Host refuses a plugin id that is not a single path component, refuses a data
+root or data directory that is a symbolic link, and never follows a link inside
+it, so it cannot reach the user's workspace or any other file.
+
+For callers of the `plugins:remove` IPC, the data choice is the optional
+`nativeBackendData: 'keep' | 'delete'` argument. Omitting it keeps the data, as
+before this choice existed; `plugins:nativeBackendData` reports
+`{ exists, bytes, path }` for the dialog.
+
+What removal keeps:
+
+- Publisher trust: removing a plugin keeps publisher trust. A reinstall of the
+  same package from the same publisher does not ask "trust this publisher"
+  again; the capability and risk confirmation is still asked.
+- Pre-release channel: removing a plugin keeps its "Get pre-releases" opt-in,
+  so a reinstall is offered pre-releases again.
+- The global "Allow third-party Navide plugins to run native backends" switch,
+  which belongs to the user, not to any plugin.
+- Files the plugin wrote in the user's workspaces. The Host does not track
+  them and never deletes them.
+
 ### Navide Backend Wire v1
 
 `backend.protocolVersion: 1` selects **Navide Backend Wire v1**. This is a

@@ -1087,8 +1087,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       restoredInstances: number
       skippedDestroyedHostWindows: number
     }> => ipcRenderer.invoke('plugins:rollback', { id }),
-    remove: (id: string): Promise<{ ok: boolean }> =>
-      ipcRenderer.invoke('plugins:remove', { id }),
+    remove: (id: string, nativeBackendData?: 'keep' | 'delete'): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
+    nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
+      ipcRenderer.invoke('plugins:nativeBackendData', { id }),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>

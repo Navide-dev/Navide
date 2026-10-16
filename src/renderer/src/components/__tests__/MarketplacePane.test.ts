@@ -566,6 +566,78 @@ describe('MarketplacePane', () => {
     expect(api.remove).toHaveBeenCalledWith('acme.demo')
   })
 
+  it('asks whether to keep native backend data, defaulting to delete, only when data exists', async () => {
+    const nativeBackendData = vi
+      .fn()
+      .mockResolvedValue({ exists: true, bytes: 2048, path: '/userData/plugin-native-backends/data/acme.demo' })
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData,
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const view = wrapper.get('[data-detail-id="acme.demo"]')
+
+    // Data exists: the dialog discloses size and location and offers "keep",
+    // unchecked, so confirming deletes the data.
+    await view.get('.ext-uninstall').trigger('click')
+    await flushPromises()
+    expect(nativeBackendData).toHaveBeenCalledWith('acme.demo')
+    const dialog = useNotify().dialog.value
+    expect(dialog?.kind).toBe('confirm')
+    expect(dialog?.message).toContain('2.0 KB')
+    expect(dialog?.detail).toBe('/userData/plugin-native-backends/data/acme.demo')
+    expect(dialog?.checkboxLabel).toBeTruthy()
+    expect(useNotify().dialogCheckbox.value).toBe(false)
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenLastCalledWith('acme.demo', 'delete')
+  })
+
+  it('keeps native backend data when the user ticks keep in the remove dialog', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData: vi.fn().mockResolvedValue({ exists: true, bytes: 10, path: '/d/acme.demo' }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-detail-id="acme.demo"] .ext-uninstall').trigger('click')
+    await flushPromises()
+    useNotify().dialogCheckbox.value = true
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('acme.demo', 'keep')
+  })
+
+  it('removes without a data choice when the plugin has no native backend data', async () => {
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      nativeBackendData: vi.fn().mockResolvedValue({ exists: false, bytes: 0, path: '/x' }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-detail-id="acme.demo"] .ext-uninstall').trigger('click')
+    await flushPromises()
+    expect(useNotify().dialog.value?.checkboxLabel).toBeUndefined()
+    expect(useNotify().dialog.value?.detail).toBeUndefined()
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledWith('acme.demo')
+    expect(api.remove.mock.calls[0]).toHaveLength(1)
+  })
+
   it('shows the detail error and a README fallback', async () => {
     mockPlugins({
       marketplaceDetail: vi

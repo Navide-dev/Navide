@@ -439,7 +439,8 @@ declare global {
           restoredInstances: number
           skippedDestroyedHostWindows: number
         }>
-        remove: (id: string) => Promise<{ ok: boolean }>
+        remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
+        nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>

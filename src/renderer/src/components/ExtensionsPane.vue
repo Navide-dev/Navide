@@ -15,7 +15,7 @@ import type {
 } from '../../../shared/executionPolicy'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
-import { confirmUninstall, ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
+import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
@@ -144,11 +144,12 @@ function pluginErrorMessage(err: unknown): string {
 async function remove(id: string): Promise<void> {
   const api = pluginsApi()
   if (!api) return
-  if (!(await confirmUninstall(t, notify, id))) return
+  const answer = await askUninstall(t, notify, id)
+  if (!answer) return
   busy.value = true
   error.value = ''
   try {
-    await api.remove(id)
+    await removeWithAnswer(api, id, answer)
     await refreshInstalled()
   } catch (err) {
     error.value = pluginErrorMessage(err)
