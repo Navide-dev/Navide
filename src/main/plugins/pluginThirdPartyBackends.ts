@@ -197,6 +197,8 @@ export interface NativeBackendStatusRow {
   canWriteWorkspace: boolean
   workspaceWrite: string[]
   lastViolation?: ResourceViolation
+  /** Declared shell mode, so the panel keeps the high-risk grant visible. */
+  shell?: 'allowlist' | 'full'
 }
 
 export interface NativeBackendConsentPrompt {
@@ -216,9 +218,13 @@ export interface NativeBackendConsentPrompt {
  * "no network access" sentence is only true without shell: saying it there
  * would deceive the user (anti-deception, not a restriction). */
 export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { message: string; detail: string } {
-  const access = prompt.system.includes('fs')
-    ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
-    : 'It asks for no access to your files.'
+  // With shell, git reads and changes workspace files without the separate
+  // file-change grant, so neither "no access" nor "separate permission" holds.
+  const access = prompt.shell
+    ? prompt.system.includes('fs') ? 'It asks to read files in the workspace you open it in.' : ''
+    : prompt.system.includes('fs')
+      ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
+      : 'It asks for no access to your files.'
   const sandbox = prompt.shell
     ? 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.'
     : 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.'
@@ -226,7 +232,9 @@ export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { 
   const shell = prompt.shell
     ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
       + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
-      + 'this workspace to them, and it can change the repository.'
+      + 'this workspace to them, and it can change the repository. '
+      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
+      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).'
     : ''
   return {
     message: prompt.update
@@ -638,6 +646,7 @@ export class ThirdPartyBackendController {
       canWriteWorkspace: spec.thirdParty.system.includes('fs'),
       workspaceWrite: record.workspaceWrite ?? [],
       ...(lastViolation ? { lastViolation } : {}),
+      ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
     }
   }
 

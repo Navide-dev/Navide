@@ -350,7 +350,8 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect(admission.workspaceRoot).toBe(root)
     admission.spawnProcess(spec.entryFile, {})
     expect(spawnImpl).toHaveBeenCalledTimes(1)
-    expect((await instance.status(spec)).status).toBe('ready')
+    expect(await instance.status(spec)).toMatchObject({ status: 'ready', shell: 'allowlist' })
+    expect(await instance.status(writePackage({ system: ['fs'] }))).not.toHaveProperty('shell')
   })
 
   it('asks again when an update adds shell, and the prompt marks it as an update', async () => {
@@ -728,6 +729,17 @@ describe('native backend consent text', () => {
     expect(detail).toContain('can contact network hosts')
     expect(detail).toContain('send data from this workspace')
     expect(detail).toContain('cannot open network connections itself')
+    // Through git a shell package reads and changes workspace files without
+    // the file-change grant: the text must not claim otherwise (review M1).
+    for (const system of [[], ['fs']] as const) {
+      const text = nativeBackendConsentText({ ...base, system: [...system], shell: 'allowlist' }).detail
+      expect(text).not.toContain('no access to your files')
+      expect(text).not.toContain('Changing files needs your separate permission')
+      expect(text).toContain('Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission.')
+      expect(text).toContain('Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).')
+    }
+    expect(nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' }).detail).toContain('It asks to read files in the workspace you open it in.')
+    expect(nativeBackendConsentText({ ...base, system: ['fs'] }).detail).not.toContain('run to completion')
     const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
     expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
     expect(update.detail).not.toMatch(/no network/i)

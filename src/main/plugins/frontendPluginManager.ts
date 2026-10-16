@@ -739,8 +739,11 @@ const IPC_RECEIVER_OPEN_LEFT = 'plugin:receiver:open-left'
 const IPC_RECEIVER_MOUNT = 'plugin:receiver:mount'
 const IPC_RECEIVER_ACCEPT_EXISTING = 'plugin:receiver:accept-existing'
 const DETAIL_OPEN_TIMEOUT_MS = 10_000
-/** The Python shell broker gives a command 30 s (ws_handlers `shell.run`);
- *  the request waits a little longer so the broker's own timeout answers. */
+/** The supervisor's 30 s bridge timer (pluginBackendSupervisor callTimeoutMs)
+ *  answers the backend first, with TIMEOUT; this Host wait is only longer than
+ *  the Python broker's own 30 s (ws_handlers `shell.run`) so the Host request
+ *  itself never ends first. A command the broker already started is not
+ *  cancelled: it runs to completion (disclosed in the consent text). */
 const THIRD_PARTY_SHELL_RUN_TIMEOUT_MS = 35_000
 const IPC_RECEIVER_DISPOSE = 'plugin:receiver:dispose'
 const IPC_RECEIVER_ABORT = 'plugin:receiver:abort'

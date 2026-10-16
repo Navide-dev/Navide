@@ -405,9 +405,14 @@ answer is `{exitCode, stdout, stderr}`; a refused command is the bridge error
 `CAPABILITY_DENIED`. The Host checks on every call that the package declares
 `shell: "allowlist"`, that the user's capability grant for this package version
 has the same shell mode, that the call comes from a live binding of this
-version at its bound workspace root, and, for an agent initiator, the user's
-execution policy for the command. A backend that does not declare it is
-refused the port. `shell: "full"` is not available to a backend: the broker
+version at its bound workspace root. Today only user-initiated calls are
+served: an agent-initiated shell call is refused (third-party methods are not
+agent-callable yet; B1-b of plan B opens that path, and the supervisor already
+applies the user's agent execution policy to the command for it). A backend
+that does not declare it is refused the port. A command the broker has already
+started is not cancelled when the plugin is disabled, its permission is
+revoked or the bridge request times out (30 s): it runs to completion, up to
+the broker's own 30 s limit. Revocation takes effect at the next call. `shell: "full"` is not available to a backend: the broker
 serves only the allowlist, and such a backend is not started
 (`shell-not-allowed`).
 
@@ -416,8 +421,13 @@ connection, but a backend with `shell: "allowlist"` is **not** a backend
 without network access: the broker's `git`, `gh` and `glab` commands contact
 network hosts (`git fetch`/`push` to any URL the repository or command names,
 `gh api`, `glab api`), so the backend can send workspace data off the machine
-through them. The consent dialog says so plainly instead of "it has no
-network access", which it keeps only for backends without shell; the
+through them. Through git it can also read and change workspace files (for
+example `git show`, `git checkout -- .`, `git clean`) without the separate
+per-workspace file-change grant. The consent dialog says so plainly instead of
+"it has no network access" and "changing files needs your separate
+permission", which it keeps only for backends without shell, and Settings →
+Navide Plugins → Native backends keeps a high-risk marker on such a plugin's
+row; the
 disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
