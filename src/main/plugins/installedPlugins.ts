@@ -416,7 +416,8 @@ export function loadPluginDir(dir: string): ScannedPlugin {
 export function scanInstalledPlugins(root: string): ScannedPlugin[] {
   let names: string[]
   try {
-    names = readdirSync(root)
+    // Sorted: readdir order differs between filesystems and runtimes.
+    names = readdirSync(root).sort()
   } catch {
     return []
   }

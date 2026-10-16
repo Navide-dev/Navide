@@ -2,6 +2,31 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.24] — 2026-10-16 — signed release
+
+### Added
+
+- Channels: `/pending` (or `/pending@<bot>`; a command for another bot is ignored) re-sends every prompt still waiting for an answer in this chat or topic, each with the pane name, how many minutes it has waited, the prompt, its options and its buttons. The re-sent message becomes the prompt's own message, and the earlier copy drops its buttons and says "↓ 已重新列在下方". With nothing waiting, the reply is "目前沒有等待確認的 pane". Only prompts from this chat's bot, chat and topic are listed. At start the Telegram adapter adds the missing entries of its "/" menu (`pending`, `menu`, `status`, `stop`) to the bot's command list without replacing or reordering the bot's own commands; it writes nothing when the list is complete or cannot be read (#291).
+- Channels: the warning a chat gets when it writes to a pane that is waiting for an answer now carries the prompt (up to 300 characters), its options, the answer hint and the same buttons as the prompt. On Telegram it quotes the original prompt message, so tapping the quote jumps back to it. It is edited along with the prompt when the prompt is answered, superseded or expires. A warning sent to a different chat or topic keeps the one-line hint, with no buttons or quote (#290).
+- Toasts: a delivery from a chat channel (Telegram, LINE and others) gets its own toast: a solid red header band reading "External channel · {platform} · {sender}" and a thin red frame over the normal toast background, shown for 8 s. Deliveries from another machine keep the solid red external toast, and Guard, other-workspace and ordinary toasts are unchanged (#283).
+
+### Changed
+
+- Scheduler: a job owned by a pane follows that pane's conversation. Rebuilding a pane on the same session, or resuming a closed pane's session in a new pane, hands its jobs to the new pane, so they can be changed again instead of failing with `SCHEDULER_NOT_OWNER`. A different or empty session, a pane name alone, an owner that was only unregistered by a backend restart, and a live owner never pass a job on. Each hand-over is recorded in the job's `owner_inherited` state and logged (#298).
+- Self-evolution rules v3: runs also read the error ledger (`persisted`), the flaky-test ledger and pane exit and stall counts, group repeated signals, and write one daily "Error triage <date>" note with the count, first and last seen, evidence, class and what a fix would be. Triage only proposes: no signal leads to an edit, commit, push or PR. Ledger and log text is treated as data, never instructions (#288).
+- Plugin developer docs: the Navide plugin developer docs match current main (the SDK entry pattern, that `definePlugin` `activate` is never called, the 10 s `ready()` install check, what Developer Mode and backends can and cannot do, current limits), and CI fails when their code examples or reference tables drift from the SDK, the manifest schema or the capability catalog (#299, #300).
+- Dev web mode: `NAVIDE_DEV_WEB=1 node scripts/dev-web/serve.mjs` serves the main window to a local browser against an isolated backend, for headless checks. It is dev-only; release builds are checked to contain none of it (#287).
+- Tests and CI: the backend suite runs on pytest-xdist workers on Linux and macOS and in the release gate's main pass (#286); `scripts/changed-backend-tests.mjs` runs only the backend tests a change can affect, and `release.sh` can overlap typecheck with the backend tests when `NAVIDE_RELEASE_OVERLAP_GATES=1` (off by default) (#285); pull-request CI skips the backend or frontend jobs a change cannot affect (#284); `scripts/ci-triage.mjs` classifies more failures correctly and refuses a ledger write without a run id (#282, #294, #305, #307); five flaky tests wait on events or report what they waited for (#293, #306, #308, #309); and vendor modules can no longer add function-level app imports without a reviewed entry (#304).
+
+### Fixed
+
+- Channels: a person's chat messages no longer hit the agent-to-agent rate limit (5 per minute), which refused the sixth message and every resend in that minute with "⚠️ 訊息沒有送進 pane（rate-limit）". Chat messages have their own cap of 30 per minute per pane and sender; past it, the chat is told the message was not delivered and how many seconds to wait before resending. Messages from agents, groups, the scheduler and other devices keep the agent limit (#301).
+- Channels: an answer from a chat, typed or by button, presses keys only while the window still shows the prompt and options the chat was shown. If the prompt has changed, the answer is not sent: the old request is used up, its message is edited to "superseded", the current prompt is relayed again, and the chat is told "⚠️ 畫面上的確認已經換了，這個回覆沒有送出；請在新的確認訊息重新選擇". A stale button is refused (#289).
+- Read aloud (Linux): readback now speaks. Navide turns on Chromium's speech-dispatcher support, without which no voices were found and every utterance failed. On Windows, the voice hint in Settings › Voice Input points at Settings › Time & language › Speech instead of a macOS path; Linux names the system's speech settings; macOS is unchanged (#292).
+- Shutdown: the backend no longer hangs at quit when a Git watcher burst is being recorded at the same moment (#295), and no longer waits on SQLite's busy timeout in that case; the burst's rows are now kept (#303).
+- Plugin SDK: a package scaffolded by `navide-plugin init` reports ready, so it passes the install check instead of failing it as written (#302).
+- Plugins: a plugin backend's spawn or child error keeps its message in the diagnostic when the runtime's stack omits it (#297, thanks @slighter12), and installed plugins are scanned in directory-name order, the same on every filesystem (#296, thanks @slighter12).
+
 ## [0.2.23] — 2026-10-15 — signed release
 
 ### Added
