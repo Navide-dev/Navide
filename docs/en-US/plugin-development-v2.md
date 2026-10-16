@@ -1744,9 +1744,11 @@ runs only inside the OS sandbox described in
   and future backend spawn. A newly revoked running frontend plugin is stopped
   and quarantined; the Electron backend supervisor re-verifies the current
   root-signed trust decision immediately before every child spawn.
-- Developer Mode accepts one explicitly selected local unpacked Manifest v1 or
-  Manifest v2 frontend directory only when `AGENT_TEAM_PLUGIN_DEV=1` and
-  `AGENT_TEAM_PLUGIN_DEV_PATH` names that exact directory. Manifest v1 is a
+- Developer Mode exists only in development builds; packaged builds ignore
+  its environment variables. It accepts one explicitly selected local unpacked
+  Manifest v1 or Manifest v2 frontend directory only when
+  `AGENT_TEAM_PLUGIN_DEV=1` and `AGENT_TEAM_PLUGIN_DEV_PATH` names that exact
+  directory. Manifest v1 is a
   bounded local compatibility path: it remains unsigned and local-only, must
   be explicitly selected by the user, and cannot obtain Registry provenance.
   Both versions reject reserved ids and backend contributions and record a
