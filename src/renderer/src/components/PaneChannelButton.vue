@@ -14,7 +14,7 @@ import {
 } from '../composables/useChannels'
 import { guardKey, type GuardStore } from '../composables/useGuard'
 import { vendorRunsYolo } from '../lib/guardYolo'
-import { channelBotLabel, formatChannelIdentity } from '../lib/channelIdentity'
+import { channelBotLabel, channelBotName, formatChannelIdentity } from '../lib/channelIdentity'
 import { useAgentMessaging } from '../composables/useAgentMessaging'
 import ChannelLinkGuide from './ChannelLinkGuide.vue'
 
@@ -306,6 +306,11 @@ async function loadChatTitle(): Promise<void> {
 }
 // A refresh (channels.changed: a chat renamed or first seen) may bring the title.
 watch(() => [binding.value, store?.platforms.value], () => void loadChatTitle(), { immediate: true })
+
+/** The bot a binding talks through, named as every channel label names it. */
+function botName(platform: ChannelPlatform, account: string): string {
+  return channelBotName(store?.accountState(platform, account || DEFAULT_ACCOUNT))
+}
 
 // The bot, else the chat, after the platform; the tooltip adds the chat and the level.
 function chipIdentity(mode: 'short' | 'full'): string {
