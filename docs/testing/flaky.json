@@ -145,6 +145,42 @@
       ]
     },
     {
+      "test": "backend/tests/test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#324",
+      "count": 1,
+      "firstSeen": "2026-10-16T10:10:14Z",
+      "lastSeen": "2026-10-16T10:10:14Z",
+      "runs": [
+        {
+          "run": 38882596771,
+          "job": "Backend tests (Windows, 4/4)",
+          "pr": 321,
+          "at": "2026-10-16T10:10:14Z",
+          "evidence": "FAILED backend\\tests\\test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete - assert 0.1 == 0.0"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#322",
+      "count": 1,
+      "firstSeen": "2026-10-16T08:45:40Z",
+      "lastSeen": "2026-10-16T08:45:40Z",
+      "runs": [
+        {
+          "run": 38871697083,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": null,
+          "at": "2026-10-16T08:45:40Z",
+          "evidence": "FAILED backend\\tests\\test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token - AssertionError: condition never became true"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]",
       "category": "test-race",
       "status": "fixed",

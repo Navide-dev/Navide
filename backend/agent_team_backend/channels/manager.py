@@ -67,6 +67,7 @@ CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
+STATUS_SEND_WAIT_S = 5.0  # how long a turn's end waits for a status message still on its way
 TYPING_EVERY_S = 4.0
 AWAITING_PROBE_EVERY_S = 5.0
 AWAITING_RETRY_MAX = 3  # relay attempts per awaiting prompt before giving up
@@ -267,6 +268,7 @@ class _Pending:
     loc: Location
     armed_at: float | None = None  # monotonic time the message went in; None while queued
     status_id: str = ""
+    status_send: asyncio.Task[str] | None = None  # the status message's send, while its id is not back
     status_failures: int = 0
     last_edit: float = 0.0
     started: float = field(default_factory=time.monotonic)
@@ -562,6 +564,7 @@ class ChannelManager:
         status: dict[str, Any] = {
             "lifecycle": "stopped", "connected": False, "reconnect_attempts": 0,
             "last_error": "", "last_connected_at": None, "last_inbound_at": None, "identity": "",
+            "display_name": "",
         }
         if bot in self._errors:
             status["lifecycle"] = "blocked"
@@ -1295,7 +1298,7 @@ class ChannelManager:
                 log.warning("channels: MSG reply for %s dropped: %s is not connected",
                             pending.loc.key(), pending.loc.platform)
             return
-        if pending.status_id:
+        if pending.status_id or pending.status_send is not None:
             elapsed = int(self._clock() - pending.started)
             await self._edit_status(adapter, pending, f"✅ 完成（{elapsed}s）", force=True)
         bodies = _chat_msg_bodies(text)
@@ -2438,11 +2441,17 @@ class ChannelManager:
             if pending.status_id:
                 await self._edit_status(adapter, pending, MSG_WORKING, force=True)
             else:
-                try:
-                    ids = await self.mirror.send(pending.loc, MSG_WORKING)
-                    pending.status_id = ids[0] if ids else ""
-                except Exception:  # noqa: BLE001
-                    pending.status_id = ""
+                async def send_status() -> str:
+                    try:
+                        ids = await self.mirror.send(pending.loc, MSG_WORKING)
+                    except Exception:  # noqa: BLE001
+                        return ""
+                    return ids[0] if ids else ""
+
+                # Its own task: a turn end cancels this run, not the send, and settles it.
+                pending.status_send = self._spawn(send_status())
+                pending.status_id = await asyncio.shield(pending.status_send)
+                pending.status_send = None
         next_typing = next_edit = next_probe = self._clock()
         capped = False
         while self._pending.get(pane_id) is pending:
@@ -2503,6 +2512,17 @@ class ChannelManager:
         await self._notice(adapter, pending.loc, "\n".join(lines))
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
+        if not pending.status_id and pending.status_send is not None:
+            # The turn ended before the status message's id came back: wait for it, bounded.
+            # No id in time, and the text goes as a fresh message, ahead of the reply.
+            send, pending.status_send = pending.status_send, None
+            try:
+                pending.status_id = await asyncio.wait_for(asyncio.shield(send), STATUS_SEND_WAIT_S)
+            except asyncio.TimeoutError:
+                pass
+            if not pending.status_id:
+                self.mirror.post(pending.loc, text)
+                return
         if not pending.status_id or pending.status_failures >= STATUS_EDIT_MAX_FAILURES:
             return
         now = self._clock()

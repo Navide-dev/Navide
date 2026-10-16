@@ -58,6 +58,7 @@ async def test_poll_delivers_messages_and_persists_offset(api: FakeBotApi) -> No
     try:
         await _until(lambda: got)
         assert ad.status.lifecycle == "ready" and ad.status.identity == "@navide_bot"
+        assert ad.status.display_name == "Navide"  # getMe's first_name, for the app's channel labels
         m = got[0]
         assert (m.chat_id, m.sender_id, m.text, m.is_direct, m.thread_id) == ("42", "7", "hello", True, "")
         assert api.calls_of("deleteWebhook") == [{"drop_pending_updates": False}]
