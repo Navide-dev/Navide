@@ -436,6 +436,11 @@ tabs and scroll positions survive. Switching workspace reloads the entry.
 
 ## Security model
 
+**Principle.** Navide discloses every permission and does not restrict
+plugins. Signatures, namespaces and identity checks below exist to stop
+deception, not to limit what a plugin can do. See
+[Design principle: disclose, don't restrict](plugin-development-v2.md#design-principle-disclose-dont-restrict).
+
 **Signatures.** A package carries a detached Ed25519 signature over the
 archive's sha256 digest, supplied at publish time rather than stored inside the
 archive. Produce it with `navide-plugin sign <package> --key <privkey>`.
