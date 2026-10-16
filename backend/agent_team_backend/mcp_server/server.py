@@ -455,6 +455,10 @@ def _resolve_caller(ctx: Context) -> _Caller:
     # CLI was spawned with, which is also what any alias below is keyed by. An
     # id this run never wired has no token, so nothing can stand in for it.
     expected = mcp_wiring.bound_pane_token(pane_id)
+    if not expected and agent_messaging.was_forgotten(pane_id):
+        # A closed pane's token is revoked with it (wiring.release_pane_token);
+        # its CLI still hears what it always did, rather than a token error.
+        raise CallerUnknown(_STALE)
     if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
     entry = agent_messaging.current(pane_id)

@@ -40,6 +40,12 @@ def add_secret(token: str) -> None:
         _SECRETS.add(token)
 
 
+def remove_secret(token: str) -> None:
+    """Stop scanning for ``token`` (a revoked credential): keeps the set the
+    size of what is live rather than of everything ever minted."""
+    _SECRETS.discard(token)
+
+
 def _redact_bare(text: str) -> str:
     for secret in tuple(_SECRETS):
         if secret in text:
@@ -80,21 +86,47 @@ class TokenRedactionFilter(logging.Filter):
         if isinstance(record.msg, str):
             pattern = _TOKEN_PARAM_NOT_PLACEHOLDER if args else _TOKEN_PARAM
             record.msg = _redact_bare(pattern.sub(r"\1***", record.msg))
-        if not args:
-            return True
+        if args:
+            self._redact_args(record, args)
+        self._redact_traceback(record)
+        return True
+
+    @staticmethod
+    def _redact_args(record: logging.LogRecord, args: object) -> None:
         if isinstance(args, Mapping):
             record.args = {k: _redact_arg(v) for k, v in args.items()}
         elif isinstance(args, tuple):
             record.args = tuple(_redact_arg(a) for a in args)
         # ``"?t=%s", token``: the param name and its value only meet once
-        # formatted, so redact the formatted message instead.
+        # formatted, so redact the formatted message instead. The same goes
+        # for a registered secret inside an arg that is neither a string nor a
+        # container (an exception, an object whose repr holds an env).
         try:
             rendered = record.getMessage()
         except Exception:
-            return True
-        if redact(rendered) != rendered:
-            record.msg, record.args = redact(rendered), None
-        return True
+            return
+        cleaned = _redact_bare(redact(rendered))
+        if cleaned != rendered:
+            record.msg, record.args = cleaned, None
+
+    @staticmethod
+    def _redact_traceback(record: logging.LogRecord) -> None:
+        """A traceback (log.exception / exc_info) and stack_info are appended
+        by the formatter after the message, so they are redacted separately.
+        A traceback that held a secret is rendered here and kept as exc_text,
+        which every formatter prints in place of formatting exc_info again."""
+        if record.exc_info and not record.exc_text:
+            try:
+                text = logging.Formatter().formatException(record.exc_info)
+            except Exception:
+                text = ""
+            cleaned = _redact_bare(redact(text))
+            if cleaned != text:
+                record.exc_text, record.exc_info = cleaned, None
+        elif record.exc_text:
+            record.exc_text = _redact_bare(redact(record.exc_text))
+        if record.stack_info:
+            record.stack_info = _redact_bare(redact(record.stack_info))
 
 
 _FILTER = TokenRedactionFilter()

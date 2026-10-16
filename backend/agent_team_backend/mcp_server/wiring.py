@@ -95,8 +95,9 @@ TOKEN_ENV = "NAVIDE_MCP_TOKEN"
 PANE_CONFIG_DIRNAME = "plan-mcp-panes"
 
 # One credential per pane id, minted the first time that pane is wired and
-# kept for the rest of this backend run, so a respawn of the same pane (rebuild,
-# resume) carries the token its previous CLI had rather than stranding it.
+# kept while anything still names the pane, so a respawn of the same id (the
+# embedded AI dock) carries the token its previous CLI had rather than
+# stranding it. Revoked by release_pane_token once the pane is closed.
 # Memory only: a backend restart moves the port anyway, so nothing from a
 # previous run could reach this one. Spawn wiring runs in worker threads and
 # concurrent pane restores would otherwise race to mint the same pane's token.
@@ -133,14 +134,17 @@ def spawn_token(pane_id: str = "") -> str:
 def caller_token(pane_id: str) -> str:
     """The secret that marks a caller as ``pane_id``, minted on first use.
 
-    Bound to that one pane: plan_mcp._resolve_caller accepts ``pane=<id>``
-    only with the token minted for that id, so a process that has read one
-    pane's wiring cannot present itself as another pane. It never rides in a
+    Per pane: plan_mcp._resolve_caller accepts ``pane=<id>`` only with the
+    token minted for that id, and there is no longer one token shared by every
+    pane. That is not a boundary between processes of the same user: the
+    token sits in the pane's spawn environment or in its 0600 file under
+    ``plan-mcp-panes/`` (or its shim home), and any process running as the
+    user — another pane's agent included — can read those and obtain another
+    pane's token (see plan_mcp._PANE_PRIVATE_UI_ACTIONS). Binding a caller to
+    the pane's own process is a separate follow-up. It never rides in a
     pane's command line (see wire_command), so it is not on show to other
-    accounts through ``ps``; the pane's own environment and 0600 config file
-    still hold it, which is what lets that pane's CLI use it. Minted only by
-    spawn wiring in production — the server looks tokens up with
-    bound_pane_token, which never mints.
+    accounts through ``ps``. Minted only by spawn wiring in production — the
+    server looks tokens up with bound_pane_token, which never mints.
     """
     with _PANE_TOKENS_LOCK:
         token = _PANE_TOKENS.get(pane_id)
@@ -149,6 +153,46 @@ def caller_token(pane_id: str) -> str:
             _PANE_TOKENS[pane_id] = token
             log_redaction.add_secret(token)
         return token
+
+
+def release_pane_token(pane_id: str) -> None:
+    """Revoke ``pane_id``'s token once nothing can still be using it.
+
+    Called when the messaging registry forgets the id (pane closed, aged out
+    offline, or a former id dropped with its pane) and when its PTY exits.
+    The token is kept while either side still names the pane: a registered or
+    aliased id is a pane on screen whose CLI may be re-attached under a new id
+    (it keeps presenting this one), and a live PTY is a CLI that holds it —
+    the same-id AI dock respawn, or a close that reached the registry before
+    the process was gone. Revoked, the id gets a fresh token when it is next
+    spawned, so a CLI that outlived its pane cannot act as a reused id.
+    """
+    from agent_team_backend import agent_messaging
+
+    with _PANE_TOKENS_LOCK:
+        if pane_id not in _PANE_TOKENS:
+            return
+    if agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id):
+        return
+    with _PANE_TOKENS_LOCK:
+        token = _PANE_TOKENS.pop(pane_id, None)
+    if token:
+        log_redaction.remove_secret(token)
+
+
+def _pane_has_live_pty(pane_id: str) -> bool:
+    """Whether a PTY of this backend still runs with ``pane_id``. The app
+    module is only consulted when loaded: without it there are no PTYs."""
+    import sys
+
+    app = sys.modules.get("agent_team_backend.app")
+    terminals = getattr(app, "_TERMINALS", None) if app is not None else None
+    if terminals is None:
+        return False
+    try:
+        return bool(terminals.live_session_ids_for_pane(pane_id))
+    except Exception:  # noqa: BLE001 — keep the token when unsure
+        return True
 
 
 def bound_pane_token(pane_id: str) -> str:
