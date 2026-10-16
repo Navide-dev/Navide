@@ -9,7 +9,8 @@
 //
 // Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
-//                   or a network/disk/cancel signature);
+//                   or a network/disk/cancel signature, or a vitest worker RPC timeout in a
+//                   run whose tests all passed);
 //   test-race       a test failed on time: a timeout signature, a wait that gave up, a port race,
 //                   or a test the ledger knows as a race — rerun before blaming code;
 //   needs-review    a test the ledger does not know as a race that either raised an IndexError or
@@ -35,6 +36,9 @@ const PYTEST_TIMEOUT = /\+{3,} Timeout \+{3,}/
 const TEST_FRAME = /^\s*File ".*?[\\/](backend[\\/]tests[\\/][^"]+\.py)", line \d+, in (test_\w+)$/
 // The required-check job that fails whenever another job does; it is never the cause.
 const AGGREGATE_JOB = 'Lint and test'
+// A vitest worker that missed the fixed 60 s RPC deadline on a loaded runner:
+// an unhandled error that fails a run whose tests may all have passed.
+const VITEST_RPC_TIMEOUT = /\[vitest-worker\]: Timeout calling "onTaskUpdate"/
 const MAX_RUNS_PER_TEST = 20
 
 /** The file of the innermost frame pytest reported for `test` when it raised an
@@ -50,6 +54,13 @@ function lookupErrorPath(lines, test) {
     if (m) path = m[1].replace(/\\+/g, '/')
   }
   return path
+}
+
+/** True when the log has a vitest "Tests" summary and none of them counts a
+ *  failed test. */
+function vitestAllPassed(lines) {
+  const summaries = lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, '')).filter((l) => /^\s*Tests\s+\d/.test(l))
+  return summaries.length > 0 && summaries.every((l) => !/\bfailed\b/.test(l))
 }
 
 /** Drop the runner's leading ISO timestamp. */
@@ -87,14 +98,16 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
     const failed = lines.find((l) => /##\[error\]/.test(l))
     if (failed) {
       const env = lines.find((l) => ENVIRONMENT.test(l))
-      const timedOut = !env && lines.some((l) => PYTEST_TIMEOUT.test(l))
+      const rpcTimeout = env ? undefined : lines.find((l) => VITEST_RPC_TIMEOUT.test(l))
+      const timedOut = !env && !rpcTimeout && lines.some((l) => PYTEST_TIMEOUT.test(l))
       const frame = timedOut ? lines.map((l) => TEST_FRAME.exec(l)).find(Boolean) : null
       const test = frame ? `${frame[1].replace(/\\+/g, '/')}::${frame[2]}` : '(job)'
       out.push({
         test,
         category: env || /canceled/i.test(failed) ? 'environment'
-          : timedOut ? (knownRaces.has(test) ? 'test-race' : 'needs-review') : 'product-defect',
-        evidence: (env ?? frame?.[0] ?? failed).trim().slice(0, 400),
+          : rpcTimeout ? (vitestAllPassed(lines) ? 'environment' : 'needs-review')
+            : timedOut ? (knownRaces.has(test) ? 'test-race' : 'needs-review') : 'product-defect',
+        evidence: (env ?? rpcTimeout ?? frame?.[0] ?? failed).trim().slice(0, 400),
       })
     }
   }

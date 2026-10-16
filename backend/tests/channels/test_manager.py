@@ -405,6 +405,41 @@ async def test_busy_acknowledgement_carries_cancel_and_stop_buttons(env: Env) ->
     assert env.tg.buttons[MSG_RECEIVED_BUSY] == BUSY_BUTTONS
 
 
+NO_BUTTONS = Capabilities(threads=True, create_location=True, edit=True, typing=True,
+                          buttons=False, text_limit=4000)
+
+
+async def test_without_buttons_the_busy_reply_says_what_to_type(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    await env.inbound("while busy")
+    assert env.tg.buttons == {}
+    assert env.tg.texts()[-1] == MSG_RECEIVED_BUSY + "\n可直接輸入：/cancel 撤回排隊中的訊息 · stop 中斷 pane"
+
+
+async def test_without_buttons_the_stop_reply_says_how_to_resume(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    await env.inbound("stop")
+    assert env.tg.texts()[-1] == MSG_INTERRUPTED + "\n可直接輸入：/resume 繼續"
+
+
+@pytest.mark.parametrize("text", ["<@U123> stop", "@navide_bot stop", "@navide_bot /stop"])
+async def test_a_stop_addressed_to_the_bot_still_stops(env: Env, text: str) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound(text)
+    assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
+
+
+async def test_cancel_and_resume_addressed_to_the_bot_are_commands(env: Env) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound("wrong")
+    await env.inbound("<@U123> /cancel")
+    assert env.fake.cancels == ["k1"]
+    env.fake.states["pane-1"] = {"exists": True, "busy": False, "display_status": "stopped"}
+    await env.inbound("@navide_bot /resume")
+    assert env.fake.resumes == ["pane-1"] and len(env.fake.delivered) == 1
+
+
 async def test_cancel_button_withdraws_like_the_command(env: Env) -> None:
     await env.inbound("wrong")
     await env.inbound("", callback=CANCEL_CALLBACK)
@@ -529,6 +564,72 @@ async def test_status_edits_stop_after_three_failures(env: Env) -> None:
     env.fake.verdicts["k1"] = {"status": "delivered"}
     await asyncio.sleep(0.4)
     assert len(env.tg.edits) == 3
+
+
+def _slow_status(env: Env, delay: float, *, fail: bool = False) -> list[tuple[str, str, str]]:
+    """Make the status message's send hang ``delay`` s after its text reached the chat
+    (then fail, if ``fail``); returns one log of ("send"/"edit", id, text) in wire order."""
+    wire: list[tuple[str, str, str]] = []
+    send_text, edit_text = env.tg.send_text, env.tg.edit_text
+
+    async def send(loc, text, *, buttons=None):
+        ids = await send_text(loc, text, buttons=buttons)
+        wire.append(("send", ids[0], text))
+        if text == MSG_WORKING:
+            await asyncio.sleep(delay)
+            if fail:
+                raise RuntimeError("status send timed out")
+        return ids
+
+    async def edit(loc, message_id, text):
+        await edit_text(loc, message_id, text)
+        wire.append(("edit", message_id, text))
+
+    env.tg.send_text, env.tg.edit_text = send, edit
+    return wire
+
+
+async def test_a_turn_ending_while_the_status_send_is_in_flight_still_marks_it_done(env: Env) -> None:
+    wire = _slow_status(env, 0.05)
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    env.turn_complete("pane-1", "the answer")  # before the status message's id is back
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    status_id = next(mid for kind, mid, text in wire if kind == "send" and text == MSG_WORKING)
+    done = [i for i, (kind, mid, text) in enumerate(wire)
+            if kind == "edit" and mid == status_id and text.startswith("✅ 完成（")]
+    assert done, wire  # edited in place, as when the id was back in time
+    assert done[0] < wire.index(("send", wire[-1][1], reply)), wire  # still ahead of the reply
+    assert [t for t in env.tg.texts() if t.startswith("✅ 完成（")] == []  # no second status
+    assert env.tg.texts()[-1] == reply
+
+
+async def test_a_status_send_that_never_returns_its_id_gets_a_fresh_done(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "STATUS_SEND_WAIT_S", 0.2, raising=False)
+    wire = _slow_status(env, 1.5, fail=True)
+    submitted: dict[str, float] = {}
+    send = env.m.mirror.send
+
+    async def timed(loc, text, **kw):
+        submitted.setdefault(text, time.monotonic())
+        return await send(loc, text, **kw)
+
+    env.m.mirror.send = timed
+    await env.inbound("go")
+    env.fake.verdicts["k1"] = {"status": "delivered"}
+    await _until(lambda: MSG_WORKING in env.tg.texts())
+    ended = time.monotonic()
+    env.turn_complete("pane-1", "the answer")
+    reply = "✅ 完成 · 💬 alice\nthe answer"
+    await _until(lambda: reply in env.tg.texts())
+    # The reply waited out the bound, not the stuck send (which took 1.5 s on the wire).
+    assert submitted[reply] - ended < 1.0
+    texts = env.tg.texts()
+    fresh = [i for i, t in enumerate(texts) if t.startswith("✅ 完成（")]
+    assert len(fresh) == 1 and fresh[0] < texts.index(reply), wire
+    assert texts[-1] == reply
 
 
 async def test_delivery_failure_posts_notice(env: Env) -> None:
@@ -1150,8 +1251,19 @@ async def test_relay_prompt_answered_against_a_stale_screen_is_settled(env: Env)
     await _until_relay_prompt(env)
     mid, text = _prompt_message(env)
     rid = _relay_id(env)
+    # The answer is what finds the screen changed here. The run's awaiting probe would
+    # find it too and supersede the id first, so it waits until the answer is handled.
+    probe = env.m._check_awaiting
+    held = True
+
+    async def check_awaiting(adapter, pane_id, pending):
+        if not held:
+            await probe(adapter, pane_id, pending)
+
+    env.m._check_awaiting = check_awaiting
     env.fake.prompt = "Allow Bash(npm publish)?"
     await env.inbound(f"yes {rid}")
+    held = False
     assert env.fake.answers == [] and mgr_mod.MSG_RELAY_PROMPT_CHANGED in env.tg.texts()
     await _until(lambda: any(m == mid for m, _ in env.tg.edits))
     assert (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_SUPERSEDED}") in env.tg.edits

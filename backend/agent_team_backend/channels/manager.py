@@ -67,6 +67,7 @@ CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
+STATUS_SEND_WAIT_S = 5.0  # how long a turn's end waits for a status message still on its way
 TYPING_EVERY_S = 4.0
 AWAITING_PROBE_EVERY_S = 5.0
 AWAITING_RETRY_MAX = 3  # relay attempts per awaiting prompt before giving up
@@ -103,6 +104,8 @@ MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
 MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
 MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
 RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
+# Where a platform has no buttons, the reply names the commands they stand for.
+MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
@@ -265,6 +268,7 @@ class _Pending:
     loc: Location
     armed_at: float | None = None  # monotonic time the message went in; None while queued
     status_id: str = ""
+    status_send: asyncio.Task[str] | None = None  # the status message's send, while its id is not back
     status_failures: int = 0
     last_edit: float = 0.0
     started: float = field(default_factory=time.monotonic)
@@ -1294,7 +1298,7 @@ class ChannelManager:
                 log.warning("channels: MSG reply for %s dropped: %s is not connected",
                             pending.loc.key(), pending.loc.platform)
             return
-        if pending.status_id:
+        if pending.status_id or pending.status_send is not None:
             elapsed = int(self._clock() - pending.started)
             await self._edit_status(adapter, pending, f"✅ 完成（{elapsed}s）", force=True)
         bodies = _chat_msg_bodies(text)
@@ -1431,6 +1435,7 @@ class ChannelManager:
             return ""
         loc = Location(msg.platform, msg.account, msg.chat_id, msg.thread_id)
         if not adapter.capabilities.buttons:
+            text += _typed_hint(buttons or [])
             buttons = None
         try:
             ids = await self.mirror.send(loc, text, buttons=buttons)
@@ -1486,6 +1491,10 @@ class ChannelManager:
             msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
         if msg.callback_data and not msg.text:
             return  # a button press with the relay off, or not ours
+        pick = quick_menu.menu_pick(msg.text, self._identity(msg))
+        if pick is not None:
+            await self._quick_pick(msg, pick)
+            return
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
             await self._quick_menu(msg)
             return
@@ -1511,13 +1520,15 @@ class ChannelManager:
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
-        if _is_stop_word(msg.text):
+        # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
+        command = quick_menu.strip_mention(msg.text, self._identity(msg))
+        if _is_stop_word(command):
             await self._interrupt(msg, pane_id, buttons=RESUME_BUTTONS)
             return
-        if _command_word(msg.text) in CANCEL_WORDS:
+        if _command_word(command) in CANCEL_WORDS:
             await self._cancel_queued(msg)
             return
-        if _command_word(msg.text) in RESUME_WORDS:
+        if _command_word(command) in RESUME_WORDS:
             await self._resume(msg, pane_id)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
@@ -2077,9 +2088,6 @@ class ChannelManager:
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
             return
-        if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
-            await self._reply(msg, quick_menu.text(lang, "no_buttons"))
-            return
         agent_key = self._seams.pane_agent(pane_id)
         menu = self.quick.create(
             platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
@@ -2089,6 +2097,10 @@ class ChannelManager:
         )
         if menu is None:
             await self._reply(msg, quick_menu.text(lang, "empty"))
+            return
+        if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
+            # No buttons: the same menu as numbered lines, picked with "/menu <n>".
+            await self._reply(msg, redact.redact_text(self.quick.render_text(menu)))
             return
         body, rows = self.quick.render(menu, 0)
         try:
@@ -2111,6 +2123,32 @@ class ChannelManager:
         if press.kind == "g":
             await self._quick_page(msg, press.menu, int(press.key))
             return
+        await self._quick_cast(msg, press, binding, pane_id, settings, lang)
+
+    async def _quick_pick(self, msg: InboundMessage, number: int) -> None:
+        """``/menu <n>``: item ``n`` of the text menu this chat was sent."""
+        settings = await self._ui_settings()
+        menu = self.quick.latest(msg.location_key())
+        lang = menu.lang if menu is not None else prompt_skills.language(settings)
+        binding = self._binding_for(msg)
+        if binding is None:
+            # As /menu: a bot sharing a group with others stays quiet.
+            if msg.is_direct or self._sole_bot(msg.platform):
+                await self._reply(msg, quick_menu.text(lang, "not_bound"))
+            return
+        pane_id = self._seams.resolve_pane(binding.pane_id)
+        if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
+            await self._reply(msg, quick_menu.text(lang, "expired"))
+            return
+        press = self.quick.pick(msg.location_key(), number)
+        if press is None:
+            await self._reply(msg, quick_menu.text(lang, "bad_pick"))
+            return
+        await self._quick_cast(msg, press, binding, pane_id, settings, lang)
+
+    async def _quick_cast(self, msg: InboundMessage, press: quick_menu.Press, binding: Binding,
+                          pane_id: str, settings: dict[str, Any], lang: str) -> None:
+        """Send the prompt or skill ``press`` stands for to ``pane_id``, once."""
         if press.kind == "p":
             prompt = next((p for p in prompt_skills.castable(prompt_skills.effective(settings))
                            if p["id"] == press.key), None)
@@ -2403,11 +2441,17 @@ class ChannelManager:
             if pending.status_id:
                 await self._edit_status(adapter, pending, MSG_WORKING, force=True)
             else:
-                try:
-                    ids = await self.mirror.send(pending.loc, MSG_WORKING)
-                    pending.status_id = ids[0] if ids else ""
-                except Exception:  # noqa: BLE001
-                    pending.status_id = ""
+                async def send_status() -> str:
+                    try:
+                        ids = await self.mirror.send(pending.loc, MSG_WORKING)
+                    except Exception:  # noqa: BLE001
+                        return ""
+                    return ids[0] if ids else ""
+
+                # Its own task: a turn end cancels this run, not the send, and settles it.
+                pending.status_send = self._spawn(send_status())
+                pending.status_id = await asyncio.shield(pending.status_send)
+                pending.status_send = None
         next_typing = next_edit = next_probe = self._clock()
         capped = False
         while self._pending.get(pane_id) is pending:
@@ -2468,6 +2512,17 @@ class ChannelManager:
         await self._notice(adapter, pending.loc, "\n".join(lines))
 
     async def _edit_status(self, adapter: ChannelAdapter, pending: _Pending, text: str, *, force: bool = False) -> None:
+        if not pending.status_id and pending.status_send is not None:
+            # The turn ended before the status message's id came back: wait for it, bounded.
+            # No id in time, and the text goes as a fresh message, ahead of the reply.
+            send, pending.status_send = pending.status_send, None
+            try:
+                pending.status_id = await asyncio.wait_for(asyncio.shield(send), STATUS_SEND_WAIT_S)
+            except asyncio.TimeoutError:
+                pass
+            if not pending.status_id:
+                self.mirror.post(pending.loc, text)
+                return
         if not pending.status_id or pending.status_failures >= STATUS_EDIT_MAX_FAILURES:
             return
         now = self._clock()
@@ -2586,6 +2641,8 @@ class ChannelManager:
             request.message_text = text if len(ids) == 1 else ""
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown[pane_id] = _Shown(prompt, request.id)
+        # Relayed: a run's probe that has not seen it yet must not post it a second time.
+        self._awaiting_posted.add(pane_id)
 
     def _retire_relay(self, pane_id: str, note: str) -> None:
         """Expire the pane's relay requests and mark their chat prompts settled, so a
@@ -2819,6 +2876,14 @@ def _strip_controls(text: str, keep: str = "\t") -> str:
     return "".join(
         ch if ch in keep or unicodedata.category(ch) != "Cc" else (" " if ch in "\t\n\r" else "")
         for ch in text)
+
+
+def _typed_hint(buttons: list[tuple[str, str]]) -> str:
+    """The commands ``buttons`` stand for, for a platform that cannot show them; "" when
+    none of them has a typed form."""
+    commands = [f"{_CALLBACK_COMMANDS[data]} {label.split(' ', 1)[-1]}"
+                for label, data in buttons if data in _CALLBACK_COMMANDS]
+    return "\n" + MSG_TYPED_HINT.format(commands=" · ".join(commands)) if commands else ""
 
 
 def _command_word(text: str) -> str:

@@ -119,6 +119,12 @@ _bridge_watch_origins: set[str] = set()
 # same value twice a millisecond apart (Windows ticks every ~15.6 ms) cannot
 # order a caller against a scan that started beside it.
 _list_flights: dict[Any, dict[str, Any]] = {}
+# The last flight each instance finished cleanly, held only while callers of
+# that instance are still in _list_plans_single_flight: one that arrived before
+# it started may wake after it ended and must still share it. The count is of
+# those callers; the last one out drops both entries, so no result outlives them.
+_list_finished: dict[Any, dict[str, Any]] = {}
+_list_callers: dict[Any, int] = {}
 _list_generation = 0
 
 SERVER_INFO = {"name": "navide.plans", "version": "0.1.0"}
@@ -1264,41 +1270,56 @@ def _list_plans_single_flight(origin: dict[str, Any]) -> list[dict[str, Any]]:
     key = origin["instance"]
     with _state_lock:
         arrived_after = _list_generation
-    while True:
-        with _state_lock:
-            flight = _list_flights.get(key)
-            leader = flight is None
-            if leader:
-                _list_generation += 1
-                flight = _list_flights[key] = {
-                    "done": threading.Event(),
-                    "generation": _list_generation,
-                    "result": None,
-                    "error": None,
-                }
-        assert flight is not None
-        if not leader:
-            flight["done"].wait()
-            if flight["generation"] <= arrived_after:
-                continue
-            error = flight["error"]
-            # A leader cancelled by its own caller says nothing about ours:
-            # take the next flight instead of reporting its cancellation.
-            if isinstance(error, BridgeFailure) and error.code == "USER_CANCELLED":
-                continue
-            if error is not None:
-                raise error
-            return flight["result"]
-        try:
-            flight["result"] = _list_plans(origin)
-        except BaseException as error:
-            flight["error"] = error
-            raise
-        finally:
+        _list_callers[key] = _list_callers.get(key, 0) + 1
+    try:
+        while True:
             with _state_lock:
-                _list_flights.pop(key, None)
-            flight["done"].set()
-        return flight["result"]
+                flight = _list_flights.get(key)
+                finished = _list_finished.get(key)
+                # A scan that started after this caller arrived and has already
+                # ended is as fresh as one it could still join.
+                if flight is None and finished is not None and finished["generation"] > arrived_after:
+                    return finished["result"]
+                leader = flight is None
+                if leader:
+                    _list_generation += 1
+                    flight = _list_flights[key] = {
+                        "done": threading.Event(),
+                        "generation": _list_generation,
+                        "result": None,
+                        "error": None,
+                    }
+            assert flight is not None
+            if not leader:
+                flight["done"].wait()
+                if flight["generation"] <= arrived_after:
+                    continue
+                error = flight["error"]
+                # A leader cancelled by its own caller says nothing about ours:
+                # take the next flight instead of reporting its cancellation.
+                if isinstance(error, BridgeFailure) and error.code == "USER_CANCELLED":
+                    continue
+                if error is not None:
+                    raise error
+                return flight["result"]
+            try:
+                flight["result"] = _list_plans(origin)
+            except BaseException as error:
+                flight["error"] = error
+                raise
+            finally:
+                with _state_lock:
+                    _list_flights.pop(key, None)
+                    if flight["error"] is None:
+                        _list_finished[key] = flight
+                flight["done"].set()
+            return flight["result"]
+    finally:
+        with _state_lock:
+            _list_callers[key] -= 1
+            if not _list_callers[key]:
+                del _list_callers[key]
+                _list_finished.pop(key, None)
 
 
 def _encoded_size(value: Any) -> int:

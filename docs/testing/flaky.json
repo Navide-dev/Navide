@@ -113,6 +113,22 @@
       ]
     },
     {
+      "test": "backend/tests/cli_regression/test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode]",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-16T04:46:48Z",
+      "lastSeen": "2026-10-16T04:46:48Z",
+      "runs": [
+        {
+          "run": 38850198431,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": 296,
+          "at": "2026-10-16T04:46:48Z",
+          "evidence": "FAILED backend\\tests\\cli_regression\\test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode] - TimeoutError"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal",
       "category": "needs-review",
       "count": 1,
@@ -141,6 +157,42 @@
           "pr": 317,
           "at": "2026-10-16T07:41:01Z",
           "evidence": "FAILED backend\\tests\\test_git_service.py::TestDiscoverRepositories::test_timeout_preserves_workspace_validation[False-expected1] - AssertionError: assert {'ok': True, ...ncated': True} == {'ok': False,...sitories': []}"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#324",
+      "count": 1,
+      "firstSeen": "2026-10-16T10:10:14Z",
+      "lastSeen": "2026-10-16T10:10:14Z",
+      "runs": [
+        {
+          "run": 38882596771,
+          "job": "Backend tests (Windows, 4/4)",
+          "pr": 321,
+          "at": "2026-10-16T10:10:14Z",
+          "evidence": "FAILED backend\\tests\\test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete - assert 0.1 == 0.0"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#322",
+      "count": 1,
+      "firstSeen": "2026-10-16T08:45:40Z",
+      "lastSeen": "2026-10-16T08:45:40Z",
+      "runs": [
+        {
+          "run": 38871697083,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": null,
+          "at": "2026-10-16T08:45:40Z",
+          "evidence": "FAILED backend\\tests\\test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token - AssertionError: condition never became true"
         }
       ]
     },
@@ -193,6 +245,24 @@
           "pr": 276,
           "at": "2026-10-15T05:37:34Z",
           "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#329",
+      "count": 1,
+      "firstSeen": "2026-10-16T12:35:26Z",
+      "lastSeen": "2026-10-16T12:35:26Z",
+      "runs": [
+        {
+          "run": 38899029640,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": null,
+          "at": "2026-10-16T12:35:26Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt - AssertionError: assert [] == [('pane-1', {...'option': 1})]"
         }
       ]
     }

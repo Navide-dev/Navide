@@ -31,6 +31,7 @@ MAX_RENDERS_PER_MENU = 3
 
 _CALLBACK_RE = re.compile(rf"^nv2:([psg]):([{TOKEN_ALPHABET}]{{{TOKEN_LENGTH}}})$")
 _MENTION_RE = re.compile(r"^(?:<[@!][^>]*>\s*)+")
+_PICK_RE = re.compile(r"^/menu(?:@(\S+))?\s+(\d{1,3})$", re.IGNORECASE)
 # A name typed after the vendor's skill prefix: anything else could split the command.
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
@@ -83,6 +84,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "expired": "⚠️ 這個選單已過期，請重新傳 /menu",
         "gone": "⚠️「{name}」已不存在或已停用，請重新傳 /menu",
         "sent": "▶ 已送出：{name}",
+        "pick_hint": "回覆 /menu <編號> 送出",
+        "bad_pick": "⚠️ 沒有這個編號，請重新傳 /menu",
         "send_failed": "⚠️ 無法顯示快捷選單：{error}",
         "shares_title": "🔗 有效的分享連結（最近 {count} 筆）",
         "shares_line": "{n}. {title} · {kind} · 開啟 {opens} 次 · 到期 {expires} · {short}",
@@ -113,6 +116,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "expired": "⚠️ This menu has expired. Send /menu again",
         "gone": "⚠️ \"{name}\" no longer exists or is turned off. Send /menu again",
         "sent": "▶ Sent: {name}",
+        "pick_hint": "Reply /menu <number> to send one",
+        "bad_pick": "⚠️ No such number. Send /menu again",
         "send_failed": "⚠️ The quick menu could not be shown: {error}",
         "shares_title": "🔗 Active share links (newest {count})",
         "shares_line": "{n}. {title} · {kind} · opened {opens}× · expires {expires} · {short}",
@@ -143,6 +148,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "expired": "⚠️ このメニューは期限切れです。もう一度 /menu を送ってください",
         "gone": "⚠️「{name}」は存在しないか無効になっています。もう一度 /menu を送ってください",
         "sent": "▶ 送信しました：{name}",
+        "pick_hint": "送るには /menu <番号> と返信してください",
+        "bad_pick": "⚠️ その番号はありません。もう一度 /menu を送ってください",
         "send_failed": "⚠️ クイックメニューを表示できませんでした：{error}",
         "shares_title": "🔗 有効な共有リンク（最新 {count} 件）",
         "shares_line": "{n}. {title} · {kind} · 開封 {opens} 回 · 期限 {expires} · {short}",
@@ -168,17 +175,36 @@ def text(lang: str, key: str, **kw: Any) -> str:
     return STRINGS.get(lang, STRINGS[DEFAULT_LANGUAGE])[key].format(**kw)
 
 
+def strip_mention(body: str, identity: str = "") -> str:
+    """``body`` without a leading Slack/Discord mention (``<@U123>``) or the bot's own
+    ``@name`` (``identity``), so a command addressed to the bot reads as typed."""
+    rest = _MENTION_RE.sub("", (body or "").strip()).strip()
+    name = identity.lstrip("@").lower()
+    if name and rest.lower().startswith("@" + name) and rest[len(name) + 1:len(name) + 2] in ("", " ", "\n"):
+        rest = rest[len(name) + 1:].strip()
+    return rest
+
+
 def is_menu_command(body: str, identity: str = "") -> bool:
     """``/menu`` or a bare ``/start`` (Telegram's first contact, when it carries no link
-    code), optionally ``@bot``-addressed or after a leading Slack/Discord mention. A
-    command addressed to another bot (``/menu@other``) is not ours."""
-    rest = _MENTION_RE.sub("", (body or "").strip()).strip()
+    code), optionally ``@bot``-addressed or after a leading mention. A command addressed
+    to another bot (``/menu@other``) is not ours."""
+    rest = strip_mention(body, identity)
     if not rest.startswith("/") or " " in rest:
         return False
     head, _, bot = rest.partition("@")
     if bot and identity and bot.lower() != identity.lstrip("@").lower():
         return False
     return head.lower() in ("/menu", "/start")
+
+
+def menu_pick(body: str, identity: str = "") -> int | None:
+    """The number in ``/menu <n>``: an item of the text menu a platform without buttons got."""
+    m = _PICK_RE.match(strip_mention(body, identity))
+    if m is None or (m.group(1) and identity and m.group(1).lower() != identity.lstrip("@").lower()):
+        return None
+    n = int(m.group(2))
+    return n if n > 0 else None
 
 
 def parse_callback(data: str) -> tuple[str, str] | None:
@@ -259,6 +285,10 @@ def _clip(label: str, limit: int) -> str:
     return label if len(label) <= limit else label[: limit - 1] + "…"
 
 
+def _items(menu: Menu) -> list[Item]:
+    return [item for page in menu.pages for row in page for item in row]
+
+
 def paginate(prompts: list[Item], skills: list[Item], layout: Layout) -> list[list[list[Item]]]:
     """Rows of ``per_row`` buttons, a group never sharing a row, ``rows`` rows a page."""
     rows = [g[i:i + layout.per_row] for g in (prompts, skills) for i in range(0, len(g), layout.per_row)]
@@ -314,6 +344,32 @@ class QuickMenus:
             for token in renders.pop(0):
                 self._tokens.pop(token, None)
         return "\n".join(lines), rows
+
+    def render_text(self, menu: Menu) -> str:
+        """The whole menu as numbered lines, for a platform without buttons."""
+        lines = [text(menu.lang, "title", pane=menu.title),
+                 text(menu.lang, "counts", prompts=menu.counts[0], skills=menu.counts[1])]
+        if not menu.skills_supported:
+            lines.append(text(menu.lang, "no_skill_syntax"))
+        lines += [f"{n}. {item.label}" for n, item in enumerate(_items(menu), 1)]
+        lines.append(text(menu.lang, "pick_hint"))
+        return "\n".join(lines)
+
+    def latest(self, location_key: str) -> Menu | None:
+        """The newest live menu sent to ``location_key``."""
+        now = self.clock()
+        live = [m for m in self._menus.values()
+                if m.location_key == location_key and now - m.created <= MENU_TTL_S]
+        return live[-1] if live else None
+
+    def pick(self, location_key: str, number: int) -> Press | None:
+        """Item ``number`` (1-based) of the newest live menu at ``location_key``."""
+        menu = self.latest(location_key)
+        items = _items(menu) if menu is not None else []
+        if not 0 < number <= len(items):
+            return None
+        item = items[number - 1]
+        return Press(menu, item.kind, item.key, item.label)
 
     def press(self, kind: str, token: str, location_key: str) -> Press | None:
         """The live press ``token`` stands for, pressed in ``location_key``; None once expired."""

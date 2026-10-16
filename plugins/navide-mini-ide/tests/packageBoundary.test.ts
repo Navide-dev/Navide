@@ -11,6 +11,7 @@ import {
   rmSync,
   symlinkSync,
 } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, dirname, join, resolve } from 'node:path'
@@ -246,17 +247,20 @@ describe('navide Mini-IDE public package boundary', () => {
           expect(workerFiles.filter((path) => basename(path).startsWith(workerPrefix)), workerPrefix).toHaveLength(1)
         }
         const javaScriptFiles = distFiles.filter((path) => path.endsWith('.js'))
+        // Read the dist once and asynchronously: rereading every bundle per
+        // Monaco worker kept this test worker's event loop busy on a loaded runner.
+        const javaScriptSources = new Map(await Promise.all(
+          javaScriptFiles.map(async (path) => [path, await readFile(path, 'utf8')] as const),
+        ))
         for (const workerFile of workerFiles) {
           const workerName = basename(workerFile)
           expect(
-            javaScriptFiles.some((path) => path !== workerFile && readFileSync(path, 'utf8').includes(workerName)),
+            [...javaScriptSources].some(([path, source]) => path !== workerFile && source.includes(workerName)),
             workerName,
           ).toBe(true)
         }
 
-        const builtJavaScript = javaScriptFiles
-          .map((path) => readFileSync(path, 'utf8'))
-          .join('\n')
+        const builtJavaScript = [...javaScriptSources.values()].join('\n')
         expect(builtJavaScript.length).toBeGreaterThan(0)
         expect(builtJavaScript).not.toContain('src/renderer')
         expect(builtJavaScript).not.toContain('capabilityBackend')
