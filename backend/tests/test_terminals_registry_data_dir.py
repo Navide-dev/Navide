@@ -160,6 +160,48 @@ async def test_kill_all_waits_for_registry_cleanup_before_returning(tmp_path, mo
 
 
 @pytest.mark.asyncio
+async def test_kill_all_unregisters_a_child_closed_before_it_was_reapable(tmp_path, monkeypatch):
+    """The PTY's EOF can close a shutdown session before its child is
+    reapable: _close then sees exit=None (CI run 38862563872). That close
+    used to skip the unregister for reason="shutdown", and kill_all's own
+    _close found the session already closed, so the record stayed behind.
+    Here every child still looks alive to that first close."""
+    unregistered: list[int] = []
+    real_unregister = pty_registry.unregister
+
+    def unregister(pid: int) -> None:
+        unregistered.append(pid)
+        real_unregister(pid)
+
+    monkeypatch.setattr(pty_registry, "unregister", unregister)
+    monkeypatch.setattr(terminals_module, "_ps_snapshot", lambda: {})
+    service = TerminalService(_emit)
+    session = service.create(
+        pane_id="eof-first",
+        agent_key=None,
+        command=[sys.executable, "-c", "import time; time.sleep(30)"],
+        cwd=str(tmp_path),
+    )
+    real_poll = session.proc.poll
+    hidden = True
+    session.proc.poll = lambda: None if hidden else real_poll()
+    real_close = service._close
+
+    def close(target: TerminalSession, *, reason: str) -> None:
+        nonlocal hidden
+        real_close(target, reason=reason)
+        hidden = False
+
+    monkeypatch.setattr(service, "_close", close)
+
+    await asyncio.wait_for(service.kill_all(grace=0.2), 10)
+
+    assert session.closed and session.exit_code is None, "the close saw an unreapable child"
+    assert real_poll() is not None
+    assert session.proc.pid in unregistered, "kill_all returned with the child's registry record left behind"
+
+
+@pytest.mark.asyncio
 async def test_kill_all_waits_for_an_inflight_descendant_registry_write(tmp_path, monkeypatch):
     update_started = threading.Event()
     release_update = threading.Event()

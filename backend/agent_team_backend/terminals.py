@@ -2071,15 +2071,18 @@ class TerminalService:
         # Drop the crash-recovery record only once the child is confirmed
         # dead: a still-live child (e.g. a TERM-trapping CLI) must stay
         # visible to the next start's reap_stale. kill()'s escalation task
-        # and kill_all() unregister the survivors they put down.
+        # unregisters the survivors it puts down; kill_all() relies on the
+        # settle below for a child its close found not yet reapable.
         if child_gone:
             self._submit_lifecycle(
                 in_data_dir(self._data_dir, pty_registry.unregister, session.proc.pid),
             )
-        elif reason == "exit":
+        elif reason in ("exit", "shutdown"):
             # EOF can arrive before the child is reapable: it has closed its
             # end of the PTY but not finished exiting (seen under load). Both
             # cleanups above need it confirmed dead, so wait for that, bounded.
+            # kill_all's EOF arrives as "shutdown" (its pending close reason),
+            # and kill_all awaits these settles before it returns.
             task = self._loop.create_task(self._settle_exit(session))
             self._exit_settles.add(task)
             task.add_done_callback(self._exit_settles.discard)

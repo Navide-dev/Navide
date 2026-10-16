@@ -77,6 +77,7 @@ BOT_COMMANDS = [
     {"command": "menu", "description": "快速選單"},
     {"command": "status", "description": "pane 狀態"},
     {"command": "stop", "description": "中斷 pane"},
+    {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
 ]
 
 
