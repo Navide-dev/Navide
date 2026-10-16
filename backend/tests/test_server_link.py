@@ -1122,7 +1122,7 @@ async def test_an_incoming_sealed_message_is_opened_and_delivered(broadcasts):
             )
         )
         await server.opened[0].push({"type": "messages.pending", "payload": payload})
-        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts))
+        await _until(lambda: any(e["type"] == "agent_msg.deliver" for e in broadcasts), timeout=CONNECT_TIMEOUT_S)
         delivered = next(e for e in broadcasts if e["type"] == "agent_msg.deliver")
         assert delivered["payload"]["content"] == "please review"
     finally:
