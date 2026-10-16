@@ -95,10 +95,11 @@ describe.skipIf(!pythonAvailable)('pre-commit relative import parser', () => {
     expect(scan(NEW_PARSER, name, source)).toBe(scan(OLD_PARSER, name, source))
   })
 
+  // Windows Python writes print()'s newline as \r\n, so split on either.
   it('still finds the real imports in the synthetic cases', () => {
-    expect(scan(NEW_PARSER, 'template.ts', SYNTHETIC['template.ts']).split('\n'))
+    expect(scan(NEW_PARSER, 'template.ts', SYNTHETIC['template.ts']).split(/\r?\n/))
       .toEqual(['./a', './dyn', ''])
-    expect(scan(NEW_PARSER, 'comments.ts', SYNTHETIC['comments.ts']).split('\n'))
+    expect(scan(NEW_PARSER, 'comments.ts', SYNTHETIC['comments.ts']).split(/\r?\n/))
       .toEqual(['./real', '../re/export', ''])
   })
 
