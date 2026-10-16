@@ -91,7 +91,7 @@ def test_backend_port_absent_or_garbage(tmp_path: Path) -> None:
 def test_plan_mcp_url_with_pane_id_carries_the_pane_credential() -> None:
     url = plan_mcp_wiring.plan_mcp_url(4567, "pane-1")
     assert url == (
-        f"http://127.0.0.1:4567/plan-mcp?pane=pane-1&t={plan_mcp_wiring.caller_token()}"
+        f"http://127.0.0.1:4567/plan-mcp?pane=pane-1&t={plan_mcp_wiring.caller_token('pane-1')}"
     )
 
 
@@ -670,8 +670,8 @@ async def test_terminal_create_wires_claude_pane(
     )
     url = _config_file(created["command"][2])["mcpServers"]["navide"]["url"]
     assert "pane=pane-1" in url
-    assert plan_mcp_wiring.caller_token() in url
-    assert plan_mcp_wiring.caller_token() not in created["command"][2]
+    assert plan_mcp_wiring.caller_token("pane-1") in url
+    assert plan_mcp_wiring.caller_token("pane-1") not in created["command"][2]
 
 
 @pytest.mark.asyncio

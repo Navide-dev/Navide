@@ -479,8 +479,10 @@ def unregister(pane_id: str, owner: Any = None) -> bool:
     if _PANES.pop(pane_id, None) is not None:
         _remember_forgotten(pane_id)
     _OWNERS.pop(pane_id, None)
+    former = former_ids(pane_id)
     _forget_aliases_to(pane_id)
     _notify_pane("unregister", pane_id)
+    _release_caller_tokens([pane_id, *former])
     return True
 
 
@@ -526,9 +528,31 @@ def purge_expired() -> list[str]:
         _PANES.pop(pane_id, None)
         _remember_forgotten(pane_id)
         _OWNERS.pop(pane_id, None)
+        former = former_ids(pane_id)
         _forget_aliases_to(pane_id)
         _notify_pane("unregister", pane_id)
+        _release_caller_tokens([pane_id, *former])
     return expired
+
+
+def names_pane(pane_id: str) -> bool:
+    """Whether ``pane_id`` is still a registered pane (online or not) or an
+    alias of one. No purge: asked from inside the registry's own removals."""
+    return pane_id in _PANES or pane_id in _ALIASES
+
+
+def _release_caller_tokens(pane_ids: list[str]) -> None:
+    """Let /plan-mcp revoke the caller tokens of ids nothing names any more."""
+    try:
+        from .mcp_server import wiring
+    except Exception:  # noqa: BLE001 — the registry must never break over it
+        log.exception("agent_messaging: could not load MCP wiring")
+        return
+    for pane_id in pane_ids:
+        try:
+            wiring.release_pane_token(pane_id)
+        except Exception:  # noqa: BLE001
+            log.exception("agent_messaging: releasing pane %s token failed", pane_id)
 
 
 def get(pane_id: str) -> RegisteredPane | None:
