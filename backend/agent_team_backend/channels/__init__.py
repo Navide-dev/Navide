@@ -196,6 +196,27 @@ def default_seams() -> Seams:
 
         return listed(app.skills_store, agent_key)
 
+    # /mcp: read-only and allowlisted (mcp_menu). A CLI's own servers come from its config
+    # file and are never started; Navide's are the ones it already runs.
+    def agent_mcp(agent_key: str) -> list[dict[str, Any]]:
+        from .. import native_mcp
+        from .mcp_menu import native_rows
+
+        return native_rows(native_mcp.scan(), agent_key)
+
+    async def navide_mcp() -> list[dict[str, Any]]:
+        from .. import app
+        from .mcp_menu import navide_rows
+
+        servers = await asyncio.to_thread(app.mcp_settings_store.list_servers)
+        return await navide_rows(servers, app.mcp_manager.get)
+
+    async def navide_mcp_tools(name: str) -> list[str] | None:
+        from .. import app
+        from .mcp_menu import navide_tools
+
+        return await navide_tools(app.mcp_manager.get, name)
+
     async def broadcast(event_type: str, payload: dict[str, Any]) -> None:
         from .. import app
 
@@ -218,6 +239,7 @@ def default_seams() -> Seams:
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
         ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
+        agent_mcp=agent_mcp, navide_mcp=navide_mcp, navide_mcp_tools=navide_mcp_tools,
     )
 
 

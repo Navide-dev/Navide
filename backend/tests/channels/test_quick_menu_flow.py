@@ -187,3 +187,60 @@ async def test_a_page_that_can_be_neither_edited_nor_resent_is_answered_with_why
     await env.inbound("", callback=_press_data(env, "▶"))
     assert len(env.tg.menus) == 1
     assert env.tg.texts()[-1] == qm.text("zh-TW", "send_failed", error="Bad Request: BUTTON_DATA_INVALID")
+
+
+async def test_prompts_lists_only_the_prompt_skills(env: Env) -> None:
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/prompts")
+    assert [label for label, _ in _buttons(env)] == ["💬 Fix it", "💬 Docs"]
+    assert env.tg.menus[-1][1].startswith(qm.text("zh-TW", "title_prompts", pane="api"))
+    await env.inbound("", callback=_press_data(env, "Docs"))
+    assert env.fake.delivered[-1][:2] == ("pane-1", "update the docs")
+
+
+async def test_skills_lists_only_the_panes_skills(env: Env) -> None:
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "codex"
+    env.fake.skills["codex"] = ["deploy", "lint"]
+    await env.inbound("/skills")
+    assert [label for label, _ in _buttons(env)] == ["🧩 deploy", "🧩 lint"]
+    assert env.tg.menus[-1][1].startswith(qm.text("zh-TW", "title_skills", pane="api"))
+    await env.inbound("", callback=_press_data(env, "lint"))
+    assert env.fake.delivered[-1][:2] == ("pane-1", "$lint")
+
+
+async def test_skills_explains_a_vendor_without_a_verified_syntax(env: Env) -> None:
+    env.fake.agents["pane-1"] = "opencode"
+    env.fake.skills["opencode"] = ["deploy"]
+    await env.inbound("/skills")
+    assert env.tg.menus == []
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "no_skill_syntax")
+
+
+async def test_skills_with_none_installed_says_so(env: Env) -> None:
+    env.fake.agents["pane-1"] = "claude"
+    await env.inbound("/skills")
+    assert env.tg.menus == []
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "empty_skills")
+
+
+async def test_a_buttonless_platform_gets_numbered_prompts_and_picks_by_number(env: Env) -> None:
+    env.tg.capabilities = Capabilities(threads=True, create_location=True, edit=True, typing=True,
+                                       buttons=False, text_limit=4000)
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/prompts")
+    body = env.tg.texts()[-1]
+    assert "1. 💬 Fix it" in body and "2. 💬 Docs" in body and "deploy" not in body
+    await env.inbound("/menu 2")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "update the docs")
+
+
+async def test_prompts_and_skills_in_an_unbound_chat(env: Env) -> None:
+    for command in ("/prompts", "/skills"):
+        await env.inbound(command, thread="99")
+        assert env.tg.texts()[-1] == qm.text("zh-TW", "not_bound")
+    assert env.tg.menus == []

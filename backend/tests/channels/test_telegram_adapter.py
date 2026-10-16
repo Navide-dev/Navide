@@ -528,7 +528,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop", "cancel", "resume"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "prompts", "skills", "mcp", "status", "stop", "cancel", "resume"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -538,7 +538,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop", "cancel", "resume"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "prompts", "skills", "mcp", "stop", "cancel", "resume"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
@@ -553,6 +553,98 @@ async def test_an_unreadable_command_list_is_not_written(api: FakeBotApi) -> Non
     api.fail("getMyCommands", 400, "Bad Request: something")
     await _one_session(api)
     assert api.calls_of("setMyCommands") == []
+
+
+async def test_our_command_with_an_old_description_is_updated_in_place(api: FakeBotApi) -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS
+
+    # A bot registered by an older build: /menu still says "快速選單".
+    old = [{"command": "deploy", "description": "my own"},
+           *[dict(c, description="快速選單") if c["command"] == "menu" else dict(c) for c in BOT_COMMANDS]]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in old]
+    await _one_session(api)
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    assert [c["command"] for c in commands] == [c["command"] for c in old]
+    assert commands[0] == {"command": "deploy", "description": "my own"}
+    assert next(c for c in commands if c["command"] == "menu")["description"] == "Prompt 與技能選單"
+
+
+async def test_a_users_own_command_sharing_our_name_is_left_alone(api: FakeBotApi) -> None:
+    mine = [{"command": "menu", "description": "today's lunch"}]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in mine]
+    await _one_session(api)
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    assert commands[0] == mine[0]
+    assert [c["command"] for c in commands].count("menu") == 1
+
+
+async def test_commands_are_described_in_the_navide_language(api: FakeBotApi) -> None:
+    api.handlers["getMyCommands"] = lambda params: []
+    ad = _adapter(api)
+    ad.command_language = lambda: "en-US"
+
+    async def emit(msg: InboundMessage) -> None:
+        pass
+
+    await ad.start(emit)
+    try:
+        await _until(lambda: api.calls_of("getUpdates"))
+    finally:
+        await ad.stop()
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    assert next(c for c in commands if c["command"] == "menu")["description"] == "Prompts and skills menu"
+
+
+async def test_a_language_change_rewrites_our_descriptions_only(api: FakeBotApi) -> None:
+    from agent_team_backend.channels.telegram import bot_commands
+
+    current = [{"command": "deploy", "description": "my own"}, *bot_commands("zh-TW")]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in current]
+    ad = _adapter(api)
+    ad.command_language = lambda: "ja-JP"
+
+    async def emit(msg: InboundMessage) -> None:
+        pass
+
+    await ad.start(emit)
+    try:
+        await _until(lambda: api.calls_of("getUpdates"))
+    finally:
+        await ad.stop()
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    assert commands == [{"command": "deploy", "description": "my own"}, *bot_commands("ja-JP")]
+
+
+async def test_an_unreadable_language_still_writes_the_default_wording(api: FakeBotApi) -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS
+
+    def broken() -> str:
+        raise OSError("settings unreadable")
+
+    api.handlers["getMyCommands"] = lambda params: []
+    ad = _adapter(api)
+    ad.command_language = broken
+
+    async def emit(msg: InboundMessage) -> None:
+        pass
+
+    await ad.start(emit)
+    try:
+        await _until(lambda: api.calls_of("getUpdates"))
+    finally:
+        await ad.stop()
+    assert api.calls_of("setMyCommands")[0]["commands"] == BOT_COMMANDS
+
+
+async def test_every_language_describes_every_command() -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS, bot_commands
+
+    names = [c["command"] for c in BOT_COMMANDS]
+    for lang in ("zh-TW", "en-US", "ja-JP"):
+        commands = bot_commands(lang)
+        assert [c["command"] for c in commands] == names
+        assert all(0 < len(c["description"]) <= 256 for c in commands)
+    assert bot_commands("xx") == bot_commands("zh-TW")
 
 
 async def test_a_failed_command_menu_does_not_stop_the_bot(api: FakeBotApi) -> None:
