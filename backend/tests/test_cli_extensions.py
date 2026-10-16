@@ -278,7 +278,7 @@ def test_default_runner_never_prompts_and_times_out(tmp_path: Path) -> None:
 
 
 def _ctx(pane_id: str = "pa") -> Any:
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
 

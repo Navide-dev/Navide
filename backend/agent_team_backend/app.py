@@ -962,6 +962,9 @@ async def _active_emit(event: dict[str, Any] | bytes) -> None:
         exit_pane_id = payload.get("pane_id")
         if exit_pane_id:
             _schedule_pane_unregister(exit_pane_id)
+            # The CLI holding the pane's /plan-mcp token is gone; the token
+            # goes too unless the pane is still on screen (see wiring).
+            mcp_server_wiring.release_pane_token(str(exit_pane_id))
             # A CLI that exits with subagents still running never reports their
             # stops, so the count would stay above zero for a pane id that no
             # longer has a CLI behind it.

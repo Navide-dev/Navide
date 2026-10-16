@@ -119,7 +119,7 @@ async def test_ui_invoke_cannot_reach_guard_requests(monkeypatch, guard_store):
 
     monkeypatch.setattr(mcp, "_ui_request", fake_ui_request)
     agent_messaging.register("pa", "agent", "/ws/alpha", agent_key="claude")
-    params = {"pane": "pa", "t": mcp_wiring.caller_token()}
+    params = {"pane": "pa", "t": mcp_wiring.caller_token("pa")}
     ctx = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
     mark_tainted("pa", "agent")
     for t, args in (("guard.set_enabled", {"enabled": False}), ("guard.taint.clear", {"pane_id": "pa"})):
@@ -139,7 +139,7 @@ def _seed() -> None:
 
 
 def _pane_ctx(pane_id: str) -> Any:
-    params = {"pane": pane_id, "t": mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
 
