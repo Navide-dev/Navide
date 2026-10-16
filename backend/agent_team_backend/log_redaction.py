@@ -28,19 +28,44 @@ _TOKEN_PARAM = re.compile(_PARAM + _VALUE)
 _TOKEN_PARAM_NOT_PLACEHOLDER = re.compile(_PARAM + r"(?!%[-#0 +]*[\d.]*[sdrifxXeEgGc(])" + _VALUE)
 
 
+# Credentials minted in-process that can turn up bare, outside any ``t=``:
+# the per-pane /plan-mcp tokens ride in a spawn env (NAVIDE_MCP_TOKEN) and in
+# Authorization headers, so a logged env or header carries no "t=" to catch.
+_SECRETS: set[str] = set()
+
+
+def add_secret(token: str) -> None:
+    """Redact ``token`` wherever it appears in a log record from now on."""
+    if token:
+        _SECRETS.add(token)
+
+
+def _redact_bare(text: str) -> str:
+    for secret in tuple(_SECRETS):
+        if secret in text:
+            text = text.replace(secret, "***")
+    return text
+
+
 def redact(text: str) -> str:
     return _TOKEN_PARAM.sub(r"\1***", text)
 
 
 def _redact_arg(value: object) -> object:
     if not isinstance(value, str):
+        if isinstance(value, (Mapping, list, tuple, set)) and _SECRETS:
+            # A container is rendered with repr: check that, and fall back to
+            # the redacted text only when a secret is actually in it.
+            rendered = repr(value)
+            if _redact_bare(rendered) != rendered:
+                return _redact_bare(redact(rendered))
         return value
     # The bare token, too: when the format and args do not match, logging's
     # error report prints the raw args, so there is no rendered "t=" to catch.
     token = ws_auth.current_token()
     if token and token in value:
         value = value.replace(token, "***")
-    return redact(value)
+    return redact(_redact_bare(value))
 
 
 class TokenRedactionFilter(logging.Filter):
@@ -54,7 +79,7 @@ class TokenRedactionFilter(logging.Filter):
         args = record.args
         if isinstance(record.msg, str):
             pattern = _TOKEN_PARAM_NOT_PLACEHOLDER if args else _TOKEN_PARAM
-            record.msg = pattern.sub(r"\1***", record.msg)
+            record.msg = _redact_bare(pattern.sub(r"\1***", record.msg))
         if not args:
             return True
         if isinstance(args, Mapping):

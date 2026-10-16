@@ -66,7 +66,7 @@ class _Window:
 def _pane_ctx(pane_id: str = "pa") -> Any:
     """A Context carrying a CLI pane's credential, so the caller has an own
     window for the request to be addressed to."""
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

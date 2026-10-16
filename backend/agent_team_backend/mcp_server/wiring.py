@@ -55,10 +55,12 @@ import logging
 import os
 import secrets
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from agent_team_backend import log_redaction
 from agent_team_backend.applog import app_data_dir, backend_port_file
 from agent_team_backend.cli_vendors import registry
 from agent_team_backend.cli_vendors.base import McpWiring, mcp_document, mcp_entry
@@ -92,10 +94,14 @@ TOKEN_ENV = "NAVIDE_MCP_TOKEN"
 # documents are read once at CLI start and their tokens die with the run.
 PANE_CONFIG_DIRNAME = "plan-mcp-panes"
 
-# Minted at import, not on first use: spawn wiring runs in worker threads and
-# concurrent pane restores would otherwise race to initialise it, burning a
-# token into one pane's command line that a later winner immediately replaces.
-_CALLER_TOKEN = secrets.token_urlsafe(24)
+# One credential per pane id, minted the first time that pane is wired and
+# kept for the rest of this backend run, so a respawn of the same pane (rebuild,
+# resume) carries the token its previous CLI had rather than stranding it.
+# Memory only: a backend restart moves the port anyway, so nothing from a
+# previous run could reach this one. Spawn wiring runs in worker threads and
+# concurrent pane restores would otherwise race to mint the same pane's token.
+_PANE_TOKENS: dict[str, str] = {}
+_PANE_TOKENS_LOCK = threading.Lock()
 
 
 def plan_mcp_url(port: int, pane_id: str = "", *, with_token: bool = True) -> str:
@@ -121,21 +127,35 @@ def plan_mcp_url(port: int, pane_id: str = "", *, with_token: bool = True) -> st
 
 def spawn_token(pane_id: str = "") -> str:
     """The credential a spawn's wiring carries: the pane's, or the host's."""
-    return caller_token() if pane_id else auth.internal_token()
+    return caller_token(pane_id) if pane_id else auth.internal_token()
 
 
-def caller_token() -> str:
-    """Per-run secret marking a caller as a pane this backend run spawned.
+def caller_token(pane_id: str) -> str:
+    """The secret that marks a caller as ``pane_id``, minted on first use.
 
-    It never rides in a pane's command line (see wire_command), so it is not
-    on show to other accounts through ``ps``. Anything running as the same
-    user can still find it — in the pane's environment or its 0600 config
-    file — so it is a freshness check rather than an authorisation boundary
-    between processes of one user: a caller from a previous backend run (or
-    something that never went through spawn wiring) is rejected instead of
-    silently acting as some pane.
+    Bound to that one pane: plan_mcp._resolve_caller accepts ``pane=<id>``
+    only with the token minted for that id, so a process that has read one
+    pane's wiring cannot present itself as another pane. It never rides in a
+    pane's command line (see wire_command), so it is not on show to other
+    accounts through ``ps``; the pane's own environment and 0600 config file
+    still hold it, which is what lets that pane's CLI use it. Minted only by
+    spawn wiring in production — the server looks tokens up with
+    bound_pane_token, which never mints.
     """
-    return _CALLER_TOKEN
+    with _PANE_TOKENS_LOCK:
+        token = _PANE_TOKENS.get(pane_id)
+        if token is None:
+            token = secrets.token_urlsafe(24)
+            _PANE_TOKENS[pane_id] = token
+            log_redaction.add_secret(token)
+        return token
+
+
+def bound_pane_token(pane_id: str) -> str:
+    """The token minted for ``pane_id`` in this run, or "" when it was never
+    wired — in which case no pane credential can name it."""
+    with _PANE_TOKENS_LOCK:
+        return _PANE_TOKENS.get(pane_id, "") if pane_id else ""
 
 
 def claude_config_path() -> Path:
