@@ -179,6 +179,7 @@ import { applyLinuxSpeechDispatcher } from './linuxSpeech'
 import type { EditorNativeHost } from './plugins/editorNativeCapability'
 import { NativeBackendStore } from './plugins/pluginNativeBackendStore'
 import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
+import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
   thirdPartyBackendLaunchSpec,
@@ -5303,8 +5304,8 @@ app.whenReady().then(async () => {
   // This mode keeps the fixed first-party dist-plugins bundles available for
   // local app development. An optional explicit package path is a separate
   // Host-owned seam; it never scans an arbitrary parent directory or carries
-  // Registry provenance.
-  const pluginDevEnabled = process.env['AGENT_TEAM_PLUGIN_DEV'] === '1'
+  // Registry provenance. Packaged builds never enter Developer Mode.
+  const pluginDevEnabled = pluginDeveloperModeEnabled(process.env, app.isPackaged)
   if (pluginDevEnabled) {
     // Dev-only: prefer the local Manifest v2 bundle. The old descriptor is a
     // recovery artifact and must not be the normal developer override.
