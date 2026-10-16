@@ -190,6 +190,14 @@ def _said(env: "Env", needle: str) -> bool:
     return any(needle in t for t in env.tg.texts())
 
 
+def _status_posted(env: "Env", pane_id: str = "pane-1") -> bool:
+    """The working status is visible AND the manager holds its id. The fake
+    records the text before the id comes back through the outbox, and a turn
+    that ends in between has no status to edit to done."""
+    pending = env.m._pending.get(pane_id)
+    return MSG_WORKING in env.tg.texts() and bool(pending and pending.status_id)
+
+
 async def _until(pred, timeout: float = 3.0) -> None:
     deadline = time.monotonic() + timeout
     while not pred():
@@ -485,7 +493,7 @@ async def test_outbound_after_turn_complete_only(env: Env) -> None:
     env.turn_complete("pane-1", "not the reply")
     await _until(lambda: "✅ 完成 · 🖥 本機\nnot the reply" in env.tg.texts())
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "the **answer**")
     await _until(lambda: "✅ 完成 · 💬 alice\nthe **answer**" in env.tg.texts())
     loc = next(loc for loc, t in env.tg.sent if t.endswith("the **answer**"))
@@ -793,7 +801,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
     # (2026-10-14 09:36:47 / 09:36:52). The first must not answer the chat with nothing.
     await env.inbound("你有什麼建議")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await asyncio.sleep(0.05)
     env.turn_complete("pane-1", "我的建議")
@@ -807,7 +815,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
 async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: Env) -> None:
     await env.inbound("go")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
     assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
@@ -989,11 +997,19 @@ def _relay_id(env: Env) -> str:
     return next(iter(env.m.relay._by_id))
 
 
+def _relay_posted(env: Env) -> bool:
+    """The relay prompt's message id is recorded. It comes back through the
+    outbox after the fake has recorded the text, and an answer or a turn end
+    in between finds no message to edit."""
+    return any(req.message_id for req in env.m.relay._by_id.values())
+
+
 async def _until_relay_prompt(env: Env) -> None:
     # The relay registers its id before the prompt is sent, so waiting on the id
     # alone lets a slow runner assert (or send the next message) before the
-    # prompt has reached the chat. Wait for the prompt itself.
-    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts()))
+    # prompt has reached the chat. Wait for the prompt itself, and its message id.
+    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts())
+                 and _relay_posted(env))
 
 
 async def test_stale_relay_off_config_is_ignored(env: Env) -> None:
@@ -1007,7 +1023,7 @@ async def test_relay_on_prompt_buttons_and_yes(env: Env) -> None:
     import re
 
     await _awaiting(env)
-    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()))
+    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()) and _relay_posted(env))
     rid = _relay_id(env)
     assert re.fullmatch(r"[a-km-z]{5}", rid)
     text = next(t for t in env.tg.texts() if t.startswith("⏸"))
@@ -1034,7 +1050,7 @@ async def test_relay_buttons_via_callback_and_question_option(env: Env) -> None:
 
     env.tg.send_text = capture
     await _awaiting(env)
-    await _until(lambda: sent_buttons)
+    await _until(lambda: sent_buttons and _relay_posted(env))
     rid = _relay_id(env)
     assert sent_buttons[0] == [("1. Keep", f"nv1:{rid}:1"), ("2. Discard", f"nv1:{rid}:2")]
     assert all(len(data.encode()) <= 64 for _, data in sent_buttons[0])
