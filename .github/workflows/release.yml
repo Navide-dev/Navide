@@ -41,16 +41,20 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install, typecheck, test, build and electron-builder. The version
+        # is pinned in .bun-version; the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node scripts/...` and `node -p` steps below, which
+        # are release checks and post-processing outside package.json. Everything
+        # started through `bun run` runs on Bun itself (bunfig.toml [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -70,12 +74,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: pnpm release:check "${GITHUB_REF_NAME}"
+        run: bun run release:check "${GITHUB_REF_NAME}"
 
       - name: Run release gates
         env:
@@ -84,9 +88,9 @@ jobs:
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
           uv --project backend run --locked ruff check backend
-          pnpm typecheck
-          pnpm test:run
-          pnpm run test:packaged-plans
+          bun run typecheck
+          bun run test:run
+          bun run test:packaged-plans
           uv --project backend run --locked pytest backend/tests
 
       - name: Build Python backend
@@ -108,12 +112,12 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: pnpm build:stt
+        run: bun run build:stt
 
       - name: Build, sign & notarize application
         shell: bash
         run: |
-          pnpm build
+          bun run build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
@@ -125,7 +129,7 @@ jobs:
           # hdiutil on shared macOS runners intermittently fails to attach the
           # DMG staging image ("Device not configured"); retry absorbs it.
           for attempt in 1 2 3; do
-            if pnpm exec electron-builder --mac --arm64 --publish never; then
+            if bun run electron-builder --mac --arm64 --publish never; then
               exit 0
             fi
             echo "electron-builder attempt ${attempt} failed; retrying in 15s..."
@@ -198,6 +202,19 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${extracted}"
           rm -rf "${work}"
 
+      - name: Attach installers to the workflow run
+        # Every run, including a workflow_dispatch dry run: this is how a signed
+        # and notarized macOS build gets tried on a real Mac before a tag
+        # publishes it.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: navide-macos-arm64
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist-release/Navide-*.dmg
+            dist-release/Navide-*.zip
+
       - name: Upload to the draft GitHub Release
         # Manual (workflow_dispatch) runs dry-run the signing chain only.
         if: github.event_name == 'push'
@@ -232,16 +249,20 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install, typecheck, test, build and electron-builder. The version
+        # is pinned in .bun-version; the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node scripts/...` and `node -p` steps below, which
+        # are release checks and post-processing outside package.json. Everything
+        # started through `bun run` runs on Bun itself (bunfig.toml [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -262,12 +283,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: pnpm release:check "${GITHUB_REF_NAME}"
+        run: bun run release:check "${GITHUB_REF_NAME}"
 
       - name: Run Linux release gates
         # The frontend gates (typecheck, vitest, packaged-plans) are platform
@@ -302,12 +323,12 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: pnpm build:stt
+        run: bun run build:stt
 
       - name: Build application
         shell: bash
         run: |
-          pnpm build
+          bun run build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
@@ -316,7 +337,7 @@ jobs:
           # SmartScreen equivalent, so there is no certificate to provision and
           # nothing to notarize. `--publish never` still writes latest-linux.yml,
           # which the AppImage updater reads.
-          pnpm exec electron-builder --linux --x64 --publish never
+          bun run electron-builder --linux --x64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
@@ -435,16 +456,20 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install, typecheck, test, build and electron-builder. The version
+        # is pinned in .bun-version; the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node scripts/...` and `node -p` steps below, which
+        # are release checks and post-processing outside package.json. Everything
+        # started through `bun run` runs on Bun itself (bunfig.toml [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -465,7 +490,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Run Linux release gates
@@ -502,12 +527,12 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '0'
-        run: pnpm build:stt
+        run: bun run build:stt
 
       - name: Build application
         shell: bash
         run: |
-          pnpm build
+          bun run build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
@@ -516,7 +541,7 @@ jobs:
           # SmartScreen equivalent, so there is no certificate to provision and
           # nothing to notarize. `--publish never` still writes latest-linux.yml,
           # which the AppImage updater reads.
-          pnpm exec electron-builder --linux --arm64 --publish never
+          bun run electron-builder --linux --arm64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
@@ -643,16 +668,20 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install, typecheck, test, build and electron-builder. The version
+        # is pinned in .bun-version; the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node scripts/...` and `node -p` steps below, which
+        # are release checks and post-processing outside package.json. Everything
+        # started through `bun run` runs on Bun itself (bunfig.toml [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -673,12 +702,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: pnpm release:check "${GITHUB_REF_NAME}"
+        run: bun run release:check "${GITHUB_REF_NAME}"
 
       - name: Build Python backend
         # PyInstaller cannot cross-compile; this is the only place a Windows
@@ -709,11 +738,11 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '1'
-        run: pnpm build:stt
+        run: bun run build:stt
 
       - name: Build application
         run: |
-          pnpm build
+          bun run build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
@@ -722,7 +751,7 @@ jobs:
           # SmartScreen will warn on first run and electron-updater installs
           # updates without verifying a signature. `--publish never` still
           # writes latest.yml, which the NSIS updater reads.
-          pnpm exec electron-builder --win --x64 --publish never
+          bun run electron-builder --win --x64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
@@ -791,16 +820,20 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Bun
+        # Runs install, typecheck, test, build and electron-builder. The version
+        # is pinned in .bun-version; the action pin is the one ci.yml uses.
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          version: 10.0.0
+          bun-version-file: .bun-version
 
       - name: Set up Node.js
+        # Only for the plain `node scripts/...` and `node -p` steps below, which
+        # are release checks and post-processing outside package.json. Everything
+        # started through `bun run` runs on Bun itself (bunfig.toml [run] bun).
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -821,12 +854,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pnpm install --frozen-lockfile
+          bun install --frozen-lockfile
           uv --project backend sync --locked
 
       - name: Verify tag and version sources
         if: github.event_name == 'push'
-        run: pnpm release:check "${GITHUB_REF_NAME}"
+        run: bun run release:check "${GITHUB_REF_NAME}"
 
       - name: Build Python backend
         # PyInstaller cannot cross-compile, so an arm64 backend exe exists only
@@ -861,18 +894,18 @@ jobs:
         shell: bash
         env:
           NAVIDE_STT_REQUIRED: '0'
-        run: pnpm build:stt
+        run: bun run build:stt
 
       - name: Build application
         run: |
-          pnpm build
+          bun run build
           test -f dist-plugins/plans/index.html
           test ! -e dist-plugins/plans/backend/navide-plans
           test ! -e dist-plugins/plans/backend/navide-plans-go
           node scripts/verify-plans-production.mjs
           # Unsigned for the same reason the x64 build is: there is no Windows
           # code-signing certificate yet.
-          pnpm exec electron-builder --win --arm64 --publish never
+          bun run electron-builder --win --arm64 --publish never
         env:
           NODE_OPTIONS: "--max-old-space-size=4096"
 
