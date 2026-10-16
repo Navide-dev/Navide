@@ -275,6 +275,21 @@ async def test_inbound_topic_vs_general_thread_ids(api: FakeBotApi) -> None:
     ]
 
 
+async def test_buttons_are_laid_out_in_rows_that_fit_a_phone(api: FakeBotApi) -> None:
+    ad = _adapter(api)
+    loc = Location("telegram", "default", "42")
+    options = [(f"{n}. Option {n}", f"nv1:abcde:{n}") for n in range(1, 10)]
+    await ad.send_text(loc, "pick one", buttons=options)
+    rows = api.calls_of("sendMessage")[0]["reply_markup"]["inline_keyboard"]
+    assert [b["callback_data"] for row in rows for b in row] == [d for _, d in options]  # order kept
+    assert len(rows) > 1
+    assert all(len(row) <= 3 and sum(len(b["text"]) for b in row) <= 24 for row in rows)
+    long = [("1. Yes, and don't ask again for this command", "nv1:abcde:1"), ("2. No", "nv1:abcde:2")]
+    await ad.send_text(loc, "approve?", buttons=long)
+    rows = api.calls_of("sendMessage")[1]["reply_markup"]["inline_keyboard"]
+    assert [[b["text"] for b in row] for row in rows] == [[long[0][0]], [long[1][0]]]  # a long label gets its own row
+
+
 async def test_edit_buttons_and_callback(api: FakeBotApi) -> None:
     got: list[InboundMessage] = []
 
@@ -513,7 +528,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop", "cancel"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop", "cancel", "resume"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -523,7 +538,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop", "cancel"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop", "cancel", "resume"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:

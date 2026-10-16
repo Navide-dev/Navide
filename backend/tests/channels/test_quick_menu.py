@@ -44,6 +44,44 @@ def test_menu_command(body: str, identity: str, want: bool) -> None:
     assert qm.is_menu_command(body, identity) is want
 
 
+@pytest.mark.parametrize("body,identity,want", [
+    ("<@U123> /pending", "", "/pending"),
+    ("<@!42> stop", "", "stop"),
+    ("@navide_bot /cancel", "@navide_bot", "/cancel"),
+    ("@Navide_Bot stop", "@navide_bot", "stop"),
+    ("@other_bot stop", "@navide_bot", "@other_bot stop"),
+    ("@navide_botx stop", "@navide_bot", "@navide_botx stop"),
+    ("  stop  ", "", "stop"),
+])
+def test_strip_mention(body: str, identity: str, want: str) -> None:
+    assert qm.strip_mention(body, identity) == want
+
+
+@pytest.mark.parametrize("body,identity,want", [
+    ("/menu 3", "", 3),
+    ("/menu@navide_bot 12", "@navide_bot", 12),
+    ("<@U123> /menu 2", "", 2),
+    ("/menu@other_bot 2", "@navide_bot", None),
+    ("/menu", "", None),
+    ("/menu two", "", None),
+    ("/menu 0", "", None),
+])
+def test_menu_pick(body: str, identity: str, want: int | None) -> None:
+    assert qm.menu_pick(body, identity) == want
+
+
+def test_text_menu_numbers_every_item_across_pages() -> None:
+    menus = qm.QuickMenus()
+    menu = _menu(menus, prompts=12, skills=["deploy"])
+    body = menus.render_text(menu)
+    lines = body.splitlines()
+    assert "1. 💬" in body and "13. 🧩 deploy" in lines
+    assert lines[-1] == qm.text("zh-TW", "pick_hint")
+    assert menus.pick(menu.location_key, 13).key == "deploy"
+    assert menus.pick(menu.location_key, 14) is None
+    assert menus.pick("elsewhere", 1) is None
+
+
 def test_callback_data_fits_every_platform_and_round_trips() -> None:
     menus = qm.QuickMenus()
     menu = _menu(menus, prompts=1, skills=["deploy"])

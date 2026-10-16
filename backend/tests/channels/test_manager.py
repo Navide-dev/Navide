@@ -405,6 +405,41 @@ async def test_busy_acknowledgement_carries_cancel_and_stop_buttons(env: Env) ->
     assert env.tg.buttons[MSG_RECEIVED_BUSY] == BUSY_BUTTONS
 
 
+NO_BUTTONS = Capabilities(threads=True, create_location=True, edit=True, typing=True,
+                          buttons=False, text_limit=4000)
+
+
+async def test_without_buttons_the_busy_reply_says_what_to_type(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    await env.inbound("while busy")
+    assert env.tg.buttons == {}
+    assert env.tg.texts()[-1] == MSG_RECEIVED_BUSY + "\n可直接輸入：/cancel 撤回排隊中的訊息 · stop 中斷 pane"
+
+
+async def test_without_buttons_the_stop_reply_says_how_to_resume(env: Env) -> None:
+    env.tg.capabilities = NO_BUTTONS
+    await env.inbound("stop")
+    assert env.tg.texts()[-1] == MSG_INTERRUPTED + "\n可直接輸入：/resume 繼續"
+
+
+@pytest.mark.parametrize("text", ["<@U123> stop", "@navide_bot stop", "@navide_bot /stop"])
+async def test_a_stop_addressed_to_the_bot_still_stops(env: Env, text: str) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound(text)
+    assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
+
+
+async def test_cancel_and_resume_addressed_to_the_bot_are_commands(env: Env) -> None:
+    env.tg.status.identity = "@navide_bot"
+    await env.inbound("wrong")
+    await env.inbound("<@U123> /cancel")
+    assert env.fake.cancels == ["k1"]
+    env.fake.states["pane-1"] = {"exists": True, "busy": False, "display_status": "stopped"}
+    await env.inbound("@navide_bot /resume")
+    assert env.fake.resumes == ["pane-1"] and len(env.fake.delivered) == 1
+
+
 async def test_cancel_button_withdraws_like_the_command(env: Env) -> None:
     await env.inbound("wrong")
     await env.inbound("", callback=CANCEL_CALLBACK)

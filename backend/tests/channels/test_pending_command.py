@@ -83,3 +83,5 @@ def test_pending_command_parsing() -> None:
     assert not relay.is_pending_command("/pending@other_bot", "@navide_bot")
     assert not relay.is_pending_command("/pending now")
     assert not relay.is_pending_command("pending")
+    assert relay.is_pending_command("<@U123> /pending")  # Slack/Discord mention
+    assert relay.is_pending_command("@navide_bot /pending", "@navide_bot")
