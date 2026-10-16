@@ -1,7 +1,8 @@
-import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
+import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { assertExactTrustFields, requireTrustObject } from './pluginTrustJson'
 import { assertPluginTargetCompatible, currentPluginHostTarget } from './pluginTarget'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
+import { canonicalContractJson, type ManifestDisclosure } from '../../shared/pluginDisclosure'
 
 export type RegistryAuthority = 'official' | 'self-hosted'
 
@@ -16,6 +17,20 @@ export interface RegistryPackageEnvelope {
   publisherId: string
   keyId: string
   signedAt: string
+}
+
+/** The Registry-signed disclosure envelope (contract section 3.5). It is
+ * separate from the 8-field package envelope, which stays unchanged so that
+ * released Apps keep verifying new versions. */
+export interface RegistryDisclosureEnvelope {
+  schemaVersion: 1
+  artifactDigest: string
+  packageId: string
+  version: string
+  target: string
+  keyId: string
+  signedAt: string
+  disclosureDigest: string
 }
 
 export interface RegistrySignerTrust {
@@ -54,6 +69,8 @@ export type RegistryTrustErrorCode =
   | 'SIGNER_INVALID'
   | 'PUBLISHER_BLOCKED'
   | 'PACKAGE_BLOCKED'
+  | 'DISCLOSURE_INVALID'
+  | 'DISCLOSURE_MISMATCH'
 
 export class RegistryTrustError extends Error {
   constructor(
@@ -397,4 +414,84 @@ export function verifyRegistryPackageTrust(
   }
 
   return { publisherId: input.envelope.publisherId, keyId: signer.keyId }
+}
+
+export interface VerifyRegistryDisclosureInput {
+  /** Wire values from the Registry version row; all three or none. */
+  disclosure: unknown
+  disclosureEnvelope: unknown
+  disclosureSignature: unknown
+  /** The package envelope and trust metadata, both already verified by
+   * verifyRegistryPackageTrust. */
+  packageEnvelope: RegistryPackageEnvelope
+  trustMetadata: RegistryTrustMetadata
+}
+
+const DISCLOSURE_ENVELOPE_FIELDS = [
+  'schemaVersion',
+  'artifactDigest',
+  'packageId',
+  'version',
+  'target',
+  'keyId',
+  'signedAt',
+  'disclosureDigest',
+] as const
+
+/** Verify the disclosure envelope of an already verified package envelope
+ * (contract 3.5, D-b step 2). Returns the signed disclosure, or null when the
+ * version carries no disclosure envelope at all (published before D-a). The
+ * caller still compares it with the disclosure recomputed from the package. */
+export function verifyRegistryDisclosure(
+  input: VerifyRegistryDisclosureInput
+): ManifestDisclosure | null {
+  const present = [input.disclosure, input.disclosureEnvelope, input.disclosureSignature].filter(
+    (value) => value !== null && value !== undefined
+  ).length
+  if (present === 0) return null
+  const invalid = (reason: string): RegistryTrustError =>
+    new RegistryTrustError('DISCLOSURE_INVALID', `registry disclosure ${reason}; the install was refused`)
+  if (present !== 3) throw invalid('is incomplete (disclosure, envelope and signature must come together)')
+
+  let envelope: RegistryDisclosureEnvelope
+  try {
+    const value = requireTrustObject(input.disclosureEnvelope, 'registry disclosure envelope')
+    assertExactTrustFields(value, 'registry disclosure envelope', DISCLOSURE_ENVELOPE_FIELDS)
+    if (value.schemaVersion !== 1) throw new Error('registry disclosure envelope schemaVersion is unsupported')
+    for (const field of DISCLOSURE_ENVELOPE_FIELDS.slice(1)) {
+      requiredString(value[field], `registry disclosure envelope.${field}`)
+    }
+    if (!/^[0-9a-f]{64}$/.test(value.disclosureDigest as string)) {
+      throw new Error('registry disclosure envelope.disclosureDigest is invalid')
+    }
+    envelope = value as unknown as RegistryDisclosureEnvelope
+  } catch (error) {
+    throw invalid(`envelope is malformed (${error instanceof Error ? error.message : String(error)})`)
+  }
+  for (const field of ['artifactDigest', 'packageId', 'version', 'target', 'keyId'] as const) {
+    if (envelope[field] !== input.packageEnvelope[field]) {
+      throw invalid(`envelope ${field} does not match the package envelope`)
+    }
+  }
+  const signer = input.trustMetadata.signers.find((candidate) => candidate.keyId === envelope.keyId)
+  if (
+    !signer ||
+    typeof input.disclosureSignature !== 'string' ||
+    !verifyCanonicalSignature(envelope, input.disclosureSignature, signer.publicKey)
+  ) {
+    throw invalid('signature failed verification against the package signer')
+  }
+  if (typeof input.disclosure !== 'object' || Array.isArray(input.disclosure)) {
+    throw invalid('is not an object')
+  }
+  let spelling: string
+  try {
+    spelling = canonicalContractJson(input.disclosure)
+  } catch {
+    throw invalid('has no canonical spelling')
+  }
+  if (createHash('sha256').update(spelling, 'utf8').digest('hex') !== envelope.disclosureDigest) {
+    throw invalid('does not match its signed digest')
+  }
+  return input.disclosure as ManifestDisclosure
 }

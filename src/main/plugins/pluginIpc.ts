@@ -198,6 +198,15 @@ export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
 }
 
+/** A Registry-supplied JSON object (disclosure data), or null for anything
+ * else. Display data only: install re-verifies the signed disclosure in
+ * prepareInstall. */
+function jsonObjectOrNull(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
 /** A Registry-supplied link, kept only when it is an https URL. */
 function httpsLink(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 2048) return null
@@ -848,6 +857,9 @@ export function registerPluginIpc(
           compatible: isEngineCompatible(v.engines_navide, appVersion),
           min_navide_version: minNavideVersion(v.engines_navide),
           channel: typeof v.version === 'string' && isPrereleaseVersion(v.version) ? 'pre-release' : 'stable',
+          // Contract 3.4/3.5: shown before download, verified at prepareInstall.
+          disclosure: jsonObjectOrNull(v.disclosure),
+          registry: jsonObjectOrNull(v.registry),
         })),
         readme,
       }
@@ -1169,7 +1181,7 @@ export function registerPluginIpc(
     namespace: string
     name: string
     version?: string
-  }): Promise<PreparedInstall> => {
+  }): Promise<PreparedInstall & { registryFacts: Record<string, unknown> | null }> => {
     const marketplace = resolveConfiguredMarketplace(trust)
     const base = marketplace.registryUrl.replace(/\/+$/, '')
     const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
@@ -1187,6 +1199,10 @@ export function registerPluginIpc(
         trust_tier: string
         yanked: boolean
         engines_navide?: string | null
+        disclosure?: unknown
+        disclosure_envelope?: unknown
+        disclosure_signature?: unknown
+        registry?: unknown
       }>
     }
     const wanted = args.version ?? detail.latest_version
@@ -1222,10 +1238,14 @@ export function registerPluginIpc(
       trustMetadata: detail.trust_metadata,
       trustMetadataSignature: detail.trust_metadata_signature,
       claimedTrustTier: versionRow.trust_tier,
+      disclosure: versionRow.disclosure,
+      disclosureEnvelope: versionRow.disclosure_envelope,
+      disclosureSignature: versionRow.disclosure_signature,
       provenance: 'official-registry',
     }, undefined, marketplace.trust)
     assertEngineCompatible(result.id, result.version, result.manifest, appVersion)
-    return result
+    // The `registry` facts are unsigned Registry information (contract 3.4).
+    return { ...result, registryFacts: jsonObjectOrNull(versionRow.registry) }
   }
 
   ipcMain.handle(
@@ -1252,6 +1272,8 @@ export function registerPluginIpc(
           !result.official &&
           !publisherTrust.isTrusted(result.publisherId, result.id),
         requiresRiskConfirmation: result.requiresConfirmation,
+        disclosure: result.disclosure ?? null,
+        registry: result.registryFacts,
       }
     }
   )
