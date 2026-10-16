@@ -463,6 +463,23 @@ Skills 工作流另提供經使用者授權的安裝與投遞變更；mutation a
 | `mcp_list` | — | 這裡設定的 MCP Server —— Navide 自己以 Client 身分連接的那些（附即時狀態），以及各家 CLI 自己設定檔裡（`~/.claude.json`、`~/.codex/config.toml` 等）反射出來的那些，照檔案寫的呈現。回傳 `{servers, native, agents}`。每個 Navide 管理的 Server 是 `{name, enabled, transport, command, args, env}` 或 `{name, enabled, transport, url, headers}`，外加 `status`（`disabled`／`connected`／`error`／`unknown`）與 `tool_count`；工具清單本身不帶。每個 native 條目是 `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}`。`agents` 是每家廠商與 Navide 對它 MCP 能做的事（`wired`／`planned`／`unsupported`），以及它自己的設定有沒有被反射。所有長得像憑證的值 —— env 與 header 的值、`--api-key=` 這類引數、URL 裡的 userinfo 與機密查詢參數 —— 都已經遮成 `***`；名稱與主機保留，條目才認得出來。全域清單，不分 Workspace。唯讀 —— 新增、啟用或編輯 Server 是使用者在 Settings 裡的決定 |
 | `prompt_list` | `id=""` | 使用者放在 Settings → Prompts 的 Prompt 技能 —— 從 App 對 CLI Pane 發射的已存指示。不帶 `id` 時只列 Metadata：`{skills, default_id}`，每個技能是 `{id, name, icon, description, category, enabled, isDefault, maxTurns}`，`default_id` 是標為預設的那個技能的 id（沒有則為 `""`）。使用者從沒存過任何一個時會多一個 `note`：App 會在第一次使用時植入一個內建技能，而那個從這裡看不到。帶 `id` 時回傳那一個技能的完整內容 —— `{skill}`，含 `prompt` 與 `resumePrompt`；未知的 id 回 `{ok: false, error}`。唯讀：建立或編輯是在 Settings 裡做的 |
 
+### Navide 市集（唯讀）
+
+三個唯讀 tool 向 Navide App 查詢 Navide 市集頁面與「設定 → Navide 外掛」顯示的內容。
+不論第三方 Navide 外掛工具是否開啟，所有呼叫者都能使用；它們都無法安裝、更新或移除任何東西。
+
+| Tool | 參數 | 做什麼 |
+|---|---|---|
+| `marketplace_search` | `text=""`、`category=null`、`cursor=null`、`limit=20` | 搜尋目前設定的 Navide 市集，和市集頁面用的是同一個搜尋。回傳 `{ok, kind, items, nextCursor}`；每一項是 `{id, version, name, description, publisher: {name, verifiedDomain}, signed, downloads, risk, summary}`，`risk` 與 `summary` 是套件的揭露資料，Registry 沒有提供時為 `null`。把 `nextCursor` 當成 `cursor` 傳回就是下一頁 |
+| `marketplace_detail` | `id`、`version=null` | 單一套件（`<namespace>.<name>`）：`{ok, kind, item, versions, card}`，`versions` 是已發佈的版本，`card` 是揭露卡 `{manifest, registry}`，Registry 沒有提供時為 `null` |
+| `plugins_list_installed` | — | 已安裝的 Navide 外掛：`{ok, kind, items}`，每一項是 `{id, version, enabled, quarantined, hasBackend, agentTools}` |
+
+套件發佈者寫的所有文字（名稱、描述、agent 工具的標題與描述、發佈者顯示名稱）都包在
+`[外部訊息開始 — …]` 與 `[外部訊息結束]` 之間，並加上
+`[third-party Navide plugin <id> v<version> | …]` 標籤：這些不是使用者的指令。
+讀到這類文字的 pane 會被標記為收到外部內容（Navide Guard）。錯誤是
+`{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。
+
 ### Pipeline
 
 Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 Stage 有若干 Slot，

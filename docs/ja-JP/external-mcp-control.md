@@ -520,6 +520,23 @@ CLI が既に何を渡されているのか、このプロジェクトが既に�
 | `mcp_list` | — | ここで設定されている MCP サーバー — Navide 自身がクライアントとして接続するもの（ライブ状態付き）と、各 CLI が自分の設定（`~/.claude.json`、`~/.codex/config.toml` など）に持つものをファイルの記述どおりに反映したもの。`{servers, native, agents}` を返します。Navide 管理の各サーバーは `{name, enabled, transport, command, args, env}` または `{name, enabled, transport, url, headers}` に `status`（`disabled` / `connected` / `error` / `unknown`）と `tool_count` を加えたもので、ツール一覧そのものは含みません。各 native エントリは `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}` です。`agents` は各ベンダーと、Navide がその MCP に対してできること（`wired` / `planned` / `unsupported`）、および自身の設定が反映されているかどうかです。資格情報の形をした値 — env と header の値、`--api-key=` 形式の引数、URL の userinfo と秘密のクエリパラメータ — はすべて `***` にマスク済みで、名前とホストはエントリを識別できるよう残されます。Workspace ごとではなくグローバルな一覧です。読み取り専用 — サーバーの追加・有効化・編集は Settings でのユーザーの判断です |
 | `prompt_list` | `id=""` | ユーザーが Settings → Prompts に保持する Prompt スキル — アプリから CLI Pane に送る保存済みの指示。`id` なしで呼ぶとメタデータのみを一覧します: `{skills, default_id}` で、各スキルは `{id, name, icon, description, category, enabled, isDefault, maxTurns}`、`default_id` はデフォルトに指定されたスキルの id（無ければ `""`）です。ユーザーが一度も保存していない場合は `note` が付きます: アプリは初回使用時に組み込みスキルを植え付けますが、それはここからは見えません。`id` を付けるとそのスキルを丸ごと返します — `{skill}` で、`prompt` と `resumePrompt` も含みます。未知の id は `{ok: false, error}` を返します。読み取り専用: 作成や編集は Settings で行います |
 
+### Navide マーケットプレイス（読み取り専用）
+
+3 つの読み取り専用 tool が、Navide マーケットプレイスのページと「設定 → Navide プラグイン」に表示される内容を Navide アプリに問い合わせます。
+サードパーティの Navide プラグインツールが有効かどうかに関係なく、すべての呼び出し元が使えます。どれもインストール・更新・削除はできません。
+
+| Tool | パラメータ | 内容 |
+|---|---|---|
+| `marketplace_search` | `text=""`、`category=null`、`cursor=null`、`limit=20` | 設定された Navide マーケットプレイスを検索します（マーケットプレイスのページと同じ検索）。`{ok, kind, items, nextCursor}` を返します。各項目は `{id, version, name, description, publisher: {name, verifiedDomain}, signed, downloads, risk, summary}` で、`risk` と `summary` はパッケージの開示データ、Registry が提供しない場合は `null` です。次のページは `nextCursor` を `cursor` に渡します |
+| `marketplace_detail` | `id`、`version=null` | 1 つのパッケージ（`<namespace>.<name>`）：`{ok, kind, item, versions, card}`。`versions` は公開済みのバージョン、`card` は開示カード `{manifest, registry}`（Registry が提供しない場合は `null`） |
+| `plugins_list_installed` | — | インストール済みの Navide プラグイン：`{ok, kind, items}`。各項目は `{id, version, enabled, quarantined, hasBackend, agentTools}` |
+
+パッケージの公開者が書いたテキスト（名前、説明、エージェントツールのタイトルと説明、公開者の表示名）はすべて
+`[外部訊息開始 — …]` と `[外部訊息結束]` の間に入れられ、
+`[third-party Navide plugin <id> v<version> | …]` ラベルが付きます。これはユーザーの指示ではありません。
+このテキストを読んだ pane は外部コンテンツを受け取ったものとしてマークされます（Navide Guard）。エラーは
+`{ok: false, error, error_code}` で、コードは `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。
+
 ### Pipeline
 
 Pipeline は保存された多段階の実行です: 順序付けられた Stage の集合で、各 Stage は

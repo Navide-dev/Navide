@@ -4694,6 +4694,83 @@ describe('plugins:listInstalled scope disclosure', () => {
   })
 })
 
+// B2-a: the backend's read-only Marketplace tools are answered by the same
+// functions the Marketplace page's IPC handlers run.
+describe('marketplace.query answered from the Marketplace page functions', () => {
+  const savedFetch = global.fetch
+  const savedMarketplaceUrl = process.env['AGENT_TEAM_MARKETPLACE_URL']
+  beforeEach(() => {
+    handlers.clear()
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://server.navide.dev/registry'
+  })
+  afterEach(() => {
+    global.fetch = savedFetch
+    if (savedMarketplaceUrl === undefined) delete process.env['AGENT_TEAM_MARKETPLACE_URL']
+    else process.env['AGENT_TEAM_MARKETPLACE_URL'] = savedMarketplaceUrl
+    vi.restoreAllMocks()
+  })
+
+  function registerWithQuery(manager: FrontendPluginManager): (query: unknown) => Promise<unknown> {
+    const install = vi.spyOn(manager, 'setMarketplaceQueryHandler')
+    registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG, undefined, { appVersion: () => '0.2.13' })
+    const handler = install.mock.calls[0]?.[0]
+    if (!handler) throw new Error('marketplace query handler not installed')
+    return handler
+  }
+
+  it('searches through the same Registry request the Marketplace page sends', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { items: [{ namespace: 'acme', name: 'demo', latest_version: '1.0.0', trust_tier: 'signed-verified' }], total: 1 }
+      },
+    }))
+    global.fetch = fetchMock as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    const page = handlers.get('plugins:marketplaceSearch')!
+
+    await page(null, 'git', undefined, { limit: 20 })
+    const answer = await query({ kind: 'search', text: 'git', limit: 20 })
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(urls).toEqual([
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+    ])
+    expect(answer).toEqual({
+      ok: true,
+      result: { kind: 'search', nextCursor: null, items: [expect.objectContaining({ id: 'acme.demo', signed: true, risk: null })] },
+    })
+  })
+
+  it('reports a Registry 404 on detail as NOT_FOUND, while the page still gets the same error text', async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 404, async json() { return {} } })) as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    await expect(handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'none' }))
+      .rejects.toThrow('marketplace detail failed: HTTP 404')
+    expect(await query({ kind: 'detail', id: 'acme.none' })).toEqual({
+      ok: false, error: 'marketplace detail failed: HTTP 404', error_code: 'NOT_FOUND',
+    })
+  })
+
+  it('lists the same inventory as the Extensions page, with the native backend flag', async () => {
+    const manager = new FrontendPluginManager()
+    const query = registerWithQuery(manager)
+    manager.registerInstalledPackage({ id: 'acme.notes', requires: ['fs'], packageVersion: '1.0.0', hasBackend: true })
+    manager.registerInstalledPackage({ id: 'acme.plain', requires: [], packageVersion: '2.0.0' })
+
+    const page = (handlers.get('plugins:listInstalled')!(null) as Array<{ id: string }>).map((row) => row.id)
+    const answer = await query({ kind: 'installed' }) as { ok: true; result: { items: Array<Record<string, unknown>> } }
+
+    expect(answer.result.items.map((item) => item.id)).toEqual(page)
+    expect(answer.result.items).toEqual(expect.arrayContaining([
+      { id: 'acme.notes', version: '1.0.0', enabled: true, quarantined: false, hasBackend: true, agentTools: [] },
+      { id: 'acme.plain', version: '2.0.0', enabled: true, quarantined: false, hasBackend: false, agentTools: [] },
+    ]))
+  })
+})
+
 describe('plugins:setDisabled', () => {
   const coldStartSource = (root: string) => ({
     provenance: 'official-registry' as const,

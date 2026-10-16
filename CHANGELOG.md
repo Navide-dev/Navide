@@ -7,6 +7,7 @@ All notable released changes to Navide will be documented in this file. The form
 ### Added
 
 - Extensions: a Navide plugin installed from the Navide Marketplace can be disabled and enabled again. A disabled Navide plugin is still verified at startup, but its views and backend are not loaded, now or after a restart; its files, Grant and stored data are kept, and its row shows a Disabled badge and an Enable button. Enabling restores it under the Grant it already has. Update, rollback and remove keep working while it is disabled, and an update stays disabled. The bundled Plans, Git and Mini-IDE packages are not covered by this switch.
+- MCP: three read-only tools, `marketplace_search`, `marketplace_detail` and `plugins_list_installed`, let an agent search the Navide Marketplace, read one Navide plugin's listing and disclosure card, and list the installed Navide plugins with their state. The Navide app answers them with the same search, detail and inventory the Navide Marketplace page and Settings → Navide Plugins use. They cannot install, update or remove anything. Text a package publisher wrote reaches the agent fenced as external content with a third-party Navide plugin label, and a pane that reads it is marked as having received external content.
 
 ## [0.2.24] — 2026-10-16 — signed release
 
