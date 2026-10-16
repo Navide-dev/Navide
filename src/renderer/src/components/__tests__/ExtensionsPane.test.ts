@@ -20,6 +20,7 @@ function mockPlugins(overrides: Record<string, unknown> = {}) {
     checkUpdates: vi.fn().mockResolvedValue([]),
     remove: vi.fn().mockResolvedValue({ ok: true }),
     setPrerelease: vi.fn().mockResolvedValue({ id: '', enabled: false }),
+    setDisabled: vi.fn().mockResolvedValue({ id: '', disabled: false }),
     listPacks: vi.fn().mockResolvedValue([]),
     removePack: vi.fn().mockResolvedValue({ removed: true }),
     ...overrides,
@@ -910,5 +911,45 @@ describe('ExtensionsPane', () => {
     await flushPromises()
     expect(api.remove).not.toHaveBeenCalled()
     expect(wrapper.find('[data-id="navide.mini-ide"]').exists()).toBe(true)
+  })
+
+  it('disables an installed Navide plugin visibly and offers Enable while it is disabled', async () => {
+    const enabledRow = { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.2.0', provenance: 'official-registry', disabled: false }
+    const disabledRow = { ...enabledRow, disabled: true }
+    const listInstalled = vi
+      .fn()
+      .mockResolvedValueOnce([
+        enabledRow,
+        { id: 'local.dev', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
+      ])
+      .mockResolvedValueOnce([disabledRow])
+      .mockResolvedValue([enabledRow])
+    const api = mockPlugins({
+      listInstalled,
+      setDisabled: vi.fn().mockResolvedValue({ id: 'acme.demo', disabled: true }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    let row = wrapper.get('[data-id="acme.demo"]')
+    expect(row.find('.ext-disabled-badge').exists()).toBe(false)
+    expect(row.find('.ext-enable').exists()).toBe(false)
+    // Only rows the Host reports a disabled state for get the switch.
+    expect(wrapper.find('[data-id="local.dev"] .ext-disable').exists()).toBe(false)
+
+    await row.get('.ext-disable').trigger('click')
+    await flushPromises()
+    expect(api.setDisabled).toHaveBeenCalledWith('acme.demo', true)
+    row = wrapper.get('[data-id="acme.demo"]')
+    expect(row.get('.ext-disabled-badge').text()).toBe('Disabled')
+    expect(row.find('.ext-disable').exists()).toBe(false)
+    // Disabling keeps the package: removing it stays a separate action.
+    expect(row.find('.ext-remove').exists()).toBe(true)
+
+    await row.get('.ext-enable').trigger('click')
+    await flushPromises()
+    expect(api.setDisabled).toHaveBeenLastCalledWith('acme.demo', false)
+    row = wrapper.get('[data-id="acme.demo"]')
+    expect(row.find('.ext-disabled-badge').exists()).toBe(false)
+    expect(row.find('.ext-disable').exists()).toBe(true)
   })
 })

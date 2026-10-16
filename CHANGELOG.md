@@ -2,6 +2,12 @@
 
 All notable released changes to Navide will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Extensions: a Navide plugin installed from the Navide Marketplace can be disabled and enabled again. A disabled Navide plugin is still verified at startup, but its views and backend are not loaded, now or after a restart; its files, Grant and stored data are kept, and its row shows a Disabled badge and an Enable button. Enabling restores it under the Grant it already has. Update, rollback and remove keep working while it is disabled, and an update stays disabled. The bundled Plans, Git and Mini-IDE packages are not covered by this switch.
+
 ## [0.2.24] — 2026-10-16 — signed release
 
 ### Added

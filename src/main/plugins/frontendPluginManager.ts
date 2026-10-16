@@ -1470,6 +1470,7 @@ export class FrontendPluginManager {
   private capabilityGrantResolver:
     | ((pluginId: string, packageVersion: string) => HostCapabilityGrant | null)
     | null = null
+  private disabledPluginResolver: ((pluginId: string) => boolean) | null = null
   /** Previous Plans snapshot selected by the Host lifecycle record. It is
    *  intentionally absent until the lifecycle has found a real prior active
    *  package; current candidate/active identities are never reused as a fake
@@ -2233,6 +2234,33 @@ export class FrontendPluginManager {
   ): void {
     this.capabilityGrantResolver = resolver
     this.refreshHostSessionRegistration()
+  }
+
+  /** The user's durable "Disabled" switch for installed packages. */
+  setDisabledPluginResolver(resolver: ((pluginId: string) => boolean) | null): void {
+    this.disabledPluginResolver = resolver
+  }
+
+  /** A disabled package stays in the installed inventory, but the Host
+   *  registers neither its views nor its backend. First-party ids are not
+   *  governed by this switch. */
+  isPluginDisabled(pluginId: string): boolean {
+    return this.canDisablePlugin(pluginId) && (this.disabledPluginResolver?.(pluginId) ?? false)
+  }
+
+  /** The bundled first-party packages (Plans, Git, Mini-IDE) have their own
+   *  factory and recovery paths and are outside the "Disabled" switch. */
+  canDisablePlugin(pluginId: string): boolean {
+    return !isReservedPluginId(pluginId)
+  }
+
+  /** Stop a just-disabled package and drop its frontend descriptor, keeping
+   *  its inventory entry and package directory for Enable, update, rollback
+   *  and remove. */
+  suspendDisabledPlugin(pluginId: string): void {
+    if (!this.isPluginDisabled(pluginId)) throw new Error(`plugin ${pluginId} is not disabled`)
+    this.preparePluginRemoval(pluginId)
+    this.descriptors.delete(pluginId)
   }
 
   /** Set the durable Host-selected storage snapshot for a generic package. */
@@ -10133,6 +10161,9 @@ export class FrontendPluginManager {
 
   /** Register one Host-approved package-local backend activation. */
   registerBackendActivation(activation: BackendPluginLaunchSpec): void {
+    if (this.isPluginDisabled(activation.pluginId)) {
+      throw new BackendPluginError('INVALID_ACTIVATION', 'Backend plugin is disabled.')
+    }
     const descriptor = this.descriptors.get(activation.pluginId)
     const activationPackageDir = canonicalBackendPackageDir(activation.packageDir)
     const descriptorPackageDir = descriptor
@@ -10555,7 +10586,7 @@ export class FrontendPluginManager {
     this.destroyPluginInstances(summary.id)
     this.clearTerminalRoutes(summary.id)
     this.descriptors.delete(summary.id)
-    if (descriptor) this.registerDescriptor(descriptor, opts)
+    if (descriptor && !this.isPluginDisabled(summary.id)) this.registerDescriptor(descriptor, opts)
     const canonicalPackageDir = canonicalBackendPackageDir(packageDir ?? descriptor?.packageDir)
     if (canonicalPackageDir) this.installedPackageDirectories.set(summary.id, canonicalPackageDir)
     else this.installedPackageDirectories.delete(summary.id)
@@ -11706,6 +11737,14 @@ export class FrontendPluginManager {
     for (const { scanned, packageSummary, opts } of uniqueApproved) {
       try {
         this.registerInstalledPackage(packageSummary, scanned.descriptor, opts, scanned.dir)
+        // A disabled package was verified like any other and stays in the
+        // inventory; it contributes no view and no backend activation.
+        if (this.isPluginDisabled(packageSummary.id)) {
+          if (scanned.activation) {
+            activationCatalog = activationCatalog.filter((entry) => entry !== scanned.activation)
+          }
+          continue
+        }
         if (scanned.descriptor) loaded.push(scanned.descriptor.id)
       } catch (err) {
         errors.push(`${scanned.dir}: ${err instanceof Error ? err.message : String(err)}`)
