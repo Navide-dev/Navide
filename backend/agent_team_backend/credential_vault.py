@@ -585,13 +585,23 @@ class CredentialVault:
                 "line limit; using argv",
                 service, len(command.encode("utf-8")),
             )
-            rc, out = self._security(
-                [
-                    "add-generic-password", "-U", "-a", account, "-s", service,
-                    "-X", secret.encode("utf-8").hex(),
-                ],
-                None,
-            )
+            try:
+                rc, out = self._security(
+                    [
+                        "add-generic-password", "-U", "-a", account, "-s", service,
+                        "-X", secret.encode("utf-8").hex(),
+                    ],
+                    None,
+                )
+            except Exception as err:  # noqa: BLE001
+                # Never let it propagate as is: a TimeoutExpired (locked
+                # keychain, an open access prompt) carries the full argv,
+                # hex secret included, and the swap error quotes err.args[0].
+                # `from None` keeps it out of any logged traceback too.
+                raise CredentialVaultError(
+                    f"keychain write failed for {service!r} "
+                    f"({type(err).__name__})"
+                ) from None
         if rc != 0:
             # Only `security`'s own error line ("security: ..."): on a failed
             # command it also echoes the command, and with it the secret.

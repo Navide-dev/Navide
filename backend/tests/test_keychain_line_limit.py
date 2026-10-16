@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import shlex
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -199,6 +200,33 @@ def test_a_failed_cli_account_write_does_not_echo_security_output(tmp_path, monk
             vault._keychain_write("Claude Code-credentials", secret, account="me")
         assert MARKER not in str(failed.value)
         assert MARKER.encode().hex() not in str(failed.value)
+
+
+@pytest.mark.parametrize("exc", [
+    lambda args: subprocess.TimeoutExpired(["/usr/bin/security", *args], 10),
+    lambda args: OSError(f"spawn failed: {args}"),
+])
+def test_an_argv_write_that_raises_names_no_part_of_the_secret(tmp_path, monkeypatch, caplog, exc):
+    """Review (PR #330): a timeout on the argv path carries the whole argv,
+    hex secret included, and the swap error quotes err.args[0]."""
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
+
+    def raising(args, input_text=None):
+        raise exc(args)
+
+    vault = CredentialVault(root=tmp_path / "r", real_home=tmp_path / "h",
+                            security_runner=raising, platform="darwin")
+    caplog.set_level(logging.DEBUG)
+    big = _doc(5000)
+    with pytest.raises(CredentialVaultError) as failed:
+        vault._keychain_write("Claude Code-credentials", big, account="me")
+
+    shown = str(failed.value.args[0])
+    for text in (shown, str(failed.value), caplog.text):
+        assert MARKER not in text
+        assert MARKER.encode().hex() not in text
+        assert big.encode().hex()[:64] not in text
+    assert failed.value.__cause__ is None and failed.value.__suppress_context__
 
 
 @pytest.mark.parametrize("write", [
