@@ -54,3 +54,14 @@ def test_truncates_to_80_chars(tmp_path: Path) -> None:
 
 def test_missing_file_returns_empty(tmp_path: Path) -> None:
     assert first_user_prompts(tmp_path / "nope.jsonl", limit=2) == []
+
+
+def test_skips_hidden_image_notes(tmp_path: Path) -> None:
+    f = tmp_path / "s.jsonl"
+    note = "[Image: original 780x3746, displayed at 416x2000. Multiply coordinates by 1.88 to map to original image.]"
+    _write(f, [
+        _line({**_user(note), "isMeta": True, "turnCompanion": True}),  # the agent read an image
+        _line(_user("真正的問題")),
+    ])
+
+    assert first_user_prompts(f, limit=2) == ["真正的問題"]

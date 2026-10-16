@@ -77,6 +77,42 @@
       ]
     },
     {
+      "test": "backend/tests/channels/test_manager.py::test_a_turn_that_ends_without_text_still_says_so_after_the_grace",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#319",
+      "count": 1,
+      "firstSeen": "2026-10-16T05:56:37Z",
+      "lastSeen": "2026-10-16T05:56:37Z",
+      "runs": [
+        {
+          "run": 38857934119,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 311,
+          "at": "2026-10-16T05:56:37Z",
+          "evidence": "FAILED backend/tests/channels/test_manager.py::test_a_turn_that_ends_without_text_still_says_so_after_the_grace - assert False"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/channels/test_manager.py::test_outbound_after_turn_complete_only",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#319",
+      "count": 1,
+      "firstSeen": "2026-10-16T07:30:30Z",
+      "lastSeen": "2026-10-16T07:30:30Z",
+      "runs": [
+        {
+          "run": 38866282207,
+          "job": "Backend tests (macOS, 1/1)",
+          "pr": 317,
+          "at": "2026-10-16T07:30:30Z",
+          "evidence": "FAILED backend/tests/channels/test_manager.py::test_outbound_after_turn_complete_only - assert False"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal",
       "category": "needs-review",
       "count": 1,
@@ -89,6 +125,22 @@
           "pr": 305,
           "at": "2026-10-15T21:15:23Z",
           "evidence": "--- 480s: 852 results; last: backend\\tests\\test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal +++++++++++++++++++++++++++++++++++ Timeout +++++++++"
+        }
+      ]
+    },
+    {
+      "test": "backend/tests/test_git_service.py::TestDiscoverRepositories::test_timeout_preserves_workspace_validation[False-expected1]",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-16T07:41:01Z",
+      "lastSeen": "2026-10-16T07:41:01Z",
+      "runs": [
+        {
+          "run": 38866282207,
+          "job": "Backend tests (Windows, 1/4)",
+          "pr": 317,
+          "at": "2026-10-16T07:41:01Z",
+          "evidence": "FAILED backend\\tests\\test_git_service.py::TestDiscoverRepositories::test_timeout_preserves_workspace_validation[False-expected1] - AssertionError: assert {'ok': True, ...ncated': True} == {'ok': False,...sitories': []}"
         }
       ]
     },
