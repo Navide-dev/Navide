@@ -180,6 +180,14 @@ def _said(env: "Env", needle: str) -> bool:
     return any(needle in t for t in env.tg.texts())
 
 
+def _status_posted(env: "Env", pane_id: str = "pane-1") -> bool:
+    """The working status is visible AND the manager holds its id. The fake
+    records the text before the id comes back through the outbox, and a turn
+    that ends in between has no status to edit to done."""
+    pending = env.m._pending.get(pane_id)
+    return MSG_WORKING in env.tg.texts() and bool(pending and pending.status_id)
+
+
 async def _until(pred, timeout: float = 3.0) -> None:
     deadline = time.monotonic() + timeout
     while not pred():
@@ -429,7 +437,7 @@ async def test_outbound_after_turn_complete_only(env: Env) -> None:
     env.turn_complete("pane-1", "not the reply")
     await _until(lambda: "✅ 完成 · 🖥 本機\nnot the reply" in env.tg.texts())
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "the **answer**")
     await _until(lambda: "✅ 完成 · 💬 alice\nthe **answer**" in env.tg.texts())
     loc = next(loc for loc, t in env.tg.sent if t.endswith("the **answer**"))
@@ -737,7 +745,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
     # (2026-10-14 09:36:47 / 09:36:52). The first must not answer the chat with nothing.
     await env.inbound("你有什麼建議")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await asyncio.sleep(0.05)
     env.turn_complete("pane-1", "我的建議")
@@ -751,7 +759,7 @@ async def test_a_turn_end_split_over_two_lines_replies_once_with_its_text(env: E
 async def test_a_turn_that_ends_without_text_still_says_so_after_the_grace(env: Env) -> None:
     await env.inbound("go")
     env.fake.verdicts["k1"] = {"status": "delivered"}
-    await _until(lambda: MSG_WORKING in env.tg.texts())
+    await _until(lambda: _status_posted(env))
     env.turn_complete("pane-1", "")
     await _until(lambda: _said(env, mgr_mod.MSG_EMPTY_REPLY))
     assert any(text.startswith("✅ 完成") for _, text in env.tg.edits)
