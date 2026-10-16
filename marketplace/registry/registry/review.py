@@ -12,7 +12,7 @@ review-required, so their publishes are approved at submission as before.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select, update
@@ -186,9 +186,13 @@ def approve(
     artifacts: Sequence[str],
     acknowledge_secret_findings: bool = False,
     inspected_native_backend: bool = False,
+    rescan: Callable[[ExtensionVersion], dict | None] | None = None,
 ) -> list[ExtensionVersion]:
     """Sign and publish the pending artifacts of `extension@version`, which
-    must be exactly `artifacts` (the package digests the reviewer saw)."""
+    must be exactly `artifacts` (the package digests the reviewer saw).
+    `rescan` scans a row's stored package with the current scanner (contract
+    3.8: the report signed is the one made at approval); without it the
+    submission's report is signed."""
     rows = _reviewed_rows(session, extension, version, artifacts)
     publisher = session.get(Publisher, extension.publisher_id)
     publisher_id = publisher.name if publisher else extension.namespace
@@ -243,8 +247,10 @@ def approve(
         )
         row.registry_envelope = envelope
         row.registry_signature = signature
+        if rescan is not None:
+            row.scan = rescan(row)
         row.disclosure, row.disclosure_envelope, row.disclosure_signature = (
-            sign_disclosure(signer, row.manifest or {}, envelope)
+            sign_disclosure(signer, row.manifest or {}, envelope, row.scan)
         )
         row.trust_tier = compute_trust_tier(signed=True)
         row.review_status = APPROVED

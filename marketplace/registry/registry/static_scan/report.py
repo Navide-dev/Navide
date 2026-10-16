@@ -1,0 +1,181 @@
+"""Build the signed scan report of one artifact (contract 3.8).
+
+The report is facts only. ``scan_package`` reads an already validated
+package archive, runs the frontend script rules on every ``.js``/``.mjs``/
+``.cjs`` file, bounds the work by ``SCAN_LIMITS`` and redacts anything that
+matches a secret-scan rule. A package with a native backend gets no report
+(``None``) until the native-executable scanner exists, so its card says
+"not scanned" rather than presenting a partial scan as complete.
+"""
+
+from __future__ import annotations
+
+import time
+import zipfile
+from collections.abc import Callable
+from datetime import datetime, timezone
+from io import BytesIO
+from typing import Any
+
+from ..plugin_contract.disclosure_scan_contract import (
+    SCAN_LIMITS,
+    SCAN_SCHEMA_VERSION,
+    SCANNER_ID,
+    ScanReport,
+)
+from ..secret_scan import RULES as SECRET_RULES
+from .js_scan import ScriptFacts, scan_script
+
+SCANNER_VERSION = "1.0.0"
+SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
+
+
+def _timestamp(value: datetime) -> str:
+    return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _redacted(value: str) -> bool:
+    data = value.encode("utf-8", "replace")
+    return any(pattern.search(data) for _rule, pattern in SECRET_RULES)
+
+
+def scan_package(
+    data: bytes,
+    *,
+    artifact_digest: str,
+    target: str,
+    manifest: dict,
+    now: datetime | None = None,
+    clock: Callable[[], float] = time.monotonic,
+) -> ScanReport | None:
+    if manifest.get("schemaVersion") != 2 or manifest.get("backend") is not None:
+        return None
+    started = clock()
+    budget = SCAN_LIMITS["timeBudgetMs"] / 1000
+    limit = SCAN_LIMITS["maxItemsPerKind"]
+    skipped: dict[str, int] = {}
+    truncated = False
+    timed_out = False
+    files_total = 0
+    files_scanned = 0
+    bytes_scanned = 0
+    merged = ScriptFacts()
+    call_files: dict[tuple[str, str | None, str, str], int] = {}
+    any_script = False
+
+    def skip(reason: str, count: int = 1) -> None:
+        skipped[reason] = skipped.get(reason, 0) + count
+
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        members = sorted((info for info in archive.infolist() if not info.is_dir()), key=lambda i: i.filename)
+        for info in members:
+            if info.filename == "manifest.json":
+                continue
+            files_total += 1
+            if not info.filename.lower().endswith(SCRIPT_SUFFIXES):
+                skip("binaryAsset")
+                continue
+            if timed_out or clock() - started > budget:
+                timed_out = True
+                skip("unsupported")
+                continue
+            with archive.open(info) as stream:
+                content = stream.read(SCAN_LIMITS["maxScriptBytes"] + 1)
+            if len(content) > SCAN_LIMITS["maxScriptBytes"]:
+                content = content[:SCAN_LIMITS["maxScriptBytes"]]
+                truncated = True
+            facts = scan_script(content.decode("utf-8", "replace"), max_path_length=SCAN_LIMITS["maxPathLength"])
+            any_script = True
+            files_scanned += 1
+            bytes_scanned += len(content)
+            for call in facts.calls:
+                call_files[call] = call_files.get(call, 0) + 1
+            merged.dynamic += facts.dynamic
+            for host, count in facts.hosts.items():
+                merged.hosts[host] = merged.hosts.get(host, 0) + count
+            merged.capabilities |= facts.capabilities
+            merged.read_paths |= facts.read_paths
+            merged.write_paths |= facts.write_paths
+            merged.dynamic_paths += facts.dynamic_paths
+            merged.eval += facts.eval
+            merged.new_function += facts.new_function
+            merged.dynamic_import += facts.dynamic_import
+            merged.string_timers += facts.string_timers
+            merged.obfuscation_signals |= facts.obfuscation_signals
+            if facts.dynamic:
+                merged.dynamic_files += 1
+
+    redactions = 0
+
+    def keep(values: list[str]) -> list[str]:
+        nonlocal redactions, truncated
+        kept = []
+        for value in values:
+            if _redacted(value):
+                redactions += 1
+            else:
+                kept.append(value)
+        if len(kept) > limit:
+            truncated = True
+            kept = kept[:limit]
+        return kept
+
+    calls = []
+    for (executable, subcommand, category, evidence), files in sorted(
+        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][3])
+    ):
+        command = executable if subcommand is None else f"{executable} {subcommand}"
+        if _redacted(command):
+            redactions += 1
+            continue
+        calls.append({
+            "executable": executable, "subcommand": subcommand, "category": category,
+            "source": "frontend", "evidence": evidence, "files": files,
+        })
+    # A command seen as a call site is not repeated as a mere string.
+    sites = {(c["executable"], c["subcommand"]) for c in calls if c["evidence"] == "callSite"}
+    calls = [c for c in calls if c["evidence"] == "callSite" or (c["executable"], c["subcommand"]) not in sites]
+    if len(calls) > limit:
+        truncated = True
+        calls = calls[:limit]
+    hosts = keep(sorted(merged.hosts))
+    read_paths = keep(sorted(merged.read_paths))[: SCAN_LIMITS["maxPaths"]]
+    write_paths = keep(sorted(merged.write_paths))[: SCAN_LIMITS["maxPaths"]]
+    if len(merged.read_paths) > SCAN_LIMITS["maxPaths"] or len(merged.write_paths) > SCAN_LIMITS["maxPaths"]:
+        truncated = True
+    if redactions:
+        skip("redacted", redactions)
+    report: dict[str, Any] = {
+        "schemaVersion": SCAN_SCHEMA_VERSION,
+        "scanner": {"id": SCANNER_ID, "version": SCANNER_VERSION},
+        "artifactDigest": artifact_digest,
+        "target": target,
+        "scannedAt": _timestamp(now or datetime.now(timezone.utc)),
+        "coverage": {
+            "filesTotal": files_total,
+            "filesScanned": files_scanned,
+            "bytesScanned": bytes_scanned,
+            "skipped": [{"reason": reason, "count": skipped[reason]} for reason in sorted(skipped)],
+            "truncated": truncated,
+            "timedOut": timed_out,
+        },
+        "shell": {
+            "calls": calls,
+            "dynamic": {"count": merged.dynamic, "files": merged.dynamic_files},
+        },
+        "network": {"hosts": [{"host": host, "source": "frontend", "count": merged.hosts[host]} for host in hosts]},
+        "files": {"readPaths": read_paths, "writePaths": write_paths, "dynamicPaths": merged.dynamic_paths},
+        "capabilities": [{"address": address, "source": "frontend"} for address in keep(sorted(merged.capabilities))],
+        "code": {
+            "frontend": {
+                "eval": merged.eval,
+                "newFunction": merged.new_function,
+                "dynamicImport": merged.dynamic_import,
+                "stringTimers": merged.string_timers,
+                "obfuscationSignals": sorted(merged.obfuscation_signals),
+            } if any_script else None,
+            "backend": None,
+        },
+        "native": [],
+    }
+    return report  # type: ignore[return-value]
