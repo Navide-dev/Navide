@@ -6,11 +6,16 @@ that the parallel work lines B1 (agent tools), B2 (Navide Marketplace MCP
 tools) and D (disclosure) build against. Nothing described here is wired into
 the app yet:
 
-- `plugin-manifest-v2.schema.json` still refuses `backend.agentTools`
-  ([section 2.6](#26-schema-fragment-not-yet-accepted)); B1-a turns it on.
-- No MCP tool, Host route, WebSocket handler, UI, Registry endpoint or database
-  table exists for anything below. The reference code is types, constants and
-  pure functions that nothing imports:
+- B1-a turned on `backend.agentTools` in `plugin-manifest-v2.schema.json`
+  ([section 2.6](#26-schema-fragment)): the Host and the
+  Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
+  the consent key carries the tools digest (section 2.8), and the consent
+  surfaces list the tools. The Registry image is built from
+  `marketplace/registry` alone, so it ships a byte-identical copy of
+  `agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
+- No MCP tool, Host route, WebSocket handler, Registry endpoint or database
+  table exists for anything else below. The reference code is types, constants and
+  pure functions:
 
 | Language | Module | Contents |
 |---|---|---|
@@ -153,14 +158,13 @@ error as `{ index, field, code }`, ordered by entry index and then:
 A package with any error is refused at install and publish, exactly like a
 schema error.
 
-### 2.6 Schema fragment (not yet accepted)
+### 2.6 Schema fragment
 
 `agent-tools-fixtures/manifest-agent-tools.fragment.schema.json` holds the
 JSON Schema that B1-a adds to `$defs.backend.properties` of
 `plugin-manifest-v2.schema.json` (both copies) together with the
-`agentTool` and `agentToolText` definitions. Until then the schema refuses the
-field (`backend` has `additionalProperties: false`), and both test suites
-assert that it still does, so the switch is a deliberate edit in B1-a. Rules the
+`agentTool` and `agentToolText` definitions; B1-a added it, and both test
+suites assert that both schema copies carry it verbatim. Rules the
 schema cannot express (prefix, reserved names, declared method, uniqueness,
 integers, DB9) stay in `validateAgentTools`.
 

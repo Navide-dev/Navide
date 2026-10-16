@@ -1,8 +1,8 @@
 /**
  * Step-0 contract for Navide plugin agent tools (plan B, B1 and B2).
  *
- * Types and pure functions only: nothing in the app imports this module yet,
- * and plugin-manifest-v2.schema.json still refuses `backend.agentTools`. The
+ * Types and pure functions only. Since B1-a the Host refuses a manifest whose
+ * `backend.agentTools` fails `validateAgentTools` (pluginManifestV2.ts). The
  * normative text is docs/en-US/plugin-agent-tools-contract.md; the Python
  * twin is backend/agent_team_backend/plugins/agent_tools_contract.py, and both
  * are held to docs/plugin-contracts/agent-tools-fixtures/ by their tests.

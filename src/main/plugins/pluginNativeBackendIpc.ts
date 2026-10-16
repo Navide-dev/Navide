@@ -48,7 +48,7 @@ export function registerNativeBackendIpc(
   }
   const overview = async (): Promise<NativeBackendOverview> => ({
     enabled: isEnabled(),
-    plugins: await Promise.all(listSpecs().map((spec) => controller.status(spec))),
+    plugins: await controller.statuses(listSpecs()),
   })
 
   handle('plugins:nativeBackends:list', async (event) => {

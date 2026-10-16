@@ -24,6 +24,9 @@ export interface NativeBackendPluginRecord {
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
+  /** When the package began declaring agent tools (ISO 8601): the DB1
+   * name-collision order. Cleared with the rest on uninstall. */
+  agentToolsSince?: string
 }
 
 export interface NativeBackendState {
@@ -68,6 +71,7 @@ function parseState(value: unknown): NativeBackendState {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
       if (paths.length > 0) record.workspaceWrite = [...new Set(paths)]
     }
+    if (typeof raw.agentToolsSince === 'string') record.agentToolsSince = raw.agentToolsSince
     plugins[pluginId] = record
   }
   return { schemaVersion: 1, enabled: value.enabled === true, plugins }
@@ -166,6 +170,13 @@ export class NativeBackendStore {
       else delete record.workspaceWrite
       return record
     })
+  }
+
+  /** Record the first time a package declares agent tools; later calls keep
+   * the first time (no save). */
+  noteAgentToolsSince(pluginId: string, now = new Date()): void {
+    if (this.state.plugins[pluginId]?.agentToolsSince !== undefined) return
+    this.update(pluginId, (record) => ({ ...record, agentToolsSince: now.toISOString() }))
   }
 
   /** Uninstall: forget every decision about the plugin. */

@@ -9,6 +9,7 @@ import { useI18n } from 'vue-i18n'
 import { ipcErrorMessage } from '../composables/usePluginInstallFlow'
 import { usePluginInventory } from '../composables/usePluginInventory'
 import MarketplaceIcon from './MarketplaceIcon.vue'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 const { t } = useI18n()
 const overview = ref<NativeBackendOverview | null>(null)
@@ -139,6 +140,7 @@ watch(installed, refresh)
               {{ $t('settings.extensions.nativeBackends.revoke') }}
             </button>
           </span>
+          <PluginAgentToolsList v-if="row.agentTools?.length" :tools="row.agentTools" />
         </div>
       </li>
     </ul>

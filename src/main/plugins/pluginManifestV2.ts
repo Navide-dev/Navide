@@ -12,6 +12,7 @@ import {
   type PluginShellMode,
   type PluginSystemNamespace,
 } from '../../../packages/plugin-contracts/src/index'
+import { validateAgentTools } from '../../shared/pluginAgentTools'
 import { InstalledPluginError } from './pluginManifestErrors'
 
 export {
@@ -38,10 +39,19 @@ export function compareSemver(left: string, right: string): number | null {
 }
 
 /**
- * Host adapter preserving the Host error type while delegating all Manifest v2
- * validation to the public contracts package.
+ * Host adapter preserving the Host error type while delegating Manifest v2
+ * validation to the public contracts package, plus the agent-tools contract
+ * rules that the manifest schema (and so the public parser) cannot express.
  */
 export function parseManifestV2(raw: Record<string, unknown>): PluginManifestV2 {
+  // backend.agentTools: every rule of the agent-tools contract (section 2.5),
+  // first, so a refusal names the contract's error code. A package with any
+  // error is refused, exactly like a schema error.
+  const [first] = validateAgentTools(raw)
+  if (first) {
+    const at = first.index === null ? '' : `[${first.index}]${first.field ? `.${first.field}` : ''}`
+    throw new InstalledPluginError(`manifest backend.agentTools${at} is invalid: ${first.code}`)
+  }
   try {
     return parsePublicManifestV2(raw)
   } catch (error) {

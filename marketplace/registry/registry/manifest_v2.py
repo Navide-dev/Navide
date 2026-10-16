@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .agent_tools_contract import validate_agent_tools
 from .path_policy import canonical_html_path, canonical_package_path
 from .versions import _V2_VERSION_RE
 
@@ -188,6 +189,9 @@ class ManifestV2Backend(ManifestV2Model):
     activation: Literal["startup"]
     methods: list[str] | None = Field(default=None, min_length=1, max_length=64)
     events: list[str] | None = Field(default=None, min_length=1, max_length=32)
+    # Kept as plain JSON: every field rule is validate_agent_tools' (the
+    # contract module, checked on the whole manifest in ManifestV2).
+    agentTools: list[dict[str, Any]] | None = Field(default=None, min_length=1)
 
     @field_validator("methods", "events")
     @classmethod
@@ -304,6 +308,21 @@ class ManifestV2(ManifestV2Model):
         bad = [member for member in value if not PACKAGE_ID_RE.fullmatch(member)]
         if bad:
             raise ValueError(f"contains invalid package ids {bad}")
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def _check_agent_tools(cls, value: Any) -> Any:
+        # The contract's own rules (docs/en-US/plugin-agent-tools-contract.md
+        # section 2.5) on the raw manifest: they need the id and the declared
+        # methods, and refuse a package exactly like a schema error.
+        if isinstance(value, Mapping):
+            errors = validate_agent_tools(dict(value))
+            if errors:
+                first = errors[0]
+                where = "" if first["index"] is None else f"[{first['index']}]"
+                field = f".{first['field']}" if first["index"] is not None and first["field"] else ""
+                raise ValueError(f"backend.agentTools{where}{field} is invalid: {first['code']}")
         return value
 
     @model_validator(mode="after")

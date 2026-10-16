@@ -1,8 +1,9 @@
 """Step-0 contract for Navide plugin agent tools (plan B, B1 and B2).
 
-Types, constants and pure functions only: nothing in the backend imports this
-module yet, and plugin-manifest-v2.schema.json still refuses
-``backend.agentTools``. The normative text is
+Types, constants and pure functions only. Since B1-a the Registry validates
+``backend.agentTools`` with ``validate_agent_tools`` through its byte-identical
+copy (marketplace/registry/registry/agent_tools_contract.py, held by
+marketplace/registry/tests/test_agent_tools_contract_copy.py). The normative text is
 docs/en-US/plugin-agent-tools-contract.md; the TypeScript twin is
 src/shared/pluginAgentTools.ts, and both are held to
 docs/plugin-contracts/agent-tools-fixtures/ by their tests.

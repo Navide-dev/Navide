@@ -1697,6 +1697,14 @@
     },
     "extensions": {
       "devUnpacked": "未簽章的本機資料夾，僅限開發者模式",
+      "agentTools": {
+        "heading": "agent 可呼叫的工具",
+        "read": "唯讀",
+        "write": "會修改資料",
+        "timeout": "{seconds} 秒逾時",
+        "dataFlow": "這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。",
+        "collision": "agent 無法使用：較早安裝的 {heldBy} 已經用了這個名稱。"
+      },
       "nativeBackends": {
         "title": "原生後端",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沒有網路的沙盒裡執行：它只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。在你打開下方開關之前，不會執行任何原生程式。",

@@ -76,6 +76,7 @@ import {
   type ManifestPermissionsSummary,
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
+import { computeDisclosure } from '../../shared/pluginDisclosure'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -1239,12 +1240,15 @@ export function registerPluginIpc(
         throw new Error(`${result.id} is an extension pack; install it from its Marketplace page`)
       }
       prepared.set(result.id, { pkg: result })
+      // Declared agent tools, for the trust dialog; absent when there are none.
+      const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
       return {
         id: result.id,
         version: result.version,
         trustTier: result.trustTier,
         sensitive: result.sensitive,
         containsBackendExecutable: result.containsBackendExecutable,
+        ...(agentTools.length > 0 ? { agentTools } : {}),
         requiresConfirmation: result.requiresConfirmation,
         publisherId: result.publisherId,
         requiresPublisherTrust:

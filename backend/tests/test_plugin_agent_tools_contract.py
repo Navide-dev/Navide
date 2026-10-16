@@ -120,10 +120,22 @@ def test_schema_fragment_matches_the_validator_constants() -> None:
     assert fragment["required"] == list(tools.AGENT_TOOL_REQUIRED_FIELDS)
 
 
-def test_manifest_schema_still_refuses_agent_tools_until_b1a() -> None:
-    schema = json.loads((FIXTURES.parent / "plugin-manifest-v2.schema.json").read_text(encoding="utf-8"))
-    assert schema["$defs"]["backend"]["additionalProperties"] is False
-    assert "agentTools" not in schema["$defs"]["backend"]["properties"]
+def test_manifest_schema_accepts_agent_tools_exactly_as_the_fragment() -> None:
+    # B1-a turned the fragment on (contract section 2.6); both schema copies
+    # must carry it verbatim, apart from the field's description.
+    fragment = _load("manifest-agent-tools.fragment.schema.json")
+    for path in (
+        FIXTURES.parent / "plugin-manifest-v2.schema.json",
+        FIXTURES.parents[2] / "packages/plugin-contracts/src/schemas/plugin-manifest-v2.schema.json",
+    ):
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        backend = schema["$defs"]["backend"]
+        assert backend["additionalProperties"] is False
+        field = dict(backend["properties"]["agentTools"])
+        field.pop("description")
+        assert field == fragment["backendProperties"]["agentTools"]
+        assert schema["$defs"]["agentTool"] == fragment["$defs"]["agentTool"]
+        assert schema["$defs"]["agentToolText"] == fragment["$defs"]["agentToolText"]
 
 
 # ── disclosure ──────────────────────────────────────────────────────────────

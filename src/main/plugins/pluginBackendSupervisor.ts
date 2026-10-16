@@ -26,6 +26,7 @@ import {
 } from './pluginCapabilityBroker'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import type { PluginSystemNamespace } from './pluginManifestV2'
+import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
 
 /** Private Electron-main seam for Backend Wire v1 conformance tests. */
 export const MCP_PROTOCOL_REVISION = '2026-07-28'
@@ -97,6 +98,9 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** The package's declared agent tools as the disclosure spells them
+     *  (defaulted timeouts, sorted by name); absent when it declares none. */
+    agentTools?: readonly DisclosureAgentTool[]
   }
 }
 

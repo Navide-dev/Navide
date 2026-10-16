@@ -1167,6 +1167,19 @@ function nativeBackendDialogParent(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
+/** The declared agent tools, each with its full description, read/write tag
+ * and timeout: allowing the backend also allows agents to call these. */
+function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string {
+  if (prompt.agentTools.length === 0) return ''
+  return [
+    `Agents will be able to call these tools of ${prompt.name}:`,
+    ...prompt.agentTools.map((tool) =>
+      `• ${tool.name} (${tool.risk === 'write' ? 'changes data' : 'read-only'}, times out after ${tool.timeoutMs / 1000} s): ${tool.description}`
+    ),
+    'What these tools return is shown to the agent, which may pass it on elsewhere.',
+  ].join('\n')
+}
+
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
   const access = prompt.system.includes('fs')
     ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
@@ -1180,6 +1193,7 @@ async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): P
     detail: [
       'Navide runs it in a sandbox: it has no network access and cannot read your home folder.',
       access,
+      nativeBackendAgentToolsText(prompt),
       'You can disable it at any time in Settings → Extensions.',
     ].filter(Boolean).join('\n\n'),
     buttons: ['Not now', 'Allow'],

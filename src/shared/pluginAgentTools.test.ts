@@ -94,11 +94,21 @@ describe('validateAgentTools', () => {
   })
 })
 
-describe('contract fragments that are not wired yet', () => {
-  it('leaves plugin-manifest-v2.schema.json refusing backend.agentTools until B1-a', () => {
-    const schema = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/plugin-manifest-v2.schema.json'), 'utf8'))
-    expect(schema.$defs.backend.additionalProperties).toBe(false)
-    expect(schema.$defs.backend.properties).not.toHaveProperty('agentTools')
+describe('contract fragments', () => {
+  it('has plugin-manifest-v2.schema.json (both copies) accept backend.agentTools exactly as the fragment', () => {
+    const fragment = load('manifest-agent-tools.fragment.schema.json')
+    for (const path of [
+      'docs/plugin-contracts/plugin-manifest-v2.schema.json',
+      'packages/plugin-contracts/src/schemas/plugin-manifest-v2.schema.json',
+    ]) {
+      const schema = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'))
+      expect(schema.$defs.backend.additionalProperties).toBe(false)
+      const { description, ...field } = schema.$defs.backend.properties.agentTools
+      expect(typeof description).toBe('string')
+      expect(field).toEqual(fragment.backendProperties.agentTools)
+      expect(schema.$defs.agentTool).toEqual(fragment.$defs.agentTool)
+      expect(schema.$defs.agentToolText).toEqual(fragment.$defs.agentToolText)
+    }
   })
 
   it('keeps the schema fragment consistent with the validator constants', () => {
