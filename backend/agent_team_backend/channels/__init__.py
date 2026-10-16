@@ -58,6 +58,20 @@ def default_seams() -> Seams:
             return {"status": "queued", "unknown": True}
         return {"status": entry["status"], "reason": entry.get("reason"), "hold": entry.get("hold")}
 
+    async def cancel(msg_key: str) -> str:
+        # The same withdrawal cli_cancel_message asks of the window owning the queue.
+        from .. import app
+
+        entry = mcp._mcp_message_status.get(msg_key)
+        if entry is None:
+            return "unknown"
+        if entry["status"] != "queued":
+            return str(entry["status"])
+        await app.broadcast(make_event("agent_msg.cancel", {"msg_key": msg_key}))
+        await mcp._await_delivery(msg_key, mcp._CANCEL_VERDICT_TIMEOUT_S)
+        settled = mcp._mcp_message_status.get(msg_key)
+        return str(settled["status"]) if settled else "unknown"
+
     async def interrupt(pane_id: str) -> dict[str, Any]:
         pane = agent_messaging.current(pane_id)
         if pane is None:
@@ -190,7 +204,7 @@ def default_seams() -> Seams:
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
-        ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills,
+        ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel,
     )
 
 
