@@ -301,6 +301,7 @@ function makeBridgeChild(
   onFrame?: (frame: string) => void,
   port: PlansBridgePort = 'filesystem',
   operation = 'resolve_root',
+  bridgeArguments: unknown = {},
 ): ChildProcessWithoutNullStreams {
   const child = new EventEmitter()
   const stdin = new PassThrough()
@@ -348,7 +349,7 @@ function makeBridgeChild(
             origin: { kind: 'call', requestId: frame.id },
             port,
             operation,
-            arguments: {},
+            arguments: bridgeArguments,
           },
         })}\n`)
         continue
@@ -410,6 +411,8 @@ function bridgeOperationForPort(port: PlansBridgePort): string {
       return 'open'
     case 'spawn':
       return 'transform'
+    case 'shell':
+      return 'run'
   }
   const exhaustive: never = port
   return exhaustive
@@ -595,7 +598,7 @@ describe('PluginBackendSupervisor', () => {
     expect(bridgeDispatcher).not.toHaveBeenCalled()
   })
 
-  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem'))(
+  it.each(PLANS_BRIDGE_PORTS.filter((port) => port !== 'filesystem' && port !== 'shell'))(
     'rejects agent Bridge use of unmapped %s even in full policy',
     async (port) => {
       const bridgeDispatcher = vi.fn(async () => ({ ok: true }))
@@ -622,6 +625,65 @@ describe('PluginBackendSupervisor', () => {
       expect(bridgeDispatcher).not.toHaveBeenCalled()
     },
   )
+
+  it.each([
+    ['allowlist', ['git'], 'git rev-parse HEAD', true],
+    ['allowlist', ['git'], 'gh pr list', false],
+    ['allowlist', ['git'], '', false],
+    ['allowlist', [], 'git status', false],
+    ['full', [], 'gh pr list', true],
+  ] as const)(
+    'applies the agent shell Execution Policy (%s %j) to the shell Bridge command %j',
+    async (mode, shell, command, allowed) => {
+      const bridgeDispatcher = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }))
+      const supervisor = new PluginBackendSupervisor(
+        { ...activation, approvedBridgePorts: ['shell'] },
+        {
+          environment: { NAVIDE_FIXTURE: 'backend-wire' },
+          spawnProcess: () => makeBridgeChild(undefined, 'shell', 'run', { command }),
+          resolveExecutionPolicy: () => ({
+            policy: { schemaVersion: 1, mode, system: [], shell: [...shell] },
+            revision: 1,
+            state: 'user',
+          }),
+          bridgeDispatcher: { dispatch: bridgeDispatcher },
+        },
+      )
+      supervisors.push(supervisor)
+      const agentRuntime = createAuthenticatedBackendRuntime({
+        ...runtime,
+        initiator: { kind: 'agent', source: 'mcp', id: `shell-${mode}-agent` },
+      })
+
+      await supervisor.start()
+      const call = supervisor.clientFor(agentRuntime, { workspacePath: '/workspace' }).call('fixture.bridge', null)
+      if (allowed) {
+        await expect(call).resolves.toEqual({ exitCode: 0, stdout: '', stderr: '' })
+        expect(bridgeDispatcher).toHaveBeenCalledOnce()
+      } else {
+        await expect(call).rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: 'CAPABILITY_DENIED' })
+        expect(bridgeDispatcher).not.toHaveBeenCalled()
+      }
+    },
+  )
+
+  it('refuses the shell Bridge port to an activation that was not projected it', async () => {
+    const bridgeDispatcher = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }))
+    const supervisor = new PluginBackendSupervisor(
+      { ...activation, approvedBridgePorts: ['filesystem'] },
+      {
+        environment: { NAVIDE_FIXTURE: 'backend-wire' },
+        spawnProcess: () => makeBridgeChild(undefined, 'shell', 'run', { command: 'git status' }),
+        bridgeDispatcher: { dispatch: bridgeDispatcher },
+      },
+    )
+    supervisors.push(supervisor)
+    await supervisor.start()
+    await expect(
+      supervisor.clientFor(authenticatedRuntime, { workspacePath: '/workspace' }).call('fixture.bridge', null)
+    ).rejects.toMatchObject({ code: 'PLUGIN_ERROR', pluginCode: 'CAPABILITY_DENIED' })
+    expect(bridgeDispatcher).not.toHaveBeenCalled()
+  })
 
   it.each(PLANS_BRIDGE_PORTS)(
     'does not apply the agent Bridge policy to user %s operations',

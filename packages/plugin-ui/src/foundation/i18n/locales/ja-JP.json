@@ -1721,7 +1721,7 @@
           "disabled": "無効",
           "needsConsent": "許可が必要",
           "sandboxUnavailable": "このシステムでは安全に実行できません",
-          "shellNotAllowed": "ブロック：シェルアクセスも要求しています",
+          "shellNotAllowed": "ブロック：完全なシェルアクセスを要求しています",
           "stoppedAfterCrashes": "失敗が続いたため停止",
           "unavailable": "利用不可"
         }

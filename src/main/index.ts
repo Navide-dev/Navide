@@ -1138,6 +1138,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   store: nativeBackendStore,
   dataRoot: join(nativeBackendRoot, 'data'),
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
+  shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
@@ -1171,6 +1172,10 @@ async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): P
   const access = prompt.system.includes('fs')
     ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
     : 'It asks for no access to your files.'
+  // DB5: shell is allowed for a backend and disclosed as high risk.
+  const shell = prompt.shell === 'allowlist'
+    ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. These commands can change the repository and contact remotes.'
+    : ''
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Native code',
@@ -1180,6 +1185,7 @@ async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): P
     detail: [
       'Navide runs it in a sandbox: it has no network access and cannot read your home folder.',
       access,
+      shell,
       'You can disable it at any time in Settings → Extensions.',
     ].filter(Boolean).join('\n\n'),
     buttons: ['Not now', 'Allow'],

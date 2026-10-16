@@ -67,9 +67,9 @@ value of the Navide Marketplace.
 When a new design would add a restriction, turn it into a declaration plus
 disclosure instead, or bring it to the product owner as an explicit decision.
 Some existing rules in this spec predate the principle and are under review:
-a backend package may not also declare `shell`, and third-party methods are
-never callable by MCP agents. Until they change, they are documented as they
-stand.
+third-party methods are never callable by MCP agents. Until it changes, it is
+documented as it stands. (A backend package may now declare
+`shell: "allowlist"`; see [Third-party backends](#third-party-backends-sandbox-consent-and-publishing).)
 
 ## What is public
 
@@ -349,7 +349,8 @@ all of these hold, and they are checked again before every restart:
   changes any file - frontend files included - is staged but not started until
   the user allows it again.
 - The platform sandbox is available. There is no unsandboxed fallback.
-- The package does not also declare `permissions.shell`.
+- The package does not declare `permissions.shell: "full"`. A backend package
+  may declare `shell: "allowlist"`; see "Shell commands from a backend" below.
 
 | Platform | Sandbox | Contains | Does not contain |
 |---|---|---|---|
@@ -379,8 +380,36 @@ Host bridge: `filesystem` reads (`read_file`, `read_range`, `list_dir`,
 declares `permissions.system: ["fs"]` and the user granted it. Writes
 (`write_file`, chunked writes, `delete`, `rename`) additionally need a
 per-workspace "allow file changes" grant, asked once in a dialog and revocable
-in Settings. Every other bridge port is refused. Third-party methods are never
-callable by MCP agents.
+in Settings. The only other bridge port is the shell broker described next;
+every other bridge port is refused. Third-party methods are never callable by
+MCP agents.
+
+#### Shell commands from a backend
+
+A backend package may declare `permissions.shell: "allowlist"` (DB5 of plan B:
+disclosed, not refused). The consent dialog then states it as **high risk**,
+the disclosure data lists `shell.allowlist` as a high risk reason (see
+[plugin-agent-tools-contract.md](plugin-agent-tools-contract.md), section 3.3),
+and the consent binds to it: `shell` is part of the consented permission set,
+so a version that adds it is staged until the user allows it again.
+
+The backend never executes anything itself (the sandbox lets it exec only files
+of its own package). It sends the Host bridge request `port: "shell"`,
+`operation: "run"`, `arguments: {"command": "<command>"}`, and the Host runs it
+through the same shell broker as a view's `shell.run` in `allowlist` mode: only
+`git`, `gh` and `glab` as a plain command without shell syntax, in the
+workspace the view is bound to, with credential/auth subcommands, `-c`/`-C` and
+the other overrides refused (the Host shell executable allowlist in
+"Host-managed storage partitions" below). The
+answer is `{exitCode, stdout, stderr}`; a refused command is the bridge error
+`CAPABILITY_DENIED`. The Host checks on every call that the package declares
+`shell: "allowlist"`, that the user's capability grant for this package version
+has the same shell mode, that the call comes from a live binding of this
+version at its bound workspace root, and, for an agent initiator, the user's
+execution policy for the command. A backend that does not declare it is
+refused the port. `shell: "full"` is not available to a backend: the broker
+serves only the allowlist, and such a backend is not started
+(`shell-not-allowed`).
 
 Planned, not yet accepted: a `backend.agentTools` manifest field that lets a
 package offer consented agent tools on the core MCP server, and the disclosure
@@ -419,8 +448,9 @@ snapshot fails the pre-spawn trust check).
 
 Publishing a package with a backend from a self-service namespace requires an
 administrator to allowlist the publisher and a verified publisher domain
-(DNS). The package must declare `engines.navide` of at least `>=0.2.14`, must
-not request `shell`, and every version waits in the review queue, where the
+(DNS). The package must declare `engines.navide` of at least `>=0.2.14`
+(`>=0.2.25` when it requests `shell: "allowlist"`; `shell: "full"` is refused),
+and every version waits in the review queue, where the
 reviewer must confirm having inspected the executable of every target. The
 secret scan reads backend executables in full (up to 512 MiB uncompressed per
 file) instead of the first 5 MiB, and name similarity also warns on names

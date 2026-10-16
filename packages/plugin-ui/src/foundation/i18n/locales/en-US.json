@@ -1721,7 +1721,7 @@
           "disabled": "Disabled",
           "needsConsent": "Needs your permission",
           "sandboxUnavailable": "Cannot run safely on this system",
-          "shellNotAllowed": "Blocked: also requests shell access",
+          "shellNotAllowed": "Blocked: requests full shell access",
           "stoppedAfterCrashes": "Stopped after repeated failures",
           "unavailable": "Unavailable"
         }

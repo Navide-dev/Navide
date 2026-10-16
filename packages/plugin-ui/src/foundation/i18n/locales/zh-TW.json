@@ -1721,7 +1721,7 @@
           "disabled": "已停用",
           "needsConsent": "需要你的允許",
           "sandboxUnavailable": "此系統無法安全執行",
-          "shellNotAllowed": "已封鎖：同時要求 shell 權限",
+          "shellNotAllowed": "已封鎖：要求完整 shell 權限",
           "stoppedAfterCrashes": "多次失敗後已停止",
           "unavailable": "無法使用"
         }

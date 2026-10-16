@@ -134,8 +134,10 @@ See FORMAT.md, "Targets and backend entry".
 A backend runs in Navide only inside the OS sandbox, after the user allows it,
 and only answers the methods and events it declares. Publishing one also needs
 an administrator to allow your namespace for native backends, a verified
-publisher domain, `engines.navide` of at least `>=0.2.14`, a non-empty
-`backend.methods`, and no `shell` permission. See
+publisher domain, `engines.navide` of at least `>=0.2.14`, and a non-empty
+`backend.methods`. A backend package may also declare `shell: "allowlist"`
+(shown to users as high risk); it then needs `engines.navide` of at least
+`>=0.2.25`. `shell: "full"` is not available with a backend. See
 [plugin-development-v2.md](plugin-development-v2.md), "Third-party backends".
 
 `dev-backend` runs your built backend the same way, so what works here works
