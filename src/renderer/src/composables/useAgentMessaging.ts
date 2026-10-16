@@ -1084,6 +1084,9 @@ function acceptRemoteMessage(args: {
   /** From a chat channel or a remote device: fence the body as external
    *  content (see isExternalDelivery / renderEnvelope). */
   external?: boolean
+  /** From a sender no MSG block can reach (see hasReplyRoute): the envelope
+   *  asks for the answer in the final output instead. */
+  noReplyRoute?: boolean
 }): boolean {
   if (!deps) return false
   const localName = nameByPane.get(args.targetPaneId)
@@ -1170,7 +1173,11 @@ function acceptRemoteMessage(args: {
     msg.id,
     toTerminal
       ? args.content
-      : renderEnvelope(args.fromDisplay, args.content, { correlationId: args.msgKey, external: args.external }),
+      : renderEnvelope(args.fromDisplay, args.content, {
+          correlationId: args.msgKey,
+          external: args.external,
+          noReplyRoute: args.noReplyRoute,
+        }),
   )
   correlations.set(args.msgKey, { id: msg.id, sentAt: msg.createdAt })
   remoteInbound.set(msg.id, args.msgKey)
