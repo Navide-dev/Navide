@@ -2641,6 +2641,8 @@ class ChannelManager:
             request.message_text = text if len(ids) == 1 else ""
         self._awaiting_failures.pop(pane_id, None)
         self._awaiting_shown[pane_id] = _Shown(prompt, request.id)
+        # Relayed: a run's probe that has not seen it yet must not post it a second time.
+        self._awaiting_posted.add(pane_id)
 
     def _retire_relay(self, pane_id: str, note: str) -> None:
         """Expire the pane's relay requests and mark their chat prompts settled, so a

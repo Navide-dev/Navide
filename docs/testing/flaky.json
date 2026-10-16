@@ -247,6 +247,24 @@
           "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
         }
       ]
+    },
+    {
+      "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#PENDING",
+      "count": 1,
+      "firstSeen": "2026-10-16T12:35:26Z",
+      "lastSeen": "2026-10-16T12:35:26Z",
+      "runs": [
+        {
+          "run": 38899029640,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": null,
+          "at": "2026-10-16T12:35:26Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt - AssertionError: assert [] == [('pane-1', {...'option': 1})]"
+        }
+      ]
     }
   ]
 }
