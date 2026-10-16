@@ -215,6 +215,24 @@
       ]
     },
     {
+      "test": "backend/tests/test_server_link_rotation_d1.py::test_a_full_record_recovers_by_unpairing_and_not_by_starting_over[keychain]",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#337",
+      "count": 1,
+      "firstSeen": "2026-10-16T17:49:31Z",
+      "lastSeen": "2026-10-16T17:49:31Z",
+      "runs": [
+        {
+          "run": 38941866472,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 332,
+          "at": "2026-10-16T17:49:31Z",
+          "evidence": "FAILED backend/tests/test_server_link_rotation_d1.py::test_a_full_record_recovers_by_unpairing_and_not_by_starting_over[keychain] - AssertionError: assert ('')"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is",
       "category": "test-race",
       "status": "fixed",
