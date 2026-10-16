@@ -202,6 +202,19 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${extracted}"
           rm -rf "${work}"
 
+      - name: Attach installers to the workflow run
+        # Every run, including a workflow_dispatch dry run: this is how a signed
+        # and notarized macOS build gets tried on a real Mac before a tag
+        # publishes it.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: navide-macos-arm64
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            dist-release/Navide-*.dmg
+            dist-release/Navide-*.zip
+
       - name: Upload to the draft GitHub Release
         # Manual (workflow_dispatch) runs dry-run the signing chain only.
         if: github.event_name == 'push'
