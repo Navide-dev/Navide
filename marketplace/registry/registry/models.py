@@ -116,6 +116,13 @@ class ExtensionVersion(SQLModel, table=True):
     review_report: dict = Field(default_factory=dict, sa_column=Column(JSON))
     """Automatic checks run at submission (similarity, secret scan, limits).
     Holds locations and rule names only, never a matched secret value."""
+    disclosure: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    """Manifest disclosure (contract 3.1) computed when the row was signed;
+    None for a v1 manifest, an unsigned row or a row signed before D-a."""
+    disclosure_envelope: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    """Disclosure envelope (contract 3.5) signed with the package envelope."""
+    disclosure_signature: str | None = None
+    """Detached Ed25519 signature over canonical disclosure_envelope JSON."""
 
 
 class ExtensionAsset(SQLModel, table=True):

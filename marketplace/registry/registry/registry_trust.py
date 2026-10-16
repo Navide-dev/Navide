@@ -275,6 +275,29 @@ class RegistryTrustSigner:
         }
         return envelope, sign_json(self.signer_private_key, envelope)
 
+    def sign_disclosure_envelope(
+        self, *, package_envelope: dict, disclosure_digest: str
+    ) -> tuple[dict, str]:
+        """Sign the disclosure envelope of one artifact (contract 3.5).
+
+        Its identity fields are copied from the package envelope this signer
+        just produced, so the two always name the same artifact, signer and
+        moment. The package envelope itself is not changed.
+        """
+        if package_envelope.get("keyId") != self.key_id:
+            raise ValueError("package envelope was not signed by this registry signer")
+        envelope = {
+            "schemaVersion": 1,
+            "artifactDigest": package_envelope["artifactDigest"],
+            "packageId": package_envelope["packageId"],
+            "version": package_envelope["version"],
+            "target": package_envelope["target"],
+            "keyId": self.key_id,
+            "signedAt": package_envelope["signedAt"],
+            "disclosureDigest": disclosure_digest,
+        }
+        return envelope, sign_json(self.signer_private_key, envelope)
+
     def block_reason(
         self, *, publisher_id: str, package_id: str, version: str
     ) -> str | None:

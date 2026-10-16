@@ -31,6 +31,15 @@ class VersionInfo(BaseModel):
     """Against the request's `navide_version`; None when either is unknown."""
     channel: str = "stable"
     """`pre-release` for a SemVer prerelease version, else `stable`."""
+    disclosure: dict | None = None
+    """Manifest disclosure (contract 3.1); None for versions without one."""
+    disclosure_envelope: dict | None = None
+    """Registry-signed disclosure envelope (contract 3.5); the package
+    `registry_envelope` above is unchanged."""
+    disclosure_signature: str | None = None
+    registry: dict | None = None
+    """Unsigned Registry facts (contract 3.4): publisher verification, review
+    and scan summary as counts and status only."""
 
 
 class ExtensionSummary(BaseModel):
