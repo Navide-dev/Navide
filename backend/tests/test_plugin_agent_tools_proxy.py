@@ -404,3 +404,39 @@ async def test_the_backend_operation_is_unchanged_without_an_agent_tool(host: Fa
     [request] = host.requests
     assert set(request) == {"request_id", "target", "operation", "payload"}
     assert request["operation"] == "backend"
+
+
+async def test_arguments_are_validated_against_the_whole_input_schema_before_forwarding(
+    host: FakeHost, monkeypatch,
+) -> None:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    schema = {
+        "type": "object",
+        "required": ["block_id", "status"],
+        "additionalProperties": False,
+        "properties": {
+            "block_id": {"type": "string", "minLength": 1},
+            "status": {"enum": ["done", "wip", "plan"]},
+            "groups": {"type": "array", "items": {"type": "object", "required": ["id"]}},
+        },
+    }
+    _apply(_snapshot(1, [_entry("devmap_status", risk="write", method="devmap.status", inputSchema=schema)]))
+    for arguments in (
+        {"block_id": "b1"},                                       # required
+        {"block_id": "b1", "status": "gone"},                     # enum
+        {"block_id": "", "status": "done"},                       # minLength
+        {"block_id": "b1", "status": "done", "extra": 1},         # additionalProperties
+        {"block_id": "b1", "status": "done", "groups": [{}]},     # nested required
+    ):
+        body = _body(await core.server.call_tool("devmap_status", arguments))
+        assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS", arguments
+    assert host.requests == []
+    await core.server.call_tool("devmap_status", {"block_id": "b1", "status": "done", "groups": [{"id": "g"}]})
+    assert len(host.requests) == 1
+
+
+async def test_an_entry_whose_input_schema_is_not_a_valid_schema_is_not_served() -> None:
+    result = _apply(_snapshot(1, [_entry("devmap_bad", inputSchema={"type": "object", "required": "block_id"}),
+                                  _entry("devmap_ok")]))
+    assert result == {"applied": True, "registered": ["devmap_ok"], "dropped": 1}

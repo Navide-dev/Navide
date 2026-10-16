@@ -36,6 +36,8 @@ import weakref
 from dataclasses import dataclass, field
 from typing import Any
 
+from jsonschema import exceptions as jsonschema_exceptions
+from jsonschema import validators as jsonschema_validators
 from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
@@ -189,8 +191,19 @@ def _valid_entry(entry: Any) -> bool:
         and isinstance(entry["method"], str)
         and isinstance(timeout, int) and not isinstance(timeout, bool) and 1 <= timeout <= 120_000
         and isinstance(entry["inputSchema"], dict) and entry["inputSchema"].get("type") == "object"
+        and _schema_validator(entry["inputSchema"]) is not None
         and isinstance(entry["permissions"], dict)
     )
+
+
+def _schema_validator(schema: dict[str, Any]) -> Any | None:
+    """A validator for a tool's inputSchema, or None when the schema itself is invalid."""
+    cls = jsonschema_validators.validator_for(schema, default=jsonschema_validators.Draft202012Validator)
+    try:
+        cls.check_schema(schema)
+    except jsonschema_exceptions.SchemaError:
+        return None
+    return cls(schema)
 
 
 def _valid_payload(payload: Any) -> bool:
@@ -338,14 +351,29 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
     if caller.kind != "pane" and not _catalog.external_callers:
         reason = "external-callers-off"
         return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+    validator = _schema_validator(entry["inputSchema"])
+    errors = sorted(validator.iter_errors(arguments), key=lambda error: list(error.absolute_path)) if validator else []
+    if errors:
+        # The whole inputSchema the user consented to, before anything leaves
+        # this process; the Host checks again.
+        first = errors[0]
+        where = "/".join(str(part) for part in first.absolute_path) or "(arguments)"
+        return _refusal(
+            sanitize_agent_tool_result_text(f"arguments do not match the input schema of {name} at {where}: {first.message}"),
+            "PLUGIN_TOOL_INVALID_ARGUMENTS",
+        )
     workspace = caller_object["workspace"] or ""
     if not workspace:
         # A caller without a pane has no workspace to target, and the contract
         # gives such a caller no way to name one yet.
         return _refusal("a caller without a pane has no target workspace for a Navide plugin tool", "BAD_REQUEST")
+    # The target is the caller pane's own workspace, so a call made here is
+    # never cross-workspace; recorded so the audit line says it explicitly.
+    cross_workspace = workspace != (caller_object["workspace"] or "")
     _log.info(
-        "plugin tool call %s (%s v%s) by %s %s; %s",
-        name, entry["pluginId"], entry["pluginVersion"], caller.kind, caller.pane_id or "-", CALLER_IDENTITY_NOTE,
+        "plugin tool call %s (%s v%s) by %s %s; cross_workspace=%s; %s",
+        name, entry["pluginId"], entry["pluginVersion"], caller.kind, caller.pane_id or "-",
+        cross_workspace, CALLER_IDENTITY_NOTE,
     )
     response = await core.request_host_agent_workspace_backend(
         entry["pluginId"],
