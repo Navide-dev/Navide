@@ -265,6 +265,31 @@ async def agent_capability_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("plugins.agentTools.sync")
+async def plugins_agent_tools_sync(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """The Host's full catalog of third-party agent tools (contract 4.1).
+
+    Only the authenticated Host session may send it. A snapshot replaces the
+    previous one; one from a new Host session starts again from its revision.
+    """
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import plugin_agent_tools
+
+    result = plugin_agent_tools.apply_sync(payload, plugin_agent_tools.session_key(session))
+    if not result["applied"] and result["error"] == "malformed snapshot":
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agentTools.sync is malformed")
+        )
+        return
+    await session.send_json(make_response(msg_id, msg_type, result))
+
+
 @handler("editor.rewrite")
 async def editor_rewrite(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

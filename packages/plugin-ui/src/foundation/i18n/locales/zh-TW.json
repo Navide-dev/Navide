@@ -10326,7 +10326,8 @@
       "local": "本機",
       "relay": "聊天室",
       "remote": "遠端",
-      "agent": "其他 agent"
+      "agent": "其他 agent",
+      "plugin": "Navide 外掛工具"
     },
     "vendors": {
       "title": "Guard 能擋哪些 CLI",

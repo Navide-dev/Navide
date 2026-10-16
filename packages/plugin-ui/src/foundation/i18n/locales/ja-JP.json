@@ -10326,7 +10326,8 @@
       "local": "ローカル",
       "relay": "チャットアプリ",
       "remote": "リモート",
-      "agent": "他の agent"
+      "agent": "他の agent",
+      "plugin": "Navide プラグインのツール"
     },
     "vendors": {
       "title": "Guard がブロックできる CLI",
