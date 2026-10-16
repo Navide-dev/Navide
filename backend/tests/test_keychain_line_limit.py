@@ -7,8 +7,9 @@ returns 1 *after* the damage is done. The device trust record outgrew this and
 locked cross-device traffic on the next restart (2026-10-11).
 
 The guards live in `cloud_secrets.write`, the writer for Navide Cloud's own
-items. The CLI account path (`CredentialVault._keychain_write`) is deliberately
-left as it was — see test_cli_keychain_path_guard.py.
+items. The CLI account path (`CredentialVault._keychain_write`) cannot refuse
+instead: Claude Code's own credentials outgrow the line once a few MCP logins
+sit in them, so it falls back to a hex-encoded argv write, as Claude Code does.
 
 Every Keychain here is the fake below: nothing in this file runs `security`.
 """
@@ -40,6 +41,7 @@ class LineLimitedSecurity:
     def __init__(self) -> None:
         self.items: dict[str, str] = {}
         self.interactive_lines: list[str] = []
+        self.argv_writes: list[list[str]] = []
 
     def _run(self, tokens: list[str]) -> int:
         cmd, service = tokens[0], tokens[tokens.index("-s") + 1]
@@ -51,6 +53,10 @@ class LineLimitedSecurity:
     def __call__(self, args, input_text=None):
         if args != ["-i"]:
             service = args[args.index("-s") + 1]
+            if args[0] == "add-generic-password":
+                self.argv_writes.append(args)
+                self.items[service] = bytes.fromhex(args[args.index("-X") + 1]).decode()
+                return 0, ""
             if args[0] == "find-generic-password" and service in self.items:
                 return 0, security_g_output(self.items[service])
             if args[0] == "delete-generic-password":
@@ -159,16 +165,40 @@ def test_a_failed_write_does_not_echo_security_output(tmp_path, monkeypatch, cap
         assert MARKER not in text
 
 
-def test_the_bound_is_not_applied_to_cli_account_credentials(tmp_path, monkeypatch):
-    """User ruling: the CLI account path is not changed by this fix. Its write
-    reaches `security` exactly as it did at v0.2.19, whatever its length."""
+def test_an_oversized_cli_account_write_lands_whole_through_argv(tmp_path, monkeypatch):
+    """Claude Code credentials carrying several MCP logins are 4.3 KB: the
+    account switch must store them whole, never a 4095-byte head of them."""
     monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
     vault, sec = _vault(tmp_path)
-    # It reaches `security` and fails there, as it always did (the fake cuts
-    # the line the way the real one does) — no bound refuses it first.
-    with pytest.raises(CredentialVaultError):
-        vault._keychain_write("Claude Code-credentials", _doc(5000), account="me")
-    assert len(sec.interactive_lines) == 1
+    big = _doc(5000)
+    vault._keychain_write("Claude Code-credentials", big, account="me")
+    assert sec.interactive_lines == [], "the oversized command reached security -i"
+    assert sec.items["Claude Code-credentials"] == big
+    assert big not in " ".join(sec.argv_writes[0]), "the secret went on the argv unencoded"
+
+
+def test_a_cli_account_write_that_fits_stays_off_the_argv(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
+    vault, sec = _vault(tmp_path)
+    small = _doc(100)
+    vault._keychain_write("Claude Code-credentials", small, account="me")
+    assert sec.argv_writes == []
+    assert sec.items["Claude Code-credentials"] == small
+
+
+def test_a_failed_cli_account_write_does_not_echo_security_output(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "dd"))
+
+    def echoing(args, input_text=None):
+        return 1, f'{(input_text or " ".join(args)).strip()}": returned 1'
+
+    vault = CredentialVault(root=tmp_path / "r", real_home=tmp_path / "h",
+                            security_runner=echoing, platform="darwin")
+    for secret in (f"tok-{MARKER}", _doc(5000)):
+        with pytest.raises(CredentialVaultError) as failed:
+            vault._keychain_write("Claude Code-credentials", secret, account="me")
+        assert MARKER not in str(failed.value)
+        assert MARKER.encode().hex() not in str(failed.value)
 
 
 @pytest.mark.parametrize("write", [
