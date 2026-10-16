@@ -123,6 +123,9 @@ class ExtensionVersion(SQLModel, table=True):
     """Disclosure envelope (contract 3.5) signed with the package envelope."""
     disclosure_signature: str | None = None
     """Detached Ed25519 signature over canonical disclosure_envelope JSON."""
+    scan: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
+    """Static scan report (contract 3.8) signed through `scanDigest`; None
+    until the Registry has a scanner (DS8)."""
 
 
 class ExtensionAsset(SQLModel, table=True):
