@@ -210,6 +210,46 @@ describe('test races without a timing word in the assertion', () => {
   })
 })
 
+// Build and artifact contracts, 2026-10-16, trimmed: every test passed, but a
+// worker missed vitest's 60 s RPC deadline and the run exited 1.
+const E = '\u001b'
+const VITEST_RPC_TIMEOUT_WINDOWS = `2026-10-16T11:18:28.1949349Z  ${E}[32m✓${E}[39m ${E}[30m${E}[45m artifacts ${E}[49m${E}[39m plugins/navide-mini-ide/tests/packageBoundary.test.ts ${E}[2m(${E}[22m${E}[2m1 test${E}[22m${E}[2m)${E}[22m${E}[33m 88309${E}[2mms${E}[22m${E}[39m\r
+2026-10-16T11:18:28.2224554Z ${E}[31m⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯${E}[39m\r
+2026-10-16T11:18:28.2226044Z ${E}[31m${E}[1mVitest caught 1 unhandled error during the test run.${E}[22m${E}[39m\r
+2026-10-16T11:18:28.2254390Z ${E}[31m${E}[1mError${E}[22m: [vitest-worker]: Timeout calling "onTaskUpdate"${E}[39m\r
+2026-10-16T11:18:28.2258764Z ${E}[36m ${E}[2m❯${E}[22m Object.onTimeoutError node_modules/.pnpm/vitest@3.2.7/node_modules/vitest/dist/chunks/rpc.-pEldfrD.js:${E}[2m53:10${E}[22m${E}[39m\r
+2026-10-16T11:18:28.2287418Z ${E}[2m Test Files ${E}[22m ${E}[1m${E}[32m22 passed${E}[39m${E}[22m${E}[2m | ${E}[22m${E}[33m4 skipped${E}[39m${E}[90m (26)${E}[39m\r
+2026-10-16T11:18:28.2289824Z ${E}[2m      Tests ${E}[22m ${E}[1m${E}[32m203 passed${E}[39m${E}[22m${E}[2m | ${E}[22m${E}[33m46 skipped${E}[39m${E}[90m (249)${E}[39m\r
+2026-10-16T11:18:28.2290965Z ${E}[2m     Errors ${E}[22m ${E}[1m${E}[31m1 error${E}[39m${E}[22m\r
+2026-10-16T11:18:28.6411294Z ##[error]Process completed with exit code 1.\r`
+
+const VITEST_RPC_TIMEOUT_MACOS = `2026-10-16T10:29:37.2803970Z  ${E}[32m✓${E}[39m ${E}[30m${E}[45m artifacts ${E}[49m${E}[39m tests/integration/plansPackagedRoundtrip.test.ts ${E}[2m(${E}[22m${E}[2m5 tests${E}[22m${E}[2m)${E}[22m${E}[33m 9993${E}[2mms${E}[22m${E}[39m
+2026-10-16T10:29:37.3439810Z ${E}[31m${E}[1mVitest caught 1 unhandled error during the test run.${E}[22m${E}[39m
+2026-10-16T10:29:37.3446200Z ${E}[2m Test Files ${E}[22m ${E}[1m${E}[32m26 passed${E}[39m${E}[22m${E}[90m (26)${E}[39m
+2026-10-16T10:29:37.3454300Z ${E}[2m      Tests ${E}[22m ${E}[1m${E}[32m248 passed${E}[39m${E}[22m${E}[2m | ${E}[22m${E}[33m1 skipped${E}[39m${E}[90m (249)${E}[39m
+2026-10-16T10:29:37.3459880Z ${E}[2m     Errors ${E}[22m ${E}[1m${E}[31m1 error${E}[39m${E}[22m
+2026-10-16T10:29:37.3471160Z ${E}[31m${E}[1mError${E}[22m: [vitest-worker]: Timeout calling "onTaskUpdate"${E}[39m
+2026-10-16T10:29:38.0559380Z ##[error]Process completed with exit code 1.`
+
+describe('a vitest worker that missed the RPC deadline', () => {
+  it('is the environment when every test in the job passed (Windows, job 116943096414)', () => {
+    expect(classifyLog(VITEST_RPC_TIMEOUT_WINDOWS)).toEqual([expect.objectContaining({
+      test: '(job)',
+      category: 'environment',
+      evidence: expect.stringContaining('[vitest-worker]: Timeout calling "onTaskUpdate"'),
+    })])
+  })
+
+  it('is the environment on macOS the same way (PR #324, job 116924889337)', () => {
+    expect(classifyLog(VITEST_RPC_TIMEOUT_MACOS)).toEqual([expect.objectContaining({ test: '(job)', category: 'environment' })])
+  })
+
+  it('needs review when a test in the same job failed', () => {
+    const log = VITEST_RPC_TIMEOUT_MACOS.replace(`${E}[32m248 passed`, `${E}[31m1 failed${E}[39m${E}[22m${E}[2m | ${E}[22m${E}[1m${E}[32m247 passed`)
+    expect(classifyLog(log)).toEqual([expect.objectContaining({ test: '(job)', category: 'needs-review' })])
+  })
+})
+
 describe('splitJobLogs — one saved log, possibly several jobs', () => {
   it('gives each job of a gh run view --log-failed file its own failures', () => {
     const jobs = splitJobLogs(MIXED_JOBS, '(local log)')
