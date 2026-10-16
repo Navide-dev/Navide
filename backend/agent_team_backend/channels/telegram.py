@@ -74,12 +74,34 @@ CONFLICT_MIN_ATTEMPT = 4
 # is handled by the channel manager.
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
-    {"command": "menu", "description": "快速選單"},
+    {"command": "menu", "description": "Prompt 與技能選單"},
     {"command": "status", "description": "pane 狀態"},
     {"command": "stop", "description": "中斷 pane"},
     {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
     {"command": "resume", "description": "恢復被中斷的 pane"},
 ]
+# BOT_COMMANDS's descriptions in each Navide language (zh-TW is BOT_COMMANDS itself).
+BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
+    "zh-TW": {c["command"]: c["description"] for c in BOT_COMMANDS},
+    "en-US": {
+        "pending": "List panes waiting for confirmation",
+        "menu": "Prompts and skills menu",
+        "status": "Pane status",
+        "stop": "Interrupt the pane",
+        "cancel": "Withdraw messages not yet sent to the pane",
+        "resume": "Resume an interrupted pane",
+    },
+    "ja-JP": {
+        "pending": "確認待ちの pane を一覧表示",
+        "menu": "プロンプトとスキルのメニュー",
+        "status": "pane の状態",
+        "stop": "pane を中断",
+        "cancel": "まだ pane に送っていないメッセージを取り消す",
+        "resume": "中断した pane を再開",
+    },
+}
+# Descriptions earlier builds registered: a command still carrying one is ours to update.
+_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單"}}
 # A flat button list (prompt options, the busy buttons) is laid out a few to a row, so
 # labels show whole on a phone; a label too long for a shared row gets its own.
 ROW_MAX_BUTTONS = 3
@@ -149,6 +171,9 @@ class TelegramAdapter:
         # Receives each ManagedBotUpdated (a bot this one manages was created, re-tokened
         # or changed owner); the manager decides what it means. None: such updates are skipped.
         self.on_managed_bot: Callable[[dict[str, Any]], Awaitable[None]] | None = None
+        # Returns the Navide language ("zh-TW", "en-US", "ja-JP") the "/" menu is described
+        # in, read at each session; set by the manager. None: zh-TW.
+        self.command_language: Callable[[], str] | None = None
         self.bot_id = self._token.split(":", 1)[0]
         self._client: httpx.AsyncClient | None = None
         self._task: asyncio.Task[None] | None = None
@@ -208,19 +233,35 @@ class TelegramAdapter:
                 await asyncio.sleep(delay)
 
     async def _add_commands(self) -> None:
-        """Add ours to the bot's "/" menu without touching the list it already has: the
-        user's own commands keep their place and wording, a name already there is left as
-        is, and a list that cannot be read is not written. A failure only loses the menu."""
+        """Add ours to the bot's "/" menu without touching the user's own commands: theirs
+        keep their place and wording, and a list that cannot be read is not written. One of
+        ours already there (a description this or an earlier build wrote) is reworded in
+        place to the Navide language; a same-named command worded otherwise is the user's
+        and is left as is. A failure only loses the menu."""
         try:
             current = await self._call("getMyCommands")
             if not isinstance(current, list):
                 return
+            lang = ""
+            if self.command_language is not None:
+                try:
+                    lang = await asyncio.to_thread(self.command_language)
+                except Exception as exc:  # noqa: BLE001 — the default wording still works
+                    log.info("telegram: reading the Navide language failed: %s", exc)
+            ours = {c["command"]: c["description"] for c in bot_commands(lang)}
+            updated = [
+                {**c, "description": ours[name]}
+                if isinstance(c, dict) and (name := str(c.get("command") or "").lower()) in ours
+                and c.get("description") in _known_descriptions(name) else c
+                for c in current
+            ]
             have = {str(c.get("command") or "").lower() for c in current if isinstance(c, dict)}
-            missing = [c for c in BOT_COMMANDS if c["command"] not in have]
-            if not missing:
+            missing = [{"command": k, "description": v} for k, v in ours.items() if k not in have]
+            if not missing and updated == current:
                 return
-            await self._call("setMyCommands", {"commands": [*current, *missing]})
-            log.info("telegram: added bot commands: %s", ", ".join(c["command"] for c in missing))
+            await self._call("setMyCommands", {"commands": [*updated, *missing]})
+            log.info("telegram: bot commands set (%s); added: %s", lang or "default",
+                     ", ".join(c["command"] for c in missing) or "none")
         except Exception as exc:  # noqa: BLE001
             log.info("telegram: updating the bot's commands failed: %s", exc)
 
@@ -554,6 +595,17 @@ class TelegramAdapter:
             await asyncio.sleep(min(err.retry_after or 1.0, RETRY_AFTER_CAP_S))
             return []
         raise err
+
+
+def bot_commands(lang: str) -> list[dict[str, str]]:
+    """BOT_COMMANDS described in ``lang``; an unknown language falls back to zh-TW."""
+    texts = BOT_COMMAND_DESCRIPTIONS.get(lang) or BOT_COMMAND_DESCRIPTIONS["zh-TW"]
+    return [{"command": c["command"], "description": texts[c["command"]]} for c in BOT_COMMANDS]
+
+
+def _known_descriptions(command: str) -> set[str]:
+    """Every description Navide has given ``command``, in any language or earlier build."""
+    return {t[command] for t in BOT_COMMAND_DESCRIPTIONS.values()} | _OLD_COMMAND_DESCRIPTIONS.get(command, set())
 
 
 def create_adapter(config: dict[str, Any], secret: dict[str, Any], *, store: OffsetStore | None = None) -> TelegramAdapter:

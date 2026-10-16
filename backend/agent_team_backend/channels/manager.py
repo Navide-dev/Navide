@@ -538,6 +538,9 @@ class ChannelManager:
                 self._on_managed_bot(platform, account, adapter, update)
 
             adapter.on_managed_bot = on_managed_bot
+        if hasattr(adapter, "command_language"):
+            # Telegram describes its "/" menu in the language the rest of Navide speaks.
+            adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
         return None
 

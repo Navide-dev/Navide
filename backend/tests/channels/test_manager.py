@@ -305,6 +305,17 @@ async def test_configure_stores_single_line_secret_and_masks(env: Env) -> None:
     assert tg["capabilities"]["text_limit"] == 4000
 
 
+async def test_a_built_adapter_reads_the_navide_language(env: Env, monkeypatch) -> None:
+    # Telegram describes its "/" menu in the Navide language; an adapter without the
+    # hook (every other platform) is left as it was.
+    monkeypatch.setattr(FakeAdapter, "command_language", None, raising=False)
+    assert (await env.m.configure("telegram", {}, {"token": "tok-A"}))["ok"]
+    env.fake.settings = {"agent-team:language": "ja-JP"}
+    assert env.tg.command_language() == "ja-JP"
+    env.fake.settings = {}
+    assert env.tg.command_language() == "zh-TW"
+
+
 async def test_stranger_dm_gets_pairing_code_group_stranger_dropped(env: Env) -> None:
     await env.inbound("hi", sender="99", chat="99", thread="", direct=True)
     assert "配對" in env.tg.texts()[-1]
