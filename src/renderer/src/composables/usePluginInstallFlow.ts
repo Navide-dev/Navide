@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useNotify } from '@navide/plugin-ui/foundation'
 import { usePluginInventory } from './usePluginInventory'
 import { usePluginUpdates } from './usePluginUpdates'
+import { formatBytes } from '../lib/formatBytes'
 
 // The verified install flow shared by the Marketplace (install/update) and the
 // Extensions page (update): prepare → optional publisher/risk confirmation →
@@ -120,11 +121,12 @@ export function usePluginInstallFlow() {
   async function uninstall(id: string): Promise<void> {
     const plugins = api()
     if (!plugins) return
-    if (!(await confirmUninstall(t, notify, id))) return
+    const answer = await askUninstall(t, notify, id)
+    if (!answer) return
     busy.value = true
     error.value = ''
     try {
-      await plugins.remove(id)
+      await removeWithAnswer(plugins, id, answer)
       await Promise.all([inventory.refresh(), pluginUpdates.refresh()])
     } catch (err) {
       fail(err)
@@ -158,6 +160,54 @@ export function confirmUninstall(
     cancelText: t('settings.extensions.trust.cancel'),
     danger: true,
   })
+}
+
+export interface UninstallAnswer {
+  /** Set only when the plugin's native backend left private data on this
+   *  device and the dialog asked about it. */
+  nativeBackendData?: 'keep' | 'delete'
+}
+
+/** The in-app remove confirmation. When the plugin's native backend left
+ *  private data on this device, the dialog also discloses its size and
+ *  location and offers to keep it; unticked (the default) deletes it. Resolves
+ *  null when the user cancels. */
+export async function askUninstall(
+  t: (key: string, values?: Record<string, unknown>) => string,
+  notify: ReturnType<typeof useNotify>,
+  id: string
+): Promise<UninstallAnswer | null> {
+  let data: { exists: boolean; bytes: number; path: string } | null = null
+  try {
+    data = (await window.agentTeam?.plugins?.nativeBackendData?.(id)) ?? null
+  } catch (err) {
+    // Without the answer the dialog cannot disclose the data, so removal keeps
+    // it, exactly as before the choice existed.
+    console.warn('[plugins] native backend data lookup failed', err)
+  }
+  if (!data?.exists) return (await confirmUninstall(t, notify, id)) ? {} : null
+  const confirmed = await notify.confirm(
+    t('settings.extensions.marketplace.uninstallConfirmBodyWithData', { name: id, size: formatBytes(data.bytes) }),
+    {
+      title: t('settings.extensions.marketplace.uninstallConfirmTitle'),
+      confirmText: t('settings.extensions.marketplace.uninstall'),
+      cancelText: t('settings.extensions.trust.cancel'),
+      danger: true,
+      detail: data.path,
+      checkboxLabel: t('settings.extensions.marketplace.uninstallKeepNativeData'),
+    }
+  )
+  if (!confirmed) return null
+  return { nativeBackendData: notify.dialogCheckbox.value ? 'keep' : 'delete' }
+}
+
+/** Remove with the dialog's answer; no data choice keeps the old call shape. */
+export function removeWithAnswer(
+  plugins: { remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<unknown> },
+  id: string,
+  answer: UninstallAnswer
+): Promise<unknown> {
+  return answer.nativeBackendData ? plugins.remove(id, answer.nativeBackendData) : plugins.remove(id)
 }
 
 // Electron prefixes a main-process throw with the channel it came through.

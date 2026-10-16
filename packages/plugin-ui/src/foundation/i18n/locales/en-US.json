@@ -1803,6 +1803,8 @@
         "unavailableDetail": "Version {version} is not published for this platform ({host}); available for: {targets}.",
         "uninstallConfirmTitle": "Uninstall Navide plugin?",
         "uninstallConfirmBody": "{name} will be removed from this device. You can install it again from the Navide Marketplace.",
+        "uninstallConfirmBodyWithData": "{name} will be removed from this device. Its native backend also stored {size} of private data on this device, at the location below. Navide deletes this data too unless you choose to keep it.",
+        "uninstallKeepNativeData": "Keep this data so a reinstall can use it again",
         "updatesCount": "Updates available: {count}",
         "retry": "Retry",
         "featured": "Featured",

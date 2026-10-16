@@ -59,6 +59,7 @@ import { assertEngineCompatible, isEngineCompatible, minNavideVersion } from './
 import { compareSemver } from './pluginManifestV2'
 import { MAX_EXTENSION_PACK_MEMBERS } from '../../../packages/plugin-contracts/src/index'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
+import { inspectNativeBackendData, removeNativeBackendData } from './pluginNativeBackendData'
 import { packOnlyMembers, PluginPackStore, type InstalledPackRecord } from './pluginPackStore'
 import type {
   FrontendPluginManager,
@@ -309,6 +310,10 @@ export interface PluginIpcOptions {
   }) => void
   /** Actual uninstall boundary; rollback/quarantine paths deliberately do not call this. */
   cleanupPluginStorage?: (pluginId: string) => Promise<void>
+  /** `<userData>/plugin-native-backends/data`: third-party native backends keep
+   *  their private data in `<root>/<pluginId>/`. Removal deletes that directory
+   *  only when the caller passes `nativeBackendData: 'delete'`. */
+  nativeBackendDataRoot?: string
   factoryPackageIds?: readonly string[]
   /** Why rolling this id back to its factory package is refused right now, or
    *  undefined when it is allowed. Checked before a rollback is offered or its
@@ -2075,8 +2080,17 @@ export function registerPluginIpc(
     }
   })
 
-  const uninstallPlugin = async (rawId: unknown): Promise<{ ok: true }> => {
+  const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
+    // No choice means keep, exactly as before this option existed.
+    if (rawDataChoice !== undefined && rawDataChoice !== 'keep' && rawDataChoice !== 'delete') {
+      throw new Error('invalid native backend data choice')
+    }
+    const deleteNativeBackendData = rawDataChoice === 'delete'
+    const nativeBackendDataRoot = options.nativeBackendDataRoot
+    if (deleteNativeBackendData && !nativeBackendDataRoot) {
+      throw new Error('native backend data cleanup is unavailable')
+    }
     if (activeTransactions.has(id)) {
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
@@ -2097,6 +2111,10 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // The backend child was stopped with the runtime above. Deleting its
+        // data here keeps a refused deletion on the same fail-closed path:
+        // the package stays installed and its backend registration returns.
+        if (deleteNativeBackendData) removeNativeBackendData(nativeBackendDataRoot!, id)
       } catch (error) {
         if (previousBackend) {
           try {
@@ -2132,9 +2150,22 @@ export function registerPluginIpc(
     }
   }
 
-  ipcMain.handle('plugins:remove', async (event, args: { id?: unknown } | null) => {
+  ipcMain.handle(
+    'plugins:remove',
+    async (event, args: { id?: unknown; nativeBackendData?: unknown } | null) => {
+      assertAuthorized(event)
+      return uninstallPlugin(args?.id, args?.nativeBackendData)
+    },
+  )
+
+  // What the remove dialog discloses: whether this plugin's native backend left
+  // private data on this device, how large it is and where.
+  ipcMain.handle('plugins:nativeBackendData', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
-    return uninstallPlugin(args?.id)
+    const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+    const root = options.nativeBackendDataRoot
+    if (!root) return { exists: false, bytes: 0, path: '' }
+    return inspectNativeBackendData(root, id)
   })
 
   // The user's "Disabled" switch for an installed Marketplace package. Disable

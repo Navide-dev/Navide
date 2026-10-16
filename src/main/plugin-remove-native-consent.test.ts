@@ -101,4 +101,9 @@ describe('plugin removal forgets native-backend decisions', () => {
     // The global switch is the user's, not the plugin's.
     expect(reloaded.isEnabled()).toBe(true)
   }, IMPORT_INDEX_TIMEOUT_MS)
+
+  it('hands the plugin IPC the native backend data root, so removal can delete it', async () => {
+    await import('./index')
+    expect(captured.options?.nativeBackendDataRoot).toBe(join(nativeBackendRoot, 'data'))
+  }, IMPORT_INDEX_TIMEOUT_MS)
 })

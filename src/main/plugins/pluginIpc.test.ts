@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
 import { sha256Hex } from './pluginVerify'
@@ -32,6 +32,8 @@ import { readZipEntries } from './pluginPackage'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginPublisherTrustStore } from './pluginPublisherTrust'
+import { PluginPrereleaseStore } from './pluginPrereleaseStore'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
 
 const { handlers, browserWindowFromWebContents } = vi.hoisted(() => ({
@@ -4857,6 +4859,117 @@ describe('plugins:setDisabled', () => {
     } finally {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('plugins:remove native backend data choice', () => {
+  // The sandboxed native backend keeps its private data in
+  // <nativeBackendDataRoot>/<pluginId>/. The remove dialog asks whether to
+  // keep it; a caller that does not say keeps it, exactly as before.
+  function setup(prefix: string) {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), prefix)))
+    const root = join(base, 'plugins')
+    const dataRoot = join(base, 'plugin-native-backends', 'data')
+    mkdirSync(join(root, 'acme.demo'), { recursive: true })
+    const dataDir = join(dataRoot, 'acme.demo')
+    mkdirSync(join(dataDir, 'tmp'), { recursive: true })
+    writeFileSync(join(dataDir, 'state.db'), 'x'.repeat(42))
+    mkdirSync(join(dataRoot, 'acme.other'), { recursive: true })
+    const manager = new FrontendPluginManager()
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation(() => undefined)
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      nativeBackendDataRoot: dataRoot,
+    })
+    const remove = handlers.get('plugins:remove')
+    const inspect = handlers.get('plugins:nativeBackendData')
+    if (!remove || !inspect) throw new Error('handlers not registered')
+    return { base, root, dataRoot, dataDir, remove, inspect }
+  }
+
+  it('reports the size and location of the backend data before removal', async () => {
+    const { base, dataDir, inspect } = setup('navide-native-data-inspect-')
+    try {
+      await expect(inspect(null, { id: 'acme.demo' })).resolves.toEqual({ exists: true, bytes: 42, path: dataDir })
+      await expect(inspect(null, { id: 'acme.none' })).resolves.toMatchObject({ exists: false, bytes: 0 })
+      await expect(inspect(null, { id: '../outside' })).rejects.toThrow(/invalid plugin id/)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('deletes the backend data directory when the user chose delete', async () => {
+    const { base, dataRoot, dataDir, remove } = setup('navide-native-data-delete-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).resolves.toEqual({ ok: true })
+      expect(existsSync(dataDir)).toBe(false)
+      expect(existsSync(join(dataRoot, 'acme.other'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the backend data directory when the user chose keep', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-keep-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'keep' })).resolves.toEqual({ ok: true })
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+      expect(existsSync(join(dataDir, 'state.db'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps the backend data directory when the caller does not choose (compatibility)', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-omitted-')
+    try {
+      await expect(remove(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+      expect(existsSync(join(dataDir, 'state.db'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses an unknown choice before removing anything', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-bad-choice-')
+    try {
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'wipe' })).rejects.toThrow(/invalid native backend data choice/)
+      expect(existsSync(join(root, 'acme.demo'))).toBe(true)
+      expect(existsSync(dataDir)).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a symlinked data directory and keeps the package and the link target', async () => {
+    const { base, root, dataDir, remove } = setup('navide-native-data-symlink-')
+    try {
+      rmSync(dataDir, { recursive: true, force: true })
+      const workspace = join(base, 'workspace')
+      mkdirSync(workspace)
+      writeFileSync(join(workspace, 'project.txt'), 'user file')
+      symlinkSync(workspace, dataDir)
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).rejects.toThrow(/symbolic link/)
+      expect(existsSync(join(workspace, 'project.txt'))).toBe(true)
+      expect(existsSync(join(root, 'acme.demo'))).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps publisher trust and the pre-release opt-in after removal', async () => {
+    const { base, root, remove } = setup('navide-native-data-kept-prefs-')
+    try {
+      // registerPluginIpc reads both stores from these files on every call.
+      new PluginPublisherTrustStore(join(root, '.navide-publisher-trust.json')).trust('acme', 'acme.demo')
+      new PluginPrereleaseStore(root).set('acme.demo', true)
+      await expect(remove(null, { id: 'acme.demo', nativeBackendData: 'delete' })).resolves.toEqual({ ok: true })
+      expect(new PluginPublisherTrustStore(join(root, '.navide-publisher-trust.json')).isTrusted('acme', 'acme.demo')).toBe(true)
+      expect(new PluginPrereleaseStore(root).has('acme.demo')).toBe(true)
+    } finally {
+      rmSync(base, { recursive: true, force: true })
     }
   })
 })

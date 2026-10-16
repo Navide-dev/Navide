@@ -1626,6 +1626,7 @@ const pluginTrustRefresh = registerPluginIpc(
     onActivationChange: applyPluginActivationChange,
     preflightCandidateFrontend,
     preflightCandidateBackend,
+    nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)
