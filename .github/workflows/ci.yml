@@ -246,22 +246,20 @@ jobs:
     steps:
       - name: Check out the repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # This job installs and builds the way releases do (release.yml): pnpm +
+      # Node.js, frozen pnpm-lock.yaml. pnpm comes from packageManager.
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Bun only runs the artifact tests below, against the Node-built output.
       # The Bun version is pinned in .bun-version.
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
-      # Only pluginExternalWorkspace.test.ts needs pnpm: it installs the packed
-      # public packages into a temporary project with `pnpm install --offline`,
-      # like an external plugin author would. pnpm comes from packageManager.
-      - name: Set up pnpm for the plugin-author consumer check
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      # Node.js here is for the pnpm consumer check and the plain `node` step
-      # below, which run outside `bun run`; install and build stay on Bun.
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -277,12 +275,23 @@ jobs:
         with:
           go-version: '1.27.x'
           cache: false
+      # pnpm and Bun cannot share one node_modules, so this job installs with
+      # pnpm only; the other jobs cover `bun install --frozen-lockfile`. This
+      # is the only PR job that fails when package.json and pnpm-lock.yaml
+      # disagree, which would otherwise surface at release time.
       - name: Install locked dependencies
         run: |
-          bun install --frozen-lockfile
+          pnpm install --frozen-lockfile
           uv --project backend sync --locked
+      # The release path also typechecks under Node (release.yml); one OS is
+      # enough because typecheck is platform independent.
+      - name: Typecheck under Node.js
+        if: runner.os == 'Linux'
+        run: pnpm typecheck
+      # The release build: pnpm runs the scripts under Node.js, so bunfig.toml's
+      # `[run] bun = true` does not apply.
       - name: Build application and all bundled plugins once
-        run: bun run build
+        run: pnpm build
       # Consumes this job's output. The macOS invocation additionally builds
       # the test-only Plans fixtures and exercises the production backend.
       - name: Complete artifact suite and packaged Plans contracts
