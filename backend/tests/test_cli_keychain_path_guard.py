@@ -30,7 +30,9 @@ PINNED = {
     "_kc_quote": "623b7e1cc205f16d2b33f83d5e298eb9fd035037a238f23910da9e1d5654b829",
     "_parse_security_password": "233f3ecb3ac3cc88ce6e3df0ec9d3100d2378be18902262dcf6698b64705cdd4",
     "CredentialVault._keychain_read": "009a4d99d530d15850cc86f00cdb97891b93e70eec06b0cc8052179909ef6d37",
-    "CredentialVault._keychain_write": "2bcd837870f13ec86a4401b3044df0f850f79859e227db087bec694ca36b2634",
+    # Re-pinned 2026-10-16: oversized writes fall back to a hex argv write
+    # (Claude Code credentials with MCP logins exceed the security -i line).
+    "CredentialVault._keychain_write": "fcf29ef287e652fa4eaef9a0bdc89ffe9cc636a6ad5709f7372ccb722da59fb8",
     "CredentialVault._keychain_delete": "b288dc4e76b41871a5c7fd9166b26dd5908c94279f693a100889c510dc925264",
     "CredentialVault.app_secret_path": "5202557703ddd1f9bebae65a6aeef4964616c976129ec6a21269568704fda799",
     "CredentialVault.app_secret_service": "010a5bb31525a00691deb93dd60d4e33323a87278fb026528b2adaef0e20058e",
