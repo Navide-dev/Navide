@@ -357,7 +357,8 @@ async def test_cancel_reports_a_message_that_already_went_in(env: Env) -> None:
     await env.inbound("second")
     env.fake.cancel_results["k1"] = "delivered"
     await env.inbound("/cancel")
-    reply = env.tg.texts()[-1]
+    # Not texts()[-1]: k1 now reads as delivered, so the pane's working status may follow.
+    reply = next(t for t in env.tg.texts() if "已撤回" in t)
     assert "已撤回 1 則" in reply and "1 則已經送進 pane" in reply
 
 
