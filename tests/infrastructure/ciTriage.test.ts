@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { classifyLog, mergeIntoLedger } from '../../scripts/ci-triage.mjs'
+import { classifyLog, mergeIntoLedger, splitJobLogs } from '../../scripts/ci-triage.mjs'
 
 // Real lines from the 2026-10-15 PR runs (#266, #267), trimmed to what matters.
 const PYTEST_RACE = `2026-10-15T04:18:03.0400740Z E                   subprocess.TimeoutExpired: Command '['python', '-m', 'tests.cli_regression.support.backend_entry']' timed out after 15 seconds
@@ -74,6 +75,70 @@ describe('classifyLog — one entry per failed test, in one of three categories'
     expect(classifyLog(log, { knownRaces: known })[0].category).toBe('test-race')
   })
 
+  describe('an IndexError or KeyError raised in a test file', () => {
+    // The pin_audit flake from PR #285 (run 38763082739, attempt 1), trimmed.
+    const PIN_AUDIT = 'backend/tests/test_server_link_pin_audit.py::test_refused_confirms_never_fill_the_record[keychain]'
+    const lookupLog = ({ frame, error, failed }: { frame: string, error: string, failed: string }) => `2026-10-15T15:53:05.8883068Z =================================== FAILURES ===================================
+2026-10-15T15:53:05.8886541Z ____________ test_refused_confirms_never_fill_the_record[keychain] _____________
+2026-10-15T15:53:05.8887254Z [gw1] linux -- Python 3.12.15 /home/runner/work/Navide/Navide/backend/.venv/bin/python
+2026-10-15T15:53:05.8894320Z             for _ in range(10):
+2026-10-15T15:53:05.8894606Z                 await asyncio.sleep(0.03)
+2026-10-15T15:53:05.8894920Z                 n = len(server.opened)
+2026-10-15T15:53:05.8895235Z >               await server.opened[-1].close()
+2026-10-15T15:53:05.8895545Z                       ^^^^^^^^^^^^^^^^^
+2026-10-15T15:53:05.8895867Z E               ${error}
+2026-10-15T15:53:05.8896101Z
+2026-10-15T15:53:05.8896287Z ${frame}
+2026-10-15T15:53:05.8896774Z ----------------------------- Captured stderr call -----------------------------
+2026-10-15T15:53:05.8899596Z reading the navide-server credential
+2026-10-15T15:53:06.3004557Z =========================== short test summary info ============================
+2026-10-15T15:53:06.3005337Z FAILED ${failed} - ${error}
+2026-10-15T15:53:06.3006131Z ===== 1 failed, 11700 passed, 61 skipped, 45 warnings in 448.14s (0:07:28) =====`
+    const indexError = lookupLog({
+      frame: 'backend/tests/test_server_link_pin_audit.py:259: IndexError',
+      error: 'IndexError: list index out of range',
+      failed: PIN_AUDIT,
+    })
+
+    it('is a test race when the ledger knows the test as one', () => {
+      expect(classifyLog(indexError, { knownRaces: new Set([PIN_AUDIT]) })).toEqual([
+        expect.objectContaining({ test: PIN_AUDIT, category: 'test-race' }),
+      ])
+    })
+
+    it('needs review when the ledger does not know the test', () => {
+      expect(classifyLog(indexError)[0].category).toBe('needs-review')
+    })
+
+    it('needs review for a KeyError the same way', () => {
+      const log = lookupLog({
+        frame: 'backend/tests/test_server_link_pin_audit.py:259: KeyError',
+        error: "KeyError: 'pins'",
+        failed: PIN_AUDIT,
+      })
+      expect(classifyLog(log)[0].category).toBe('needs-review')
+    })
+
+    it('stays a product defect when the failing frame is in product code', () => {
+      const log = lookupLog({
+        frame: 'backend/agent_team_backend/trust_store.py:412: IndexError',
+        error: 'IndexError: list index out of range',
+        failed: PIN_AUDIT,
+      })
+      expect(classifyLog(log)[0].category).toBe('product-defect')
+    })
+
+    it('reads a Windows path the same way', () => {
+      const log = lookupLog({
+        frame: 'backend\\tests\\test_server_link_pin_audit.py:259: IndexError',
+        error: 'IndexError: list index out of range',
+        failed: PIN_AUDIT.replace(/\//g, '\\\\'),
+      })
+      expect(classifyLog(log, { knownRaces: new Set([PIN_AUDIT]) })[0]).toMatchObject({ test: PIN_AUDIT, category: 'test-race' })
+      expect(classifyLog(log)[0].category).toBe('needs-review')
+    })
+  })
+
   it('keeps the evidence line without the timestamp', () => {
     const [entry] = classifyLog(PYTEST_DEFECT)
     expect(entry.evidence.startsWith('FAILED backend/tests/test_share_mcp_tools.py')).toBe(true)
@@ -81,6 +146,101 @@ describe('classifyLog — one entry per failed test, in one of three categories'
 
   it('returns nothing for a log with no failure in it', () => {
     expect(classifyLog('===== 120 passed in 3.2s =====')).toEqual([])
+  })
+})
+
+// `gh run view 38790727272 --attempt 1 --log-failed` (PR #300), trimmed: one
+// file, three failed jobs, each line prefixed "job<TAB>step<TAB>".
+const MIXED_JOBS = `Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3608700Z =========================== short test summary info ============================
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3609380Z FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst - AssertionError: close_all deadlocked with the burst
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3610010Z assert (not True)
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:17.3611260Z ===== 1 failed, 11768 passed, 32 skipped, 46 warnings in 300.32s (0:05:00) =====
+Backend tests (macOS, 1/1)	UNKNOWN STEP	2026-10-15T19:11:28.3792230Z ##[error]Process completed with exit code 1.
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.6850048Z --- 960s: 2934 results; last: FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never be
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7450569Z =========================== short test summary info ===========================
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7453663Z FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7456427Z = 1 failed, 2877 passed, 68 skipped, 8804 deselected, 12 warnings in 918.17s (0:15:18) =
+Backend tests (Windows, 4/4)	UNKNOWN STEP	2026-10-15T19:29:02.7922192Z ##[error]Process completed with exit code 1.
+Lint and test	Require every check to succeed	2026-10-15T19:29:12.8164352Z ##[error]Process completed with exit code 1.`
+
+// PR #305 run 38807333845 attempt 1, Backend tests (Windows, 3/4), trimmed:
+// pytest-timeout dumped every thread's stack and ended pytest, so no FAILED line.
+const PYTEST_TIMEOUT_DUMP = String.raw`2026-10-15T21:15:23.2640906Z --- 480s: 852 results; last: backend\tests\test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal +++++++++++++++++++++++++++++++++++ Timeout +++++++++
+2026-10-15T21:15:23.2674803Z --- pytest exit: 1
+2026-10-15T21:15:23.2689020Z --- last 200 lines of pytest.log:
+2026-10-15T21:15:23.2767901Z ~~~~~~~~~~~~~~~~~~~~~~~~~ Stack of vault-io_4 (6540) ~~~~~~~~~~~~~~~~~~~~~~~~~~
+2026-10-15T21:15:23.2773721Z   File "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\threading.py", line 1032, in _bootstrap
+2026-10-15T21:15:23.3798429Z   File "D:\a\Navide\Navide\backend\.venv\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+2026-10-15T21:15:23.3805545Z     result = testfunction(**testargs)
+2026-10-15T21:15:23.3813260Z   File "D:\a\Navide\Navide\backend\tests\test_db.py", line 230, in test_commits_are_not_blocked_by_a_reader_holding_the_journal
+2026-10-15T21:15:23.3819878Z     db.kv_set(f"k{i}", i, now=i)
+2026-10-15T21:15:23.3852224Z   File "D:\a\Navide\Navide\backend\agent_team_backend\db.py", line 105, in transaction
+2026-10-15T21:15:23.3858071Z     with self._lock:
+2026-10-15T21:15:23.3864151Z +++++++++++++++++++++++++++++++++++ Timeout +++++++++++++++++++++++++++++++++++
+2026-10-15T21:15:23.3870331Z --- summary:
+2026-10-15T21:15:23.4403174Z ##[error]Process completed with exit code 1.`
+
+describe('test races without a timing word in the assertion', () => {
+  it('reads a wait helper that gave up as a race (run 38790727272, Windows 4/4)', () => {
+    const log = String.raw`2026-10-15T19:29:02.7453663Z FAILED backend\tests\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is - AssertionError: condition never became true`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({
+      test: 'backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+      category: 'test-race',
+    })])
+  })
+
+  it('reads a pytest-timeout stack dump as the stopped test needing review: a real deadlock hangs the same way', () => {
+    const [entry, ...rest] = classifyLog(PYTEST_TIMEOUT_DUMP)
+    expect(rest).toEqual([])
+    expect(entry).toMatchObject({
+      test: 'backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal',
+      category: 'needs-review',
+    })
+    expect(entry.evidence).toContain('test_db.py", line 230, in test_commits_are_not_blocked_by_a_reader_holding_the_journal')
+  })
+
+  it('keeps a timed-out test the ledger knows as a race a race', () => {
+    const known = new Set(['backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal'])
+    expect(classifyLog(PYTEST_TIMEOUT_DUMP, { knownRaces: known })[0].category).toBe('test-race')
+  })
+
+  it('still lets the environment win over a timeout dump', () => {
+    const log = `2026-10-15T21:10:00.0000000Z npm error network read ECONNRESET\n${PYTEST_TIMEOUT_DUMP}`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({ category: 'environment' })])
+  })
+})
+
+describe('splitJobLogs — one saved log, possibly several jobs', () => {
+  it('gives each job of a gh run view --log-failed file its own failures', () => {
+    const jobs = splitJobLogs(MIXED_JOBS, '(local log)')
+    expect(jobs.map((j) => [j.job, classifyLog(j.text).map((e) => [e.test, e.evidence.split(' - ')[0]])])).toEqual([
+      ['Backend tests (macOS, 1/1)', [[
+        'backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst',
+        'FAILED backend/tests/test_preview_log.py::test_shutdown_close_does_not_deadlock_with_a_watcher_burst',
+      ]]],
+      ['Backend tests (Windows, 4/4)', [[
+        'backend/tests/test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+        'FAILED backend\\tests\\test_server_link_trust.py::test_a_conflict_that_survives_the_retry_says_what_it_is',
+      ]]],
+      ['Lint and test', [['(job)', '##[error]Process completed with exit code 1.']]],
+    ])
+  })
+
+  it('leaves out the aggregate Lint and test job, which fails whenever another job does', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'triage-'))
+    try {
+      const path = join(dir, 'run.log')
+      writeFileSync(path, MIXED_JOBS)
+      const out = execFileSync(process.execPath, ['scripts/ci-triage.mjs', '--log', path], { encoding: 'utf8' })
+      expect(out).toContain('Backend tests (Windows, 4/4)')
+      expect(out).not.toContain('Lint and test')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a single job log, as the API returns it, under the given job name', () => {
+    expect(splitJobLogs(PYTEST_DEFECT, 'Backend tests (macOS, 1/1)')).toEqual([{ job: 'Backend tests (macOS, 1/1)', text: PYTEST_DEFECT }])
   })
 })
 
@@ -108,6 +268,16 @@ describe('mergeIntoLedger — docs/testing/flaky.json', () => {
       lastSeen: '2026-10-16T00:00:00Z',
     })
     expect(ledger.tests[0].runs).toHaveLength(2)
+  })
+
+  it('refuses a run without a run id, so two unknown runs never collapse into one', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'flaky-'))
+    dirs.push(dir)
+    const path = join(dir, 'flaky.json')
+    const entries = classifyLog(PYTEST_RACE)
+    expect(() => mergeIntoLedger(path, entries, { run: 0, job: 'j', pr: 0, at: '2026-10-15T00:00:00Z' })).toThrow(/run id/)
+    expect(() => mergeIntoLedger(path, entries, { job: 'j', pr: 0, at: '2026-10-15T00:00:00Z' } as never)).toThrow(/run id/)
+    expect(existsSync(path)).toBe(false)
   })
 
   it('keeps an existing ledger and its other tests', () => {

@@ -10673,6 +10673,16 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         previous = next((p for p in before.panes
                          if p.origin != "pipeline" and p.pane_id == previous_pane_id), None)
         previous_session_id = previous.session_id if previous is not None else ""
+    # Closed panes that held exactly the session this spawn resumes: the jobs
+    # one of them owned pass to this pane. Only a closed record counts, so an
+    # owner merely not registered yet (after a restart) keeps its jobs.
+    session_id = str(payload.get("session_id") or "")
+    closed_lineage: set[str] = set()
+    if session_id:
+        known = app.project_store.load_or_create(payload["workspace_path"])
+        closed_lineage = {p.pane_id for p in known.panes
+                          if p.origin != "pipeline" and p.spawn_status == "removed"
+                          and p.session_id == session_id}
     project = app.project_store.record_manual_pane_spawn(
         payload["workspace_path"],
         pane_id=payload["pane_id"],
@@ -10704,6 +10714,14 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
             )
         except Exception:  # noqa: BLE001 — the spawn is recorded either way
             log.exception("manual_pane.spawn: scheduler rebind failed")
+    if closed_lineage:
+        from . import scheduler
+
+        try:
+            await scheduler.get_service().inherit_owner(
+                closed_lineage, str(payload["pane_id"]), session_id)
+        except Exception:  # noqa: BLE001 — the spawn is recorded either way
+            log.exception("manual_pane.spawn: scheduler owner inheritance failed")
 
 
 @handler("manual_pane.unspawn")

@@ -172,7 +172,11 @@ CI retains complete frontend and backend suites on macOS, Linux and Windows.
 Static checks run once, while application builds and artifact integration tests
 run separately from ordinary frontend tests. The `Lint and test` status requires
 the test/build matrices, packaged Plans, marketplace contracts, deterministic
-speech sidecar tests and dependency audit to succeed. CI does not run Electron
+speech sidecar tests and dependency audit to succeed. On a pull request, a
+change confined to the renderer, preload or e2e (frontend-only) skips the backend
+jobs, and a change confined to `backend/tests/` skips the frontend and build
+jobs; `scripts/ci-changed-scopes.mjs` holds the rules, runs everything when
+unsure, and pushes to `main` always run everything. CI does not run Electron
 UI automation; test UI changes manually. To reproduce the build check locally,
 run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
@@ -345,5 +349,7 @@ By participating you agree to abide by its terms.
 ## Documentation
 
 User-facing behavior changes must update the relevant canonical document under [`docs/en-US/`](docs/en-US/README.md), synchronize an existing localized counterpart in the same change, and add an entry under `CHANGELOG.md`'s Unreleased section. Avoid describing configurable registries with fixed counts, document any new external data flow in `docs/en-US/privacy.md`, and keep future vision distinct from shipped capability claims.
+
+A PR that changes the plugin API (`packages/plugin-sdk`, `packages/plugin-contracts`), the manifest schema (`plugin-manifest-v2.schema.json`) or the capability catalog (`capabilities-v1.json`) must update `docs/en-US/plugin-development*.md` in the same PR. Two tests enforce part of this: `tests/infrastructure/pluginDocsExamples.test.ts` typechecks every TypeScript/JavaScript example in the plugin docs against the SDK source (mark a block that cannot compile with `<!-- docs-typecheck: skip (reason) -->` on the line before its fence) and rejects `definePlugin` as an activation path, and `tests/infrastructure/pluginDocsManifest.test.ts` compares the Spec v2 manifest field, view location, error code and capability tables with the schema and catalog. Prose they cannot parse is still yours to keep current.
 
 A release announces itself in the app: add the version's What's New entry — its highlights and, optionally, a guided tour — as described in [Release announcements](docs/en-US/release-announcements.md). `./release.sh` prints a warning when the version being released has no entry.

@@ -88,6 +88,17 @@ shows one. Every file the package contains must be listed in
 `artifact-files.json` — the packager never zips a directory recursively, so
 source files, keys and `node_modules` cannot slip in.
 
+> **Every view must report that it has mounted.** Navide waits 10 seconds
+> after a view's HTML loads; at install and update time a view that has not
+> reported ready fails the package. The scaffold's `main.js` reports ready
+> itself with `window.nav.ready()`, the call
+> `createPluginViewRuntimeClient().ready()` makes, so it installs as written.
+> Once a view has a build step, bundle it with `@navide/plugin-sdk` and call
+> `createPluginViewRuntimeClient().ready()` after mounting instead; the SDK
+> factories are described under
+> [SDK interface](plugin-development-v2.md#sdk-interface). Navide never calls a
+> `definePlugin` activation function.
+
 ## 2. Validate and package
 
 ```bash
@@ -194,6 +205,12 @@ listed at once; a namespace claimed on the Marketplace is reviewed first
 (section 5). To install from the local Registry in a development build of
 Navide, point the app at it as described under **Registry endpoints** in the
 [Plugin development guide](plugin-development.md#packaging-and-publishing).
+
+This is the way to try a package inside Navide before publishing. There is no
+`navide-plugin dev` command, and Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
+writes no capability grant, so it cannot open a Manifest v2 view and refuses a
+backend. A Registry install grants the declared permissions and storage for
+that exact version when you choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 

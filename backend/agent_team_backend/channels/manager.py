@@ -23,6 +23,7 @@ import contextlib
 import dataclasses
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -51,6 +52,10 @@ log = logging.getLogger(__name__)
 STOP_WORDS = {"stop", "停止", "/stop", "esc"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
+# A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
+# loop guard (5 per pair per minute), which refused a person's sixth short line in a row.
+CHAT_RATE_MAX = 30
+CHAT_RATE_WINDOW_S = 60.0
 STATUS_EDIT_MIN_INTERVAL_S = 1.0
 STATUS_EDIT_MAX_FAILURES = 3
 STATUS_EDIT_EVERY_S = 5.0
@@ -87,6 +92,7 @@ MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這
 MSG_CHAT_TAKEN = "這個聊天室已連接到另一個 pane，請先在那個 pane 解除連接"
 MSG_UNBOUND_CLOSED = "🔌 pane「{name}」已關閉，這個聊天室已中斷連接。"
 MSG_QUEUE_FULL = "⚠️ 這個 pane 已有太多訊息在排隊，請稍後再傳"
+MSG_CHAT_RATE = "⚠️ 1 分鐘內傳了超過 {max} 則，這則沒有送進 pane，請 {wait} 秒後重送"
 MSG_EMPTY_REPLY = "（pane 回合結束，沒有文字輸出）"
 MSG_STILL_RUNNING = "⏳ 仍在執行，完成時會再回覆"
 MSG_USAGE_LIMIT = "⚠️ {agent} 額度已用完，{reset} 重置"
@@ -307,6 +313,7 @@ class ChannelManager:
         # pane_id -> a run whose turn ended with no text, and the timer that answers it empty
         self._textless: dict[str, tuple[_Pending, asyncio.Task[Any]]] = {}
         self._queued: dict[str, set[str]] = {}  # pane_id -> msg_keys still queued
+        self._chat_sends: dict[tuple[str, str], list[float]] = {}  # (pane_id, sender_id) -> send times
         self._last_status: dict[BotKey, dict[str, Any]] = {}
         self._tasks: set[asyncio.Task[Any]] = set()
         self._status_task: asyncio.Task[None] | None = None
@@ -1887,6 +1894,13 @@ class ChannelManager:
         if len(queued) >= MAX_QUEUED_PER_PANE:
             await self._reply(msg, MSG_QUEUE_FULL)
             return False
+        now = self._clock()
+        sends = [t for t in self._chat_sends.get((pane_id, msg.sender_id), []) if now - t < CHAT_RATE_WINDOW_S]
+        self._chat_sends[(pane_id, msg.sender_id)] = sends
+        if len(sends) >= CHAT_RATE_MAX:
+            wait = math.ceil(sends[0] + CHAT_RATE_WINDOW_S - now)
+            await self._reply(msg, MSG_CHAT_RATE.format(max=CHAT_RATE_MAX, wait=wait))
+            return False
         state = self._seams.pane_state(pane_id)
         files = await self._fetch_attachments(msg, pane_id)
         text = "\n".join(part for part in (msg.text, *files) if part)
@@ -1901,6 +1915,7 @@ class ChannelManager:
         if not result.get("ok"):
             await self._reply(msg, f"⚠️ 無法送達 pane：{result.get('error') or 'unknown'}")
             return False
+        sends.append(now)
         msg_key = str(result.get("msg_key") or "")
         pane_id = str(result.get("pane_id") or pane_id)
         loc = binding.location()

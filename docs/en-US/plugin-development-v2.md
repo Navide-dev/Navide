@@ -1,32 +1,28 @@
 # Plugin Developer Spec v2
 
-> **Status: target draft; Issues 03, 16, the bounded Issue 21 Plans spike, Issue 22's bridge/lifecycle work, and Issue 23E's production Plans integration are implemented.** The current runtime uses manifest
-> v1 and is documented in [Plugin development guide](plugin-development.md).
-> This document is the author-facing contract that the v2 migration must
-> implement before third-party publishing opens.
+> **Status: implemented for third-party publishing.** Manifest v2 is the format
+> the Navide Marketplace accepts; the legacy manifest v1 runtime is documented in
+> [Plugin development guide](plugin-development.md). The bundled `navide.git`,
+> `navide.plans` and `navide.mini-ide` packages run on this contract, and so do
+> third-party packages installed from a Registry.
 >
-> Issue 03 adds strict Manifest v2 grant parsing, catalog validation, and the
-> Host authorization/planning seam. Issue 21 adds one bundled Plans
-> package-local operation through the public SDK, authenticated Host router,
-> and self-contained Python Backend Wire child. Issue 22 adds the Host-private
-> core-service ports, package-owned watcher, bounded child lifecycle, and
-> cross-language fixture parity. Issue 23E activates the first-party combined
-> Plans package with the shared agent Execution Policy and retains the legacy
-> adapter as a bounded recovery path. Issue 03 completes the
-> parser, catalog, authorization planner, and Host enforcement seams.
-> Issue 16 adds the durable storage adapter and Host-only lifecycle seams to
-> Electron main. Third-party production grant/consent and general
-> runtime-context wiring are not wired yet, so ordinary third-party plugin
-> instances cannot reach storage; calls remain denied until that later
-> integration is delivered. The bundled Git and Plans packages use explicit
-> Host-selected grants as first-party migration consumers. Other public
-> execution adapters and persisted consent wiring also remain disabled.
+> Installing a v2 package from a Registry and choosing **Restart Plugin**
+> writes an exact package-version grant for the declared `permissions` plus
+> Host-managed storage, so a third-party view can call the public catalog and
+> `storage.*` (see [Host-managed storage partitions](#host-managed-storage-partitions)).
+> Third-party native backends run only under the OS sandbox and consent rules
+> in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing).
 >
-> Issue 06 adds the public package boundary and the external frontend workflow.
-> The SDK CLI (`navide-plugin`) now covers the whole publishing workflow —
+> What is not available: Navide never calls a `definePlugin` activation function
+> (see [SDK interface](#sdk-interface)); there is no `navide-plugin dev` command;
+> Developer Mode cannot open a Manifest v2 view or run a backend (see
+> [Backend trust](#backend-trust)); there are no command, menu or keybinding
+> contribution points; `custom` is the only view kind; and a package can be
+> installed and removed but not disabled.
+>
+> The SDK CLI (`navide-plugin`) covers the whole publishing workflow —
 > `init`, `validate`, `package` (per target), `keygen`, `sign`, `login`, and
 > `publish` — see [Publishing to the Navide Marketplace](marketplace-publishing.md).
-> `dev` and general runtime activation remain deferred to their owning issues.
 > The first-party Plans build scripts package the app's production artifact
 > and are not the public author workflow.
 >
@@ -70,7 +66,7 @@ migration on 2026-09-11, superseding the earlier private-feature proposal.
 The package manifests declare public npm publication metadata and use normal
 SemVer 2.0.0 versions, but registry publication is future work outside Issue
 06. The package implementations live under
-`packages/plugin-{contracts,sdk,ui,ui-vue}/` and have no dependency on Host
+`packages/plugin-{contracts,sdk,ui}/` and have no dependency on Host
 renderer sources. Third-party projects must use registry versions in a
 published workflow, never `workspace:` dependencies. The Issue 06 release
 gate packs those public packages and installs the tarballs in a directory
@@ -147,7 +143,8 @@ contain one self-contained executable. `sign` and `verify` use a detached
 Ed25519 signature over the SHA-256 digest of the complete archive. `init`
 scaffolds a frontend-only package that validates without a build step;
 `login` and `publish` talk to a Registry (see
-[Publishing to the Navide Marketplace](marketplace-publishing.md)). The CLI has
+[Publishing to the Navide Marketplace](marketplace-publishing.md)). Apart from
+`dev-backend`, which launches a built backend under the sandbox, the CLI has
 no Host transport, process execution, or development server.
 
 ## Issue 06 external workspace workflow
@@ -174,9 +171,13 @@ pnpm run package
 
 The example declares the `fs` system namespace and successfully invokes
 `fs.readFile`. It also attempts `shell.run` without declaring `shell`; the Host
-authorization seam rejects that call with `CAPABILITY_DENIED`. The example
-does not implement backend wire handling, subscriptions, Git transport, or
-any later package lifecycle.
+authorization seam rejects that call with `CAPABILITY_DENIED`. Both calls run
+only in the smoke test, which calls the exported `definePlugin` object's
+`activate` with an in-memory Host. Inside Navide that function is never called
+and the view never reports ready (see [SDK interface](#sdk-interface)), so the
+example is a build and packaging reference, not a package to install. The
+example does not implement backend wire handling, subscriptions, Git
+transport, or any later package lifecycle.
 
 ## Normative publish artifact
 
@@ -244,9 +245,9 @@ protocol.
 | Stage | Python backend | Host-visible contract |
 |---|---|---|
 | Source development | Authors may use `.py` files, a virtual environment, and any Python build/test layout. | None. Source layout is not an installed interface. |
-| `navide-plugin dev` | The author-owned development tool may launch the local Python interpreter or a temporary build. It must expose the same protocol-compatible child process used by the packaged backend. | Developer Mode receives a development launch descriptor; this exception is unsigned, local-only, and cannot be published or auto-updated. |
+| Local testing | There is no `navide-plugin dev` command, and Developer Mode refuses packages with a backend. Build the executable and run it with `navide-plugin dev-backend <directory>`, which uses the Host's sandbox profile but answers every Host bridge request with `CAPABILITY_DENIED`. | None. A backend first runs inside Navide after it is installed from a Registry. |
 | `navide-plugin package` | Python, its required modules, and the plugin code are bundled into a target-specific executable by an author-selected tool such as PyInstaller or Nuitka. | `backend.entry` names the resulting executable inside the archive. |
-| Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process has an internal Backend Wire v1 supervisor and Host router. Issue 21 exercises one bundled Plans executable directly without a shell; it does not activate installed third-party backends or complete the general package lifecycle. |
+| Install and runtime target | No Python installation, `pip`, virtual environment, source checkout, or author build tool may be required on the user's machine. | The Electron main process supervises the executable over Backend Wire v1 without a shell. The first-party Plans backend runs directly; a third-party backend runs only under the conditions in [Third-party backends](#third-party-backends-sandbox-consent-and-publishing). |
 
 Manifest validation rejects recognizable source or script suffixes. Package
 validation also rejects empty backend entries, POSIX entries without executable
@@ -318,7 +319,7 @@ all of these hold, and they are checked again before every restart:
 | Platform | Sandbox | Contains | Does not contain |
 |---|---|---|---|
 | macOS | Seatbelt (`sandbox-exec`), deny by default | reads outside the package and its private data directory, writes outside the data directory, every network connection including loopback and DNS, executing anything outside the package (including files it writes to its data directory), Keychain, even the metadata of `~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`, `~/.claude`, `~/.codex`, `~/Library/Keychains`, `~/Documents`, `~/Downloads` | CPU and memory (see below); `stat` of other paths still succeeds, because denying metadata reads under all of `/Users` or `/private/tmp` makes a real PyInstaller backend exit at start |
-| Linux | bubblewrap with every namespace unshared, only when the system `bwrap` can create unprivileged user namespaces | the same file view and no network; every process dies with the pid namespace (checked by the linux-sandbox CI workflow on Ubuntu 24.04; not yet run) | CPU and memory; system binaries under `/usr` can run inside the namespaces |
+| Linux | bubblewrap with every namespace unshared, only when the system `bwrap` can create unprivileged user namespaces | the same file view and no network; every process dies with the pid namespace (checked by the linux-sandbox CI workflow on Ubuntu 24.04; not yet verified on real user hosts) | CPU and memory; system binaries under `/usr` can run inside the namespaces |
 | Windows | not supported yet (AppContainer is planned for v1.1) | — | — |
 
 On macOS a process can leave the child's process tree (fork, `setsid`, fork:
@@ -416,11 +417,14 @@ identity; MCP `clientInfo` is never an authorization input.
 
 The author-facing SDK remains transport-free:
 
+<!-- docs-typecheck: mirrors PluginBackendClient -->
 ```ts
+import type { Disposable, JsonValue } from '@navide/plugin-sdk'
+
 interface PluginBackendClient {
   call<Result extends JsonValue>(
     name: string,
-    arguments: JsonValue,
+    args: JsonValue,
     options?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<Result>
 
@@ -503,8 +507,9 @@ bundled Plans operation and event through the public SDK and Host router. Issue
 Issue 23E consumes them for the first-party Plans package and exposes an
 explicit Host-owned allowlist of Plans methods to the MCP adapter; no package
 method is AI-callable by default, and adopting this wire profile does not
-itself create a tool catalog. This remains distinct from a general third-party
-installed-backend activation workflow.
+itself create a tool catalog. Installed third-party backends use the same wire
+profile under the separate rules in
+[Third-party backends](#third-party-backends-sandbox-consent-and-publishing).
 
 After installation, frontend-only, backend-only, and combined packages appear
 in the Navide Plugins installed list and can be removed there. Package inventory is
@@ -653,6 +658,47 @@ when an extension has no stable version at all), and Navide offers a
 pre-release as an install or update candidate only for an extension whose
 "Get pre-releases" switch the user turned on. Build metadata (`+build.1`) does
 not change the channel and is ignored for ordering.
+
+### Manifest field reference
+
+Every field the schema accepts at the top level and in `permissions`,
+`contributes.views[]` and `backend`. **Required** means required whenever its
+parent object is present. Where the schema fixes the values, **Allowed values**
+lists all of them. `tests/infrastructure/pluginDocsManifest.test.ts` compares
+this table with the schema, so a schema change fails CI until this table
+matches.
+
+| Field | Required | Allowed values | Notes |
+|---|---|---|---|
+| `schemaVersion` | yes | `2` | |
+| `apiVersion` | yes | X.Y.Z, optionally prefixed with ^ or ~ | Public SDK and capability range |
+| `id` | yes | Lowercase dotted id such as acme.files | |
+| `name` | yes | 1–80 characters of plain text | |
+| `version` | yes | SemVer 2.0.0 | |
+| `publisher` | yes | Lowercase publisher id | |
+| `engines` | no | Object with a required navide requirement | See `engines.navide` above |
+| `permissions` | yes | Object; may be empty | Must be empty in an Extension Pack |
+| `marketplace` | yes | Object with a required description and license | |
+| `contributes` | no | Object with a required views array (1–16 views) | At least one of `contributes`, `backend` or `extensionPack` |
+| `backend` | no | Object | See [Backend source, development, and publish contract](#backend-source-development-and-publish-contract) |
+| `extensionPack` | no | 1–20 member plugin ids | See [Extension Packs](#extension-packs) |
+| `permissions.system` | no | `fs`, `ui`, `aiCli` | 1–3 unique entries |
+| `permissions.shell` | no | `allowlist`, `full` | Omission denies `shell.run` |
+| `permissions.scopes` | no | Object with a required fs entry | Disclosure only, see below |
+| `contributes.views[].id` | yes | Lowercase view id | |
+| `contributes.views[].kind` | yes | `custom` | |
+| `contributes.views[].location` | yes | `top`, `bottom`, `right`, `left`, `main`, `detail`, `window` | |
+| `contributes.views[].title` | yes | 1–80 characters of plain text | |
+| `contributes.views[].icon` | no | Package-relative path | |
+| `contributes.views[].entry` | yes | Package-relative .html path | |
+| `contributes.views[].detailView` | no | Id of a detail view in the same package | Only on a `left` view |
+| `contributes.views[].targetSchema` | no | Package-relative .json path | Only on a `detail` view |
+| `contributes.views[].receives` | no | Object | Only on a `window` view, see [Composed View Contracts](#composed-view-contracts) |
+| `backend.entry` | yes | Package-relative executable path; script and source filenames are rejected | |
+| `backend.protocolVersion` | yes | `1` | Navide Backend Wire v1 |
+| `backend.activation` | yes | `startup` | |
+| `backend.methods` | no | Up to 64 unique dotted names | The Host forwards only declared names |
+| `backend.events` | no | Up to 32 unique dotted names | The Host forwards only declared names |
 
 ### Extension Packs
 
@@ -1031,48 +1077,54 @@ and are surfaced with safe messages.
 
 ## SDK interface
 
-```ts
-export interface PluginContext {
-  readonly pluginId: string
-  readonly packageVersion: string
-  readonly contributionKey: string
-  readonly instanceId: string
-  readonly workspaceId: string
-  readonly startupDeadlineMs: number
-  readonly capabilities: {
-    invoke<M extends PublicMethod>(method: M, params: Params<M>): Promise<Result<M>>
-  }
-  readonly events: {
-    subscribe<E extends PublicEvent>(event: E, listener: (payload: Payload<E>) => void): Disposable
-  }
-  readonly lifecycle: {
-    reportProgress(message: string): void
-  }
-  readonly view: {
-    hide(): Promise<void>
-  }
-  readonly targets: {
-    subscribe(listener: (target: WorkspaceTarget | null) => void): Disposable
-  }
-}
+Navide does not call an activation function. Each view's entry HTML loads its
+own script, and that script gets the Host-backed runtime from three SDK
+factories. This is how the bundled `navide.git`, `navide.plans` and
+`navide.mini-ide` views are written:
 
-export declare function definePlugin(
-  activate: (context: PluginContext) => void | Promise<void>
-): PluginDefinition
+```ts
+import {
+  createPluginBackendClient,
+  createPluginCapabilityClient,
+  createPluginViewRuntimeClient,
+} from '@navide/plugin-sdk'
+
+declare function mountApp(): void // your view's own render code
+
+const runtime = createPluginViewRuntimeClient()
+const context = createPluginCapabilityClient() // { capabilities, events }
+
+mountApp()      // render the view
+runtime.ready() // readiness handshake, see below
+
+const file = await context.capabilities.invoke('fs.readFile', { path: 'README.md' })
 ```
 
-Issue 06 implements `definePlugin` as a transport-free definition factory. It
-does not open a preload channel, send `ready`, or provide a runtime adapter;
-those responsibilities remain with the later Host integration.
+| Factory | Provides |
+|---|---|
+| `createPluginCapabilityClient()` | `capabilities.invoke(method, params)` and `events.subscribe(event, listener)` for the public catalog |
+| `createPluginViewRuntimeClient()` | `ready()`, `hide()`, `onOpenTarget`, `onBackendStatus`, `openContributionWindow`, and the composed-view receiver, detail and close methods |
+| `createPluginBackendClient()` | `call` and `subscribe` for the package's own backend (see [Navide Backend Wire v1](#navide-backend-wire-v1)) |
 
-`instanceId` is a Host-generated opaque JSON string. Do not parse, construct,
-persist, or use it as authorization input. The SDK sends `ready` only after the
-`activate` promise resolves. `reportProgress` is diagnostic and does not extend
-`startupDeadlineMs`.
+Every view must call `ready()` once it has mounted. The Host waits 10 seconds
+after the entry document finishes loading. During install and update preflight
+a view that has not reported ready fails the package; in a running view the
+Host reloads the view once and does not retry again.
+
+The SDK also exports the `PluginContext` type and `definePlugin(activate)`.
+`definePlugin` only returns a frozen `{ activate }` object; nothing in Navide
+calls `activate`, so code inside it never runs in the app. The Host does not
+supply the full `PluginContext` (`pluginId`, `instanceId`, `workspaceId`,
+`startupDeadlineMs`, `lifecycle`, `view`, `appearance`, `credentials`, `ui`,
+`targets`); only its `capabilities` and `events` members exist at runtime,
+through `createPluginCapabilityClient()`. The examples in this document written
+as `context.capabilities.invoke(...)` use that object.
 
 `window.nav` is the private preload transport used by the SDK. Its channels,
 payload wrappers, and bootstrap mechanics are not public API. Plugin code must
-not call it directly.
+not call it directly. The one exception is the `navide-plugin init` scaffold:
+having no build step to bundle the SDK, its `main.js` calls `window.nav.ready()`,
+which is all `createPluginViewRuntimeClient().ready()` does.
 
 ## Capabilities and permissions
 
@@ -1106,6 +1158,12 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `shell` | `shell.run` | `workspace` |
+
+The table shows representative entries; `capabilities-v1.json` lists all of
+them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and
+`shell.*` methods). Entries marked with an `eligibility` requirement there,
+such as the Git account and share methods, are limited to first-party
+packages.
 
 `workspace` is a resource boundary, not raw workspace filesystem access. The
 Host derives `workspaceId` from authenticated runtime binding. There is no
@@ -1160,19 +1218,22 @@ Host-managed grant, not a `permissions.system` namespace: a plugin must have a
 Host-approved storage grant for its authenticated package version, but must not
 declare a new `storage` permission in its manifest.
 
-Current runtime status: the Electron main-process adapter and Host-only
-planning/lifecycle seams are implemented. The production source of `storage`
-grants and authenticated snapshot context is connected for the first-party
-`navide.git` migration; ordinary third-party production calls still receive
-`CAPABILITY_DENIED` until their own grant/context integration is delivered.
-The API below remains the public contract and does not expose the first-party
-storage migration seam to third-party packages.
+Current runtime status: the Host writes the storage grant together with the
+package-version grant, both for the bundled packages and for a package
+installed from a Registry (when **Restart Plugin** activates it). A view
+without such a grant, for example one loaded through Developer Mode, cannot
+open at all. The API below does not expose the first-party storage migration
+seam to third-party packages.
 
 The SDK calls accept only a partition class and key; the Host derives the
 plugin identity, workspace identity, package version, and storage location
 from the authenticated runtime binding:
 
 ```ts
+import { createPluginCapabilityClient } from '@navide/plugin-sdk'
+
+const context = createPluginCapabilityClient()
+
 await context.capabilities.invoke('storage.set', {
   scope: 'plugin',
   key: 'panel-state',
@@ -1648,8 +1709,11 @@ restart never claims to undo completed external effects.
 
 ## Backend trust
 
-A backend plugin is native local code. Process isolation limits crash impact;
-it does not restrict filesystem, network, subprocess, or OS access.
+A backend plugin is native local code. The first-party Plans backend runs as
+an ordinary child process: process isolation limits crash impact but does not
+restrict filesystem, network, subprocess, or OS access. A third-party backend
+runs only inside the OS sandbox described in
+[Third-party backends](#third-party-backends-sandbox-consent-and-publishing).
 
 - Normal mode will run only complete artifacts covered by a Registry envelope
   signature that chains to a Host-pinned Registry root; publisher keys are not
@@ -1690,6 +1754,14 @@ it does not restrict filesystem, network, subprocess, or OS access.
   bundles remain Host-owned app-development fixtures, not this package
   selection path. Developer Mode packages cannot publish, auto-update, execute
   backend code, or claim Registry provenance.
+  Developer Mode also writes no capability grant. The Host opens a Manifest v2
+  view only when a grant for that exact package id and version exists, so a
+  Developer Mode v2 view is refused ("package-version capability grant is
+  missing") unless a Registry install of the same id and version already left
+  one behind. To run a v2 package in the app, install it from a Registry; a
+  local Registry works (see
+  [Publishing to the Navide Marketplace](marketplace-publishing.md)).
+  Manifest v1 packages need no grant.
 
 The package archive signature covers the manifest, frontend, backend, assets,
 and their digests. Each OS/architecture artifact is signed independently.
@@ -1721,4 +1793,9 @@ Issue 06 supports the following external frontend workflow:
 Scaffolding, per-target backend packaging, signing, sign-in and publishing
 to the Navide Marketplace are covered step by step in
 [Publishing to the Navide Marketplace](marketplace-publishing.md).
-`navide-plugin dev` remains a later contract.
+
+There is no `navide-plugin dev` command and no in-app hot-reload loop. Test a
+backend with `navide-plugin dev-backend`, whose Host bridge refuses every
+request, and test the complete package inside Navide by installing it from a
+local Registry; Developer Mode cannot open a v2 view (see
+[Backend trust](#backend-trust)).

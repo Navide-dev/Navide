@@ -438,6 +438,38 @@ async def test_queue_cap_per_pane(env: Env, monkeypatch) -> None:
     assert len(env.fake.delivered) == 2 and "排隊" in env.tg.texts()[-1]
 
 
+async def test_a_human_burst_past_the_agent_limit_is_delivered(env: Env) -> None:
+    # The window's agent-to-agent guard is 5 per pair per minute; a person typing
+    # eight short lines in a row is not a message storm.
+    for i in range(8):
+        await env.inbound(f"line {i}")
+    assert len(env.fake.delivered) == 8
+
+
+async def test_chat_rate_cap_refuses_with_a_resend_hint_then_recovers(clocked, monkeypatch) -> None:
+    env, clock = clocked
+    monkeypatch.setattr(mgr_mod, "CHAT_RATE_MAX", 3)
+    for i in range(4):
+        await env.inbound(f"m{i}")
+        clock.t += 1
+    assert len(env.fake.delivered) == 3
+    notice = env.tg.texts()[-1]
+    assert "沒有送進" in notice and "重送" in notice and "57" in notice
+    clock.t += mgr_mod.CHAT_RATE_WINDOW_S
+    await env.inbound("later")
+    assert len(env.fake.delivered) == 4
+
+
+async def test_chat_rate_cap_is_per_sender(clocked, monkeypatch) -> None:
+    env, clock = clocked
+    monkeypatch.setattr(mgr_mod, "CHAT_RATE_MAX", 2)
+    env.store.add_allow("telegram", "8", "bob", 1)
+    for i in range(3):
+        await env.inbound(f"a{i}")
+    await env.inbound("b0", sender="8")
+    assert len(env.fake.delivered) == 3
+
+
 async def test_second_message_queued_behind_first_turn_still_gets_its_reply(env: Env) -> None:
     await env.inbound("first")
     env.fake.verdicts["k1"] = {"status": "delivered"}
