@@ -584,7 +584,9 @@ watch(
                   })
                 }}
               </span>
+              <!-- Built-in Navide plugins are disabled in Extensions, never removed. -->
               <button
+                v-if="!idOf(detail).startsWith('navide.')"
                 class="ext-uninstall nv-btn nv-btn--ghost mkt-btn-danger-ghost"
                 :disabled="flow.busy.value"
                 @click="flow.uninstall(idOf(detail))"

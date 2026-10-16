@@ -1738,6 +1738,9 @@
       "restartPlugin": "重新啟動 Navide 外掛",
       "disable": "停用",
       "enable": "啟用",
+      "builtinDisabledTooltip": "Navide 外掛 {name} 已停用，請在「設定 → 擴充」重新啟用。",
+      "builtinDisabledNote": "已停用：它的畫面、視窗與 agent 工具都已關閉。權限與儲存的資料都保留，按「啟用」即全部恢復。",
+      "builtinDataDeletedEarlier": "舊版 Navide 曾移除這個 Navide 外掛，當時已刪除它儲存的資料。啟用後會從空白資料開始。",
       "disabledBadge": "已停用",
       "disabledNote": "已停用：它的畫面與後端不會執行，檔案、權限與儲存的資料都會保留。",
       "rollback": {

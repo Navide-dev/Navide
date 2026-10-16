@@ -352,6 +352,7 @@ import {
   sanitizeDiagnosticLines,
   MAX_DIAGNOSTIC_LINE_CHARS,
   MAX_DIAGNOSTIC_LINES_PER_EMISSION,
+  builtinPluginDisabledMessage,
   type PluginLaunchDescriptor,
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
@@ -15664,5 +15665,134 @@ describe('FrontendPluginManager — ending a closed window\'s AI panels', () => 
     } finally {
       warn.mockRestore()
     }
+  })
+})
+
+describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+  }
+  const gitDescriptor = (): PluginLaunchDescriptor => ({
+    ...descriptor(GIT_PLUGIN_ID),
+    views: [{
+      id: 'window',
+      contributionKey: 'navide.git.window',
+      kind: 'custom',
+      location: 'window',
+      title: 'Git',
+      entryFile: '/plugins/navide.git/frontend/window/index.html',
+    }],
+  })
+
+  function registrationOf(disabled: ReadonlySet<string>): SentMessage {
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => disabled.has(pluginId))
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { ...descriptor('acme.builtin-disable-host'), requires: ['terminal'] },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl(`ws://builtin-disable-${[...disabled].join('-') || 'none'}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    return socket.sent
+      .map((raw) => JSON.parse(raw) as SentMessage)
+      .find((message) => message.type === 'host.register')!
+  }
+
+  it('advertises disabled built-ins to the backend only while one is disabled', async () => {
+    const enabled = registrationOf(new Set())
+    await flush()
+    // Nothing disabled: the registration is main's, key for key.
+    expect(enabled.payload.features).toEqual({ plans_backend_v2: false })
+    const disabled = registrationOf(new Set(['navide.plans', 'acme.not-builtin']))
+    expect(disabled.payload.features).toEqual({ plans_backend_v2: false, disabled_plugins: ['navide.plans'] })
+  })
+
+  it('refuses an agent Plans call with the contract code and no recovery disposition', async () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => pluginId === PLANS_PLUGIN_ID)
+    const response = await mgr.executeAgentBackendCallForWorkspace(
+      PLANS_PLUGIN_ID,
+      '/tmp/builtin-disable-ws',
+      { reqId: 'agent-disabled', name: 'plans.create', args: {} },
+    )
+    expect(response).toEqual({
+      reqId: 'agent-disabled',
+      ok: false,
+      error: { code: 'PLUGIN_TOOL_UNAVAILABLE', message: builtinPluginDisabledMessage(PLANS_PLUGIN_ID) },
+      reason: 'plugin-disabled',
+    })
+    expect(response).not.toHaveProperty('recoveryDisposition')
+  })
+
+  it('answers an agent Plans call as before while Plans is enabled', async () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver(() => false)
+    await expect(mgr.executeAgentBackendCallForWorkspace(
+      PLANS_PLUGIN_ID,
+      '/tmp/builtin-disable-ws',
+      { reqId: 'agent-enabled', name: 'plans.list', args: {} },
+    )).resolves.toEqual({
+      reqId: 'agent-enabled',
+      ok: false,
+      error: { code: 'BACKEND_UNAVAILABLE', message: 'Plans agent backend is unavailable' },
+    })
+  })
+
+  it('keeps a disabled built-in registered but neither lists nor opens its views', async () => {
+    let gitDisabled = true
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => gitDisabled && pluginId === GIT_PLUGIN_ID)
+    mgr.registerDescriptor(gitDescriptor(), { official: true })
+    expect(mgr.getDescriptor(GIT_PLUGIN_ID)).toBeDefined()
+    expect(mgr.isBuiltinPluginDisabled(GIT_PLUGIN_ID)).toBe(true)
+    expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID])
+    expect(mgr.listContributionCatalog()).toEqual([])
+    await expect(mgr.openContributionWindow(asHost(new FakeBrowserWindow()), 'navide.git.window', {
+      workspacePath: '/tmp/builtin-disable-ws',
+    })).resolves.toEqual({ ok: false, error: 'contribution is not installed' })
+    const registered = mgr.getDescriptor(GIT_PLUGIN_ID)!
+    await expect(mgr.openView(registered, registered.views![0], {
+      hostWindow: asHost(new FakeBrowserWindow()),
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+      workspacePath: '/tmp/builtin-disable-ws',
+    } as never)).rejects.toThrow(builtinPluginDisabledMessage(GIT_PLUGIN_ID))
+
+    gitDisabled = false
+    expect(mgr.listContributionCatalog().map((entry) => entry.contributionKey)).toEqual(['navide.git.window'])
+  })
+
+  it('does not treat a third-party id as a built-in', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver(() => true)
+    expect(mgr.isBuiltinPluginDisabled('acme.demo')).toBe(false)
+    expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
+  })
+
+  it('drains a disabled built-in and re-registers the same backend on Enable', async () => {
+    let plansDisabled = true
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => plansDisabled && pluginId === PLANS_PLUGIN_ID)
+    mgr.registerDescriptor({ ...descriptor(PLANS_PLUGIN_ID), packageVersion: '1.2.3' }, { official: true })
+    const backend = { pluginId: PLANS_PLUGIN_ID, packageVersion: '1.2.3' } as never
+    vi.spyOn(mgr, 'getBackendActivation').mockReturnValue(backend)
+    const revoke = vi.spyOn(mgr, 'revokePackageVersion').mockResolvedValue(undefined)
+    let registered = true
+    vi.spyOn(mgr, 'hasBackendActivation').mockImplementation(() => registered)
+    const register = vi.spyOn(mgr, 'registerBackendActivation').mockImplementation(() => { registered = true })
+
+    await mgr.suspendBuiltinPlugin(PLANS_PLUGIN_ID)
+    expect(revoke).toHaveBeenCalledWith(PLANS_PLUGIN_ID, '1.2.3')
+    // Disable keeps the package: its descriptor is still registered.
+    expect(mgr.getDescriptor(PLANS_PLUGIN_ID)).toBeDefined()
+    expect(() => mgr.resumeBuiltinPlugin(PLANS_PLUGIN_ID)).toThrow(/is disabled/)
+
+    registered = false
+    plansDisabled = false
+    mgr.resumeBuiltinPlugin(PLANS_PLUGIN_ID)
+    expect(register).toHaveBeenCalledWith(backend)
   })
 })

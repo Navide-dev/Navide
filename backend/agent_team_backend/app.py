@@ -453,6 +453,21 @@ def host_supports_plans_backend() -> bool:
     )
 
 
+def host_disabled_plugins() -> frozenset[str]:
+    """Built-in Navide plugins the authenticated Electron Host reports as
+    disabled by the user. Empty without a Host, which is main's behaviour."""
+    disabled: set[str] = set()
+    for session in list(_SESSIONS):
+        if not session.dead and session.host_authenticated:
+            disabled |= session.disabled_plugins
+    return frozenset(disabled)
+
+
+def plans_plugin_disabled() -> bool:
+    """Whether the user disabled the built-in Plans plugin."""
+    return "navide.plans" in host_disabled_plugins()
+
+
 def navide_window_proof_matches(challenge: str, proof: Any) -> bool:
     """Whether `proof` answers this connection's window challenge: main
     returns HMAC-SHA256(host token, "navide-window/v2\\0" + challenge) to its
@@ -539,6 +554,8 @@ class Session:
         # appears in renderer/backend-info payloads.
         self.host_authenticated = False
         self.plans_backend_v2 = False
+        # Built-in Navide plugins the user disabled, as the Host registered them.
+        self.disabled_plugins: frozenset[str] = frozenset()
         # Set by `ui.invoke.ready`: only a main window runs the UI action bus,
         # while plugin, editor and manager windows share this server and never
         # answer a ui.invoke.request. unicast_any picks among these alone, the
@@ -2012,8 +2029,9 @@ def _register_workspace_and_backfill(workspace_path: str) -> None:
     attribution.register_workspace(workspace_path)
     # Provision plan-document infrastructure (_spec.md + _template.html) into
     # <workspace>/.agent-team/plans/. Idempotent, never overwrites, never
-    # raises — see plan_provisioning.
-    ensure_plan_assets(workspace_path)
+    # raises — see plan_provisioning. Not while the user has Plans disabled.
+    if not plans_plugin_disabled():
+        ensure_plan_assets(workspace_path)
     # Start watching for disk changes here rather than waiting for the GitPane's
     # first `git.status`: the watcher is the only catch-all writer of the
     # preview record, and until this call it never saw a workspace nobody had

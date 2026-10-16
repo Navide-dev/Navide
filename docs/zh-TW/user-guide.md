@@ -159,7 +159,7 @@ token 依事件時間，週期數依開始時間（未知時用重設時間）�
 
 ## Git 與 Review
 
-在 Marketplace 安裝功能完成前，Navide 會提供可移除的官方 Git Factory Package。其 Active Package Version 會同時提供嵌入式左側 View 與獨立 Git Window。在 Extensions 移除 Bundled Git 後，重新啟動也不會自動裝回；可在同一處按 **Restore** 恢復 Factory Copy。若存在已驗證的 Marketplace Version，會優先使用該版本。Git View 支援 Repository Discovery、Working Tree Inspection、Staging、Commit、Branch、Remote、Issue 與相關工作流；Multi-repository Workspace 可以在偵測到的 Repository 間切換。Discovery Scan 不會阻塞 Backend，並會在慢速 Filesystem 上經過受限的掃描時間後回傳部分結果。Repository Operation 仍經由 Navide Host／Backend 邊界處理；GitHub 與 GitLab Issue Detection 在可用時使用設定的 `gh` 或 `glab` CLI。若選定的 v2 Package 無法 Load、Mount 或回報 Ready，Navide 會明確標示並在該次 Process 使用保留的 Legacy Git Renderer；Security、Trust 或 Permission Denial 不會觸發 Fallback。
+Navide 內建官方 Git Factory Package。其 Active Package Version 會同時提供嵌入式左側 View 與獨立 Git Window。Bundled Git 不能移除，只能在 Extensions 停用（見下文）。若存在已驗證的 Marketplace Version，會優先使用該版本。Git View 支援 Repository Discovery、Working Tree Inspection、Staging、Commit、Branch、Remote、Issue 與相關工作流；Multi-repository Workspace 可以在偵測到的 Repository 間切換。Discovery Scan 不會阻塞 Backend，並會在慢速 Filesystem 上經過受限的掃描時間後回傳部分結果。Repository Operation 仍經由 Navide Host／Backend 邊界處理；GitHub 與 GitLab Issue Detection 在可用時使用設定的 `gh` 或 `glab` CLI。若選定的 v2 Package 無法 Load、Mount 或回報 Ready，Navide 會明確標示並在該次 Process 使用保留的 Legacy Git Renderer；Security、Trust 或 Permission Denial 不會觸發 Fallback。
 
 Commit 前務必審查變更，特別是在 Automation 或 Parallel Run 之後。Agent 生成的變更不會因為顯示在 Git Panel 中就自動變得安全。
 
@@ -192,7 +192,7 @@ Skills 畫面在 backend 成功變更與重新連線後刷新，保留未儲存�
 
 **設定 → 語言** 是側欄中位於「外觀」之後的獨立頁面。可選擇繁體中文、English 或日本語；這項使用者層級偏好套用到所有工作區。初次啟動且尚未儲存語言偏好時，日文系統會使用日文介面。語言切換也會套用到初始設定畫面、Navide 原生選單標籤，以及獨立的 Plans 和 Token Monitor 視窗。作業系統提供的選單角色與外部內容可能保留各自的語言。
 
-Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut，以及獨立的 **Execution Policy** 分頁。該分頁會顯示唯讀的 Host 預設值，讓你建立或編輯一個全域的 `full`、`allowlist` 或 `denylist` 使用者政策，並將第一層系統命名空間與最上層 Shell 可執行檔名稱分開管理。完整模式需要明確的高風險確認。開啟工作區後，也會顯示不受信任的 Repository 建議，讓你明確選擇 Host 預設值、使用者政策或接受後的 Repository 政策。全域政策損壞時，可透過獨立確認的重建保留工作區來源選擇；政策資料夾不安全或無法使用時，則必須手動修復。Extensions 會將 Plugin 的 Manifest Permissions、精確 package-version Grant，以及目前選定 Agent 的 Execution Policy 分開顯示。從 Navide 市集安裝的 Navide 外掛可在該處**停用**：Navide 會停止它，之後（包含重新啟動後）不再載入它的畫面與後端，但保留檔案、Grant 與儲存的資料。該列會顯示「已停用」標籤與**啟用**按鈕，啟用後沿用同一份 Grant。停用期間仍可更新、回復與移除，更新後維持停用。內建的 Plans、Git 與 Mini-IDE 不適用此開關。
+Settings 涵蓋 Role、Pipeline、MCP Server、Analyzer Behavior、AI Provider、Appearance、Keyboard Shortcut，以及獨立的 **Execution Policy** 分頁。該分頁會顯示唯讀的 Host 預設值，讓你建立或編輯一個全域的 `full`、`allowlist` 或 `denylist` 使用者政策，並將第一層系統命名空間與最上層 Shell 可執行檔名稱分開管理。完整模式需要明確的高風險確認。開啟工作區後，也會顯示不受信任的 Repository 建議，讓你明確選擇 Host 預設值、使用者政策或接受後的 Repository 政策。全域政策損壞時，可透過獨立確認的重建保留工作區來源選擇；政策資料夾不安全或無法使用時，則必須手動修復。Extensions 會將 Plugin 的 Manifest Permissions、精確 package-version Grant，以及目前選定 Agent 的 Execution Policy 分開顯示。從 Navide 市集安裝的 Navide 外掛可在該處**停用**：Navide 會停止它，之後（包含重新啟動後）不再載入它的畫面與後端，但保留檔案、Grant 與儲存的資料。該列會顯示「已停用」標籤與**啟用**按鈕，啟用後沿用同一份 Grant。停用期間仍可更新、回復與移除，更新後維持停用。內建的 Plans、Git 與 Mini-IDE 不能移除，但可在各自的內建列**停用**。停用後不顯示分頁、視窗或舊版復原畫面，agent 也無法使用：停用 Plans 時 `plan_*` MCP 工具從工具清單消失、呼叫會回 `PLUGIN_TOOL_UNAVAILABLE`、不再於工作區建立 Plan 範本檔，手機對分享計畫的回饋也會被拒絕；停用 Mini-IDE 時，只有 Mini-IDE 能開啟的項目會顯示為停用，預設編輯器為外部編輯器的開啟則照常運作。Grant 與儲存的資料都保留，按**啟用**即全部恢復。舊版曾移除的 Git 或 Mini-IDE 會以「已停用」狀態回來，該列會說明當初的移除已刪除它儲存的資料。
 
 **設定 → CLI Agents** 以每個 Agent 一張卡片呈現。使用搜尋及「全部」、「已啟用」或「需注意」篩選找到 Agent，切換啟用狀態。要調整順序，請選擇「全部」並清空搜尋，再使用卡片標題左側的拖曳把手調整順序；篩選或搜尋期間無法重新排序。至少必須保留一個已啟用的 Agent。選擇「管理」會開啟該 Agent 的側邊抽屜，總覽、啟動設定、權限、推送及安裝區段依序排列在同一個可捲動頁面。設定沿用自動儲存方式，不需要另外按下儲存。關閉抽屜或按 Escape 會先返回卡片，不會直接關閉整個設定視窗。
 

@@ -193,6 +193,31 @@ server = FastMCP(
     ),
 )
 
+#: Tools owned by a built-in Navide plugin, hidden from tools/list while the
+#: user has that plugin disabled. Filled by the plugin's installer.
+_PLUGIN_OWNED_TOOLS: dict[str, frozenset[str]] = {}
+
+
+def hide_tools_while_plugin_disabled(plugin_id: str, names: list[str]) -> None:
+    """Hide ``names`` from tools/list while ``plugin_id`` is disabled. The
+    tools stay registered: a CLI that cached the list still reaches them, and
+    each refuses with PLUGIN_TOOL_UNAVAILABLE on its own."""
+    _PLUGIN_OWNED_TOOLS[plugin_id] = _PLUGIN_OWNED_TOOLS.get(plugin_id, frozenset()) | frozenset(names)
+
+
+async def list_visible_tools() -> list[Any]:
+    """tools/list: FastMCP's own list, minus the tools of disabled built-in
+    plugins. With none disabled it is FastMCP's list unchanged."""
+    from agent_team_backend import app
+
+    tools = await server.list_tools()
+    disabled = app.host_disabled_plugins()
+    hidden = frozenset().union(*(_PLUGIN_OWNED_TOOLS.get(plugin_id, frozenset()) for plugin_id in disabled))
+    return [tool for tool in tools if tool.name not in hidden] if hidden else tools
+
+
+server._mcp_server.list_tools()(list_visible_tools)
+
 
 # ── workspace resolution ────────────────────────────────────────────────────
 

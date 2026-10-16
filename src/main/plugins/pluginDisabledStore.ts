@@ -13,3 +13,48 @@ export class PluginDisabledStore extends PluginFactoryOptOutStore {
     super(root, DISABLED_PLUGINS_FILE)
   }
 }
+
+export const BUILTIN_REMOVED_EARLIER_FILE = '.navide-builtin-removed-earlier.json'
+
+/**
+ * Built-ins (Git, Mini-IDE) an earlier Navide version removed. That removal
+ * deleted their stored data; the upgrade turned it into Disabled, and this
+ * record lets the Extensions row say the data is gone until the user enables
+ * the plugin again.
+ */
+export class BuiltinRemovedEarlierStore extends PluginFactoryOptOutStore {
+  constructor(root: string) {
+    super(root, BUILTIN_REMOVED_EARLIER_FILE)
+  }
+}
+
+/**
+ * Built-ins can no longer be removed, only disabled. Turn a removal an earlier
+ * version recorded into Disabled, before anything loads: the bundled package
+ * comes back, off, with Enable one click away. The switch is written before the
+ * opt-out is cleared, so an interrupted run leaves the package away (as before
+ * the upgrade) and is finished on the next launch. Returns the migrated ids.
+ */
+export function migrateBuiltinRemovalsToDisabled(
+  stores: {
+    optOuts: PluginFactoryOptOutStore
+    disabled: PluginDisabledStore
+    removedEarlier: BuiltinRemovedEarlierStore
+  },
+  pluginIds: readonly string[],
+  warn: (message: string) => void,
+): string[] {
+  const migrated: string[] = []
+  for (const pluginId of pluginIds) {
+    if (!stores.optOuts.has(pluginId)) continue
+    try {
+      stores.disabled.add(pluginId)
+      stores.removedEarlier.add(pluginId)
+      stores.optOuts.remove(pluginId)
+      migrated.push(pluginId)
+    } catch (error) {
+      warn(`${pluginId} removal could not become Disabled: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  return migrated
+}

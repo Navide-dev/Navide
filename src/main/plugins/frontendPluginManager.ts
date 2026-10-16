@@ -154,6 +154,7 @@ import { executeAiTerminalResource } from './aiTerminalResources'
 import { AiTerminalOutputDecoder } from './aiTerminalOutput'
 import { MINI_IDE_STORAGE_KEYS } from '../../shared/miniIdePreferences'
 import { copyManifestPermissionsSummary } from '../../shared/executionPolicy'
+import type { AgentToolCallErrorCode, AgentToolUnavailableReason } from '../../shared/pluginAgentTools'
 import type { MiniIdeLegacyPreferences } from './miniIdeLegacyPreferences'
 import type { FilePickerHost, FilePickerInvocation } from '../filePicker'
 import { PluginActivationSelector } from './pluginActivationSelector'
@@ -958,6 +959,32 @@ export function isReservedPluginId(id: string): boolean {
   return id === HOST_EVENT_SOURCE_PLUGIN_ID || id.startsWith('navide.')
 }
 
+/** The three bundled first-party Navide plugins. They cannot be removed; the
+ *  user can disable them. Their names, for messages the user reads. */
+export const BUILTIN_PLUGIN_NAMES: ReadonlyMap<string, string> = new Map([
+  ['navide.plans', 'Plans'],
+  ['navide.git', 'Git'],
+  ['navide.mini-ide', 'Mini-IDE'],
+])
+
+/** What the Host tells the user (and an agent) when it refuses to act through
+ *  a disabled built-in plugin. */
+export function builtinPluginDisabledMessage(pluginId: string): string {
+  const name = BUILTIN_PLUGIN_NAMES.get(pluginId) ?? pluginId
+  return `Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`
+}
+
+/** A Host refusal of an agent call into a disabled built-in plugin. The code
+ *  and reason are the agent-tools contract's (docs/en-US/plugin-agent-tools-contract.md
+ *  §4.2); it never carries a recovery disposition, so the MCP adapter cannot
+ *  fall back to serving the call itself. */
+export interface BuiltinPluginDisabledResponse {
+  reqId: string
+  ok: false
+  error: { code: Extract<AgentToolCallErrorCode, 'PLUGIN_TOOL_UNAVAILABLE'>; message: string }
+  reason: Extract<AgentToolUnavailableReason, 'plugin-disabled'>
+}
+
 function hasOfficialRegistryAuthority(trust: InstalledRegistryTrustContext): boolean {
   return (
     trust.registryAuthority === 'official' &&
@@ -1388,6 +1415,11 @@ export class FrontendPluginManager {
   private hostSessionRegistered = false
   /** The `plans_backend_v2` feature the current registration advertised. */
   private hostSessionPlansBackendV2: boolean | null = null
+  /** The `disabled_plugins` feature the current registration advertised. */
+  private hostSessionDisabledPlugins = ''
+  /** Backend activations of a disabled built-in, kept so Enable re-registers
+   *  exactly what Disable drained. */
+  private readonly suspendedBuiltinBackends = new Map<string, BackendPluginLaunchSpec[]>()
   private hostRegistrationTask: Promise<void> | null = null
   /** Lazily-created shared transport to the backend plugin host. */
   private wsClient: WsClient | null = null
@@ -2252,6 +2284,52 @@ export class FrontendPluginManager {
    *  factory and recovery paths and are outside the "Disabled" switch. */
   canDisablePlugin(pluginId: string): boolean {
     return !isReservedPluginId(pluginId)
+  }
+
+  /** The user's Disabled switch for the built-in Plans, Git and Mini-IDE
+   *  (same durable store as {@link isPluginDisabled}). A disabled built-in
+   *  stays loaded exactly as when enabled; the Host only refuses to mount its
+   *  views, list its contributions or serve agent calls into it. */
+  isBuiltinPluginDisabled(pluginId: string): boolean {
+    return BUILTIN_PLUGIN_NAMES.has(pluginId) && (this.disabledPluginResolver?.(pluginId) ?? false)
+  }
+
+  /** The disabled built-ins, sorted, for the backend and the renderer. */
+  listDisabledBuiltinPlugins(): string[] {
+    return [...BUILTIN_PLUGIN_NAMES.keys()].filter((id) => this.isBuiltinPluginDisabled(id)).sort()
+  }
+
+  /** Drain a just-disabled built-in: every instance, headless backend and AI
+   *  session ends. Its descriptor, grant and storage stay. */
+  async suspendBuiltinPlugin(pluginId: string): Promise<void> {
+    if (!this.isBuiltinPluginDisabled(pluginId)) throw new Error(`plugin ${pluginId} is not disabled`)
+    const packageVersion = this.packageVersionForPluginId(pluginId)
+    if (packageVersion) {
+      const backend = this.getBackendActivation(pluginId, packageVersion)
+      if (backend) this.suspendedBuiltinBackends.set(pluginId, [backend])
+      await this.revokePackageVersion(pluginId, packageVersion)
+    } else {
+      this.preparePluginRemoval(pluginId)
+    }
+    this.refreshHostSessionRegistration()
+  }
+
+  /** Undo {@link suspendBuiltinPlugin} for a just-enabled built-in. */
+  resumeBuiltinPlugin(pluginId: string): void {
+    if (this.isBuiltinPluginDisabled(pluginId)) throw new Error(`plugin ${pluginId} is disabled`)
+    for (const backend of this.suspendedBuiltinBackends.get(pluginId) ?? []) {
+      if (!this.hasBackendActivation(backend.pluginId, backend.packageVersion)) {
+        this.registerBackendActivation(backend)
+      }
+    }
+    this.suspendedBuiltinBackends.delete(pluginId)
+    this.refreshHostSessionRegistration()
+  }
+
+  /** Registered descriptors a view may be opened from: a disabled built-in's
+   *  descriptor stays registered but is never offered or mounted. */
+  private enabledDescriptors(): PluginLaunchDescriptor[] {
+    return this.listDescriptors().filter((descriptor) => !this.isBuiltinPluginDisabled(descriptor.id))
   }
 
   /** Stop a just-disabled package and drop its frontend descriptor, keeping
@@ -6503,7 +6581,7 @@ export class FrontendPluginManager {
     pluginId: string,
     workspacePath: string,
     payload: unknown,
-  ): Promise<CapabilityResponse> {
+  ): Promise<CapabilityResponse | BuiltinPluginDisabledResponse> {
     const record = this.exactBackendPayload(payload, new Set(['reqId', 'name', 'args', 'timeoutMs']))
     const reqId =
       typeof payload === 'object' && payload !== null && !Array.isArray(payload) &&
@@ -6521,6 +6599,16 @@ export class FrontendPluginManager {
       (record.timeoutMs !== undefined && !isAllowedBackendTimeout(record.timeoutMs))
     ) return buildError(reqId, 'BAD_REQUEST', 'malformed Plans backend request')
 
+    // The user's Disabled switch wins over every later check, and its refusal
+    // carries no recovery disposition: a disabled Plans is off, not degraded.
+    if (this.isBuiltinPluginDisabled(PLANS_PLUGIN_ID)) {
+      return {
+        reqId: record.reqId,
+        ok: false,
+        error: { code: 'PLUGIN_TOOL_UNAVAILABLE', message: builtinPluginDisabledMessage(PLANS_PLUGIN_ID) },
+        reason: 'plugin-disabled',
+      }
+    }
     const descriptor = this.descriptors.get(PLANS_PLUGIN_ID)
     const packageVersion = descriptor?.packageVersion
     if (!descriptor || !nonEmptyString(packageVersion)) {
@@ -8019,7 +8107,8 @@ export class FrontendPluginManager {
     // re-marks the backend unavailable, so every one of them lapsed.
     if (
       this.hostSessionRegistered &&
-      this.hostSessionPlansBackendV2 === this.hasActivePlansBackend()
+      this.hostSessionPlansBackendV2 === this.hasActivePlansBackend() &&
+      this.hostSessionDisabledPlugins === this.listDisabledBuiltinPlugins().join('\n')
     ) return
     this.hostSessionRegistered = false
     this.registerHostSession(client)
@@ -8030,11 +8119,20 @@ export class FrontendPluginManager {
     const url = this.backendWsUrl
     if (!token || !url || this.wsClient !== client || this.hostRegistrationTask) return
     const plansBackendV2 = this.hasActivePlansBackend()
+    // Sent only while a built-in is disabled, so the registration is exactly
+    // main's otherwise.
+    const disabledPlugins = this.listDisabledBuiltinPlugins()
     const task = (async (): Promise<void> => {
       try {
         const response = await client.send<{ registered?: unknown }>(
           'host.register',
-          { token, features: { plans_backend_v2: plansBackendV2 } },
+          {
+            token,
+            features: {
+              plans_backend_v2: plansBackendV2,
+              ...(disabledPlugins.length > 0 ? { disabled_plugins: disabledPlugins } : {}),
+            },
+          },
           5_000,
         )
         if (
@@ -8045,6 +8143,7 @@ export class FrontendPluginManager {
         ) {
           this.hostSessionRegistered = response.ok && response.payload?.registered === true
           this.hostSessionPlansBackendV2 = plansBackendV2
+          this.hostSessionDisabledPlugins = disabledPlugins.join('\n')
           if (!this.hostSessionRegistered) {
             console.warn('[plugin-backend] Host session registration was rejected')
           }
@@ -8068,7 +8167,8 @@ export class FrontendPluginManager {
       if (this.hostRegistrationTask !== task) return
       this.hostRegistrationTask = null
       if (
-        plansBackendV2 !== this.hasActivePlansBackend() &&
+        (plansBackendV2 !== this.hasActivePlansBackend() ||
+          disabledPlugins.join('\n') !== this.listDisabledBuiltinPlugins().join('\n')) &&
         this.wsClient === client &&
         this.backendWsUrl === url &&
         this.backendHostToken === token &&
@@ -8132,7 +8232,7 @@ export class FrontendPluginManager {
       return refuse('BAD_REQUEST', 'agent capability request is malformed')
     }
 
-    let response: CapabilityResponse
+    let response: CapabilityResponse | BuiltinPluginDisabledResponse
     try {
       response = legacyRequest
         ? record.operation === 'capability'
@@ -9254,6 +9354,9 @@ export class FrontendPluginManager {
     const registered = this.descriptors.get(packageDescriptor.id)
     if (!registered) {
       throw new Error(`package descriptor '${packageDescriptor.id}' is not registered by the Host`)
+    }
+    if (this.isBuiltinPluginDisabled(registered.id)) {
+      throw new Error(builtinPluginDisabledMessage(registered.id))
     }
     if (this.isPackageVersionStopping(registered.id, registered.packageVersion)) {
       throw new BackendPluginError('PLUGIN_STOPPING')
@@ -10615,7 +10718,7 @@ export class FrontendPluginManager {
   /** Deterministic registry projection used by Host navigation and region
    *  composition. This projection contains no live view identity. */
   listContributionCatalog(): PluginContributionCatalogEntry[] {
-    return buildPluginContributionCatalog(this.listDescriptors())
+    return buildPluginContributionCatalog(this.enabledDescriptors())
   }
 
   /** Host-only left/detail pairing. The Host supplies opaque live identities;
@@ -10730,7 +10833,7 @@ export class FrontendPluginManager {
     | { ok: true; bindingId: string; entryUrl: string }
     | { ok: false; error: string }
   > {
-    const descriptor = this.listDescriptors().find((candidate) =>
+    const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.views?.some((view) => view.contributionKey === contributionKey)
     )
     const view = descriptor?.views?.find((candidate) => candidate.contributionKey === contributionKey)
@@ -11077,7 +11180,7 @@ export class FrontendPluginManager {
     contributionKey: string,
     options: { workspacePath: string; query: string }
   ): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-    const listed = this.listDescriptors().find((candidate) =>
+    const listed = this.enabledDescriptors().find((candidate) =>
       candidate.views?.some((view) => view.contributionKey === contributionKey)
     )
     // Re-resolve against the registered descriptor rather than the listing, and
@@ -11289,7 +11392,7 @@ export class FrontendPluginManager {
     contributionKey: string,
     options: Omit<PluginViewOpenOptions, 'hostWindow'>,
   ): Promise<{ ok: boolean; error?: string }> {
-    const descriptor = this.listDescriptors().find((candidate) =>
+    const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.views?.some((view) => view.contributionKey === contributionKey)
     )
     const view = descriptor?.views?.find((candidate) => candidate.contributionKey === contributionKey)
@@ -11362,7 +11465,7 @@ export class FrontendPluginManager {
   ): Promise<{ ok: boolean; error?: string }> {
     const canDispatch = options.canDispatch ?? (() => true)
     if (!canDispatch()) return { ok: false, error: 'request is no longer active' }
-    const descriptor = this.listDescriptors().find((candidate) =>
+    const descriptor = this.enabledDescriptors().find((candidate) =>
       candidate.views?.some((view) => view.contributionKey === contributionKey)
     )
     const view = descriptor?.views?.find((candidate) => candidate.contributionKey === contributionKey)

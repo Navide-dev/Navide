@@ -1007,6 +1007,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listInstalled'),
     listFactoryPackages: (): Promise<FactoryPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listFactoryPackages'),
+    disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null

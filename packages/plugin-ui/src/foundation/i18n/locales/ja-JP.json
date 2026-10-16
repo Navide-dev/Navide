@@ -1738,6 +1738,9 @@
       "restartPlugin": "Navide プラグインを再起動",
       "disable": "無効化",
       "enable": "有効化",
+      "builtinDisabledTooltip": "Navide プラグイン {name} は無効です。「設定 → 拡張機能」で有効にしてください。",
+      "builtinDisabledNote": "無効：画面、ウィンドウ、エージェントツールはすべてオフです。権限と保存データは残り、「有効化」ですべて元に戻ります。",
+      "builtinDataDeletedEarlier": "以前の Navide がこの Navide プラグインを削除し、そのとき保存データも削除しました。有効にすると空のデータから始まります。",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
       "rollback": {
