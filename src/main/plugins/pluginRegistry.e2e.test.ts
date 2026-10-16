@@ -6,7 +6,8 @@
 //
 // The Registry cannot host on Windows (its key files are checked for POSIX
 // owner-only modes), so the suite is skipped there. Elsewhere it skips only
-// when marketplace/registry/.venv is missing locally; in CI it fails instead.
+// when marketplace/registry/.venv is missing, unless NAVIDE_REGISTRY_E2E_REQUIRED=1
+// (set by ci.yml's frontend job on macOS and Linux), which makes that a failure.
 
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest'
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
@@ -55,9 +56,11 @@ const PUBLISHER = 'e2etest'
 const NAME = 'probe'
 const ID = `${PUBLISHER}.${NAME}`
 
+// Only a job that installs the Registry env opts in to failing without it;
+// every other run (release gates included) skips.
 if (!IS_WINDOWS && !REGISTRY_AVAILABLE) {
-  if (process.env.CI) {
-    throw new Error(`Registry Python env missing at ${REGISTRY_PYTHON}; CI must run uv --project marketplace/registry sync --locked`)
+  if (process.env.NAVIDE_REGISTRY_E2E_REQUIRED === '1') {
+    throw new Error(`Registry Python env missing at ${REGISTRY_PYTHON}; NAVIDE_REGISTRY_E2E_REQUIRED=1 needs uv --project marketplace/registry sync --locked`)
   }
   console.warn(`[pluginRegistry.e2e] skipped: no Registry env at ${REGISTRY_PYTHON} (run uv --project marketplace/registry sync --locked)`)
 }
