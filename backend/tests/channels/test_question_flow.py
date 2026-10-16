@@ -77,6 +77,31 @@ async def test_an_answer_to_a_stale_screen_brings_the_current_prompt(env: Env) -
     assert env.fake.answers == [("pane-1", {"kind": "question", "option": 1})]
 
 
+async def test_a_stale_answer_relays_the_current_prompt_exactly_once(env: Env) -> None:
+    # Two paths relay the current prompt after a stale answer: the answer's follow-up
+    # and the run's awaiting probe. Hold the probe so the follow-up gets there first,
+    # then let one probe tick land before the chat answers the prompt it was shown.
+    probe = env.m._check_awaiting
+    held = False
+
+    async def check_awaiting(adapter, pane_id, pending):
+        if not held:
+            await probe(adapter, pane_id, pending)
+
+    env.m._check_awaiting = check_awaiting
+    rid = await _question(env, ["Keep", "Discard"], prompt="Old question")
+    env.fake.prompt = "New question"
+    held = True
+    await env.inbound(f"1 {rid}")
+    await _until(lambda: any("New question" in t for t in _prompts(env))
+                 and env.m._awaiting_shown["pane-1"].prompt == "New question")
+    new_rid = _relay_id(env)
+    await probe(env.tg, "pane-1", env.m._pending["pane-1"])
+    assert sum("New question" in t for t in _prompts(env)) == 1
+    await env.inbound(f"1 {new_rid}")
+    assert env.fake.answers == [("pane-1", {"kind": "question", "option": 1})]
+
+
 def _capture_buttons(env: Env) -> list:
     sent: list = []
     orig = env.tg.send_text

@@ -1251,8 +1251,19 @@ async def test_relay_prompt_answered_against_a_stale_screen_is_settled(env: Env)
     await _until_relay_prompt(env)
     mid, text = _prompt_message(env)
     rid = _relay_id(env)
+    # The answer is what finds the screen changed here. The run's awaiting probe would
+    # find it too and supersede the id first, so it waits until the answer is handled.
+    probe = env.m._check_awaiting
+    held = True
+
+    async def check_awaiting(adapter, pane_id, pending):
+        if not held:
+            await probe(adapter, pane_id, pending)
+
+    env.m._check_awaiting = check_awaiting
     env.fake.prompt = "Allow Bash(npm publish)?"
     await env.inbound(f"yes {rid}")
+    held = False
     assert env.fake.answers == [] and mgr_mod.MSG_RELAY_PROMPT_CHANGED in env.tg.texts()
     await _until(lambda: any(m == mid for m, _ in env.tg.edits))
     assert (mid, f"{text}\n\n{mgr_mod.MSG_RELAY_SUPERSEDED}") in env.tg.edits
