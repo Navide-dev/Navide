@@ -252,7 +252,7 @@
       "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
       "category": "product-defect",
       "status": "fixed",
-      "fixedBy": "#PENDING",
+      "fixedBy": "#329",
       "count": 1,
       "firstSeen": "2026-10-16T12:35:26Z",
       "lastSeen": "2026-10-16T12:35:26Z",
