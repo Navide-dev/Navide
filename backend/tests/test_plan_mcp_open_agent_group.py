@@ -15,7 +15,7 @@ from agent_team_backend.mcp_server import auth, server as plan_mcp, wiring
 def _ctx(*, host: bool = False) -> Any:
     params = (
         {"client": "host", "t": auth.internal_token()}
-        if host else {"pane": "parent", "t": wiring.caller_token()}
+        if host else {"pane": "parent", "t": wiring.caller_token("parent")}
     )
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))

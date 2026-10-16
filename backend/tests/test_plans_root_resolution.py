@@ -136,7 +136,7 @@ async def test_an_agents_plan_is_visible_from_the_subdirectory_workspace(
     agent_messaging._reset_for_test()
     try:
         agent_messaging.register("pa", "builder", str(subdir), agent_key="claude")
-        params = {"pane": "pa", "t": plan_mcp_wiring.caller_token()}
+        params = {"pane": "pa", "t": plan_mcp_wiring.caller_token("pa")}
         ctx = SimpleNamespace(
             request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
         )

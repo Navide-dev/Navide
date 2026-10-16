@@ -3,8 +3,8 @@
 Every /plan-mcp tool call must carry one of three credential kinds (see
 plan_mcp._resolve_caller):
 
-- pane: ``?pane=<id>&t=<per-run caller token>`` — plan_mcp_wiring.caller_token(),
-  unrelated to this module.
+- pane: ``?pane=<id>&t=<that pane's token>`` — plan_mcp_wiring.caller_token(id),
+  minted per pane at spawn, unrelated to this module.
 - host: ``?client=host&t=<internal token>`` — this backend's own CLI wiring
   (the fallback claude config, and any wired command where the pane id was
   not known at spawn time) so a backend-owned config is never mistaken for
