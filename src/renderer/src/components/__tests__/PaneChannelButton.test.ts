@@ -25,6 +25,7 @@ function seed(opts: {
   extra?: Record<string, unknown>[]
   locations?: Record<string, unknown>[]
   bindings?: Record<string, unknown>[]
+  status?: Record<string, unknown>
 }): void {
   mock.setResponse('channels.list', {
     ok: true,
@@ -34,7 +35,7 @@ function seed(opts: {
           platform: 'telegram',
           configured: true,
           enabled: true,
-          status: { lifecycle: 'ready', connected: true, identity: '@navide_bot' },
+          status: { lifecycle: 'ready', connected: true, identity: '@navide_bot', ...opts.status },
           config: {},
           capabilities: { threads: true, create_location: true, edit: true, typing: true, buttons: true, text_limit: 4000 },
         }, ...(opts.extra ?? [])]
@@ -676,22 +677,26 @@ describe('PaneChannelButton', () => {
     // The pane's name is already on the pane header; the chip names where it talks to.
     const label = (w: VueWrapper) => w.get('[data-testid="channel-chip-label"]').text()
 
-    it('names the bound chat, never the pane', async () => {
-      seed({ configured: true, bound: true })
+    it('names the bot, never the chat user or the pane; the tooltip keeps the chat', async () => {
+      seed({ configured: true, bound: true, locations: [{ chat_id: '-100', title: 'neillu123', kind: 'private', supports_topics: false }] })
       const w = await render()
-      expect(label(w)).toBe('Telegram · Navide')
+      expect(label(w)).toBe('Telegram · @navide_bot')
       const tip = w.get('[data-testid="channel-chip"]').attributes('title')
-      expect(tip).toContain('Telegram')
-      expect(tip).toContain('@navide_bot')
-      expect(tip).toContain('Navide')
-      expect(tip).toContain('Chat replies only')
+      expect(tip).toBe('Telegram · @navide_bot · neillu123 · Chat replies only')
       expect(tip).not.toContain('api-refactor')
     })
 
-    it('falls back to the bot when the chat is not among the known chats', async () => {
-      seed({ configured: true, bound: true, locations: [] })
+    it("prefers the bot's display name from the platform over its handle", async () => {
+      seed({ configured: true, bound: true, status: { display_name: 'Neil M4' } })
       const w = await render()
-      expect(label(w)).toBe('Telegram · @navide_bot')
+      expect(label(w)).toBe('Telegram · Neil M4')
+      expect(w.get('[data-testid="channel-chip"]').attributes('title')).toBe('Telegram · Neil M4 · Navide · Chat replies only')
+    })
+
+    it('falls back to the chat while the bot has no name', async () => {
+      seed({ configured: true, bound: true, status: { identity: '' } })
+      const w = await render()
+      expect(label(w)).toBe('Telegram · Navide')
     })
 
     it('shows the platform alone when neither chat nor bot has a name', async () => {
@@ -715,7 +720,7 @@ describe('PaneChannelButton', () => {
     seed({ configured: true, bound: true })
     const w = await render()
     expect(w.find('[data-testid="channel-connect"]').exists()).toBe(false)
-    expect(w.get('[data-testid="channel-chip"]').text()).toContain('Telegram · Navide')
+    expect(w.get('[data-testid="channel-chip"]').text()).toContain('Telegram · @navide_bot')
     await w.get('[data-testid="channel-unbind"]').trigger('click')
     await flushPromises()
     expect(mock.sent.find((s) => s.type === 'channels.unbind')?.payload).toEqual({ pane_id: 'p1', pane_name: 'api-refactor' })

@@ -63,6 +63,9 @@ MSG_STOPPED = "⏹ 已送出中斷（{name}）"
 MSG_SUMMARY_TAIL = "\n完整內容請在 Navide 查看"
 MSG_LOCAL_NOTICE = "🖥 本機下了新指令"
 MSG_PROMPT_CUT = "…\n（完整內容請在 Navide 查看）"
+MSG_IMAGES = "🖼 圖片 ×{n}"
+# A pasted image's marker in the prompt text ("[Image #5]"), Claude Code's and Codex's alike.
+_IMAGE_MARKER = re.compile(r"\[Image #\d+\][ \t]*")
 
 _LEVEL = {"replies": 0, "minimal": 1, "standard": 2, "full": 3}
 _STATUS_WORDS = {
@@ -95,6 +98,16 @@ def source_pane(name: str) -> str:
 
 # One colour a child keeps, so panes riding a chat without topics can be told apart.
 CHILD_COLOURS = ("🟦", "🟩", "🟧", "🟪", "🟥", "🟨", "🟫", "⬛")
+
+
+def _image_label(text: str) -> str:
+    """Pasted-image markers folded into one label after the typed text."""
+    n = len(_IMAGE_MARKER.findall(text))
+    if not n:
+        return text
+    rest = _IMAGE_MARKER.sub("", text).strip()
+    label = MSG_IMAGES.format(n=n)
+    return f"{rest} {label}" if rest else label
 
 
 def child_tag(name: str) -> str:
@@ -522,7 +535,7 @@ class Mirror:
         self.m._begin_run(pane_id, route, SRC_LOCAL)
         if shows(verbosity, "full"):
             more = MSG_PROMPT_CUT if len(snippet) >= LOCAL_PROMPT_MAX else ""
-            self.post(route.binding.location(), self.label(route, f"🖥 你：{snippet}{more}"), pane_id)
+            self.post(route.binding.location(), self.label(route, f"🖥 你：{_image_label(snippet)}{more}"), pane_id)
         elif shows(verbosity, "standard"):
             self.post(route.binding.location(), self.label(route, MSG_LOCAL_NOTICE), pane_id)
 

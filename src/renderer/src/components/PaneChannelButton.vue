@@ -14,6 +14,7 @@ import {
 } from '../composables/useChannels'
 import { guardKey, type GuardStore } from '../composables/useGuard'
 import { vendorRunsYolo } from '../lib/guardYolo'
+import { channelBotLabel, channelBotName, formatChannelIdentity } from '../lib/channelIdentity'
 import { useAgentMessaging } from '../composables/useAgentMessaging'
 import ChannelLinkGuide from './ChannelLinkGuide.vue'
 
@@ -22,7 +23,7 @@ import ChannelLinkGuide from './ChannelLinkGuide.vue'
  * popover listing every chat the configured, connected bots know, grouped by
  * bot (one group per platform unless it runs several bots); picking one opens a confirmation step that asks what the chat
  * receives, and only Connect binds (or Settings → Channels opens when no
- * platform is configured). Bound: a chip naming the platform and chat, with ✕
+ * platform is configured). Bound: a chip naming the platform and bot, with ✕
  * to unbind. The chip never names the pane: `binding.title` is the pane's own
  * name (or its topic's), already on the header the chip sits in.
  */
@@ -92,8 +93,7 @@ function canCreate(platform: ChannelPlatform, account: string): boolean {
 function botLabel(platform: ChannelPlatform, account: string): string {
   const bots = store?.platformState(platform)?.accounts ?? []
   if (bots.length < 2) return ''
-  const bot = bots.find((b) => b.account === account)
-  return bot?.name || (account === DEFAULT_ACCOUNT ? t('channels.bot.default') : account)
+  return channelBotLabel(bots.find((b) => b.account === account), account, t)
 }
 
 // Platforms name one-to-one chats differently: Telegram `private`, Slack `im`,
@@ -307,25 +307,24 @@ async function loadChatTitle(): Promise<void> {
 // A refresh (channels.changed: a chat renamed or first seen) may bring the title.
 watch(() => [binding.value, store?.platforms.value], () => void loadChatTitle(), { immediate: true })
 
-/** The bot a binding talks through: its given name, else the identity the platform reports. */
+/** The bot a binding talks through, named as every channel label names it. */
 function botName(platform: ChannelPlatform, account: string): string {
-  const a = store?.accountState(platform, account || DEFAULT_ACCOUNT)
-  return a?.name || a?.status.identity || ''
+  return channelBotName(store?.accountState(platform, account || DEFAULT_ACCOUNT))
 }
 
-// Chat title, else the bot, else nothing after the platform.
-const chipLabel = computed(() => {
+// The bot, else the chat, after the platform; the tooltip adds the chat and the level.
+function chipIdentity(mode: 'short' | 'full'): string {
   const b = binding.value
   if (!b) return ''
-  const where = chatTitle.value || botName(b.platform, b.account)
-  return where ? `${platformName(b.platform)} · ${where}` : platformName(b.platform)
-})
-const chipTip = computed(() => {
-  const b = binding.value
-  if (!b) return ''
-  return [platformName(b.platform), botName(b.platform, b.account), chatTitle.value || b.chat_id,
-    t(`channels.pane.verbosity-${verbosity.value}`)].filter(Boolean).join(' · ')
-})
+  return formatChannelIdentity(b, {
+    t,
+    state: store?.accountState(b.platform, b.account || DEFAULT_ACCOUNT),
+    chat: chatTitle.value || (mode === 'full' ? b.chat_id : ''),
+    extra: [t(`channels.pane.verbosity-${verbosity.value}`)],
+  }, mode)
+}
+const chipLabel = computed(() => chipIdentity('short'))
+const chipTip = computed(() => chipIdentity('full'))
 
 const VERBOSITIES: ChannelVerbosity[] = ['replies', 'minimal', 'standard', 'full']
 const menuOpen = ref(false)

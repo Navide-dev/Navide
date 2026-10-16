@@ -58,6 +58,7 @@ async def test_poll_delivers_messages_and_persists_offset(api: FakeBotApi) -> No
     try:
         await _until(lambda: got)
         assert ad.status.lifecycle == "ready" and ad.status.identity == "@navide_bot"
+        assert ad.status.display_name == "Navide"  # getMe's first_name, for the app's channel labels
         m = got[0]
         assert (m.chat_id, m.sender_id, m.text, m.is_direct, m.thread_id) == ("42", "7", "hello", True, "")
         assert api.calls_of("deleteWebhook") == [{"drop_pending_updates": False}]
@@ -512,7 +513,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop", "cancel"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -522,7 +523,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop", "cancel"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
