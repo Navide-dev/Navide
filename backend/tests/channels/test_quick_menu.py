@@ -221,3 +221,13 @@ def test_paging_back_and_forth_does_not_pile_up_tokens() -> None:
     # The page on screen still works.
     kind, token = qm.parse_callback(rows[0][0][1])
     assert menus.press(kind, token, "telegram:default:-100:50") is not None
+
+
+def test_menu_scope_reads_menu_prompts_and_skills() -> None:
+    assert qm.menu_scope("/menu") == "all"
+    assert qm.menu_scope("/start") == "all"
+    assert qm.menu_scope("/prompts") == "p"
+    assert qm.menu_scope("/skills@navide_bot", "@navide_bot") == "s"
+    assert qm.menu_scope("/skills@other_bot", "@navide_bot") is None
+    assert qm.menu_scope("/prompts 2") is None
+    assert qm.menu_scope("prompts") is None

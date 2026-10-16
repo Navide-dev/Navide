@@ -1498,8 +1498,9 @@ class ChannelManager:
         if pick is not None:
             await self._quick_pick(msg, pick)
             return
-        if quick_menu.is_menu_command(msg.text, self._identity(msg)):
-            await self._quick_menu(msg)
+        scope = quick_menu.menu_scope(msg.text, self._identity(msg))
+        if scope is not None:
+            await self._quick_menu(msg, scope)
             return
         if relay.is_pending_command(msg.text, self._identity(msg)):
             await self._list_pending(msg)
@@ -2074,8 +2075,9 @@ class ChannelManager:
             log.warning("channels: listing skills for %s failed: %s", agent_key, exc)
             return []
 
-    async def _quick_menu(self, msg: InboundMessage) -> None:
-        """``/menu``: buttons for the bound pane's prompt skills and skills."""
+    async def _quick_menu(self, msg: InboundMessage, scope: str = "all") -> None:
+        """``/menu``: buttons for the bound pane's prompt skills and skills; ``/prompts``
+        (``scope`` "p") and ``/skills`` ("s") list only that group."""
         settings = await self._ui_settings()
         lang = prompt_skills.language(settings)
         binding = self._binding_for(msg)
@@ -2092,14 +2094,18 @@ class ChannelManager:
         if adapter is None:
             return
         agent_key = self._seams.pane_agent(pane_id)
+        if scope == "s" and agent_key not in quick_menu.SKILL_INVOCATION:
+            await self._reply(msg, quick_menu.text(lang, "no_skill_syntax"))
+            return
         menu = self.quick.create(
             platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
             pane_title=binding.title or pane_id, agent_key=agent_key, lang=lang,
-            prompts=prompt_skills.castable(prompt_skills.effective(settings)),
-            skills=await self._agent_skills(agent_key),
+            prompts=prompt_skills.castable(prompt_skills.effective(settings)) if scope != "s" else [],
+            skills=await self._agent_skills(agent_key) if scope != "p" else [],
+            scope=scope,
         )
         if menu is None:
-            await self._reply(msg, quick_menu.text(lang, "empty"))
+            await self._reply(msg, quick_menu.text(lang, {"p": "empty_prompts", "s": "empty_skills"}.get(scope, "empty")))
             return
         if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
             # No buttons: the same menu as numbered lines, picked with "/menu <n>".

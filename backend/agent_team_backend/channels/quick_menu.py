@@ -73,6 +73,8 @@ DEFAULT_LAYOUT = Layout(per_row=2, rows=4, label_max=30)
 STRINGS: dict[str, dict[str, str]] = {
     "zh-TW": {
         "title": "⚡ 快捷選單 · pane「{pane}」",
+        "title_prompts": "💬 Prompts · pane「{pane}」",
+        "title_skills": "🧩 Skills · pane「{pane}」",
         "page": "第 {page}/{pages} 頁",
         "counts": "💬 Prompts {prompts} 個 · 🧩 Skills {skills} 個",
         "no_skill_syntax": "（這個 pane 的 CLI 沒有已查證的 skill 呼叫方式，不列出 Skills）",
@@ -81,6 +83,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_bound": "此聊天室尚未連接 pane；在 Navide 的 pane 聊天按鈕連接後再傳 /menu",
         "no_buttons": "這個平台不支援按鈕，無法顯示快捷選單",
         "empty": "沒有可用的 prompt 或 skill；到 Navide 設定的 Prompts／Skills 新增",
+        "empty_prompts": "沒有可用的 prompt；到 Navide 設定的 Prompts 新增",
+        "empty_skills": "這個 pane 的 CLI 沒有可用的 skill；到 Navide 設定的 Skills 新增",
         "expired": "⚠️ 這個選單已過期，請重新傳 /menu",
         "gone": "⚠️「{name}」已不存在或已停用，請重新傳 /menu",
         "sent": "▶ 已送出：{name}",
@@ -105,6 +109,8 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "en-US": {
         "title": "⚡ Quick menu · pane \"{pane}\"",
+        "title_prompts": "💬 Prompts · pane \"{pane}\"",
+        "title_skills": "🧩 Skills · pane \"{pane}\"",
         "page": "Page {page}/{pages}",
         "counts": "💬 Prompts {prompts} · 🧩 Skills {skills}",
         "no_skill_syntax": "(No verified way to run a skill in this pane's CLI, so Skills are not listed)",
@@ -113,6 +119,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_bound": "This chat is not connected to a pane. Connect it from the pane's chat button in Navide, then send /menu",
         "no_buttons": "This platform has no buttons, so the quick menu cannot be shown",
         "empty": "No prompts or skills to offer. Add them under Prompts / Skills in Navide's settings",
+        "empty_prompts": "No prompts to offer. Add them under Prompts in Navide's settings",
+        "empty_skills": "This pane's CLI has no skills to offer. Add them under Skills in Navide's settings",
         "expired": "⚠️ This menu has expired. Send /menu again",
         "gone": "⚠️ \"{name}\" no longer exists or is turned off. Send /menu again",
         "sent": "▶ Sent: {name}",
@@ -137,6 +145,8 @@ STRINGS: dict[str, dict[str, str]] = {
     },
     "ja-JP": {
         "title": "⚡ クイックメニュー · pane「{pane}」",
+        "title_prompts": "💬 Prompts · pane「{pane}」",
+        "title_skills": "🧩 Skills · pane「{pane}」",
         "page": "{page}/{pages} ページ",
         "counts": "💬 Prompts {prompts} 件 · 🧩 Skills {skills} 件",
         "no_skill_syntax": "（この pane の CLI には確認済みの skill 呼び出し方法がないため、Skills は表示しません）",
@@ -145,6 +155,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "not_bound": "このチャットは pane に接続されていません。Navide の pane のチャットボタンで接続してから /menu を送ってください",
         "no_buttons": "このプラットフォームはボタンに対応していないため、クイックメニューを表示できません",
         "empty": "使える prompt も skill もありません。Navide の設定の Prompts／Skills で追加してください",
+        "empty_prompts": "使える prompt がありません。Navide の設定の Prompts で追加してください",
+        "empty_skills": "この pane の CLI で使える skill がありません。Navide の設定の Skills で追加してください",
         "expired": "⚠️ このメニューは期限切れです。もう一度 /menu を送ってください",
         "gone": "⚠️「{name}」は存在しないか無効になっています。もう一度 /menu を送ってください",
         "sent": "▶ 送信しました：{name}",
@@ -189,13 +201,23 @@ def is_menu_command(body: str, identity: str = "") -> bool:
     """``/menu`` or a bare ``/start`` (Telegram's first contact, when it carries no link
     code), optionally ``@bot``-addressed or after a leading mention. A command addressed
     to another bot (``/menu@other``) is not ours."""
+    return menu_scope(body, identity) == "all"
+
+
+# The commands that open a quick menu, and which of its groups each one lists.
+_MENU_SCOPES = {"/menu": "all", "/start": "all", "/prompts": "p", "/skills": "s"}
+
+
+def menu_scope(body: str, identity: str = "") -> str | None:
+    """``"all"`` for ``/menu`` (as ``is_menu_command``), ``"p"`` for ``/prompts``, ``"s"``
+    for ``/skills``; None for anything else, a command addressed to another bot included."""
     rest = strip_mention(body, identity)
     if not rest.startswith("/") or " " in rest:
-        return False
+        return None
     head, _, bot = rest.partition("@")
     if bot and identity and bot.lower() != identity.lstrip("@").lower():
-        return False
-    return head.lower() in ("/menu", "/start")
+        return None
+    return _MENU_SCOPES.get(head.lower())
 
 
 def menu_pick(body: str, identity: str = "") -> int | None:
@@ -262,6 +284,7 @@ class Menu:
     counts: tuple[int, int]
     created: float
     message_id: str = ""
+    scope: str = "all"  # "all" (/menu), "p" (/prompts) or "s" (/skills)
 
 
 @dataclass(frozen=True)
@@ -289,6 +312,17 @@ def _items(menu: Menu) -> list[Item]:
     return [item for page in menu.pages for row in page for item in row]
 
 
+def _heading(menu: Menu) -> list[str]:
+    """The title lines: /menu counts both groups; /prompts and /skills name their one group."""
+    if menu.scope != "all":
+        return [text(menu.lang, "title_prompts" if menu.scope == "p" else "title_skills", pane=menu.title)]
+    lines = [text(menu.lang, "title", pane=menu.title),
+             text(menu.lang, "counts", prompts=menu.counts[0], skills=menu.counts[1])]
+    if not menu.skills_supported:
+        lines.append(text(menu.lang, "no_skill_syntax"))
+    return lines
+
+
 def paginate(prompts: list[Item], skills: list[Item], layout: Layout) -> list[list[list[Item]]]:
     """Rows of ``per_row`` buttons, a group never sharing a row, ``rows`` rows a page."""
     rows = [g[i:i + layout.per_row] for g in (prompts, skills) for i in range(0, len(g), layout.per_row)]
@@ -303,7 +337,8 @@ class QuickMenus:
     _renders: dict[str, list[list[str]]] = field(default_factory=dict)  # menu id -> tokens per render
 
     def create(self, *, platform: str, location_key: str, pane_id: str, pane_title: str,
-               agent_key: str, lang: str, prompts: list[dict[str, Any]], skills: list[str]) -> Menu | None:
+               agent_key: str, lang: str, prompts: list[dict[str, Any]], skills: list[str],
+               scope: str = "all") -> Menu | None:
         """A menu for this snapshot, or None when it would have no buttons."""
         layout = LAYOUTS.get(platform, DEFAULT_LAYOUT)
         p_items = [Item("p", str(p["id"]), _clip("💬 " + str(p["name"]), layout.label_max)) for p in prompts]
@@ -315,7 +350,7 @@ class QuickMenus:
             id=self._new_key(self._menus), location_key=location_key, pane_id=pane_id,
             agent_key=agent_key, lang=lang, title=pane_title,
             pages=paginate(p_items, s_items, layout), skills_supported=agent_key in SKILL_INVOCATION,
-            counts=(len(p_items), len(s_items)), created=self.clock(),
+            counts=(len(p_items), len(s_items)), created=self.clock(), scope=scope,
         )
         self._menus[menu.id] = menu
         return menu
@@ -323,12 +358,9 @@ class QuickMenus:
     def render(self, menu: Menu, page: int) -> tuple[str, list[list[tuple[str, str]]]]:
         """The message text and button rows for ``page`` (0-based, clamped)."""
         page = max(0, min(page, len(menu.pages) - 1))
-        lines = [text(menu.lang, "title", pane=menu.title)]
+        lines = _heading(menu)
         if len(menu.pages) > 1:
             lines[0] += "　" + text(menu.lang, "page", page=page + 1, pages=len(menu.pages))
-        lines.append(text(menu.lang, "counts", prompts=menu.counts[0], skills=menu.counts[1]))
-        if not menu.skills_supported:
-            lines.append(text(menu.lang, "no_skill_syntax"))
         rows = [[(item.label, self._mint(menu, item.kind, item.key, item.label)) for item in row]
                 for row in menu.pages[page]]
         nav: list[tuple[str, str]] = []
@@ -347,10 +379,7 @@ class QuickMenus:
 
     def render_text(self, menu: Menu) -> str:
         """The whole menu as numbered lines, for a platform without buttons."""
-        lines = [text(menu.lang, "title", pane=menu.title),
-                 text(menu.lang, "counts", prompts=menu.counts[0], skills=menu.counts[1])]
-        if not menu.skills_supported:
-            lines.append(text(menu.lang, "no_skill_syntax"))
+        lines = _heading(menu)
         lines += [f"{n}. {item.label}" for n, item in enumerate(_items(menu), 1)]
         lines.append(text(menu.lang, "pick_hint"))
         return "\n".join(lines)

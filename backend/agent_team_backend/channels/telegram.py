@@ -75,6 +75,8 @@ CONFLICT_MIN_ATTEMPT = 4
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
     {"command": "menu", "description": "Prompt 與技能選單"},
+    {"command": "prompts", "description": "Prompt 清單"},
+    {"command": "skills", "description": "技能清單"},
     {"command": "status", "description": "pane 狀態"},
     {"command": "stop", "description": "中斷 pane"},
     {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
@@ -86,6 +88,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "en-US": {
         "pending": "List panes waiting for confirmation",
         "menu": "Prompts and skills menu",
+        "prompts": "Prompt list",
+        "skills": "Skill list",
         "status": "Pane status",
         "stop": "Interrupt the pane",
         "cancel": "Withdraw messages not yet sent to the pane",
@@ -94,6 +98,8 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
         "menu": "プロンプトとスキルのメニュー",
+        "prompts": "プロンプト一覧",
+        "skills": "スキル一覧",
         "status": "pane の状態",
         "stop": "pane を中断",
         "cancel": "まだ pane に送っていないメッセージを取り消す",
