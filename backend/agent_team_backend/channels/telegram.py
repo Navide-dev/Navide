@@ -78,7 +78,12 @@ BOT_COMMANDS = [
     {"command": "status", "description": "pane 狀態"},
     {"command": "stop", "description": "中斷 pane"},
     {"command": "cancel", "description": "撤回還沒送進 pane 的訊息"},
+    {"command": "resume", "description": "恢復被中斷的 pane"},
 ]
+# A flat button list (prompt options, the busy buttons) is laid out a few to a row, so
+# labels show whole on a phone; a label too long for a shared row gets its own.
+ROW_MAX_BUTTONS = 3
+ROW_MAX_CHARS = 24
 
 
 class OffsetStore(Protocol):
@@ -373,9 +378,7 @@ class TelegramAdapter:
                 # Quote the message; still send if it was deleted meanwhile.
                 params["reply_parameters"] = {"message_id": int(reply_to), "allow_sending_without_reply": True}
             if buttons and i == len(chunks) - 1:
-                params["reply_markup"] = {
-                    "inline_keyboard": [[{"text": label, "callback_data": data} for label, data in buttons]]
-                }
+                params["reply_markup"] = self._keyboard(self._button_rows(buttons))
             result = await self._send_rich("sendMessage", params, chunk)
             ids.append(str(result.get("message_id", "")))
         return ids
@@ -389,6 +392,18 @@ class TelegramAdapter:
             if "message is not modified" in str(exc).lower():
                 return
             raise
+
+    @staticmethod
+    def _button_rows(buttons: list[tuple[str, str]]) -> list[list[tuple[str, str]]]:
+        rows: list[list[tuple[str, str]]] = []
+        for label, data in buttons:
+            row = rows[-1] if rows else None
+            if (row is not None and len(row) < ROW_MAX_BUTTONS
+                    and sum(len(lb) for lb, _ in row) + len(label) <= ROW_MAX_CHARS):
+                row.append((label, data))
+            else:
+                rows.append([(label, data)])
+        return rows
 
     @staticmethod
     def _keyboard(rows: list[list[tuple[str, str]]]) -> dict[str, Any]:

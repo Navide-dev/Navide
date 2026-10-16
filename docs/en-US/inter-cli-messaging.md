@@ -1007,6 +1007,14 @@ not grant access.
   "已收到，等 pane 空檔…" acknowledgement carries two buttons doing the same as
   `/cancel` and `stop`; a press passes the same allowlist and binding checks
   as the typed command.
+- A command may be addressed to the bot: a leading mention (`<@bot>` on Slack
+  and Discord, `@bot` elsewhere) is ignored, so `@navide_bot stop` stops the
+  pane. Telegram's `/` menu gains `/resume` alongside the other commands
+  (added only when missing).
+- On a platform without buttons, a reply that would carry them names the
+  commands they stand for instead ("可直接輸入：/cancel 撤回排隊中的訊息 · stop
+  中斷 pane"), and `/menu` lists the prompt skills and skills as numbered
+  lines; `/menu <n>` sends item n.
 - A busy pane queues the message as usual (holds and the Messages panel are
   unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most 20 chat
   messages may wait per pane.
