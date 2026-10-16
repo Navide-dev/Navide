@@ -427,7 +427,8 @@ def _bearer(request: Any) -> str:
 def _resolve_caller(ctx: Context) -> _Caller:
     """Validate the request's credential (pane / host / external).
 
-    Every pane is spawned pointing at `/plan-mcp?pane=<id>&t=<token>`; backend-
+    Every pane is spawned pointing at `/plan-mcp?pane=<id>&t=<token>`, with a
+    token minted for that pane id alone (mcp_wiring.caller_token); backend-
     written CLI config without a known pane id instead carries
     `?client=host&t=<internal token>` (see mcp_wiring.plan_mcp_url); an
     external client carries `?client=external&t=<external token>`, accepted
@@ -475,7 +476,15 @@ def _resolve_caller(ctx: Context) -> _Caller:
     pane_id = str(params.get("pane") or "")
     if not pane_id:
         raise CallerUnknown(_UNWIRED)
-    if not secrets.compare_digest(token, mcp_wiring.caller_token()):
+    # The token must be the one minted for the very id presented — the id the
+    # CLI was spawned with, which is also what any alias below is keyed by. An
+    # id this run never wired has no token, so nothing can stand in for it.
+    expected = mcp_wiring.bound_pane_token(pane_id)
+    if not expected and agent_messaging.was_forgotten(pane_id):
+        # A closed pane's token is revoked with it (wiring.release_pane_token);
+        # its CLI still hears what it always did, rather than a token error.
+        raise CallerUnknown(_STALE)
+    if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
     entry = agent_messaging.current(pane_id)
     if entry is None:
@@ -5048,14 +5057,13 @@ _UI_INVOKE_SLOW_TIMEOUT_S = 60.0
 #: caller's own pane; the only legitimate emitter, cli_read_incoming, always
 #: names its own.
 #:
-#: This is NOT a boundary around the inbox, and reading it as one would be a
-#: mistake. A pane caller's identity is the `pane=<id>` query param it was
-#: wired with, checked against a token shared by every pane on the machine
-#: (wiring.caller_token — a freshness check, readable via `ps` by anything
-#: running as the same user). So a local caller can present itself AS the
-#: victim pane and satisfy the check below. What this list buys is that a
-#: caller acting under its own identity cannot reach across to someone else's
-#: inbox; closing the impersonation case needs a per-pane token.
+#: A pane caller's identity is the `pane=<id>` query param it was wired with,
+#: checked against the token minted for that one pane (wiring.caller_token),
+#: so presenting another pane's id takes that pane's own token. What this list
+#: adds is that a caller acting under its own identity cannot reach across to
+#: someone else's inbox. It is not a boundary against a process that can read
+#: the victim pane's own environment or 0600 config file (same user), which
+#: holds that pane's token.
 #:
 #: Deliberately a short explicit list, not "every action with a paneId": focus,
 #: close, getStatus and interrupt are cross-pane by design.

@@ -733,7 +733,7 @@ def clean_registry() -> Any:
 def _pane_ctx(pane_id: str = "pa") -> SimpleNamespace:
     """A Context carrying a live pane's credential, the way a wired CLI spawn
     does (plan_mcp_wiring.plan_mcp_url)."""
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

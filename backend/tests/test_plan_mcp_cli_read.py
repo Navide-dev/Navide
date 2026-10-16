@@ -31,7 +31,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> Any:
 def _ctx(pane_id: str | None = "pa", token: str | None = None) -> Any:
     if pane_id is None:
         return SimpleNamespace(request_context=SimpleNamespace(request=None))
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token() if token is None else token}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id) if token is None else token}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

@@ -85,7 +85,7 @@ def test_resolve_caller_rejects_no_request() -> None:
 def test_resolve_caller_accepts_a_valid_pane_credential() -> None:
     agent_messaging.register("pa", "sender", "/ws/alpha")
     caller = plan_mcp._resolve_caller(
-        _ctx(pane="pa", t=plan_mcp_wiring.caller_token())
+        _ctx(pane="pa", t=plan_mcp_wiring.caller_token("pa"))
     )
     assert caller.kind == "pane"
     assert caller.pane_id == "pa"
@@ -93,7 +93,7 @@ def test_resolve_caller_accepts_a_valid_pane_credential() -> None:
 
 def test_resolve_caller_rejects_a_missing_pane_id() -> None:
     with pytest.raises(plan_mcp.CallerUnknown, match="could not identify your pane"):
-        plan_mcp._resolve_caller(_ctx(t=plan_mcp_wiring.caller_token()))
+        plan_mcp._resolve_caller(_ctx(t=plan_mcp_wiring.caller_token("pa")))
 
 
 def test_resolve_caller_rejects_a_bad_pane_token() -> None:
@@ -104,7 +104,7 @@ def test_resolve_caller_rejects_a_bad_pane_token() -> None:
 
 def test_resolve_caller_rejects_a_stale_pane_id() -> None:
     with pytest.raises(plan_mcp.CallerUnknown, match="stale"):
-        plan_mcp._resolve_caller(_ctx(pane="long-gone", t=plan_mcp_wiring.caller_token()))
+        plan_mcp._resolve_caller(_ctx(pane="long-gone", t=plan_mcp_wiring.caller_token("long-gone")))
 
 
 def test_resolve_caller_accepts_a_valid_host_credential() -> None:
@@ -215,15 +215,14 @@ def test_no_temp_file_survives_a_failed_write(monkeypatch) -> None:
 def test_resolve_caller_tells_a_forgotten_pane_from_a_never_registered_one(caplog: Any) -> None:
     agent_messaging.register("pa", "sender", "/ws/alpha")
     agent_messaging.unregister("pa")
-    token = plan_mcp_wiring.caller_token()
     with pytest.raises(plan_mcp.CallerUnknown) as forgotten:
-        plan_mcp._resolve_caller(_ctx(pane="pa", t=token))
+        plan_mcp._resolve_caller(_ctx(pane="pa", t=plan_mcp_wiring.caller_token("pa")))
     # A closed main-window pane hears exactly what it heard before.
     assert str(forgotten.value) == plan_mcp._STALE
 
     with caplog.at_level("WARNING", logger="agent_team_backend.mcp_server"):
         with pytest.raises(plan_mcp.CallerUnknown) as never:
-            plan_mcp._resolve_caller(_ctx(pane="never-registered", t=token))
+            plan_mcp._resolve_caller(_ctx(pane="never-registered", t=plan_mcp_wiring.caller_token("never-registered")))
     assert "never registered" in str(never.value)
     assert "stale" in str(never.value)
     assert any("never-registered" in r.getMessage() for r in caplog.records)

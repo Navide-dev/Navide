@@ -165,7 +165,7 @@ async def test_vendor_unsupported_session(data, monkeypatch):
     monkeypatch.setattr(app, "broadcast", broadcast)
     agent_messaging.register(PANE, "regression-caller", str(data.workspace), agent_key="claude")
     context = SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(
-        query_params={"pane": PANE, "t": wiring.caller_token()},
+        query_params={"pane": PANE, "t": wiring.caller_token(PANE)},
     )))
     try:
         refused = await server.cli_open_agent(key, "helper", "continue", context, session_id="fixture-id")
