@@ -941,11 +941,19 @@ def _relay_id(env: Env) -> str:
     return next(iter(env.m.relay._by_id))
 
 
+def _relay_posted(env: Env) -> bool:
+    """The relay prompt's message id is recorded. It comes back through the
+    outbox after the fake has recorded the text, and an answer or a turn end
+    in between finds no message to edit."""
+    return any(req.message_id for req in env.m.relay._by_id.values())
+
+
 async def _until_relay_prompt(env: Env) -> None:
     # The relay registers its id before the prompt is sent, so waiting on the id
     # alone lets a slow runner assert (or send the next message) before the
-    # prompt has reached the chat. Wait for the prompt itself.
-    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts()))
+    # prompt has reached the chat. Wait for the prompt itself, and its message id.
+    await _until(lambda: env.m.relay._by_id and any(t.startswith("⏸") for t in env.tg.texts())
+                 and _relay_posted(env))
 
 
 async def test_stale_relay_off_config_is_ignored(env: Env) -> None:
@@ -959,7 +967,7 @@ async def test_relay_on_prompt_buttons_and_yes(env: Env) -> None:
     import re
 
     await _awaiting(env)
-    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()))
+    await _until(lambda: any(t.startswith("⏸ pane 需要確認") for t in env.tg.texts()) and _relay_posted(env))
     rid = _relay_id(env)
     assert re.fullmatch(r"[a-km-z]{5}", rid)
     text = next(t for t in env.tg.texts() if t.startswith("⏸"))
@@ -986,7 +994,7 @@ async def test_relay_buttons_via_callback_and_question_option(env: Env) -> None:
 
     env.tg.send_text = capture
     await _awaiting(env)
-    await _until(lambda: sent_buttons)
+    await _until(lambda: sent_buttons and _relay_posted(env))
     rid = _relay_id(env)
     assert sent_buttons[0] == [("1. Keep", f"nv1:{rid}:1"), ("2. Discard", f"nv1:{rid}:2")]
     assert all(len(data.encode()) <= 64 for _, data in sent_buttons[0])
