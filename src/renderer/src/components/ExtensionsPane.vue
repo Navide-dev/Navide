@@ -289,6 +289,31 @@ async function setDisabled(id: string, disabled: boolean): Promise<void> {
   }
 }
 
+// The Disabled store itself: rebuilt from its backup this session, or
+// unreadable (the built-ins then count as disabled until the user resets it).
+const disabledStoreStatus = ref<'ok' | 'restored' | 'unreadable'>('ok')
+async function refreshDisabledStoreStatus(): Promise<void> {
+  try {
+    disabledStoreStatus.value = (await pluginsApi()?.disabledStoreStatus?.())?.status ?? 'ok'
+  } catch {
+    disabledStoreStatus.value = 'ok'
+  }
+}
+async function resetDisabledStore(): Promise<void> {
+  const api = pluginsApi()
+  if (!api?.resetDisabledStore) return
+  busy.value = true
+  error.value = ''
+  try {
+    disabledStoreStatus.value = (await api.resetDisabledStore()).status
+    await refreshInstalled()
+  } catch (err) {
+    error.value = pluginErrorMessage(err)
+  } finally {
+    busy.value = false
+  }
+}
+
 async function restoreFactoryPackage(id: string): Promise<void> {
   const api = pluginsApi()
   if (!api) return
@@ -306,6 +331,7 @@ async function restoreFactoryPackage(id: string): Promise<void> {
 
 onMounted(() => {
   void reloadInventory()
+  void refreshDisabledStoreStatus()
   void pluginUpdates.refresh()
   void refreshPacks()
 })
@@ -324,6 +350,15 @@ watch(installed, () => void refreshPacks())
         {{ $t('settings.extensions.bundled') }}
         <span class="ext-section-count">{{ factoryRows.length }}</span>
       </h3>
+      <p v-if="disabledStoreStatus === 'restored'" class="ext-store-restored" role="status">
+        {{ $t('settings.extensions.disabledStoreRestored') }}
+      </p>
+      <div v-else-if="disabledStoreStatus === 'unreadable'" class="ext-store-unreadable" role="alert">
+        <p>{{ $t('settings.extensions.disabledStoreUnreadable') }}</p>
+        <button class="ext-store-reset nv-btn nv-btn--primary nv-btn--sm" :disabled="busy" @click="resetDisabledStore()">
+          {{ $t('settings.extensions.disabledStoreReset') }}
+        </button>
+      </div>
       <ul class="ext-list ext-bundled-list">
         <li
           v-for="p in factoryRows"
@@ -907,6 +942,22 @@ watch(installed, () => void refreshPacks())
 .ext-badge.ext-disabled-badge {
   color: var(--risk-fg);
   background: var(--risk-subtle);
+}
+.ext-store-restored {
+  margin: 0 0 var(--space-2, 8px);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.ext-store-unreadable {
+  margin: 0 0 var(--space-2, 8px);
+  padding: 8px 10px;
+  border: 1px solid var(--danger-bright);
+  border-radius: 6px;
+  color: var(--danger-bright);
+  font-size: var(--font-xs);
+}
+.ext-store-unreadable p {
+  margin: 0 0 6px;
 }
 .ext-disabled-note {
   margin: 0;

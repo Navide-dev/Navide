@@ -204,6 +204,7 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     features = payload.get("features", {})
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
+    app.note_host_disabled_plugins(session.disabled_plugins)
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
 
 
@@ -645,6 +646,12 @@ async def plans_ensure_assets(session: "Session", msg_id: str, msg_type: str, pa
 async def plans_list_docs(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
 
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
+
     # Plans live in the project root (plan_provisioning writes the spec there,
     # and every writer resolves to it), so a workspace opened on a
     # subdirectory must look up to find them — otherwise a plan an agent just
@@ -678,6 +685,12 @@ async def plans_resolve_root(session: "Session", msg_id: str, msg_type: str, pay
 @handler("plans.cache_put")
 async def plans_cache_put(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
 
     # Same root as the scan that produced these entries, or the cache keys
     # would never match on the next list.

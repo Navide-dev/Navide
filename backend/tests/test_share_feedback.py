@@ -392,3 +392,21 @@ async def test_a_phone_approval_is_refused_while_plans_is_disabled(ring, home, b
     assert client.acked == ["f1" * 16]
     assert broadcasts[-1]["payload"]["result"] == "rejected"
     assert broadcasts[-1]["payload"]["reason"] == "plugin-disabled"
+
+
+async def test_feedback_drained_before_the_host_registers_respects_a_disabled_plans(
+    ring, home, broadcasts, monkeypatch,
+) -> None:
+    """The startup drain runs before main's host.register; main passed the
+    switch at spawn, so the approval is still refused."""
+    client = FeedbackLinks()
+    path, link, sha = await _shared_plan(home, client)
+    before = path.read_text(encoding="utf-8")
+    client.queue.append(_item(link, {"v": 1, "action": "note", "text": "hi", "contentSha256": sha, "version": 1}))
+    monkeypatch.setattr(app, "_host_reported_disabled", None)
+    monkeypatch.setenv(app.DISABLED_BUILTIN_PLUGINS_ENV, "navide.plans")
+
+    await share_feedback.drain(client)
+
+    assert path.read_text(encoding="utf-8") == before
+    assert broadcasts[-1]["payload"]["reason"] == "plugin-disabled"

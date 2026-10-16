@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import {
   startBackend,
+  setBackendDisabledBuiltinsProvider,
   getResolvedUserPath,
   readWsToken,
   mintTrustConfirmation,
@@ -52,7 +53,8 @@ import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
 import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
-import { builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
+import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
+import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import {
@@ -401,6 +403,9 @@ const pendingAdoptedWorkspaces = new Map<number, string[]>()
  * registered for diagnostics, but no renderer is allowed to keep presenting
  * a dead v2 contribution or MCP availability bit. */
 function enterPlansRecovery(reason: string): void {
+  // A disabled Plans is off, not degraded: nothing it does may leave the
+  // session in legacy recovery once it is enabled again.
+  if (frontendPluginManager.isBuiltinPluginDisabled(PLANS_PLUGIN_ID)) return
   frontendPluginManager.markPlansBackendUnavailable(reason)
   if (plansRecoveryEnabled) return
   plansRecoveryEnabled = true
@@ -1102,6 +1107,9 @@ const pluginFactoryOptOuts = new PluginFactoryOptOutStore(pluginsRoot())
 // verified, but its views and backend are never registered.
 const pluginDisabledSwitch = new PluginDisabledStore(pluginsRoot())
 frontendPluginManager.setDisabledPluginResolver((pluginId) => pluginDisabledSwitch.has(pluginId))
+// Every backend start learns the disabled built-ins from its spawn env, so it
+// refuses Plans work even before this Host session registers.
+setBackendDisabledBuiltinsProvider(() => frontendPluginManager.listDisabledBuiltinPlugins())
 // Built-ins can no longer be removed, only disabled. A Git or Mini-IDE removal
 // an earlier version recorded becomes Disabled here, before anything loads: the
 // bundled package comes back, off, with Enable one click away. That removal
@@ -1118,11 +1126,8 @@ migrateBuiltinRemovalsToDisabled(
 function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, notify = true): boolean {
   if (!frontendPluginManager.isBuiltinPluginDisabled(pluginId)) return false
   if (notify) {
-    const options: Electron.MessageBoxOptions = {
-      type: 'info',
-      title: 'Navide plugin disabled',
-      message: builtinPluginDisabledMessage(pluginId),
-    }
+    const text = builtinPluginDisabledDialog(currentUiLocale(), BUILTIN_PLUGIN_NAMES.get(pluginId) ?? pluginId)
+    const options: Electron.MessageBoxOptions = { type: 'info', title: text.title, message: text.message }
     const parent = target && !target.isDestroyed() ? target : mainWindow
     void (parent && !parent.isDestroyed()
       ? dialog.showMessageBox(parent, options)
@@ -1842,6 +1847,13 @@ const pluginTrustRefresh = registerPluginIpc(
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
+    },
+    onBuiltinSwitchReset: () => {
+      for (const hostWindow of mainWindows) {
+        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+          hostWindow.webContents.send('plugins:contributionsChanged')
+        }
+      }
     },
     setBuiltinDisabled: async (pluginId, disabled) => {
       if (disabled) {
@@ -3907,6 +3919,11 @@ ipcMain.handle('plugins:prepareContribution', async (event, args: Record<string,
       )
     : null
   if (!hostWindow || !contributionKey || !workspacePath) return { ok: false }
+  // A stale renderer may still ask for a just-disabled built-in's view; refuse
+  // before any storage migration or recovery path runs for it.
+  const disabledBuiltin = frontendPluginManager.listDisabledBuiltinPlugins()
+    .find((pluginId) => contributionKey.startsWith(`${pluginId}.`))
+  if (disabledBuiltin) return { ok: false, error: builtinPluginDisabledMessage(disabledBuiltin) }
   if (contributionKey.startsWith('navide.plans.') && plansRecoveryEnabled) {
     return { ok: false, error: 'Plans legacy recovery is active' }
   }

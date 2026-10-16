@@ -1741,6 +1741,9 @@
       "builtinDisabledTooltip": "Navide プラグイン {name} は無効です。「設定 → 拡張機能」で有効にしてください。",
       "builtinDisabledNote": "無効：画面、ウィンドウ、エージェントツールはすべてオフです。権限と保存データは残り、「有効化」ですべて元に戻ります。",
       "builtinDataDeletedEarlier": "以前の Navide がこの Navide プラグインを削除し、そのとき保存データも削除しました。有効にすると空のデータから始まります。",
+      "disabledStoreRestored": "バックアップから復元しました：Navide プラグインの無効化設定が破損していたため、バックアップから再構築しました。",
+      "disabledStoreUnreadable": "Navide プラグインの無効化設定とそのバックアップを読み取れません。安全のため Plans、Git、Mini-IDE は無効として扱います。破損したファイルは保持されます。「リセット」ですべてのスイッチが有効に戻ります。",
+      "disabledStoreReset": "リセット",
       "disabledBadge": "無効",
       "disabledNote": "無効：ビューとバックエンドは実行されません。ファイル、権限、保存データは保持されます。",
       "rollback": {

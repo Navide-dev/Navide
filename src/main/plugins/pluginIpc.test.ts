@@ -5050,6 +5050,38 @@ describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
     }
   })
 
+  it('fails closed for the built-ins when the store and its backup are unreadable, until a one-click reset', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager } = setup('navide-builtin-unreadable-', (id, disabled) => { calls.push([id, disabled]) })
+    const reset = vi.fn()
+    // Re-register with the reset hook (setup registers without it).
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { calls.push([id, disabled]) },
+      onBuiltinSwitchReset: reset,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      expect(handlers.get('plugins:disabledStoreStatus')!(null)).toEqual({ status: 'unreadable' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      expect(manager.isBuiltinPluginDisabled('navide.plans')).toBe(true)
+      // Enabling cannot silently rewrite the damaged store.
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/unreadable/)
+      expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
+
+      expect(handlers.get('plugins:resetDisabledStore')!(null)).toEqual({ status: 'ok' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('stays disabled when the Host cannot enable it', async () => {
     const { root } = setup('navide-builtin-enable-fail-', (_id, disabled) => {
       if (!disabled) throw new Error('bundled package missing')

@@ -38,6 +38,14 @@ class FakeWebSocket:
         self.sent.append(payload)
 
 
+@pytest.fixture(autouse=True)
+def no_host_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Every test starts as a fresh backend: no Host has registered yet and no
+    # disabled built-ins were passed at spawn.
+    monkeypatch.setattr(app, "_host_reported_disabled", None)
+    monkeypatch.delenv(app.DISABLED_BUILTIN_PLUGINS_ENV, raising=False)
+
+
 @pytest_asyncio.fixture
 async def host_session(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(app, "_HOST_SESSION_TOKEN", "host-secret")
@@ -174,3 +182,89 @@ def test_no_plan_assets_are_provisioned_while_plans_is_disabled(
     monkeypatch.setattr(app, "host_disabled_plugins", lambda: frozenset())
     app._register_workspace_and_backfill(str(tmp_path))  # noqa: SLF001
     assert provisioned == [str(tmp_path)]
+
+
+async def test_before_any_host_the_spawn_env_says_what_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(app.DISABLED_BUILTIN_PLUGINS_ENV, "navide.plans,acme.not-builtin,")
+    assert app.host_disabled_plugins() == frozenset({"navide.plans"})
+    assert app.plans_plugin_disabled() is True
+
+
+async def test_a_registered_host_wins_and_its_answer_survives_a_reconnect(
+    host_session, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(app.DISABLED_BUILTIN_PLUGINS_ENV, "navide.plans")
+    await _register(host_session, {"plans_backend_v2": True})
+    assert app.plans_plugin_disabled() is False
+    await _register(host_session, {"plans_backend_v2": True, "disabled_plugins": ["navide.git"]})
+    host_session.dead = True  # the Host went away; it has not registered again yet
+    assert app.host_disabled_plugins() == frozenset({"navide.git"})
+
+
+def test_no_plan_assets_before_the_host_registers_when_spawned_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provisioned: list[str] = []
+    monkeypatch.setattr(app, "ensure_plan_assets", provisioned.append)
+    monkeypatch.setattr(app.attribution, "register_workspace", lambda _ws: None)
+    monkeypatch.setattr(app.attribution, "known_workspaces", lambda: {str(tmp_path)})
+    monkeypatch.setattr(app, "_git_watcher", None)
+    monkeypatch.setenv(app.DISABLED_BUILTIN_PLUGINS_ENV, "navide.plans")
+    app._register_workspace_and_backfill(str(tmp_path))  # noqa: SLF001
+    assert provisioned == []
+
+
+def test_host_register_and_app_agree_on_the_built_in_ids() -> None:
+    from agent_team_backend import ws_handlers
+
+    assert ws_handlers._DISABLEABLE_BUILTIN_PLUGINS == app.DISABLEABLE_BUILTIN_PLUGINS  # noqa: SLF001
+
+
+def _plan_file(root: Path) -> Path:
+    plans = root / ".agent-team" / "plans"
+    plans.mkdir(parents=True, exist_ok=True)
+    path = plans / "x_abc123.html"
+    path.write_text("<html><head><title>x</title></head><body>plan</body></html>", encoding="utf-8")
+    return path
+
+
+def test_no_plan_document_is_published_while_plans_is_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_team_backend import share_links
+
+    monkeypatch.setenv("AGENT_TEAM_DATA_DIR", str(tmp_path / "data"))
+    path = _plan_file(tmp_path / "ws")
+    assert share_links.prepare(str(path), "plan").kind == "plan"
+    monkeypatch.setattr(app, "host_disabled_plugins", lambda: frozenset({"navide.plans"}))
+    with pytest.raises(share_links.ShareRefused) as refused:
+        share_links.prepare(str(path), "plan")
+    assert refused.value.code == "plugin-disabled"
+
+
+async def test_share_create_answers_the_contract_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend import share_links
+
+    monkeypatch.setattr(plan_mcp, "_share_cloud_ready", lambda: True)
+
+    async def refused(_client: Any) -> dict:
+        raise share_links.ShareRefused(share_links.PLANS_DISABLED_CODE, share_links.PLANS_DISABLED_MESSAGE)
+
+    assert await plan_mcp._share_run(refused) == {  # noqa: SLF001
+        "ok": False,
+        "error": share_links.PLANS_DISABLED_MESSAGE,
+        "code": "PLUGIN_TOOL_UNAVAILABLE",
+        "reason": "plugin-disabled",
+    }
+
+
+@pytest.mark.parametrize("msg_type", ["plans.list_docs", "plans.cache_put"])
+async def test_the_plans_ws_handlers_refuse_while_plans_is_disabled(
+    host_session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, msg_type: str,
+) -> None:
+    monkeypatch.setattr(app, "host_disabled_plugins", lambda: frozenset({"navide.plans"}))
+    await app.handle_message(host_session, {
+        "id": "p", "type": msg_type, "payload": {"workspace_path": str(tmp_path), "entries": []},
+    })
+    reply = host_session.websocket.sent[-1]  # type: ignore[attr-defined]
+    assert reply["error"]["code"] == "PLUGIN_TOOL_UNAVAILABLE"

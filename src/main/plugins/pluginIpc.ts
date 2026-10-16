@@ -70,6 +70,7 @@ import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManage
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 import {
@@ -331,6 +332,9 @@ export interface PluginIpcOptions {
    *  Mini-IDE, called after the switch is recorded: drain on disable, reload
    *  on enable. Its storage, grant and package stay either way. */
   setBuiltinDisabled?: (pluginId: string, disabled: boolean) => Promise<void> | void
+  /** Called after the user reset an unreadable Disabled store: the built-ins
+   *  it held off are enabled again. */
+  onBuiltinSwitchReset?: () => void
   onFactoryPackageRemoved?: (pluginId: string) => void
   /** Load the App-bundled package and its grant after an installed package
    *  that replaced it was unregistered; the rollback path back to the factory. */
@@ -2220,6 +2224,26 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
     assertAuthorized(event)
     return manager.listDisabledBuiltinPlugins()
+  })
+
+  // Whether the Disabled store read normally, was rebuilt from its backup, or
+  // cannot be read (the built-ins then count as disabled until a reset).
+  ipcMain.handle('plugins:disabledStoreStatus', (event): { status: PluginIdStoreStatus } => {
+    assertAuthorized(event)
+    return { status: disabledPlugins.status() }
+  })
+
+  // The user's one-click reset of an unreadable Disabled store. Both damaged
+  // copies are kept aside; every switch starts from enabled.
+  ipcMain.handle('plugins:resetDisabledStore', (event): { status: PluginIdStoreStatus } => {
+    assertAuthorized(event)
+    if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
+    disabledPlugins.resetUnreadable()
+    for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
+      if (!manager.isBuiltinPluginDisabled(id)) manager.resumeBuiltinPlugin(id)
+    }
+    options.onBuiltinSwitchReset?.()
+    return { status: disabledPlugins.status() }
   })
 
   // The user's "Disabled" switch for an installed Marketplace package. Disable

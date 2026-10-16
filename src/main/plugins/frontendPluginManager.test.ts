@@ -15772,6 +15772,49 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     expect(mgr.listDisabledBuiltinPlugins()).toEqual([GIT_PLUGIN_ID, MINI_IDE_PLUGIN_ID, PLANS_PLUGIN_ID].sort())
   })
 
+  it('drains the real Plans backend activation on Disable and registers it again on Enable', async () => {
+    let plansDisabled = false
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => plansDisabled && pluginId === PLANS_PLUGIN_ID)
+    mgr.registerDescriptor({
+      id: PLANS_PLUGIN_ID,
+      packageVersion: '1.0.0',
+      packageDir: process.cwd(),
+      requires: ['fs'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ system: ['fs'] }),
+      devUrl: '',
+      entryFile: '/plugins/navide.plans/index.html',
+      views: [],
+    }, { builtin: true })
+    const spec = {
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion: '1.0.0',
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend/navide-plans',
+      protocolVersion: 1 as const,
+      activation: 'startup' as const,
+      approvedMethods: ['plans.list'],
+      agentMethods: ['plans.list'],
+      approvedEvents: ['plans.changed'],
+      approvedBridgePorts: ['filesystem' as const],
+    }
+    mgr.registerBackendActivation(spec)
+    expect(mgr.hasBackendActivation(PLANS_PLUGIN_ID, '1.0.0')).toBe(true)
+
+    plansDisabled = true
+    await mgr.suspendBuiltinPlugin(PLANS_PLUGIN_ID)
+    expect(mgr.hasBackendActivation(PLANS_PLUGIN_ID, '1.0.0')).toBe(false)
+    expect(mgr.getDescriptor(PLANS_PLUGIN_ID)?.packageVersion).toBe('1.0.0')
+
+    plansDisabled = false
+    mgr.resumeBuiltinPlugin(PLANS_PLUGIN_ID)
+    expect(mgr.getBackendActivation(PLANS_PLUGIN_ID, '1.0.0')).toMatchObject({
+      entryFile: spec.entryFile,
+      agentMethods: ['plans.list'],
+    })
+    await mgr.closeBackendPlugins()
+  })
+
   it('drains a disabled built-in and re-registers the same backend on Enable', async () => {
     let plansDisabled = true
     const mgr = new FrontendPluginManager()

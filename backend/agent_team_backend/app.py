@@ -453,14 +453,45 @@ def host_supports_plans_backend() -> bool:
     )
 
 
+#: The Navide plugins whose Disabled switch the Host reports.
+DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+#: Set by main on every backend start: the built-ins disabled at that moment,
+#: comma-separated. Absent when none is.
+DISABLED_BUILTIN_PLUGINS_ENV = "NAVIDE_DISABLED_BUILTIN_PLUGINS"
+#: What the last authenticated Host registration reported, kept across a Host
+#: reconnect. None until a Host has registered in this process.
+_host_reported_disabled: frozenset[str] | None = None
+
+
+def note_host_disabled_plugins(disabled: frozenset[str]) -> None:
+    """Record a Host registration's disabled built-ins (see host.register)."""
+    global _host_reported_disabled
+    _host_reported_disabled = frozenset(disabled)
+
+
+def _disabled_at_spawn() -> frozenset[str]:
+    raw = os.environ.get(DISABLED_BUILTIN_PLUGINS_ENV, "")
+    return frozenset(item for item in raw.split(",") if item in DISABLEABLE_BUILTIN_PLUGINS)
+
+
 def host_disabled_plugins() -> frozenset[str]:
-    """Built-in Navide plugins the authenticated Electron Host reports as
-    disabled by the user. Empty without a Host, which is main's behaviour."""
+    """Built-in Navide plugins the user disabled.
+
+    An authenticated Host session is authoritative. Without one (before the
+    Host registers, or while it reconnects) the last registration's answer
+    stands, and before any registration the set main passed at spawn. With
+    nothing disabled every source is empty, which is main's behaviour."""
     disabled: set[str] = set()
+    hosted = False
     for session in list(_SESSIONS):
         if not session.dead and session.host_authenticated:
+            hosted = True
             disabled |= session.disabled_plugins
-    return frozenset(disabled)
+    if hosted:
+        return frozenset(disabled)
+    if _host_reported_disabled is not None:
+        return _host_reported_disabled
+    return _disabled_at_spawn()
 
 
 def plans_plugin_disabled() -> bool:

@@ -23,6 +23,8 @@ function mockPlugins(overrides: Record<string, unknown> = {}) {
     setDisabled: vi.fn().mockResolvedValue({ id: '', disabled: false }),
     listPacks: vi.fn().mockResolvedValue([]),
     removePack: vi.fn().mockResolvedValue({ removed: true }),
+    disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'ok' }),
+    resetDisabledStore: vi.fn().mockResolvedValue({ status: 'ok' }),
     ...overrides,
   }
   ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: api }
@@ -237,6 +239,30 @@ describe('ExtensionsPane', () => {
     expect(row.find('.ext-enable').exists()).toBe(true)
     expect(row.find('.ext-restore').exists()).toBe(false)
     expect(row.text()).not.toContain('Removed')
+  })
+
+  it('says the Disabled switches were restored from their backup', async () => {
+    mockPlugins({ disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'restored' }) })
+    wrapper = mountExtensions()
+    await flushPromises()
+    expect(wrapper.get('.ext-store-restored').text()).toContain('Restored from backup')
+    expect(wrapper.find('.ext-store-unreadable').exists()).toBe(false)
+  })
+
+  it('explains an unreadable Disabled store and resets it in one click', async () => {
+    const api = mockPlugins({
+      disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'unreadable' }),
+      resetDisabledStore: vi.fn().mockResolvedValue({ status: 'ok' }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const banner = wrapper.get('.ext-store-unreadable')
+    expect(banner.attributes('role')).toBe('alert')
+    expect(banner.text()).toContain('treated as disabled')
+    await banner.get('.ext-store-reset').trigger('click')
+    await flushPromises()
+    expect(api.resetDisabledStore).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('.ext-store-unreadable').exists()).toBe(false)
   })
 
   it('offers no Uninstall for a Marketplace copy of a built-in', async () => {

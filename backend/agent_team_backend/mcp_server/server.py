@@ -8697,6 +8697,9 @@ async def _share_run(call: Callable[[Any], Awaitable[dict]]) -> dict:
     try:
         return {"ok": True, **await call(share_links.ServerLinksClient())}
     except share_links.ShareRefused as err:
+        if err.code == share_links.PLANS_DISABLED_CODE:
+            # The agent-tools contract's refusal for a disabled plugin.
+            return {"ok": False, "error": str(err), "code": "PLUGIN_TOOL_UNAVAILABLE", "reason": err.code}
         return {"ok": False, "error": str(err), "reason": err.code}
     except share_links.ShareRemoteError as err:
         if err.code in share_links.UNAVAILABLE_CODES:

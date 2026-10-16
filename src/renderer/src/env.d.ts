@@ -371,6 +371,8 @@ declare global {
         listInstalled: () => Promise<InstalledPluginSummary[]>
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
         disabledBuiltins?: () => Promise<string[]>
+        disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
