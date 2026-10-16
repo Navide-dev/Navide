@@ -213,6 +213,14 @@ Sessions should publish structured progress back to the Project Intelligence Lay
 - Cross-agent handoffs can propagate sensitive text.
 - Local API-key file permissions are defense in depth, not a secret vault.
 - Git history and run artifacts can preserve data after a working file is deleted.
+- A pane's identity on the Navide MCP endpoint (`/plan-mcp?pane=<id>`) is
+  checked against a token minted for that one pane at spawn and revoked when
+  the pane closes; panes no longer share a token. This is not a boundary
+  between processes of the same user: the token sits in the pane's spawn
+  environment, its 0600 file under `plan-mcp-panes/` in the app data
+  directory, or its per-pane home, and any process running as the user —
+  another pane's agent included — can read those and present itself as that
+  pane. Binding a caller to the pane's own process is a planned follow-up.
 
 See [Privacy and Data Flows](privacy.md) and [SECURITY.md](../../SECURITY.md).
 

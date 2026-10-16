@@ -276,7 +276,11 @@ class RegistryTrustSigner:
         return envelope, sign_json(self.signer_private_key, envelope)
 
     def sign_disclosure_envelope(
-        self, *, package_envelope: dict, disclosure_digest: str
+        self,
+        *,
+        package_envelope: dict,
+        disclosure_digest: str,
+        scan_digest: str | None = None,
     ) -> tuple[dict, str]:
         """Sign the disclosure envelope of one artifact (contract 3.5).
 
@@ -295,6 +299,7 @@ class RegistryTrustSigner:
             "keyId": self.key_id,
             "signedAt": package_envelope["signedAt"],
             "disclosureDigest": disclosure_digest,
+            "scanDigest": scan_digest,
         }
         return envelope, sign_json(self.signer_private_key, envelope)
 

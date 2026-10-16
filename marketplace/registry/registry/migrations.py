@@ -297,12 +297,13 @@ def _add_publisher_native_backend(connection: sqlite3.Connection) -> None:
 
 
 def _add_version_disclosure(connection: sqlite3.Connection) -> None:
-    """Disclosure columns (contract 3.5); NULL for every existing version."""
+    """Disclosure and scan columns (contract 3.5, 3.8); NULL for every existing version."""
     columns = _columns(connection, "extension_version")
     for column, ddl in (
         ("disclosure", "JSON"),
         ("disclosure_envelope", "JSON"),
         ("disclosure_signature", "VARCHAR"),
+        ("scan", "JSON"),
     ):
         if column not in columns:
             connection.execute(f"ALTER TABLE extension_version ADD COLUMN {column} {ddl}")

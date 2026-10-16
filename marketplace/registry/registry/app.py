@@ -302,6 +302,7 @@ def _version_info(
         disclosure=row.disclosure,
         disclosure_envelope=row.disclosure_envelope,
         disclosure_signature=row.disclosure_signature,
+        scan=row.scan,
         registry=registry_facts(row, publisher),
     )
 

@@ -24,7 +24,7 @@ from registry.db import create_db_engine
 from registry.manifest_v2 import ManifestV2
 from registry.models import ExtensionVersion, Publisher
 from registry.native_backend import MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND
-from registry.plugin_contract import disclosure_contract
+from registry.plugin_contract import disclosure_contract, disclosure_scan_contract
 from registry.signing import canonical_json
 from tests.conftest import SignedEnv
 from tests.fixtures import build_package, build_v2_package, contract_manifest
@@ -54,10 +54,7 @@ PACKAGE_ENVELOPE_FIELDS = [
     "schemaVersion", "artifactDigest", "packageId", "version", "target",
     "publisherId", "keyId", "signedAt",
 ]
-DISCLOSURE_ENVELOPE_FIELDS = [
-    "schemaVersion", "artifactDigest", "packageId", "version", "target",
-    "keyId", "signedAt", "disclosureDigest",
-]
+DISCLOSURE_ENVELOPE_FIELDS = list(disclosure_scan_contract.DISCLOSURE_ENVELOPE_FIELDS)
 
 
 # -- the v0.2.24 App's package-envelope shape check, ported verbatim ---------
@@ -125,7 +122,9 @@ def _backend_manifest(identity: str = "acme.indexer", publisher: str = "acme") -
 # -- vendored contract -------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["agent_tools_contract.py", "disclosure_contract.py"])
+@pytest.mark.parametrize(
+    "name", ["agent_tools_contract.py", "disclosure_contract.py", "disclosure_scan_contract.py"]
+)
 def test_vendored_contract_modules_are_byte_identical_to_the_backend(name: str) -> None:
     assert (VENDORED / name).read_bytes() == (BACKEND_CONTRACT / name).read_bytes()
 
@@ -188,6 +187,10 @@ def test_publish_signs_a_disclosure_envelope_beside_the_unchanged_package_envelo
         assert attestation[field] == envelope[field], field
     assert attestation["disclosureDigest"] == _digest(disclosure)
     assert re.fullmatch(r"[0-9a-f]{64}", attestation["disclosureDigest"])
+    # No scanner yet (DS8): the 9-field envelope ships with a null scanDigest.
+    assert len(DISCLOSURE_ENVELOPE_FIELDS) == 9
+    assert attestation["scanDigest"] is None
+    assert version["scan"] is None
     _verify(signed_env.registry_signer_public_pem, attestation, version["disclosure_signature"])
 
 
@@ -232,6 +235,7 @@ def test_a_legacy_v1_package_has_no_disclosure(signed_env: SignedEnv) -> None:
     assert version["disclosure"] is None
     assert version["disclosure_envelope"] is None
     assert version["disclosure_signature"] is None
+    assert version["scan"] is None
     assert version["registry"]["review"]["status"] == "not-required"
 
 
@@ -367,5 +371,26 @@ def test_migration_adds_nullable_disclosure_columns(tmp_path) -> None:
     with sqlite3.connect(path) as db:
         columns = {row[1] for row in db.execute("PRAGMA table_info(extension_version)")}
         applied = {row[1] for row in db.execute("SELECT version, name FROM schema_migrations")}
-    assert {"disclosure", "disclosure_envelope", "disclosure_signature"} <= columns
+    assert {"disclosure", "disclosure_envelope", "disclosure_signature", "scan"} <= columns
     assert "version-disclosure" in applied
+
+
+def test_a_scan_report_is_signed_through_its_own_digest(signed_env: SignedEnv) -> None:
+    from registry.disclosure import sign_disclosure
+
+    signer = signed_env.client.app.state.registry.trust_signer
+    manifest = _v2_manifest()
+    package_envelope, _ = signer.sign_envelope(
+        artifact_digest="b" * 64, package_id="acme.scoped", version=manifest["version"],
+        target="universal", publisher_id="acme",
+    )
+    fixture = json.loads((CONTRACT_FIXTURES / "scan-cases.json").read_text(encoding="utf-8"))
+    report = next(c["scan"] for c in fixture["cases"] if c["name"] == fixture["scanDigestCase"])
+    report = dict(report, artifactDigest="b" * 64, target="universal")
+    disclosure, envelope, signature = sign_disclosure(signer, manifest, package_envelope, report)
+    expected = hashlib.sha256(disclosure_contract.canonical_contract_json(report).encode("ascii")).hexdigest()
+    assert envelope["scanDigest"] == expected
+    assert envelope["disclosureDigest"] == _digest(disclosure)
+    _verify(signed_env.registry_signer_public_pem, envelope, signature)
+    with pytest.raises(ValueError):
+        sign_disclosure(signer, manifest, package_envelope, dict(report, artifactDigest="c" * 64))

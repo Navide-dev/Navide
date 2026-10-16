@@ -34,17 +34,33 @@ def disclosure_digest(disclosure: ManifestDisclosure) -> str:
     return hashlib.sha256(canonical_contract_json(disclosure).encode("ascii")).hexdigest()
 
 
+def scan_digest(scan: dict) -> str:
+    """Lowercase hex SHA-256 of the scan report's canonical spelling (contract 3.5)."""
+    return hashlib.sha256(canonical_contract_json(scan).encode("ascii")).hexdigest()
+
+
 def sign_disclosure(
-    signer: RegistryTrustSigner, manifest: dict, package_envelope: dict
+    signer: RegistryTrustSigner,
+    manifest: dict,
+    package_envelope: dict,
+    scan: dict | None = None,
 ) -> tuple[ManifestDisclosure | None, dict | None, str | None]:
     """(disclosure, disclosure envelope, signature) for one just-signed
-    artifact, or three Nones for a legacy v1 manifest."""
+    artifact, or three Nones for a legacy v1 manifest. ``scan`` is the
+    artifact's scan report (contract 3.8), or None while there is no scanner:
+    the envelope then carries ``scanDigest: null`` (DS8)."""
     disclosure = manifest_disclosure(manifest)
     if disclosure is None:
         return None, None, None
+    if scan is not None and (
+        scan.get("artifactDigest") != package_envelope["artifactDigest"]
+        or scan.get("target") != package_envelope["target"]
+    ):
+        raise ValueError("scan report does not describe this artifact")
     envelope, signature = signer.sign_disclosure_envelope(
         package_envelope=package_envelope,
         disclosure_digest=disclosure_digest(disclosure),
+        scan_digest=scan_digest(scan) if scan is not None else None,
     )
     return disclosure, envelope, signature
 
