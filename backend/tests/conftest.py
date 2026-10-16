@@ -308,7 +308,7 @@ def _isolated_trust_store():
     ask for it would find a marker with no state — which is exactly the locked
     state the module exists to enforce — and every later test would be refused
     for a reason belonging to an earlier one."""
-    from agent_team_backend import device_signing, sync_keyring, trust_store
+    from agent_team_backend import device_signing, remote_roster, sync_keyring, trust_store
 
     # Reset on the way in only. On the way out a test's own monkeypatching may
     # still be in force (one of them swaps pathlib.Path for the Windows flavour
@@ -320,6 +320,9 @@ def _isolated_trust_store():
     # The sync key is cached in-process for the same reason the others are
     # singletons, and it outlives the per-test vault above.
     sync_keyring._reset_for_test()
+    # Every connected link fills the remote roster from its directory, and a
+    # roster left behind adds remote_targets to a later test's cli_list_targets.
+    remote_roster._reset_for_test()
     yield
     # The one thing stopped on the way out: the delivered-message timer is a
     # thread, and one left running fires after this test's vault and data dir
