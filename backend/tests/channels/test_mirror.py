@@ -203,6 +203,17 @@ async def test_full_verbosity_mirrors_local_prompt_text_and_labels_the_result(en
     assert any(t.startswith("✅ 完成") for _, t in env.tg.edits)  # the status message closed in place
 
 
+async def test_pasted_image_markers_become_one_clean_label(env: Env) -> None:
+    env.m.mirror.on_local_prompt("pane-1", "[Image #5] [Image #6] 為什麼看不到圖片")
+    await _until(lambda: "🖥 你：為什麼看不到圖片 🖼 圖片 ×2" in env.tg.texts())
+    assert not _said(env, "[Image #")
+
+
+async def test_a_prompt_of_images_alone_still_says_what_came_in(env: Env) -> None:
+    env.m.mirror.on_local_prompt("pane-1", "[Image #1]")
+    await _until(lambda: "🖥 你：🖼 圖片 ×1" in env.tg.texts())
+
+
 async def test_standard_verbosity_only_says_a_local_command_happened(env: Env) -> None:
     _set_verbosity(env, "standard")
     env.m.mirror.on_local_prompt("pane-1", "secret local words")

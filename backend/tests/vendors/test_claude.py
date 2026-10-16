@@ -485,6 +485,55 @@ def test_parse_activity_user_text_only_for_real_prompts(
     ]
 
 
+# Real shapes from Claude Code 2.1.x transcripts.
+_IMAGE_BLOCK = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="}}
+_IMAGE_NOTE = ("[Image: original 780x3746, displayed at 416x2000. "
+               "Multiply coordinates by 1.88 to map to original image.]")
+
+
+def test_parse_activity_image_read_notes_are_not_prompts(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    """The agent's Read of an image is followed by a hidden isMeta user record whose
+    plain-string content is the size note; nobody typed it, so it carries no text
+    (it posted as "你：[Image: original ...]" in chat channels, once per image)."""
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "img-001.jsonl"
+    _write_jsonl(session, [
+        {"type": "assistant", "timestamp": "t1", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "/tmp/shot.png"}}]}},
+        {"type": "user", "timestamp": "t2", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_1", "content": [_IMAGE_BLOCK]}]}},
+        {"type": "user", "timestamp": "t3", "isMeta": True, "turnCompanion": True,
+         "message": {"role": "user", "content": _IMAGE_NOTE}},
+    ])
+    events = reader.parse_activity(session, set())
+    assert [e.text for e in events if e.detail == "user"] == ["", ""]
+
+
+def test_parse_activity_pasted_images_keep_the_typed_text(
+    fake_claude: tuple[ClaudeLogReader, Path],
+) -> None:
+    """A prompt with pasted images is a content list (text plus image blocks); its
+    typed text, markers included, is the prompt. It used to be dropped whole, and
+    the isMeta list after it stays text-less."""
+    reader, root = fake_claude
+    session = root / "-tmp-demo" / "img-002.jsonl"
+    _write_jsonl(session, [
+        {"type": "user", "timestamp": "t1", "imagePasteIds": [5, 6], "origin": {"kind": "human"},
+         "message": {"role": "user", "content": [
+             {"type": "text", "text": "[Image #5] [Image #6] 為什麼看不到圖片"}, _IMAGE_BLOCK, _IMAGE_BLOCK]}},
+        {"type": "user", "timestamp": "t2", "isMeta": True,
+         "message": {"role": "user", "content": [{"type": "text", "text": _IMAGE_NOTE}]}},
+        {"type": "user", "timestamp": "t3",
+         "message": {"role": "user", "content": [{"type": "text", "text": "Continue from where you left off."}]}},
+    ])
+    events = reader.parse_activity(session, set())
+    texts = [e.text for e in events if e.detail == "user"]
+    assert texts == ["[Image #5] [Image #6] 為什麼看不到圖片", "", ""]
+    assert texts[0].full == "[Image #5] [Image #6] 為什麼看不到圖片"
+
+
 def test_join_text_blocks_shared_helper() -> None:
     from agent_team_backend.log_readers.base import join_text_blocks
     assert join_text_blocks("plain", "text") == "plain"
