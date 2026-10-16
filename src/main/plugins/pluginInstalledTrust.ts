@@ -166,7 +166,12 @@ function installedManifest(pluginDir: string): InstalledManifest {
 function listExtractedFiles(root: string, hostPackageDirs: ReadonlySet<string>): string[] {
   const files: string[] = []
   const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    // Sorted by name: readdir order differs between filesystems and runtimes,
+    // and it decides which invalid entry is named when several are present.
+    const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
+      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    )
+    for (const entry of entries) {
       const absolute = join(dir, entry.name)
       const rel = relative(root, absolute).split(sep).join('/')
       if (rel === REGISTRY_RECEIPT_NAME || rel === REGISTRY_ARTIFACT_NAME) continue
