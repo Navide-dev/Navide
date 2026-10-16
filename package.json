@@ -50,7 +50,7 @@
     "release:check": "node scripts/verify-release-version.mjs",
     "release:prepare": "bash ./release.sh",
     "test:frontend": "vitest run --project unit --project cli",
-    "test:artifacts": "vitest run --project artifacts",
+    "test:artifacts": "vitest run --project artifacts --project artifacts-heavy",
     "test:artifacts:ci": "node scripts/run-artifact-tests.mjs --prepared",
     "test:infrastructure": "vitest run --project unit tests/infrastructure",
     "test:cli": "node scripts/run-cli-tests.mjs",
