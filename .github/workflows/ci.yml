@@ -211,6 +211,11 @@ jobs:
         run: |
           bun install --frozen-lockfile
           uv --project backend sync --locked
+      # pluginRegistry.e2e.test.ts starts the real Registry from this env. The
+      # Registry cannot host on Windows, where that suite is skipped.
+      - name: Install Registry dependencies
+        if: runner.os != 'Windows'
+        run: uv --project marketplace/registry sync --locked
       - name: Complete unit and CLI suites
         env:
           NAVIDE_CLI_COVERAGE_REQUIRED: '1'
