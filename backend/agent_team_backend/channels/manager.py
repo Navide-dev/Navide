@@ -217,6 +217,13 @@ class Seams:
     cancel: Callable[[str], Awaitable[str]] = lambda _msg_key: _no_cancel()
     # pane_id -> {ok, error?}: clear the pane's stopped flag, as the user typing into it does
     resume: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_resume()
+    # /mcp, read-only and allowlisted (channels.mcp_menu). agent_key -> that CLI's own
+    # servers from its config file, never started; blocking
+    agent_mcp: Callable[[str], list[dict[str, Any]]] = lambda _agent_key: []
+    # () -> Navide's own servers as {name, status, tool_count}
+    navide_mcp: Callable[[], Awaitable[list[dict[str, Any]]]] = lambda: _no_rows()
+    # server name -> its tool names; [] when not running, None when tools/list timed out
+    navide_mcp_tools: Callable[[str], Awaitable[list[str] | None]] = lambda _name: _no_tools()
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -225,6 +232,14 @@ async def _no_limit() -> dict[str, Any]:
 
 async def _no_cancel() -> str:
     return "unknown"
+
+
+async def _no_rows() -> list[dict[str, Any]]:
+    return []
+
+
+async def _no_tools() -> list[str] | None:
+    return []
 
 
 async def _no_resume() -> dict[str, Any]:
@@ -1498,6 +1513,10 @@ class ChannelManager:
         if pick is not None:
             await self._quick_pick(msg, pick)
             return
+        pick = quick_menu.mcp_pick(msg.text, self._identity(msg))
+        if pick is not None:
+            await self._quick_pick(msg, pick, mcp=True)
+            return
         scope = quick_menu.menu_scope(msg.text, self._identity(msg))
         if scope is not None:
             await self._quick_menu(msg, scope)
@@ -2077,7 +2096,8 @@ class ChannelManager:
 
     async def _quick_menu(self, msg: InboundMessage, scope: str = "all") -> None:
         """``/menu``: buttons for the bound pane's prompt skills and skills; ``/prompts``
-        (``scope`` "p") and ``/skills`` ("s") list only that group."""
+        (``scope`` "p") and ``/skills`` ("s") list only that group; ``/mcp`` ("mcp") lists
+        MCP servers, read-only."""
         settings = await self._ui_settings()
         lang = prompt_skills.language(settings)
         binding = self._binding_for(msg)
@@ -2097,15 +2117,23 @@ class ChannelManager:
         if scope == "s" and agent_key not in quick_menu.SKILL_INVOCATION:
             await self._reply(msg, quick_menu.text(lang, "no_skill_syntax"))
             return
-        menu = self.quick.create(
-            platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
-            pane_title=binding.title or pane_id, agent_key=agent_key, lang=lang,
-            prompts=prompt_skills.castable(prompt_skills.effective(settings)) if scope != "s" else [],
-            skills=await self._agent_skills(agent_key) if scope != "p" else [],
-            scope=scope,
-        )
+        if scope == "mcp":
+            menu = self.quick.create_mcp(
+                platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
+                pane_title=binding.title or pane_id, agent_key=agent_key, lang=lang,
+                native=await self._agent_mcp(agent_key), navide=await self._navide_mcp(),
+            )
+        else:
+            menu = self.quick.create(
+                platform=msg.platform, location_key=msg.location_key(), pane_id=pane_id,
+                pane_title=binding.title or pane_id, agent_key=agent_key, lang=lang,
+                prompts=prompt_skills.castable(prompt_skills.effective(settings)) if scope != "s" else [],
+                skills=await self._agent_skills(agent_key) if scope != "p" else [],
+                scope=scope,
+            )
         if menu is None:
-            await self._reply(msg, quick_menu.text(lang, {"p": "empty_prompts", "s": "empty_skills"}.get(scope, "empty")))
+            empty = {"p": "empty_prompts", "s": "empty_skills", "mcp": "mcp_empty"}.get(scope, "empty")
+            await self._reply(msg, quick_menu.text(lang, empty))
             return
         if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
             # No buttons: the same menu as numbered lines, picked with "/menu <n>".
@@ -2127,17 +2155,22 @@ class ChannelManager:
         pane_id = self._seams.resolve_pane(binding.pane_id) if binding is not None else ""
         # A menu made for a pane the chat no longer drives is as dead as an expired one.
         if press is None or not pane_id or pane_id != self._seams.resolve_pane(press.menu.pane_id):
-            await self._reply(msg, quick_menu.text(lang, "expired"))
+            mcp = press is not None and press.menu.scope == "mcp"
+            await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
         if press.kind == "g":
             await self._quick_page(msg, press.menu, int(press.key))
             return
+        if press.kind in ("n", "m"):
+            await self._mcp_detail(msg, press, pane_id, lang)
+            return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
 
-    async def _quick_pick(self, msg: InboundMessage, number: int) -> None:
-        """``/menu <n>``: item ``n`` of the text menu this chat was sent."""
+    async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False) -> None:
+        """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/mcp <n>``
+        (``mcp``): server ``n`` of its /mcp list."""
         settings = await self._ui_settings()
-        menu = self.quick.latest(msg.location_key())
+        menu = self.quick.latest(msg.location_key(), mcp)
         lang = menu.lang if menu is not None else prompt_skills.language(settings)
         binding = self._binding_for(msg)
         if binding is None:
@@ -2147,13 +2180,51 @@ class ChannelManager:
             return
         pane_id = self._seams.resolve_pane(binding.pane_id)
         if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
-            await self._reply(msg, quick_menu.text(lang, "expired"))
+            await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
-        press = self.quick.pick(msg.location_key(), number)
+        press = self.quick.pick(msg.location_key(), number, mcp)
         if press is None:
-            await self._reply(msg, quick_menu.text(lang, "bad_pick"))
+            await self._reply(msg, quick_menu.text(lang, "bad_pick_mcp" if mcp else "bad_pick"))
+            return
+        if mcp:
+            await self._mcp_detail(msg, press, pane_id, lang)
             return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
+
+    async def _agent_mcp(self, agent_key: str) -> list[dict[str, Any]]:
+        try:
+            return await asyncio.to_thread(self._seams.agent_mcp, agent_key)
+        except Exception as exc:  # noqa: BLE001 — an unreadable config leaves Navide's group
+            log.warning("channels: listing %s's MCP servers failed: %s", agent_key, exc)
+            return []
+
+    async def _navide_mcp(self) -> list[dict[str, Any]]:
+        try:
+            return await self._seams.navide_mcp()
+        except Exception as exc:  # noqa: BLE001 — the CLI's group still lists
+            log.warning("channels: listing Navide's MCP servers failed: %s", exc)
+            return []
+
+    async def _mcp_detail(self, msg: InboundMessage, press: quick_menu.Press, pane_id: str, lang: str) -> None:
+        """One server of an /mcp list, read again now: allowlisted fields, never a change."""
+        if press.kind == "n":
+            agent_key = self._seams.pane_agent(pane_id)
+            row = next((r for r in await self._agent_mcp(agent_key) if r["name"] == press.key), None)
+            body = quick_menu.mcp_cli_detail(lang, row, agent_key) if row is not None else ""
+        else:
+            row = next((r for r in await self._navide_mcp() if r["name"] == press.key), None)
+            body = ""
+            if row is not None:
+                try:
+                    tools = await self._seams.navide_mcp_tools(press.key) if row["status"] == "connected" else []
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("channels: listing %s's MCP tools failed: %s", press.key, exc)
+                    tools = []
+                body = quick_menu.mcp_navide_detail(lang, row, tools)
+        if not body:
+            await self._reply(msg, quick_menu.text(lang, "mcp_gone", name=press.label))
+            return
+        await self._reply(msg, redact.redact_text(body))
 
     async def _quick_cast(self, msg: InboundMessage, press: quick_menu.Press, binding: Binding,
                           pane_id: str, settings: dict[str, Any], lang: str) -> None:

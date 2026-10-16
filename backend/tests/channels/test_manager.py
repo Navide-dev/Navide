@@ -119,6 +119,10 @@ class FakeSeams:
         self.settings: dict[str, Any] = {}
         self.agents: dict[str, str] = {}
         self.skills: dict[str, list[str]] = {}
+        self.mcp_native: dict[str, list[dict[str, Any]]] = {}
+        self.mcp_navide: list[dict[str, Any]] = []
+        self.mcp_tools: dict[str, list[str] | None] = {}
+        self.mcp_tool_calls: list[str] = []
         self.limit: dict[str, Any] = {}
         self.limit_probes = 0
         self._n = 0
@@ -175,6 +179,13 @@ class FakeSeams:
     async def write_secret(self, name: str, secret: str | None) -> None:
         self.secrets[name] = secret
 
+    async def navide_mcp(self) -> list[dict[str, Any]]:
+        return [dict(r) for r in self.mcp_navide]
+
+    async def navide_mcp_tools(self, name: str) -> list[str] | None:
+        self.mcp_tool_calls.append(name)
+        return self.mcp_tools.get(name, [])
+
     def seams(self) -> Seams:
         return Seams(deliver=self.deliver, await_verdict=self.await_verdict, interrupt=self.interrupt,
                      pane_state=self.pane_state, awaiting_info=self.awaiting_info, answer=self.answer,
@@ -182,6 +193,8 @@ class FakeSeams:
                      read_secret=self.read_secret, write_secret=self.write_secret,
                      ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
                      agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info,
+                     agent_mcp=lambda a: [dict(r) for r in self.mcp_native.get(a, [])],
+                     navide_mcp=self.navide_mcp, navide_mcp_tools=self.navide_mcp_tools,
                      cancel=self.cancel, resume=self.resume)
 
 
