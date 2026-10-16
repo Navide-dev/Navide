@@ -17,7 +17,7 @@ from .js_tokens import Token, iter_tokens
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
 CAPABILITY_NAMESPACES = frozenset({"aiCli", "fs", "shell", "storage", "ui", "workspace"})
-_ADDRESS_RE = re.compile(r"^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
+CAPABILITY_ADDRESS_RE = _ADDRESS_RE = re.compile(r"^(aiCli|fs|shell|storage|ui|workspace)\.[a-z][A-Za-z0-9]{0,63}$")
 FS_READ_ADDRESSES = frozenset({
     "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
 })
@@ -93,6 +93,16 @@ def _command_like(value: str) -> tuple[str, str | None, str] | None:
     if len(head) != 2 or head[0] not in COMMAND_EXECUTABLES:
         return None
     return parse_command(value)
+
+
+def hosts_in(value: str) -> list[str]:
+    """Host names of the URLs in ``value`` (never a path, query or credential)."""
+    return _hosts(value)
+
+
+def command_like(value: str) -> tuple[str, str | None, str] | None:
+    """(executable, subcommand, category) when ``value`` reads as a command."""
+    return _command_like(value)
 
 
 def _hosts(value: str) -> list[str]:

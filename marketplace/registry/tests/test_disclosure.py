@@ -228,9 +228,9 @@ def test_auto_published_native_backend_is_not_inspected(signed_env: SignedEnv) -
     }
     assert version["disclosure"]["nativeBackend"] is not None
     assert version["disclosure_envelope"]["target"] == "darwin-arm64"
-    # No native-executable scanner yet: no report rather than a partial one.
-    assert version["scan"] is None
-    assert version["disclosure_envelope"]["scanDigest"] is None
+    # The native executable is scanned and the report signed (contract 3.8).
+    assert version["scan"]["native"][0]["format"] == "mach-o"
+    assert version["disclosure_envelope"]["scanDigest"] is not None
 
 
 def test_a_legacy_v1_package_has_no_disclosure(signed_env: SignedEnv) -> None:

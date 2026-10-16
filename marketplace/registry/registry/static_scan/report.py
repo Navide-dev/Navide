@@ -3,9 +3,10 @@
 The report is facts only. ``scan_package`` reads an already validated
 package archive, runs the frontend script rules on every ``.js``/``.mjs``/
 ``.cjs`` file, bounds the work by ``SCAN_LIMITS`` and redacts anything that
-matches a secret-scan rule. A package with a native backend gets no report
-(``None``) until the native-executable scanner exists, so its card says
-"not scanned" rather than presenting a partial scan as complete.
+matches a secret-scan rule. The native backend executable named by
+``backend.entry`` is summarized by ``native.summarize_executable``; its
+commands, hosts and capability addresses are reported with
+``source: "backend"``.
 """
 
 from __future__ import annotations
@@ -24,7 +25,9 @@ from ..plugin_contract.disclosure_scan_contract import (
     ScanReport,
 )
 from ..secret_scan import RULES as SECRET_RULES
+from ..package import backend_entry_for_target
 from .js_scan import ScriptFacts, scan_script
+from .native import NativeFacts, summarize_executable
 
 SCANNER_VERSION = "1.0.0"
 SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
@@ -48,8 +51,10 @@ def scan_package(
     now: datetime | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> ScanReport | None:
-    if manifest.get("schemaVersion") != 2 or manifest.get("backend") is not None:
+    if manifest.get("schemaVersion") != 2:
         return None
+    backend = manifest.get("backend")
+    backend_path = backend_entry_for_target(backend["entry"], target) if backend else None
     started = clock()
     budget = SCAN_LIMITS["timeBudgetMs"] / 1000
     limit = SCAN_LIMITS["maxItemsPerKind"]
@@ -60,7 +65,11 @@ def scan_package(
     files_scanned = 0
     bytes_scanned = 0
     merged = ScriptFacts()
-    call_files: dict[tuple[str, str | None, str, str], int] = {}
+    call_files: dict[tuple[str, str | None, str, str, str], int] = {}
+    """(executable, subcommand, category, evidence, source) -> files"""
+    backend_hosts: dict[str, int] = {}
+    backend_capabilities: set[str] = set()
+    natives: list[NativeFacts] = []
     any_script = False
 
     def skip(reason: str, count: int = 1) -> None:
@@ -72,6 +81,27 @@ def scan_package(
             if info.filename == "manifest.json":
                 continue
             files_total += 1
+            if info.filename == backend_path:
+                if timed_out or clock() - started > budget:
+                    timed_out = True
+                    skip("unsupported")
+                    continue
+                with archive.open(info) as stream:
+                    binary = stream.read(SCAN_LIMITS["maxNativeBytes"] + 1)
+                if len(binary) > SCAN_LIMITS["maxNativeBytes"]:
+                    binary = binary[:SCAN_LIMITS["maxNativeBytes"]]
+                    truncated = True
+                native = summarize_executable(info.filename, binary)
+                natives.append(native)
+                files_scanned += 1
+                bytes_scanned += len(binary)
+                for executable, subcommand, category in native.commands:
+                    key = (executable, subcommand, category, "commandLikeString", "backend")
+                    call_files[key] = call_files.get(key, 0) + 1
+                for host, count in native.hosts.items():
+                    backend_hosts[host] = backend_hosts.get(host, 0) + count
+                backend_capabilities |= native.capabilities
+                continue
             if not info.filename.lower().endswith(SCRIPT_SUFFIXES):
                 skip("binaryAsset")
                 continue
@@ -89,7 +119,8 @@ def scan_package(
             files_scanned += 1
             bytes_scanned += len(content)
             for call in facts.calls:
-                call_files[call] = call_files.get(call, 0) + 1
+                key = (*call, "frontend")
+                call_files[key] = call_files.get(key, 0) + 1
             merged.dynamic += facts.dynamic
             for host, count in facts.hosts.items():
                 merged.hosts[host] = merged.hosts.get(host, 0) + count
@@ -121,8 +152,8 @@ def scan_package(
         return kept
 
     calls = []
-    for (executable, subcommand, category, evidence), files in sorted(
-        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][3])
+    for (executable, subcommand, category, evidence, source), files in sorted(
+        call_files.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][4], item[0][3])
     ):
         command = executable if subcommand is None else f"{executable} {subcommand}"
         if _redacted(command):
@@ -130,15 +161,27 @@ def scan_package(
             continue
         calls.append({
             "executable": executable, "subcommand": subcommand, "category": category,
-            "source": "frontend", "evidence": evidence, "files": files,
+            "source": source, "evidence": evidence, "files": files,
         })
     # A command seen as a call site is not repeated as a mere string.
-    sites = {(c["executable"], c["subcommand"]) for c in calls if c["evidence"] == "callSite"}
-    calls = [c for c in calls if c["evidence"] == "callSite" or (c["executable"], c["subcommand"]) not in sites]
+    sites = {(c["executable"], c["subcommand"], c["source"]) for c in calls if c["evidence"] == "callSite"}
+    calls = [
+        c for c in calls
+        if c["evidence"] == "callSite" or (c["executable"], c["subcommand"], c["source"]) not in sites
+    ]
     if len(calls) > limit:
         truncated = True
         calls = calls[:limit]
-    hosts = keep(sorted(merged.hosts))
+    host_entries = sorted(
+        [(host, "frontend", count) for host, count in merged.hosts.items()]
+        + [(host, "backend", count) for host, count in backend_hosts.items()]
+    )
+    kept_hosts = set(keep(sorted({host for host, _source, _count in host_entries})))
+    host_entries = [entry for entry in host_entries if entry[0] in kept_hosts]
+    capability_entries = sorted(
+        [(address, "frontend") for address in merged.capabilities]
+        + [(address, "backend") for address in backend_capabilities]
+    )
     read_paths = keep(sorted(merged.read_paths))[: SCAN_LIMITS["maxPaths"]]
     write_paths = keep(sorted(merged.write_paths))[: SCAN_LIMITS["maxPaths"]]
     if len(merged.read_paths) > SCAN_LIMITS["maxPaths"] or len(merged.write_paths) > SCAN_LIMITS["maxPaths"]:
@@ -163,9 +206,13 @@ def scan_package(
             "calls": calls,
             "dynamic": {"count": merged.dynamic, "files": merged.dynamic_files},
         },
-        "network": {"hosts": [{"host": host, "source": "frontend", "count": merged.hosts[host]} for host in hosts]},
+        "network": {"hosts": [
+            {"host": host, "source": source, "count": count} for host, source, count in host_entries
+        ][:limit]},
         "files": {"readPaths": read_paths, "writePaths": write_paths, "dynamicPaths": merged.dynamic_paths},
-        "capabilities": [{"address": address, "source": "frontend"} for address in keep(sorted(merged.capabilities))],
+        "capabilities": [
+            {"address": address, "source": source} for address, source in capability_entries
+        ][:limit],
         "code": {
             "frontend": {
                 "eval": merged.eval,
@@ -176,6 +223,6 @@ def scan_package(
             } if any_script else None,
             "backend": None,
         },
-        "native": [],
+        "native": [native.summary(limit) for native in natives],
     }
     return report  # type: ignore[return-value]
