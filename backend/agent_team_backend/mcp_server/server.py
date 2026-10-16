@@ -8853,44 +8853,103 @@ async def request_host_marketplace_query(query: dict[str, Any], *, caller: _Call
         _marketplace_query_pending.discard(request_id)
 
 
-def _fence_listing(item: dict[str, Any]) -> dict[str, Any]:
-    """A ListingItem with its package-written texts fenced."""
-    from agent_team_backend.plugins.external_content import third_party_label, wrap_external_text
+# Every string in a Marketplace answer is third-party text unless its key
+# names a Navide fact and the value has that fact's exact grammar (an
+# allowlist, not a list of known-dangerous fields). Keys outside the contract
+# shapes are dropped, and an inputSchema is fenced whole as one JSON text.
+_MQ_PACKAGE_ID = re.compile(r"[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+")
+_MQ_SEMVER = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+)
+_MQ_ISO_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})")
+_MQ_DOMAIN = re.compile(r"(?=.{1,253}\Z)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+")
+_MQ_KEY_ID = re.compile(r"[A-Za-z0-9._-]{1,64}")
+_MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
+#: Every enum literal of the contract shapes a Marketplace answer may carry.
+_MQ_ENUMS = frozenset({
+    "search", "detail", "installed",
+    "read", "write", "readWrite", "low", "medium", "high", "highest",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "agentTools", "network", "noPermissions",
+    "system.ui", "system.fs", "system.aiCli", "shell.allowlist", "shell.full", "agentTools.write",
+    "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared",
+    "plugin-disclosure.summary.v1",
+    "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
+    "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
+})
+_MQ_ENUM_KEYS = frozenset({
+    "kind", "risk", "level", "key", "mode", "access", "status", "secretScan", "network", "template",
+    "state", "root", "projectWrites", "system", "executables",
+})
+_MQ_KNOWN_KEYS = frozenset({
+    "kind", "items", "nextCursor", "item", "versions", "card",
+    "id", "version", "name", "description", "publisher", "verifiedDomain", "signed", "downloads",
+    "risk", "summary", "template", "clauses", "key", "params", "access", "mode", "executables", "read", "write",
+    "manifest", "registry", "schemaVersion", "plugin", "level", "reasons", "permissions", "system", "shell",
+    "scopes", "fs", "root", "nativeBackend", "methods", "events", "network", "agentTools", "method", "title",
+    "timeoutMs", "inputSchema", "dataLocations", "hostStorage", "backendDataDirectory", "projectWrites",
+    "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
+    "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
+    "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+})
 
-    label = third_party_label(str(item.get("id") or ""), str(item.get("version") or ""), _MARKETPLACE_TEXT_DETAIL)
-    out = dict(item)
-    for key in ("name", "description"):
-        if isinstance(out.get(key), str):
-            out[key] = wrap_external_text(out[key], label=label)
-    return out
+
+def _mq_plain(key: str, parent: str, value: str) -> bool:
+    """Whether ``value`` under ``key`` is a Navide fact rather than third-party text."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_NAME_PATTERN
+
+    if key in _MQ_ENUM_KEYS:
+        return value in _MQ_ENUMS
+    if key == "id":
+        return _MQ_PACKAGE_ID.fullmatch(value) is not None
+    if key in ("version", "versions"):
+        return _MQ_SEMVER.fullmatch(value) is not None
+    if key == "nextCursor":
+        return _MQ_CURSOR.fullmatch(value) is not None
+    if key == "verifiedDomain":
+        return _MQ_DOMAIN.fullmatch(value) is not None
+    if key in ("reviewedAt", "scannedAt", "domainVerifiedAt"):
+        return _MQ_ISO_TIME.fullmatch(value) is not None
+    if key == "keyId":
+        return _MQ_KEY_ID.fullmatch(value) is not None
+    if key == "name" and parent == "agentTools":
+        return AGENT_TOOL_NAME_PATTERN.fullmatch(value) is not None
+    return False
 
 
-def _fence_card(card: Any, item: dict[str, Any]) -> Any:
-    """A DisclosureCard with its package-written texts fenced; None stays None."""
-    from agent_team_backend.plugins.external_content import third_party_label, wrap_external_text
+def _fence_untrusted(value: Any, label: str, fenced: list[int], key: str = "", parent: str = "") -> Any:
+    """A copy of ``value`` with every third-party string fenced; counts fences in ``fenced``."""
+    from agent_team_backend.plugins.external_content import wrap_external_text
 
-    if not isinstance(card, dict):
-        return None
-    label = third_party_label(str(item.get("id") or ""), str(item.get("version") or ""), _MARKETPLACE_TEXT_DETAIL)
-    out = dict(card)
-    manifest = out.get("manifest")
-    if isinstance(manifest, dict) and isinstance(manifest.get("agentTools"), list):
-        tools = []
-        for tool in manifest["agentTools"]:
-            if isinstance(tool, dict):
-                tool = dict(tool)
-                for key in ("title", "description"):
-                    if isinstance(tool.get(key), str):
-                        tool[key] = wrap_external_text(tool[key], label=label)
-            tools.append(tool)
-        out["manifest"] = {**manifest, "agentTools": tools}
-    registry = out.get("registry")
-    if isinstance(registry, dict) and isinstance(registry.get("publisher"), dict):
-        publisher = dict(registry["publisher"])
-        if isinstance(publisher.get("name"), str):
-            publisher["name"] = wrap_external_text(publisher["name"], label=label)
-        out["registry"] = {**registry, "publisher": publisher}
-    return out
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for child_key, child in value.items():
+            if not isinstance(child_key, str) or child_key not in _MQ_KNOWN_KEYS:
+                continue
+            if child_key == "inputSchema":
+                fenced[0] += 1
+                out[child_key] = wrap_external_text(json.dumps(child, ensure_ascii=False, sort_keys=True), label=label)
+            else:
+                out[child_key] = _fence_untrusted(child, label, fenced, child_key, key)
+        return out
+    if isinstance(value, list):
+        return [_fence_untrusted(entry, label, fenced, key, parent) for entry in value]
+    if isinstance(value, str):
+        if _mq_plain(key, parent, value):
+            return value
+        fenced[0] += 1
+        return wrap_external_text(value, label=label)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return None
+
+
+def _mq_label(item: Any) -> str:
+    from agent_team_backend.plugins.external_content import third_party_label
+
+    item = item if isinstance(item, dict) else {}
+    plugin_id = item.get("id") if isinstance(item.get("id"), str) and _MQ_PACKAGE_ID.fullmatch(item["id"]) else ""
+    version = item.get("version") if isinstance(item.get("version"), str) and _MQ_SEMVER.fullmatch(item["version"]) else ""
+    return third_party_label(plugin_id or "unknown", version, _MARKETPLACE_TEXT_DETAIL)
 
 
 def _taint_marketplace_reader(caller: _Caller, tool: str) -> None:
@@ -8959,9 +9018,16 @@ async def marketplace_search(
     caller, out = await _marketplace_query(ctx, query)
     if out.get("ok") is not True or caller is None:
         return out
-    items = out.get("items")
-    out["items"] = [_fence_listing(item) for item in items if isinstance(item, dict)] if isinstance(items, list) else []
-    if out["items"]:
+    fenced = [0]
+    items = out.get("items") if isinstance(out.get("items"), list) else []
+    next_cursor = out.get("nextCursor")
+    out = {
+        "ok": True,
+        "kind": "search",
+        "items": [_fence_untrusted(item, _mq_label(item), fenced) for item in items if isinstance(item, dict)],
+        "nextCursor": next_cursor if isinstance(next_cursor, str) and _MQ_CURSOR.fullmatch(next_cursor) else None,
+    }
+    if fenced[0]:
         _taint_marketplace_reader(caller, "marketplace_search")
     return out
 
@@ -8989,10 +9055,19 @@ async def marketplace_detail(ctx: Context, id: str, version: str | None = None) 
     caller, out = await _marketplace_query(ctx, query)
     if out.get("ok") is not True or caller is None:
         return out
+    fenced = [0]
     item = out.get("item") if isinstance(out.get("item"), dict) else {}
-    out["item"] = _fence_listing(item)
-    out["card"] = _fence_card(out.get("card"), item)
-    _taint_marketplace_reader(caller, "marketplace_detail")
+    label = _mq_label(item)
+    card = out.get("card")
+    out = {
+        "ok": True,
+        "kind": "detail",
+        "item": _fence_untrusted(item, label, fenced),
+        "versions": _fence_untrusted(out.get("versions") if isinstance(out.get("versions"), list) else [], label, fenced, "versions"),
+        "card": _fence_untrusted(card, label, fenced) if isinstance(card, dict) else None,
+    }
+    if fenced[0]:
+        _taint_marketplace_reader(caller, "marketplace_detail")
     return out
 
 
@@ -9005,7 +9080,18 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
     hasBackend, agentTools: [{name, state}]}. Enabling, disabling, updating
     or removing a plugin is the user's decision and is not possible from here.
     """
-    _caller, out = await _marketplace_query(ctx, {"kind": "installed"})
+    caller, out = await _marketplace_query(ctx, {"kind": "installed"})
+    if out.get("ok") is not True or caller is None:
+        return out
+    fenced = [0]
+    items = out.get("items") if isinstance(out.get("items"), list) else []
+    out = {
+        "ok": True,
+        "kind": "installed",
+        "items": [_fence_untrusted(item, _mq_label(item), fenced) for item in items if isinstance(item, dict)],
+    }
+    if fenced[0]:
+        _taint_marketplace_reader(caller, "plugins_list_installed")
     return out
 
 
