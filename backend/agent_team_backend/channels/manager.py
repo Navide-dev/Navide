@@ -51,9 +51,13 @@ log = logging.getLogger(__name__)
 
 STOP_WORDS = {"stop", "停止", "/stop", "esc"}
 CANCEL_WORDS = {"/cancel"}
-# The busy acknowledgement's buttons; a press is handled exactly as the typed command.
+RESUME_WORDS = {"/resume"}
+# The busy acknowledgement's and the stop reply's buttons; a press is handled exactly as
+# the typed command.
 CANCEL_CALLBACK = "nv4:cancel"
 STOP_CALLBACK = "nv4:stop"
+RESUME_CALLBACK = "nv4:resume"
+_CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -96,6 +100,9 @@ MSG_CANCELLED = "↩️ 已撤回 {n} 則還沒送進 pane 的訊息"
 MSG_CANCEL_NONE = "沒有可以撤回的訊息（已經送進 pane 的不能撤回）"
 MSG_CANCEL_LATE = "；{n} 則已經送進 pane，來不及撤回"
 MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
+MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
+MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
+RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
 MSG_UNBOUND = "🔌 這個聊天室已和 pane「{name}」中斷連接，之後的訊息不會再送進 pane。"
 MSG_BOUND = "🔗 已連接 pane「{name}」，在這裡傳的訊息會送進這個 pane；傳 stop 可以中斷。"
@@ -205,6 +212,8 @@ class Seams:
     # msg_key -> its settled status after asking the window to withdraw it ("cancelled" when it
     # did; "delivered"/"failed" when too late; "queued" when no window answered; "unknown")
     cancel: Callable[[str], Awaitable[str]] = lambda _msg_key: _no_cancel()
+    # pane_id -> {ok, error?}: clear the pane's stopped flag, as the user typing into it does
+    resume: Callable[[str], Awaitable[dict[str, Any]]] = lambda _pane_id: _no_resume()
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -213,6 +222,10 @@ async def _no_limit() -> dict[str, Any]:
 
 async def _no_cancel() -> str:
     return "unknown"
+
+
+async def _no_resume() -> dict[str, Any]:
+    return {"ok": False, "error": "not supported"}
 
 
 AdapterFactory = Callable[[dict[str, Any], dict[str, Any], ChannelStore], ChannelAdapter]
@@ -1467,10 +1480,9 @@ class ChannelManager:
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
-        if msg.callback_data in (CANCEL_CALLBACK, STOP_CALLBACK):
+        if msg.callback_data in _CALLBACK_COMMANDS:
             # Then on through the binding checks below, as if the command had been typed.
-            msg = dataclasses.replace(msg, text="/cancel" if msg.callback_data == CANCEL_CALLBACK else "stop",
-                                      callback_data="")
+            msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
         if msg.callback_data and not msg.text:
             return  # a button press with the relay off, or not ours
         if quick_menu.is_menu_command(msg.text, self._identity(msg)):
@@ -1499,10 +1511,13 @@ class ChannelManager:
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
         if _is_stop_word(msg.text):
-            await self._interrupt(msg, pane_id)
+            await self._interrupt(msg, pane_id, buttons=RESUME_BUTTONS)
             return
-        if _is_cancel_word(msg.text):
+        if _command_word(msg.text) in CANCEL_WORDS:
             await self._cancel_queued(msg)
+            return
+        if _command_word(msg.text) in RESUME_WORDS:
+            await self._resume(msg, pane_id)
             return
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
@@ -1754,14 +1769,16 @@ class ChannelManager:
             })
             await self._changed()
 
-    async def _interrupt(self, msg: InboundMessage, pane_id: str, ok_text: str = MSG_INTERRUPTED) -> None:
+    async def _interrupt(self, msg: InboundMessage, pane_id: str, ok_text: str = MSG_INTERRUPTED,
+                         buttons: list[tuple[str, str]] | None = None) -> None:
         try:
             result = await self._seams.interrupt(pane_id)
         except Exception as exc:  # noqa: BLE001
             result = {"ok": False, "error": str(exc)}
         if result.get("ok") and result.get("sent", True):
             waiting = len(self._joining(msg)) + len(self._queued_from(msg))
-            await self._reply(msg, ok_text + (MSG_INTERRUPTED_QUEUED.format(n=waiting) if waiting else ""))
+            await self._reply(msg, ok_text + (MSG_INTERRUPTED_QUEUED.format(n=waiting) if waiting else ""),
+                              buttons=buttons)
         else:
             await self._reply(msg, f"⚠️ 中斷失敗：{result.get('error') or 'not sent'}")
 
@@ -1773,6 +1790,14 @@ class ChannelManager:
         """This chat's own messages still queued in a pane, whichever pane they went to."""
         loc = msg.location_key()
         return [key for keys in self._queued.values() for key in keys if self._queued_loc.get(key) == loc]
+
+    async def _resume(self, msg: InboundMessage, pane_id: str) -> None:
+        """``/resume`` or the stop reply's button: let a stopped pane take messages again."""
+        if self._seams.pane_state(pane_id).get("display_status") != "stopped":
+            await self._reply(msg, MSG_NOT_STOPPED)
+            return
+        result = await self._seams.resume(pane_id)
+        await self._reply(msg, MSG_RESUMED if result.get("ok") else f"⚠️ 恢復失敗：{result.get('error') or 'unknown'}")
 
     async def _cancel_queued(self, msg: InboundMessage) -> None:
         """``/cancel``: withdraw what this chat sent that has not gone into a pane yet."""
@@ -1971,6 +1996,12 @@ class ChannelManager:
             await self._reply(msg, MSG_CHAT_RATE.format(max=CHAT_RATE_MAX, wait=wait))
             return False
         state = self._seams.pane_state(pane_id)
+        if state.get("display_status") == "stopped":
+            # The chat's own next message is the user carrying on, as typing in the pane is;
+            # left stopped, the pane would hold it (and every later one) as not ready.
+            resumed = await self._seams.resume(pane_id)
+            if not resumed.get("ok"):
+                log.info("channels: resuming stopped pane %s failed: %s", pane_id, resumed.get("error"))
         files = await self._fetch_attachments(msg, pane_id)
         text = "\n".join(part for part in (msg.text, *files) if part)
         if msg.attachments and not text:
@@ -2789,11 +2820,11 @@ def _strip_controls(text: str, keep: str = "\t") -> str:
         for ch in text)
 
 
-def _is_cancel_word(text: str) -> bool:
+def _command_word(text: str) -> str:
     word = (text or "").strip().lower()
     if word.startswith("/") and "@" in word:
         word = word.split("@", 1)[0]
-    return word in CANCEL_WORDS
+    return word
 
 
 def _is_stop_word(text: str) -> bool:

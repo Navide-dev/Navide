@@ -596,6 +596,8 @@ async def test_stop_with_a_name_interrupts_only_that_child(env: Env) -> None:
     _use_directory(env, [_pane("pane-1", "main"), _pane("pane-2", "tester", "pane-1")])
     await env.inbound("/stop tester")
     assert env.fake.interrupts == ["pane-2"] and "⏹ 已送出中斷（tester）" in env.tg.texts()
+    # The resume button resumes the bound pane, so a child's stop does not offer it.
+    assert "⏹ 已送出中斷（tester）" not in env.tg.buttons
     await env.inbound("/stop ghost")
     assert env.fake.interrupts == ["pane-2"] and "⚠️ 找不到子視窗「ghost」" in env.tg.texts()
     await env.inbound("/stop")

@@ -72,6 +72,19 @@ def default_seams() -> Seams:
         settled = mcp._mcp_message_status.get(msg_key)
         return str(settled["status"]) if settled else "unknown"
 
+    async def resume(pane_id: str) -> dict[str, Any]:
+        # What project.set_pane_stopped does when the user types into a stopped pane.
+        from .. import app
+
+        pane = agent_messaging.current(pane_id)
+        if pane is None:
+            return {"ok": False, "error": "pane is gone"}
+        app.project_store.set_pane_stopped(pane.workspace_path, pane_id=pane.pane_id, stopped=False)
+        await app.broadcast(make_event("pane.stopped", {
+            "workspace_path": pane.workspace_path, "pane_id": pane.pane_id, "stopped": False,
+        }))
+        return {"ok": True}
+
     async def interrupt(pane_id: str) -> dict[str, Any]:
         pane = agent_messaging.current(pane_id)
         if pane is None:
@@ -204,7 +217,7 @@ def default_seams() -> Seams:
         awaiting_info=awaiting_info, answer=answer, limit_info=limit_info, resolve_pane=resolve_pane, broadcast=broadcast,
         read_secret=read_secret, write_secret=write_secret, pane_workspace=pane_workspace,
         pane_directory=pane_directory, inherit_taint=inherit_taint,
-        ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel,
+        ui_settings=ui_settings, pane_agent=pane_agent, agent_skills=agent_skills, cancel=cancel, resume=resume,
     )
 
 
