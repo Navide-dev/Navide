@@ -444,3 +444,57 @@ async def test_a_pty_exit_revokes_the_token_of_an_unregistered_pane(terminals: _
     await app._active_emit({"type": "terminal.exit", "payload": {"pane_id": "pa", "terminal_session_id": "t-pa"}})
     app._cancel_pane_unregister("pa")
     assert plan_mcp_wiring.bound_pane_token("pa") == ""
+
+
+def test_a_release_and_a_same_id_respawn_cannot_interleave(
+    terminals: _Terminals, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The respawn's wiring must not hand out the token a release has already
+    # decided to revoke: it waits, then gets a fresh token that stays bound.
+    import threading
+
+    old = _codex_spawn_token("pa")
+    entered, proceed = threading.Event(), threading.Event()
+    real_check = plan_mcp_wiring._pane_has_live_pty
+
+    def slow_check(pane_id: str) -> bool:
+        entered.set()
+        proceed.wait(5)
+        return real_check(pane_id)
+
+    monkeypatch.setattr(plan_mcp_wiring, "_pane_has_live_pty", slow_check)
+    release = threading.Thread(target=plan_mcp_wiring.release_pane_token, args=("pa",))
+    release.start()
+    assert entered.wait(5)
+    handed: list[str] = []
+    respawn = threading.Thread(target=lambda: handed.append(plan_mcp_wiring.caller_token("pa")))
+    respawn.start()
+    respawn.join(0.3)
+    blocked = respawn.is_alive()
+    proceed.set()
+    release.join(5)
+    respawn.join(5)
+    assert blocked, "the respawn's wiring did not wait for the release"
+    assert len(handed) == 1
+    if handed[0] == old:
+        pytest.fail("the respawn was handed the token being revoked", pytrace=False)
+    if plan_mcp_wiring.bound_pane_token("pa") != handed[0]:
+        pytest.fail("the respawn's token was revoked under it", pytrace=False)
+
+
+def test_a_cli_still_running_when_its_id_is_closed_and_reused_keeps_its_token(
+    terminals: _Terminals,
+) -> None:
+    # Documented limit (wiring.release_pane_token): ids are random UUIDs and
+    # only the AI dock reuses one, after killing the old PTY. If a CLI is still
+    # running when its id is closed and that id registers again, nothing tells
+    # the old CLI from the new pane, so the token stays.
+    token = _codex_spawn_token("pa")
+    terminals.live.add("pa")
+    agent_messaging.register("pa", "alpha", "/ws/one")
+    agent_messaging.unregister("pa")
+    agent_messaging.register("pa", "alpha-again", "/ws/one")
+    terminals.live.discard("pa")
+    plan_mcp_wiring.release_pane_token("pa")
+    if plan_mcp_wiring.bound_pane_token("pa") != token:
+        pytest.fail("expected the documented limit to hold", pytrace=False)

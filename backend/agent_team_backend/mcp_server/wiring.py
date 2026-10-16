@@ -165,16 +165,24 @@ def release_pane_token(pane_id: str) -> None:
     (it keeps presenting this one), and a live PTY is a CLI that holds it —
     the same-id AI dock respawn, or a close that reached the registry before
     the process was gone. Revoked, the id gets a fresh token when it is next
-    spawned, so a CLI that outlived its pane cannot act as a reused id.
+    spawned, so a CLI that has exited cannot be impersonated with its old
+    token under a reused id.
+
+    Not covered: a CLI whose PTY is still running when its id is closed and
+    the same id registers again keeps the token, because nothing tells that
+    CLI apart from the new pane's. Pane ids are random UUIDs; only the AI dock
+    reuses one, and its terminal.create kills the old PTY before respawning.
+
+    The check and the revoke hold the lock that minting takes, so a same-id
+    respawn's wiring cannot be handed the token this call is about to drop.
     """
     from agent_team_backend import agent_messaging
 
     with _PANE_TOKENS_LOCK:
         if pane_id not in _PANE_TOKENS:
             return
-    if agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id):
-        return
-    with _PANE_TOKENS_LOCK:
+        if agent_messaging.names_pane(pane_id) or _pane_has_live_pty(pane_id):
+            return
         token = _PANE_TOKENS.pop(pane_id, None)
     if token:
         log_redaction.remove_secret(token)
