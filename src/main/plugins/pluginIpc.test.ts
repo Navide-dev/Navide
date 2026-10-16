@@ -755,6 +755,51 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('makes a reinstall after removal ask for capability consent again', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', { shell: 'full' })
+    const root = mkdtempSync(join(tmpdir(), 'navide-remove-reinstall-consent-'))
+    const manager = new FrontendPluginManager()
+    const cleanupPluginStorage = vi.fn(async () => undefined)
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        cleanupPluginStorage,
+        ...TEST_PREFLIGHT_OPTIONS,
+      })
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      const remove = handlers.get('plugins:remove')!
+      const grants = new PluginCapabilityGrantStore(root)
+
+      installFetch(signedDetail(digest), bytes, digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+      expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
+
+      await expect(remove(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(cleanupPluginStorage).toHaveBeenCalledWith('acme.demo')
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      expect(new PluginActivationSelector(root).read('acme.demo')).toBeNull()
+      expect(existsSync(join(root, 'acme.demo'))).toBe(false)
+
+      // The same version again: nothing from the first install may stand in
+      // for the user's answer.
+      installFetch(signedDetail(digest), bytes, digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await expect(commit(null, { id: 'acme.demo', publisherConfirmed: true })).rejects.toThrow(
+        /capability and backend risk confirmation/
+      )
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      expect(grants.get('acme.demo', '1.0.0')).toBeNull()
+      await restart(null, { id: 'acme.demo' })
+      expect(grants.get('acme.demo', '1.0.0')).toMatchObject({ shell: 'full', highRiskShellConfirmed: true })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps the package installed when storage cleanup fails and permits retry', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-storage-failure-'))
     const installedDir = join(root, 'acme.demo')
