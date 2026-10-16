@@ -39,14 +39,11 @@ jobs:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # The Bun version is pinned in .bun-version.
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          node-version: 22
-          cache: pnpm
+          bun-version-file: .bun-version
 
       - name: Install bubblewrap and a C compiler
         run: |
@@ -54,10 +51,10 @@ jobs:
           sudo apt-get install -y bubblewrap build-essential
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Build public packages
-        run: pnpm run build:public-packages
+        run: bun run build:public-packages
 
       - name: Record the host's namespace policy
         run: |
@@ -75,7 +72,7 @@ jobs:
           previous=$(sysctl -n user.max_user_namespaces)
           echo "PREVIOUS_MAX_USER_NAMESPACES=$previous" >> "$GITHUB_ENV"
           sudo sysctl -w user.max_user_namespaces=0
-          pnpm test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
+          bun run test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
 
       # 2. Permitted: namespaces allowed and the AppArmor restriction relaxed,
       #    so bwrap works. Every escape in the suite must be blocked.
@@ -85,4 +82,4 @@ jobs:
         run: |
           sudo sysctl -w user.max_user_namespaces="$PREVIOUS_MAX_USER_NAMESPACES"
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || echo "no AppArmor userns restriction on this kernel"
-          pnpm test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts
+          bun run test:run src/main/plugins/pluginBackendSandbox.test.ts packages/plugin-sdk/bin/dev-backend.test.ts

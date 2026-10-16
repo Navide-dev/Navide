@@ -181,7 +181,11 @@ UI automation; test UI changes manually. To reproduce the build check locally,
 run `pnpm build`. See [CI and CLI regression infrastructure](docs/en-US/ci-and-cli-regression.md)
 for suite ownership, provider isolation, contract coverage and diagnostics.
 
+CI runs its install, typecheck and test jobs on Bun (`bun install --frozen-lockfile`, version pinned in `.bun-version`); releases and local development still use pnpm. When you change a dependency, run `pnpm install` and `bun install` so `bun.lock` and `pnpm-lock.yaml` resolve the same versions; CI fails on a stale `bun.lock` and, via `scripts/check-lockfile-parity.mjs`, whenever the two locks resolve different packages.
+
 > Fork 後建立 feature branch，跑測試與型別檢查無誤後，依照下方 commit 格式提交，並開 PR 至 `main`。
+>
+> CI 的安裝、型別檢查與測試 job 以 Bun 執行（`bun install --frozen-lockfile`，版本固定於 `.bun-version`）；發佈與本機開發仍使用 pnpm。變更依賴時請同時執行 `pnpm install` 與 `bun install`，讓 `bun.lock` 與 `pnpm-lock.yaml` 解析出相同版本；`bun.lock` 過期、或兩份 lock 解析出不同套件時（由 `scripts/check-lockfile-parity.mjs` 檢查）CI 會失敗。
 
 ---
 
