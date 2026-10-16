@@ -26,22 +26,22 @@
               "risk": "read",
               "title": "Read dev map",
               "description": "Read this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "properties": {}
-              },
-              "timeoutMs": 30000
+              }
             }
           },
           {
             "kind": "agentTool",
             "key": "devmap_set_status",
             "detail": {
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
-              "timeoutMs": 30000,
               "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "required": [
@@ -70,12 +70,12 @@
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.read",
+            "key": "devmap.block.status",
             "detail": null
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.setStatus",
+            "key": "devmap.read",
             "detail": null
           },
           {
@@ -86,6 +86,11 @@
           {
             "kind": "nativeBackend",
             "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "network",
+            "key": "via-shell",
             "detail": null
           },
           {
@@ -161,11 +166,11 @@
             "kind": "agentTool",
             "key": "devmap_set_status",
             "detail": {
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
-              "timeoutMs": 30000,
               "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "required": [
@@ -193,11 +198,11 @@
             "kind": "agentTool",
             "key": "devmap_set_status",
             "detail": {
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
-              "timeoutMs": 30000,
               "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "required": [
@@ -229,11 +234,11 @@
               "risk": "read",
               "title": "Read dev map",
               "description": "Read this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "properties": {}
-              },
-              "timeoutMs": 30000
+              }
             }
           },
           {
@@ -243,12 +248,12 @@
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.read",
+            "key": "devmap.block.status",
             "detail": null
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.setStatus",
+            "key": "devmap.read",
             "detail": null
           },
           {
@@ -274,6 +279,11 @@
           {
             "kind": "nativeBackend",
             "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "network",
+            "key": "via-shell",
             "detail": null
           },
           {
@@ -336,22 +346,22 @@
               "risk": "read",
               "title": "Read dev map",
               "description": "Read this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "properties": {}
-              },
-              "timeoutMs": 30000
+              }
             }
           },
           {
             "kind": "agentTool",
             "key": "devmap_set_status",
             "detail": {
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
-              "timeoutMs": 30000,
               "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+              "timeoutMs": 30000,
               "inputSchema": {
                 "type": "object",
                 "required": [
@@ -380,12 +390,12 @@
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.read",
+            "key": "devmap.block.status",
             "detail": null
           },
           {
             "kind": "backendMethod",
-            "key": "devmap.setStatus",
+            "key": "devmap.read",
             "detail": null
           },
           {
@@ -396,6 +406,11 @@
           {
             "kind": "nativeBackend",
             "key": "native",
+            "detail": null
+          },
+          {
+            "kind": "network",
+            "key": "via-shell",
             "detail": null
           },
           {
@@ -494,6 +509,11 @@
           "risk": "highest"
         },
         "added": [
+          {
+            "kind": "network",
+            "key": "via-shell",
+            "detail": null
+          },
           {
             "kind": "shell",
             "key": "full",
