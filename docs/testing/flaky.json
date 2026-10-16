@@ -52,6 +52,22 @@
       ]
     },
     {
+      "test": "backend/tests/cli_regression/test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode]",
+      "category": "needs-review",
+      "count": 1,
+      "firstSeen": "2026-10-16T04:46:48Z",
+      "lastSeen": "2026-10-16T04:46:48Z",
+      "runs": [
+        {
+          "run": 38850198431,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": 296,
+          "at": "2026-10-16T04:46:48Z",
+          "evidence": "FAILED backend\\tests\\cli_regression\\test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode] - TimeoutError"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_db.py::test_commits_are_not_blocked_by_a_reader_holding_the_journal",
       "category": "needs-review",
       "count": 1,
