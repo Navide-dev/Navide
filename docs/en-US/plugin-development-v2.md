@@ -347,6 +347,14 @@ per-workspace "allow file changes" grant, asked once in a dialog and revocable
 in Settings. Every other bridge port is refused. Third-party methods are never
 callable by MCP agents.
 
+Planned, not yet accepted: a `backend.agentTools` manifest field that lets a
+package offer consented agent tools on the core MCP server, and the disclosure
+data computed from every manifest. Their interface contract (field rules,
+naming, disclosure shape, Host messages, audit tables) is
+[plugin-agent-tools-contract.md](plugin-agent-tools-contract.md). Until the
+manifest schema accepts the field, a package that declares it is refused and
+the sentence above holds unchanged.
+
 `backend.methods` and `backend.events` declare the package-local names the
 Host forwards (1–64 methods, 1–32 events, dotted lower-camel names such as
 `files.search`). A name that is not declared is refused before it reaches the

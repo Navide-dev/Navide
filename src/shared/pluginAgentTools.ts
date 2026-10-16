@@ -1,0 +1,416 @@
+/**
+ * Step-0 contract for Navide plugin agent tools (plan B, B1 and B2).
+ *
+ * Types and pure functions only: nothing in the app imports this module yet,
+ * and plugin-manifest-v2.schema.json still refuses `backend.agentTools`. The
+ * normative text is docs/en-US/plugin-agent-tools-contract.md; the Python
+ * twin is backend/agent_team_backend/plugins/agent_tools_contract.py, and both
+ * are held to docs/plugin-contracts/agent-tools-fixtures/ by their tests.
+ */
+
+import { canonicalJson } from './canonicalJson'
+import type {
+  DisclosureCard,
+  DisclosureDiff,
+  DisclosurePermissions,
+  DisclosureRiskLevel,
+  DisclosureSummary,
+} from './pluginDisclosure'
+
+// ── manifest: backend.agentTools[] ──────────────────────────────────────────
+
+export type AgentToolRisk = 'read' | 'write'
+
+/** One entry of `backend.agentTools` as a package declares it. */
+export interface AgentToolDeclaration {
+  /** `<prefix>_<rest>`, see {@link AGENT_TOOL_NAME_PATTERN} and {@link deriveAgentToolPrefix}. */
+  name: string
+  /** A name listed in `backend.methods`; the Host forwards the call to it. */
+  method: string
+  risk: AgentToolRisk
+  title: string
+  description: string
+  /** JSON Schema of the arguments; `type` must be `"object"`, numbers must be integers. */
+  inputSchema: Record<string, unknown>
+  /** 1..{@link AGENT_TOOL_MAX_TIMEOUT_MS}; {@link AGENT_TOOL_DEFAULT_TIMEOUT_MS} when omitted. */
+  timeoutMs?: number
+}
+
+export const AGENT_TOOL_NAME_PATTERN = /^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$/
+const PREFIX_PATTERN = /^[a-z][a-z0-9]{1,15}$/
+
+export const AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
+/** Same bound as the Host's backend calls (pluginBackendLimits.MAX_BACKEND_TIMEOUT_MS). */
+export const AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
+/** DB9: the technical cap on one description, one canonical input schema and one result, in UTF-8 bytes. */
+export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
+
+export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
+const AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...AGENT_TOOL_REQUIRED_FIELDS, 'timeoutMs'])
+
+/** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation). */
+export const RESERVED_TOOL_PREFIXES = [
+  'cli_', 'credentials_', 'evolve_', 'marketplace_', 'mcp_', 'memory_', 'navide_', 'pipeline_', 'plan_',
+  'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_', 'workspace_',
+] as const
+
+/** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
+export const CORE_TOOL_NAMES = [
+  'cli_answer_prompt', 'cli_cancel_message', 'cli_check_message', 'cli_close_agent', 'cli_extensions_list',
+  'cli_get_status', 'cli_inbox_summary', 'cli_interrupt', 'cli_list_sessions', 'cli_list_targets',
+  'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
+  'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
+  'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
+  'mcp_list', 'memory_list', 'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
+  'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
+  'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'preview_clear', 'preview_list',
+  'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
+  'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
+  'share_list', 'share_revoke', 'skills_inspect', 'skills_install', 'skills_install_status', 'skills_list',
+  'skills_prepare_install', 'skills_set_delivery', 'stage_define', 'ui_diagnostics', 'ui_invoke',
+  'ui_list_actions', 'ui_snapshot', 'workspace_list', 'workspace_open', 'workspace_switch',
+] as const
+
+export type AgentToolNameError =
+  | 'AGENT_TOOL_PREFIX_UNDERIVABLE'
+  | 'AGENT_TOOL_NAME_INVALID'
+  | 'AGENT_TOOL_PREFIX_MISMATCH'
+  | 'AGENT_TOOL_PREFIX_RESERVED'
+  | 'AGENT_TOOL_NAME_RESERVED'
+
+export type AgentToolErrorCode =
+  | AgentToolNameError
+  | 'AGENT_TOOLS_NOT_ARRAY'
+  | 'AGENT_TOOL_NOT_OBJECT'
+  | 'AGENT_TOOL_FIELD_UNKNOWN'
+  | 'AGENT_TOOL_FIELD_MISSING'
+  | 'AGENT_TOOL_NAME_DUPLICATE'
+  | 'AGENT_TOOL_METHOD_UNDECLARED'
+  | 'AGENT_TOOL_RISK_INVALID'
+  | 'AGENT_TOOL_TEXT_INVALID'
+  | 'AGENT_TOOL_SCHEMA_INVALID'
+  | 'AGENT_TOOL_NON_INTEGER_NUMBER'
+  | 'AGENT_TOOL_TOO_LARGE'
+  | 'AGENT_TOOL_TIMEOUT_INVALID'
+
+export interface AgentToolValidationError {
+  index: number | null
+  field: string | null
+  code: AgentToolErrorCode
+}
+
+/**
+ * The tool-name prefix a plugin id yields: its last dot segment with hyphens
+ * removed, when that matches `^[a-z][a-z0-9]{1,15}$`; otherwise null and the
+ * package cannot declare agent tools.
+ */
+export function deriveAgentToolPrefix(pluginId: unknown): string | null {
+  if (typeof pluginId !== 'string') return null
+  const segments = pluginId.split('.')
+  const candidate = segments[segments.length - 1].replace(/-/g, '')
+  return PREFIX_PATTERN.test(candidate) ? candidate : null
+}
+
+/** First failing rule for one tool name, or null when it is accepted. */
+export function validateAgentToolName(name: unknown, pluginId: unknown): AgentToolNameError | null {
+  const prefix = deriveAgentToolPrefix(pluginId)
+  if (prefix === null) return 'AGENT_TOOL_PREFIX_UNDERIVABLE'
+  if (typeof name !== 'string' || !AGENT_TOOL_NAME_PATTERN.test(name)) return 'AGENT_TOOL_NAME_INVALID'
+  if (name.slice(0, name.indexOf('_')) !== prefix) return 'AGENT_TOOL_PREFIX_MISMATCH'
+  if ((RESERVED_TOOL_PREFIXES as readonly string[]).includes(`${prefix}_`)) return 'AGENT_TOOL_PREFIX_RESERVED'
+  if ((CORE_TOOL_NAMES as readonly string[]).includes(name)) return 'AGENT_TOOL_NAME_RESERVED'
+  return null
+}
+
+// ── text rules ──────────────────────────────────────────────────────────────
+
+// Cc (C0, DEL, C1) plus the two Unicode line/paragraph separators, and markup.
+// eslint-disable-next-line no-control-regex
+const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]/
+// Cc except tab and line feed.
+// eslint-disable-next-line no-control-regex
+const RESULT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
+
+/** Title and description: a non-empty single line with no control characters and no `<` `>`. */
+export function isValidAgentToolText(value: unknown): boolean {
+  return typeof value === 'string' && value.length > 0 && !FORBIDDEN_TEXT.test(value)
+}
+
+/** Tool result text as the agent will see it: every Cc character except `\t` and `\n` removed. */
+export function sanitizeAgentToolResultText(value: string): string {
+  return value.replace(RESULT_CONTROL, '')
+}
+
+/** UTF-8 length; a lone surrogate counts 3 bytes, as Python's surrogatepass does. */
+export function utf8ByteLength(value: string): number {
+  let bytes = 0
+  for (let i = 0; i < value.length; i++) {
+    const unit = value.charCodeAt(i)
+    if (unit < 0x80) bytes += 1
+    else if (unit < 0x800) bytes += 2
+    else if (unit >= 0xd800 && unit <= 0xdbff && i + 1 < value.length) {
+      const next = value.charCodeAt(i + 1)
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4
+        i++
+      } else bytes += 3
+    } else bytes += 3
+  }
+  return bytes
+}
+
+// ── manifest validation ─────────────────────────────────────────────────────
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function hasNonIntegerNumber(value: unknown): boolean {
+  if (typeof value === 'number') return !Number.isSafeInteger(value)
+  if (Array.isArray(value)) return value.some(hasNonIntegerNumber)
+  if (isPlainObject(value)) return Object.values(value).some(hasNonIntegerNumber)
+  return false
+}
+
+function isValidTimeout(value: unknown): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= AGENT_TOOL_MAX_TIMEOUT_MS
+}
+
+/**
+ * Every rule of section 2.5 that JSON Schema cannot express, plus the shape
+ * rules it can, so B1-a has one function to call. Reads only `id` and
+ * `backend`; returns all errors ordered by entry index, then check order.
+ */
+export function validateAgentTools(manifest: { id?: unknown; backend?: unknown }): AgentToolValidationError[] {
+  const backend = manifest.backend
+  if (!isPlainObject(backend) || !('agentTools' in backend)) return []
+  const declared = backend.agentTools
+  if (!Array.isArray(declared)) return [{ index: null, field: 'agentTools', code: 'AGENT_TOOLS_NOT_ARRAY' }]
+  const methods = Array.isArray(backend.methods) ? backend.methods : []
+  const errors: AgentToolValidationError[] = []
+  const seen = new Set<string>()
+  declared.forEach((tool, index) => {
+    const fail = (field: string | null, code: AgentToolErrorCode): void => {
+      errors.push({ index, field, code })
+    }
+    if (!isPlainObject(tool)) return fail(null, 'AGENT_TOOL_NOT_OBJECT')
+    for (const field of Object.keys(tool).sort()) {
+      if (!AGENT_TOOL_FIELDS.has(field)) fail(field, 'AGENT_TOOL_FIELD_UNKNOWN')
+    }
+    for (const field of AGENT_TOOL_REQUIRED_FIELDS) {
+      if (!(field in tool)) fail(field, 'AGENT_TOOL_FIELD_MISSING')
+    }
+    if ('name' in tool) {
+      const nameError = validateAgentToolName(tool.name, manifest.id)
+      if (nameError) fail('name', nameError)
+      else if (seen.has(tool.name as string)) fail('name', 'AGENT_TOOL_NAME_DUPLICATE')
+      else seen.add(tool.name as string)
+    }
+    if ('method' in tool && !methods.includes(tool.method)) fail('method', 'AGENT_TOOL_METHOD_UNDECLARED')
+    if ('risk' in tool && tool.risk !== 'read' && tool.risk !== 'write') fail('risk', 'AGENT_TOOL_RISK_INVALID')
+    if ('title' in tool && !isValidAgentToolText(tool.title)) fail('title', 'AGENT_TOOL_TEXT_INVALID')
+    if ('description' in tool) {
+      if (!isValidAgentToolText(tool.description)) fail('description', 'AGENT_TOOL_TEXT_INVALID')
+      else if (utf8ByteLength(tool.description as string) > AGENT_TOOL_STABILITY_CAP_BYTES) {
+        fail('description', 'AGENT_TOOL_TOO_LARGE')
+      }
+    }
+    if ('inputSchema' in tool) {
+      const schema = tool.inputSchema
+      if (!isPlainObject(schema) || schema.type !== 'object') fail('inputSchema', 'AGENT_TOOL_SCHEMA_INVALID')
+      else if (hasNonIntegerNumber(schema)) fail('inputSchema', 'AGENT_TOOL_NON_INTEGER_NUMBER')
+      else if (utf8ByteLength(canonicalJson(schema)) > AGENT_TOOL_STABILITY_CAP_BYTES) {
+        fail('inputSchema', 'AGENT_TOOL_TOO_LARGE')
+      }
+    }
+    if ('timeoutMs' in tool && !isValidTimeout(tool.timeoutMs)) fail('timeoutMs', 'AGENT_TOOL_TIMEOUT_INVALID')
+  })
+  return errors
+}
+
+// ── Host → backend: plugins.agentTools.sync ─────────────────────────────────
+
+/** Why a catalog entry is not callable; `available` is the only callable state. */
+export type AgentToolState =
+  | 'available'
+  | 'consent-required'
+  | 'plugin-disabled'
+  | 'plugin-quarantined'
+  | 'plugin-revoked'
+  | 'name-collision'
+
+export interface AgentToolSyncEntry {
+  pluginId: string
+  pluginVersion: string
+  name: string
+  title: string
+  description: string
+  risk: AgentToolRisk
+  method: string
+  /** Defaulted: always present on the wire. */
+  timeoutMs: number
+  inputSchema: Record<string, unknown>
+  state: AgentToolState
+  /** Feeds the D4 source label; the disclosure `permissions` object of the package version. */
+  permissions: DisclosurePermissions
+}
+
+/** Event `plugins.agentTools.sync`: a full snapshot that replaces the previous one. */
+export interface AgentToolsSyncPayload {
+  /** Strictly increasing per Host process; the backend drops a snapshot not newer than the last. */
+  revision: number
+  /** DB8 master switch. False ⇒ `tools` is empty. */
+  enabled: boolean
+  /** DB4 switch: external MCP clients may call third-party tools. */
+  externalCallers: boolean
+  tools: AgentToolSyncEntry[]
+}
+
+export const AGENT_TOOLS_SYNC_EVENT = 'plugins.agentTools.sync'
+
+// ── backend → Host: the generalized agent call ──────────────────────────────
+
+export interface AgentToolCaller {
+  kind: 'pane' | 'external' | 'host'
+  /** Set for kind "pane" only. */
+  paneId: string | null
+  /** The caller pane's workspace; null for external and host callers. */
+  workspace: string | null
+}
+
+/** Payload of the existing `agent.capability.request` event with operation "agentTool". */
+export interface AgentToolCallRequest {
+  request_id: string
+  operation: 'agentTool'
+  target: { plugin_id: string; workspace_path: string }
+  tool: { name: string; plugin_version: string; sync_revision: number }
+  caller: AgentToolCaller
+  payload: { arguments: Record<string, unknown> }
+}
+
+export type AgentToolCallErrorCode =
+  | 'BAD_REQUEST'
+  | 'PLUGIN_TOOL_UNAVAILABLE'
+  | 'WORKSPACE_NOT_AUTHORIZED'
+  | 'WORKSPACE_WRITE_DECLINED'
+  | 'EXECUTION_POLICY_DENIED'
+  | 'PLUGIN_TOOL_INVALID_ARGUMENTS'
+  | 'PLUGIN_TOOL_TIMEOUT'
+  | 'PLUGIN_TOOL_FAILED'
+  | 'PLUGIN_TOOL_RESULT_TOO_LARGE'
+
+/** `reason` of PLUGIN_TOOL_UNAVAILABLE, in Host check order. */
+export type AgentToolUnavailableReason =
+  | 'master-switch-off'
+  | 'external-callers-off'
+  | 'plugin-not-installed'
+  | 'plugin-disabled'
+  | 'plugin-quarantined'
+  | 'plugin-revoked'
+  | 'plugin-stopping'
+  | 'consent-required'
+  | 'tool-not-consented'
+  | 'name-collision'
+
+export interface AgentToolCallMeta {
+  durationMs: number
+  resultBytes: number
+  /** True when the target workspace differs from caller.workspace. */
+  crossWorkspace: boolean
+}
+
+export type AgentToolCallResponse =
+  | { ok: true; result: unknown; meta: AgentToolCallMeta }
+  | {
+      ok: false
+      error: string
+      error_code: AgentToolCallErrorCode
+      reason?: AgentToolUnavailableReason
+      /** The plugin's own error code, for PLUGIN_TOOL_FAILED. */
+      plugin_error?: string
+      meta?: AgentToolCallMeta
+    }
+
+// ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────
+
+export type MarketplaceQuery =
+  | { kind: 'search'; text: string; category?: string; cursor?: string; limit?: number }
+  | { kind: 'detail'; id: string; version?: string }
+  | { kind: 'installed' }
+
+export interface MarketplaceQueryRequest {
+  request_id: string
+  query: MarketplaceQuery
+}
+
+export interface MarketplaceListingItem {
+  id: string
+  version: string
+  name: string
+  /** Third-party text: the backend wraps it as external content before an agent sees it. */
+  description: string
+  publisher: { name: string; verifiedDomain: string | null }
+  signed: boolean
+  downloads: number
+  risk: DisclosureRiskLevel
+  summary: DisclosureSummary
+}
+
+export interface MarketplaceInstalledItem {
+  id: string
+  version: string
+  enabled: boolean
+  quarantined: boolean
+  hasBackend: boolean
+  agentTools: Array<{ name: string; state: AgentToolState }>
+}
+
+export type MarketplaceQueryResult =
+  | { kind: 'search'; items: MarketplaceListingItem[]; nextCursor: string | null }
+  | { kind: 'detail'; item: MarketplaceListingItem; versions: string[]; card: DisclosureCard }
+  | { kind: 'installed'; items: MarketplaceInstalledItem[] }
+
+export type MarketplaceQueryResponse =
+  | { request_id: string; ok: true; result: MarketplaceQueryResult }
+  | { request_id: string; ok: false; error: string; error_code: 'BAD_REQUEST' | 'NOT_FOUND' | 'REGISTRY_UNAVAILABLE' | 'HOST_UNAVAILABLE' }
+
+export const MARKETPLACE_QUERY_REQUEST_EVENT = 'marketplace.query.request'
+export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
+
+// ── approval registry (B2) ──────────────────────────────────────────────────
+
+export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove'
+export const APPROVAL_KINDS: readonly ApprovalKind[] = [
+  'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove',
+]
+
+export type PluginApprovalStatus = 'pending' | 'applying' | 'completed' | 'rejected' | 'failed' | 'expired'
+
+export interface PluginApprovalRequest {
+  approval_id: string
+  kind: Exclude<ApprovalKind, 'skill'>
+  /** Coalescing key: kind + plugin id + version; a duplicate returns the pending record. */
+  owner: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: AgentToolCaller['kind'] }
+  /** Written by the agent; the card labels it as such. */
+  reason: string
+  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+  card: DisclosureCard | null
+  diff: DisclosureDiff | null
+  status: PluginApprovalStatus
+  error: string | null
+  created_at: number
+  /** created_at + 15 minutes. */
+  expires_at: number
+}
+
+export interface PluginApprovalDecision {
+  approval_id: string
+  approve: boolean
+  /** Trust confirmation minted by the main window for {@link PLUGIN_APPROVAL_DECIDE_ACTION}, subject approval_id. */
+  confirmation: string
+}
+
+export const PLUGIN_APPROVAL_DECIDE_ACTION = 'plugins.agent_request.decide'
+export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000
