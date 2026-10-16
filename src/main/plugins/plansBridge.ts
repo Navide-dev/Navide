@@ -1125,7 +1125,7 @@ export function createTestPlansFilesystemPort(): PlansFilesystemPort {
     async listDir(arguments_, context) {
       const directory = exactPathArguments(arguments_, 'rel_path', context)
       try {
-        return { entries: readdirSync(directory) }
+        return { entries: readdirSync(directory).sort() }
       } catch {
         throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Workspace directory is unavailable.')
       }
@@ -1134,7 +1134,7 @@ export function createTestPlansFilesystemPort(): PlansFilesystemPort {
       const directory = exactPathArguments(arguments_, 'rel_path', context)
       try {
         return {
-          entries: readdirSync(directory).filter((entry) => extname(entry) !== ''),
+          entries: readdirSync(directory).sort().filter((entry) => extname(entry) !== ''),
         }
       } catch {
         throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Workspace directory is unavailable.')

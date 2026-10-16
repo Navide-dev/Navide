@@ -1,7 +1,7 @@
 """Step-0 contract for Navide plugin disclosure (plan B, D1-D5).
 
 The disclosure is computed from a package manifest only, so the Registry (at
-publish time, inside the signed envelope) and the App (at prepareInstall, from
+publish time, in the signed disclosure envelope) and the App (at prepareInstall, from
 the package's own manifest) compute the same object and compare their
 canonical spellings. Registry-only facts (publisher verification, review and
 scan results) travel beside it, never inside it.
@@ -58,7 +58,7 @@ class ManifestDisclosure(TypedDict):
 
 
 class RegistryDisclosureFacts(TypedDict):
-    """Facts only the Registry knows; computed and signed there, never derived from the manifest."""
+    """Facts only the Registry knows; computed there (not covered by a signature), never derived from the manifest."""
 
     publisher: dict[str, Any]   # {name, verifiedDomain, domainVerifiedAt}
     signature: dict[str, Any]   # {signed, keyId}

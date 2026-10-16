@@ -17,7 +17,7 @@ from agent_team_backend.skills_store import SkillsStore
 
 
 def _ctx(pane_id: str = "pa") -> Any:
-    params = {"pane": pane_id, "t": wiring.caller_token()}
+    params = {"pane": pane_id, "t": wiring.caller_token(pane_id)}
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
 

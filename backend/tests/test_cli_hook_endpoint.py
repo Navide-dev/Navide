@@ -212,7 +212,7 @@ def test_stop_hook_records_pane_activity_so_wait_idle_sees_it(
         ctx = SimpleNamespace(
             request_context=SimpleNamespace(
                 request=SimpleNamespace(
-                    query_params={"pane": "other", "t": plan_mcp_wiring.caller_token()}
+                    query_params={"pane": "other", "t": plan_mcp_wiring.caller_token("other")}
                 )
             )
         )
@@ -563,7 +563,7 @@ def test_idle_prompt_after_the_turn_ended_keeps_turn_complete(
         ctx = SimpleNamespace(
             request_context=SimpleNamespace(
                 request=SimpleNamespace(
-                    query_params={"pane": "other", "t": plan_mcp_wiring.caller_token()}
+                    query_params={"pane": "other", "t": plan_mcp_wiring.caller_token("other")}
                 )
             )
         )
