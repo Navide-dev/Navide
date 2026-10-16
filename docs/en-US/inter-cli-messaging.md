@@ -994,7 +994,15 @@ not grant access.
 - Inbound messages are de-duplicated by platform message id. Lines from one
   sender to one topic arriving within 500 ms are joined into one message.
 - `stop`, `停止`, `/stop` or `esc` interrupts the pane (same as `cli_interrupt`)
-  instead of being delivered.
+  instead of being delivered. The reply says how many of this chat's messages
+  are still waiting.
+- `/cancel` withdraws this chat's messages that have not gone into a pane yet,
+  including lines still being joined, through the same withdrawal as
+  `cli_cancel_message`. It never touches another chat's or an agent's
+  messages, and a message already delivered cannot be taken back. The
+  "已收到，等 pane 空檔…" acknowledgement carries two buttons doing the same as
+  `/cancel` and `stop`; a press passes the same allowlist and binding checks
+  as the typed command.
 - A busy pane queues the message as usual (holds and the Messages panel are
   unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most 20 chat
   messages may wait per pane.

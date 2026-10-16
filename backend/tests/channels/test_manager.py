@@ -14,6 +14,8 @@ from agent_team_backend.channels import manager as mgr_mod
 from agent_team_backend.channels import relay as relay_mod
 from agent_team_backend.channels.base import AdapterStatus, Capabilities, InboundMessage, Location
 from agent_team_backend.channels.manager import (
+    BUSY_BUTTONS,
+    CANCEL_CALLBACK,
     MSG_INTERRUPTED,
     MSG_NOT_BOUND,
     MSG_RECEIVED_BUSY,
@@ -38,6 +40,7 @@ class FakeAdapter:
         self.token = token
         self.status = AdapterStatus()
         self.sent: list[tuple[Location, str]] = []
+        self.buttons: dict[str, list] = {}  # text -> the buttons it was sent with
         self.edits: list[tuple[str, str]] = []
         self.typing = 0
         self.fail_edits = False
@@ -56,6 +59,8 @@ class FakeAdapter:
 
     async def send_text(self, loc: Location, text: str, *, buttons=None) -> list[str]:
         self.sent.append((loc, text))
+        if buttons:
+            self.buttons[text] = buttons
         return [str(len(self.sent))]
 
     async def edit_text(self, loc: Location, message_id: str, text: str) -> None:
@@ -93,6 +98,8 @@ class FakeSeams:
         self.delivered: list[tuple[str, str, str]] = []
         self.verdicts: dict[str, dict[str, Any]] = {}
         self.interrupts: list[str] = []
+        self.cancels: list[str] = []
+        self.cancel_results: dict[str, str] = {}
         self.states: dict[str, dict[str, Any]] = {}
         self.aliases: dict[str, str] = {}
         self.events: list[tuple[str, dict[str, Any]]] = []
@@ -123,6 +130,12 @@ class FakeSeams:
     async def interrupt(self, pane_id: str) -> dict[str, Any]:
         self.interrupts.append(pane_id)
         return {"ok": True, "sent": True}
+
+    async def cancel(self, msg_key: str) -> str:
+        self.cancels.append(msg_key)
+        status = self.cancel_results.get(msg_key, "cancelled")
+        self.verdicts[msg_key] = {"status": status}
+        return status
 
     def pane_state(self, pane_id: str) -> dict[str, Any]:
         return self.states.get(pane_id, {"exists": True, "busy": False, "display_status": "idle"})
@@ -158,7 +171,8 @@ class FakeSeams:
                      resolve_pane=self.resolve_pane, broadcast=self.broadcast,
                      read_secret=self.read_secret, write_secret=self.write_secret,
                      ui_settings=lambda: self.settings, pane_agent=lambda p: self.agents.get(p, ""),
-                     agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info)
+                     agent_skills=lambda a: self.skills.get(a, []), limit_info=self.limit_info,
+                     cancel=self.cancel)
 
 
 def _said(env: "Env", needle: str) -> bool:
@@ -303,6 +317,92 @@ async def test_stop_words_interrupt_instead_of_delivering(env: Env, word: str) -
     await env.inbound(word)
     assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
     assert env.tg.texts()[-1] == MSG_INTERRUPTED
+
+
+# --- /cancel, the stop reply and the busy acknowledgement's buttons ----------------
+
+async def test_cancel_withdraws_this_chats_queued_messages(env: Env) -> None:
+    await env.inbound("wrong one")
+    await env.inbound("wrong two")
+    await env.inbound("/cancel")
+    assert sorted(env.fake.cancels) == ["k1", "k2"] and len(env.fake.delivered) == 2
+    assert "已撤回 2 則" in env.tg.texts()[-1]
+
+
+@pytest.mark.parametrize("word", ["/cancel", "/CANCEL", "/cancel@navide_bot"])
+async def test_cancel_word_forms(env: Env, word: str) -> None:
+    await env.inbound("wrong")
+    await env.inbound(word)
+    assert env.fake.cancels == ["k1"] and len(env.fake.delivered) == 1
+
+
+async def test_cancel_with_nothing_queued_says_so(env: Env) -> None:
+    await env.inbound("/cancel")
+    assert env.fake.cancels == [] and env.fake.delivered == []
+    assert "沒有可以撤回" in env.tg.texts()[-1]
+
+
+async def test_cancel_reports_a_message_that_already_went_in(env: Env) -> None:
+    await env.inbound("first")
+    await env.inbound("second")
+    env.fake.cancel_results["k1"] = "delivered"
+    await env.inbound("/cancel")
+    reply = env.tg.texts()[-1]
+    assert "已撤回 1 則" in reply and "1 則已經送進 pane" in reply
+
+
+async def test_cancel_leaves_another_chats_messages_alone(env: Env) -> None:
+    env.store.bind("pane-2", Location("telegram", "default", "-100", "51", "web"))
+    await env.inbound("for web", thread="51")
+    await env.inbound("for api")
+    await env.inbound("/cancel")
+    assert env.fake.cancels == ["k2"]
+
+
+async def test_cancel_from_a_stranger_does_nothing(env: Env) -> None:
+    await env.inbound("mine")
+    await env.inbound("/cancel", sender="99")
+    assert env.fake.cancels == []
+
+
+async def test_cancel_drops_lines_still_being_joined(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(mgr_mod, "DEBOUNCE_S", 0.2)
+    await env.inbound("typo line", wait=False)
+    await env.inbound("/cancel")
+    await asyncio.sleep(0.3)
+    assert env.fake.delivered == [] and "已撤回 1 則" in env.tg.texts()[-1]
+
+
+async def test_stop_reply_says_how_many_are_still_queued(env: Env) -> None:
+    await env.inbound("queued one")
+    await env.inbound("stop")
+    assert env.fake.interrupts == ["pane-1"]
+    assert env.tg.texts()[-1] == MSG_INTERRUPTED + "（還有 1 則在排隊；傳 /cancel 撤回）"
+
+
+async def test_busy_acknowledgement_carries_cancel_and_stop_buttons(env: Env) -> None:
+    env.fake.states["pane-1"] = {"exists": True, "busy": True, "display_status": "running"}
+    await env.inbound("while busy")
+    assert env.tg.buttons[MSG_RECEIVED_BUSY] == BUSY_BUTTONS
+
+
+async def test_cancel_button_withdraws_like_the_command(env: Env) -> None:
+    await env.inbound("wrong")
+    await env.inbound("", callback=CANCEL_CALLBACK)
+    assert env.fake.cancels == ["k1"] and "已撤回 1 則" in env.tg.texts()[-1]
+
+
+async def test_stop_button_interrupts_like_the_command(env: Env) -> None:
+    stop_cb = next(data for _, data in BUSY_BUTTONS if data != CANCEL_CALLBACK)
+    await env.inbound("", callback=stop_cb)
+    assert env.fake.interrupts == ["pane-1"] and env.fake.delivered == []
+
+
+async def test_buttons_from_a_stranger_do_nothing(env: Env) -> None:
+    await env.inbound("mine")
+    for _, data in BUSY_BUTTONS:
+        await env.inbound("", callback=data, sender="99")
+    assert env.fake.cancels == [] and env.fake.interrupts == []
 
 
 async def test_binding_routing_and_unbound_topic(env: Env) -> None:

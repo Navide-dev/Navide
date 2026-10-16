@@ -512,7 +512,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "status", "stop", "cancel"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -522,7 +522,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "stop", "cancel"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
