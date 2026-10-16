@@ -198,10 +198,8 @@ def test_bounds_mark_the_report_incomplete_instead_of_failing() -> None:
     assert "timedOut" in incomplete["params"]["reasons"]
 
 
-def test_packages_with_a_native_backend_or_v1_manifests_get_no_report_yet() -> None:
+def test_v1_manifests_get_no_report() -> None:
     data = _zip({"frontend/a.js": "1"})
-    assert scan_package(data, artifact_digest="a" * 64, target="darwin-arm64",
-                        manifest={**MANIFEST, "backend": {"entry": "backend/x"}}) is None
     assert scan_package(data, artifact_digest="a" * 64, target="universal", manifest={"id": "acme.v1"}) is None
 
 
