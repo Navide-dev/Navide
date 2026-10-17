@@ -3,6 +3,7 @@ import {
   createAuthenticatedBackendRuntime,
   PluginBackendSupervisor,
   type AuthenticatedBackendRuntime,
+  type BackendChildResourceUsage,
   type BackendPluginCallOptions,
   type BackendPluginEvent,
   type BackendPluginLaunchSpec,
@@ -17,11 +18,7 @@ import {
   type AuthenticatedInitiator,
 } from './pluginCapabilityBroker'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
-import {
-  isAllowedBackendTimeout,
-  MAX_BACKEND_CHILDREN,
-  MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
-} from './pluginBackendLimits'
+import { isAllowedBackendTimeout } from './pluginBackendLimits'
 import {
   createProductionPlansBridgeDispatcher,
   type BackendBridgeDispatcher,
@@ -100,6 +97,8 @@ interface BoundView {
   calls: Set<AbortController>
   subscriptions: Set<BackendPluginSubscription>
   pendingSubscriptions: number
+  /** Most subscriptions (held + pending) this view had at once. */
+  subscriptionPeak: number
   /** Third-party only: idle auto-shutdown state. */
   idle?: ThirdPartyIdleState
 }
@@ -216,6 +215,24 @@ export interface BackendCallConcurrency {
 }
 
 /**
+ * Backend resources the Host holds now and at the most, none of them capped
+ * (user ruling): child processes Host-wide (`retained` = children whose close
+ * failed and that may still be running), each bound view's subscriptions and
+ * its child's own usage, and the per-plugin call counts. Read by the activity
+ * page (D-f) through plugins:backendResourceUsage.
+ */
+export interface BackendResourceUsage {
+  children: { current: number; peak: number; retained: number }
+  views: Array<{
+    pluginId: string
+    instanceId: string
+    subscriptions: { current: number; peak: number }
+    child: BackendChildResourceUsage | null
+  }>
+  plugins: BackendCallConcurrency[]
+}
+
+/**
  * Host-owned router for one package's Backend Wire child processes.
  *
  * A registered package is only metadata. Each bound view gets its own
@@ -250,6 +267,7 @@ export class PluginBackendHost {
     { packageKey: string; task: Promise<void> }
   >()
   private reservedChildSlots = 0
+  private childSlotPeak = 0
   /** Slots consumed by children whose close failed; never reclaimed. */
   private retainedChildSlots = 0
   /** In-flight calls and dropped notifications per plugin id; see {@link backendCallConcurrency}. */
@@ -275,6 +293,20 @@ export class PluginBackendHost {
     return [...this.callConcurrency]
       .map(([pluginId, { current, peak, droppedNotifications }]) => ({ pluginId, current, peak, droppedNotifications }))
       .sort((a, b) => a.pluginId.localeCompare(b.pluginId))
+  }
+
+  /** Everything {@link BackendResourceUsage} discloses, as of now. */
+  backendResourceUsage(): BackendResourceUsage {
+    return {
+      children: { current: this.reservedChildSlots, peak: this.childSlotPeak, retained: this.retainedChildSlots },
+      views: [...this.views].map(([instanceId, view]) => ({
+        pluginId: view.runtime.pluginId,
+        instanceId,
+        subscriptions: { current: view.subscriptions.size + view.pendingSubscriptions, peak: view.subscriptionPeak },
+        child: view.supervisor?.resourceUsage() ?? null,
+      })),
+      plugins: this.backendCallConcurrency(),
+    }
   }
 
   private concurrencyFor(pluginId: string): { current: number; peak: number; droppedNotifications: number } {
@@ -442,10 +474,6 @@ export class PluginBackendHost {
     if (workspacePath !== undefined && !nonEmptyString(workspacePath)) {
       throw new BackendPluginError('INVALID_RUNTIME')
     }
-    if (this.reservedChildSlots >= MAX_BACKEND_CHILDREN) {
-      throw new BackendPluginError('RESOURCE_LIMIT', this.childLimitMessage())
-    }
-
     const view: BoundView = {
       runtime: createAuthenticatedBackendRuntime(runtime),
       ...(workspacePath === undefined ? {} : { workspacePath: resolve(workspacePath) }),
@@ -459,10 +487,12 @@ export class PluginBackendHost {
       calls: new Set(),
       subscriptions: new Set(),
       pendingSubscriptions: 0,
+      subscriptionPeak: 0,
       ...(backend.activation.thirdParty !== undefined ? { idle: { stopped: false, inFlight: 0 } } : {}),
     }
     this.views.set(instanceId, view)
     this.reservedChildSlots++
+    this.childSlotPeak = Math.max(this.childSlotPeak, this.reservedChildSlots)
     view.bindingTask = this.finishBinding(view).catch((error: unknown) => {
       if (this.views.get(instanceId) === view) this.views.delete(instanceId)
       view.closing = true
@@ -661,23 +691,22 @@ export class PluginBackendHost {
    * it: the view is already unregistered and the Host has no exit signal to
    * reclaim on. Releasing the slot would let a new child start while that one
    * may still be running, which is the same reason a failed drain keeps its
-   * package admission barrier. Keep the slot for the life of the process and
-   * report it, so the limit it will eventually hit is explained. */
+   * package admission barrier. Keep it counted for the life of the process and
+   * report it; it never stops another child from starting (no child cap). */
   private retainChildSlot(view: BoundView): void {
     if (view.slotReleased || view.slotRetained) return
     view.slotRetained = true
     this.retainedChildSlots++
     console.warn(
       `[plugin-backend] backend child slot retained after a failed close for ` +
-      `${view.activation.pluginId}@${view.activation.packageVersion}: ` +
-      `${this.retainedChildSlots} of ${MAX_BACKEND_CHILDREN} slots are held by children that may still be running.`,
+      `${view.activation.pluginId}@${view.activation.packageVersion}: ${this.childLimitMessage()}`,
     )
   }
 
+  /** How many children whose close failed may still be running (there is no child cap to report against). */
   private childLimitMessage(): string {
-    if (this.retainedChildSlots === 0) return 'Backend child process limit reached.'
-    return 'Backend child process limit reached. ' +
-      `${this.retainedChildSlots} of ${MAX_BACKEND_CHILDREN} slots are retained by backend children whose close failed.`
+    const retained = this.retainedChildSlots
+    return `${retained} backend ${retained === 1 ? 'child' : 'children'} whose close failed may still be running.`
   }
 
   async unbindView(
@@ -892,10 +921,8 @@ export class PluginBackendHost {
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
-    if (view.subscriptions.size + view.pendingSubscriptions >= MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
-    }
     view.pendingSubscriptions++
+    view.subscriptionPeak = Math.max(view.subscriptionPeak, view.subscriptions.size + view.pendingSubscriptions)
     try {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginSubscriptionOptions = { ...options }

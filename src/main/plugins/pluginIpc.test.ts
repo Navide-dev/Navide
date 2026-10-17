@@ -690,6 +690,27 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('discloses backend resource usage to an authorized renderer only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-backend-usage-'))
+    const manager = new FrontendPluginManager()
+    const usage = {
+      children: { current: 2, peak: 40, retained: 0 },
+      views: [],
+      plugins: [{ pluginId: 'navide.plans', current: 0, peak: 9, droppedNotifications: 0 }],
+    }
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { backendResourceUsage: () => usage })
+      const handler = handlers.get('plugins:backendResourceUsage')
+      if (!handler) throw new Error('usage handler not registered')
+      expect(handler(null)).toEqual(usage)
+
+      registerPluginIpc(manager, root, () => false, TRUST_CONFIG, undefined, { backendResourceUsage: () => usage })
+      expect(() => handlers.get('plugins:backendResourceUsage')?.(null)).toThrow()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('refuses uninstall when storage cleanup is unavailable', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-no-storage-cleanup-'))
     const installedDir = join(root, 'acme.demo')

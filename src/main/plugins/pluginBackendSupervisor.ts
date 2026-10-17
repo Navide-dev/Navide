@@ -3,7 +3,6 @@ import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from 'n
 import { TextDecoder } from 'node:util'
 import {
   isAllowedBackendTimeout,
-  MAX_BACKEND_BRIDGE_REQUESTS,
   MAX_BACKEND_BRIDGE_QUEUE_BYTES,
   MAX_BACKEND_BRIDGE_RESULT_BYTES,
 } from './pluginBackendLimits'
@@ -36,7 +35,6 @@ const PROTOCOL_ERROR_MESSAGE = 'Backend plugin returned an invalid protocol mess
 const ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u
 /** Live cancellation tombstones kept per child; the oldest is evicted past it. */
 export const MAX_IGNORED_REQUEST_IDS = 256
-const MAX_ACTIVE_SUBSCRIPTIONS = 256
 const MAX_RETAINED_STDERR_BYTES = 64 * 1024
 const MAX_DIAGNOSTIC_EMITTED_BYTES = 64 * 1024
 export const MAX_CAUSE_STDERR_CHARS = 8192
@@ -234,6 +232,27 @@ export interface BackendHealth {
   serverInfo: BackendServerInfo
 }
 
+/** Bytes and frames of one kind waiting in a child's Host→child output queue, now and at the most. */
+export interface BackendQueueUsage {
+  frames: number
+  bytes: number
+  peakFrames: number
+  peakBytes: number
+}
+
+/**
+ * What one backend child holds right now and the most it has held since its
+ * supervisor was created. None of these are capped (user ruling): they are
+ * disclosed instead, for the activity page (D-f).
+ */
+export interface BackendChildResourceUsage {
+  subscriptions: { current: number; peak: number }
+  bridgeRequests: { current: number; peak: number }
+  outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
+  /** Always 0 now that notifications are never dropped; kept for older readers. */
+  droppedNotifications: number
+}
+
 export interface PluginBackendSupervisorOptions {
   environment: Readonly<Record<string, string>>
   spawnProcess?: (entryFile: string, options: SpawnOptions) => ChildProcessWithoutNullStreams
@@ -261,7 +280,8 @@ export interface PluginBackendSupervisorOptions {
   ) => ExecutionPolicySnapshot | undefined
   /** Notify the Host when this child generation becomes unusable. */
   onFailure?: (error: BackendPluginError) => void
-  /** Called for every Host event notification dropped because the event backlog was full. */
+  /** Kept for older callers: Host event notifications are never dropped any
+   *  more (user ruling: no queue limit), so this is never called. */
   onNotificationDropped?: () => void
 }
 
@@ -1039,7 +1059,9 @@ export class PluginBackendSupervisor {
     workspacePath?: string,
   ) => ExecutionPolicySnapshot | undefined
   private readonly onFailure?: (error: BackendPluginError) => void
-  private readonly onNotificationDropped?: () => void
+  private subscriptionPeak = 0
+  private bridgeRequestPeak = 0
+  private readonly queuePeaks = { requestFrames: 0, requestBytes: 0, notificationFrames: 0, notificationBytes: 0 }
   private rootRefreshController?: AbortController
   private state: SupervisorState = 'idle'
   private currentGeneration?: ChildGeneration
@@ -1121,7 +1143,6 @@ export class PluginBackendSupervisor {
     this.beforeSpawn = options.beforeSpawn
     this.resolveExecutionPolicy = options.resolveExecutionPolicy
     this.onFailure = options.onFailure
-    this.onNotificationDropped = options.onNotificationDropped
     if (
       !isRecord(this.clientCapabilities) ||
       !isJsonValue(this.clientCapabilities) ||
@@ -1139,6 +1160,33 @@ export class PluginBackendSupervisor {
       !isPositiveFiniteNumber(this.maxFrameBytes)
     ) {
       throw new BackendPluginError('INVALID_ACTIVATION')
+    }
+  }
+
+  /** Subscriptions, Bridge requests and output-queue backlog now and at the most; see {@link BackendChildResourceUsage}. */
+  resourceUsage(): BackendChildResourceUsage {
+    const generation = this.currentGeneration
+    const notificationFrames = generation?.outputNotificationFrames.size ?? 0
+    const notificationBytes = generation?.outputNotificationBytes ?? 0
+    const peaks = this.queuePeaks
+    return {
+      subscriptions: { current: this.subscriptions.size, peak: this.subscriptionPeak },
+      bridgeRequests: { current: this.bridgeRequests.size, peak: this.bridgeRequestPeak },
+      outputQueue: {
+        requests: {
+          frames: (generation?.outputQueue.length ?? 0) - notificationFrames,
+          bytes: (generation?.outputQueueBytes ?? 0) - notificationBytes,
+          peakFrames: peaks.requestFrames,
+          peakBytes: peaks.requestBytes,
+        },
+        notifications: {
+          frames: notificationFrames,
+          bytes: notificationBytes,
+          peakFrames: peaks.notificationFrames,
+          peakBytes: peaks.notificationBytes,
+        },
+      },
+      droppedNotifications: generation?.droppedNotifications ?? 0,
     }
   }
 
@@ -1287,9 +1335,6 @@ export class PluginBackendSupervisor {
     ) {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
-    if (this.subscriptions.size >= MAX_ACTIVE_SUBSCRIPTIONS) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
-    }
     if (options.signal?.aborted) {
       throw new BackendPluginError('USER_CANCELLED')
     }
@@ -1337,6 +1382,7 @@ export class PluginBackendSupervisor {
     }
     state.publicSubscription = publicSubscription
     this.subscriptions.add(state)
+    this.subscriptionPeak = Math.max(this.subscriptionPeak, this.subscriptions.size)
     if (options.timeoutMs !== undefined) {
       state.timeoutTimer = setTimeout(() => this.timeoutSubscription(state), options.timeoutMs)
     }
@@ -1969,10 +2015,6 @@ export class PluginBackendSupervisor {
       this.sendBridgeError(generation, request.id, 'PROTOCOL_ERROR')
       return
     }
-    if (this.bridgeRequests.size >= MAX_BACKEND_BRIDGE_REQUESTS) {
-      this.sendBridgeError(generation, request.id, 'RESOURCE_LIMIT')
-      return
-    }
     if (!this.approvedBridgePorts.includes(request.port)) {
       this.sendBridgeError(generation, request.id, 'CAPABILITY_DENIED')
       return
@@ -2022,6 +2064,7 @@ export class PluginBackendSupervisor {
       )
     }
     this.bridgeRequests.set(request.id, pending)
+    this.bridgeRequestPeak = Math.max(this.bridgeRequestPeak, this.bridgeRequests.size)
     if (request.operation === 'watch') this.bridgeWatchOrigins.set(requestOriginKey, pending)
     const context: PlansBridgeContext = {
       runtime: pending.runtime,
@@ -2700,10 +2743,9 @@ export class PluginBackendSupervisor {
    * protocol exchange someone is waiting on, so it is always queued: a backlog
    * of requests is load, not a dead child (with no cap on in-flight calls, 500
    * concurrent calls used to overflow the queue and kill the child). A
-   * 'notification' frame carries a Host event nobody is waiting on; once the
-   * queued notifications alone pass the queue bound it is dropped, counted and
-   * reported through onNotificationDropped. Requests waiting in the same queue
-   * never count against that bound, so a request backlog cannot drop events.
+   * 'notification' frame carries a Host event; it is queued too and never
+   * dropped (user ruling: no queue limit). Both backlogs are counted apart and
+   * disclosed through resourceUsage().
    */
   private writeFrame(
     generation: ChildGeneration,
@@ -2716,29 +2758,17 @@ export class PluginBackendSupervisor {
       generation.child.stdin.destroyed ||
       generation.child.stdin.writableEnded
     ) throw new Error('closed')
-    if (kind === 'notification' && generation.outputNotificationBytes + frame.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
-      generation.droppedNotifications += 1
-      try {
-        this.onNotificationDropped?.()
-      } catch {
-        // An observer must not change the drop.
-      }
-      if (generation.droppedNotifications === 1) {
-        this.emitDiagnostic(
-          new Error(
-            'Host event notification dropped: output queue limit reached. Further drops for this child are counted but not reported.',
-          ),
-          generation,
-        )
-      }
-      return
-    }
     generation.outputQueue.push(frame)
     generation.outputQueueBytes += frame.length
     if (kind === 'notification') {
       generation.outputNotificationFrames.add(frame)
       generation.outputNotificationBytes += frame.length
     }
+    const peaks = this.queuePeaks
+    peaks.requestFrames = Math.max(peaks.requestFrames, generation.outputQueue.length - generation.outputNotificationFrames.size)
+    peaks.requestBytes = Math.max(peaks.requestBytes, generation.outputQueueBytes - generation.outputNotificationBytes)
+    peaks.notificationFrames = Math.max(peaks.notificationFrames, generation.outputNotificationFrames.size)
+    peaks.notificationBytes = Math.max(peaks.notificationBytes, generation.outputNotificationBytes)
     this.flushOutput(generation)
   }
 
