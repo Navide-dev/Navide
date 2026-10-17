@@ -343,6 +343,60 @@
           "verifiedTo": "pane"
         }
       }
+    },
+    {
+      "name": "unknown-caller-kind",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "user",
+          "paneId": null,
+          "workspace": null
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
+    },
+    {
+      "name": "pane-relative-workspace",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "relative/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        }
+      }
     }
   ]
 }
