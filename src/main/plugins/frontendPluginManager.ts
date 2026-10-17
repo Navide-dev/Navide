@@ -108,13 +108,11 @@ import {
   canonicalBackendPackageDir,
   PluginBackendHost,
   type BackendCallConcurrency,
+  type BackendResourceUsage,
   type ThirdPartyAdmitter,
 } from './pluginBackendHost'
 import { currentPluginHostTarget, UNIVERSAL_PLUGIN_TARGET } from './pluginTarget'
-import {
-  isAllowedBackendTimeout,
-  MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
-} from './pluginBackendLimits'
+import { isAllowedBackendTimeout } from './pluginBackendLimits'
 import {
   createHostPlansFilesystemPort,
   createProductionPlansBridgeDispatcher,
@@ -5895,9 +5893,6 @@ export class FrontendPluginManager {
       if (subscriptions.has(subscriptionId)) {
         return buildError(subscriptionId, 'BAD_REQUEST', 'backend subscription id is already pending')
       }
-      if (subscriptions.size >= MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE) {
-        return buildError(subscriptionId, 'RESOURCE_LIMIT', 'backend subscription limit reached')
-      }
       this.pendingBackendSubscriptions.set(plugin.instanceId, subscriptions)
       const pending: PendingBackendSubscription = {
         controller: new AbortController(),
@@ -11076,6 +11071,11 @@ export class FrontendPluginManager {
   /** Current and peak in-flight backend calls per plugin (never capped); the activity page (D-f) reads this. */
   backendCallConcurrency(): BackendCallConcurrency[] {
     return this.pluginBackendHost.backendCallConcurrency()
+  }
+
+  /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped); the activity page (D-f) reads this. */
+  backendResourceUsage(): BackendResourceUsage {
+    return this.pluginBackendHost.backendResourceUsage()
   }
 
   /** All validated packages installed from disk, including backend-only packages. */

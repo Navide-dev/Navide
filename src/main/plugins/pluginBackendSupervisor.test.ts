@@ -77,6 +77,7 @@ const activation: BackendPluginLaunchSpec = {
     'fixture.duplicatekeys',
     'fixture.echo',
     'fixture.bridge',
+    'fixture.bridgeburst',
     'fixture.emit',
     'fixture.exit',
     'fixture.forgedruntime',
@@ -834,6 +835,21 @@ describe('PluginBackendSupervisor', () => {
     subscription.dispose()
   })
 
+  it('holds more subscriptions on one child than the old 256 and discloses current and peak', async () => {
+    const supervisor = makeSupervisor()
+    supervisors.push(supervisor)
+    await supervisor.start()
+
+    const client = supervisor.clientFor(authenticatedRuntime)
+    // User ruling: no cap; the 257th subscription used to get RESOURCE_LIMIT.
+    const subscriptions = Array.from({ length: 300 }, () => client.subscribe(['fixture.changed'], () => undefined))
+    await Promise.all(subscriptions.map((subscription) => subscription.acknowledged))
+    expect(supervisor.resourceUsage().subscriptions).toEqual({ current: 300, peak: 300 })
+    for (const subscription of subscriptions) subscription.dispose()
+    await Promise.all(subscriptions.map((subscription) => subscription.settled))
+    expect(supervisor.resourceUsage().subscriptions).toEqual({ current: 0, peak: 300 })
+  }, 60_000)
+
   it('rejects events outside the Host-approved package catalog', async () => {
     const supervisor = makeSupervisor()
     supervisors.push(supervisor)
@@ -1020,7 +1036,7 @@ describe('PluginBackendSupervisor', () => {
     ).resolves.toEqual(1)
   })
 
-  it('bounds active subscription state', async () => {
+  it('accepts a subscription past the old 256 bound and settles every one on dispose', async () => {
     const supervisor = makeSupervisor()
     supervisors.push(supervisor)
     await supervisor.start()
@@ -1031,12 +1047,14 @@ describe('PluginBackendSupervisor', () => {
     )
     await Promise.all(subscriptions.map((subscription) => subscription.acknowledged))
 
-    expect(() => client.subscribe(['fixture.changed'], () => undefined)).toThrowError(
-      new BackendPluginError('RESOURCE_LIMIT')
-    )
+    // User ruling: no cap; the 257th used to throw RESOURCE_LIMIT.
+    const extra = client.subscribe(['fixture.changed'], () => undefined)
+    await extra.acknowledged
+    subscriptions.push(extra)
 
     subscriptions.forEach((subscription) => subscription.dispose())
     await Promise.all(subscriptions.map((subscription) => subscription.settled))
+    expect(supervisor.resourceUsage().subscriptions).toEqual({ current: 0, peak: 257 })
   })
 
   it('delivers progress only to the owning subscription', async () => {
@@ -2357,6 +2375,7 @@ describe('PluginBackendSupervisor', () => {
       let input = ''
       let exited = false
       let parentCallId = ''
+      let burst: { parent: string; expected: number; ok: number; errors: unknown[] } | undefined
       const serverInfo = { 'io.modelcontextprotocol/serverInfo': { name: 'stallable', version: '1.0.0' } }
       const consume = (text: string): void => {
         input += text
@@ -2379,6 +2398,38 @@ describe('PluginBackendSupervisor', () => {
               id: frame.id,
               result: { resultType: 'complete', value: { ok: true }, _meta: serverInfo },
             })}\n`)
+            continue
+          }
+          if (frame.method === 'navide/call' && frame.id && frame.params?.name === 'fixture.bridgeburst') {
+            // Many Bridge requests in flight at once, all from one call.
+            const count = (frame.params.arguments as { count: number }).count
+            burst = { parent: frame.id, expected: count, ok: 0, errors: [] }
+            for (let index = 0; index < count; index += 1) {
+              stdout.write(`${JSON.stringify({
+                jsonrpc: '2.0',
+                id: `bridge:burst-${index}`,
+                method: 'navide/host/call',
+                params: {
+                  origin: { kind: 'call', requestId: frame.id },
+                  port: 'filesystem',
+                  operation: 'resolve_root',
+                  arguments: {},
+                },
+              })}\n`)
+            }
+            continue
+          }
+          if (burst && typeof frame.id === 'string' && frame.id.startsWith('bridge:burst-')) {
+            if (frame.result) burst.ok += 1
+            else burst.errors.push(frame.error)
+            if (burst.ok + burst.errors.length === burst.expected) {
+              stdout.write(`${JSON.stringify({
+                jsonrpc: '2.0',
+                id: burst.parent,
+                result: { resultType: 'complete', value: { ok: burst.ok, errors: burst.errors }, _meta: serverInfo },
+              })}\n`)
+              burst = undefined
+            }
             continue
           }
           if (frame.method === 'navide/call' && frame.id && frame.params?.name === 'fixture.bridge') {
@@ -2455,7 +2506,7 @@ describe('PluginBackendSupervisor', () => {
       }
     }
 
-    it('drops Host event notifications instead of failing the child when the output queue overflows', async () => {
+    it('queues every Host event notification while the child is not reading, dropping none', async () => {
       const onFailure = vi.fn()
       const stderrSink = vi.fn()
       const onNotificationDropped = vi.fn()
@@ -2487,14 +2538,18 @@ describe('PluginBackendSupervisor', () => {
           .call('fixture.bridge', null)
       ).resolves.toEqual({ ok: true })
 
+      // User ruling: no drop. 12 x 48 KiB of events wait for the child instead.
       const delivered = harness.hostFrames.filter((frame) => frame.includes('navide/host/event')).length
-      expect(delivered).toBeGreaterThan(0)
-      expect(delivered).toBeLessThan(emitted)
+      expect(delivered).toBe(emitted)
       expect(onFailure).not.toHaveBeenCalled()
       expect(harness.kill).not.toHaveBeenCalled()
-      expect(stderrSink).toHaveBeenCalledWith(expect.stringContaining('output queue limit'))
-      // Every drop is reported, not only the first one.
-      expect(onNotificationDropped).toHaveBeenCalledTimes(emitted - delivered)
+      expect(stderrSink).not.toHaveBeenCalledWith(expect.stringContaining('output queue limit'))
+      expect(onNotificationDropped).not.toHaveBeenCalled()
+      const usage = supervisor.resourceUsage()
+      expect(usage.droppedNotifications).toBe(0)
+      expect(usage.outputQueue.notifications.peakFrames).toBeGreaterThanOrEqual(emitted - 1)
+      expect(usage.outputQueue.notifications.peakBytes).toBeGreaterThan(256 * 1024)
+      expect(usage.outputQueue.notifications).toMatchObject({ frames: 0, bytes: 0 })
     })
 
     it('keeps delivering Host event notifications while requests back up past the queue bound', async () => {
@@ -2556,6 +2611,39 @@ describe('PluginBackendSupervisor', () => {
       expect(settled.filter((entry) => entry instanceof Error)).toEqual([])
       expect(onFailure).not.toHaveBeenCalled()
       expect(harness.kill).not.toHaveBeenCalled()
+      const queue = supervisor.resourceUsage().outputQueue.requests
+      expect(queue.peakFrames).toBeGreaterThanOrEqual(11)
+      expect(queue.peakBytes).toBeGreaterThan(256 * 1024)
+      expect(queue).toMatchObject({ frames: 0, bytes: 0 })
+    })
+
+    it('serves more Bridge requests from one child at once than the old 256 and discloses them', async () => {
+      const harness = makeStallableChild()
+      const count = 300
+      let arrived = 0
+      let releaseAll!: () => void
+      const allArrived = new Promise<void>((resolve) => { releaseAll = resolve })
+      const supervisor: PluginBackendSupervisor = makeSupervisor({
+        bridgeDispatcher: {
+          dispatch: async () => {
+            arrived += 1
+            if (arrived === count) releaseAll()
+            // Hold every request until all are in flight (or 2 s, so the old cap cannot hang the test).
+            await Promise.race([allArrived, new Promise((resolve) => setTimeout(resolve, 2_000))])
+            return { root: '/workspace' }
+          },
+        },
+        spawnProcess: () => harness.child,
+      })
+      supervisors.push(supervisor)
+      await supervisor.start()
+
+      const result = await supervisor
+        .clientFor(authenticatedRuntime, { workspacePath: '/workspace' })
+        .call('fixture.bridgeburst', { count })
+      // User ruling: no cap. Every request was dispatched; none got RESOURCE_LIMIT.
+      expect(result).toEqual({ ok: count, errors: [] })
+      expect(supervisor.resourceUsage().bridgeRequests).toEqual({ current: 0, peak: count })
     })
 
     it('refuses a single request frame larger than the whole queue without failing the child', async () => {
