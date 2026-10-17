@@ -850,3 +850,16 @@ async def test_property_names_served_alike_are_logged_and_refused(host: FakeHost
     body = _body(await core.server.call_tool("devmap_read", {"kx": 1}))
     assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS" and "ambiguous" in body["error"]
     assert host.requests == []
+
+
+async def test_the_served_value_index_does_not_grow_across_sync_revisions(host: FakeHost, monkeypatch) -> None:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    for revision in range(1, 21):
+        schema = {"type": "object", "properties": {"mode": {"enum": [f"r{revision}a", f"r{revision}b"]}}}
+        _apply(_snapshot(revision, [_entry("devmap_read", inputSchema=schema)]))
+        await core.server.call_tool("devmap_read", {"mode": f"r{revision}a"})
+    assert len(host.requests) == 20
+    # Each snapshot drops the index of the schemas it replaced: only the live
+    # schema's nodes are cached (rebuilt on the next call).
+    assert proxy._served_index.cache_info().currsize <= 2

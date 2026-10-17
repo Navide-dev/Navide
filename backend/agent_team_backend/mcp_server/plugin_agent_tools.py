@@ -619,6 +619,9 @@ def apply_sync(payload: Any, session_key: int) -> dict[str, Any]:
     for name in set(_catalog.registered) | set(available):
         cache.pop(name, None)
 
+    # Indexes of replaced schemas are never used again; live ones rebuild on
+    # their next call.
+    _served_index.cache_clear()
     _catalog.session_key = session_key
     _catalog.revision = payload["revision"]
     _catalog.enabled = payload["enabled"]
