@@ -16,7 +16,9 @@ _V2_CATEGORY_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 PACKAGE_ID_BODY_PATTERN = r"[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)+"
 PACKAGE_ID_RE = re.compile(rf"^{PACKAGE_ID_BODY_PATTERN}$")
 _V2_DISPLAY_TEXT_RE = r"^[^\r\n<>]+$"
-_V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
+# The App backend supervisor's rule (isMethodName, src/main/plugins/pluginBackendSupervisor.ts):
+# a name it would refuse at activation is refused at publish. Pinned by test_backend_name_rule.py.
+_V2_BACKEND_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 # The App's backend supervisor accepts only these method names (isMethodName,
 # src/main/plugins/pluginBackendSupervisor.ts); an agent tool forwarded to any
 # other name could never be served, so publish refuses it.

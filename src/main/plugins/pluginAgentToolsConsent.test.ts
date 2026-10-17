@@ -177,6 +177,26 @@ describe('consent key (contract section 2.8)', () => {
     ])
   })
 
+  it.skipIf(isWindows())('keeps a package whose tools changed offline until the user consents again', async () => {
+    const before = writePackage('acme.devmap', [READ_TOOL])
+    store.grantConsent('acme.devmap', {
+      binarySha256: 'a'.repeat(64),
+      permissionsKey: backendPermissionsKey(before),
+      packageVersion: '1.0.0',
+    })
+    const instance = controller()
+    expect(await instance.preflightAdmission(before)).not.toBeNull()
+
+    // Same binary, one tool's description changed: nothing may start without a new consent.
+    const after = writePackage('acme.devmap', [{ ...READ_TOOL, description: 'Read the dev map and more.' }])
+    await expect(instance.admit(after, undefined, { prompt: false })).rejects.toThrow('the native backend has not been allowed')
+    expect(await instance.preflightAdmission(after)).toBeNull()
+    expect((await instance.status(after)).status).toBe('needs-consent')
+
+    await instance.allow(after)
+    expect(await instance.preflightAdmission(after)).not.toBeNull()
+  })
+
   it.skipIf(isWindows())('passes an empty tool list to the prompt of a package without tools', async () => {
     const promptConsent = vi.fn(async (_prompt: NativeBackendConsentPrompt) => false)
     await expect(controller({ promptConsent }).admit(writePackage('acme.devmap'))).rejects.toThrow()

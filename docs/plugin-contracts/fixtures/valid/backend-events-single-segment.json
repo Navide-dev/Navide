@@ -11,7 +11,7 @@
     ]
   },
   "marketplace": {
-    "description": "Reject backend events unqualified.",
+    "description": "A single-segment event name, which the backend supervisor accepts.",
     "license": "MIT"
   },
   "contributes": {
