@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import ntpath
 import os
 import posixpath
@@ -220,6 +221,13 @@ def _undeclared_uses(refusals: list[Any]) -> list[dict[str, Any]]:
     ]
     out.sort(key=lambda item: (-item["lastAt"], item["source"], item["address"], item["workspace"]))
     return out
+
+
+def _non_negative_number(value: Any) -> float:
+    """A finite number >= 0 (not a bool): a resource usage or threshold."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"expected a finite number >= 0, got {value!r}")
+    return float(value) if isinstance(value, float) else value
 
 
 def _non_negative_int(value: Any) -> int:
@@ -398,6 +406,7 @@ class PluginAuditLog:
         self._stopping = threading.Event()
         self._calls: list[tuple[Any, ...]] = []
         self._activity: list[tuple[Any, ...]] = []
+        self._decisions: list[tuple[Any, ...]] = []
         self._actions: list[tuple[Any, ...]] = []
         # Backend calls, added up per (plugin, version, workspace, address,
         # outcome, minute) until the next flush.
@@ -452,7 +461,10 @@ class PluginAuditLog:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            pending = len(self._calls) + len(self._activity) + len(self._actions) + len(self._backend_calls)
+            pending = (
+                len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
+                + len(self._backend_calls)
+            )
         return {
             "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
             "actions_enabled": self.actions_enabled, "actions_reason": self.actions_disabled_reason,
@@ -579,6 +591,40 @@ class PluginAuditLog:
             return False
         return True
 
+    def record_resource_decision(
+        self,
+        *,
+        plugin_id: str,
+        plugin_version: str,
+        item: str,
+        usage: float,
+        threshold: float,
+        decision: str,
+        at: int | None = None,
+    ) -> bool:
+        """Queue one watchdog notice or decision (section 5.2); False when it is not recorded.
+
+        ``at`` (Unix ms, from the Host) is clamped to now. Only the item and its
+        numbers are kept: there is no field for a path or a command line.
+        """
+        if not self.enabled:
+            return False
+        try:
+            if not isinstance(plugin_id, str) or not plugin_id or not isinstance(plugin_version, str):
+                raise ValueError("plugin_id and plugin_version are required")
+            if item not in contract.PLUGIN_RESOURCE_ITEMS:
+                raise ValueError(f"unknown item {item!r}")
+            if decision not in contract.PLUGIN_RESOURCE_DECISIONS:
+                raise ValueError(f"unknown decision {decision!r}")
+            numbers = (_non_negative_number(usage), _non_negative_number(threshold))
+            row = (self._at(at), plugin_id, plugin_version, item, *numbers, decision)
+            with self._lock:
+                self._decisions.append(row)
+        except Exception as err:  # noqa: BLE001 - the audit never fails what it records
+            log.warning("plugin audit: resource decision not recorded: %s", err)
+            return False
+        return True
+
     def record_agent_action(
         self,
         *,
@@ -667,6 +713,7 @@ class PluginAuditLog:
             activity, self._activity = self._activity, []
             actions, self._actions = self._actions, []
             backend_calls, self._backend_calls = self._backend_calls, {}
+            decisions, self._decisions = self._decisions, []
         if backend_calls:
             try:
                 with self.db.transaction() as cur:
@@ -689,6 +736,17 @@ class PluginAuditLog:
                     )
             except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
                 log.warning("plugin audit: %d backend-call rows not written: %s", len(backend_calls), err)
+        if decisions:
+            # Its own short transaction: a failure here never drops the activity rows.
+            try:
+                with self.db.transaction() as cur:
+                    cur.executemany(
+                        "INSERT INTO plugin_resource_decisions (at, plugin_id, plugin_version, item, usage, threshold,"
+                        " decision) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        decisions,
+                    )
+            except Exception as err:  # noqa: BLE001 - dropped, never raised into a decision
+                log.warning("plugin audit: %d resource-decision rows not written: %s", len(decisions), err)
         if actions:
             try:
                 with self.db.transaction() as cur:
@@ -917,6 +975,12 @@ class PluginAuditLog:
             "DELETE FROM plugin_activity_daily WHERE rowid IN"
             " (SELECT rowid FROM plugin_activity_daily WHERE day < ? LIMIT ?)",
             (day, batch),
+        ):
+            pass
+        while self._batch(
+            "DELETE FROM plugin_resource_decisions WHERE id IN"
+            " (SELECT id FROM plugin_resource_decisions WHERE at < ? LIMIT ?)",
+            (daily_cutoff, batch),
         ):
             pass
         while self._batch(
@@ -1183,7 +1247,8 @@ class PluginAuditLog:
 
     def forget_plugin(self, plugin_id: str) -> None:
         """A removed plugin: drop its first-seen rows, so a reinstall's first
-        write in a workspace is new again, and its backend-call counts. Never raises."""
+        write in a workspace is new again, its resource decisions and its
+        backend-call counts. Never raises."""
         if not self.enabled and not self.backend_calls_enabled:
             return
         self.flush()
@@ -1191,6 +1256,7 @@ class PluginAuditLog:
             with self.db.transaction() as cur:
                 if self.enabled:
                     cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+                    cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
                 if self.backend_calls_enabled:
                     cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))
                     cur.execute("DELETE FROM plugin_backend_call_days WHERE plugin_id = ?", (plugin_id,))

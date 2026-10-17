@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import functools
@@ -469,6 +470,71 @@ def _declared_items(value: Any) -> list[dict[str, str]] | None:
             return None
         items.append({"kind": item["kind"], "key": item["key"]})
     return items
+
+
+_RESOURCE_DECISION_FIELDS = frozenset(
+    ("plugin_id", "plugin_version", "item", "usage", "threshold", "decision", "at")
+)
+_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def _resource_decision_row(row: Any) -> dict[str, Any] | None:
+    """A ``plugin.resource.decision`` row with exactly the contract's fields
+    and types (``parsePluginResourceDecisionRow``'s rules), or None."""
+    from .plugins import agent_tools_contract as contract
+
+    if not isinstance(row, dict) or set(row) != _RESOURCE_DECISION_FIELDS:
+        return None
+
+    def number(value: Any) -> bool:
+        return (
+            not isinstance(value, bool) and isinstance(value, (int, float))
+            and math.isfinite(value) and value >= 0
+        )
+
+    at = row["at"]
+    if (
+        not isinstance(row["plugin_id"], str) or not row["plugin_id"]
+        or not isinstance(row["plugin_version"], str)
+        or row["item"] not in contract.PLUGIN_RESOURCE_ITEMS
+        or row["decision"] not in contract.PLUGIN_RESOURCE_DECISIONS
+        or not number(row["usage"]) or not number(row["threshold"])
+        or isinstance(at, bool) or not isinstance(at, int) or not 0 <= at <= _MAX_SAFE_INTEGER
+    ):
+        return None
+    return dict(row)
+
+
+@handler("plugin.resource.decision")
+async def plugin_resource_decision(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store the Host's watchdog notices and the user's decisions (contract 5.2).
+
+    Write-only: rows are queued for the audit's batched flush. A row that is
+    not exactly the contract's shape is skipped and only counted in the log.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    rows = payload.get("rows") if isinstance(payload, dict) and set(payload) == {"rows"} else None
+    if not isinstance(rows, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.resource.decision is malformed")
+        )
+        return
+    accepted = 0
+    for raw in rows:
+        row = _resource_decision_row(raw)
+        if row is not None and app.plugin_audit_log.record_resource_decision(**row):
+            accepted += 1
+    if accepted < len(rows):
+        log.warning("plugin resource decision: %d of %d rows skipped", len(rows) - accepted, len(rows))
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
 @handler("plugin.activity.forget")

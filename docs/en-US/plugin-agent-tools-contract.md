@@ -824,6 +824,15 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
+A call whose package stops being callable while its backend is being bound
+(the bind is refused or cancelled) answers `PLUGIN_TOOL_UNAVAILABLE` with the
+reason the checks then give, or `plugin-stopping` for a bind or call the stop
+cancelled; it is never reported as `PLUGIN_TOOL_FAILED`, which is the plugin's
+own failure. A call running when Navide closes every backend (a quit) is
+cancelled the same way and also answers `plugin-stopping`. Any other bind
+failure keeps its own error, even when the deadline passes or the workspace
+closes meanwhile.
+
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
 
@@ -1323,7 +1332,17 @@ outcome. (Before those calls were recorded, the Host sent no `backendMethod`
 entries, since they could only ever read unused.) The Host also sends
 `installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
 then counts only writes since then, so a first-seen row left by an earlier
-install of the same id counts as absent. Answer `PluginActivityReport`
+install of the same id counts as absent. It is the time of the install since
+the id was last removed: the Host records it in its own
+`.navide-install-scans.json` (owner-only, `0600`) when a fresh install becomes
+active (the activation finds no version of the id in place: no registered
+package, no active selection, no legacy backend-only install), keeps it
+through updates (over any layout, legacy included) and rollbacks, records
+nothing for a candidate that is staged and then discarded or fails to
+activate, and drops it when the plugin is removed. An id installed before
+this was recorded has none, and Manifest v1 packages (installed in place,
+without the staged activation) never have one; the request then carries no
+`installedAt` and the backend keeps its earlier behaviour. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the
@@ -1352,6 +1371,59 @@ malformed one whole.
 known: such a value is shown as "unknown", never summed, averaged or counted
 in a statistic. Every string is shown as plain text: no link is made from a
 path or a command, and nothing is rendered as HTML.
+
+### 5.2 Resource thresholds: notice, then the user decides
+
+The Host samples every third-party native backend's process tree
+(`pluginBackendResourceWatchdog.ts`). The thresholds are unchanged: resident
+memory of the tree over 512 MiB on two consecutive samples, more than 8
+processes, CPU at or over 0.95 cores sustained for 5 minutes, the private data
+directory over 1 GiB. Going over one no longer stops the backend on its own:
+the Host tells the user which Navide plugin, which item and how much it uses
+now, and offers **Stop** and **Keep running**. The backend keeps running,
+unthrottled, until the user answers. Bundled `navide.*` plugins are not
+watched (unchanged).
+
+- **Stop** runs exactly the stop that used to happen automatically.
+- **Keep running** raises that item's notice level to twice the larger of the
+  level just crossed and the usage at that moment; for CPU the usage value
+  doubles and the 5-minute window stays. This decides only when to tell the
+  user again; it limits nothing. The raised level is not lowered when usage
+  falls back; it returns to the default when the backend starts again.
+- While a notice waits for an answer, the same item is not announced again.
+  A notice counts as delivered only when a main window has shown it; until
+  then it is kept and sent again when a window finishes loading. It is kept in
+  memory only: after a restart the watchdog measures again and, if the backend
+  is still over, raises a new notice.
+
+Every step is recorded, with no path or command line: the Host sends
+`plugin.resource.decision` (`PLUGIN_RESOURCE_DECISION_MESSAGE`,
+`src/shared/pluginResourceDecision.ts`; Host-authenticated, in batches)
+`{rows: [{plugin_id, plugin_version, item, usage, threshold, decision, at}]}`,
+answered `{ok, accepted}`. A failed send is logged and never holds up the
+user's choice. Fixture:
+`docs/plugin-contracts/agent-tools-fixtures/resource-decisions.json`.
+
+| Field | Content |
+|---|---|
+| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds (#367's counts have no threshold); `stdoutPending`: reserved for the stdout a child has sent without a newline yet (review M2 on #375), measured by the backend supervisor once DB9 (#375) lands, threshold set by DB9 |
+| `usage`, `threshold` | non-negative finite numbers; `memory`, `disk` and `stdoutPending` in bytes, `processes` a count, `cpu` in cores (fractional). `threshold` is the level this notice was raised at |
+| `decision` | `notified` (raised, no answer yet), `continue`, `terminate` |
+| `at` | Host Unix ms (the backend clamps a future time to now) |
+
+The backend stores them in `plugin_resource_decisions` (`CREATE TABLE IF NOT
+EXISTS`), kept 90 days like the daily rows, and removes a plugin's rows with
+`plugin.activity.forget`.
+
+Backend side (`PLUGIN_RESOURCE_DECISION_MESSAGE`, `PLUGIN_RESOURCE_ITEMS`,
+`PLUGIN_RESOURCE_DECISIONS` in `agent_tools_contract.py`): a row is accepted
+only with exactly these seven fields and types (`parsePluginResourceDecisionRow`'s
+rules; any other field, such as a path, refuses the row). Accepted rows are
+queued and written by the audit's batched flush, in a transaction of their own
+so a failure there never drops the activity rows. A skipped row is counted in
+the log, never with its content. Columns: `id`, `at`, `plugin_id`,
+`plugin_version`, `item`, `usage` (REAL), `threshold` (REAL), `decision`;
+indexes `(at)` and `(plugin_id, at)`.
 
 ## 6. Approval registry (B2)
 
