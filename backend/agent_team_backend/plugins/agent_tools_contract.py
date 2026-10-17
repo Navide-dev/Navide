@@ -375,7 +375,8 @@ def reassemble_agent_tool_result_text(chunks: list[dict[str, Any]], summary: Any
 
     Returns ``{"ok": True, "text": ...}`` or
     ``{"ok": False, "code": "RESULT_CHUNKS_INVALID", "reason": "summary" | "seq" | "count" | "bytes"}``.
-    No size limit beyond memory.
+    No size limit beyond memory. A joined text that does not parse as JSON is
+    reported by the caller with reason ``"json"``.
     """
 
     def invalid(reason: str) -> dict[str, Any]:

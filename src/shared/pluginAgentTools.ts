@@ -383,7 +383,8 @@ export interface AgentToolCallChunkedResponse {
   meta: AgentToolCallMeta
 }
 
-export type AgentToolResultChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes'
+/** `json` is set by the caller when the joined text does not parse. */
+export type AgentToolResultChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes' | 'json'
 
 export type AgentToolResultReassembly =
   | { ok: true; text: string }

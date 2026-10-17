@@ -812,8 +812,13 @@ arrival order does not matter), and checks that `seq` runs `0..chunks-1`
 exactly once each and that the joined text has `summary.bytes` UTF-8 bytes. A
 mismatch is `RESULT_CHUNKS_INVALID` with `reason` `summary` | `seq` | `count`
 | `bytes`; it fails that one call and nothing else. The joined text is then
-parsed as JSON. A result whose text fits in one piece is sent exactly as
+parsed as JSON; text that does not parse fails the call the same way with
+`reason` `json`. A result whose text fits in one piece is sent exactly as
 before, with no pieces.
+
+**Scope.** Pieces carry results only (DB9). Tool arguments travel as today;
+their per-hop limits are listed in the DB9 contract PR, and sending arguments
+in pieces is a separate decision.
 
 **Hop 1: plugin child → Host (Backend Wire).** The Host advertises support in
 every `navide/call` it sends:
