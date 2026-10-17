@@ -801,10 +801,11 @@ wrapped as external content by the backend before an agent sees it.
 
 ### 4.4 Chunked transfer of results and arguments
 
-A result or an argument object of any size reaches the other end intact. Every
-hop has a single-message limit of its own (the plugin child's 1 MiB Backend
-Wire frame, uvicorn's 16 MiB WebSocket message), so a payload larger than one
-piece travels as ordered pieces and is joined at the receiving end. The pieces
+A result or an argument object of any size reaches the other end intact. A
+payload larger than one piece travels as ordered pieces and is joined at the
+receiving end, so no single message grows with the payload (uvicorn's 16 MiB
+WebSocket message, a child's own frame reader) and other calls are never held
+behind a large one. The pieces
 are a transport unit, not a cap: nothing refuses a call because of the size of
 its arguments or its result, and the receiver holds as much as memory allows.
 Both directions use the same piece format, the same piece size and the same
@@ -815,8 +816,8 @@ two functions.
 ensure_ascii=False, allow_nan=False)`) and cuts it with
 `splitAgentToolPayloadText(text)` into pieces of at most
 `AGENT_TOOL_CHUNK_BYTES` = 131,072 UTF-8 bytes, never inside a code point.
-Even with every byte escaped as `\u00XX` a piece's frame stays below the 1 MiB
-Backend Wire frame. Each piece is `{seq, data}` with `seq` counting from 0.
+Even with every byte escaped as `\u00XX` a piece's frame stays below 1 MiB,
+the frame size child readers use. Each piece is `{seq, data}` with `seq` counting from 0.
 The receiver joins them with `reassembleAgentToolPayloadText(pieces,
 summary)`, which orders by `seq` (so arrival order does not matter) and checks
 that `seq` runs `0..chunks-1` exactly once each and that the joined text has
@@ -935,9 +936,14 @@ call was cancelled, timed out or already settled) are dropped and counted, not
 a protocol error. The call's `timeoutMs` covers the whole transfer up to the
 final response. On timeout or cancellation the Host sends the existing
 `notifications/cancelled`, drops the pieces held so far, and the child should
-stop sending pieces for that id. The child is not restarted for any of this;
-the existing rule that a single frame over the frame limit is a protocol error
-stays, and pieces are what keep a correct child under it.
+stop sending pieces for that id. The child is not restarted for any of this.
+
+The Host reads child frames of any size: the 1 MiB `maxFrameBytes` check on
+the child's stdout, which today fails the process with `PROTOCOL_ERROR` and
+restarts it, is removed. A child that does not send pieces and answers with
+one large frame therefore still delivers its result and keeps running; it only
+holds its other calls behind that frame. A frame that is not valid JSON-RPC
+stays a protocol error, whatever its size.
 
 **R2: Host → backend (WebSocket session).** When the Host's response
 `result` spells longer than one piece, the Host sends the request message
@@ -1104,7 +1110,8 @@ by editing the fixture.
 | DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
 | Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
-| Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under the 1 MiB Backend Wire frame; small enough that other calls interleave |
+| Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child (user decision 2026-10-17); pieces stay the normal path for interleaving |
+| Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under 1 MiB, the frame size child readers use (the built-in Plans backend's `MAX_FRAME_BYTES`); small enough that other calls interleave |
 | Arguments-size field | `args_bytes` only, measured by the backend over the same spelling as `args_sha256`; no `meta.argsBytes` | one number for one fact; the backend sees the arguments first and writes the audit row |
 | Who measures the size | the Host, once, compact JSON (`agentToolResultBytes`) | one number from the hop that sees the plugin's value; the backend's spelling differs |
 | Example backend method names | lowercase dotted (`devmap.block.status`) | the Host supervisor refuses upper-case method names (2.1) |

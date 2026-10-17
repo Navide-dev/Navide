@@ -327,8 +327,8 @@ class AgentToolCallMeta(TypedDict):
 
 #: UTF-8 bytes of the ``data`` of one piece, in both directions. A transport
 #: unit, not a cap: a value of any size is sent as as many pieces as it needs.
-#: Even fully escaped (6 bytes per byte) a piece stays under the 1 MiB Backend
-#: Wire frame.
+#: Even fully escaped (6 bytes per byte) a piece stays under 1 MiB, the frame
+#: size child readers use (Plans backend MAX_FRAME_BYTES).
 AGENT_TOOL_CHUNK_BYTES = 131_072
 #: Backend Wire notification, child -> Host, one per result piece.
 BACKEND_WIRE_RESULT_CHUNK_METHOD = "notifications/navide/resultChunk"

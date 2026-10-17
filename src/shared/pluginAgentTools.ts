@@ -346,7 +346,7 @@ export type AgentToolCallResponse =
  * UTF-8 bytes of the `data` of one piece, in both directions. A transport
  * unit, not a cap: a value of any size is sent as as many pieces as it needs.
  * Even if every byte of a piece were escaped as `\u00XX` (6 bytes) the frame
- * stays under the 1 MiB Backend Wire frame (pluginBackendSupervisor maxFrameBytes).
+ * stays under 1 MiB, the frame size child readers use (Plans backend MAX_FRAME_BYTES).
  */
 export const AGENT_TOOL_CHUNK_BYTES = 131_072
 /** Backend Wire notification, child → Host, one per result piece. */

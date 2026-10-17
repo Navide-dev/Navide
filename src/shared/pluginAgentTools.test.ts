@@ -148,11 +148,11 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     }).toEqual(chunking.constants)
   })
 
-  it('keeps a fully escaped piece inside one Backend Wire frame in both directions', () => {
-    // Read as text: src/shared is also compiled by the web project, which cannot import src/main.
-    const supervisor = readFileSync(join(process.cwd(), 'src/main/plugins/pluginBackendSupervisor.ts'), 'utf8')
-    const frame = Number(/maxFrameBytes \?\? ([\d_]+)/.exec(supervisor)?.[1]?.replace(/_/g, ''))
-    expect(frame).toBeGreaterThan(0)
+  it('keeps a fully escaped piece inside a 1 MiB child frame reader in both directions', () => {
+    // The built-in Plans backend's reader; read as text because it is Python.
+    const plans = readFileSync(join(process.cwd(), 'plugins/navide-plans/backend/plans_backend.py'), 'utf8')
+    const frame = Number(/^MAX_FRAME_BYTES = ([\d_]+)$/m.exec(plans)?.[1]?.replace(/_/g, ''))
+    expect(frame).toBe(1_048_576)
     for (const method of [BACKEND_WIRE_RESULT_CHUNK_METHOD, BACKEND_WIRE_ARGUMENT_CHUNK_METHOD]) {
       const worst = JSON.stringify({
         jsonrpc: '2.0', method,
