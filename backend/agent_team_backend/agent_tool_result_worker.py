@@ -30,6 +30,7 @@ import math
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, BinaryIO
 
@@ -39,6 +40,10 @@ HEARTBEAT_S = 2.0
 #: Seconds the backend waits for the next frame (or room to write) before it
 #: gives the helper up; the same window as AGENT_TOOL_CHUNK_IDLE_MS.
 IDLE_S = 30.0
+#: Seconds a stopped helper gets to exit by itself before its tree is killed.
+STOP_GRACE_S = 2.0
+#: Seconds after a failed start before the next start is tried (each try forks).
+RETRY_START_S = 60.0
 #: Characters encoded, and bytes decoded, per step on the event loop.
 _SLICE = 1 << 18
 
@@ -117,7 +122,19 @@ def main() -> int:
 
 
 class ResultWorkerError(Exception):
-    """The helper process could not answer (it failed to start or died)."""
+    """The helper process could not answer: ``reason`` is ``crashed`` (it died
+    or broke its frames) or ``timeout`` (nothing came within IDLE_S)."""
+
+    def __init__(self, reason: str, detail: str = "") -> None:
+        super().__init__(f"{reason}: {detail}" if detail else reason)
+        self.reason = reason
+
+
+class ResultWorkerUnavailable(ResultWorkerError):
+    """The helper process could not be started at all."""
+
+    def __init__(self, detail: str = "") -> None:
+        super().__init__("unavailable", detail)
 
 
 class InvalidResult(Exception):
@@ -131,6 +148,7 @@ class ResultWorker:
         self._process: asyncio.subprocess.Process | None = None
         self._lock: asyncio.Lock | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
+        self._start_failed: tuple[float, str] | None = None
 
     @staticmethod
     def argv() -> list[str]:
@@ -138,16 +156,35 @@ class ResultWorker:
             return [sys.executable, WORKER_FLAG]
         return [sys.executable, str(Path(__file__)), WORKER_FLAG]
 
+    def _bind(self) -> None:
+        """Pipes and the lock belong to one event loop; a new loop starts over."""
+        loop = asyncio.get_running_loop()
+        if self._loop is not loop or self._lock is None:
+            self.stop()
+            self._loop = loop
+            self._lock = asyncio.Lock()
+
     async def _started(self) -> asyncio.subprocess.Process:
+        self._bind()
         process = self._process
         if process is not None and process.returncode is None:
             return process
-        self._process = await asyncio.create_subprocess_exec(
-            *self.argv(),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            limit=_SLICE,
-        )
+        if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
+            raise ResultWorkerUnavailable(self._start_failed[1])
+        try:
+            # Its own session (process group on POSIX), so stop() ends the
+            # whole tree: a onefile build runs Python under a bootloader.
+            self._process = await asyncio.create_subprocess_exec(
+                *self.argv(),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                limit=_SLICE,
+                start_new_session=True,
+            )
+        except OSError as error:
+            self._start_failed = (time.monotonic() + RETRY_START_S, str(error))
+            raise ResultWorkerUnavailable(str(error)) from error
+        self._start_failed = None
         return self._process
 
     @staticmethod
@@ -160,10 +197,23 @@ class ResultWorker:
                 return await asyncio.wait_for(stream.readexactly(size), IDLE_S)
 
     def stop(self) -> None:
-        """Kill the helper; the next request starts a new one."""
+        """End the helper; the next request starts a new one.
+
+        Its stdin is closed first, so a helper that is waiting exits by
+        itself (a onefile bootloader then removes what it unpacked); after
+        STOP_GRACE_S the whole process tree is killed, whatever it is doing."""
         process, self._process = self._process, None
-        if process is not None and process.returncode is None:
-            process.kill()
+        if process is None or process.returncode is not None:
+            return
+        if process.stdin is not None and not process.stdin.is_closing():
+            try:
+                process.stdin.close()
+            except RuntimeError:
+                pass  # its event loop is gone, and the pipe with it
+        # A timer thread, not the event loop: it runs even if the loop ends first.
+        timer = threading.Timer(STOP_GRACE_S, _kill_tree, args=(process,))
+        timer.daemon = True
+        timer.start()
 
     async def wrap(self, entry: dict[str, Any], pieces: list[str]) -> str:
         """``wrap_result(entry, strict_loads("".join(pieces)))``, computed by the helper.
@@ -172,12 +222,8 @@ class ResultWorker:
         ResultWorkerError when the helper cannot answer. The event loop only
         encodes, writes, reads and decodes, a slice at a time.
         """
-        # Pipes and the lock belong to one event loop; a new loop starts over.
-        loop = asyncio.get_running_loop()
-        if self._loop is not loop or self._lock is None:
-            self.stop()
-            self._loop = loop
-            self._lock = asyncio.Lock()
+        self._bind()
+        assert self._lock is not None
         async with self._lock:
             try:
                 process = await self._started()
@@ -196,15 +242,22 @@ class ResultWorker:
                 if not answer.get("ok"):
                     if answer.get("reason") == "json":
                         raise InvalidResult
-                    raise ResultWorkerError(str(answer.get("reason")))
+                    raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
                 data = await self._frame(process.stdout)
-            except (InvalidResult, ResultWorkerError):
+            except InvalidResult:
+                raise
+            except ResultWorkerUnavailable:
+                self.stop()
                 raise
             except BaseException as error:
                 # A request cut short leaves the pipes mid-frame: start over next time.
                 self.stop()
+                if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
+                    raise ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s") from error
+                if isinstance(error, ResultWorkerError):
+                    raise
                 if isinstance(error, Exception):
-                    raise ResultWorkerError(str(error)) from error
+                    raise ResultWorkerError("crashed", f"{type(error).__name__}: {error}") from error
                 raise
         parts: list[str] = []
         start = 0
@@ -217,6 +270,18 @@ class ResultWorker:
             await asyncio.sleep(0)
         parts.append(data[start:].decode("utf-8", "surrogatepass"))
         return "".join(parts)
+
+
+def _kill_tree(process: asyncio.subprocess.Process) -> None:
+    """Kill a helper that has not exited, with every process under it."""
+    if process.returncode is not None:
+        return
+    from agent_team_backend import osplat
+
+    try:
+        osplat.process_tree.kill_group(process.pid, force=True)
+    except OSError:
+        pass
 
 
 if __name__ == "__main__":

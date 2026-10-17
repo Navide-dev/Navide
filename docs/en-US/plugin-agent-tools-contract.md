@@ -825,7 +825,9 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
 The transport failures that exist today stay as they are (`host_unavailable`,
-`host_timeout`, lower-case, produced by the backend itself).
+`host_timeout`, lower-case, produced by the backend itself); the backend also
+produces `result_helper_failed` for a result in pieces its helper process
+could not handle (4.4, R2).
 
 `meta.resultBytes` is `agentToolResultBytes(result)`: the UTF-8 byte length of
 the compact `JSON.stringify` spelling of the result value the Host received
@@ -1150,9 +1152,18 @@ a backend that never gets one starts no process, and the helper exits when
 the backend does, its stdin closing), so the event loop only moves bytes; the
 agent sees exactly the text the in-process functions would give. While it
 works the helper writes an empty frame every 2 s, and the backend waits 30 s
-for each frame: a helper that crashes or hangs is stopped within that window
-(a time window, not a size limit) and the result is handled in the backend
-process instead, slower for other panes while it runs. The backend's wait is the one described under Timing:
+for each frame (a time window, not a size limit). A helper that crashes or
+hangs is stopped and that call answers `result_helper_failed` (lower-case,
+produced by the backend), `reason` `crashed` or `timeout`, with the result's
+size in `error`; the work is not redone in the backend, where a result that
+hung the helper would hang the event loop, and the next call starts the
+helper again. A helper that cannot be started leaves a result up to 1 MiB
+(what the backend handled before DB9) to be handled in the backend as then; a
+larger one answers `result_helper_failed`, `reason` `unavailable`, and the
+backend logs it and records `AGENT_TOOL_RESULT_HELPER_UNAVAILABLE` in its
+error ledger (a start is retried after 60 s). The helper runs in its own
+session; stopping it closes its stdin, then after 2 s kills its whole process
+tree (a onefile build runs Python under a bootloader). The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.
@@ -1228,7 +1239,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
-| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it), anything else `other` |
+| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, `result_helper_failed`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it), anything else `other` |
 | `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); `0` when the call has no result; `-1` when the Host sent no valid size (unknown) |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are

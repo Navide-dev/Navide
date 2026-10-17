@@ -71,7 +71,14 @@ from agent_team_backend.plugins.agent_tools_contract import (
     validate_agent_tool_name,
     is_valid_agent_tool_text,
 )
-from agent_team_backend.agent_tool_result_worker import InvalidResult, ResultWorker, ResultWorkerError, strict_loads
+from agent_team_backend.agent_tool_result_worker import (
+    IDLE_S,
+    InvalidResult,
+    ResultWorker,
+    ResultWorkerError,
+    ResultWorkerUnavailable,
+    strict_loads,
+)
 from agent_team_backend.plugins.external_content import neutralize_external_text
 
 _log = logging.getLogger(__name__)
@@ -209,20 +216,65 @@ def wrap_result(entry: dict[str, Any], result: Any) -> str:
 
 _result_worker = ResultWorker()
 
+#: The largest result the backend handled before DB9 (one frame, 1 MiB). When
+#: the helper process cannot start, a result up to this size is handled in the
+#: backend as it was then; a larger one is refused with the reason. Where the
+#: work runs, not a limit: with the helper, results have no size limit.
+IN_PROCESS_RESULT_BYTES = 1_048_576
 
-async def _large_result_text(name: str, entry: dict[str, Any], pieces: list[str]) -> str:
+
+class _HelperFailed(Exception):
+    def __init__(self, reason: str, size: int) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.size = size
+
+
+def _disclose_helper_unavailable(name: str, detail: str) -> None:
+    message = f"the agent tool result helper process could not be started ({detail}); results over 1 MiB are refused until it can"
+    _log.error("plugin tool result %s: %s", name, message)
+    try:
+        from agent_team_backend import error_ledger
+
+        error_ledger.record("backend", "error", "AGENT_TOOL_RESULT_HELPER_UNAVAILABLE", message)
+    except Exception as err:  # noqa: BLE001 - disclosure must not fail the call
+        _log.warning("plugin tool result %s: could not record the helper state: %s", name, err)
+
+
+async def _large_result_text(name: str, entry: dict[str, Any], pieces: list[str], size: int) -> str:
     """``wrap_result`` of a result received in pieces, from the helper process.
-    Should the helper be unavailable, the same work runs here: slower for
-    every pane while it runs, but the call still gets its answer."""
+
+    A helper that crashes or stops answering fails this call with the
+    reason (the work is not redone here, where it would hold the event loop:
+    a result that hung the helper would hang the backend). One that cannot
+    start leaves results up to IN_PROCESS_RESULT_BYTES to be handled here,
+    as before DB9, and refuses larger ones."""
     try:
         return await _result_worker.wrap(entry, pieces)
+    except ResultWorkerUnavailable as error:
+        _disclose_helper_unavailable(name, str(error))
+        if size > IN_PROCESS_RESULT_BYTES:
+            raise _HelperFailed("unavailable", size) from None
     except ResultWorkerError as error:
-        _log.warning("plugin tool result %s: helper process unavailable (%s); wrapping in process", name, error)
+        _log.warning("plugin tool result %s (%d bytes): the result helper failed: %s", name, size, error)
+        raise _HelperFailed(error.reason, size) from None
     try:
         value = strict_loads("".join(pieces))
     except (ValueError, RecursionError):
         raise InvalidResult from None
     return wrap_result(entry, value)
+
+
+def _helper_failed_message(failed: _HelperFailed) -> str:
+    what = {
+        "crashed": "stopped while handling it",
+        "timeout": f"did not answer within {IDLE_S:g} s",
+        "unavailable": "could not be started (results up to 1 MiB are still delivered)",
+    }.get(failed.reason, "failed")
+    return (
+        f"The Navide plugin result ({failed.size} bytes) was not delivered: Navide's result helper process {what}. "
+        "The next call starts it again."
+    )
 
 
 # ── snapshot validation and registration ────────────────────────────────────
@@ -871,10 +923,17 @@ async def _answer(
         # came whole fits one piece and is wrapped here as before.
         pieces = response.get("result_pieces")
         if isinstance(pieces, list):
+            pieces_bytes = response.get("result_pieces_bytes")
+            if not isinstance(pieces_bytes, int) or isinstance(pieces_bytes, bool):
+                # The core always counts the bytes as the pieces arrive; were
+                # it missing, characters are a cheap stand-in for a message.
+                pieces_bytes = sum(len(piece) for piece in pieces)
             try:
-                text = await _large_result_text(name, entry, pieces)
+                text = await _large_result_text(name, entry, pieces, pieces_bytes)
             except InvalidResult:
                 return refuse("The Navide plugin result did not arrive whole.", "PLUGIN_TOOL_CHUNKS_INVALID", "json")
+            except _HelperFailed as failed:
+                return refuse(_helper_failed_message(failed), "result_helper_failed", failed.reason)
         else:
             text = wrap_result(entry, result)
         audit["outcome"] = "ok"

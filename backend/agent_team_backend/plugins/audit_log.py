@@ -111,9 +111,12 @@ TOOL_RISKS = ("read", "write")
 ACTIVITY_SOURCES = ("broker", "shell", "agentTool")
 ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 #: The contract's call error codes plus the codes the backend produces itself:
-#: two transport codes (contract 4.2) and ``cancelled``, a call its caller
-#: cancelled before it was answered (contract 5).
-ERROR_CODES = frozenset((*contract.AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout", "cancelled"))
+#: two transport codes (contract 4.2), ``result_helper_failed`` (a result in
+#: pieces its helper process could not handle, 4.4) and ``cancelled``, a call
+#: its caller cancelled before it was answered (contract 5).
+ERROR_CODES = frozenset((
+    *contract.AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout", "result_helper_failed", "cancelled",
+))
 #: Contract reasons a call or broker request is refused for.
 DENIED_REASONS = frozenset(contract.PLUGIN_ACTIVITY_DENIED_REASONS)
 

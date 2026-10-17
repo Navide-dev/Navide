@@ -1035,11 +1035,14 @@ async def test_the_served_value_index_does_not_grow_across_sync_revisions(host: 
 
 def _pieces_host(monkeypatch, text: str) -> None:
     pieces = split_agent_tool_payload_text(text)
-    meta = {"durationMs": 1, "resultBytes": utf8_byte_length(text), "crossWorkspace": False}
+    size = utf8_byte_length(text)
+    meta = {"durationMs": 1, "resultBytes": size, "crossWorkspace": False}
 
     async def host(event: dict[str, Any]) -> bool:
         if event["type"] == "agent.capability.request":
-            core.resolve_agent_capability(event["payload"]["request_id"], {"ok": True, "result_pieces": pieces, "meta": meta})
+            core.resolve_agent_capability(event["payload"]["request_id"], {
+                "ok": True, "result_pieces": pieces, "result_pieces_bytes": size, "meta": meta,
+            })
         return True
 
     monkeypatch.setattr(app, "unicast_host", host)
@@ -1062,17 +1065,24 @@ def _devmap_tool(monkeypatch) -> dict[str, Any]:
 async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
     from tests.test_agent_tool_chunked_transport import _longest_loop_slice
 
+    import gc
+
     value = shape()
     entry = _devmap_tool(monkeypatch)
     # Start the helper first: starting a process is a one-time cost (fork and
     # exec run on the calling thread), not part of handling a result.
     _pieces_host(monkeypatch, agent_tool_payload_text({"warm": "x" * 200_000}))
     assert (await proxy.call("devmap_read", {}, None)).isError is False
+    # The backend never holds the parsed value (the helper does): neither
+    # does the test while it measures, or collecting it would be counted.
+    expected = proxy.wrap_result(entry, value)
     _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    del value
+    gc.collect()
     result, longest = await _longest_loop_slice(monkeypatch, proxy.call("devmap_read", {}, None))
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
-    assert result.content[0].text == proxy.wrap_result(entry, value)
+    assert result.content[0].text == expected
     assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
 
 
@@ -1092,20 +1102,6 @@ async def test_a_deeply_nested_result_in_pieces_still_reads(monkeypatch) -> None
     result = await proxy.call("devmap_read", {}, None)
     assert result.isError is False
     assert result.content[0].text == proxy.wrap_result(entry, value)
-
-
-async def test_without_the_helper_process_a_result_in_pieces_still_reads(monkeypatch) -> None:
-    import sys
-
-    entry = _devmap_tool(monkeypatch)
-    monkeypatch.setattr(proxy._result_worker, "argv", lambda: [sys.executable, "-c", "raise SystemExit(3)"])  # noqa: SLF001
-    proxy._result_worker.stop()  # noqa: SLF001
-    value = {"data": "abc中文😀" * 20_000}
-    _pieces_host(monkeypatch, agent_tool_payload_text(value))
-    result = await proxy.call("devmap_read", {}, None)
-    assert result.content[0].text == proxy.wrap_result(entry, value)
-    _pieces_host(monkeypatch, '{"pad":"' + "x" * 200_000 + '","v":NaN}')
-    assert _body(await proxy.call("devmap_read", {}, None))["reason"] == "json"
 
 
 # ── the helper process: started when first needed, given up on in bounded time ──
@@ -1144,33 +1140,6 @@ async def test_the_helper_starts_with_the_first_result_in_pieces_and_not_before(
     proxy._result_worker.stop()  # noqa: SLF001
 
 
-async def test_a_helper_that_dies_mid_request_falls_back_to_the_backend(monkeypatch) -> None:
-    entry = _devmap_tool(monkeypatch)
-    _fake_helper(monkeypatch, "sys.exit(1)")
-    value = {"data": "x" * 200_000}
-    _pieces_host(monkeypatch, agent_tool_payload_text(value))
-    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
-
-
-async def test_a_helper_that_hangs_is_given_up_on_within_its_window(monkeypatch) -> None:
-    import asyncio
-    import time
-
-    from agent_team_backend import agent_tool_result_worker as worker
-
-    entry = _devmap_tool(monkeypatch)
-    monkeypatch.setattr(worker, "IDLE_S", 0.5)
-    _fake_helper(monkeypatch, "time.sleep(3600)")
-    value = {"data": "x" * 200_000}
-    _pieces_host(monkeypatch, agent_tool_payload_text(value))
-    started = time.monotonic()
-    result = await proxy.call("devmap_read", {}, None)
-    assert time.monotonic() - started < 5
-    assert result.content[0].text == proxy.wrap_result(entry, value)
-    # The hung helper was killed, not left behind.
-    assert proxy._result_worker._process is None  # noqa: SLF001
-
-
 async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None:
     from agent_team_backend import agent_tool_result_worker as worker
 
@@ -1204,3 +1173,82 @@ async def test_the_helper_exits_when_the_backend_goes_away(monkeypatch) -> None:
     process.stdin.close()
     assert await asyncio.wait_for(process.wait(), 10) == 0
     proxy._result_worker._process = None  # noqa: SLF001
+
+
+_BIG_RESULT = {"data": "abc中文😀" * (10 * 1_048_576 // 16)}
+
+
+async def _measured_call(monkeypatch) -> tuple[Any, float]:
+    from tests.test_agent_tool_chunked_transport import _longest_loop_slice
+
+    return await _longest_loop_slice(monkeypatch, proxy.call("devmap_read", {}, None))
+
+
+async def test_a_helper_killed_mid_request_fails_the_call_with_the_reason(monkeypatch) -> None:
+    _devmap_tool(monkeypatch)
+    _fake_helper(monkeypatch, "import os, signal; os.kill(os.getpid(), signal.SIGKILL)")
+    _pieces_host(monkeypatch, agent_tool_payload_text(_BIG_RESULT))
+    await proxy._result_worker._started()  # noqa: SLF001 - its one-time start is not measured
+    result, longest = await _measured_call(monkeypatch)
+    body = _body(result)
+    assert (body["error_code"], body["reason"]) == ("result_helper_failed", "crashed")
+    assert str(utf8_byte_length(agent_tool_payload_text(_BIG_RESULT))) in body["error"]
+    # Not redone in the backend: the loop never held the result.
+    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+
+
+async def test_a_helper_that_hangs_fails_the_call_within_its_window_and_its_tree_is_ended(monkeypatch, tmp_path) -> None:
+    import asyncio
+    import time
+
+    from agent_team_backend import agent_tool_result_worker as worker
+    from agent_team_backend import osplat
+
+    _devmap_tool(monkeypatch)
+    monkeypatch.setattr(worker, "IDLE_S", 0.5)
+    monkeypatch.setattr(worker, "STOP_GRACE_S", 0.2)
+    pid_file = tmp_path / "grandchild.pid"
+    # The helper starts a process of its own (as a onefile bootloader runs
+    # Python), then hangs.
+    _fake_helper(monkeypatch, f"""
+import subprocess
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
+open({str(pid_file)!r}, "w").write(str(child.pid))
+time.sleep(3600)
+""")
+    _pieces_host(monkeypatch, agent_tool_payload_text(_BIG_RESULT))
+    await proxy._result_worker._started()  # noqa: SLF001 - its one-time start is not measured
+    started = time.monotonic()
+    result, longest = await _measured_call(monkeypatch)
+    assert time.monotonic() - started < 5
+    body = _body(result)
+    assert (body["error_code"], body["reason"]) == ("result_helper_failed", "timeout")
+    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    grandchild = int(pid_file.read_text())
+    for _ in range(50):
+        if not osplat.process_tree.is_alive(grandchild):
+            break
+        await asyncio.sleep(0.1)
+    assert not osplat.process_tree.is_alive(grandchild)
+
+
+async def test_a_helper_that_cannot_start_leaves_results_main_handled_and_refuses_larger(monkeypatch) -> None:
+    from agent_team_backend import error_ledger
+
+    recorded: list[tuple[str, ...]] = []
+    monkeypatch.setattr(error_ledger, "record", lambda *args: recorded.append(args))
+    entry = _devmap_tool(monkeypatch)
+    monkeypatch.setattr(proxy._result_worker, "argv", lambda: ["/nonexistent/navide-result-helper"])  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+    # Within the 1 MiB main handled: handled in the backend, as main did.
+    small = {"data": "x" * 500_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(small))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, small)
+    # Larger: refused with the reason, never handled on the loop.
+    _pieces_host(monkeypatch, agent_tool_payload_text(_BIG_RESULT))
+    result, longest = await _measured_call(monkeypatch)
+    body = _body(result)
+    assert (body["error_code"], body["reason"]) == ("result_helper_failed", "unavailable")
+    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    # Disclosed in the diagnostics, not only to the agent.
+    assert any(args[2] == "AGENT_TOOL_RESULT_HELPER_UNAVAILABLE" for args in recorded)

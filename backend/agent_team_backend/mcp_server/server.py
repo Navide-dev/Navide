@@ -5028,6 +5028,7 @@ def resolve_agent_capability(request_id: str, result: dict[str, Any]) -> bool:
         else:
             result = {key: item for key, item in result.items() if key != "resultChunks"} | {
                 "result_pieces": transfer["pieces"],
+                "result_pieces_bytes": transfer["bytes"],
             }
     return _agent_capability_pending.resolve(request_id, result)
 
