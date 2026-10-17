@@ -11054,11 +11054,11 @@
         "read": "This Navide plugin reads {paths}."
       },
       "network": {
-        "hosts": "These addresses appear in the code: {hosts}. Neither the plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
       },
       "code": {
         "eval": {
-          "frontend": "The view code builds and runs code at run time ({count} place(s)); the plugin frame's security policy blocks such calls.",
+          "frontend": "The view code builds and runs code at run time ({count} place(s)); the Navide plugin frame's security policy blocks such calls.",
           "backend": "The native code shows signs of building and running code at run time ({count} place(s))."
         },
         "obfuscated": "The code shows signs of obfuscation ({signals}); the scan may be incomplete."
@@ -11084,7 +11084,9 @@
       "truncated": "content exceeded the scan limits",
       "obfuscated": "the code is obfuscated",
       "packed": "native code is packed",
-      "embeddedRuntime": "native code embeds a runtime"
+      "embeddedRuntime": "native code embeds a runtime",
+      "scannerError": "the scanner failed on part of the package",
+      "tooComplex": "part of the package is too complex to scan"
     },
     "unscannableReason": {
       "packed": "is packed ({detail})",

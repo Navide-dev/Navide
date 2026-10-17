@@ -104,7 +104,11 @@ describe('PluginDisclosureCard content', () => {
         scan: scanCase.scan,
         registry: REGISTRY,
       }).text()
-      expect(text, scanCase.name).not.toMatch(/pluginDisclosure\.|\b(?:shell|files|network|code|native|coverage|notFound)\.[a-zA-Z]+\b/)
+      // A missing string falls back to its key (`shell.remoteWrite`, ...);
+      // capability addresses such as shell.run are legitimate text.
+      expect(text, scanCase.name).not.toMatch(
+        /pluginDisclosure\.|\b(?:shell\.(?:remoteWrite|remoteRead|localWrite|local|other|unknownSubcommand|dynamic)|files\.(?:write|read)|network\.hosts|code\.(?:eval|obfuscated)|native\.(?:summary|unscannable)|coverage\.incomplete|notFound\.[a-zA-Z]+)\b/
+      )
     }
   })
 })

@@ -11054,11 +11054,11 @@
         "read": "這個 Navide 外掛會讀取 {paths}。"
       },
       "network": {
-        "hosts": "程式碼裡出現這些網址：{hosts}。外掛頁框與原生程式都不能直接連網，這些網址可能用來開啟瀏覽器，或交給 git、gh 等指令。"
+        "hosts": "程式碼裡出現這些網址：{hosts}。Navide 外掛頁框與原生程式都不能直接連網，這些網址可能用來開啟瀏覽器，或交給 git、gh 等指令。"
       },
       "code": {
         "eval": {
-          "frontend": "畫面程式碼會在執行時產生並執行程式碼（{count} 處）；外掛頁框的安全政策會擋下這類呼叫。",
+          "frontend": "畫面程式碼會在執行時產生並執行程式碼（{count} 處）；Navide 外掛頁框的安全政策會擋下這類呼叫。",
           "backend": "原生程式裡有在執行時產生並執行程式碼的跡象（{count} 處）。"
         },
         "obfuscated": "程式碼有混淆跡象（{signals}），掃描結果可能不完整。"
@@ -11084,7 +11084,9 @@
       "truncated": "內容超過掃描上限",
       "obfuscated": "程式碼有混淆",
       "packed": "原生程式經過壓縮殼處理",
-      "embeddedRuntime": "原生程式內嵌執行環境"
+      "embeddedRuntime": "原生程式內嵌執行環境",
+      "scannerError": "掃描器在部分內容上失敗",
+      "tooComplex": "部分內容結構過於複雜，無法掃描"
     },
     "unscannableReason": {
       "packed": "經過壓縮殼（{detail}）處理",
