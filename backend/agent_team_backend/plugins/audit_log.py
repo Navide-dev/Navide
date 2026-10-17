@@ -694,7 +694,12 @@ class PluginAuditLog:
         return rows
 
     def activity_report(
-        self, plugin_id: str, *, declared: list[dict[str, str]] | None = None, now_ms: int | None = None
+        self,
+        plugin_id: str,
+        *,
+        declared: list[dict[str, str]] | None = None,
+        installed_at: int | None = None,
+        now_ms: int | None = None,
     ) -> dict[str, Any]:
         """One plugin's ``PluginActivityReport`` (contract 5.1; ``src/shared/pluginActivity.ts``).
 
@@ -716,8 +721,11 @@ class PluginAuditLog:
         - ``anomalies`` (flags only): ``volumeSpike`` (today over
           ``SPIKE_FACTOR`` times the 7-day average, never without a baseline),
           ``writeToolNewWorkspace`` (first write agent-tool call in a workspace
-          in the last 24 hours) and ``undeclaredDenied`` (per workspace, last
-          7 days).
+          in the last 24 hours, and, given ``installed_at``, the first since
+          the plugin was installed: a first-seen row from an earlier install
+          counts as absent, so a reinstall is new again even when the
+          ``plugin.activity.forget`` of its removal was lost) and
+          ``undeclaredDenied`` (per workspace, last 7 days).
         - ``agentActions`` is null until B2-c's table exists.
 
         Sizes are passed through as stored: ``-1`` (``UNKNOWN_SIZE``) is never
@@ -802,11 +810,26 @@ class PluginAuditLog:
                 (plugin_id, now - 7 * _DAY_MS),
             ).fetchall()
             # From plugin_tool_first_seen, which outlives the call rows (L4).
+            floor = max(now - _DAY_MS, installed_at or 0)
             new_writes = cur.execute(
                 "SELECT tool, workspace, first_at FROM plugin_tool_first_seen"
                 " WHERE plugin_id = ? AND first_at >= ? ORDER BY 3, 1, 2",
-                (plugin_id, now - _DAY_MS),
+                (plugin_id, floor),
             ).fetchall()
+            if installed_at:
+                # A row older than this install is an earlier install's: the
+                # first write since installing is in the call rows (#373 F1).
+                new_writes += [
+                    row for row in cur.execute(
+                        "SELECT f.tool, f.workspace, (SELECT MIN(c.at) FROM plugin_tool_calls c"
+                        "  WHERE c.plugin_id = f.plugin_id AND c.tool = f.tool AND c.target_workspace = f.workspace"
+                        "  AND c.risk = 'write' AND c.at >= ?)"
+                        " FROM plugin_tool_first_seen f WHERE f.plugin_id = ? AND f.first_at < ?",
+                        (installed_at, plugin_id, installed_at),
+                    ).fetchall()
+                    if row[2] is not None and row[2] >= floor
+                ]
+                new_writes.sort(key=lambda row: (row[2], row[0], row[1]))
         report["totals"] = {"calls": int(totals[0] or 0), "denied": int(totals[1] or 0), "errors": int(totals[2] or 0)}
         report["toolCalls"] = [
             {

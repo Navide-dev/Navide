@@ -228,3 +228,42 @@ async def test_a_malformed_forget_is_refused(audit: PluginAuditLog, payload: Any
     host = _session(host=True)
     await ws_handlers.plugin_activity_forget(host, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, payload)
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_the_report_request_carries_the_install_time(audit: PluginAuditLog) -> None:
+    seen: list[Any] = []
+    real = audit.activity_report
+    audit.activity_report = lambda plugin_id, **kw: (seen.append(kw), real(plugin_id, **kw))[1]  # type: ignore[method-assign]
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": 1_792_000_000_000}
+    )
+    assert host.websocket.sent[-1]["payload"]["schemaVersion"] == 1
+    assert seen == [{"declared": [], "installed_at": 1_792_000_000_000}]
+
+
+@pytest.mark.parametrize("installed_at", ["1", True, -1, 1.5])
+async def test_a_bad_install_time_is_refused(audit: PluginAuditLog, installed_at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": installed_at}
+    )
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_skipped_rows_are_logged_by_count_and_reason_without_their_content(
+    audit: PluginAuditLog, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#373 review F3."""
+    import logging
+
+    host = _session(host=True)
+    secret = "/Users/me/.ssh/id_rsa"
+    with caplog.at_level(logging.WARNING):
+        await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+            _row(), _row(source="agentTool", fs_path=secret), _row(at=-1), "x", _row(outcome="ok"),
+        ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+    messages = [r.getMessage() for r in caplog.records if "plugin activity" in r.getMessage()]
+    assert messages == ["plugin activity: 4 of 5 rows skipped (malformed: 2, bad at: 1, refused: 1)"]
+    assert secret not in caplog.text

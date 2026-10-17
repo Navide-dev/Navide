@@ -1191,7 +1191,16 @@ workspace, written with the call rows. It is not pruned with them, so
 calls expire, and no count limits it. When a plugin is removed the Host sends
 `plugin.activity.forget` (`PLUGIN_ACTIVITY_FORGET_MESSAGE`, Host-authenticated,
 `{plugin_id}`) and that plugin's rows go: a reinstalled plugin's first writes
-are new again. Like every other audit table it is created by the open-time DDL.
+are new again. The forget is best effort: with no registered Host session, or
+when the send fails, it is not sent again, and the rows stay. The report does
+not depend on it: given the report request's `installedAt`, a first-seen row
+older than the install counts as absent, and the first write since the install
+is read from `plugin_tool_calls` (section 5.1). Like every other audit table it
+is created by the open-time DDL.
+
+A `plugin.activity.record` row the backend skips (malformed, a bad `at`, or
+refused by the redaction) is counted, and the counts by reason are logged;
+never the row's content.
 
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
@@ -1226,7 +1235,9 @@ over IPC, whose handler passes `assertAuthorized` (as
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
 `backendMethod` methods, `agentTool` names) from the installed manifest, since
 the backend has no third-party manifest; without `declared`, `declaredUnused`
-is `[]`. Answer `PluginActivityReport`
+is `[]`. The Host also sends `installedAt` (Unix ms, when the package was
+installed): `writeToolNewWorkspace` then counts only writes since then, so a
+first-seen row left by an earlier install of the same id counts as absent. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the

@@ -360,23 +360,33 @@ async def plugin_activity_record(
         )
         return
     accepted = 0
+    # Skipped rows are counted by reason and logged, never their content (#373 F3).
+    skipped = {"malformed": 0, "bad at": 0, "refused": 0}
     for row in rows:
         if (
             not isinstance(row, dict)
             or not _ACTIVITY_ROW_REQUIRED <= set(row) <= _ACTIVITY_ROW_FIELDS
             or row.get("source") not in _HOST_ACTIVITY_SOURCES
         ):
+            skipped["malformed"] += 1
             continue
         # `at`: when the call happened on the Host (Unix ms); record_activity
         # clamps it to now. Without it, the row is dated when it arrives.
         at = row.get("at")
         if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+            skipped["bad at"] += 1
             continue
         fields = {key: value for key, value in row.items() if key != "at" and isinstance(value, str)}
         if len(fields) != len(row) - ("at" in row):
+            skipped["malformed"] += 1
             continue
         if app.plugin_audit_log.record_activity(**fields, at_ms=at):
             accepted += 1
+        else:
+            skipped["refused"] += 1
+    if accepted < len(rows):
+        reasons = ", ".join(f"{reason}: {n}" for reason, n in skipped.items() if n)
+        log.warning("plugin activity: %d of %d rows skipped (%s)", len(rows) - accepted, len(rows), reasons)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
@@ -440,12 +450,23 @@ async def plugins_activity_report(
         return
     plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
     declared = _declared_items(payload.get("declared", [])) if isinstance(payload, dict) else None
-    if not isinstance(plugin_id, str) or not plugin_id or not set(payload) <= {"plugin_id", "declared"} or declared is None:
+    # When the Host installed this package (Unix ms), optional (#373 F1).
+    installed_at = payload.get("installedAt") if isinstance(payload, dict) else None
+    if installed_at is not None and (isinstance(installed_at, bool) or not isinstance(installed_at, int) or installed_at < 0):
+        declared = None
+    if (
+        not isinstance(plugin_id, str)
+        or not plugin_id
+        or not set(payload) <= {"plugin_id", "declared", "installedAt"}
+        or declared is None
+    ):
         await session.send_json(
             make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.report is malformed")
         )
         return
-    report = await asyncio.to_thread(app.plugin_audit_log.activity_report, plugin_id, declared=declared)
+    report = await asyncio.to_thread(
+        app.plugin_audit_log.activity_report, plugin_id, declared=declared, installed_at=installed_at
+    )
     await session.send_json(make_response(msg_id, msg_type, report))
 
 
