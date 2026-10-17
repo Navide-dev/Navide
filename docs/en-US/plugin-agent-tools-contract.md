@@ -866,7 +866,10 @@ string, or a property name (along `properties`, `additionalProperties` and
 that value, so the plugin receives what it declared; a declared value sent as
 is stays. When two declared values are served as the same text, a call that
 sends it is refused with `PLUGIN_TOOL_INVALID_ARGUMENTS` (an "ambiguous"
-message, logged), never guessed. Values under other keywords are not mapped.
+message, logged), never guessed, also when one of them is that text itself
+(`ab` and `a\u200bb` are both served `ab`). Property names served alike merge
+in tools/list; registering such a tool logs a warning. Values under other
+keywords are not mapped.
 
 ### 4.3 Backend → Host: `marketplace.query`
 

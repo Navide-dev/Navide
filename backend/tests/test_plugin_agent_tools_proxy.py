@@ -815,3 +815,38 @@ async def test_two_declared_values_served_alike_are_refused_not_guessed(host: Fa
     # The declared value itself is never ambiguous.
     await core.server.call_tool("devmap_read", {"mode": "a\u200bb"})
     assert host.requests[0]["payload"] == {"arguments": {"mode": "a\u200bb"}}
+
+
+async def test_a_declared_value_another_one_is_served_as_is_refused_not_guessed(host: FakeHost, monkeypatch) -> None:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    schema = {"type": "object", "properties": {"mode": {"enum": ["ab", "a\u200bb", "ok"]}}}
+    _apply(_snapshot(1, [_entry("devmap_read", inputSchema=schema)]))
+    [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
+    assert tool.inputSchema["properties"]["mode"]["enum"] == ["ab", "ab", "ok"]
+    # "ab" is declared, but it is also how "a\u200bb" is served: which one the
+    # agent means cannot be told, so nothing is sent.
+    body = _body(await core.server.call_tool("devmap_read", {"mode": "ab"}))
+    assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS" and "ambiguous" in body["error"]
+    assert host.requests == []
+    # Values that are not shared still go through.
+    await core.server.call_tool("devmap_read", {"mode": "ok"})
+    await core.server.call_tool("devmap_read", {"mode": "a\u200bb"})
+    assert [r["payload"]["arguments"]["mode"] for r in host.requests] == ["ok", "a\u200bb"]
+
+
+async def test_property_names_served_alike_are_logged_and_refused(host: FakeHost, monkeypatch, caplog) -> None:
+    import logging
+
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    schema = {"type": "object", "properties": {"kx": {"type": "integer"}, "k\u202ex": {"type": "integer"}}}
+    with caplog.at_level(logging.WARNING, logger=proxy.__name__):
+        _apply(_snapshot(1, [_entry("devmap_read", inputSchema=schema)]))
+    assert any("devmap_read" in record.getMessage() and "property names" in record.getMessage()
+               for record in caplog.records)
+    [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
+    assert list(tool.inputSchema["properties"]) == ["kx"]
+    body = _body(await core.server.call_tool("devmap_read", {"kx": 1}))
+    assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS" and "ambiguous" in body["error"]
+    assert host.requests == []

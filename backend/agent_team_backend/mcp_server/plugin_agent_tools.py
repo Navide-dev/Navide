@@ -323,11 +323,13 @@ class _AmbiguousArgument(Exception):
 
 
 def _restored_string(value: str, declared: list[str]) -> str:
-    """``value`` as the plugin declared it: a declared value is kept; the
-    served spelling of exactly one declared value becomes that value."""
-    if value in declared:
-        return value
-    matches = {original for original in declared if original != value and _served_string(original) == value}
+    """``value`` as the plugin declared it: the served spelling of exactly one
+    declared value becomes that value. When more than one declared value is
+    served as ``value`` (``ab`` and ``a\u200bb`` are both served ``ab``) the
+    argument is ambiguous, even if one of them is ``value`` itself: never
+    guessed. A declared value sent as written that no other value is served
+    as is kept."""
+    matches = {original for original in declared if _served_string(original) == value}
     if len(matches) > 1:
         raise _AmbiguousArgument
     return matches.pop() if matches else value
@@ -357,6 +359,25 @@ def _restored_arguments(schema: Any, value: Any) -> Any:
         items = schema.get("items")
         return [_restored_arguments(items, item) for item in value]
     return value
+
+
+def _merged_names(value: Any) -> int:
+    """How many names in the schema's maps are served as the same text as
+    another name in the same map (those keys merge in tools/list)."""
+    if isinstance(value, list):
+        return sum(_merged_names(item) for item in value)
+    if not isinstance(value, dict):
+        return 0
+    merged = 0
+    for key, item in value.items():
+        if key in _DATA_KEYWORDS:
+            continue
+        if key in _SCHEMA_MAPS and key != "patternProperties" and isinstance(item, dict):
+            merged += len(item) - len({_served_string(name) for name in item})
+            merged += sum(_merged_names(schema) for schema in item.values())
+        else:
+            merged += _merged_names(item)
+    return merged
 
 
 def _served_data(value: Any) -> Any:
@@ -533,6 +554,12 @@ def _register(entry: dict[str, Any]) -> None:
     # The plugin's own schema with every string neutralized for the agent;
     # arguments are still checked against the consented one, and by the Host.
     tool.parameters = _served_schema(entry["inputSchema"])
+    merged = _merged_names(entry["inputSchema"])
+    if merged:
+        _log.warning(
+            "agent tool %s: %d property names are served as the same text as another; "
+            "a call naming one is refused as ambiguous", entry["name"], merged,
+        )
 
 
 def _unregister(name: str) -> None:
