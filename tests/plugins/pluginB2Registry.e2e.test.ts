@@ -68,7 +68,7 @@ const VERSION = '0.1.0'
 
 // ── the shared wire fixture ─────────────────────────────────────────────────
 
-interface FixtureEntry { name: string; message: unknown; optional?: string[] }
+interface FixtureEntry { name: string; message: unknown; optional?: string[]; nullable?: string[] }
 interface Fixture { opaque: string[]; messages: Record<string, FixtureEntry[]> }
 const FIXTURE: Fixture = JSON.parse(readFileSync(
   resolve(__dirname, '../../docs/plugin-contracts/b2-fixtures/host-messages.json'), 'utf8',
@@ -81,16 +81,18 @@ function kindOf(value: unknown): string {
 }
 
 /** Where `actual` differs in shape from `example`: exact keys at every level
- *  (optional paths may be absent), arrays element by element against the
- *  example's first element, a null example accepting a string too. */
-function shapeProblems(actual: unknown, example: unknown, path: string, optional: string[]): string[] {
+ *  (optional paths may be absent, nullable paths may be null), arrays element
+ *  by element against the example's first element, a null example accepting
+ *  a string too. */
+function shapeProblems(actual: unknown, example: unknown, path: string, optional: string[], nullable: string[] = []): string[] {
+  if (actual === null && nullable.includes(path)) return []
   if (FIXTURE.opaque.includes(path)) {
     return kindOf(actual) === 'object' || actual === null ? [] : [`${path}: expected an object`]
   }
   if (example === null) return actual === null || typeof actual === 'string' ? [] : [`${path}: expected null or a string`]
   if (kindOf(actual) !== kindOf(example)) return [`${path || '(root)'}: expected ${kindOf(example)}, got ${kindOf(actual)}`]
   if (Array.isArray(example)) {
-    return example.length === 0 ? [] : (actual as unknown[]).flatMap((item) => shapeProblems(item, example[0], `${path}[]`, optional))
+    return example.length === 0 ? [] : (actual as unknown[]).flatMap((item) => shapeProblems(item, example[0], `${path}[]`, optional, nullable))
   }
   if (kindOf(example) !== 'object') return []
   const ex = example as Record<string, unknown>
@@ -103,7 +105,7 @@ function shapeProblems(actual: unknown, example: unknown, path: string, optional
       if (!optional.includes(at(key))) problems.push(`${at(key)}: missing`)
       continue
     }
-    problems.push(...shapeProblems(ac[key], ex[key], at(key), optional))
+    problems.push(...shapeProblems(ac[key], ex[key], at(key), optional, nullable))
   }
   return problems
 }
@@ -112,7 +114,7 @@ function shapeProblems(actual: unknown, example: unknown, path: string, optional
 function wireProblems(type: string, message: unknown): string[] {
   const entries = FIXTURE.messages[type]
   if (!entries) return [`${type}: no fixture entry`]
-  const all = entries.map((entry) => shapeProblems(message, entry.message, '', entry.optional ?? []))
+  const all = entries.map((entry) => shapeProblems(message, entry.message, '', entry.optional ?? [], entry.nullable ?? []))
   return all.find((problems) => problems.length === 0) ?? all.reduce((a, b) => (a.length <= b.length ? a : b))
 }
 
@@ -128,6 +130,18 @@ describe('the shared B2 wire fixture', () => {
     const { changed: _dropped, ...missing } = message
     expect(wireProblems('plugins.agent_action.result', missing).length).toBeGreaterThan(0)
     expect(wireProblems('plugins.agent_action.result', { ...message, extra: 1 }).length).toBeGreaterThan(0)
+  })
+
+  it('accepts null only at the paths an entry lists as nullable', () => {
+    const entry = FIXTURE.messages['plugins.agent_action.result'].find((e) => e.name === 'approval-required')!
+    const message = structuredClone(entry.message) as { disabled: Record<string, unknown> }
+    expect(wireProblems('plugins.agent_action.result', message)).toEqual([])
+    expect(wireProblems('plugins.agent_action.result', { ...message, disabled: { ...message.disabled, at: null } })).toEqual([])
+    expect(wireProblems('plugins.agent_action.result', { ...message, disabled: { ...message.disabled, by: null } }).length)
+      .toBeGreaterThan(0)
+    expect(wireProblems('plugins.agent_action.result', { ...message, pluginVersion: null }).length).toBeGreaterThan(0)
+    expect(wireProblems('plugins.agent_action.result', { ...message, disabled: { ...message.disabled, at: 'x' } }).length)
+      .toBeGreaterThan(0)
   })
 
   it('every backend → Host example is what the Host accepts', () => {
@@ -445,6 +459,31 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
     expect(notices.length).toBe(told + 1)
   })
 
+  it('(6a) plugins_enable of a package the user disabled needs the approval card; approved, the window enables it', async () => {
+    const isDisabled = async () => (await call('plugins:listInstalled')).find((pkg: { id: string }) => pkg.id === ID)?.disabled === true
+    // The user's own Disabled switch.
+    await call('plugins:setDisabled', { id: ID, disabled: true })
+    expect(await isDisabled()).toBe(true)
+    const told = notices.length
+    const refused = await action('enable', ID)
+    expect(refused).toMatchObject({
+      ok: false, error_code: 'APPROVAL_REQUIRED', pluginId: ID, pluginVersion: VERSION,
+      disabled: { by: 'user', at: expect.any(Number), agent: null },
+    })
+    // Not enabled, and nobody is told: nothing changed.
+    expect(await isDisabled()).toBe(true)
+    expect(notices.length).toBe(told)
+    // The backend files a plugin-enable request (backend/tests/test_b2_wire_contract.py);
+    // the user approves it on the card, and the window carries it out.
+    const result = await carryOut(approved('plugin-enable', VERSION))
+    expect(result).toEqual({ status: 'completed', error: null })
+    expect(await isDisabled()).toBe(false)
+    expect(finishes.at(-1)).toMatchObject({ status: 'completed', error: null, confirmation: { subject: expect.stringMatching(/:completed$/) } })
+    // Enabled by the user's approval: an agent may disable it again later, as before.
+    expect(await action('disable', ID)).toMatchObject({ ok: true, changed: true })
+    await call('plugins:setDisabled', { id: ID, disabled: false })
+  })
+
   it('(7) the bundled Navide plugins cannot be disabled by an agent, and stay as they were', async () => {
     for (const builtin of ['navide.plans', 'navide.git', 'navide.mini-ide']) {
       const answer = await action('disable', builtin)
@@ -466,6 +505,4 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
     expectWire('plugin.activity.forget', forget)
     expect(forget).toEqual({ plugin_id: ID })
   })
-
-  it.todo('plugins_enable of a package the user disabled goes through an approval card (line 3, plugins_enable B, not merged yet)')
 })

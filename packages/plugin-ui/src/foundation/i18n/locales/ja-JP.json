@@ -1739,7 +1739,8 @@
           "memory": "メモリ",
           "cpu": "CPU",
           "processes": "プロセス数",
-          "disk": "ディスク"
+          "disk": "ディスク",
+          "stdoutPending": "改行待ちの出力"
         },
         "shellRisk": "高リスク：git、gh、glab を実行",
         "shellRiskDetail": "git、gh、glab を通じてネットワーク上のホストに接続してワークスペースのデータを送信でき、「ファイルの変更」の許可なしにワークスペースのファイルを読み取り・変更できます。無効にしたり権限を取り消したりした時点で始まっていたコマンドは最後まで実行されます（最大約 30 秒）。",
@@ -11059,6 +11060,20 @@
   },
   "pluginActivity": {
     "title": "アクティビティ",
+    "resources": {
+      "heading": "リソース（リアルタイム）",
+      "row": "{item}：{usage}／しきい値 {threshold}",
+      "over": "しきい値超過",
+      "waiting": "選択待ち",
+      "kept": "実行を継続中。{level} を超えたら再度お知らせ",
+      "item": {
+        "memory": "メモリ",
+        "cpu": "CPU",
+        "processes": "プロセス数",
+        "disk": "データフォルダ",
+        "stdoutPending": "改行待ちの出力"
+      }
+    },
     "source": {
       "broker": "Navide の機能",
       "shell": "shell コマンド",
@@ -11156,6 +11171,22 @@
       "activity": "最近のアクティビティ",
       "undeclaredCount": "宣言されていない使用の拒否 {count} 回",
       "anomalyCount": "異常 {count} 件"
+    }
+  },
+  "backendResource": {
+    "title": "Navide プラグインの backend がリソースのしきい値を超えました",
+    "body": "{name}（{id} {version}）：{item}が {usage} で、しきい値 {threshold} を超えています。",
+    "keepsRunning": "選ぶまで実行は続きます。",
+    "again": "実行を続けると、「しきい値とその時点の使用量のうち大きいほう」の 2 倍を超えたときにだけ Navide が再度お知らせします。これはお知らせのタイミングを決めるだけで、何も制限しません。",
+    "stop": "停止",
+    "continue": "実行を続ける",
+    "cores": "{count} コア",
+    "item": {
+      "memory": "メモリ",
+      "cpu": "CPU",
+      "processes": "プロセス数",
+      "disk": "データフォルダのサイズ",
+      "stdoutPending": "改行待ちの出力量"
     }
   },
   "pluginDisclosure": {
