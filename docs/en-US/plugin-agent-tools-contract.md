@@ -933,6 +933,22 @@ and the audit records `no-op`. The undo acts only while the package is still
 in the state the agent left it in. The requester's pane name and workspace go
 through `neutralize_external_text`.
 
+Who disabled a package decides whether an agent may enable it (B2-c option B).
+The Host keeps, beside the Disabled list (whose file format older Navide
+versions read and which stays as it is), who disabled each Marketplace package
+in `.navide-disabled-source.json`: `{by: "user" | "agent", at (Unix ms), agent:
+{callerKind, paneId, paneName} | null}`. The user's Extensions switch, and the
+undo on an agent notice, record `user`; `plugins_disable` records `agent` with
+the caller. Enabling removes the entry. A disabled package with no entry
+(disabled before this was recorded, or an unreadable file) reads as the user.
+`enable` of a package an agent disabled proceeds as above. `enable` of a
+package the user disabled changes nothing: the Host answers `{ok: false,
+error_code: "APPROVAL_REQUIRED", error, pluginId, pluginVersion, disabled}`, and
+the backend files a `plugin-enable` request (section 6) for the user's
+decision and answers the agent `{ok: false, error_code: "APPROVAL_REQUIRED",
+error, approval_id, status: "pending", expires_at}`. A second `enable` returns
+the same pending request.
+
 ### 4.4 Chunked transfer of results and arguments
 
 A result or an argument object of any size reaches the other end intact. A
@@ -1446,6 +1462,17 @@ unchanged. A plugin request:
   `prepareInstall` → trust dialog → `commitInstall`.
 
 B2-c tools and messages:
+
+- `plugin-enable` (option B): filed by `plugins_enable` for a package the user
+  disabled. `owner` `plugin-enable:<id>@<installed version>`, `target.version`
+  the installed version, `fromVersion` null, `card` the Registry card of that
+  version (null when not listed), `reason` empty. Every plugin record carries
+  `disabled`: for `plugin-enable`, `{by: "user" | "agent", at (Unix seconds,
+  null when not recorded), agent: {callerKind, paneId, paneName} | null}` (an
+  agent source that cannot be named reads as the user); null for every other
+  kind. On approval the window turns the user's Enable switch on (its own
+  action); a rejection leaves the package disabled. Recovery counts it
+  `completed` when the package is installed and enabled.
 
 - `marketplace_request_install` / `_update` / `_rollback` `(namespace, name,
   version, reason)` and `plugins_request_remove` `(namespace, name, reason)`

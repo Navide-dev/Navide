@@ -493,7 +493,7 @@ App 自己的固定錯誤文字（所有 `BAD_REQUEST`，以及 `HOST_UNAVAILABL
 | `plugins_request_remove` | `namespace`、`name`、`reason=""` | 請求移除已安裝的套件 |
 | `marketplace_request_status` | `approval_id`、`wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`；`status` 是 `pending`、`applying`（已核准，正在執行）、`completed`、`failed`、`rejected` 或 `expired`。`wait_s`（0–60）會等這麼久，看狀態有沒有變化 |
 | `plugins_disable` | `namespace`、`name` | 立刻停用一個從市集安裝的套件，效果和使用者在擴充頁按停用一樣：畫面、後端和 agent 工具停止，檔案、授權和資料保留。使用者會收到通知，寫明是哪個呼叫端做的，並附一鍵還原；這次變更也會記錄下來。回傳 `{ok, pluginId, pluginVersion, disabled: true, changed}`；原本就已停用時 `changed` 為 false，什麼都不做，也不通知 |
-| `plugins_enable` | `namespace`、`name` | 沿用使用者先前給的同意，重新啟用。回傳 `{ok, pluginId, pluginVersion, disabled: false, changed}` |
+| `plugins_enable` | `namespace`、`name` | agent 停用的套件會立刻重新啟用，沿用使用者先前給的同意，回傳 `{ok, pluginId, pluginVersion, disabled: false, changed}`。使用者停用的套件不會被啟用，而是送出請求讓使用者決定，回傳 `{ok: false, error_code: "APPROVAL_REQUIRED", error, approval_id, status: "pending", expires_at}` |
 
 錯誤是 `{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。每一次請求、決定、結果、停用和啟用，都會連同呼叫端（pane 名稱、外部用戶端或 Navide Host）記在 navide.db 的 `plugin_agent_actions` 表。
 

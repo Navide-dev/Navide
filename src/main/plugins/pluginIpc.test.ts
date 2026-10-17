@@ -34,6 +34,7 @@ import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginDisableSourceStore } from './pluginDisableSource'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
@@ -5409,6 +5410,125 @@ describe('plugins:setDisabled', () => {
       expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.0')).toEqual(grant)
       expect(list(null)).toMatchObject([{ id: 'acme.demo', disabled: false }])
     } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // B2-c option B: who disabled a package decides whether an agent may enable it.
+  it('lets an agent enable only what an agent disabled; the user\'s switch and its answers stay as on main', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-disable-source-'))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    let agentAction: ((request: unknown) => Promise<unknown>) | null = null
+    vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+    const notices: unknown[] = []
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+      onPluginAgentAction: (notice) => notices.push(notice),
+    })
+    const setDisabled = handlers.get('plugins:setDisabled')!
+    const requester = { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' }
+    const agent = (action: 'disable' | 'enable') =>
+      agentAction!({ request_id: 'pa:1', action, plugin_id: 'acme.demo', requester })
+    const sourceFile = join(root, '.navide-disabled-source.json')
+    try {
+      await installVersion('1.0.0')
+      // The user's own switch: same answers as on main; recorded as the user.
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true })).resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'user', agent: null })
+      // The user disabled it: an agent's enable changes nothing and asks for approval.
+      await expect(agent('enable')).resolves.toMatchObject({
+        ok: false, error_code: 'APPROVAL_REQUIRED', pluginVersion: '1.0.0', disabled: { by: 'user' },
+      })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      expect(notices).toEqual([])
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false })).resolves.toEqual({ id: 'acme.demo', disabled: false })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+
+      // An agent disabled it: the agent may enable it again at once.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, disabled: true, changed: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({
+        by: 'agent', agent: { callerKind: 'pane', paneId: 'p-41', paneName: 'dev' },
+      })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(false)
+      expect(notices).toHaveLength(2)
+
+      // Disabled before sources were recorded (no entry): read as the user.
+      new PluginDisabledStore(root).add('acme.demo')
+      rmSync(sourceFile, { force: true })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user', at: null } })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review of #385 (MED-1): an agent's entry must never outlive the disable it describes.
+  it('trusts an agent\'s entry only while the Disabled list is as it left it, and forgets it on removal', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-disable-source-fail-'))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    let agentAction: ((request: unknown) => Promise<unknown>) | null = null
+    vi.spyOn(manager, 'setPluginAgentActionHandler').mockImplementation((handler) => { agentAction = handler })
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      ...TEST_PREFLIGHT_OPTIONS,
+      cleanupPluginStorage: async () => undefined,
+    })
+    const setDisabled = handlers.get('plugins:setDisabled')!
+    const requester = { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' }
+    const agent = (action: 'disable' | 'enable') =>
+      agentAction!({ request_id: 'pa:1', action, plugin_id: 'acme.demo', requester })
+    const sourceFile = join(root, '.navide-disabled-source.json')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await installVersion('1.0.0')
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      // The user's switch works, but neither write of who did it lands: the
+      // agent's entry is left behind in the file.
+      const set = vi.spyOn(PluginDisableSourceStore.prototype, 'set').mockImplementation(() => { throw new Error('disk full') })
+      const remove = vi.spyOn(PluginDisableSourceStore.prototype, 'remove').mockImplementation(() => { throw new Error('disk full') })
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: false })).resolves.toEqual({ id: 'acme.demo', disabled: false })
+      await expect(setDisabled(null, { id: 'acme.demo', disabled: true })).resolves.toEqual({ id: 'acme.demo', disabled: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user' } })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      set.mockRestore()
+      remove.mockRestore()
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+
+      // An older Navide (which does not know the source file) enables and
+      // disables it again: the agent's entry is left, but the list changed.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      new PluginDisabledStore(root).remove('acme.demo')
+      new PluginDisabledStore(root).add('acme.demo')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user', at: null } })
+      expect(new PluginDisabledStore(root).has('acme.demo')).toBe(true)
+      await setDisabled(null, { id: 'acme.demo', disabled: false })
+
+      // The ordinary path still works: what an agent disabled, it enables at once.
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: true })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+
+      // Removing the package drops its entry, so a reinstall starts with none.
+      await agent('disable')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'agent' })
+      await expect(handlers.get('plugins:remove')!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+      await installVersion('1.0.0')
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toBeUndefined()
+
+      // LOW-1: an agent's disable of a package the user disabled changes
+      // nothing, so the user's entry stays and an agent still cannot enable it.
+      await setDisabled(null, { id: 'acme.demo', disabled: true })
+      await expect(agent('disable')).resolves.toMatchObject({ ok: true, changed: false })
+      expect(JSON.parse(readFileSync(sourceFile, 'utf8')).sources['acme.demo']).toMatchObject({ by: 'user' })
+      await expect(agent('enable')).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED', disabled: { by: 'user' } })
+    } finally {
+      warn.mockRestore()
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
