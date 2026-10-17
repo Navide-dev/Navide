@@ -1008,6 +1008,11 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listInstalled'),
     listFactoryPackages: (): Promise<FactoryPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listFactoryPackages'),
+    disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
+    disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:disabledStoreStatus'),
+    resetDisabledStore: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
+      ipcRenderer.invoke('plugins:resetDisabledStore'),
     listContributions: (): Promise<Array<{
       pluginId: string
       packageVersion: string | null

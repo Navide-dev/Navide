@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { spawn } from 'node:child_process'
 import {
   startBackend,
+  setBackendDisabledBuiltinsProvider,
   getResolvedUserPath,
   readWsToken,
   mintTrustConfirmation,
@@ -51,7 +52,9 @@ import {
 import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
-import { PluginDisabledStore } from './plugins/pluginDisabledStore'
+import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
+import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
+import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
 import {
@@ -339,6 +342,19 @@ const mainWindows = new Set<BrowserWindow>()
 const contributionWindows = new Map<string, BrowserWindow>()
 const gitRecoveryForced = process.env['NAVIDE_GIT_RECOVERY'] === 'legacy'
 let gitRecoveryEnabled = gitRecoveryForced
+let legacyGitRegisteredForForcedRecovery = false
+/** The ready-time legacy Git registration for a recovery session. */
+function registerForcedLegacyGit(): void {
+  legacyGitRegisteredForForcedRecovery = true
+  const recovery = registerLegacyBundledGit(frontendPluginManager, {
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    artifactVersion: app.getVersion(),
+  })
+  if (!recovery.registered) {
+    warnMain(`[main] NAVIDE_GIT_RECOVERY=legacy but legacy Git bundle is unavailable: ${recovery.reason}`)
+  }
+}
 const plansRecoveryForced = process.env['NAVIDE_PLANS_RECOVERY'] === 'legacy'
 let plansRecoveryEnabled = plansRecoveryForced
 /** The Host-selected v2 package being recovered by the retained legacy route.
@@ -388,6 +404,9 @@ const pendingAdoptedWorkspaces = new Map<number, string[]>()
  * registered for diagnostics, but no renderer is allowed to keep presenting
  * a dead v2 contribution or MCP availability bit. */
 function enterPlansRecovery(reason: string): void {
+  // A disabled Plans is off, not degraded: nothing it does may leave the
+  // session in legacy recovery once it is enabled again.
+  if (frontendPluginManager.isBuiltinPluginDisabled(PLANS_PLUGIN_ID)) return
   frontendPluginManager.markPlansBackendUnavailable(reason)
   if (plansRecoveryEnabled) return
   plansRecoveryEnabled = true
@@ -1089,6 +1108,34 @@ const pluginFactoryOptOuts = new PluginFactoryOptOutStore(pluginsRoot())
 // verified, but its views and backend are never registered.
 const pluginDisabledSwitch = new PluginDisabledStore(pluginsRoot())
 frontendPluginManager.setDisabledPluginResolver((pluginId) => pluginDisabledSwitch.has(pluginId))
+// Every backend start learns the disabled built-ins from its spawn env, so it
+// refuses Plans work even before this Host session registers.
+setBackendDisabledBuiltinsProvider(() => frontendPluginManager.listDisabledBuiltinPlugins())
+// Built-ins can no longer be removed, only disabled. A Git or Mini-IDE removal
+// an earlier version recorded becomes Disabled here, before anything loads: the
+// bundled package comes back, off, with Enable one click away. That removal
+// already deleted its stored data, which the Extensions row discloses.
+const builtinRemovedEarlier = new BuiltinRemovedEarlierStore(pluginsRoot())
+migrateBuiltinRemovalsToDisabled(
+  { optOuts: pluginFactoryOptOuts, disabled: pluginDisabledSwitch, removedEarlier: builtinRemovedEarlier },
+  ['navide.git', MINI_IDE_PLUGIN_ID],
+  (message) => warnMain(`[main] ${message}`),
+)
+
+/** A disabled built-in is off, not broken: refuse and say so where the user
+ *  acted. Returns false when the plugin is enabled. */
+function refuseDisabledBuiltin(pluginId: string, target?: BrowserWindow | null, notify = true): boolean {
+  if (!frontendPluginManager.isBuiltinPluginDisabled(pluginId)) return false
+  if (notify) {
+    const text = builtinPluginDisabledDialog(currentUiLocale(), BUILTIN_PLUGIN_NAMES.get(pluginId) ?? pluginId)
+    const options: Electron.MessageBoxOptions = { type: 'info', title: text.title, message: text.message }
+    const parent = target && !target.isDestroyed() ? target : mainWindow
+    void (parent && !parent.isDestroyed()
+      ? dialog.showMessageBox(parent, options)
+      : dialog.showMessageBox(options))
+  }
+  return true
+}
 const installedPluginLoad = frontendPluginManager.loadInstalledPlugins(pluginsRoot(), {
   provenance: 'official-registry',
   trust: installedPluginTrust,
@@ -1455,6 +1502,9 @@ const filePickerHostService = new FilePickerHostService({
     : { filePath: join(__dirname, '../renderer/index.html') },
   openPreview: ({ workspacePath, canonicalPath, canDispatch }) => {
     if (!canDispatch()) return Promise.resolve(false)
+    if (refuseDisabledBuiltin('navide.plans', findMainWindowForWorkspace(workspacePath))) {
+      return Promise.resolve(false)
+    }
     const workspaceRoot = normalizeWorkspacePath(workspacePath)
     if (!workspaceRoot || !isAbsolute(canonicalPath)) return Promise.resolve(false)
     const relPath = relative(workspaceRoot, canonicalPath)
@@ -1594,6 +1644,7 @@ function retryGitV2AfterRecovery(): { ok: boolean; reason?: string } {
 }
 ipcMain.handle('git:retryV2', (event) => {
   if (!isTrustedPluginManagementSender(event, mainWindows)) return { ok: false, reason: 'untrusted sender' }
+  if (refuseDisabledBuiltin('navide.git', null, false)) return { ok: false, reason: builtinPluginDisabledMessage('navide.git') }
   return retryGitV2AfterRecovery()
 })
 
@@ -1658,17 +1709,26 @@ const pluginTrustRefresh = registerPluginIpc(
         .some((pkg) => pkg.id === MINI_IDE_PLUGIN_ID && pkg.provenance === 'factory-bundled') &&
         hasValidMiniIdeV2Descriptor(miniDescriptor) &&
         !miniIdeRecoveryEnabled
+      const builtinSwitch = (pluginId: string) => ({
+        disabled: frontendPluginManager.isBuiltinPluginDisabled(pluginId),
+        ...(builtinRemovedEarlier.has(pluginId) ? { dataDeletedByEarlierRemoval: true } : {}),
+      })
       return [{
         id: 'navide.git',
         version: factoryActive ? descriptor?.packageVersion ?? null : null,
         active: factoryActive,
         optedOut: pluginFactoryOptOuts.has('navide.git'),
+        ...builtinSwitch('navide.git'),
       }, {
         id: MINI_IDE_PLUGIN_ID,
         version: miniFactoryActive ? miniDescriptor?.packageVersion ?? null : null,
         active: miniFactoryActive,
         optedOut: pluginFactoryOptOuts.has(MINI_IDE_PLUGIN_ID),
-      }, plansFactoryPackageSummary(frontendPluginManager, plansRecoveryEnabled)]
+        ...builtinSwitch(MINI_IDE_PLUGIN_ID),
+      }, {
+        ...plansFactoryPackageSummary(frontendPluginManager, plansRecoveryEnabled),
+        ...builtinSwitch('navide.plans'),
+      }]
     },
     restoreFactoryPackage: (pluginId) => {
       if (pluginId === MINI_IDE_PLUGIN_ID) {
@@ -1781,6 +1841,38 @@ const pluginTrustRefresh = registerPluginIpc(
     onPackageInstalled: (pluginId) => {
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
+    },
+    onBuiltinSwitchReset: () => {
+      for (const hostWindow of mainWindows) {
+        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+          hostWindow.webContents.send('plugins:contributionsChanged')
+        }
+      }
+    },
+    setBuiltinDisabled: async (pluginId, disabled) => {
+      if (disabled) {
+        for (const [key, hostWindow] of contributionWindows) {
+          if (key.startsWith(`${pluginId}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+        }
+        if (pluginId === 'navide.plans') {
+          for (const hostWindow of BrowserWindow.getAllWindows()) {
+            if (!hostWindow.isDestroyed() && planWindows.hasWindow(hostWindow)) hostWindow.close()
+          }
+        }
+        await frontendPluginManager.suspendBuiltinPlugin(pluginId)
+      } else {
+        frontendPluginManager.resumeBuiltinPlugin(pluginId)
+        // Enabled once, it starts from the empty storage the old removal left.
+        builtinRemovedEarlier.remove(pluginId)
+        if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
+          registerForcedLegacyGit()
+        }
+      }
+      for (const hostWindow of mainWindows) {
+        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+          hostWindow.webContents.send('plugins:contributionsChanged')
+        }
+      }
     },
   }
 )
@@ -2024,6 +2116,7 @@ function retryPlansV2AfterRecovery(): { ok: boolean; reason?: string } {
 }
 ipcMain.handle('plans:retryV2', (event) => {
   if (!isTrustedPluginManagementSender(event, mainWindows)) return { ok: false, reason: 'untrusted sender' }
+  if (refuseDisabledBuiltin('navide.plans', null, false)) return { ok: false, reason: builtinPluginDisabledMessage('navide.plans') }
   return retryPlansV2AfterRecovery()
 })
 
@@ -2827,6 +2920,7 @@ async function openMiniIdeEditor(
 ): Promise<boolean> {
   if (!canDispatch()) return false
   if (trustedEditorFileTarget && !isTrustedEditorFileTargetCurrent(trustedEditorFileTarget)) return false
+  if (refuseDisabledBuiltin(MINI_IDE_PLUGIN_ID, host)) return false
   const { workspace_path: workspacePath = '', ...extraParams } = params
   if (miniIdeRecoveryEnabled) {
     const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
@@ -2941,6 +3035,15 @@ frontendPluginManager.setEditorNativeHandlers({
     if (!ok) throw new Error('editor open failed')
   },
   openPluginWindow: async ({ contributionKey, workspacePath, filePath, line }) => {
+    const disabledBuiltin = frontendPluginManager.listDisabledBuiltinPlugins()
+      .find((pluginId) => contributionKey.startsWith(`${pluginId}.`))
+    if (disabledBuiltin) {
+      return {
+        ok: false,
+        error: 'PLUGIN_UNAVAILABLE' as const,
+        message: builtinPluginDisabledMessage(disabledBuiltin),
+      }
+    }
     const extraParams: Record<string, string> = {}
     const trustedEditorFileTarget = filePath
       ? { path: filePath, expectedCanonicalPath: filePath }
@@ -3156,6 +3259,7 @@ function openDiffWindow(host: BrowserWindow | null, params: Record<string, strin
  *  request is the one the editor window used to receive (`diff_filepath`,
  *  `branch_diff_base`, …), so callers keep passing the same params. */
 async function openGitDiffRequest(host: BrowserWindow | null, params: Record<string, string>): Promise<boolean> {
+  if (refuseDisabledBuiltin('navide.git', host)) return false
   const workspacePath = params.workspace_path ?? ''
   const extraParams = params.branch_diff_base
     ? {
@@ -3671,6 +3775,7 @@ function catalogContributionQuery(
 }
 
 async function openGitWindow(workspacePath: string, extraParams: Record<string, string> = {}): Promise<boolean> {
+  if (refuseDisabledBuiltin('navide.git', findMainWindowForWorkspace(workspacePath))) return false
   const httpUrl = backend ? `http://${backend.host}:${backend.port}` : ''
   const generic = await openCatalogContributionWindow('navide.git.window', workspacePath, extraParams)
   if (generic.ok) return true
@@ -3731,7 +3836,7 @@ function pluginBoundsFrom(value: unknown): { x: number; y: number; width: number
 // neither the workspace authority nor the opaque instance handle comes from
 // renderer input.
 ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled) return { ok: false }
+  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
   const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
   const requestedWorkspace = typeof args?.workspace_path === 'string' ? args.workspace_path : ''
   const registeredWorkspace = hostWindow
@@ -3754,7 +3859,7 @@ ipcMain.handle('window:openGitLeft', async (event, args: Record<string, unknown>
 })
 
 ipcMain.handle('window:updateGitLeft', (event, args: Record<string, unknown>) => {
-  if (!gitRecoveryEnabled) return { ok: false }
+  if (!gitRecoveryEnabled || frontendPluginManager.isBuiltinPluginDisabled('navide.git')) return { ok: false }
   const hostWindow = trustedGitLeftWindow(event, mainWindows, detachedWindowIds)
   const bounds = pluginBoundsFrom(args?.bounds)
   if (!hostWindow || !bounds) return { ok: false }
@@ -3808,6 +3913,11 @@ ipcMain.handle('plugins:prepareContribution', async (event, args: Record<string,
       )
     : null
   if (!hostWindow || !contributionKey || !workspacePath) return { ok: false }
+  // A stale renderer may still ask for a just-disabled built-in's view; refuse
+  // before any storage migration or recovery path runs for it.
+  const disabledBuiltin = frontendPluginManager.listDisabledBuiltinPlugins()
+    .find((pluginId) => contributionKey.startsWith(`${pluginId}.`))
+  if (disabledBuiltin) return { ok: false, error: builtinPluginDisabledMessage(disabledBuiltin) }
   if (contributionKey.startsWith('navide.plans.') && plansRecoveryEnabled) {
     return { ok: false, error: 'Plans legacy recovery is active' }
   }
@@ -3856,7 +3966,9 @@ ipcMain.handle('plugins:openContributionWindow', async (event, args: Record<stri
 ipcMain.handle('plugins:dockSurfaceProvided', (_event, surface: unknown) =>
   dockSurfaceProvided(
     typeof surface === 'string' ? surface : '',
-    (pluginId) => frontendPluginManager.getDescriptor(pluginId) !== undefined,
+    (pluginId) =>
+      frontendPluginManager.getDescriptor(pluginId) !== undefined &&
+      !frontendPluginManager.isBuiltinPluginDisabled(pluginId),
   ))
 
 ipcMain.handle('plugins:closeContribution', (event, args: Record<string, unknown>) => {
@@ -4035,6 +4147,7 @@ function trustedPlansRecoveryWorkspace(event: IpcMainInvokeEvent): string | null
 }
 
 async function openPlanWindow(workspacePath: string, relPath?: string): Promise<boolean> {
+  if (refuseDisabledBuiltin('navide.plans', findMainWindowForWorkspace(workspacePath))) return false
   logPlansDevProvenance('open')
   return plansWindowRouter.openPlanWindow(workspacePath, relPath)
 }
@@ -4229,6 +4342,7 @@ function dispatchPlanExecution(args: { workspace_path?: string; rel_path?: strin
   const relPath = String(args?.rel_path ?? '').trim()
   const agentKey = String(args?.agent_key ?? '').trim()
   if (!workspacePath || !relPath || !agentKey) return { delivered: false }
+  if (refuseDisabledBuiltin('navide.plans', null, false)) return { delivered: false }
   const win = findMainWindowForWorkspace(workspacePath)
   if (!win || win.isDestroyed()) return { delivered: false }
   if (win.isMinimized()) win.restore()
@@ -5284,15 +5398,9 @@ app.whenReady().then(async () => {
   // Windows/Linux cold start: the link is a launch argument.
   const launchLink = app.isPackaged ? deepLinkFromArgv(process.argv) : null
   if (launchLink) deepLinks.handle(launchLink)
-  if (gitRecoveryEnabled) {
-    const recovery = registerLegacyBundledGit(frontendPluginManager, {
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-      artifactVersion: app.getVersion(),
-    })
-    if (!recovery.registered) {
-      warnMain(`[main] NAVIDE_GIT_RECOVERY=legacy but legacy Git bundle is unavailable: ${recovery.reason}`)
-    }
+  // A disabled Git gets no legacy view either; Enable registers it then.
+  if (gitRecoveryEnabled && !frontendPluginManager.isBuiltinPluginDisabled('navide.git')) {
+    registerForcedLegacyGit()
   }
   // The plugin-view dev entry is opt-in via AGENT_TEAM_PLUGIN_DEV=1 so the
   // default menu / UI is unchanged for every normal launch (dev or packaged).
@@ -5596,9 +5704,11 @@ app.whenReady().then(async () => {
       ? (win) => { if (!win.isDestroyed()) win.setBounds(bounds) }
       : null
     try {
+      // A window of a plugin the user disabled is not brought back.
       if (entry.kind === 'token-monitor') requestTokenMonitor()
-      else if (entry.kind === 'plans') await openPlanWindow(ownerPath)
-      else await openGitWindow(ownerPath)
+      else if (entry.kind === 'plans') {
+        if (!frontendPluginManager.isBuiltinPluginDisabled('navide.plans')) await openPlanWindow(ownerPath)
+      } else if (!frontendPluginManager.isBuiltinPluginDisabled('navide.git')) await openGitWindow(ownerPath)
     } finally {
       auxWindowCreatedHook = null
     }
