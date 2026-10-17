@@ -4,7 +4,10 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DISABLE_SOURCES_FILE, PluginDisableSourceStore, UNKNOWN_DISABLE_SOURCE } from './pluginDisableSource'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { normalizePlatformId } from '../../shared/osplat'
 
+// NTFS reports 0o666 for every file: the owner-only mode cannot be observed there.
+const hostIsWindows = normalizePlatformId(process.platform) === 'win32'
 const roots: string[] = []
 function root(): string {
   const dir = mkdtempSync(join(tmpdir(), 'navide-disable-source-'))
@@ -21,7 +24,7 @@ describe('PluginDisableSourceStore', () => {
     store.set('acme.a', agent)
     store.set('acme.b', { by: 'user', at: 5, agent: null })
     expect(new PluginDisableSourceStore(dir).get('acme.a')).toEqual(agent)
-    expect(statSync(join(dir, DISABLE_SOURCES_FILE)).mode & 0o777).toBe(0o600)
+    if (!hostIsWindows) expect(statSync(join(dir, DISABLE_SOURCES_FILE)).mode & 0o777).toBe(0o600)
     store.remove('acme.a')
     expect(store.get('acme.a')).toEqual(UNKNOWN_DISABLE_SOURCE)
     expect(store.get('acme.b')).toEqual({ by: 'user', at: 5, agent: null })
