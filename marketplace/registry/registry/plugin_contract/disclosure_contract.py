@@ -116,7 +116,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     scopes = None
     if fs_scope:
         scopes = {"fs": {
-            "root": fs_scope.get("root", "workspace"),
+            # An explicit null means the default, as `?? "workspace"` does in TypeScript.
+            "root": fs_scope.get("root") or "workspace",
             "read": sorted(fs_scope.get("read") or []),
             "write": sorted(fs_scope.get("write") or []),
         }}

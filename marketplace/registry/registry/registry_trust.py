@@ -281,13 +281,21 @@ class RegistryTrustSigner:
         package_envelope: dict,
         disclosure_digest: str,
         scan_digest: str | None = None,
+        now: datetime | None = None,
     ) -> tuple[dict, str]:
         """Sign the disclosure envelope of one artifact (contract 3.5).
 
         Its identity fields are copied from the package envelope this signer
         just produced, so the two always name the same artifact, signer and
-        moment. The package envelope itself is not changed.
+        moment. The package envelope itself is not changed. The signer's
+        status and validity window are checked here too, so a later caller
+        (an admin rescan) cannot sign with a signer sign_envelope would refuse.
         """
+        signing_time = now or datetime.now(timezone.utc)
+        if self.status not in {"active", "rotating"}:
+            raise ValueError(f"registry signer is {self.status}")
+        if not self.not_before <= signing_time <= self.not_after:
+            raise ValueError("registry signer is outside its validity period")
         if package_envelope.get("keyId") != self.key_id:
             raise ValueError("package envelope was not signed by this registry signer")
         envelope = {
