@@ -1373,7 +1373,15 @@ B2-c tools and messages:
   connection a main window settles every other `applying` request against the
   installed packages: remove and the package is gone, or update / rollback /
   install and the installed version equals `target.version` → `completed`;
-  anything else → `failed` with error `interrupted`.
+  anything else → `failed` with error `interrupted`. A main window also does
+  this when the backend sends `plugins.agent_requests.recover`
+  (`PLUGIN_APPROVAL_RECOVER_EVENT`, `{approval_ids}`), which it sends to the
+  main windows still open when a main window that was carrying out approved
+  requests goes away, so they do not wait for another window to open. Either
+  way, a request is settled only if it is still unclaimed when the window
+  looks again after a 5-second grace (`RECOVERY_GRACE_MS`, a time window, not
+  a limit): a window that was only reconnecting claims its request back
+  within that time.
 - A rollback restores the version Extensions keeps for rollback: the window
   rolls back only when that is `target.version`, else it finishes `failed`
   with the reason (it never installs a version the user did not approve).

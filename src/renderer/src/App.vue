@@ -353,6 +353,7 @@ import {
   type SchedulerDisabledNotice,
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
+import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -921,6 +922,14 @@ watch(() => backend.status.value, (status) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
 }, { immediate: true })
+// And when a main window went away while carrying out approved requests
+// (review-370 R1): the backend names them, and recover() settles whatever is
+// still unclaimed after its grace.
+backend.on(PLUGIN_APPROVAL_RECOVER_EVENT, () => {
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle agent plugin requests a closed window left', error)
+  })
+})
 const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.

@@ -559,6 +559,9 @@ PLUGIN_APPROVAL_LIST_MESSAGE = "plugins.agent_requests.list"
 PLUGIN_APPROVAL_REQUEST_EVENT = "plugins.agent_request"
 #: Backend -> windows: a plugin request was decided, finished or expired.
 PLUGIN_APPROVAL_RESOLVED_EVENT = "plugins.agent_request_resolved"
+#: Backend -> main windows: a main window went away while carrying out these
+#: approved requests; the others settle them (review-370 R1). ``{approval_ids}``.
+PLUGIN_APPROVAL_RECOVER_EVENT = "plugins.agent_requests.recover"
 #: The longest marketplace_request_status waits for a decision.
 PLUGIN_APPROVAL_STATUS_MAX_WAIT_S = 60
 

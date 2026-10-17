@@ -449,3 +449,25 @@ async def test_ui_invoke_ready_records_a_well_formed_window_id() -> None:
     await ws_request(other, "ui.invoke.ready", {"window_id": "../../etc"})
     assert other.window_id == ""
 
+
+
+async def test_a_main_window_that_goes_away_mid_apply_asks_the_others_to_recover(
+    host, broadcasts, audit, caller, confirmable,
+) -> None:
+    """review-370 R1: recovery no longer waits for the next window to open."""
+    from tests.test_settings_ws_integration import _request as ws_request
+
+    first = await mcp.marketplace_request_install(None, "nerdtechnic", "devmap", "0.2.0")
+    window_a, window_b = _main_window("win-a-00000001"), _main_window("win-b-00000002")
+    decided = await ws_request(window_a, contract.PLUGIN_APPROVAL_DECIDE_ACTION, {
+        "approval_id": first["approval_id"], "approve": True,
+        "confirmation": _confirm(contract.PLUGIN_APPROVAL_DECIDE_ACTION, f"{first['approval_id']}:approve"),
+    })
+    assert decided["payload"]["approval"]["status"] == "applying"
+    broadcasts.clear()
+    await app.nudge_plugin_request_recovery(window_b)  # carries nothing
+    assert broadcasts == []
+    await app.nudge_plugin_request_recovery(window_a)
+    assert [(e["type"], e["payload"], e["to"]) for e in broadcasts] == [
+        (contract.PLUGIN_APPROVAL_RECOVER_EVENT, {"approval_ids": [first["approval_id"]]}, "main-windows"),
+    ]

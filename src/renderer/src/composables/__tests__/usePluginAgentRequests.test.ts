@@ -36,8 +36,37 @@ describe('usePluginAgentRequests', () => {
           },
         }
       : { ok: true, payload: {} })
-    await usePluginAgentRequests({ send } as never).recover()
+    await usePluginAgentRequests({ send } as never).recover(0)
     const finished = send.mock.calls.filter(([type]) => type === 'plugins.agent_request.finish')
     expect(finished.map(([, payload]) => (payload as unknown as { approval_id: string }).approval_id)).toEqual(['gone'])
+  })
+
+  it('looks again after a grace and leaves what a reconnected window claimed back (review-370 R2)', async () => {
+    vi.useFakeTimers()
+    try {
+      const trustConfirm = vi.fn(async () => ({ nonce: 'n', expires: '1', mac: 'm' }))
+      const listInstalled = vi.fn(async () => [])
+      ;(window as unknown as { agentTeam: unknown }).agentTeam = { trustConfirm, plugins: { listInstalled } }
+      const target = { id: 'a.b', namespace: 'a', name: 'b', version: '1.0.0', fromVersion: null }
+      const applying = (id: string) => ({ approval_id: id, kind: 'plugin-install', status: 'applying', target })
+      // First look: window A is between sockets, so nothing looks claimed.
+      const looks = [
+        { requests: [applying('reconnected'), applying('gone'), applying('settled')], applyingInLiveWindow: [] },
+        // After the grace: A is back and claims its request; another one finished meanwhile.
+        { requests: [applying('reconnected'), applying('gone')], applyingInLiveWindow: ['reconnected'] },
+      ]
+      const send = vi.fn(async (type: string, _payload?: unknown) => type === 'plugins.agent_requests.list'
+        ? { ok: true, payload: looks.shift() }
+        : { ok: true, payload: {} })
+      const done = usePluginAgentRequests({ send } as never).recover(5000)
+      await vi.advanceTimersByTimeAsync(4999)
+      expect(send.mock.calls.filter(([type]) => type === 'plugins.agent_request.finish')).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      await done
+      const finished = send.mock.calls.filter(([type]) => type === 'plugins.agent_request.finish')
+      expect(finished.map(([, payload]) => (payload as unknown as { approval_id: string }).approval_id)).toEqual(['gone'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
