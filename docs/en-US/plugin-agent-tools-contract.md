@@ -824,6 +824,15 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
+A call whose package stops being callable while its backend is being bound
+(the bind is refused or cancelled) answers `PLUGIN_TOOL_UNAVAILABLE` with the
+reason the checks then give, or `plugin-stopping` for a bind or call the stop
+cancelled; it is never reported as `PLUGIN_TOOL_FAILED`, which is the plugin's
+own failure. A call running when Navide closes every backend (a quit) is
+cancelled the same way and also answers `plugin-stopping`. Any other bind
+failure keeps its own error, even when the deadline passes or the workspace
+closes meanwhile.
+
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
 
