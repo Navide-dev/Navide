@@ -42,7 +42,11 @@ const PREFIX_PATTERN = /^[a-z][a-z0-9]{1,15}$/
 export const AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
 /** Same bound as the Host's backend calls (pluginBackendLimits.MAX_BACKEND_TIMEOUT_MS). */
 export const AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
-/** DB9: the technical cap on one description, one canonical input schema and one result, in UTF-8 bytes. */
+/**
+ * DB9: the technical cap on one description and one canonical input schema, in UTF-8 bytes.
+ * Results and arguments have no cap (DB9 decision a): they travel in pieces (section 4.4) and their sizes are
+ * disclosed as `resultBytes` and `args_bytes`.
+ */
 export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 
 export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
@@ -343,7 +347,9 @@ export type AgentToolCallErrorCode =
   | 'PLUGIN_TOOL_INVALID_ARGUMENTS'
   | 'PLUGIN_TOOL_TIMEOUT'
   | 'PLUGIN_TOOL_FAILED'
+  /** No longer produced: results have no size cap (DB9 decision a). Kept so older readers still type-check. */
   | 'PLUGIN_TOOL_RESULT_TOO_LARGE'
+  | 'PLUGIN_TOOL_CHUNKS_INVALID'
 
 /** `reason` of PLUGIN_TOOL_UNAVAILABLE, in Host check order. */
 export type AgentToolUnavailableReason =
@@ -360,6 +366,7 @@ export type AgentToolUnavailableReason =
 
 export interface AgentToolCallMeta {
   durationMs: number
+  /** UTF-8 bytes of the result's compact JSON text as the Host received it ({@link agentToolResultBytes}); 0 without a result. */
   resultBytes: number
   /** True when the target workspace differs from caller.workspace. */
   crossWorkspace: boolean
@@ -371,11 +378,171 @@ export type AgentToolCallResponse =
       ok: false
       error: string
       error_code: AgentToolCallErrorCode
-      reason?: AgentToolUnavailableReason
+      /** For PLUGIN_TOOL_UNAVAILABLE an unavailable reason; for PLUGIN_TOOL_CHUNKS_INVALID a join reason; for PLUGIN_TOOL_TIMEOUT which clock ran out. */
+      reason?: AgentToolUnavailableReason | AgentToolChunksInvalidReason | AgentToolTimeoutReason
       /** The plugin's own error code, for PLUGIN_TOOL_FAILED. */
       plugin_error?: string
       meta?: AgentToolCallMeta
     }
+
+// ── chunked transfer of results and arguments (section 4.4) ────────────────
+
+/**
+ * UTF-8 bytes of the `data` of one piece, in both directions. A transport
+ * unit, not a cap: a value of any size is sent as as many pieces as it needs.
+ * Even if every byte of a piece were escaped as `\u00XX` (6 bytes) the frame
+ * stays under 1 MiB, the frame size child readers use (Plans backend MAX_FRAME_BYTES).
+ */
+export const AGENT_TOOL_CHUNK_BYTES = 131_072
+/** Backend Wire notification, child → Host, one per result piece. */
+export const BACKEND_WIRE_RESULT_CHUNK_METHOD = 'notifications/navide/resultChunk'
+/**
+ * Key of the client capability the Host advertises in `navide/call` `_meta`
+ * clientCapabilities, and of the summary in the final success response `_meta`.
+ */
+export const BACKEND_WIRE_RESULT_CHUNKS_KEY = 'io.navide/resultChunks'
+/** Backend Wire notification, Host → child, one per argument piece. */
+export const BACKEND_WIRE_ARGUMENT_CHUNK_METHOD = 'notifications/navide/argumentChunk'
+/**
+ * Key of the capability a child advertises in its `navide/health` success
+ * `_meta`, and of the summary in a `navide/call` `_meta` sent without `arguments`.
+ */
+export const BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
+/** WebSocket request, Host → backend, one per result piece; answered like any request. */
+export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
+/** WebSocket event, backend → Host, one per argument piece, sent before `agent.capability.request`. */
+export const AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = 'agent.capability.request_chunk'
+/** WebSocket request, Host → backend: the call is alive (keeps the backend's wait running). */
+export const AGENT_CAPABILITY_PROGRESS_MESSAGE = 'agent.capability.progress'
+/**
+ * Idle timer of a transfer of pieces, restarted by every piece. It detects a
+ * stalled peer; it is not a size limit (section 4.4, Timing).
+ */
+export const AGENT_TOOL_CHUNK_IDLE_MS = 30_000
+
+/** Payload of {@link AGENT_CAPABILITY_PROGRESS_MESSAGE}. */
+export interface AgentToolProgressMessage {
+  request_id: string
+  phase: 'arguments' | 'execution' | 'result'
+}
+
+/** `reason` of PLUGIN_TOOL_TIMEOUT: the plugin's own work, or a stalled transfer. */
+export type AgentToolTimeoutReason = 'execution' | 'transfer-idle'
+
+/** Backend Wire `params` of both chunk notifications; `requestId` is the `navide/call` id. */
+export interface BackendWireChunkParams {
+  requestId: string | number
+  seq: number
+  data: string
+}
+
+/** Payload of {@link AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE} and {@link AGENT_CAPABILITY_REQUEST_CHUNK_EVENT}. */
+export interface AgentToolChunkMessage {
+  request_id: string
+  seq: number
+  data: string
+}
+
+/** Sent with the message that completes a transfer: how many pieces and the UTF-8 bytes of the joined text. */
+export interface AgentToolChunksSummary {
+  chunks: number
+  bytes: number
+}
+
+/** The final Host → backend response of a chunked result: `result` is replaced by `resultChunks`. */
+export interface AgentToolCallChunkedResponse {
+  ok: true
+  resultChunks: AgentToolChunksSummary
+  meta: AgentToolCallMeta
+}
+
+/** `json` is set by the caller when the joined text does not parse. */
+export type AgentToolChunksInvalidReason = 'summary' | 'seq' | 'count' | 'short' | 'bytes' | 'json'
+
+export type AgentToolPayloadReassembly =
+  | { ok: true; text: string }
+  | { ok: false; code: 'PLUGIN_TOOL_CHUNKS_INVALID'; reason: AgentToolChunksInvalidReason }
+
+/** The value of `meta.resultBytes`: UTF-8 bytes of the compact JSON text of a result (`null` when absent). */
+export function agentToolResultBytes(result: unknown): number {
+  return utf8ByteLength(JSON.stringify(result === undefined ? null : result))
+}
+
+/** Cuts `text` into pieces of at most `maxBytes` UTF-8 bytes, never inside a code point. Always at least one piece. */
+export function splitAgentToolPayloadText(text: string, maxBytes: number = AGENT_TOOL_CHUNK_BYTES): string[] {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 4) throw new RangeError('maxBytes must be an integer >= 4')
+  const pieces: string[] = []
+  let start = 0
+  let bytes = 0
+  for (let i = 0; i < text.length; ) {
+    const point = text.codePointAt(i) as number
+    const units = point > 0xffff ? 2 : 1
+    const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point > 0xffff ? 4 : 3
+    if (bytes + size > maxBytes) {
+      pieces.push(text.slice(start, i))
+      start = i
+      bytes = 0
+    }
+    bytes += size
+    i += units
+  }
+  pieces.push(text.slice(start))
+  return pieces
+}
+
+/** What a receiver learns from one piece as it arrives (section 4.4). */
+export type AgentToolChunkArrival =
+  | { ok: true; short: boolean }
+  | { ok: false; code: 'PLUGIN_TOOL_CHUNKS_INVALID'; reason: 'seq' | 'short' }
+
+/**
+ * Checks one piece on arrival. Senders send pieces in `seq` order and only the
+ * last may be short (under `chunkBytes - 3` UTF-8 bytes), so any piece after a
+ * short one is `short`. A short piece does not restart the idle timer
+ * (`short: true`); a full one does. A format rule, not a limit.
+ */
+export function agentToolChunkArrival(
+  shortSeen: boolean,
+  data: unknown,
+  chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
+): AgentToolChunkArrival {
+  if (typeof data !== 'string') return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
+  if (shortSeen) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'short' }
+  return { ok: true, short: utf8ByteLength(data) < chunkBytes - 3 }
+}
+
+function isCount(value: unknown, min: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min
+}
+
+/**
+ * Joins the pieces received for one request (in any arrival order) and checks
+ * them against the summary. Every piece but the last must be full, at least
+ * `chunkBytes - 3` UTF-8 bytes (what {@link splitAgentToolPayloadText} always
+ * produces): a format rule, so a sender cannot drip a value to stretch the
+ * transfer. No size limit beyond memory.
+ */
+export function reassembleAgentToolPayloadText(
+  chunks: ReadonlyArray<{ seq: unknown; data: unknown }>,
+  summary: unknown,
+  chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
+): AgentToolPayloadReassembly {
+  const invalid = (reason: AgentToolChunksInvalidReason): AgentToolPayloadReassembly =>
+    ({ ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason })
+  const s = summary as Partial<AgentToolChunksSummary> | null
+  if (!s || typeof s !== 'object' || !isCount(s.chunks, 1) || !isCount(s.bytes, 0)) return invalid('summary')
+  if (chunks.some((c) => !isCount(c.seq, 0) || typeof c.data !== 'string')) return invalid('seq')
+  if (chunks.length !== s.chunks) return invalid('count')
+  const ordered: string[] = new Array(s.chunks)
+  for (const c of chunks as ReadonlyArray<{ seq: number; data: string }>) {
+    if (c.seq >= s.chunks || ordered[c.seq] !== undefined) return invalid('seq')
+    ordered[c.seq] = c.data
+  }
+  if (ordered.slice(0, -1).some((piece) => utf8ByteLength(piece) < chunkBytes - 3)) return invalid('short')
+  const text = ordered.join('')
+  if (utf8ByteLength(text) !== s.bytes) return invalid('bytes')
+  return { ok: true, text }
+}
 
 // ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────
 
