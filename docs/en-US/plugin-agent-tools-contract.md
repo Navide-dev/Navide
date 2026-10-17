@@ -188,10 +188,23 @@ integers, DB9) stay in `validateAgentTools`.
 
 ### 2.7 DB9 stability cap
 
-1 MiB (1,048,576 bytes, UTF-8) each for one `description`, one `inputSchema`
-in its canonical spelling, and one tool result. It protects the MCP server,
-not a policy; the disclosure card says the cap exists. A result over the cap
-fails with `PLUGIN_TOOL_RESULT_TOO_LARGE`.
+1 MiB (1,048,576 bytes, UTF-8) each for one `description` and one
+`inputSchema` in its canonical spelling (`AGENT_TOOL_STABILITY_CAP_BYTES`,
+checked by `validateAgentTools`).
+
+**Tool results and tool arguments have no size cap** (user decisions
+2026-10-17: DB9 option a, "拿掉 1 MiB 回傳上限，只揭露資料大小；穩定性改用分段傳送處理",
+and "傳給外掛的參數上限也拿掉"). Stability comes from the chunked transfer in
+[section 4.4](#44-chunked-transfer-of-results-and-arguments), never from
+refusing a call. The sizes are disclosed instead, one field each:
+
+| Size | Measured by | Wire | Audit column |
+|---|---|---|---|
+| result | the Host, once (`agentToolResultBytes`, 4.2) | `meta.resultBytes` | `plugin_tool_calls.result_bytes` |
+| arguments | the backend, once (`agent_tool_arguments_digest`, 5) | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
+
+The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
+the error-code list for older readers but is no longer produced.
 
 ### 2.8 Consent binding (for B1-a)
 
@@ -748,10 +761,31 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_INVALID_ARGUMENTS` | arguments do not match `inputSchema` |
 | `PLUGIN_TOOL_TIMEOUT` | the backend did not answer within `timeoutMs` |
 | `PLUGIN_TOOL_FAILED` | the backend answered with an error; its own code is in `plugin_error` |
-| `PLUGIN_TOOL_RESULT_TOO_LARGE` | result over the DB9 cap |
+| `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
+
+Before sending, the core server checks the arguments against the consented
+`inputSchema` in a worker thread, never on its event loop, and the Host checks
+them again. Known limits of the core check, by design (no size or count limit
+replaces them):
+
+- It never runs a plugin-supplied regular expression: `pattern` values and
+  `patternProperties` (with the `additionalProperties` beside it) are left to
+  the plugin backend. A backtracking pattern could otherwise hold a thread for
+  every caller.
+- `uniqueItems` is checked in linear time (items compared by canonical JSON,
+  `1` equal to `1.0`, `true` not equal to `1`); jsonschema's pairwise check is
+  quadratic. The other keywords cost at most the size of the arguments times
+  the size of the schema.
+- Values of `const`, `default`, `enum` and `examples` are data: never checked
+  as schema text, never rewritten.
+- An invalid-arguments message names the failing keyword and the value's size,
+  never the value, and only property names the schema declares (any other key
+  shows as `*`).
+- A Host `error_code` outside the table above is reported as
+  `PLUGIN_TOOL_FAILED`, its text fenced like a result.
 
 ### 4.3 Backend → Host: `marketplace.query`
 

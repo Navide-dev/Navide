@@ -57,6 +57,7 @@ from jsonschema import validators as jsonschema_validators
 from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
+    AGENT_TOOL_CALL_ERROR_CODES,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
@@ -65,6 +66,7 @@ from agent_team_backend.plugins.agent_tools_contract import (
     validate_agent_tool_name,
     is_valid_agent_tool_text,
 )
+from agent_team_backend.plugins.external_content import neutralize_external_text
 
 _log = logging.getLogger(__name__)
 
@@ -156,11 +158,14 @@ def source_label(entry: dict[str, Any]) -> str:
     )
 
 
-# Bidi controls and zero-width characters: they reorder or hide text.
-_INVISIBLE = re.compile("[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
-# A boundary or label spelled loosely: any case, fullwidth brackets, with
-# invisible characters already removed.
-_BOUNDARY_RE = re.compile(r"[\[［]\s*外部\s*訊息\s*(開始|結束)")
+# The characters that reorder or hide text, the set of the contract's text
+# rule (2.4): bidi controls, zero-width and other invisible format characters,
+# variation selectors and tag characters.
+_INVISIBLE = re.compile(
+    "[\u00ad\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufe00-\ufe0f\ufeff\U000e0000-\U000e007f]"
+)
+# A source label spelled loosely (any case, fullwidth bracket): plugin text
+# must not pose as another plugin's label. Boundary lines are external_content's.
 _LABEL_RE = re.compile(r"[\[［]\s*third-party\s+navide\s+plugin", re.IGNORECASE)
 
 
@@ -170,10 +175,10 @@ def _clean(text: str) -> str:
 
 
 def _neutralize(text: str) -> str:
-    """Break any boundary or label line plugin text spells itself, so it cannot
-    close the external block early or pose as another plugin's label."""
-    text = _BOUNDARY_RE.sub(lambda match: f"[外部 訊息{match.group(1)}", text)
-    return _LABEL_RE.sub("[third party plugin", text)
+    """Plugin text made safe between the boundary lines: external_content's
+    single treatment (neutralize_external_text), and a label it spells itself
+    broken so it cannot pose as another plugin's label."""
+    return _LABEL_RE.sub("[third party plugin", neutralize_external_text(text))
 
 
 def _result_text(result: Any) -> str:
@@ -192,9 +197,15 @@ def _fence(entry: dict[str, Any], what: str, text: str) -> str:
 
 
 def result_bytes(result: Any) -> int:
-    """Size of a result as the plugin returned it (UTF-8 bytes, before fencing).
-    Disclosed, never limited here."""
-    return utf8_byte_length(_result_text(result))
+    """Size of a result spelled as the Host measures it (contract 2.7,
+    agentToolResultBytes): the UTF-8 bytes of the result value's compact JSON,
+    ``null`` when there is none; never the fenced or sanitized text.
+    Disclosed, never limited here. Becomes agent_tool_payload_text with DB9 PR1."""
+    try:
+        text = json.dumps(result, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    except ValueError:  # NaN/Infinity parsed from the Host's frame
+        text = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
+    return utf8_byte_length(text)
 
 
 def wrap_result(entry: dict[str, Any], result: Any) -> str:
@@ -205,6 +216,14 @@ def wrap_result(entry: dict[str, Any], result: Any) -> str:
 # ── snapshot validation and registration ────────────────────────────────────
 
 
+#: Schema keywords whose values are data, not schema: never checked as
+#: schema, never rewritten for validation (contract 2.4).
+_DATA_KEYWORDS = frozenset({"const", "default", "enum", "examples"})
+#: Keywords whose value maps names (property or definition names) to
+#: subschemas: a name such as ``enum`` or ``pattern`` there is a name.
+_SCHEMA_MAPS = frozenset({"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"})
+
+
 def _schema_text_ok(value: Any) -> bool:
     """Every ``description`` / ``title`` string anywhere in a schema follows the
     title/description text rule: agents read the whole schema in tools/list."""
@@ -213,7 +232,11 @@ def _schema_text_ok(value: Any) -> bool:
     if not isinstance(value, dict):
         return True
     return all(
-        (is_valid_agent_tool_text(item) and _INVISIBLE.search(item) is None)
+        True
+        if key in _DATA_KEYWORDS
+        else all(_schema_text_ok(sub) for sub in item.values())
+        if key in _SCHEMA_MAPS and isinstance(item, dict)
+        else (is_valid_agent_tool_text(item) and _INVISIBLE.search(item) is None)
         if key in ("description", "title") and isinstance(item, str)
         else _schema_text_ok(item)
         for key, item in value.items()
@@ -227,7 +250,12 @@ def _has_ref(value: Any) -> bool:
     if isinstance(value, list):
         return any(_has_ref(item) for item in value)
     if isinstance(value, dict):
-        return any(key in _REF_KEYS or _has_ref(item) for key, item in value.items())
+        return any(
+            any(_has_ref(sub) for sub in item.values())
+            if key in _SCHEMA_MAPS and isinstance(item, dict)
+            else key in _REF_KEYS or (key not in _DATA_KEYWORDS and _has_ref(item))
+            for key, item in value.items()
+        )
     return False
 
 
@@ -272,16 +300,102 @@ def _without_regexes(value: Any) -> Any:
         return [_without_regexes(item) for item in value]
     if not isinstance(value, dict):
         return value
-    out = {key: _without_regexes(item) for key, item in value.items() if not (key == "pattern" and isinstance(item, str))}
+    out = {
+        key: item if key in _DATA_KEYWORDS
+        else {name: _without_regexes(sub) for name, sub in item.items()}
+        if key in _SCHEMA_MAPS and isinstance(item, dict)
+        else _without_regexes(item)
+        for key, item in value.items()
+        if not (key == "pattern" and isinstance(item, str))
+    }
     if "patternProperties" in out:
         out.pop("patternProperties")
         out.pop("additionalProperties", None)
     return out
 
 
+# Variation selectors supplement (Mn), on top of the text-rule set.
+_VARIATION_SELECTORS = re.compile("[\U000e0100-\U000e01ef]")
+
+
+def _served_string(text: str) -> str:
+    """external_content's body rules, plus every character of the text-rule set
+    and the variation selectors supplement (some are Mn, which it keeps)."""
+    # Removed first: neutralizing breaks boundary lines with U+200B, which
+    # this set would otherwise take out again.
+    return neutralize_external_text(_VARIATION_SELECTORS.sub("", _INVISIBLE.sub("", text)))
+
+
+def _served_data(value: Any) -> Any:
+    """A data value (const, default, enum, examples) as tools/list serves it:
+    every string and key neutralized, no keyword read into it."""
+    if isinstance(value, list):
+        return [_served_data(item) for item in value]
+    if isinstance(value, dict):
+        return {_served_string(key): _served_data(item) for key, item in value.items()}
+    return _served_string(value) if isinstance(value, str) else value
+
+
+def _served_schema(value: Any) -> Any:
+    """The schema as tools/list serves it: every string, property names
+    included, neutralized like external content (contract 2.4). Regular
+    expressions (``pattern`` values, ``patternProperties`` keys) are kept as
+    written, since neutralizing would change what they match. Nothing here
+    refuses a package: only description/title text does, at install."""
+    if isinstance(value, list):
+        return [_served_schema(item) for item in value]
+    if isinstance(value, str):
+        return _served_string(value)
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if key in _DATA_KEYWORDS:
+            out[key] = _served_data(item)
+        elif key == "pattern" and isinstance(item, str):
+            out[key] = item
+        elif key == "patternProperties" and isinstance(item, dict):
+            out[key] = {pattern: _served_schema(schema) for pattern, schema in item.items()}
+        elif key in _SCHEMA_MAPS and isinstance(item, dict):
+            # Names here are names: neutralized, and their values are schemas.
+            out[key] = {_served_string(name): _served_schema(schema) for name, schema in item.items()}
+        else:
+            out[_served_string(key)] = _served_schema(item)
+    return out
+
+
+def _canonical_item(value: Any) -> str:
+    """One array item spelled so that JSON-equal items spell the same: keys
+    sorted, an integral number one way (1 == 1.0), booleans apart from numbers."""
+    def normal(item: Any) -> Any:
+        if isinstance(item, float) and item.is_integer():
+            return int(item)
+        if isinstance(item, list):
+            return [normal(entry) for entry in item]
+        if isinstance(item, dict):
+            return {key: normal(entry) for key, entry in item.items()}
+        return item
+
+    return json.dumps(normal(value), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _unique_items(validator: Any, unique: Any, instance: Any, schema: Any) -> Any:
+    """``uniqueItems`` in linear time. jsonschema compares every pair, which
+    took 453 s for 8,000 objects (about 100 KB) on a worker thread."""
+    if not unique or not validator.is_type(instance, "array"):
+        return
+    seen: set[str] = set()
+    for item in instance:
+        key = _canonical_item(item)
+        if key in seen:
+            yield jsonschema_exceptions.ValidationError("has non-unique elements")
+            return
+        seen.add(key)
+
+
 def _schema_validator(schema: dict[str, Any]) -> Any | None:
-    """A validator for a tool's inputSchema (regexes taken out), or None when
-    the schema itself is invalid."""
+    """A validator for a tool's inputSchema (regexes taken out, ``uniqueItems``
+    linear), or None when the schema itself is invalid."""
     cls = jsonschema_validators.validator_for(schema, default=jsonschema_validators.Draft202012Validator)
     try:
         cls.check_schema(schema)
@@ -289,7 +403,31 @@ def _schema_validator(schema: dict[str, Any]) -> Any | None:
         return None
     except Exception:  # noqa: BLE001 - a hostile schema must not escape as an exception
         return None
-    return cls(_without_regexes(schema))
+    linear = jsonschema_validators.extend(cls, {"uniqueItems": _unique_items})
+    return linear(_without_regexes(schema))
+
+
+def _shown_path(schema: Any, path: Any) -> str:
+    """Where an argument fails, naming only property names the schema declares:
+    a key the agent chose (it may be anything it read) shows as ``*``."""
+    parts: list[str] = []
+    current = schema
+    for part in path:
+        current = current if isinstance(current, dict) else {}
+        if isinstance(part, int):
+            parts.append(str(part))
+            items = current.get("items")
+            current = items if isinstance(items, dict) else {}
+            continue
+        properties = current.get("properties")
+        if isinstance(properties, dict) and part in properties:
+            parts.append(str(part))
+            current = properties[part]
+        else:
+            parts.append("*")
+            extra = current.get("additionalProperties")
+            current = extra if isinstance(extra, dict) else {}
+    return "/".join(parts) or "(arguments)"
 
 
 _ERROR_ECHO_MAX = 200
@@ -308,7 +446,7 @@ def _argument_error(name: str, schema: dict[str, Any], arguments: dict[str, Any]
     if not errors:
         return None
     first = errors[0]
-    where = "/".join(str(part) for part in first.absolute_path) or "(arguments)"
+    where = _shown_path(schema, first.absolute_path)
     if len(where) > _ERROR_ECHO_MAX:
         where = where[:_ERROR_ECHO_MAX] + "…"
     # The keyword and the value's size, never the value itself: an argument
@@ -341,12 +479,13 @@ def _register(entry: dict[str, Any]) -> None:
     tool = core.server._tool_manager.add_tool(  # noqa: SLF001
         _placeholder,
         name=entry["name"],
-        title=entry["title"],
-        description=f"{source_label(entry)} {entry['description']}",
+        title=_served_string(entry["title"]),
+        description=f"{source_label(entry)} {_served_string(entry['description'])}",
         structured_output=False,
     )
-    # The plugin's own schema, as consented to; the Host validates arguments.
-    tool.parameters = entry["inputSchema"]
+    # The plugin's own schema with every string neutralized for the agent;
+    # arguments are still checked against the consented one, and by the Host.
+    tool.parameters = _served_schema(entry["inputSchema"])
 
 
 def _unregister(name: str) -> None:
@@ -381,9 +520,9 @@ def apply_sync(payload: Any, session_key: int) -> dict[str, Any]:
         _unregister(name)
     for name in available:
         _register(entries[name])
-    # The low-level server validates arguments against the schema it cached
-    # from the last tools/list; a changed schema must not be checked against
-    # the old one.
+    # The low-level server caches tools/list entries; FastMCP registers
+    # call_tool with validate_input=False, so this only keeps a changed
+    # schema from being served stale.
     cache = _server().server._mcp_server._tool_cache  # noqa: SLF001
     for name in set(_catalog.registered) | set(available):
         cache.pop(name, None)
@@ -426,7 +565,9 @@ def _reset_for_test() -> None:
 # ── calls ───────────────────────────────────────────────────────────────────
 
 
-_ERROR_CODE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
+#: What a Host error_code may be (contract 4.2), plus the lower-case transport
+#: failures; anything else is reported as PLUGIN_TOOL_FAILED, fenced and tainting.
+_HOST_ERROR_CODES = frozenset((*AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout"))
 
 
 def _refusal(error: str, error_code: str, reason: str | None = None) -> CallToolResult:
@@ -528,7 +669,12 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
     if response.get("ok") is True:
         _taint(caller, entry)
         result = response.get("result")
-        size = result_bytes(result)
+        # The Host measures the size once (contract 2.7, agentToolResultBytes);
+        # measured here only when an older Host sends none.
+        meta = response.get("meta")
+        host_size = meta.get("resultBytes") if isinstance(meta, dict) else None
+        valid = isinstance(host_size, int) and not isinstance(host_size, bool) and host_size >= 0
+        size = host_size if valid else result_bytes(result)
         _log.info("plugin tool result %s: resultBytes=%d", name, size)
         # Size is disclosed, not limited (DB9 ruling a).
         return CallToolResult(
@@ -537,7 +683,7 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
             _meta={"resultBytes": size},
         )
     raw_code = response.get("error_code")
-    error_code = raw_code if isinstance(raw_code, str) and _ERROR_CODE_RE.fullmatch(raw_code) else "PLUGIN_TOOL_FAILED"
+    error_code = raw_code if isinstance(raw_code, str) and raw_code in _HOST_ERROR_CODES else "PLUGIN_TOOL_FAILED"
     raw_reason = response.get("reason")
     reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS else None
     error = str(response.get("error") or "the call failed")
