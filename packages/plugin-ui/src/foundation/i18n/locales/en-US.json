@@ -9232,6 +9232,8 @@
     "applying": "Applying…",
     "dismiss": "Dismiss",
     "completed": "Done: {plugin}",
+    "completed-late": "{plugin}: done. Another window had marked this request interrupted while this one reconnected; the record now shows what really happened.",
+    "finished-late": "Another window had marked this request interrupted while this one reconnected; the record now shows this result instead.",
     "failed": "Not done: {error}",
     "not-appliable": "This version of Navide cannot carry out this kind of request yet; you can reject it.",
     "unavailable": "Navide plugin actions are not available in this window."

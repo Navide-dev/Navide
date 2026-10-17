@@ -733,6 +733,8 @@ PLUGIN_AUDIT_DDL = (
 PLUGIN_AGENT_ACTIONS = (
     "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
     "decide-approve", "decide-reject", "finish-completed", "finish-failed",
+    # The carrying window's own result, after another window had settled the request.
+    "finish-late-completed", "finish-late-failed",
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")

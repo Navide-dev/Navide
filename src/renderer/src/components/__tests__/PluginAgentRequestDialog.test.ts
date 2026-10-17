@@ -191,6 +191,40 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(finish.payload).toMatchObject({ approval_id: 'r1', status: 'completed' })
   })
 
+  it('says so when its result came after another window had settled the request', async () => {
+    plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0' }])
+    const notify = useNotify()
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...request(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', {
+      approval: { ...request(), status: 'completed', finished_late: true, settled: { status: 'failed', error: 'interrupted' } },
+    })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    expect(notify.toasts.value.map((toast) => toast.message)).toContain(
+      i18n.global.t('plugin-request.completed-late', { plugin: 'acme.indexer' }),
+    )
+    expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
+  it('shows a late failed result with the note', async () => {
+    plugins.prepareInstall.mockRejectedValue(new Error('download failed'))
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...request(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', {
+      approval: { ...request(), status: 'failed', error: 'download failed', finished_late: true,
+        settled: { status: 'failed', error: 'interrupted' } },
+    })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-error"]').text()).toContain('download failed')
+    expect(wrapper.find('[data-testid="plugin-request-finished-late"]').text()).toBe(i18n.global.t('plugin-request.finished-late'))
+  })
+
   it('rejects with a reject-bound confirmation and touches nothing', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('plugins.agent_requests.list', { requests: [request()] })

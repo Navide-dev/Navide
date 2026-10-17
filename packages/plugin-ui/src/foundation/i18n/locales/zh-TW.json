@@ -9232,6 +9232,8 @@
     "applying": "套用中…",
     "dismiss": "關閉",
     "completed": "已完成：{plugin}",
+    "completed-late": "{plugin}：已完成。這個視窗重新連線期間，另一個視窗已把這筆請求標成中斷；紀錄已改成實際結果。",
+    "finished-late": "這個視窗重新連線期間，另一個視窗已把這筆請求標成中斷；紀錄已改成這裡的結果。",
     "failed": "沒有完成：{error}",
     "not-appliable": "這個版本的 Navide 還不能執行這種請求；你可以拒絕它。",
     "unavailable": "這個視窗無法執行 Navide 外掛的操作。"

@@ -25,6 +25,7 @@ import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow }
 import {
   applyApprovedRequest,
   isAppliableKind,
+  type FinishStatus,
   type PluginRequestApplyDeps,
   type PluginRequestRecord,
 } from '../lib/pluginAgentRequestApply'
@@ -64,6 +65,7 @@ const queue = ref<PluginAgentRequest[]>([])
 const busy = ref(false)
 const error = ref('')
 const outcome = ref<'completed' | 'failed' | null>(null)
+const finishedLate = ref(false)
 const installedDisclosure = ref<ManifestDisclosure | null>(null)
 const now = ref(Date.now())
 const current = computed(() => queue.value[0] ?? null)
@@ -150,6 +152,7 @@ const diff = computed<DisclosureDiff | null>(() => {
 watch(() => current.value?.approval_id, async (approvalId) => {
   error.value = ''
   outcome.value = null
+  finishedLate.value = false
   installedDisclosure.value = null
   const r = current.value
   if (!approvalId || !r || r.kind === 'plugin-install') return
@@ -221,7 +224,12 @@ function applyDeps(): PluginRequestApplyDeps {
       await inventory.refresh()
     },
     listInstalled: requests.listInstalled,
-    finish: requests.finish,
+    async finish(approvalId: string, result: FinishStatus): Promise<void> {
+      const record = await requests.finish(approvalId, result)
+      // Another window had settled it first (this one was reconnecting): the
+      // backend recorded this result afterwards; say so.
+      finishedLate.value = record?.finished_late === true
+    },
   }
   return deps
 }
@@ -257,7 +265,10 @@ async function decide(approve: boolean): Promise<void> {
     const record = (res.payload?.approval ?? request) as unknown as PluginRequestRecord
     const result = await applyApprovedRequest(record, applyDeps())
     if (result.status === 'completed') {
-      notify.toast(t('plugin-request.completed', { plugin: label.value }), { type: 'success' })
+      notify.toast(
+        t(finishedLate.value ? 'plugin-request.completed-late' : 'plugin-request.completed', { plugin: label.value }),
+        { type: finishedLate.value ? 'info' : 'success' },
+      )
       drop(request.approval_id)
     } else {
       outcome.value = 'failed'
@@ -343,6 +354,7 @@ watch(() => props.backend.status.value, (status) => { if (status === 'connected'
         <p v-if="!appliable" class="pr-note" data-testid="plugin-request-not-appliable">{{ $t('plugin-request.not-appliable') }}</p>
         <pre v-if="expired" class="pr-error">{{ $t('plugin-request.expired') }}</pre>
         <pre v-else-if="error" class="pr-error" data-testid="plugin-request-error">{{ error }}</pre>
+        <p v-if="finishedLate && outcome === 'failed'" class="pr-note" data-testid="plugin-request-finished-late">{{ $t('plugin-request.finished-late') }}</p>
       </main>
 
       <footer class="pr-footer">

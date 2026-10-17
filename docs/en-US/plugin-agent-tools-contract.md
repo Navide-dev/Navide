@@ -1248,7 +1248,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |
@@ -1460,18 +1460,30 @@ B2-c tools and messages:
   main windows still open when a main window that was carrying out approved
   requests goes away, so they do not wait for another window to open. Either
   way, a request is settled only if it is still unclaimed when the window
-  looks again after a 5-second grace (`RECOVERY_GRACE_MS`, a time window, not
-  a limit): a window that was only reconnecting claims its request back
-  within that time.
+  looks again after a grace (`RECOVERY_GRACE_MS`, a time window, not a
+  limit) taken from the WebSocket reconnect backoff (`reconnectDelayMs` in
+  `src/shared/wsClient.ts`): the first three reconnect waits (1.5 + 3 + 6 s)
+  plus one base wait for the handshake, 12 s. A window that was only
+  reconnecting claims its request back within that time.
 - A rollback restores the version Extensions keeps for rollback: the window
-  rolls back only when that is `target.version`, else it finishes `failed`
-  with the reason (it never installs a version the user did not approve).
+  asks the same confirmation as the Extensions pane first (cancelled →
+  `failed`, `not-applied`), and rolls back only when that is `target.version`,
+  else it finishes `failed` with the reason (it never installs a version the
+  user did not approve).
 - `plugins.agent_request.finish` `{approval_id, status: completed | failed,
   error, confirmation}` (window): the confirmation is minted for the action
   `plugins.agent_request.finish` (in `TRUST_CONFIRM_ACTIONS`) with subject
   `<approval_id>:<status>`, so a confirmation to report failure cannot report
   success; only `applying` moves. The result is broadcast as
   `plugins.agent_request_resolved` `{approval_id, status, error}`.
+  One exception, so the record matches what happened: when another window
+  settled the request (recovery) and the window that was carrying it out
+  reports afterwards, that window's result is taken, once. The record then
+  carries `finished_late: true` and `settled` `{status, error}` (what recovery
+  had said); the resolved event carries both too, the audit row is
+  `finish-late-completed` / `finish-late-failed`, and the window's card says
+  the result came late. Any other window is still refused
+  (`PLUGIN_APPROVAL_NOT_APPLYING`).
 
 ## 7. Changing this contract
 
