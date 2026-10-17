@@ -346,7 +346,16 @@ describe('PluginAgentToolsHost review fixes', () => {
     await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'plugin-revoked' })
   })
 
-  it('ends a mark only for another version or directory, or a new consent', async () => {
+  it('never attaches a mark made with no known package to a later install', async () => {
+    const h = harness({}, { enabled: true })
+    h.packages = []
+    h.host.mark('nerdtechnic.devmap', 'revoked')
+    h.packages = [DEVMAP]
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual(['available', 'available'])
+  })
+
+  it('ends a mark only for another version or directory, or a trust re-verification', async () => {
     const h = harness({}, { enabled: true })
     h.host.mark('nerdtechnic.devmap', 'quarantined')
     await h.host.refresh()

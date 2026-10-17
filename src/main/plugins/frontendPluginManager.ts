@@ -177,10 +177,8 @@ import {
   AGENT_TOOLS_SYNC_EVENT,
   utf8ByteLength,
   type AgentToolCaller,
-  type AgentToolCallErrorCode,
   type AgentToolCallResponse,
   type AgentToolsSyncPayload,
-  type AgentToolUnavailableReason,
 } from '../../shared/pluginAgentTools'
 import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
 import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
@@ -13814,7 +13812,7 @@ function agentToolUnavailable(reason: AgentToolUnavailableReason): Extract<Agent
   return { ok: false, error: agentToolUnavailableMessage(reason), error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason }
 }
 
-interface ParsedAgentToolCall {
+export interface ParsedAgentToolCall {
   pluginId: string
   workspacePath: string
   toolName: string
@@ -13832,11 +13830,14 @@ function exactRecord(value: unknown, keys: readonly string[]): Record<string, un
 
 /** Contract section 4.2. `caller` comes from the core server's credential
  * check, never from tool arguments; a pane caller names its pane. */
-function parseAgentToolCallRequest(value: Record<string, unknown>): ParsedAgentToolCall | null {
+export function parseAgentToolCallRequest(value: Record<string, unknown>): ParsedAgentToolCall | null {
   const record = exactRecord(value, ['request_id', 'operation', 'target', 'tool', 'caller', 'payload'])
   const target = exactRecord(record?.target, ['plugin_id', 'workspace_path'])
   const tool = exactRecord(record?.tool, ['name', 'plugin_version', 'sync_revision'])
+  // `verifiedTo` is optional on the wire (the core may send its own label);
+  // it must agree with the caller kind, and the Host derives its own anyway.
   const caller = exactRecord(record?.caller, ['kind', 'paneId', 'workspace'])
+    ?? exactRecord(record?.caller, ['kind', 'paneId', 'workspace', 'verifiedTo'])
   const payload = exactRecord(record?.payload, ['arguments'])
   if (!record || !target || !tool || !caller || !payload || record.operation !== 'agentTool') return null
   if (
@@ -13845,10 +13846,11 @@ function parseAgentToolCallRequest(value: Record<string, unknown>): ParsedAgentT
     !nonEmptyString(tool.name) || !nonEmptyString(tool.plugin_version) ||
     typeof tool.sync_revision !== 'number' || !Number.isSafeInteger(tool.sync_revision)
   ) return null
-  const callerOk = caller.kind === 'pane'
+  const expectedLabel = caller.kind === 'pane' ? 'pane' : 'caller-kind'
+  const callerOk = (caller.verifiedTo === undefined || caller.verifiedTo === expectedLabel) && (caller.kind === 'pane'
     ? nonEmptyString(caller.paneId) &&
       (caller.workspace === null || (nonEmptyString(caller.workspace) && isAbsolute(caller.workspace)))
-    : (caller.kind === 'external' || caller.kind === 'host') && caller.paneId === null && caller.workspace === null
+    : (caller.kind === 'external' || caller.kind === 'host') && caller.paneId === null && caller.workspace === null)
   const args = payload.arguments
   if (!callerOk || typeof args !== 'object' || args === null || Array.isArray(args) || !isJsonValue(args)) return null
   return {

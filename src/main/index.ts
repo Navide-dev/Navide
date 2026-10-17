@@ -1199,8 +1199,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
-  onConsentGranted: (pluginId) => {
-    agentToolsHost?.clearMark(pluginId)
+  onConsentGranted: () => {
     void agentToolsHost?.refresh().catch(() => undefined)
   },
   promptAgentToolWrite: promptAgentToolWorkspaceWrite,
@@ -1999,6 +1998,8 @@ async function refreshInstalledPluginTrust(): Promise<void> {
         ),
         ...refreshed.activationCatalog,
       ]
+      // Re-verified by the trust refresh: an earlier quarantine or revocation ends.
+      for (const pluginId of restoredIds) agentToolsHost?.clearMark(pluginId)
     }
     const quarantined = new Set(
       decisions

@@ -51,7 +51,7 @@ export type AgentToolsSyncDelivery = 'delivered' | 'failed' | 'no-session'
 interface PackageMark {
   kind: AgentToolPackageMark
   /** The package version and directory the mark applies to; another one clears it. */
-  identity: { packageVersion: string; packageDir: string } | null
+  identity: { packageVersion: string; packageDir: string }
 }
 
 export type AgentToolAdmission =
@@ -119,16 +119,21 @@ export class PluginAgentToolsHost {
     const departed = this.departed.get(pluginId)
     if (departed && !this.known.has(pluginId)) this.known.set(pluginId, departed)
     const spec = this.known.get(pluginId) ?? this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
+    // A mark names one package version and directory; with none known there
+    // is nothing it could apply to, and it must not attach to a later install.
+    if (!spec) return
     // Sticky: the mark holds for this package version and directory, also
     // while it is still listed during a drain or when its removal fails,
-    // until another version or directory replaces it or the user consents again.
+    // until another version or directory replaces it or the Host verifies
+    // this one again.
     this.marks.set(pluginId, {
       kind: mark,
-      identity: spec ? { packageVersion: spec.packageVersion, packageDir: spec.packageDir } : null,
+      identity: { packageVersion: spec.packageVersion, packageDir: spec.packageDir },
     })
   }
 
-  /** The user consented again: a revocation or quarantine of the old decision ends. */
+  /** The Host's trust check verified the package again (a trust refresh
+   * restored it): its quarantine or revocation ends. A new consent does not. */
   clearMark(pluginId: string): void {
     this.marks.delete(pluginId)
   }
@@ -165,9 +170,7 @@ export class PluginAgentToolsHost {
       this.known.set(spec.pluginId, spec)
       this.departed.delete(spec.pluginId)
       const mark = this.marks.get(spec.pluginId)
-      if (mark?.identity === null) {
-        mark.identity = { packageVersion: spec.packageVersion, packageDir: spec.packageDir }
-      } else if (
+      if (
         mark &&
         (mark.identity.packageVersion !== spec.packageVersion || mark.identity.packageDir !== spec.packageDir)
       ) this.marks.delete(spec.pluginId)
