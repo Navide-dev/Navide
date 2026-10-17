@@ -6,11 +6,16 @@ that the parallel work lines B1 (agent tools), B2 (Navide Marketplace MCP
 tools) and D (disclosure) build against. Nothing described here is wired into
 the app yet:
 
-- `plugin-manifest-v2.schema.json` still refuses `backend.agentTools`
-  ([section 2.6](#26-schema-fragment-not-yet-accepted)); B1-a turns it on.
-- No MCP tool, Host route, WebSocket handler, UI, Registry endpoint or database
-  table exists for anything below. The reference code is types, constants and
-  pure functions that nothing imports:
+- B1-a turned on `backend.agentTools` in `plugin-manifest-v2.schema.json`
+  ([section 2.6](#26-schema-fragment)): the Host and the
+  Registry run `validateAgentTools` / `validate_agent_tools` on every manifest,
+  the consent key carries the tools digest (section 2.8), and the consent
+  surfaces list the tools. The Registry image is built from
+  `marketplace/registry` alone, so it ships a byte-identical copy of
+  `agent_tools_contract.py` (held by `test_agent_tools_contract_copy.py`).
+- No MCP tool, Host route, WebSocket handler, Registry endpoint or database
+  table exists for anything else below. The reference code is types, constants and
+  pure functions:
 
 | Language | Module | Contents |
 |---|---|---|
@@ -121,17 +126,28 @@ declare agent tools (DB13 is open).
   characters) cannot declare agent tools.
 - Every tool name must start with `<prefix>_`.
 - Two packages that derive the same prefix may both install; when two
-  available tools have the same name, the one installed later is not served
-  (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)) and
-  the Navide Plugins page says why (DB1).
+  available tools have the same name, the one the user allowed later is not
+  served (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)),
+  and the Navide Plugins page says why in both rows (DB1). The order is per
+  name: the consent record's `agentToolNamesSince[name]`, the time the user
+  first allowed a version of the package that declares that name, made unique
+  across packages so there is never a tie. A name an update adds ranks from
+  that update's consent, so it cannot take over a name another package already
+  holds; a name the package stops declaring loses its place, and a version that
+  declares no tools clears them all. Only a package whose consent covers its
+  current tool set, and that the user has not disabled, holds names.
 
 ### 2.3 Reserved names
 
 A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
-`cli_` `credentials_` `evolve_` `marketplace_` `mcp_` `memory_` `navide_`
-`pipeline_` `plan_` `plugins_` `preview_` `prompt_` `role_` `scheduler_`
-`share_` `skills_` `stage_` `ui_` `workspace_`
+`cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_` `memory_`
+`miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_` `preview_`
+`prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_` `workspace_`
+
+`git_`, `plans_` and `miniide_` are the prefixes the built-in packages
+(`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party
+tool cannot read as first-party.
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
 pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 80
@@ -143,9 +159,30 @@ tool means adding it there (or giving it a reserved prefix).
 ### 2.4 Text rules
 
 - `title` and `description`: non-empty strings containing no character in
-  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, and no `<` or `>`
-  (`isValidAgentToolText`). These are what could fake a second tool or a system
-  message in a tool list or a terminal.
+  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no
+  character that reorders or hides text: bidi controls and zero-width or other
+  invisible characters (U+00AD, U+034F, U+061C, U+180E, U+200B–U+200F,
+  U+202A–U+202E, U+2060–U+2069, U+FEFF), variation selectors (U+FE00–U+FE0F)
+  and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
+  what could fake a second tool or a system message in a tool list or a
+  terminal, reorder and hide text in a dialog, or smuggle text an agent reads
+  but the user does not see.
+- The same rule applies to every `description` and `title` string anywhere in
+  `inputSchema` (agents read the whole schema in tools/list); a violation is
+  `AGENT_TOOL_TEXT_INVALID` on field `inputSchema`. Values of the data keywords
+  `const`, `default`, `enum` and `examples` are not schema and are not checked.
+- No other schema string refuses a package: `enum`, `const`, `default` and
+  `examples` values and property names may contain anything. Instead the core
+  server neutralizes every string in the schema it serves in tools/list
+  (property names included, `pattern` values excepted): control characters,
+  bidi controls, zero-width characters and variation selectors
+  (U+FE00–U+FE0F, U+E0100–U+E01EF) are removed and boundary markers are broken,
+  with the same `external_content` rules that fence results. Consent surfaces
+  show such characters in schema strings spelled out (`\u{202e}`).
+- Consent surfaces show each tool's `method` and its whole `inputSchema`
+  (collapsible), the number of tools and their total size. Nothing limits the
+  number of tools or the size of the whole declaration; DB9 applies per field
+  (2.7).
 - The core server prefixes every description with the source label
   `[third-party Navide plugin <id> v<version> | permissions: ...]` (D4, built by
   B1-c from the sync entry's `permissions`).
@@ -169,20 +206,19 @@ error as `{ index, field, code }`, ordered by entry index and then:
 7. `risk` → `AGENT_TOOL_RISK_INVALID`
 8. `title` → `AGENT_TOOL_TEXT_INVALID`
 9. `description` → `AGENT_TOOL_TEXT_INVALID`, else `AGENT_TOOL_TOO_LARGE`
-10. `inputSchema` → `AGENT_TOOL_SCHEMA_INVALID`, else `AGENT_TOOL_NON_INTEGER_NUMBER`, else `AGENT_TOOL_TOO_LARGE`
+10. `inputSchema` → `AGENT_TOOL_SCHEMA_INVALID`, else `AGENT_TOOL_NON_INTEGER_NUMBER`, else `AGENT_TOOL_TEXT_INVALID` (a nested `description`/`title`), else `AGENT_TOOL_TOO_LARGE`
 11. `timeoutMs` → `AGENT_TOOL_TIMEOUT_INVALID` (booleans, strings and fractions included)
 
 A package with any error is refused at install and publish, exactly like a
 schema error.
 
-### 2.6 Schema fragment (not yet accepted)
+### 2.6 Schema fragment
 
 `agent-tools-fixtures/manifest-agent-tools.fragment.schema.json` holds the
 JSON Schema that B1-a adds to `$defs.backend.properties` of
 `plugin-manifest-v2.schema.json` (both copies) together with the
-`agentTool` and `agentToolText` definitions. Until then the schema refuses the
-field (`backend` has `additionalProperties: false`), and both test suites
-assert that it still does, so the switch is a deliberate edit in B1-a. Rules the
+`agentTool` and `agentToolText` definitions; B1-a added it, and both test
+suites assert that both schema copies carry it verbatim. Rules the
 schema cannot express (prefix, reserved names, declared method, uniqueness,
 integers, DB9) stay in `validateAgentTools`.
 

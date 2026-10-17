@@ -710,7 +710,9 @@ describe('NativeBackendStore', () => {
 })
 
 describe('native backend consent text', () => {
-  const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
+  const base = {
+    pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], agentTools: [], update: false,
+  }
 
   // Plan B D-g: localized, with the methods listed.
   it('lists the methods the backend serves, sorted, in every locale', () => {
@@ -773,5 +775,50 @@ describe('native backend consent text', () => {
     const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
     expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
     expect(update.detail).not.toMatch(/no network/i)
+  })
+
+  it('lists each agent tool with its method, declared claim, timeout and whole input schema, plus count and size', () => {
+    const agentTools = [
+      { name: 'indexer_find', method: 'files.search', risk: 'read', title: 'Find', description: 'Find files.',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' } } }, timeoutMs: 30000 },
+      { name: 'indexer_tag', method: 'files.tag', risk: 'write', title: 'Tag', description: 'Tag a file.',
+        inputSchema: { type: 'object' }, timeoutMs: 5000 },
+    ] as const
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [...agentTools] })
+    expect(detail).toContain(
+      `Agents will be able to call these 2 tools of Indexer (their text and input schemas total ${
+        Buffer.byteLength(JSON.stringify(agentTools))} bytes):`,
+    )
+    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s): Find files.')
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"q":{"type":"string"}}}')
+    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
+    expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
+    expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
+  })
+
+  // D-g with #346: the agent-tool section is in the dialog's language too.
+  it.each([
+    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）：Find files.', '  輸入結構描述：{"type":"object"}'],
+    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）：Find files.', '  入力スキーマ：{"type":"object"}'],
+  ] as const)('words the agent tools in the dialog language (%s)', (locale, intro, line, schema) => {
+    const tool = {
+      name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
+      inputSchema: { type: 'object' }, timeoutMs: 30000,
+    }
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] }, locale)
+    expect(detail).toContain(intro)
+    expect(detail).toContain(line)
+    expect(detail).toContain(schema)
+    expect(detail).not.toMatch(/Agents will|Input schema|declared read-only|What these tools return/)
+  })
+
+  it('spells out invisible characters in a tool schema instead of showing them raw', () => {
+    const tool = {
+      name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
+      inputSchema: { type: 'object', properties: { 'k\u202ex': { enum: ['a\u200bb', 'v\ufe0f'] } } }, timeoutMs: 30000,
+    }
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] })
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"k\\u{202e}x":{"enum":["a\\u{200b}b","v\\u{fe0f}"]}}}')
+    expect(detail).not.toMatch(/[\u200b\u202e\ufe0f]/)
   })
 })

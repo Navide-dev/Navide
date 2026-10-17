@@ -826,7 +826,10 @@ async def _broadcast_plans_changed(ws_path: str) -> None:
     file directly). Record stage-transition snapshots first so subscribers
     refreshing on the event see up-to-date history, then notify."""
     try:
-        await asyncio.to_thread(plan_history.snapshot_plans, ws_path)
+        # Snapshots are plan-document writes (`.history/`); none while the user
+        # has Plans disabled. The change is still announced.
+        if not plans_plugin_disabled():
+            await asyncio.to_thread(plan_history.snapshot_plans, ws_path)
     except Exception as err:  # noqa: BLE001
         log.warning("plan snapshot scan failed for %s: %s", ws_path, err)
     await broadcast(make_event("plans.changed", {"workspace_path": ws_path}))

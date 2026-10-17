@@ -8,6 +8,7 @@ import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -114,6 +115,10 @@ function capabilityHint(cap: string): string {
           :scan="pending.prepared.scan ?? null"
           :registry="pending.prepared.registry ?? null"
           :verified="true"
+        />
+        <PluginAgentToolsList
+          v-if="step === 'risk' && pending.prepared.agentTools?.length"
+          :tools="pending.prepared.agentTools"
         />
         <p class="ext-trust-tier">
           <span

@@ -155,7 +155,10 @@ function buildReservedPkg(): { bytes: Uint8Array; digest: string } {
 // installer's wire check and the on-disk check pass on whichever host runs it.
 const BACKEND_ENTRY_ON_DISK = backendEntryOnDisk('backend/entry')
 
-function buildBackendPkg(version = '1.0.0'): { bytes: Uint8Array; digest: string } {
+function buildBackendPkg(
+  version = '1.0.0',
+  backendFields: Record<string, unknown> = {}
+): { bytes: Uint8Array; digest: string } {
   const manifest = JSON.stringify({
     schemaVersion: 2,
     apiVersion: '^1.0.0',
@@ -165,7 +168,7 @@ function buildBackendPkg(version = '1.0.0'): { bytes: Uint8Array; digest: string
     publisher: 'acme',
     permissions: {},
     marketplace: { description: 'Demo backend', license: 'MIT' },
-    backend: { entry: 'backend/entry', protocolVersion: 1, activation: 'startup' },
+    backend: { entry: 'backend/entry', protocolVersion: 1, activation: 'startup', ...backendFields },
   })
   const entry = { data: Buffer.from([0x7f, 0x45, 0x4c, 0x46]), unixMode: 0o100755 }
   const zip = makeZip([
@@ -1370,6 +1373,44 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('hands the declared agent tools to the trust dialog, and nothing when none are declared', async () => {
+    const write = {
+      name: 'demo_set', method: 'demo.set', risk: 'write', title: 'Set', description: 'Set the demo value.',
+      timeoutMs: 5000, inputSchema: { type: 'object' },
+    }
+    const read = { name: 'demo_get', method: 'demo.get', risk: 'read', title: 'Get', description: 'Get it.', inputSchema: { type: 'object' } }
+    const withTools = buildBackendPkg('1.0.0', { methods: ['demo.get', 'demo.set'], agentTools: [write, read] })
+    installFetch(signedDetail(withTools.digest), withTools.bytes, withTools.digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-agent-tools-'))
+    try {
+      const prepared = (await register(root, new FrontendPluginManager())(null, { namespace: 'acme', name: 'demo' })) as {
+        agentTools?: Array<{ name: string; timeoutMs: number }>
+        requiresRiskConfirmation: boolean
+      }
+      expect(prepared.agentTools).toEqual([
+        { ...read, timeoutMs: 30000 },
+        write,
+      ])
+      expect(prepared.requiresRiskConfirmation).toBe(true)
+
+      const plain = buildBackendPkg('1.0.0', { methods: ['demo.get'] })
+      installFetch(signedDetail(plain.digest), plain.bytes, plain.digest)
+      const without = (await register(root, new FrontendPluginManager())(null, { namespace: 'acme', name: 'demo' })) as object
+      expect(without).not.toHaveProperty('agentTools')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses at prepareInstall a package whose agent tools break a contract rule', async () => {
+    const bad = buildBackendPkg('1.0.0', {
+      methods: ['demo.get'],
+      agentTools: [{ name: 'other_get', method: 'demo.get', risk: 'read', title: 'Get', description: 'Get it.', inputSchema: { type: 'object' } }],
+    })
+    installFetch(signedDetail(bad.digest), bad.bytes, bad.digest)
+    await expect(register()(null, { namespace: 'acme', name: 'demo' })).rejects.toThrow(/AGENT_TOOL_PREFIX_MISMATCH/)
   })
 
   it('records full-shell approval only after explicit risk confirmation', async () => {
@@ -5351,10 +5392,36 @@ describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
         .rejects.toThrow(/unreadable/)
       expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
 
-      expect(handlers.get('plugins:resetDisabledStore')!(null)).toEqual({ status: 'ok' })
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
       expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
       expect(reset).toHaveBeenCalledTimes(1)
       expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('runs the built-in switch and the reset inside the Host hold, so a store check cannot interleave', async () => {
+    const { root, manager } = setup('navide-builtin-hold-')
+    const events: string[] = []
+    const hold = async <T>(task: () => Promise<T>): Promise<T> => {
+      events.push('hold')
+      try { return await task() } finally { events.push('release') }
+    }
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { events.push(`switch ${id} ${disabled}`) },
+      onBuiltinSwitchReset: () => { events.push('reset') },
+      holdBuiltinSwitch: hold,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.plans', disabled: true })
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
+      expect(events).toEqual(['hold', 'switch navide.plans true', 'release', 'hold', 'reset', 'release'])
     } finally {
       warn.mockRestore()
       rmSync(root, { recursive: true, force: true })
