@@ -173,6 +173,44 @@ def test_recording_only_queues_and_flush_writes_them(tmp_path: Path, monkeypatch
     assert opened == [1] and audit.status()["pending"] == 0
 
 
+def test_a_failing_decision_write_never_drops_the_activity_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    audit = PluginAuditLog(Database(tmp_path / "navide.db"))
+    real = audit.db.transaction
+
+    class _RefuseDecisions:
+        def __init__(self, cur: Any) -> None:
+            self._cur = cur
+
+        def executemany(self, sql: str, rows: Any) -> Any:
+            if "plugin_resource_decisions" in sql:
+                raise sqlite3.OperationalError("disk I/O error")
+            return self._cur.executemany(sql, rows)
+
+    class _Transaction:
+        def __enter__(self) -> Any:
+            self._inner = real()
+            return _RefuseDecisions(self._inner.__enter__())
+
+        def __exit__(self, *exc: Any) -> Any:
+            return self._inner.__exit__(*exc)
+
+    monkeypatch.setattr(audit.db, "transaction", _Transaction)
+    assert audit.record_resource_decision(**_fixture()["valid"][0])
+    assert audit.record_activity(
+        plugin_id="nerdtechnic.devmap", plugin_version="0.2.0", source="broker", address="fs.readFile", outcome="allowed",
+    )
+    audit.flush()
+    monkeypatch.setattr(audit.db, "transaction", real)
+    with audit.db.transaction() as cur:
+        assert cur.execute("SELECT COUNT(*) FROM plugin_resource_decisions").fetchone()[0] == 0
+        assert [tuple(r) for r in cur.execute("SELECT plugin_id, address FROM plugin_activity")] == [
+            ("nerdtechnic.devmap", "fs.readFile")
+        ]
+    assert audit.status()["pending"] == 0
+
+
 def test_an_old_database_gains_the_table_and_keeps_its_rows(tmp_path: Path) -> None:
     path = tmp_path / "navide.db"
     old = PluginAuditLog(Database(path))

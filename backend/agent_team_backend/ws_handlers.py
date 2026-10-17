@@ -4018,18 +4018,22 @@ async def plugins_agent_request_finish(session: "Session", msg_id: str, msg_type
     ):
         return
     try:
-        approval = registry.finish_plugin(approval_id, status, error=error if status == "failed" else None)
+        approval = registry.finish_plugin(
+            approval_id, status, error=error if status == "failed" else None,
+            window_id=session.window_id if app.is_main_window(session) else "",
+        )
     except SkillApprovalError as err:
         await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
         return
+    late = approval.get("finished_late") is True
     _audit_user_decision(
-        approval, f"finish-{status}",
+        approval, f"finish-late-{status}" if late else f"finish-{status}",
         "" if status == "completed" else ("INTERRUPTED" if error == "interrupted" else "ACTION_FAILED"),
     )
-    await app.broadcast(make_event(
-        contract.PLUGIN_APPROVAL_RESOLVED_EVENT,
-        {"approval_id": approval_id, "status": approval["status"], "error": approval["error"]},
-    ))
+    resolved = {"approval_id": approval_id, "status": approval["status"], "error": approval["error"]}
+    if late:
+        resolved.update(finished_late=True, settled=approval.get("settled"))
+    await app.broadcast(make_event(contract.PLUGIN_APPROVAL_RESOLVED_EVENT, resolved))
     await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
 
 

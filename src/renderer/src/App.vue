@@ -353,6 +353,7 @@ import {
   type SchedulerDisabledNotice,
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
+import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -430,6 +431,7 @@ const CoachMark = defineAsyncComponent(() => import('./components/CoachMark.vue'
 const CliHealthGuide = defineAsyncComponent(() => import('./components/CliHealthGuide.vue'))
 const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInstallDialog.vue'))
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
+const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -921,6 +923,14 @@ watch(() => backend.status.value, (status) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
 }, { immediate: true })
+// And when a main window went away while carrying out approved requests
+// (review-370 R1): the backend names them, and recover() settles whatever is
+// still unclaimed after its grace.
+backend.on(PLUGIN_APPROVAL_RECOVER_EVENT, () => {
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle agent plugin requests a closed window left', error)
+  })
+})
 const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.
@@ -20923,6 +20933,7 @@ function paneIsCommander(p: ActivePane): boolean {
   />
   <!-- An agent's skills_install waits here for the user's approval. -->
   <SkillInstallApprovalDialog :backend="backend" />
+  <PluginAgentRequestDialog :backend="backend" />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"
