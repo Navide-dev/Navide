@@ -514,6 +514,8 @@ class PluginAuditLog:
 
     async def run(self) -> None:
         """Background loop: flush every second, prune hourly (first after a delay)."""
+        # A stop asked of an earlier run (a cancel) must not stop this one.
+        self._stopping.clear()
         next_prune = time.monotonic() + PRUNE_START_DELAY_S
         pruning: asyncio.Future[None] | None = None
         try:

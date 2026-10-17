@@ -703,3 +703,41 @@ def test_windows_spellings_and_colons_under_a_posix_workspace(
 ) -> None:
     _activity(audit, workspace=workspace, fs_path=fs_path)
     assert _rows(audit, "plugin_activity")[0]["fs_path"] == kept
+
+
+async def test_a_restarted_task_prunes_to_the_end_after_a_cancel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#365 review N1: the stop request of one run must not stop the next."""
+    import asyncio
+
+    from agent_team_backend.plugins import audit_log
+
+    monkeypatch.setattr(audit_log, "FLUSH_INTERVAL_S", 0.01)
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 3600.0)
+    db = Database(tmp_path / "navide.db")
+    audit = PluginAuditLog(db, clock=Clock())
+    first = asyncio.create_task(audit.run())
+    await asyncio.sleep(0.05)
+    first.cancel()
+    await asyncio.gather(first, return_exceptions=True)
+
+    rows = 3 * audit_log.PRUNE_BATCH_ROWS
+    with db.transaction() as cur:
+        cur.executemany(
+            "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address, outcome)"
+            " VALUES (?, 'nerdtechnic.devmap', '0.2.0', '/w', 'broker', 'fs.read', 'allowed')",
+            ((NOW - 8 * DAY_MS + i,) for i in range(rows)),
+        )
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 0.0)
+    second = asyncio.create_task(audit.run())
+    for _ in range(500):
+        with db.transaction() as cur:
+            if cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0:
+                break
+        await asyncio.sleep(0.01)
+    second.cancel()
+    await asyncio.gather(second, return_exceptions=True)
+    with db.transaction() as cur:
+        assert cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0
+        assert cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0] == rows
