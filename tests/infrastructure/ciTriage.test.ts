@@ -69,9 +69,10 @@ describe('classifyLog — one entry per failed test, in one of three categories'
   })
 
   it('reads a Windows shard stopped at its time cap as the environment (#356, run 38990627241, Windows 4/4)', () => {
-    // The whole shard ran slow (steady progress, VM CPU 3-16%); the test that
-    // was running at 1800 s did not fail. The rerun passed in 13m36s.
+    // The whole shard ran slow (results still rising at the cap, VM CPU
+    // 3-16%); the test running at 1800 s did not fail. The rerun passed in 13m36s.
     const log = `2026-10-17T01:32:42.5238093Z --- pytest pid 7572, cap 1800s, --shard 4/4 --junitxml test-results/ci/backend.xml --collection-report test-results/ci/backend-collection.json
+2026-10-17T02:01:12.9921057Z --- 1740s: 2420 results; last: backend\\tests\\test_stt_service.py::test_crash_fails_pending_then_respawns
 2026-10-17T02:02:13.0114721Z --- 1800s: 2486 results; last: backend\\tests\\test_sync_engine.py::test_the_disk_work_of_a_round_runs_in_a_worker_thread
 2026-10-17T02:02:13.0126472Z     vm: 19.9% of 16378 MiB used, cpu 4.6%, 135 processes
 2026-10-17T02:02:13.0139859Z --- pytest exit: still running at cap
@@ -79,6 +80,31 @@ describe('classifyLog — one entry per failed test, in one of three categories'
 2026-10-17T02:02:13.1979855Z ##[error]Process completed with exit code 1.`
     expect(classifyLog(log)).toEqual([expect.objectContaining({
       test: '(job)', category: 'environment', evidence: '--- pytest exit: still running at cap',
+    })])
+  })
+
+  it('reads a shard stopped at its cap with no progress as the stuck test needing review (#359 review R3)', () => {
+    // The same cap line, but the result count stood still: one test hung
+    // (a deadlock pytest-timeout could not stop), not a slow runner.
+    const log = `2026-10-17T01:32:42.5238093Z --- pytest pid 7572, cap 1800s, --shard 4/4
+2026-10-17T01:39:42.0000000Z --- 420s: 900 results; last: backend\\tests\\test_y.py::test_hang
+2026-10-17T02:00:12.0000000Z --- 1680s: 900 results; last: backend\\tests\\test_y.py::test_hang
+2026-10-17T02:01:12.0000000Z --- 1740s: 900 results; last: backend\\tests\\test_y.py::test_hang
+2026-10-17T02:02:13.0114721Z --- 1800s: 900 results; last: backend\\tests\\test_y.py::test_hang
+2026-10-17T02:02:13.0139859Z --- pytest exit: still running at cap
+2026-10-17T02:02:13.1979855Z ##[error]Process completed with exit code 1.`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({
+      test: 'backend/tests/test_y.py::test_hang', category: 'needs-review',
+    })])
+  })
+
+  it('never lets the cap line turn a failed test near it into the environment (#359 review)', () => {
+    const log = `2026-10-17T02:02:12.0000000Z FAILED backend/tests/test_x.py::test_a - assert 1 == 2
+2026-10-17T02:02:13.0114721Z --- 1800s: 2486 results; last: backend\\tests\\test_x.py::test_b
+2026-10-17T02:02:13.0139859Z --- pytest exit: still running at cap
+2026-10-17T02:02:13.1979855Z ##[error]Process completed with exit code 1.`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({
+      test: 'backend/tests/test_x.py::test_a', category: 'product-defect',
     })])
   })
 
