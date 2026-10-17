@@ -194,6 +194,22 @@ describe('PluginActivityPanel (D-f)', () => {
     expect((await render()).text()).not.toMatch(/pluginActivity\./)
   })
 
+  // #397 merged with #396: a fixed value is words only with its outcome; any
+  // other text, a marker spelling with an invisible character included, is
+  // the plugin's and shows its invisible characters.
+  it('words a fixed value only with its outcome and spells out invisible characters in anything else', async () => {
+    const ZW = '\u200b'
+    const file = (path: string, outcome: string) => ({ path, address: 'fs.stat', workspace: '/w', outcome, count: 1, lastAt: 1 })
+    const report = { ...fixture, files: [file('<denied>', 'denied'), file(`<denied>${ZW}`, 'denied'), file('<denied>', 'allowed')] }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const files = (await render()).findAll('.nv-activity-files li')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([true, false, false])
+    expect(files[0].text()).toContain('path or command not kept: the call was refused')
+    expect(files[1].text()).not.toContain(ZW)
+    expect(files[1].text()).toContain('<denied>')
+    expect(files[2].text()).toContain('<denied>')
+  })
+
   // Final review part 2 MED-1: text from the plugin shows its invisible characters.
   it('spells out invisible characters in every plugin-provided string', async () => {
     const ZW = '​'
