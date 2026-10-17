@@ -383,6 +383,14 @@ def test_a_future_timestamp_is_clamped_to_now_and_still_expires(audit: PluginAud
         ('PASS="unterminated git push', "<unparsable>"),
         ("tool 'run", "<unparsable>"),
         ("PASS=only-an-assignment", ""),
+        # Re-review N2b: backslash is literal (Windows paths), so an escaped
+        # space in an assignment cannot be read; it must not leak the rest.
+        ("PASS=correct\\ horse git push", "<unparsable>"),
+        ("A=1 PASS=correct\\ horse git push", "<unparsable>"),
+        ("PASS=x\\\\ git push", "git push"),
+        ("/Users/neil\\ lu/bin/tool run", "other"),
+        ("C:\\tools\\gh.exe pr list", "gh.exe pr"),
+        ("git log --format=%H", "git log"),
     ],
 )
 def test_the_shell_summary_keeps_only_the_executable_and_a_plain_subcommand(
@@ -464,12 +472,9 @@ def test_a_failed_table_setup_leaves_the_audit_off_and_says_why(
     assert audit.recent_tool_calls() == []
 
 
-@pytest.mark.serial
-# ~1100 short transactions: seconds on macOS/Linux, but each commit has a high
-# fixed cost on Windows runners (64 s to over 90 s seen), past the suite's
-# per-test timeout. The bound under test is per transaction, not total time.
-@pytest.mark.timeout(600)
-def test_pruning_500k_rows_never_holds_the_database_for_long(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _assert_prune_is_batched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, activity_rows: int, call_rows: int
+) -> None:
     """Review of #349 (H1): retention runs in batches, each a short transaction."""
     import contextlib
 
@@ -482,45 +487,66 @@ def test_pruning_500k_rows_never_holds_the_database_for_long(tmp_path: Path, mon
         cur.executemany(
             "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address, outcome)"
             " VALUES (?, 'nerdtechnic.devmap', '0.2.0', '/w', 'broker', ?, 'allowed')",
-            ((old + i, f"fs.m{i % 50}") for i in range(500_000)),
+            ((old + i, f"fs.m{i % 50}") for i in range(activity_rows)),
         )
+        # Half expired, and the other half more than the newest-rows retention.
         cur.executemany(
             "INSERT INTO plugin_tool_calls (at, caller_kind, target_workspace, cross_workspace, plugin_id,"
             " plugin_version, tool, risk, args_sha256, args_bytes, outcome, duration_ms, result_bytes)"
             " VALUES (?, 'pane', '/w', 0, 'nerdtechnic.devmap', '0.2.0', 'devmap_read', 'read', '', 0, 'ok', 1, 1)",
-            ((NOW - 31 * DAY_MS if i % 2 else NOW - DAY_MS,) for i in range(60_000)),
+            ((NOW - 31 * DAY_MS if i % 2 else NOW - DAY_MS,) for i in range(call_rows)),
         )
     holds: list[float] = []
+    cpu: list[float] = []
     changed: list[int] = []
     real = db.transaction
 
     @contextlib.contextmanager
     def timed() -> Any:
-        started = time.perf_counter()
+        started, started_cpu = time.perf_counter(), time.thread_time()
         with real() as cur:
             before = cur.connection.total_changes
             yield cur
             changed.append(cur.connection.total_changes - before)
+        cpu.append(time.thread_time() - started_cpu)
         holds.append(time.perf_counter() - started)
 
     monkeypatch.setattr(db, "transaction", timed)
     audit.prune(NOW)
     monkeypatch.setattr(db, "transaction", real)
 
-    # The guarantee: no transaction touches more than one batch of rows (a
-    # rollup batch writes at most one daily row per deleted row).
-    assert max(changed) <= 2 * audit_log.PRUNE_BATCH_ROWS, f"largest transaction changed {max(changed)} rows"
-    # And each is short. p95 rather than max: on a loaded machine a single
-    # batch of a few milliseconds can be descheduled for longer than that.
+    batch = audit_log.PRUNE_BATCH_ROWS
+    # The guarantee: work is split into batches, and no transaction touches
+    # more than one batch of rows (a rollup batch writes at most one daily row
+    # per deleted row).
+    assert len(holds) >= activity_rows // batch + (call_rows - contract.PLUGIN_TOOL_CALLS_MAX_ROWS) // batch
+    assert max(changed) <= 2 * batch, f"largest transaction changed {max(changed)} rows"
+    # And each is short: the work done per batch (thread CPU time, ~10 ms) is
+    # bounded. Wall-clock time is only reported: on a loaded runner a batch of
+    # a few milliseconds can be descheduled for far longer than that.
     holds.sort()
-    p95 = holds[int(len(holds) * 0.95)]
-    assert p95 < 0.2, f"p95 transaction {p95:.3f}s (max {holds[-1]:.3f}s) over {len(holds)}"
+    assert max(cpu) < 0.2, (
+        f"longest batch {max(cpu):.3f}s CPU over {len(cpu)}; wall p95 {holds[int(len(holds) * 0.95)]:.3f}s"
+        f" max {holds[-1]:.3f}s"
+    )
     assert _rows(audit, "plugin_activity") == []
     with db.transaction() as cur:
         total = cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0]
         calls = cur.execute("SELECT COUNT(*) FROM plugin_tool_calls").fetchone()[0]
-    assert total == 500_000
+    assert total == activity_rows
     assert calls == contract.PLUGIN_TOOL_CALLS_MAX_ROWS
+
+
+@pytest.mark.serial
+def test_pruning_runs_in_short_batches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _assert_prune_is_batched(tmp_path, monkeypatch, activity_rows=50_000, call_rows=24_000)
+
+
+@pytest.mark.slow
+@pytest.mark.serial
+def test_pruning_500k_rows_never_holds_the_database_for_long(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The review's measurement size; run with --run-slow (minutes on Windows)."""
+    _assert_prune_is_batched(tmp_path, monkeypatch, activity_rows=500_000, call_rows=60_000)
 
 
 def test_the_backend_keeps_one_audit_log_on_the_global_navide_db() -> None:

@@ -214,6 +214,10 @@ def _shell_summary(command: str) -> str:
     if tokens is None:
         return UNPARSABLE
     while tokens and _ASSIGNMENT.fullmatch(tokens[0]):
+        # Backslash is literal here, so `PASS=a\\ b` splits after the
+        # backslash; the next word is the rest of the value, not a command.
+        if (len(tokens[0]) - len(tokens[0].rstrip("\\"))) % 2:
+            return UNPARSABLE
         tokens.pop(0)
     if not tokens:
         return ""
@@ -230,6 +234,12 @@ def _code(value: Any, allowed: frozenset[str]) -> str:
     if not text:
         return ""
     return text if text in allowed else OTHER
+
+
+def _yield_the_lock() -> None:
+    """Between prune batches: the database lock is not fair, so give a
+    waiting writer the chance to take it before the next batch does."""
+    time.sleep(0)
 
 
 def _report_disabled(reason: str) -> None:
@@ -413,7 +423,9 @@ class PluginAuditLog:
 
     def _batch(self, sql: str, params: tuple[Any, ...]) -> int:
         with self.db.transaction() as cur:
-            return int(cur.execute(sql, params).rowcount or 0)
+            count = int(cur.execute(sql, params).rowcount or 0)
+        _yield_the_lock()
+        return count
 
     def prune(self, now_ms: int | None = None) -> None:
         """Apply the contract's retention in small batches; never raises."""
@@ -472,6 +484,7 @@ class PluginAuditLog:
                     ids,
                 )
                 cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
+            _yield_the_lock()
         day = time.strftime("%Y-%m-%d", time.gmtime(daily_cutoff / 1000))
         while self._batch(
             "DELETE FROM plugin_activity_daily WHERE rowid IN"
