@@ -1,6 +1,6 @@
 """B2-d end to end, backend side, against the shared wire fixture.
 
-The Host side of the same messages is tests/integration/pluginB2Registry.e2e.test.ts
+The Host side of the same messages is tests/plugins/pluginB2Registry.e2e.test.ts
 (a real Registry, the real IPC and the Host's real answers). The two meet in
 docs/plugin-contracts/b2-fixtures/host-messages.json:
 
