@@ -1106,3 +1106,101 @@ async def test_without_the_helper_process_a_result_in_pieces_still_reads(monkeyp
     assert result.content[0].text == proxy.wrap_result(entry, value)
     _pieces_host(monkeypatch, '{"pad":"' + "x" * 200_000 + '","v":NaN}')
     assert _body(await proxy.call("devmap_read", {}, None))["reason"] == "json"
+
+
+# ── the helper process: started when first needed, given up on in bounded time ──
+
+_FAKE_HELPER = """
+import json, sys, time
+r, w = sys.stdin.buffer, sys.stdout.buffer
+def read():
+    return r.read(int.from_bytes(r.read(8), "big"))
+def write(data):
+    w.write(len(data).to_bytes(8, "big") + data)
+    w.flush()
+read()
+read()
+"""
+
+
+def _fake_helper(monkeypatch, behaviour: str) -> None:
+    import sys
+
+    monkeypatch.setattr(proxy._result_worker, "argv", lambda: [sys.executable, "-c", _FAKE_HELPER + behaviour])  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_the_helper_starts_with_the_first_result_in_pieces_and_not_before(host: FakeHost, monkeypatch) -> None:
+    proxy._result_worker.stop()  # noqa: SLF001
+    entry = _devmap_tool(monkeypatch)
+    monkeypatch.setattr(app, "unicast_host", host.unicast_host)
+    assert (await proxy.call("devmap_read", {}, None)).isError is False
+    # A result that came whole never starts it: no process, no memory.
+    assert proxy._result_worker._process is None  # noqa: SLF001
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+    assert proxy._result_worker._process is not None  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_a_helper_that_dies_mid_request_falls_back_to_the_backend(monkeypatch) -> None:
+    entry = _devmap_tool(monkeypatch)
+    _fake_helper(monkeypatch, "sys.exit(1)")
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == proxy.wrap_result(entry, value)
+
+
+async def test_a_helper_that_hangs_is_given_up_on_within_its_window(monkeypatch) -> None:
+    import asyncio
+    import time
+
+    from agent_team_backend import agent_tool_result_worker as worker
+
+    entry = _devmap_tool(monkeypatch)
+    monkeypatch.setattr(worker, "IDLE_S", 0.5)
+    _fake_helper(monkeypatch, "time.sleep(3600)")
+    value = {"data": "x" * 200_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    started = time.monotonic()
+    result = await proxy.call("devmap_read", {}, None)
+    assert time.monotonic() - started < 5
+    assert result.content[0].text == proxy.wrap_result(entry, value)
+    # The hung helper was killed, not left behind.
+    assert proxy._result_worker._process is None  # noqa: SLF001
+
+
+async def test_a_helper_that_is_still_working_is_waited_for(monkeypatch) -> None:
+    from agent_team_backend import agent_tool_result_worker as worker
+
+    _devmap_tool(monkeypatch)
+    monkeypatch.setattr(worker, "IDLE_S", 0.5)
+    # Works for 1.2 s, more than the window, telling it is alive every 0.2 s.
+    _fake_helper(monkeypatch, """
+for _ in range(6):
+    write(b"")
+    time.sleep(0.2)
+write(json.dumps({"ok": True}).encode())
+write("from the helper".encode())
+time.sleep(3600)
+""")
+    _pieces_host(monkeypatch, agent_tool_payload_text({"data": "x" * 200_000}))
+    result = await proxy.call("devmap_read", {}, None)
+    assert result.content[0].text == "from the helper"
+    proxy._result_worker.stop()  # noqa: SLF001
+
+
+async def test_the_helper_exits_when_the_backend_goes_away(monkeypatch) -> None:
+    import asyncio
+
+    proxy._result_worker.stop()  # noqa: SLF001
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text({"data": "x" * 200_000}))
+    assert (await proxy.call("devmap_read", {}, None)).isError is False
+    process = proxy._result_worker._process  # noqa: SLF001
+    assert process is not None and process.stdin is not None
+    # A backend that is killed closes the helper's stdin; the helper ends itself.
+    process.stdin.close()
+    assert await asyncio.wait_for(process.wait(), 10) == 0
+    proxy._result_worker._process = None  # noqa: SLF001

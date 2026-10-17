@@ -12,6 +12,10 @@ Frames on stdin and stdout: an 8-byte big-endian length, then that many bytes.
 A request is a JSON header frame (``{"entry": {...}}``) and the result text
 (UTF-8, ``surrogatepass``). The answer is a JSON header frame (``{"ok": true}``
 or ``{"ok": false, "reason": "json" | "error"}``) and, when ok, the wrapped text.
+While it works the helper writes an empty frame every ``HEARTBEAT_S`` seconds;
+the backend waits ``IDLE_S`` for each frame, so a helper that crashes or hangs
+is given up on in bounded time (a time window, not a size limit) and the
+result is handled in the backend process instead.
 
 Started as ``<backend> --agent-tool-result-worker`` (``__main__``) or, from a
 source checkout, by running this file. It exits when stdin closes, so it never
@@ -25,10 +29,16 @@ import json
 import math
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Any, BinaryIO
 
 WORKER_FLAG = "--agent-tool-result-worker"
+#: Seconds between the helper's empty frames while it works.
+HEARTBEAT_S = 2.0
+#: Seconds the backend waits for the next frame (or room to write) before it
+#: gives the helper up; the same window as AGENT_TOOL_CHUNK_IDLE_MS.
+IDLE_S = 30.0
 #: Characters encoded, and bytes decoded, per step on the event loop.
 _SLICE = 1 << 18
 
@@ -71,21 +81,35 @@ def main() -> int:
     stdin = sys.stdin.buffer
     from agent_team_backend.mcp_server.plugin_agent_tools import wrap_result
 
+    def work(header: bytes, text: bytes, done: list[tuple[dict[str, Any], bytes | None]]) -> None:
+        try:
+            value = strict_loads(text.decode("utf-8", "surrogatepass"))
+        except (ValueError, RecursionError):
+            done.append(({"ok": False, "reason": "json"}, None))
+            return
+        try:
+            body = wrap_result(json.loads(header)["entry"], value).encode("utf-8", "surrogatepass")
+        except Exception:  # noqa: BLE001 - reported to the backend as an error answer
+            done.append(({"ok": False, "reason": "error"}, None))
+            return
+        done.append(({"ok": True}, body))
+
     while True:
         header = _read_frame(stdin)
         text = _read_frame(stdin) if header is not None else None
         if header is None or text is None:
             return 0
-        try:
-            value = strict_loads(text.decode("utf-8", "surrogatepass"))
-        except (ValueError, RecursionError):
-            answer, body = {"ok": False, "reason": "json"}, None
-        else:
-            try:
-                body = wrap_result(json.loads(header)["entry"], value).encode("utf-8", "surrogatepass")
-                answer = {"ok": True}
-            except Exception:  # noqa: BLE001 - reported to the backend as an error answer
-                answer, body = {"ok": False, "reason": "error"}, None
+        done: list[tuple[dict[str, Any], bytes | None]] = []
+        worker = threading.Thread(target=work, args=(header, text, done), daemon=True)
+        worker.start()
+        # The empty frames tell the backend this helper is still working.
+        while True:
+            worker.join(HEARTBEAT_S)
+            if not worker.is_alive():
+                break
+            _write_frame(out, b"")
+            out.flush()
+        answer, body = done[0] if done else ({"ok": False, "reason": "error"}, None)
         _write_frame(out, json.dumps(answer).encode())
         if body is not None:
             _write_frame(out, body)
@@ -126,6 +150,15 @@ class ResultWorker:
         )
         return self._process
 
+    @staticmethod
+    async def _frame(stream: asyncio.StreamReader) -> bytes:
+        """The next non-empty frame; each wait is bounded by IDLE_S, which the
+        helper's empty frames (it is still working) restart."""
+        while True:
+            size = int.from_bytes(await asyncio.wait_for(stream.readexactly(8), IDLE_S), "big")
+            if size:
+                return await asyncio.wait_for(stream.readexactly(size), IDLE_S)
+
     def stop(self) -> None:
         """Kill the helper; the next request starts a new one."""
         process, self._process = self._process, None
@@ -158,14 +191,13 @@ class ResultWorker:
                 process.stdin.write(sum(len(part) for part in encoded).to_bytes(8, "big"))
                 for part in encoded:
                     process.stdin.write(part)
-                    await process.stdin.drain()
-                answer = json.loads(await process.stdout.readexactly(int.from_bytes(await process.stdout.readexactly(8), "big")))
+                    await asyncio.wait_for(process.stdin.drain(), IDLE_S)
+                answer = json.loads(await self._frame(process.stdout))
                 if not answer.get("ok"):
                     if answer.get("reason") == "json":
                         raise InvalidResult
                     raise ResultWorkerError(str(answer.get("reason")))
-                size = int.from_bytes(await process.stdout.readexactly(8), "big")
-                data = await process.stdout.readexactly(size)
+                data = await self._frame(process.stdout)
             except (InvalidResult, ResultWorkerError):
                 raise
             except BaseException as error:

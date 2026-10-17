@@ -1145,10 +1145,14 @@ the core parses it with the Host's rules (no `NaN`, no `Infinity`, no number
 that only parses as an infinity): text that breaks them answers the call with
 `PLUGIN_TOOL_CHUNKS_INVALID`, reason `json`. Parsing, spelling for the agent
 and neutralizing such a result run in a helper process the backend starts
-once (`<backend> --agent-tool-result-worker`, it exits with the backend), so
-the event loop only moves bytes; the agent sees exactly the text the
-in-process functions would give. Without the helper the same work runs in
-the backend process, slower for other panes while it runs. The backend's wait is the one described under Timing:
+the first time a result comes in pieces (`<backend> --agent-tool-result-worker`;
+a backend that never gets one starts no process, and the helper exits when
+the backend does, its stdin closing), so the event loop only moves bytes; the
+agent sees exactly the text the in-process functions would give. While it
+works the helper writes an empty frame every 2 s, and the backend waits 30 s
+for each frame: a helper that crashes or hangs is stopped within that window
+(a time window, not a size limit) and the result is handled in the backend
+process instead, slower for other panes while it runs. The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.
