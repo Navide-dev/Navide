@@ -267,7 +267,7 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
   })
 
-  it('shows who disabled the plugin for an enable request, and cannot approve a kind it cannot apply yet', async () => {
+  it('shows who disabled the plugin for an enable request, and enables it when approved', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('plugins.agent_requests.list', {
       requests: [request({
@@ -279,11 +279,18 @@ describe('PluginAgentRequestDialog (B2)', () => {
     wrapper = await open(mock)
     expect(wrapper.find('[data-testid="plugin-request-disabled-by"]').text()).toContain('review')
     expect(wrapper.find('[data-testid="plugin-request-disabled-at"]').text()).toBe(i18n.global.t('plugin-request.not-recorded'))
+    // #385: an approved enable turns the user's own Enable switch on.
+    plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.2.0', disabled: false }])
+    const enableRequest = { ...request(), kind: 'plugin-enable' }
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...enableRequest, status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...enableRequest, status: 'completed' } })
     const approve = wrapper.find('[data-testid="plugin-request-approve"]')
-    expect(approve.attributes('disabled')).toBeDefined()
+    expect(approve.attributes('disabled')).toBeUndefined()
     await approve.trigger('click')
     await flushPromises()
-    expect(mock.sent.some((s) => s.type === 'plugins.agent_request.decide')).toBe(false)
+    expect(mock.sent.find((s) => s.type === 'plugins.agent_request.decide')!.payload).toMatchObject({ approve: true })
+    expect(plugins.setDisabled).toHaveBeenCalledWith('acme.indexer', false)
     expect(plugins.prepareInstall).not.toHaveBeenCalled()
+    expect(mock.sent.find((s) => s.type === 'plugins.agent_request.finish')!.payload).toMatchObject({ status: 'completed' })
   })
 })

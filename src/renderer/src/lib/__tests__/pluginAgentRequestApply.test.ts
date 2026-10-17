@@ -139,9 +139,8 @@ describe('a plugin-enable request (B2-c option B)', () => {
 
 describe('isAppliableKind', () => {
   it('names exactly the kinds applyApprovedRequest carries out', () => {
-    expect(['plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove'].every(isAppliableKind)).toBe(true)
+    expect(['plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable'].every(isAppliableKind)).toBe(true)
     // A kind added on the backend first must not be approvable before this side applies it.
-    expect(isAppliableKind('plugin-enable')).toBe(false)
     expect(isAppliableKind('skill')).toBe(false)
   })
 })

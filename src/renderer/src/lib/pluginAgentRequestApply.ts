@@ -11,7 +11,7 @@ export type PluginRequestKind = 'plugin-install' | 'plugin-update' | 'plugin-rol
 /** The kinds applyApprovedRequest carries out. A card must not approve any
  *  other kind: approving moves it to `applying`, and nothing here would apply it. */
 const APPLIABLE_KINDS: ReadonlySet<string> = new Set<PluginRequestKind>([
-  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove',
+  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
 ])
 
 export function isAppliableKind(kind: string): kind is PluginRequestKind {
