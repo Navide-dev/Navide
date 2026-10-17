@@ -26,6 +26,7 @@ import {
   killSandboxProcessesSync,
   sandboxIdentity,
   watchBackendResources,
+  type BackendResourceStatus,
   type BackendResourceWatch,
   type ResourceExceeded,
   type ResourceNotifyMode,
@@ -697,6 +698,8 @@ export class ThirdPartyBackendController {
   private readonly tripped = new Set<string>()
   private readonly lastViolation = new Map<string, ResourceViolation>()
   private readonly resourceNoticeMap = new Map<string, { notice: BackendResourceNotice; watch: BackendResourceWatch }>()
+  /** The watch of each running third-party backend, for the activity page. */
+  private readonly runningWatches = new Map<BackendResourceWatch, ThirdPartyLaunchSpec>()
 
   constructor(options: ThirdPartyBackendControllerOptions) {
     this.options = options
@@ -855,11 +858,13 @@ export class ThirdPartyBackendController {
           const watch: BackendResourceWatch = this.options.watchResources
             ? this.options.watchResources(rootPid, canonicalDataDir, report, notify)
             : watchBackendResources(rootPid, canonicalDataDir, report, undefined, undefined, identity, notify)
+          this.runningWatches.set(watch, spec)
           // Registered before the supervisor's own listener, so the whole
           // sandbox is gone before a stop, idle close or quit completes.
           child.once('exit', () => {
             watch.dispose()
             killSandbox(rootPid, identity)
+            this.runningWatches.delete(watch)
             this.dropResourceNotices(watch)
           })
         }
@@ -1183,6 +1188,18 @@ export class ThirdPartyBackendController {
     this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
     this.options.onConsentGranted?.(spec.pluginId)
+  }
+
+  /** Each running third-party backend's usage against its thresholds
+   *  (contract 5.2); read only. */
+  resourceStatus(): Array<BackendResourceStatus & { pluginId: string; name: string; packageVersion: string }> {
+    const out: Array<BackendResourceStatus & { pluginId: string; name: string; packageVersion: string }> = []
+    for (const [watch, spec] of this.runningWatches) {
+      const status = watch.status?.()
+      if (!status) continue
+      out.push({ pluginId: spec.pluginId, name: spec.thirdParty.name, packageVersion: spec.packageVersion, ...status })
+    }
+    return out
   }
 
   /** Unanswered resource notices, oldest first. */

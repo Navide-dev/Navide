@@ -328,3 +328,20 @@ describe('watchBackendResources in notify mode', () => {
     expect(after).toHaveBeenCalledWith({ item: 'memory', usage: 1300 * MiB, threshold: limits.maxRssBytes })
   })
 })
+
+describe('watch status (the activity page reads it)', () => {
+  it('reports the latest usage, the default thresholds, the notice levels and what waits for an answer', async () => {
+    const { deps } = fakeDeps(() => [{ pid: 10, ppid: 1, rssBytes: 600 * MiB, cpuMs: 0 }])
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: vi.fn() })
+    await watch.sample()
+    await watch.sample()
+    expect(watch.status!()).toEqual({
+      usage: { memory: 600 * MiB, cpu: 0, processes: 1, disk: 0 },
+      thresholds: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
+      levels: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
+      waiting: ['memory'],
+    })
+    watch.keepRunning('memory')
+    expect(watch.status!()).toMatchObject({ levels: { memory: 1200 * MiB }, waiting: [] })
+  })
+})

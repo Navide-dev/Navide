@@ -124,6 +124,10 @@ export function registerNativeBackendIpc(
     assertAuthorized(event)
     return controller.resourceNotices()
   })
+  handle('plugins:nativeBackends:resourceStatus', async (event) => {
+    assertAuthorized(event)
+    return controller.resourceStatus()
+  })
   handle('plugins:nativeBackends:answerResourceNotice', async (event, args) => {
     assertAuthorized(event)
     const { id, choice } = record(args)

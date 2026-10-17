@@ -394,6 +394,18 @@ export interface BackendResourceNoticeView {
   at: number
 }
 
+type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk', number>
+
+export interface BackendResourceStatusView {
+  pluginId: string
+  name: string
+  packageVersion: string
+  usage: ResourceItemValues
+  thresholds: ResourceItemValues
+  levels: ResourceItemValues
+  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk'>
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
@@ -1263,6 +1275,9 @@ contextBridge.exposeInMainWorld('agentTeam', {
       /** Watchdog option C: unanswered resource notices (contract 5.2). */
       resourceNotices: (): Promise<BackendResourceNoticeView[]> =>
         ipcRenderer.invoke('plugins:nativeBackends:resourceNotices'),
+      /** Each running third-party backend's usage against its thresholds. */
+      resourceStatus: (): Promise<BackendResourceStatusView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceStatus'),
       answerResourceNotice: (id: string, choice: 'terminate' | 'continue'): Promise<boolean> =>
         ipcRenderer.invoke('plugins:nativeBackends:answerResourceNotice', { id, choice }),
       onResourceNoticesChanged: (handler: () => void): (() => void) => {

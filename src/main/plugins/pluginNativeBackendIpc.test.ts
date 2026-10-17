@@ -91,6 +91,7 @@ describe('resource notice IPC', () => {
     const handlers = new Map<string, (event: IpcMainInvokeEvent, args?: unknown) => unknown>()
     const controller = {
       resourceNotices: vi.fn(() => [notice]),
+      resourceStatus: vi.fn(() => [{ pluginId: 'acme.indexer', waiting: [] }]),
       answerResourceNotice: vi.fn(async () => true),
     }
     registerNativeBackendIpc(
@@ -107,6 +108,7 @@ describe('resource notice IPC', () => {
   it('lists the unanswered notices and passes a Stop or Keep running answer on', async () => {
     const { invoke, controller } = withNotices()
     await expect(invoke('plugins:nativeBackends:resourceNotices')).resolves.toEqual([notice])
+    await expect(invoke('plugins:nativeBackends:resourceStatus')).resolves.toEqual([{ pluginId: 'acme.indexer', waiting: [] }])
     await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'continue' })).resolves.toBe(true)
     expect(controller.answerResourceNotice).toHaveBeenCalledWith('n-1', 'continue')
     await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'later' })).rejects.toThrow(/invalid/)
@@ -116,6 +118,7 @@ describe('resource notice IPC', () => {
   it('refuses an unauthorized sender', async () => {
     const { invoke, controller } = withNotices(false)
     await expect(invoke('plugins:nativeBackends:resourceNotices')).rejects.toThrow(/unauthorized/)
+    await expect(invoke('plugins:nativeBackends:resourceStatus')).rejects.toThrow(/unauthorized/)
     await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'terminate' })).rejects.toThrow(/unauthorized/)
     expect(controller.answerResourceNotice).not.toHaveBeenCalled()
   })

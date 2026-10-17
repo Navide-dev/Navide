@@ -489,11 +489,22 @@ declare global {
           setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
           /** Watchdog option C: unanswered resource notices (contract 5.2). */
           resourceNotices?: () => Promise<BackendResourceNoticeView[]>
+          resourceStatus?: () => Promise<BackendResourceStatusView[]>
           answerResourceNotice?: (id: string, choice: 'terminate' | 'continue') => Promise<boolean>
           onResourceNoticesChanged?: (handler: () => void) => () => void
         }
       }
     }
+  }
+
+  interface BackendResourceStatusView {
+    pluginId: string
+    name: string
+    packageVersion: string
+    usage: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
+    thresholds: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
+    levels: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
+    waiting: Array<'memory' | 'cpu' | 'processes' | 'disk'>
   }
 
   interface BackendResourceNoticeView {

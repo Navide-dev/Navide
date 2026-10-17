@@ -606,6 +606,27 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
       expect(w.killed).toEqual([42])
     })
 
+    it('lists each running backend\'s usage against its thresholds, and forgets it when it exits', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      let exit: (() => void) | undefined
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: 42, once: (_event: string, listener: () => void) => { exit = listener } })) as never,
+        watchResources: w.watchResources,
+      })
+      const spec = writePackage()
+      const admission = await instance.admit(spec)
+      admission.spawnProcess(spec.entryFile, {})
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceStatus()).toEqual([expect.objectContaining({
+        pluginId: 'acme.indexer', name: expect.any(String), packageVersion: '1.0.0',
+        usage: expect.objectContaining({ memory: 600 * 1024 * 1024 }), waiting: ['memory'],
+      })])
+      exit!()
+      expect(instance.resourceStatus()).toEqual([])
+    })
+
     it('an unknown or answered notice is refused', async () => {
       const { instance } = await running({})
       expect(await instance.answerResourceNotice('nope', 'terminate')).toBe(false)

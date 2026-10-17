@@ -356,6 +356,17 @@ export interface BackendResourceWatch {
    *  becomes twice the larger of the level and the latest usage, and stays
    *  there until this watch ends (contract 5.2). Returns the new level. */
   keepRunning(item: ResourceViolation): number
+  /** Notify mode: the latest usage against the thresholds, for the activity page. */
+  status?(): BackendResourceStatus
+}
+
+/** Units as in `ResourceExceeded`. `levels` differ from `thresholds` only
+ *  after Keep running; `waiting` are the items announced and not answered. */
+export interface BackendResourceStatus {
+  usage: Record<ResourceViolation, number>
+  thresholds: Record<ResourceViolation, number>
+  levels: Record<ResourceViolation, number>
+  waiting: ResourceViolation[]
 }
 
 /** Over a threshold in notify mode (contract 5.2). Units: memory and disk in
@@ -471,6 +482,14 @@ export function watchBackendResources(
     async terminate(item) {
       if (disposed) return item
       return violate(item, lastTree)
+    },
+    status() {
+      return {
+        usage: { ...latest },
+        thresholds: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
+        levels: { ...levels },
+        waiting: [...pending],
+      }
     },
     keepRunning(item) {
       levels[item] = 2 * Math.max(levels[item], latest[item])
