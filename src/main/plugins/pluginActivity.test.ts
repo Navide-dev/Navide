@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
-import { activityRowFor, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
+import { activityRowFor, backendCallAddress, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
 import {
   buildError,
   buildSuccess,
@@ -138,5 +138,32 @@ describe('PluginActivityRecorder', () => {
     for (let i = 0; i < 10_000; i++) recorder.record(sample)
     expect(performance.now() - started).toBeLessThan(200)
     release()
+  })
+})
+
+describe('backend calls are counted per key within a batch (H1)', () => {
+  it('sends one row per (plugin, version, workspace, address, outcome) with its count', async () => {
+    const sent: unknown[] = []
+    const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
+    const call = { plugin_id: 'acme.x', plugin_version: '1.0.0', workspace: '/w', address: backendCallAddress('devmap.read') }
+    const minute = 1_792_108_800_000
+    for (let i = 0; i < 1000; i++) recorder.recordBackendCall({ ...call, outcome: 'allowed' }, minute + i)
+    recorder.recordBackendCall({ ...call, outcome: 'cancelled' }, minute + 5)
+    recorder.recordBackendCall({ ...call, workspace: '/other', outcome: 'allowed' }, minute + 5)
+    // The next minute is its own row.
+    recorder.recordBackendCall({ ...call, outcome: 'allowed' }, minute + 60_000)
+    expect(recorder.pending).toBe(4)
+    await recorder.flush()
+    expect(sent).toEqual([{ rows: [
+      { ...call, at: minute, source: 'backend', outcome: 'allowed', count: 1000 },
+      { ...call, at: minute, source: 'backend', outcome: 'cancelled', count: 1 },
+      { ...call, at: minute, workspace: '/other', source: 'backend', outcome: 'allowed', count: 1 },
+      { ...call, at: minute + 60_000, source: 'backend', outcome: 'allowed', count: 1 },
+    ] }])
+    expect(recorder.pending).toBe(0)
+  })
+
+  it('keeps a method named like a system namespace apart from it', () => {
+    expect(backendCallAddress('fs.read')).toBe('backend.fs.read')
   })
 })
