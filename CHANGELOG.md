@@ -18,6 +18,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- MCP: `marketplace_request_status` now reports a result that came in late. When another Navide window had settled a request as interrupted while the window carrying it out was reconnecting, and that window then reported what really happened, the answer carries `finished_late: true` and `settled` (what had been recorded before), with `status` and `error` the actual result. Every other answer is unchanged.
 - Guard: the Grep and Glob tools now go through the same credential-location check as Read and `ls`. Grep searching `~/.ssh`, `~/.aws` or another credential store (by its path or its glob filter) is graded critical like reading the file, and Glob listing one is graded high like `ls`; before, both were always normal. `~/.claude/secrets` now counts as a credential store for every tool and shell command. Grep and Glob calls that touch no credential location are graded exactly as before, and what Guard does with a grade (allow, ask or deny) follows your existing settings.
 
 ## [0.2.24] — 2026-10-16 — signed release

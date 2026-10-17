@@ -1630,7 +1630,12 @@ B2-c tools and messages:
   as `plugins.agent_request` (the record).
 - `marketplace_request_status (approval_id, wait_s 0-60)` returns `{ok,
   approval_id, kind, target: {id, version}, status, error, expires_at}`,
-  waiting while the request is `pending` or `applying`.
+  waiting while the request is `pending` or `applying`. For a result
+  recorded late (see `finished_late` under `plugins.agent_request.finish`)
+  it also returns `finished_late: true` and `settled: {status, error}`;
+  `status` and `error` are then the late, actual result. Every other answer
+  has exactly the seven fields above. `settled.error` is fenced like `error`
+  unless it is Navide's own word (`interrupted`, `not-applied`).
 - `plugins.agent_requests.list` (main windows only, `FORBIDDEN` otherwise)
   returns `{requests, applyingInLiveWindow}`: the `pending` and `applying`
   plugin requests, and the ids of the applying ones a still-connected main
