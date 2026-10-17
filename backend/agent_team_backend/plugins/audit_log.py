@@ -7,9 +7,11 @@ Two record tables, created from the contract's ``PLUGIN_AUDIT_DDL``
   path). The call arguments are never stored, only the SHA-256 and UTF-8
   size of their canonical spelling (an unsalted digest: an argument with
   little entropy can be confirmed by guessing it).
-- ``plugin_activity``: one row per broker or shell-broker call and per agent
-  tool call (written by D-e), with ``plugin_activity_daily`` holding the
-  per-day counts of detail rows once they expire.
+- ``plugin_activity``: one row per agent tool call recorded as activity, and
+  the broker and shell-broker rows of earlier versions until they expire;
+  ``plugin_activity_counts``: broker and shell-broker calls counted per key
+  and minute (written by D-e), never one row per call. ``plugin_activity_daily``
+  holds the per-day counts of both once they expire.
 
 A third table, ``plugin_agent_actions`` (``PLUGIN_AGENT_ACTIONS_DDL``, B2-c),
 records who asked for, decided or carried out a change to a Navide plugin
@@ -28,7 +30,11 @@ and the reason in the error ledger (ui_diagnostics).
 What is kept, by field:
 - times are clamped to "now", so a row can never outlive its retention;
 - ``error_code`` and ``denied_reason`` are contract codes, anything else is
-  "other"; ``address`` must be ``namespace.method``, otherwise "other";
+  "other"; ``address`` must be ``namespace.method`` (or the Host's
+  ``<unknown>`` for a capability the broker does not know), otherwise "other";
+- a refused or failed broker call keeps no path or command, only the fixed
+  ``<denied>`` / ``<failed>``: the plugin wrote that text and the call cost
+  it nothing, so it is never a key;
 - ``fs_path`` is workspace-relative with ``/``; a ``file:`` URI is read as
   the path it names; a path outside the workspace (absolute elsewhere, ``~``,
   ``..``, any other URI, or any path at all when the workspace is missing,
@@ -345,6 +351,27 @@ def _shell_summary(command: str) -> str:
     return executable
 
 
+#: SQLite's INTEGER range: a count outside it would fail the whole flush
+#: transaction, and with it every other plugin's rows (a type range, not a limit).
+_SQLITE_INT_MAX = 2**63 - 1
+
+
+def _sqlite_count(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and 1 <= value <= _SQLITE_INT_MAX
+
+
+#: Fixed values recorded in place of a plugin's text (contract 5).
+_MARKERS = frozenset((
+    contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS, contract.PLUGIN_ACTIVITY_DENIED_TARGET,
+    contract.PLUGIN_ACTIVITY_FAILED_TARGET, contract.PLUGIN_ACTIVITY_MISSING_TARGET,
+))
+
+
+def _plain(value: str) -> str:
+    """A plugin's own path or command spelled like a fixed value, as ``./<value>``."""
+    return f"./{value}" if value in _MARKERS else value
+
+
 def _code(value: Any, allowed: frozenset[str]) -> str:
     text = str(value or "")
     if not text:
@@ -410,6 +437,10 @@ class PluginAuditLog:
         self._stopping = threading.Event()
         self._calls: list[tuple[Any, ...]] = []
         self._activity: list[tuple[Any, ...]] = []
+        # Broker and shell-broker calls, added up per (plugin, version,
+        # workspace, source, address, outcome, reason, path, command, minute)
+        # until the next flush: [count, latest at].
+        self._activity_counts: dict[tuple[Any, ...], list[int]] = {}
         self._decisions: list[tuple[Any, ...]] = []
         self._actions: list[tuple[Any, ...]] = []
         # Backend calls, added up per (plugin, version, workspace, address,
@@ -467,7 +498,7 @@ class PluginAuditLog:
         with self._lock:
             pending = (
                 len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
-                + len(self._backend_calls)
+                + len(self._backend_calls) + len(self._activity_counts)
             )
         return {
             "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
@@ -567,11 +598,15 @@ class PluginAuditLog:
         shell_command: str = "",
         tool_call_id: int | None = None,
         at_ms: int | None = None,
+        count: int = 1,
     ) -> bool:
-        """Queue one broker, shell or agent-tool activity row; False when it is not recorded."""
+        """Queue one agent-tool activity row, or count ``count`` broker or shell
+        calls into their key's row for that minute; False when not recorded."""
         if not self.enabled:
             return False
         try:
+            if not _sqlite_count(count):
+                raise ValueError("count must be an integer from 1 to 2**63 - 1")
             if source not in ACTIVITY_SOURCES:
                 raise ValueError(f"unknown source {source!r}")
             if outcome not in ACTIVITY_OUTCOMES:
@@ -580,6 +615,12 @@ class PluginAuditLog:
                 raise ValueError("address is required")
             if tool_call_id is not None:
                 _non_negative_int(tool_call_id)
+            if source != "agentTool" and tool_call_id is None:
+                self._count_activity(
+                    plugin_id, plugin_version, workspace, source, address, outcome, denied_reason, fs_path,
+                    shell_command, self._at(at_ms), count,
+                )
+                return True
             row = (
                 self._at(at_ms), str(plugin_id), str(plugin_version), str(workspace), source,
                 address if _ADDRESS.fullmatch(address) else OTHER, outcome,
@@ -594,6 +635,43 @@ class PluginAuditLog:
             log.warning("plugin audit: activity not recorded: %s", err)
             return False
         return True
+
+    def _count_activity(
+        self, plugin_id: str, plugin_version: str, workspace: str, source: str, address: str, outcome: str,
+        denied_reason: str, fs_path: str, shell_command: str, at: int, count: int,
+    ) -> None:
+        kept_error = (
+            outcome == "error" and address not in contract.PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES
+            and address != contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS and _ADDRESS.fullmatch(address) is not None
+        )
+        if outcome == "allowed" or kept_error:
+            # A failed call that is not known to change nothing may have done
+            # something: it keeps its redacted path and command, as an allowed
+            # call does. The Host's own fixed value stays as it is: <missing>
+            # (an allowed read that found nothing), <failed> (answered before
+            # dispatch).
+            host_marker = (
+                contract.PLUGIN_ACTIVITY_MISSING_TARGET if outcome == "allowed" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
+            )
+            path = fs_path if fs_path == host_marker else _plain(_relative_path(str(fs_path), str(workspace)))
+            command = shell_command if shell_command == host_marker else _plain(_shell_summary(str(shell_command)))
+        else:
+            marker = contract.PLUGIN_ACTIVITY_DENIED_TARGET if outcome == "denied" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
+            path = marker if fs_path else ""
+            command = marker if shell_command else ""
+        known = address == contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS or _ADDRESS.fullmatch(address)
+        key = (
+            str(plugin_id), str(plugin_version), str(workspace), source, address if known else OTHER, outcome,
+            (_code(denied_reason, DENIED_REASONS) or OTHER) if outcome == "denied" else "",
+            path, command, at - at % _MINUTE_MS,
+        )
+        with self._lock:
+            counted = self._activity_counts.get(key)
+            if counted is None:
+                self._activity_counts[key] = [count, at]
+            else:
+                counted[0] += count
+                counted[1] = max(counted[1], at)
 
     def record_resource_decision(
         self,
@@ -699,8 +777,8 @@ class PluginAuditLog:
                 raise ValueError(f"unknown outcome {outcome!r}")
             if not isinstance(address, str) or not address.startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
                 raise ValueError("address must be backend.<method>")
-            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-                raise ValueError("count must be a positive integer")
+            if not _sqlite_count(count):
+                raise ValueError("count must be an integer from 1 to 2**63 - 1")
             minute = self._at(at_ms) // _MINUTE_MS * _MINUTE_MS
             key = (str(plugin_id), str(plugin_version), str(workspace), address, outcome, minute)
             with self._lock:
@@ -718,6 +796,7 @@ class PluginAuditLog:
             actions, self._actions = self._actions, []
             backend_calls, self._backend_calls = self._backend_calls, {}
             decisions, self._decisions = self._decisions, []
+            activity_counts, self._activity_counts = self._activity_counts, {}
         if backend_calls:
             try:
                 with self.db.transaction() as cur:
@@ -762,7 +841,7 @@ class PluginAuditLog:
                     )
             except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
                 log.warning("plugin audit: %d agent-action rows not written: %s", len(actions), err)
-        if not calls and not activity:
+        if not calls and not activity and not activity_counts:
             return
         calls = [row for row in map(_with_digest, calls) if row is not None]
         # plugin_id, tool, target_workspace, at of each write call.
@@ -787,8 +866,20 @@ class PluginAuditLog:
                     " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     activity,
                 )
+                # Broker and shell calls: added into their key's row for that minute.
+                cur.executemany(
+                    "INSERT INTO plugin_activity_counts (plugin_id, plugin_version, workspace, source, address,"
+                    " outcome, denied_reason, fs_path, shell_command, minute, count, last_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                    " ON CONFLICT(plugin_id, minute, plugin_version, workspace, source, address, outcome,"
+                    " denied_reason, fs_path, shell_command)"
+                    " DO UPDATE SET count = count + excluded.count, last_at = MAX(last_at, excluded.last_at)",
+                    [(*key, n, last) for key, (n, last) in activity_counts.items()],
+                )
         except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
-            log.warning("plugin audit: %d rows not written: %s", len(calls) + len(activity), err)
+            log.warning(
+                "plugin audit: %d rows not written: %s", len(calls) + len(activity) + len(activity_counts), err,
+            )
 
     # ── retention ───────────────────────────────────────────────────────
 
@@ -974,6 +1065,42 @@ class PluginAuditLog:
                 )
                 cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
             self._between_batches()
+        # The counted broker rows the same way, by ``minute``: a minute never
+        # spans two UTC days.
+        while True:
+            with self.db.transaction() as cur:
+                ids = [
+                    int(row[0])
+                    for row in cur.execute(
+                        "SELECT rowid FROM plugin_activity_counts WHERE minute < ? ORDER BY minute LIMIT ?",
+                        (detail_cutoff, batch),
+                    )
+                ]
+                if not ids:
+                    break
+                marks = ",".join("?" * len(ids))
+                cur.execute(
+                    "INSERT INTO plugin_activity_daily (day, plugin_id, workspace, source, address, outcome, count)"
+                    " SELECT strftime('%Y-%m-%d', minute / 1000, 'unixepoch'), plugin_id, workspace, source, address,"
+                    f" outcome, SUM(count) FROM plugin_activity_counts WHERE rowid IN ({marks})"  # noqa: S608 - placeholders only
+                    " GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1"
+                    " ON CONFLICT(day, plugin_id, workspace, source, address, outcome)"
+                    " DO UPDATE SET count = count + excluded.count",
+                    ids,
+                )
+                cur.execute(
+                    "INSERT INTO plugin_activity_denied_daily"
+                    " (day, plugin_id, workspace, source, address, denied_reason, count)"
+                    " SELECT strftime('%Y-%m-%d', minute / 1000, 'unixepoch'), plugin_id, workspace, source, address,"
+                    " denied_reason, SUM(count)"
+                    f" FROM plugin_activity_counts WHERE rowid IN ({marks}) AND outcome = 'denied'"  # noqa: S608
+                    " GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1"
+                    " ON CONFLICT(day, plugin_id, workspace, source, address, denied_reason)"
+                    " DO UPDATE SET count = count + excluded.count",
+                    ids,
+                )
+                cur.execute(f"DELETE FROM plugin_activity_counts WHERE rowid IN ({marks})", ids)  # noqa: S608
+            self._between_batches()
         day = time.strftime("%Y-%m-%d", time.gmtime(daily_cutoff / 1000))
         while self._batch(
             "DELETE FROM plugin_activity_daily WHERE rowid IN"
@@ -1118,25 +1245,44 @@ class PluginAuditLog:
             plugin_id, since_ms=window_from, until_ms=now
         )["historicalPeak"]
         since_day = _utc_day(since)
+        # Counted rows by minute: the minute a window starts in is read whole.
+        window_minute = window_from - window_from % _MINUTE_MS
+        since_minute = since - since % _MINUTE_MS
+        recent_minute = (now - 7 * _DAY_MS) - (now - 7 * _DAY_MS) % _MINUTE_MS
         with self.db.transaction() as cur:
             totals = cur.execute(
-                "SELECT COUNT(*), SUM(outcome = 'denied'), SUM(outcome = 'error') FROM plugin_activity"
-                " WHERE plugin_id = ? AND at >= ?",
-                (plugin_id, window_from),
+                "SELECT SUM(calls), SUM(denied), SUM(errors) FROM ("
+                " SELECT COUNT(*) AS calls, SUM(outcome = 'denied') AS denied, SUM(outcome = 'error') AS errors"
+                "  FROM plugin_activity WHERE plugin_id = ? AND at >= ?"
+                " UNION ALL"
+                " SELECT SUM(count), SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
+                "  SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END)"
+                "  FROM plugin_activity_counts WHERE plugin_id = ? AND minute >= ?)",
+                (plugin_id, window_from, plugin_id, window_minute),
             ).fetchone()
             tool_calls = cur.execute(
                 "SELECT * FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ? ORDER BY at DESC, id DESC",
                 (plugin_id, window_from),
             ).fetchall()
             files = cur.execute(
-                "SELECT fs_path, address, workspace, outcome, COUNT(*), MAX(at) FROM plugin_activity"
-                " WHERE plugin_id = ? AND at >= ? AND fs_path != '' GROUP BY 1, 2, 3, 4 ORDER BY 6 DESC, 1, 2, 3, 4",
-                (plugin_id, window_from),
+                "SELECT fs_path, address, workspace, outcome, SUM(n), MAX(last_at) FROM ("
+                " SELECT fs_path, address, workspace, outcome, COUNT(*) AS n, MAX(at) AS last_at FROM plugin_activity"
+                "  WHERE plugin_id = ? AND at >= ? AND fs_path != '' GROUP BY 1, 2, 3, 4"
+                " UNION ALL"
+                " SELECT fs_path, address, workspace, outcome, SUM(count), MAX(last_at) FROM plugin_activity_counts"
+                "  WHERE plugin_id = ? AND minute >= ? AND fs_path != '' GROUP BY 1, 2, 3, 4"
+                ") GROUP BY 1, 2, 3, 4 ORDER BY 6 DESC, 1, 2, 3, 4",
+                (plugin_id, window_from, plugin_id, window_minute),
             ).fetchall()
             commands = cur.execute(
-                "SELECT shell_command, workspace, outcome, COUNT(*), MAX(at) FROM plugin_activity"
-                " WHERE plugin_id = ? AND at >= ? AND shell_command != '' GROUP BY 1, 2, 3 ORDER BY 5 DESC, 1, 2, 3",
-                (plugin_id, window_from),
+                "SELECT shell_command, workspace, outcome, SUM(n), MAX(last_at) FROM ("
+                " SELECT shell_command, workspace, outcome, COUNT(*) AS n, MAX(at) AS last_at FROM plugin_activity"
+                "  WHERE plugin_id = ? AND at >= ? AND shell_command != '' GROUP BY 1, 2, 3"
+                " UNION ALL"
+                " SELECT shell_command, workspace, outcome, SUM(count), MAX(last_at) FROM plugin_activity_counts"
+                "  WHERE plugin_id = ? AND minute >= ? AND shell_command != '' GROUP BY 1, 2, 3"
+                ") GROUP BY 1, 2, 3 ORDER BY 5 DESC, 1, 2, 3",
+                (plugin_id, window_from, plugin_id, window_minute),
             ).fetchall()
             daily = cur.execute(
                 "SELECT day, SUM(calls), SUM(denied), SUM(errors) FROM ("
@@ -1144,27 +1290,41 @@ class PluginAuditLog:
                 "  SUM(outcome = 'denied') AS denied, SUM(outcome = 'error') AS errors"
                 "  FROM plugin_activity WHERE plugin_id = ? GROUP BY 1"
                 " UNION ALL"
+                " SELECT strftime('%Y-%m-%d', minute / 1000, 'unixepoch'), SUM(count),"
+                "  SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
+                "  SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END)"
+                "  FROM plugin_activity_counts WHERE plugin_id = ? GROUP BY 1"
+                " UNION ALL"
                 " SELECT day, SUM(count), SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
                 "  SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END)"
                 "  FROM plugin_activity_daily WHERE plugin_id = ? GROUP BY 1"
                 ") GROUP BY 1 ORDER BY 1",
-                (plugin_id, plugin_id),
+                (plugin_id, plugin_id, plugin_id),
             ).fetchall()
             refusals = cur.execute(
                 "SELECT source, address, workspace, denied_reason, SUM(n), MAX(last_at) FROM ("
                 " SELECT source, address, workspace, denied_reason, COUNT(*) AS n, MAX(at) AS last_at"
                 "  FROM plugin_activity WHERE plugin_id = ? AND at >= ? AND outcome = 'denied' GROUP BY 1, 2, 3, 4"
                 " UNION ALL"
+                " SELECT source, address, workspace, denied_reason, SUM(count), MAX(last_at)"
+                "  FROM plugin_activity_counts WHERE plugin_id = ? AND minute >= ? AND outcome = 'denied'"
+                "  GROUP BY 1, 2, 3, 4"
+                " UNION ALL"
                 " SELECT source, address, workspace, denied_reason, SUM(count),"
                 "  MAX(CAST(strftime('%s', day) AS INTEGER) * 1000)"
                 "  FROM plugin_activity_denied_daily WHERE plugin_id = ? AND day >= ? GROUP BY 1, 2, 3, 4"
                 ") GROUP BY 1, 2, 3, 4",
-                (plugin_id, since, plugin_id, since_day),
+                (plugin_id, since, plugin_id, since_minute, plugin_id, since_day),
             ).fetchall()
             uses = cur.execute(
-                "SELECT source, address, MAX(at) FROM plugin_activity"
-                " WHERE plugin_id = ? AND outcome = 'allowed' GROUP BY 1, 2",
-                (plugin_id,),
+                "SELECT source, address, MAX(last_at) FROM ("
+                " SELECT source, address, MAX(at) AS last_at FROM plugin_activity"
+                "  WHERE plugin_id = ? AND outcome = 'allowed' GROUP BY 1, 2"
+                " UNION ALL"
+                " SELECT source, address, MAX(last_at) FROM plugin_activity_counts"
+                "  WHERE plugin_id = ? AND outcome = 'allowed' GROUP BY 1, 2"
+                ") GROUP BY 1, 2",
+                (plugin_id, plugin_id),
             ).fetchall()
             rolled_uses = cur.execute(
                 "SELECT source, address, MAX(CAST(strftime('%s', day) AS INTEGER) * 1000) FROM plugin_activity_daily"
@@ -1176,9 +1336,14 @@ class PluginAuditLog:
                 (plugin_id,),
             ).fetchall())
             recent_undeclared = cur.execute(
-                "SELECT workspace, COUNT(*), MAX(at) FROM plugin_activity WHERE plugin_id = ? AND at >= ?"
-                " AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1 ORDER BY 1",
-                (plugin_id, now - 7 * _DAY_MS),
+                "SELECT workspace, SUM(n), MAX(last_at) FROM ("
+                " SELECT workspace, COUNT(*) AS n, MAX(at) AS last_at FROM plugin_activity WHERE plugin_id = ?"
+                "  AND at >= ? AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1"
+                " UNION ALL"
+                " SELECT workspace, SUM(count), MAX(last_at) FROM plugin_activity_counts WHERE plugin_id = ?"
+                "  AND minute >= ? AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1"
+                ") GROUP BY 1 ORDER BY 1",
+                (plugin_id, now - 7 * _DAY_MS, plugin_id, recent_minute),
             ).fetchall()
             # From plugin_tool_first_seen, which outlives the call rows (L4).
             floor = max(now - _DAY_MS, installed_at or 0)
@@ -1273,8 +1438,8 @@ class PluginAuditLog:
 
     def forget_plugin(self, plugin_id: str) -> None:
         """A removed plugin: drop its first-seen rows, so a reinstall's first
-        write in a workspace is new again, its resource decisions and its
-        backend-call counts. Never raises."""
+        write in a workspace is new again, its resource decisions, its counted
+        broker calls and its backend-call counts. Never raises."""
         if not self.enabled and not self.backend_calls_enabled:
             return
         self.flush()
@@ -1283,6 +1448,7 @@ class PluginAuditLog:
                 if self.enabled:
                     cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
                     cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
+                    cur.execute("DELETE FROM plugin_activity_counts WHERE plugin_id = ?", (plugin_id,))
                 if self.backend_calls_enabled:
                     cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))
                     cur.execute("DELETE FROM plugin_backend_call_days WHERE plugin_id = ?", (plugin_id,))

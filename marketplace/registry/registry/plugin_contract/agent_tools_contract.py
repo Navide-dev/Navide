@@ -698,6 +698,27 @@ PLUGIN_TOOL_CALLS_RETENTION_DAYS = 30
 PLUGIN_TOOL_CALLS_MAX_ROWS = 10_000
 PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS = 7
 PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS = 90
+#: Broker and shell-broker calls are counted, never one row per call: the
+#: address of a capability the broker does not know, and the path or command
+#: of a refused or failed call, are the plugin's free text (no limit on length
+#: or variety) and cost the plugin nothing, so they are these fixed values.
+PLUGIN_ACTIVITY_UNKNOWN_ADDRESS = "<unknown>"
+PLUGIN_ACTIVITY_DENIED_TARGET = "<denied>"
+PLUGIN_ACTIVITY_FAILED_TARGET = "<failed>"
+#: Broker calls known to change nothing (no disk write, no process): one that
+#: failed is ``<failed>``. Any other failed call keeps
+#: its redacted path and command (a new address too), unless the Host says it
+#: was answered before dispatch (it sends ``<failed>``) or its address is
+#: ``<unknown>``: it may have done something before it failed.
+PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES = (
+    "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+    "fs.listArchive", "fs.previewResource", "fs.convertOffice",
+    "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.glob_files", "fs.stat_path",
+    "fs.list_archive", "fs.convert_office",
+)
+#: The path of an allowed call whose result found nothing usable there
+#: (``exists: false`` or ``ok: false``).
+PLUGIN_ACTIVITY_MISSING_TARGET = "<missing>"
 
 #: Executed by B1-d / D-e inside navide.db's existing schema setup; not executed anywhere yet.
 PLUGIN_AUDIT_DDL = (
@@ -781,6 +802,26 @@ PLUGIN_AUDIT_DDL = (
     " decision TEXT NOT NULL)",
     "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_at ON plugin_resource_decisions (at)",
     "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_plugin_at ON plugin_resource_decisions (plugin_id, at)",
+    # Broker and shell-broker calls counted per key and minute (the Host
+    # counts within each batch, every flush adds into the row): kept and
+    # rolled up like plugin_activity's detail rows, which now hold agent-tool
+    # calls only. `last_at` is the latest call counted.
+    "CREATE TABLE IF NOT EXISTS plugin_activity_counts ("
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " source TEXT NOT NULL,"
+    " address TEXT NOT NULL,"
+    " outcome TEXT NOT NULL,"
+    " denied_reason TEXT NOT NULL,"
+    " fs_path TEXT NOT NULL,"
+    " shell_command TEXT NOT NULL,"
+    " minute INTEGER NOT NULL,"
+    " count INTEGER NOT NULL,"
+    " last_at INTEGER NOT NULL,"
+    " UNIQUE (plugin_id, minute, plugin_version, workspace, source, address, outcome, denied_reason, fs_path,"
+    " shell_command))",
+    "CREATE INDEX IF NOT EXISTS plugin_activity_counts_minute ON plugin_activity_counts (minute)",
 )
 
 # ── navide.db: agent plugin actions (B2-c) ──────────────────────────────────

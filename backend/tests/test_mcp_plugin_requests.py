@@ -587,6 +587,10 @@ async def test_a_window_back_within_the_grace_period_finishes_its_request_as_usu
     assert (approval["status"], approval["error"], approval.get("finished_late")) == ("completed", None, None)
     assert broadcasts[-1]["payload"] == {"approval_id": approval_id, "status": "completed", "error": None}
     assert [r["action"] for r in _actions(audit)][-1] == "finish-completed"
+    # marketplace_request_status answers exactly as before: no late fields.
+    status = await mcp.marketplace_request_status(None, approval_id)
+    assert set(status) == {"ok", "approval_id", "kind", "target", "status", "error", "expires_at"}
+    assert (status["status"], status["error"]) == ("completed", None)
 
 
 @pytest.mark.parametrize(("status", "error"), [("completed", None), ("failed", "download failed")])
@@ -623,6 +627,18 @@ async def test_a_window_back_after_recovery_settled_its_request_records_what_rea
     # Once only.
     again = await _finish_in(window_a, approval_id, status, error)
     assert again["error"]["code"] == "PLUGIN_APPROVAL_NOT_APPLYING"
+    # The agent reads the late result and what had been recorded before.
+    answer = await mcp.marketplace_request_status(None, approval_id)
+    assert set(answer) == {
+        "ok", "approval_id", "kind", "target", "status", "error", "expires_at", "finished_late", "settled",
+    }
+    assert (answer["status"], answer["finished_late"]) == (status, True)
+    assert answer["settled"] == {"status": "failed", "error": "interrupted"}  # Navide's own word, plain
+    if error is None:
+        assert answer["error"] is None
+    else:
+        # The window's own error text stays fenced, as on every other answer.
+        assert answer["error"] != error and error in answer["error"]
 
 
 # ── error text that may quote a package or the Registry is fenced (security review) ──
@@ -657,6 +673,30 @@ async def test_status_fences_a_failure_message_and_taints_the_reader(host, broad
     assert status["status"] == "failed"
     assert _is_fenced(status["error"]) and "---MSG-END---" not in status["error"]
     assert tainted and tainted[-1][0] == "p-41"
+
+
+async def test_status_fences_a_settled_error_that_is_not_navides_own_word(
+    host, broadcasts, audit, caller, tainted,
+) -> None:
+    """Review of #398 (LOW): `settled.error` goes through the same fencing as `error`."""
+    out = await mcp.marketplace_request_install(None, "nerdtechnic", "devmap", "0.2.0")
+    approval_id = out["approval_id"]
+    skills_approvals.registry.claim(approval_id, "applying", plugin=True)
+    skills_approvals.registry.set_applying_by(approval_id, "win-a-00000001")
+    # Another window settled it with text that is not Navide's own word ...
+    skills_approvals.registry.finish_plugin(
+        approval_id, "failed", error="download failed \u202eevil", window_id="win-b-00000002",
+    )
+    # ... and the window that carried it out then reported that it completed.
+    skills_approvals.registry.finish_plugin(approval_id, "completed", window_id="win-a-00000001")
+    tainted.clear()
+    status = await mcp.marketplace_request_status(None, approval_id)
+    assert (status["status"], status["error"], status["finished_late"]) == ("completed", None, True)
+    settled = status["settled"]
+    assert settled["status"] == "failed"
+    assert _is_fenced(settled["error"]) and "download failed" in settled["error"]
+    assert "\u202e" not in settled["error"]  # the bidi override is neutralized, never applied
+    assert [mark[0] for mark in tainted] == ["p-41"]  # the reading pane is marked once
 
 
 @pytest.mark.parametrize("own", [None, "interrupted", "not-applied"])

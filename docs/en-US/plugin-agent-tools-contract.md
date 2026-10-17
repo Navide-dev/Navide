@@ -1294,8 +1294,9 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
 
-`plugin_activity` (D-e; one row per broker or shell-broker call, plus one per
-agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
+`plugin_activity` (D-e; one row per agent tool call with `tool_call_id` set,
+and the broker and shell-broker rows an earlier version wrote, until they
+expire): `id`, `at`, `plugin_id`,
 `plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
 `address` (`namespace.method`; never `backend.…`, see below),
 `outcome` (`allowed` | `denied` | `error`),
@@ -1305,6 +1306,75 @@ call error code, or `undeclared` for a use the manifest did not declare;
 (workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
 Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
+
+`plugin_activity_counts` (final review part 2, H1; broker and shell-broker
+calls). Counted, never one row per call: a plugin needs no permission to be
+refused, so it can make refused calls as fast as it likes. The Host counts
+calls per `(plugin, version, workspace, source, address, outcome,
+denied_reason, fs_path, shell_command, minute)` within each batch and sends
+the row of `plugin_activity` with `count` and `at` (the latest call counted);
+the backend redacts it and adds `count` into the row of that key and minute
+(`minute`, `count`, `last_at`; created by `PLUGIN_AUDIT_DDL` like the other
+activity tables). Text the plugin wrote is never a key, because it has no
+limit on its length or on how many different values there are, and a refused
+or failed call cost the plugin nothing. Three fixed values take its place;
+the counts stay exact:
+
+- `<unknown>` (`PLUGIN_ACTIVITY_UNKNOWN_ADDRESS`), in `address`: the plugin
+  called a capability Navide does not have, one address of the public
+  catalog, a Host action or a backend-mapped call (`ping`, which answers any
+  method name, is not one address either). Its `source` is kept.
+- `<denied>` (`PLUGIN_ACTIVITY_DENIED_TARGET`), in `fs_path` / `shell_command`:
+  the call was refused (`outcome` `denied`), so the path or command it named is
+  not kept.
+- `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path` /
+  `shell_command`: the call failed (`outcome` `error`) and changed nothing, so
+  the path or command it named is not kept. A failed call keeps its redacted
+  path and command by default, as an allowed call does (it may have done
+  something before it failed, and an address added later is covered the same
+  way); it is `<failed>` only when it is known to have changed nothing:
+  - its address is read-only (`PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES`, each
+    checked to write nothing to disk and start no process: `fs.readFile`,
+    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.glob`,
+    `fs.stat`, `fs.statPath`, `fs.listArchive`, `fs.previewResource`,
+    `fs.convertOffice` and their legacy snake_case names; `fs.findInFiles`
+    runs a search process and is not in it);
+  - its address is `<unknown>` (no capability Navide has, such as `fs.bogus`
+    answered with `METHOD_NOT_FOUND`);
+  - the Host answered it before handing it to any handler (the planner
+    refused it, answered it or threw, or a check before it ran refused it):
+    the broker marks that answer itself, never by its error code, and the Host
+    sends `<failed>`, which the backend keeps as it is.
+
+  Only an `fs` call's `path` and a `shell` call's `command` are recorded at
+  all; other namespaces keep no text.
+- `<missing>` (`PLUGIN_ACTIVITY_MISSING_TARGET`), in `fs_path`: a read was
+  allowed but its result found nothing usable there: `exists: false` (as
+  `fs.stat` / `fs.statPath` answer for a path that does not exist) or
+  `ok: false` (as `fs.readFile`, `fs.readImage` and `fs.listDirectory` answer
+  a missing or unusable path, inside a successful call). Its `outcome` stays
+  `allowed`, as before; only the path is not kept. Only these reads: a write
+  keeps its path whatever it answered, since it may have changed something
+  before it failed.
+
+A fixed value means this only with its own outcome (`<denied>` with `denied`,
+`<failed>` with `error`, `<missing>` with `allowed`, `<unknown>` with anything
+but `allowed`). An `allowed` call keeps its redacted path and command: that IO
+happened, so the number of different values follows the work the plugin really
+did. A plugin's own path or command that is spelled like a fixed value is
+recorded as `./<value>` (the Host sends it so and the backend writes it so
+after redaction), so it is never read as one. Displays show each fixed value
+as what it means, set apart from a real path, command or address (the
+activity page words them and styles them differently), and only with its own
+outcome. Kept and
+rolled up into `plugin_activity_daily` / `plugin_activity_denied_daily` like
+detail rows (7 days, by the UTC day of `minute`); a row is rolled up when its
+`minute` is before the cutoff, so the calls of the minute the cutoff falls in
+leave the detail up to 59 s early. A removed plugin's rows go with
+`forget_plugin`. `count` is an integer from 1 to 2^63 − 1 (SQLite's INTEGER
+range); a row outside it is skipped. Every report field below reads `plugin_activity` and
+`plugin_activity_counts` together, with the same values as one row per call;
+a window reads the minute it starts in whole.
 
 `plugin_backend_call_minutes` (D-e; calls into a third-party plugin's own
 backend, whichever path made them: its frontend, an agent tool, an agent
@@ -1478,7 +1548,7 @@ malformed one whole.
 | `schemaVersion` | `1` |
 | `pluginId`, `generatedAt` | the plugin; when the report was made (Unix ms) |
 | `window` | `{from, to}`: the detail window the lists cover (7 days) |
-| `totals` | `{calls, denied, errors}` of `plugin_activity` within `window` |
+| `totals` | `{calls, denied, errors}` of `plugin_activity` and `plugin_activity_counts` within `window` |
 | `historicalPeakConcurrency` | the largest number of the plugin's `plugin_tool_calls` that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
 | `undeclaredSince` | start of the window `undeclared` covers (30 days) |
 | `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
@@ -1630,7 +1700,12 @@ B2-c tools and messages:
   as `plugins.agent_request` (the record).
 - `marketplace_request_status (approval_id, wait_s 0-60)` returns `{ok,
   approval_id, kind, target: {id, version}, status, error, expires_at}`,
-  waiting while the request is `pending` or `applying`.
+  waiting while the request is `pending` or `applying`. For a result
+  recorded late (see `finished_late` under `plugins.agent_request.finish`)
+  it also returns `finished_late: true` and `settled: {status, error}`;
+  `status` and `error` are then the late, actual result. Every other answer
+  has exactly the seven fields above. `settled.error` is fenced like `error`
+  unless it is Navide's own word (`interrupted`, `not-applied`).
 - `plugins.agent_requests.list` (main windows only, `FORBIDDEN` otherwise)
   returns `{requests, applyingInLiveWindow}`: the `pending` and `applying`
   plugin requests, and the ids of the applying ones a still-connected main
