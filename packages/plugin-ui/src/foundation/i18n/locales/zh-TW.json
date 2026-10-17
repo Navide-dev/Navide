@@ -1713,6 +1713,12 @@
         "title": "原生後端",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。在你打開下方開關之前，不會執行任何原生程式。",
         "enable": "允許第三方 Navide 外掛執行原生後端",
+        "agentTools": {
+          "enable": "允許 agent 呼叫第三方 Navide 外掛的工具",
+          "description": "預設關閉。開啟後，你允許過的第三方 Navide 外掛所宣告的工具，pane 裡的 agent 就能呼叫；會修改檔案的工具在每個工作區第一次使用時會先問你。關閉時，Navide 的行為就像沒有任何 Navide 外掛提供工具。",
+          "externalCallers": "外部 MCP 客戶端也能呼叫",
+          "externalCallersDisclosure": "外部程式只共用一組 token，稽核紀錄分不出是哪個程式，只能記成「外部客戶端」。Host 憑證也比照處理。"
+        },
         "empty": "目前沒有安裝任何含原生後端的 Navide 外掛。",
         "allow": "允許",
         "disable": "停用",

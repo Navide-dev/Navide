@@ -464,6 +464,7 @@ declare global {
           allow: (id: string) => Promise<NativeBackendOverview>
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
+          setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
         }
       }
     }
@@ -598,6 +599,8 @@ declare global {
   interface NativeBackendOverview {
     enabled: boolean
     plugins: NativeBackendStatusRow[]
+    /** Plan B: agent-tool switches (DB8, DB4); absent on an older Host. */
+    agentTools?: { enabled: boolean; externalCallers: boolean }
   }
 
   interface InstalledPackRecord {

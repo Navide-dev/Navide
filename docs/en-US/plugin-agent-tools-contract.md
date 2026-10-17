@@ -780,6 +780,14 @@ The generic proxy tool sends the existing `agent.capability.request` event
 `host` (both with `paneId: null`, `workspace: null`). `external` and `host`
 callers need the DB4 switch.
 
+`caller` may also carry `verifiedTo` (`pane` for a pane caller, `caller-kind`
+for `external` and `host`), the label the core attaches from its credential
+check. It is optional; a value that does not match the caller kind, or any
+other extra key, makes the Host refuse the request. The Host never keeps the
+sent label: it derives its own from `kind` for the initiator it passes on.
+Both sides test against the same wire fixture,
+`docs/plugin-contracts/agent-tools-fixtures/agent-tool-call-requests.json`.
+
 The Host answers through the existing `resolve_agent_capability(request_id,
 result)` path:
 

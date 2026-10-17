@@ -45,9 +45,23 @@ function isInitiator(value) {
     (exactKeys(value, ['kind', 'id']) &&
       value.kind === 'user' &&
       typeof value.id === 'string' && value.id.length > 0 ||
-      exactKeys(value, ['kind', 'source', 'id']) &&
+      (exactKeys(value, ['kind', 'source', 'id']) ||
+        exactKeys(value, ['kind', 'source', 'id', 'caller']) && isAgentCaller(value.caller)) &&
       value.kind === 'agent' && value.source === 'mcp' &&
       typeof value.id === 'string' && value.id.length > 0)
+}
+
+// The agent-tool caller (plan B1-b) is an additive optional field of the
+// agent initiator.
+function isAgentCaller(value) {
+  if (!isRecord(value) || !exactKeys(value, ['kind', 'paneId', 'workspace', 'verifiedTo'])) return false
+  if (value.kind === 'pane') {
+    return typeof value.paneId === 'string' && value.paneId.length > 0 &&
+      (value.workspace === null || typeof value.workspace === 'string' && value.workspace.length > 0) &&
+      value.verifiedTo === 'pane'
+  }
+  return (value.kind === 'external' || value.kind === 'host') &&
+    value.paneId === null && value.workspace === null && value.verifiedTo === 'caller-kind'
 }
 
 function isRuntime(value) {

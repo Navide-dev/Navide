@@ -102,6 +102,9 @@ interface BoundView {
   pendingSubscriptions: number
   /** Third-party only: idle auto-shutdown state. */
   idle?: ThirdPartyIdleState
+  /** A headless binding made for agent-tool calls (plan B1-b): the only kind
+   * of third-party binding an agent initiator may call into. */
+  agentToolBinding?: true
 }
 
 interface ThirdPartyIdleState {
@@ -240,6 +243,10 @@ export class PluginBackendHost {
   private readonly thirdPartyIdleMs: number
   private readonly backends = new Map<string, RegisteredBackend>()
   private readonly views = new Map<string, BoundView>()
+  /** Plan B1-b: per third-party package version, the methods its served agent
+   * tools may reach. Applies to agent-tool bindings only; views and the
+   * registered activation keep `agentMethods: []`. */
+  private readonly agentToolMethods = new Map<string, readonly string[]>()
   /** First-party child failure times per bound view, for restart backoff. */
   private readonly firstPartyFailures = new Map<string, number[]>()
   /** Package-version revocations are serialized and also act as an admission
@@ -350,6 +357,64 @@ export class PluginBackendHost {
       ? activation
       : { ...activation, packageDir }
     this.backends.set(key, { activation: normalizedActivation })
+  }
+
+  /**
+   * Set the methods an agent may reach on one registered third-party package
+   * version through its agent-tool bindings ({@link bindAgentToolWorkspace}).
+   * The set must be a subset of the package's approved methods. Views and the
+   * registered activation are not changed, and first-party activations (Plans)
+   * are never touched. Returns false when no such third-party activation is
+   * registered.
+   */
+  setAgentMethods(pluginId: string, packageVersion: string, methods: readonly string[]): boolean {
+    const key = backendKey(pluginId, packageVersion)
+    const backend = this.backends.get(key)
+    if (!backend || backend.activation.thirdParty === undefined) return false
+    if (!methods.every((method) => backend.activation.approvedMethods.includes(method))) {
+      throw new BackendPluginError('INVALID_ACTIVATION', 'Agent methods must be approved backend methods.')
+    }
+    const next = Object.freeze([...new Set(methods)].sort())
+    if (next.length === 0) this.agentToolMethods.delete(key)
+    else this.agentToolMethods.set(key, next)
+    return true
+  }
+
+  /** The methods agent-tool bindings of this package version may reach. */
+  agentToolMethodsFor(pluginId: string, packageVersion: string): readonly string[] {
+    return this.agentToolMethods.get(backendKey(pluginId, packageVersion)) ?? []
+  }
+
+  /** Bind a third-party package backend headlessly for agent-tool calls. Like
+   * {@link bindWorkspace}, but the binding is marked so that agent calls on it
+   * are checked against {@link agentToolMethodsFor} instead of `agentMethods`. */
+  async bindAgentToolWorkspace(
+    runtime: BackendRuntimeContext,
+    packageDir: string,
+    workspacePath: string,
+  ): Promise<string> {
+    if (!nonEmptyString(workspacePath)) throw new BackendPluginError('INVALID_RUNTIME')
+    const backend = this.backends.get(backendKey(runtime.pluginId, runtime.packageVersion))
+    if (!backend || backend.activation.thirdParty === undefined) throw new BackendPluginError('INVALID_RUNTIME')
+    let instanceId = randomUUID()
+    while (this.views.has(instanceId)) instanceId = randomUUID()
+    const task = this.bindView({
+      ...runtime,
+      instanceId,
+      contributionKey: runtime.contributionKey ?? `${runtime.pluginId}.agent-tools`,
+      hostWindowId: runtime.hostWindowId ?? null,
+    }, packageDir, workspacePath)
+    // bindView reserves the view synchronously.
+    const view = this.views.get(instanceId)
+    if (view) view.agentToolBinding = true
+    await task
+    return instanceId
+  }
+
+  /** True while `instanceId` names a bound (or binding) view. */
+  isBound(instanceId: string): boolean {
+    const view = this.views.get(instanceId)
+    return view !== undefined && !view.closing
   }
 
   hasActivation(pluginId: string, packageVersion: string): boolean {
@@ -759,6 +824,7 @@ export class PluginBackendHost {
         ...draining,
       ])
       this.backends.delete(key)
+      this.agentToolMethods.delete(key)
     })
     this.packageRevocations.set(key, task)
     let completed = false
@@ -812,7 +878,10 @@ export class PluginBackendHost {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
     const initiator = options?.initiator ?? view.runtime.initiator
-    if (initiator.kind === 'agent' && !view.activation.agentMethods?.includes(name)) {
+    const agentMethods = view.agentToolBinding
+      ? this.agentToolMethodsFor(view.activation.pluginId, view.activation.packageVersion)
+      : view.activation.agentMethods
+    if (initiator.kind === 'agent' && !agentMethods?.includes(name)) {
       throw new BackendPluginError('CAPABILITY_DENIED')
     }
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
