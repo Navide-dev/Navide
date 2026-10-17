@@ -163,6 +163,7 @@ import { errorMain, infoMain, logMain, warnMain } from './main-log'
 import { watchRendererCrashes } from './renderer-crash-reload'
 import { recordMainFault, setMainLedgerDataDir } from './error-ledger'
 import { createPlansBackendStoppedRelay } from './plansBackendStoppedRelay'
+import { createPluginAgentActionRelay } from './pluginAgentActionRelay'
 import { isAppWindowSender, UNTRUSTED_SENDER } from './ipcSender'
 import { drawnFrameWhereNeeded, installWindowControls } from './window-controls'
 import { openInExternalTerminal } from './external-terminal'
@@ -730,6 +731,7 @@ async function createWindow(
   setTimeout(showOnce, 4000)
   // A Plans notice that found no loaded main window is handed to this one.
   win.webContents.on('did-finish-load', () => plansBackendStoppedRelay.flush(win))
+  win.webContents.on('did-finish-load', () => pluginAgentActionRelay.flush(win))
   win.on('focus', () => { mainWindow = win })
   win.on('closed', () => {
     mainWindows.delete(win)
@@ -1451,6 +1453,9 @@ const plansBackendStoppedRelay = createPlansBackendStoppedRelay({
   find: (workspacePath) => findMainWindowForWorkspace(workspacePath),
   fallback: () => mainWindow,
 })
+// An agent disabled or enabled a Navide plugin (B2-c): the main window names
+// the caller and offers the undo; held until one has loaded.
+const pluginAgentActionRelay = createPluginAgentActionRelay({ window: () => mainWindow })
 frontendPluginManager.setPlansBackendStoppedHandler(({ workspacePath }) => {
   // A headless (agent) Plans child failed too often to be restarted. Nothing
   // on screen shows it, so the workspace's window tells the user how to bring
@@ -1670,6 +1675,7 @@ const pluginTrustRefresh = registerPluginIpc(
   {
     resolveContributionIcon: contributionIcon,
     onActivationChange: applyPluginActivationChange,
+    onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
     preflightCandidateFrontend,
     preflightCandidateBackend,
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
@@ -4825,6 +4831,9 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   // Decides an agent's request to install, update, roll back or remove a
   // Navide plugin; the subject is the approval_id.
   'plugins.agent_request.decide',
+  // Reports that the window carried out an approved request (B2-c); the
+  // subject is the approval_id, so an agent cannot report a change itself.
+  'plugins.agent_request.finish',
   // Loosening terminal command protection (switching a category off, adding
   // an allow prefix, removing a block pattern) — the backend demands a token
   // only for those, so tightening needs no prompt.

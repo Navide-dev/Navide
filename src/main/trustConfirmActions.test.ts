@@ -34,6 +34,7 @@ describe('trust:confirm action list', () => {
 
   it('mints confirmations for deciding an agent plugin request', () => {
     expect(actions()).toContain('plugins.agent_request.decide')
+    expect(actions()).toContain('plugins.agent_request.finish')
   })
 
   it('is only reachable from an app window', () => {

@@ -10999,5 +10999,23 @@
     "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller} disabled the Navide plugin {plugin}",
+      "enabled": "{caller} enabled the Navide plugin {plugin}",
+      "version": "Version {version}. Its files, grants and data are kept.",
+      "undo-failed": "Could not undo: {error}"
+    },
+    "caller": {
+      "pane": "Agent pane “{pane}”",
+      "pane-unknown": "An agent pane",
+      "external": "An external MCP client",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "Enable again",
+      "disable": "Disable again"
+    }
   }
 }

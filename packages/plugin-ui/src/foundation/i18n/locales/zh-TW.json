@@ -10999,5 +10999,23 @@
     "unpin-body": "改為跟隨會用目前的登入重開 pane，並接續對話。可以等它們跑完再改，或這次先跳過。閒置的 pane 會立即改。",
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
     "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller}停用了 Navide 外掛 {plugin}",
+      "enabled": "{caller}啟用了 Navide 外掛 {plugin}",
+      "version": "版本 {version}。檔案、授權和資料都保留。",
+      "undo-failed": "無法還原：{error}"
+    },
+    "caller": {
+      "pane": "Agent pane「{pane}」",
+      "pane-unknown": "某個 agent pane",
+      "external": "外部 MCP 用戶端",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "重新啟用",
+      "disable": "再次停用"
+    }
   }
 }

@@ -1,0 +1,95 @@
+// Carrying out an agent's Navide plugin request once the user approved it in
+// this window (plan B, B2-c; contract section 6). The approval card (D-c)
+// calls applyApprovedRequest after `plugins.agent_request.decide` answered
+// `applying`; the window's own install, rollback and remove flows do the work,
+// trust dialog included, and the result is reported with
+// `plugins.agent_request.finish`. recoverApplyingRequests settles requests a
+// restart left `applying`.
+
+export type PluginRequestKind = 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove'
+
+export interface PluginRequestRecord {
+  approval_id: string
+  kind: PluginRequestKind
+  status: string
+  target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
+}
+
+export interface InstalledPackage {
+  id: string
+  packageVersion?: string
+}
+
+export type FinishStatus = { status: 'completed'; error: null } | { status: 'failed'; error: string }
+
+export interface PluginRequestApplyDeps {
+  /** prepareInstall → trust dialog → commitInstall; resolves once the flow has
+   *  settled (committed, cancelled or failed). */
+  install(namespace: string, name: string, version: string): Promise<void>
+  rollback(pluginId: string): Promise<void>
+  /** The Extensions remove flow (it asks whether to keep native backend data). */
+  remove(pluginId: string): Promise<void>
+  listInstalled(): Promise<InstalledPackage[]>
+  /** `plugins.agent_request.finish` with a window confirmation (subject: approval_id). */
+  finish(approvalId: string, result: FinishStatus): Promise<void>
+}
+
+/** Whether the installed packages show the request carried out. */
+export function requestApplied(record: PluginRequestRecord, installed: readonly InstalledPackage[]): boolean {
+  const current = installed.find((pkg) => pkg.id === record.target.id)
+  if (record.kind === 'plugin-remove') return current === undefined
+  return current !== undefined && current.packageVersion === record.target.version
+}
+
+/** A request a restart left `applying`: done if the installed packages show it, else interrupted. */
+export function recoveryResult(record: PluginRequestRecord, installed: readonly InstalledPackage[]): FinishStatus {
+  return requestApplied(record, installed)
+    ? { status: 'completed', error: null }
+    : { status: 'failed', error: 'interrupted' }
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/** Carry out one approved request in this window and report the result. */
+export async function applyApprovedRequest(record: PluginRequestRecord, deps: PluginRequestApplyDeps): Promise<FinishStatus> {
+  const { id, namespace, name, version } = record.target
+  let failure: string | null = null
+  try {
+    if (record.kind === 'plugin-remove') await deps.remove(id)
+    else if (record.kind === 'plugin-rollback') await deps.rollback(id)
+    else if (version !== null) await deps.install(namespace, name, version)
+    else failure = 'the request names no version'
+  } catch (error) {
+    failure = errorText(error)
+  }
+  let result: FinishStatus
+  if (failure !== null) {
+    result = { status: 'failed', error: failure }
+  } else {
+    const installed = await deps.listInstalled()
+    result = requestApplied(record, installed)
+      ? { status: 'completed', error: null }
+      : { status: 'failed', error: 'not-applied' }
+  }
+  await deps.finish(record.approval_id, result)
+  return result
+}
+
+/** Settle every request the backend still holds as `applying` (window start). */
+export async function recoverApplyingRequests(
+  requests: readonly PluginRequestRecord[],
+  deps: Pick<PluginRequestApplyDeps, 'listInstalled' | 'finish'>,
+): Promise<Array<{ approvalId: string } & FinishStatus>> {
+  const applying = requests.filter((record) => record.status === 'applying')
+  if (applying.length === 0) return []
+  const installed = await deps.listInstalled()
+  const settled: Array<{ approvalId: string } & FinishStatus> = []
+  for (const record of applying) {
+    const result = recoveryResult(record, installed)
+    await deps.finish(record.approval_id, result)
+    settled.push({ approvalId: record.approval_id, ...result })
+  }
+  return settled
+}

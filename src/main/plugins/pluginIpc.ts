@@ -67,6 +67,7 @@ import type {
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
+import { answerPluginAgentAction, type PluginAgentActionNotice } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
@@ -363,6 +364,9 @@ export interface PluginIpcOptions {
   preflightCandidateBackend?: (activation: PluginActivationCatalogEntry) => Promise<void>
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
+  /** An agent disabled or enabled an installed Marketplace package (B2-c):
+   *  tell the user who, with a one-click undo. */
+  onPluginAgentAction?: (notice: PluginAgentActionNotice) => void
 }
 
 function errorText(error: unknown): string {
@@ -2340,6 +2344,14 @@ export function registerPluginIpc(
       const disabled = args?.disabled
       if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
       if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
+      return setInstalledPackageDisabled(id, disabled)
+    }
+  )
+
+  // The Disabled switch for an installed Marketplace package, shared by the
+  // user's Extensions page (above) and an agent's plugins_disable /
+  // plugins_enable (B2-c, below).
+  const setInstalledPackageDisabled = async (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> => {
       if (!manager.canDisablePlugin(id)) throw new Error(`first-party plugin ${id} cannot be disabled`)
       if (activeTransactions.has(id)) {
         throw new Error(`plugin transaction already in progress for ${id}`)
@@ -2401,7 +2413,18 @@ export function registerPluginIpc(
       } finally {
         activeTransactions.delete(id)
       }
-    }
+  }
+
+  manager.setPluginAgentActionHandler?.((request) =>
+    answerPluginAgentAction(request, {
+      isBuiltin: (pluginId) => BUILTIN_PLUGIN_NAMES.has(pluginId) || isReservedPluginId(pluginId),
+      installedVersion: (pluginId) => {
+        const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
+        return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
+      },
+      setDisabled: (pluginId, disabled) => setInstalledPackageDisabled(pluginId, disabled),
+      notify: (notice) => options.onPluginAgentAction?.(notice),
+    })
   )
 
   return {

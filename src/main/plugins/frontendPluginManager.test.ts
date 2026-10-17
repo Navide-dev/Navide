@@ -15740,6 +15740,88 @@ describe('marketplace.query requests from the backend', () => {
   })
 })
 
+// B2-c: an agent's plugins_disable / plugins_enable reaches the Host over its
+// authenticated session; only the registered session's client is answered.
+describe('plugins.agent_action requests from the backend', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+
+  const flush = async (): Promise<void> => {
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+  }
+
+  function connectHost(id: string, registered: boolean): {
+    mgr: FrontendPluginManager
+    socket: InstanceType<typeof wsMock.FakeNodeWebSocket>
+  } {
+    const mgr = new FrontendPluginManager()
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { id, requires: ['terminal'], devUrl: '', entryFile: `/plugins/${id}/index.html` },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl(`ws://${id}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    if (registered) {
+      const registration = (socket.sent.map((raw) => JSON.parse(raw) as SentMessage))
+        .find((message) => message.type === 'host.register')!
+      socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+    }
+    return { mgr, socket }
+  }
+
+  const resultsOf = (socket: InstanceType<typeof wsMock.FakeNodeWebSocket>): SentMessage[] =>
+    socket.sent.map((raw) => JSON.parse(raw) as SentMessage).filter((m) => m.type === 'plugins.agent_action.result')
+  const request = {
+    request_id: 'pa:1', action: 'disable', plugin_id: 'nerdtechnic.devmap',
+    requester: { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' },
+  }
+
+  it('answers from the installed handler on the registered session', async () => {
+    const { mgr, socket } = connectHost('acme.pa-ok', true)
+    const handler = vi.fn(async () => ({ ok: true as const, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true }))
+    mgr.setPluginAgentActionHandler(handler)
+    await flush()
+
+    socket.receive({ type: 'plugins.agent_action.request', payload: request })
+    await flush()
+
+    expect(handler).toHaveBeenCalledWith(request)
+    expect(resultsOf(socket).map((m) => m.payload)).toEqual([
+      { request_id: 'pa:1', ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true },
+    ])
+  })
+
+  it('answers HOST_UNAVAILABLE without asking the handler when the session is not registered', async () => {
+    const { mgr, socket } = connectHost('acme.pa-unregistered', false)
+    const handler = vi.fn()
+    mgr.setPluginAgentActionHandler(handler)
+    await flush()
+
+    socket.receive({ type: 'plugins.agent_action.request', payload: { ...request, request_id: 'pa:2' } })
+    await flush()
+
+    expect(handler).not.toHaveBeenCalled()
+    expect(resultsOf(socket).map((m) => m.payload)).toEqual([
+      expect.objectContaining({ request_id: 'pa:2', ok: false, error_code: 'HOST_UNAVAILABLE' }),
+    ])
+  })
+
+  it('reports a throwing handler as ACTION_FAILED', async () => {
+    const { mgr, socket } = connectHost('acme.pa-throw', true)
+    mgr.setPluginAgentActionHandler(async () => { throw new Error('busy') })
+    await flush()
+
+    socket.receive({ type: 'plugins.agent_action.request', payload: { ...request, request_id: 'pa:3' } })
+    await flush()
+
+    expect(resultsOf(socket).map((m) => m.payload)).toEqual([
+      { request_id: 'pa:3', ok: false, error: 'busy', error_code: 'ACTION_FAILED' },
+    ])
+  })
+})
+
 describe('installed package inventory scope disclosure', () => {
   it('keeps declared filesystem scopes in the listed inventory as a copy', () => {
     const mgr = new FrontendPluginManager()
