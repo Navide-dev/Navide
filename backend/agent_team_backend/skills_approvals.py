@@ -40,6 +40,19 @@ def _agent_text(value: str) -> str:
     return neutralize_external_text(value)
 
 
+def _disabled_by(value: Any) -> dict[str, Any]:
+    """Who disabled the package, as a plugin-enable card shows it; unknown reads as the user."""
+    if not isinstance(value, dict) or value.get("by") not in {"user", "agent"}:
+        return {"by": "user", "at": None, "agent": None}
+    at = value.get("at")
+    at = float(at) if isinstance(at, (int, float)) and not isinstance(at, bool) else None
+    agent = value.get("agent")
+    if value["by"] != "agent" or not isinstance(agent, dict) or agent.get("callerKind") not in {"pane", "external", "host"}:
+        return {"by": value["by"], "at": at, "agent": None} if value["by"] == "user" else {"by": "user", "at": at, "agent": None}
+    text = {key: (_agent_text(agent[key]) if isinstance(agent.get(key), str) else None) for key in ("paneId", "paneName")}
+    return {"by": "agent", "at": at, "agent": {"callerKind": agent["callerKind"], **text}}
+
+
 def _plugin_requester(requester: Any) -> dict[str, Any]:
     if not isinstance(requester, dict) or set(requester) != _REQUESTER_KEYS:
         raise SkillApprovalError("BAD_REQUEST", "the requester must name paneId, paneName, workspace and callerKind")
@@ -131,6 +144,7 @@ class ApprovalRegistry:
         target: dict[str, Any],
         card: dict[str, Any] | None,
         diff: dict[str, Any] | None,
+        disabled: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """File an agent's plugin request; the same `owner` key returns the pending one."""
         if kind not in PLUGIN_KINDS:
@@ -163,6 +177,8 @@ class ApprovalRegistry:
                 "target": copy.deepcopy(target),
                 "card": copy.deepcopy(card),
                 "diff": copy.deepcopy(diff),
+                # plugin-enable: who disabled the package; null for every other kind.
+                "disabled": _disabled_by(disabled) if kind == "plugin-enable" else None,
                 "status": "pending",
                 "error": None,
                 "created_at": created_at,

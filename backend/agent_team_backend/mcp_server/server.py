@@ -9595,6 +9595,8 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
                        "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
+    if code == "APPROVAL_REQUIRED" and action == "enable" and isinstance(result.get("pluginVersion"), str):
+        return await _file_enable_request(caller, requester, plugin_id, str(namespace), str(name), result)
     # A failure may quote a package: it gets Navide's own words. A refusal is
     # passed on only when it is one of the Host's fixed sentences; any other
     # text reaches the agent fenced, and the reader is tainted.
@@ -9606,6 +9608,54 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     else:
         error = _fenced_request_error(caller, host_error, tool=f"plugins_{action}")
     return finish(_marketplace_error(code, error))
+
+
+async def _file_enable_request(
+    caller: _Caller, requester: dict[str, Any], plugin_id: str, namespace: str, name: str, result: dict[str, Any],
+) -> dict[str, Any]:
+    """The user disabled this package (B2-c option B): file a plugin-enable
+    request for the user's decision instead of enabling it."""
+    from agent_team_backend import app, skills_approvals
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    version = result["pluginVersion"]
+    if not _MQ_SEMVER.fullmatch(version):
+        return _marketplace_error("ACTION_FAILED", f"Navide could not enable {plugin_id}")
+    disabled = result.get("disabled") if isinstance(result.get("disabled"), dict) else {}
+    at_ms = disabled.get("at")
+    disabled_by = {
+        "by": disabled.get("by"),
+        # Host time is Unix ms; a request record's times are Unix seconds.
+        "at": at_ms / 1000 if isinstance(at_ms, (int, float)) and not isinstance(at_ms, bool) else None,
+        "agent": disabled.get("agent"),
+    }
+    # The disclosure card of the installed version, when the Registry lists it.
+    card, _ = await _registry_card(caller, plugin_id, version)
+    target = {"id": plugin_id, "namespace": namespace, "name": name, "version": version, "fromVersion": None}
+    try:
+        record = skills_approvals.registry.request_plugin(
+            kind="plugin-enable", requester=requester, reason="", target=target, card=card, diff=None,
+            disabled=disabled_by,
+        )
+    except skills_approvals.SkillApprovalError as err:
+        _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="request-enable",
+                            outcome="denied", error_code=err.code)
+        return _marketplace_error(err.code, str(err))
+    _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=version, action="request-enable",
+                        outcome="allowed", approval_id=record["approval_id"])
+    await app.broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    return {
+        "ok": False,
+        "error_code": "APPROVAL_REQUIRED",
+        "error": (
+            f"The user disabled {plugin_id}, so enabling it needs the user's approval. "
+            "A request was filed for their decision in Navide; poll marketplace_request_status."
+        ),
+        "approval_id": record["approval_id"],
+        "status": record["status"],
+        "expires_at": record["expires_at"],
+    }
 
 
 @server.tool()
@@ -9629,9 +9679,13 @@ async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, 
 async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
     """Enable a disabled Navide plugin from the Navide Marketplace again.
 
-    It comes back under the consent the user already gave; nothing new is
-    granted. The change is recorded. The bundled Navide plugins cannot be
-    enabled here.
+    A plugin an agent disabled (plugins_disable) comes back at once, under the
+    consent the user already gave; the user is told, with a one-click undo.
+    A plugin the user disabled is not enabled: a request is filed for the
+    user's decision in Navide instead, and the answer is {ok: false,
+    error_code: "APPROVAL_REQUIRED", error, approval_id, status: "pending",
+    expires_at}; follow it with marketplace_request_status. The change is
+    recorded. The bundled Navide plugins cannot be enabled here.
 
     Returns {ok, pluginId, pluginVersion, disabled: false, changed} or {ok:
     false, error, error_code}; `changed` is false when it was already enabled.

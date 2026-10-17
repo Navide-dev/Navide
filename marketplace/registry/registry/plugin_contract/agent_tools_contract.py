@@ -562,7 +562,7 @@ class MarketplaceQueryRequest(TypedDict):
 
 # ── approval registry (B2) ──────────────────────────────────────────────────
 
-APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove")
+APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable")
 PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "failed", "expired")
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
@@ -597,15 +597,31 @@ class PluginApprovalTarget(TypedDict):
     fromVersion: str | None
 
 
+class PluginApprovalDisablingAgent(TypedDict):
+    callerKind: Literal["pane", "external", "host"]
+    paneId: str | None
+    paneName: str | None
+
+
+class PluginApprovalDisabledBy(TypedDict):
+    """Who disabled the package (plugin-enable only): ``at`` in Unix seconds, null when not recorded."""
+
+    by: Literal["user", "agent"]
+    at: float | None
+    agent: PluginApprovalDisablingAgent | None
+
+
 class PluginApprovalRequest(TypedDict):
     approval_id: str
-    kind: Literal["plugin-install", "plugin-update", "plugin-rollback", "plugin-remove"]
+    kind: Literal["plugin-install", "plugin-update", "plugin-rollback", "plugin-remove", "plugin-enable"]
     owner: str
     requester: PluginApprovalRequester
     reason: str
     target: PluginApprovalTarget
     card: dict[str, Any] | None
     diff: dict[str, Any] | None
+    #: plugin-enable: who disabled the package; null for every other kind.
+    disabled: PluginApprovalDisabledBy | None
     status: str
     error: str | None
     created_at: float
@@ -623,8 +639,9 @@ class PluginApprovalDecision(TypedDict):
 PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
 PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
 PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable")
+#: ``APPROVAL_REQUIRED``: plugins_enable of a package the user disabled (B2-c option B).
 PLUGIN_AGENT_ACTION_ERROR_CODES = (
-    "BAD_REQUEST", "NOT_INSTALLED", "BUILTIN_PLUGIN", "ACTION_FAILED", "HOST_UNAVAILABLE",
+    "BAD_REQUEST", "NOT_INSTALLED", "BUILTIN_PLUGIN", "ACTION_FAILED", "HOST_UNAVAILABLE", "APPROVAL_REQUIRED",
 )
 
 
@@ -732,7 +749,7 @@ PLUGIN_AUDIT_DDL = (
 
 PLUGIN_AGENT_ACTIONS = (
     "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
-    "decide-approve", "decide-reject", "finish-completed", "finish-failed",
+    "request-enable", "decide-approve", "decide-reject", "finish-completed", "finish-failed",
     # The carrying window's own result, after another window had settled the request.
     "finish-late-completed", "finish-late-failed",
 )

@@ -13,6 +13,9 @@ function deps(overrides: Partial<PluginAgentActionDeps> = {}): PluginAgentAction
     installedVersion: (id: string) => (id === 'nerdtechnic.devmap' ? '0.2.0' : null),
     setDisabled: vi.fn(async () => ({ changed: true })),
     notify: vi.fn(),
+    isDisabled: () => false,
+    disableSource: () => ({ by: 'user' as const, at: null, agent: null }),
+    now: () => 1_792_108_800_000,
     ...overrides,
   } as never
 }
@@ -43,10 +46,10 @@ describe('answerPluginAgentAction', () => {
     await expect(answerPluginAgentAction(request, d)).resolves.toEqual({
       ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true, changed: true,
     })
-    expect(d.setDisabled).toHaveBeenCalledWith('nerdtechnic.devmap', true)
+    expect(d.setDisabled).toHaveBeenCalledWith('nerdtechnic.devmap', true, expect.objectContaining({ by: 'agent' }))
     expect(d.notify).toHaveBeenCalledWith({ action: 'disable', pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', requester })
     await answerPluginAgentAction({ ...request, action: 'enable' }, d)
-    expect(d.setDisabled).toHaveBeenLastCalledWith('nerdtechnic.devmap', false)
+    expect(d.setDisabled).toHaveBeenLastCalledWith('nerdtechnic.devmap', false, undefined)
   })
 
   it('tells nobody and offers no undo when the package was already in that state', async () => {
@@ -89,3 +92,44 @@ describe('answerPluginAgentAction', () => {
     expect(d.notify).not.toHaveBeenCalled()
   })
 })
+
+describe('enable depends on who disabled the package (B2-c option B)', () => {
+  const enable = { ...request, action: 'enable' }
+
+  it('records the agent as the one who disabled it', async () => {
+    const d = deps()
+    await answerPluginAgentAction(request, d)
+    expect(d.setDisabled).toHaveBeenCalledWith('nerdtechnic.devmap', true, {
+      by: 'agent', at: 1_792_108_800_000, agent: { callerKind: 'pane', paneId: 'p-41', paneName: 'dev' },
+    })
+  })
+
+  it('sends a package the user disabled to the user\'s approval, changing nothing', async () => {
+    const d = deps({ isDisabled: () => true, disableSource: () => ({ by: 'user', at: 1_792_000_000_000, agent: null }) })
+    await expect(answerPluginAgentAction(enable, d)).resolves.toEqual({
+      ok: false,
+      error: "the user disabled nerdtechnic.devmap; enabling it needs the user's approval in Navide",
+      error_code: 'APPROVAL_REQUIRED',
+      pluginId: 'nerdtechnic.devmap',
+      pluginVersion: '0.2.0',
+      disabled: { by: 'user', at: 1_792_000_000_000, agent: null },
+    })
+    expect(d.setDisabled).not.toHaveBeenCalled()
+    expect(d.notify).not.toHaveBeenCalled()
+  })
+
+  it('treats a package disabled before sources were recorded as disabled by the user', async () => {
+    const d = deps({ isDisabled: () => true })
+    await expect(answerPluginAgentAction(enable, d)).resolves.toMatchObject({ ok: false, error_code: 'APPROVAL_REQUIRED' })
+    expect(d.setDisabled).not.toHaveBeenCalled()
+  })
+
+  it('re-enables at once what an agent disabled, and tells the user', async () => {
+    const agent = { callerKind: 'pane' as const, paneId: 'p-9', paneName: 'other' }
+    const d = deps({ isDisabled: () => true, disableSource: () => ({ by: 'agent', at: 1, agent }) })
+    await expect(answerPluginAgentAction(enable, d)).resolves.toMatchObject({ ok: true, disabled: false, changed: true })
+    expect(d.setDisabled).toHaveBeenCalledWith('nerdtechnic.devmap', false, undefined)
+    expect(d.notify).toHaveBeenCalledTimes(1)
+  })
+})
+

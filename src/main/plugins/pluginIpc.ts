@@ -74,6 +74,7 @@ import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
@@ -602,6 +603,18 @@ export function registerPluginIpc(
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // Who disabled each Marketplace package (B2-c option B). A write that fails
+  // leaves an older entry behind, but the Disabled list changed since, so an
+  // agent's entry then reads as the user: the conservative side.
+  const disableSources = new PluginDisableSourceStore(pluginsRoot)
+  const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
+    try {
+      if (disabled && source) disableSources.set(id, source)
+      else disableSources.remove(id)
+    } catch (error) {
+      console.warn(`[plugins] who disabled ${id} was not recorded: ${errorText(error)}`)
+    }
+  }
   // Update, rollback and restart re-register a package. While it is disabled
   // they may change which version is selected, but they never hand the Host an
   // activation to start.
@@ -2468,6 +2481,8 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      // A reinstalled package starts with no record of who disabled it.
+      recordDisableSource(id, null)
       try {
         installScans.removePlugin(id)
       } catch (error) {
@@ -2600,6 +2615,8 @@ export function registerPluginIpc(
       if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
       if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
       const result = await setInstalledPackageDisabled(id, disabled)
+      // The user's own switch (and the undo on an agent notice).
+      if (result.changed) recordDisableSource(id, disabled, { by: 'user', at: Date.now(), agent: null })
       return { id: result.id, disabled: result.disabled }
     }
   )
@@ -2681,8 +2698,17 @@ export function registerPluginIpc(
         const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
         return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
       },
-      setDisabled: (pluginId, disabled) => setInstalledPackageDisabled(pluginId, disabled),
+      setDisabled: async (pluginId, disabled, source) => {
+        const result = await setInstalledPackageDisabled(pluginId, disabled)
+        if (result.changed) {
+          recordDisableSource(pluginId, disabled, source ?? { by: 'agent', at: Date.now(), agent: null })
+        }
+        return result
+      },
       notify: (notice) => options.onPluginAgentAction?.(notice),
+      isDisabled: (pluginId) => disabledPlugins.has(pluginId),
+      disableSource: (pluginId) => disableSources.get(pluginId),
+      now: () => Date.now(),
     })
   )
 
