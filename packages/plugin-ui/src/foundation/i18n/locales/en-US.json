@@ -830,6 +830,10 @@
       "loop-stalled-notify-body": "The agent repeated itself for several turns without moving forward (it may be waiting on something) — the loop has stopped so it stops burning quota",
       "loop-capped-notify-title": "Loop stopped — continue limit reached",
       "loop-capped-notify-body": "The loop sent its maximum number of continue prompts without the agent reporting the task done — restart it if the work is still on track",
+      "loop-inject-failed-notify-title": "Loop stopped — continue could not be sent",
+      "loop-inject-failed-notify-body": "The continue prompt failed to reach the agent 3 times in a row (the input box did not accept it) — the loop has stopped; check the pane and restart it",
+      "loop-interrupted-notify-title": "Loop stopped — interrupted",
+      "loop-interrupted-notify-body": "You interrupted the agent, so the loop has stopped instead of sending another continue — restart it when you want it to keep going",
       "login-expired-badge": "⚠ Login expired",
       "exit-fault-badge": "⚠ Exited (code {code})",
       "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
@@ -9203,6 +9207,41 @@
     "signin-hint": "This opens a pane that runs the sign-in for you. Most CLIs then open your browser; finish there and come back.",
     "dont-ask": "Stop asking about {label}"
   },
+  "plugin-request": {
+    "kicker": "Navide plugin request",
+    "title": {
+      "install": "Install the Navide plugin {plugin} {version}?",
+      "update": "Update the Navide plugin {plugin} from {from} to {version}?",
+      "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
+      "remove": "Remove the Navide plugin {plugin}?",
+      "enable": "Enable the Navide plugin {plugin} again?"
+    },
+    "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
+    "queue": "{count} pending",
+    "requester": "Requested by",
+    "workspace": "Workspace",
+    "expires": "Expires at",
+    "caller-unknown": "Unknown caller",
+    "disabled-by": "Disabled by",
+    "disabled-by-user": "You",
+    "disabled-at": "Disabled at",
+    "not-recorded": "Not recorded",
+    "reason": "Reason, written by the agent",
+    "diff": "What changes from the installed version",
+    "card": "What this version declares (from the Navide Marketplace, not verified yet)",
+    "no-card": "The Navide Marketplace has no disclosure for this version. The package itself is verified when it is downloaded, before anything is installed.",
+    "expired": "This request expired.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "applying": "Applying…",
+    "dismiss": "Dismiss",
+    "completed": "Done: {plugin}",
+    "completed-late": "{plugin}: done. Another window had marked this request interrupted while this one reconnected; the record now shows what really happened.",
+    "finished-late": "Another window had marked this request interrupted while this one reconnected; the record now shows this result instead.",
+    "failed": "Not done: {error}",
+    "not-appliable": "This version of Navide cannot carry out this kind of request yet; you can reject it.",
+    "unavailable": "Navide plugin actions are not available in this window."
+  },
   "skill-approval": {
     "kicker": "Skill install request",
     "title": "Install skill “{name}”?",
@@ -10328,7 +10367,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off."
+      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -10522,6 +10561,7 @@
       "text-missing": "text no longer in the message log",
       "text-none": "no message text recorded",
       "explain": "Its High and Critical actions need your confirmation on this computer. Clear the mark only if you have checked what it was sent.",
+      "explain-off": "Navide Guard is off, so nothing is asked for confirmation now. The mark is kept and applies again when you turn Guard back on.",
       "clear": "Clear",
       "no-hook-warning": "Navide Guard cannot block this CLI, and it runs without permission prompts. Be careful giving it commands from a chat room."
     },

@@ -1261,8 +1261,10 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
     rules as Read (grep) and ls (glob). These tools expand nothing, so a path
     that does not resolve statically is skipped rather than made opaque."""
     # Copilot CLI names the root `paths`: one directory, or a list of them.
-    root = tool_input.get("path") or tool_input.get("paths")
-    roots = [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
+    # Both keys are read: a call carrying both reaches every root it names.
+    roots = []
+    for root in (tool_input.get("path"), tool_input.get("paths")):
+        roots += [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
     # Glob's pattern and Grep's glob filter are paths under root (or absolute).
     sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
     sub = sub if isinstance(sub, str) and sub else None

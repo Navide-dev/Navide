@@ -1083,7 +1083,9 @@ class PluginAuditLog:
           counts as absent, so a reinstall is new again even when the
           ``plugin.activity.forget`` of its removal was lost) and
           ``undeclaredDenied`` (per workspace, last 7 days).
-        - ``agentActions`` is null until B2-c's table exists.
+        - ``agentActions``: what agents did to the plugin in
+          ``plugin_agent_actions`` over the same 30 days, newest first (a
+          person's decisions are not listed); null when that table is off.
         - ``backendCalls``: calls into the plugin's own backend, from
           ``plugin_backend_call_days`` (``methods`` per address and outcome
           from the UTC day ``window`` starts in, ``daily`` for every day kept). They are not in
@@ -1243,7 +1245,27 @@ class PluginAuditLog:
             for ws, n, last_at in recent_undeclared
         )
         report["anomalies"] = anomalies
+        report["agentActions"] = self._agent_actions(plugin_id, since)
         return report
+
+    def _agent_actions(self, plugin_id: str, since: int) -> list[dict[str, Any]] | None:
+        """What agents did to ``plugin_id`` since ``since`` (``plugin_agent_actions``),
+        newest first; a person's own decisions are not agent actions. None
+        when that table is off."""
+        if not self.actions_enabled:
+            return None
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT at, action, caller_kind, caller_pane_id, caller_pane_name, caller_workspace, plugin_version"
+                " FROM plugin_agent_actions WHERE plugin_id = ? AND at >= ? AND caller_kind != 'user'"
+                " ORDER BY at DESC, id DESC",
+                (plugin_id, since),
+            ).fetchall()
+        return [
+            {"at": at, "action": action, "callerKind": kind, "paneId": pane_id, "paneName": pane_name,
+             "workspace": workspace, "version": version}
+            for at, action, kind, pane_id, pane_name, workspace, version in rows
+        ]
 
     def forget_plugin(self, plugin_id: str) -> None:
         """A removed plugin: drop its first-seen rows, so a reinstall's first

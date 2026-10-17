@@ -142,7 +142,17 @@
       "baseline": null
     }
   ],
-  "agentActions": null,
+  "agentActions": [
+    {
+      "at": 1792022400000,
+      "action": "disable",
+      "callerKind": "pane",
+      "paneId": "p-41",
+      "paneName": "dev",
+      "workspace": "/Users/me/project",
+      "version": "0.2.0"
+    }
+  ],
   "backendCalls": {
     "methods": [
       {

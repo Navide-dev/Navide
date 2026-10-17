@@ -10,7 +10,7 @@ import { readingIsCurrent, hasHeadlineHeadroom, exhaustedWindow, type UsageSnaps
 import { LIMIT_RESET_BUFFER_MS } from '../../lib/loopPrompt'
 import { detectUsageLimit, QUOTA_READING_VETO, usageLimitDue, usageResumeAt } from '../../lib/cliUsageLimit'
 vi.mock('@navide/plugin-ui/shared', () => ({ settingsGet: (_: string, fallback: unknown) => fallback, settingsSet: vi.fn() }))
-import { loopBackoffMs, loopContinueReady, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents } from '../../lib/completion'
+import { loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT } from '../../lib/completion'
 import {
   LOOP_FAILOVER_RESUME_SETTING_KEY,
   LOOP_FAILOVER_RESUME_TIMEOUT_MS,
@@ -85,6 +85,7 @@ function harness(opts: { loopFailoverResume?: boolean } = {}) {
     paneHealthWatchers: new Map(), paneCleanBytes: () => 0, usageFor: () => undefined,
     stopLoopLimitWatcher: vi.fn(), loopLimitWatchers: watchers, LOOP_LIMIT_POLL_MS: 5000,
     loopStallVerdict, loopContinueReady, loopSettleMs, loopWaitingOnSubagents, loopBackoffMs,
+    loopInjectFailures, LOOP_INJECT_FAIL_LIMIT,
     stopLoopSpinning: vi.fn(), panePendingSubagents: new Map(),
     paneTurnCompleteAt: new Map([['p1', now - 10000]]), paneLastWorkingAt: new Map([['p1', now - 20000]]),
     VENDORS_WITHOUT_TURN_END: new Set(), TURN_COMPLETE_SETTLE_MS: 2000,
