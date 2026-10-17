@@ -12,6 +12,10 @@ the package. A body cannot fake its way out of the fence:
   the Unicode line and paragraph separators;
 - the body is NFKC-normalized, so fullwidth lookalikes (［外部訊息結束］)
   become the plain spelling first;
+- variation selectors (U+FE00-FE0F, U+E0100-E01EF) are removed, and so is
+  any other combining mark (category Mn) right after a character a boundary
+  line is spelled with, so ``[外\ufe00部訊息結束]`` cannot hide one; marks in
+  ordinary text are kept;
 - any copy of a boundary line, also spelled in simplified Chinese
   (外部讯息开始 / 外部讯息结束), and any ``---MARKER---`` token is broken with a
   zero-width space, as ``renderEnvelope`` breaks them.
@@ -30,10 +34,29 @@ EXTERNAL_CONTENT_END = "[外部訊息結束]"
 _BOUNDARY = re.compile(r"([\[【〔]\s*)外部([訊讯])息(開始|开始|結束|结束)")
 # Cf (format: bidi controls, zero-width), Zl and Zp (U+2028 / U+2029).
 _INVISIBLE_CATEGORIES = frozenset({"Cf", "Zl", "Zp"})
+# The characters the boundary lines are spelled with (both scripts).
+_BOUNDARY_CHARS = frozenset("[【〔外部訊讯息開开始結结束")
+
 _MARKER_TOKEN = re.compile(r"-{3}([A-Z][A-Z0-9-]*)-{3}")
 # What a package id or version may contribute to the label. Anything else is
 # dropped, so a value from the Registry cannot add a line or close the label.
 _LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9._+-]")
+
+
+def _is_variation_selector(ch: str) -> bool:
+    return "\ufe00" <= ch <= "\ufe0f" or "\U000e0100" <= ch <= "\U000e01ef"
+
+
+def _drop_marks(text: str) -> str:
+    """Drop variation selectors, and combining marks after a boundary character."""
+    out: list[str] = []
+    for ch in text:
+        if _is_variation_selector(ch):
+            continue
+        if out and out[-1] in _BOUNDARY_CHARS and unicodedata.category(ch) == "Mn":
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def third_party_label(plugin_id: str, version: str, detail: str) -> str:
@@ -51,6 +74,7 @@ def wrap_external_text(text: str, *, label: str) -> str:
     """Fence one piece of third-party text, headed by ``label``."""
     body = unicodedata.normalize("NFKC", sanitize_agent_tool_result_text(str(text)))
     body = "".join(ch for ch in body if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
+    body = _drop_marks(body)
     body = _MARKER_TOKEN.sub(lambda m: f"-\u200b--{m.group(1)}-\u200b--", body)
     body = _BOUNDARY.sub(lambda m: f"{m.group(1)}外部\u200b{m.group(2)}息{m.group(3)}", body)
     return "\n".join((EXTERNAL_CONTENT_START, label, body, EXTERNAL_CONTENT_END))
