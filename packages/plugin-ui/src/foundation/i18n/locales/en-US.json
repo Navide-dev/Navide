@@ -10353,7 +10353,8 @@
       "local": "Local",
       "relay": "Chat app",
       "remote": "Remote",
-      "agent": "Other agent"
+      "agent": "Other agent",
+      "plugin": "Navide plugin tool"
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
