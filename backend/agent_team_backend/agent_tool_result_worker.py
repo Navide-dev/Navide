@@ -323,6 +323,9 @@ class ResultWorker:
                 raise asyncio.IncompleteReadError(b"", left)
             left -= len(chunk)
             parts.append(decoder.decode(chunk, final=not left))
+            # read() returns at once when the bytes are already buffered:
+            # hand the loop back after every slice all the same.
+            await asyncio.sleep(0)
         return "".join(parts)
 
     def stop(self) -> None:
