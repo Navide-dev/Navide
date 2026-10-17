@@ -780,3 +780,90 @@ def test_arguments_that_are_not_json_inside_are_dropped_at_flush(audit: PluginAu
     assert [r["args_bytes"] for r in _rows(audit, "plugin_tool_calls")] == [
         contract.agent_tool_arguments_digest({"ok": 1})[1], contract.agent_tool_arguments_digest({"ok": 2})[1],
     ]
+
+
+# ── D-e: activity summary (read by D-f) ─────────────────────────────────────
+
+_PLUGIN = "nerdtechnic.devmap"
+
+
+def _act(audit: PluginAuditLog, at_ms: int, address: str = "fs.readFile", **overrides: Any) -> None:
+    fields: dict[str, Any] = {"source": "broker", "address": address, "outcome": "allowed", "at_ms": at_ms}
+    fields.update(overrides)
+    assert _activity(audit, **fields) is True
+
+
+def test_the_summary_counts_detail_and_rolled_up_days_once(audit: PluginAuditLog, clock: Clock) -> None:
+    for day in (20, 10):  # rolled up into plugin_activity_daily by the prune below
+        _act(audit, NOW - day * DAY_MS)
+    _act(audit, NOW - 40 * DAY_MS)  # outside the 30-day window
+    for _ in range(3):
+        _act(audit, NOW - 2 * DAY_MS)
+    _act(audit, NOW - DAY_MS, "shell.run", source="shell", shell_command="git log")
+    audit.prune(NOW)
+    summary = audit.activity_summary(_PLUGIN)
+    assert summary["pluginId"] == _PLUGIN and summary["windowDays"] == 30
+    assert summary["total"] == 6
+    assert summary["calls"] == [
+        {"address": "fs.readFile", "source": "broker", "outcome": "allowed", "count": 5},
+        {"address": "shell.run", "source": "shell", "outcome": "allowed", "count": 1},
+    ]
+    assert audit.activity_summary("other.plugin")["total"] == 0
+
+
+def test_the_summary_counts_undeclared_denials_and_flags_them(audit: PluginAuditLog) -> None:
+    _act(audit, NOW - 3 * DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    _act(audit, NOW - 2 * DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    _act(audit, NOW - DAY_MS, "fs.readFile", outcome="denied", denied_reason="plugin-disabled")
+    summary = audit.activity_summary(_PLUGIN)
+    assert summary["deniedUndeclared"] == {"count7d": 2, "lastAt": NOW - 2 * DAY_MS}
+    assert summary["denied30d"] == 3
+    assert {"kind": "undeclared-denied", "count7d": 2, "lastAt": NOW - 2 * DAY_MS} in summary["anomalies"]
+
+
+def test_declared_but_unused_lists_what_had_no_allowed_call_in_30_days(audit: PluginAuditLog) -> None:
+    _act(audit, NOW - DAY_MS, "fs.readFile")
+    _act(audit, NOW - DAY_MS, "shell.run", source="shell", outcome="denied", denied_reason="undeclared")
+    summary = audit.activity_summary(_PLUGIN, declared=["fs", "shell", "storage.get"])
+    assert summary["declaredUnused"] == ["shell", "storage.get"]
+    assert audit.activity_summary(_PLUGIN)["declaredUnused"] is None
+
+
+def test_a_day_over_ten_times_the_7_day_baseline_is_flagged(audit: PluginAuditLog) -> None:
+    for day in range(1, 8):  # one call a day for the 7 days before today
+        _act(audit, NOW - day * DAY_MS + 1000)
+    for i in range(11):  # today: 11 > 10 x 1
+        _act(audit, NOW + i)
+    summary = audit.activity_summary(_PLUGIN, now_ms=NOW + 60_000)
+    assert {"kind": "volume-spike", "day": "2026-10-16", "count": 11, "baselineDailyAverage": 1.0} in summary["anomalies"]
+
+
+@pytest.mark.parametrize("today", [10, 0])
+def test_no_spike_at_ten_times_or_without_a_baseline(audit: PluginAuditLog, today: int) -> None:
+    if today:
+        for day in range(1, 8):
+            _act(audit, NOW - day * DAY_MS + 1000)
+    for i in range(today or 50):
+        _act(audit, NOW + i)
+    kinds = [a["kind"] for a in audit.activity_summary(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]]
+    assert "volume-spike" not in kinds
+
+
+def test_a_write_tool_first_seen_in_a_workspace_is_flagged(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 5 * DAY_MS
+    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")
+    _call(audit, tool="devmap_read", risk="read", target_workspace="/w/new", caller_workspace="/w/new")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")  # not new
+    _call(audit, target_workspace="/w/new", caller_workspace="/w/new")  # first write here
+    summary = audit.activity_summary(_PLUGIN, now_ms=NOW)
+    flagged = [a for a in summary["anomalies"] if a["kind"] == "write-tool-new-workspace"]
+    assert flagged == [{"kind": "write-tool-new-workspace", "tool": "devmap_set_status", "workspace": "/w/new",
+                        "firstAt": NOW - 3600_000}]
+
+
+def test_a_disabled_audit_summarizes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = Database(tmp_path / "navide.db")
+    monkeypatch.setattr(db, "migrate", lambda *_a, **_k: (_ for _ in ()).throw(sqlite3.OperationalError("full")))
+    summary = PluginAuditLog(db).activity_summary(_PLUGIN)
+    assert summary["enabled"] is False and summary["total"] == 0 and summary["anomalies"] == []

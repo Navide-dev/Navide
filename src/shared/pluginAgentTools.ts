@@ -590,6 +590,13 @@ export type MarketplaceQueryResponse =
 export const MARKETPLACE_QUERY_REQUEST_EVENT = 'marketplace.query.request'
 export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 
+// ── Host → backend: plugin activity (D-e, section 5) ────────────────────────
+
+/** Host-authenticated: `{rows}`, one row per broker or shell-broker call, batched. */
+export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
+/** Host-authenticated: `{plugin_id, declared?}` → the activity summary. */
+export const PLUGIN_ACTIVITY_SUMMARY_MESSAGE = 'plugin.activity.summary'
+
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
 export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove'

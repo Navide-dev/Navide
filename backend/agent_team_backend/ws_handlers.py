@@ -305,6 +305,77 @@ async def marketplace_query_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+_ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
+_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
+#: The Host records broker and shell-broker calls; agent tool calls are the
+#: backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+
+
+@handler("plugin.activity.record")
+async def plugin_activity_record(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Store the Host's batch of broker and shell-broker calls (plan B, D-e).
+
+    Write-only: each row is redacted and queued by ``record_activity``; a row
+    it refuses is skipped, and nothing here can fail the calls it records.
+    """
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    rows = payload.get("rows") if isinstance(payload, dict) and set(payload) == {"rows"} else None
+    if not isinstance(rows, list):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.record is malformed")
+        )
+        return
+    accepted = 0
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or not _ACTIVITY_ROW_REQUIRED <= set(row) <= _ACTIVITY_ROW_FIELDS
+            or row.get("source") not in _HOST_ACTIVITY_SOURCES
+        ):
+            continue
+        fields = {key: value for key, value in row.items() if isinstance(value, str)}
+        if len(fields) == len(row) and app.plugin_audit_log.record_activity(**fields):
+            accepted += 1
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+@handler("plugin.activity.summary")
+async def plugin_activity_summary(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """One plugin's activity counts and anomaly flags for the activity page (D-f)."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
+    declared = payload.get("declared") if isinstance(payload, dict) else None
+    if (
+        not isinstance(plugin_id, str)
+        or not plugin_id
+        or not set(payload) <= {"plugin_id", "declared"}
+        or not (declared is None or (isinstance(declared, list) and all(isinstance(d, str) for d in declared)))
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.summary is malformed")
+        )
+        return
+    summary = await asyncio.to_thread(app.plugin_audit_log.activity_summary, plugin_id, declared=declared)
+    await session.send_json(make_response(msg_id, msg_type, summary))
+
+
 @handler("editor.rewrite")
 async def editor_rewrite(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app

@@ -522,6 +522,15 @@ MARKETPLACE_QUERY_RESULT_MESSAGE = "marketplace.query.result"
 MARKETPLACE_QUERY_KINDS = ("search", "detail", "installed")
 MARKETPLACE_QUERY_ERROR_CODES = ("BAD_REQUEST", "NOT_FOUND", "REGISTRY_UNAVAILABLE", "HOST_UNAVAILABLE")
 
+# ── Host → backend: plugin activity (D-e, section 5) ────────────────────────
+
+#: Host-authenticated: ``{rows: [{plugin_id, plugin_version, workspace, source,
+#: address, outcome, denied_reason?, fs_path?, shell_command?}]}``, one row per
+#: broker or shell-broker call, batched. The backend redacts and stores them.
+PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
+#: Host-authenticated: ``{plugin_id, declared?}`` → the activity summary.
+PLUGIN_ACTIVITY_SUMMARY_MESSAGE = "plugin.activity.summary"
+
 
 class MarketplaceQueryRequest(TypedDict):
     request_id: str
