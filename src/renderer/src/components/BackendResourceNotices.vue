@@ -7,6 +7,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { formatBytes } from '../lib/formatBytes'
+import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 
 const { t, locale } = useI18n()
 const notices = ref<BackendResourceNoticeView[]>([])
@@ -59,7 +60,7 @@ onBeforeUnmount(() => {
       <h4>{{ $t('backendResource.title') }}</h4>
       <p>
         {{ $t('backendResource.body', {
-          name: notice.name, id: notice.pluginId, version: notice.packageVersion,
+          name: reveal(notice.name), id: reveal(notice.pluginId), version: reveal(notice.packageVersion),
           item: $t(`backendResource.item.${notice.item}`),
           usage: amount(notice.item, notice.usage), threshold: amount(notice.item, notice.threshold),
         }) }}

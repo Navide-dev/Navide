@@ -8,6 +8,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PluginActivityReport } from '../../../shared/pluginActivity'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { ScanReport } from '../../../shared/pluginDisclosureScan'
+import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
 import { createQueueTrend, pluginBackendUsage } from '../lib/backendQueueTrend'
@@ -87,7 +88,7 @@ onBeforeUnmount(() => {
     <p v-if="loading" class="nv-overview-muted">{{ $t('pluginActivity.loading') }}</p>
     <p v-else-if="entries.length === 0" class="nv-overview-muted">{{ $t('pluginActivity.overview.empty') }}</p>
     <article v-for="entry in entries" :key="entry.id" class="nv-overview-entry" :data-id="entry.id">
-      <h3 class="nv-overview-name">{{ entry.id }} <span class="nv-overview-muted">{{ entry.version }}</span></h3>
+      <h3 class="nv-overview-name">{{ reveal(entry.id) }} <span class="nv-overview-muted">{{ reveal(entry.version) }}</span></h3>
       <p v-if="growing.has(entry.id)" class="nv-overview-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
       <PluginDisclosureCard :disclosure="entry.disclosure" :scan="entry.scan" :registry="null" :verified="true" />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>

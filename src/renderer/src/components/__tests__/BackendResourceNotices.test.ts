@@ -89,4 +89,18 @@ describe('BackendResourceNotices (watchdog option C)', () => {
     await flushPromises()
     expect(wrapper.text()).not.toMatch(/backendResource\./)
   })
+
+  // Final review part 2 MED-1: the name the user decides on cannot hide or reorder text.
+  it('spells out invisible characters in the plugin name, id and version; ordinary text is unchanged', async () => {
+    mockApi(() => [
+      { ...memory, name: 'Navide​ Git‮', pluginId: 'acme.‮indexer', packageVersion: '1.0.0​' },
+      memory,
+    ])
+    wrapper = mount(BackendResourceNotices, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const items = wrapper.findAll('.nv-resource-notice')
+    expect(items[0].text()).toContain('Navide\\u{200b} Git\\u{202e} (acme.\\u{202e}indexer 1.0.0\\u{200b})')
+    expect(items[0].text()).not.toMatch(/[​‮]/)
+    expect(items[1].text()).toContain('Indexer (acme.indexer 1.0.0)')
+  })
 })
