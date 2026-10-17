@@ -1,8 +1,8 @@
 /**
  * Step-0 contract for Navide plugin agent tools (plan B, B1 and B2).
  *
- * Types and pure functions only: nothing in the app imports this module yet,
- * and plugin-manifest-v2.schema.json still refuses `backend.agentTools`. The
+ * Types and pure functions only. Since B1-a the Host refuses a manifest whose
+ * `backend.agentTools` fails `validateAgentTools` (pluginManifestV2.ts). The
  * normative text is docs/en-US/plugin-agent-tools-contract.md; the Python
  * twin is backend/agent_team_backend/plugins/agent_tools_contract.py, and both
  * are held to docs/plugin-contracts/agent-tools-fixtures/ by their tests.
@@ -48,10 +48,12 @@ export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
 const AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...AGENT_TOOL_REQUIRED_FIELDS, 'timeoutMs'])
 
-/** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation). */
+/** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation), and so
+ *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
-  'cli_', 'credentials_', 'evolve_', 'marketplace_', 'mcp_', 'memory_', 'navide_', 'pipeline_', 'plan_',
-  'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_', 'workspace_',
+  'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
+  'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
+  'workspace_',
 ] as const
 
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
@@ -127,9 +129,25 @@ export function validateAgentToolName(name: unknown, pluginId: unknown): AgentTo
 
 // ── text rules ──────────────────────────────────────────────────────────────
 
-// Cc (C0, DEL, C1) plus the two Unicode line/paragraph separators, and markup.
-// eslint-disable-next-line no-control-regex
-const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]/
+/** The characters that reorder or hide text: bidi controls, zero-width and
+ *  other invisible format characters (soft hyphen, Mongolian vowel separator,
+ *  combining grapheme joiner), variation selectors and tag characters (which
+ *  can smuggle ASCII an agent reads but a dialog does not show). One set for
+ *  the text rule and for display. */
+const INVISIBLE_CHARACTERS =
+  '\\u00ad\\u034f\\u061c\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\ufe00-\\ufe0f\\ufeff\\u{e0000}-\\u{e007f}'
+// Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
+// invisible characters above.
+const FORBIDDEN_TEXT = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>${INVISIBLE_CHARACTERS}]`, 'u')
+const INVISIBLE_TEXT = new RegExp(`[${INVISIBLE_CHARACTERS}]`, 'gu')
+
+/** Text from a package shown to the user verbatim except that every invisible
+ *  character is spelled out (`\u{202e}`), so a schema key or enum value cannot
+ *  reorder or hide what a consent surface shows. Nothing is refused for it. */
+export function revealInvisibleText(text: string): string {
+  return text.replace(INVISIBLE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
+}
+
 // Cc except tab and line feed.
 // eslint-disable-next-line no-control-regex
 const RESULT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
@@ -173,6 +191,30 @@ function hasNonIntegerNumber(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasNonIntegerNumber)
   if (isPlainObject(value)) return Object.values(value).some(hasNonIntegerNumber)
   return false
+}
+
+/** Schema keywords whose values are data, not schema: never refused for their
+ *  text (the core neutralizes every schema string in tools/list instead). */
+const SCHEMA_DATA_KEYWORDS: ReadonlySet<string> = new Set(['const', 'default', 'enum', 'examples'])
+/** Keywords whose value maps names (property names, definition names) to
+ *  subschemas: a name such as `enum` there is a name, not a keyword. */
+const SCHEMA_MAP_KEYWORDS: ReadonlySet<string> = new Set([
+  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas',
+])
+
+/** Every `description` / `title` string anywhere in a schema follows the text rules too:
+ *  agents read the whole schema in tools/list. */
+function hasInvalidSchemaText(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasInvalidSchemaText)
+  if (!isPlainObject(value)) return false
+  return Object.entries(value).some(([key, item]) =>
+    SCHEMA_DATA_KEYWORDS.has(key)
+      ? false
+      : SCHEMA_MAP_KEYWORDS.has(key) && isPlainObject(item)
+        ? Object.values(item).some(hasInvalidSchemaText)
+        : (key === 'description' || key === 'title') && typeof item === 'string'
+          ? !isValidAgentToolText(item)
+          : hasInvalidSchemaText(item))
 }
 
 function isValidTimeout(value: unknown): boolean {
@@ -222,6 +264,7 @@ export function validateAgentTools(manifest: { id?: unknown; backend?: unknown }
       const schema = tool.inputSchema
       if (!isPlainObject(schema) || schema.type !== 'object') fail('inputSchema', 'AGENT_TOOL_SCHEMA_INVALID')
       else if (hasNonIntegerNumber(schema)) fail('inputSchema', 'AGENT_TOOL_NON_INTEGER_NUMBER')
+      else if (hasInvalidSchemaText(schema)) fail('inputSchema', 'AGENT_TOOL_TEXT_INVALID')
       else if (utf8ByteLength(canonicalJson(schema)) > AGENT_TOOL_STABILITY_CAP_BYTES) {
         fail('inputSchema', 'AGENT_TOOL_TOO_LARGE')
       }

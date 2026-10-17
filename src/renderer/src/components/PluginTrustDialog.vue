@@ -6,6 +6,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -88,6 +89,10 @@ function capabilityHint(cap: string): string {
             </li>
           </ul>
         </template>
+        <PluginAgentToolsList
+          v-if="step === 'risk' && pending.prepared.agentTools?.length"
+          :tools="pending.prepared.agentTools"
+        />
         <p class="ext-trust-tier">
           <span
             v-if="pending.prepared.trustTier === 'signed-verified'"

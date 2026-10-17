@@ -15993,7 +15993,7 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       listPackages: () => (spec() ? [spec()] : []),
       isDisabled: (pluginId) => disabled.has(pluginId),
       hasConsent: async () => consented.value,
-      consentGrantedAt: () => '2026-10-01T00:00:00.000Z',
+      agentToolSince: () => '2026-10-01T00:00:00.000Z',
       setAgentMethods: (pluginId, version, methods) => mgr.setThirdPartyAgentMethods(pluginId, version, methods),
       confirmWrite,
       send: (payload) => mgr.sendAgentToolsSync(payload),
@@ -16586,6 +16586,36 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     expect(enabled.payload.features).toEqual({ plans_backend_v2: false })
     const disabled = registrationOf(new Set(['navide.plans', 'acme.not-builtin']))
     expect(disabled.payload.features).toEqual({ plans_backend_v2: false, disabled_plugins: ['navide.plans'] })
+  })
+
+  it('re-registers the Host with the new disabled set as soon as a built-in is drained', async () => {
+    let disabled = false
+    const mgr = new FrontendPluginManager()
+    mgr.setDisabledPluginResolver((pluginId) => disabled && pluginId === PLANS_PLUGIN_ID)
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { ...descriptor('acme.builtin-disable-reregister'), requires: ['terminal'] },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl('ws://builtin-disable-reregister')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const registrations = () => socket.sent
+      .map((raw) => JSON.parse(raw) as SentMessage)
+      .filter((message) => message.type === 'host.register')
+    const first = registrations()[0]
+    socket.receive({ id: first.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+    await flush()
+    expect(registrations()).toHaveLength(1)
+
+    // The store turned unreadable (or the user disabled Plans): drain it.
+    disabled = true
+    await mgr.suspendBuiltinPlugin(PLANS_PLUGIN_ID)
+    await flush()
+    const all = registrations()
+    expect(all).toHaveLength(2)
+    expect(all[1].payload.features).toEqual({ plans_backend_v2: false, disabled_plugins: [PLANS_PLUGIN_ID] })
   })
 
   it('refuses an agent Plans call with the contract code and no recovery disposition', async () => {

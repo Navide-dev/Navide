@@ -75,6 +75,8 @@ function fileStamp(path: string): string {
 const readCache = new Map<string, { stamp: string; read: StoreRead }>()
 /** Store files this process rebuilt from their `.bak`. */
 const restoredFiles = new Set<string>()
+/** Store files last read as unreadable, warned about once until they read again. */
+const unreadableFiles = new Set<string>()
 
 export class PluginFactoryOptOutStore {
   private readonly file: string
@@ -94,8 +96,15 @@ export class PluginFactoryOptOutStore {
   has(pluginId: string): boolean {
     const read = this.read()
     if (read.status === 'unreadable') {
-      console.warn(`[plugins] unreadable plugin id store at ${this.file} and its backup`)
+      // Once per change of state: the built-in switch checks every 15 s.
+      if (!unreadableFiles.has(this.file)) {
+        unreadableFiles.add(this.file)
+        console.warn(`[plugins] unreadable plugin id store at ${this.file} and its backup`)
+      }
       return this.unreadableAnswer(pluginId)
+    }
+    if (unreadableFiles.delete(this.file)) {
+      console.warn(`[plugins] plugin id store at ${this.file} is readable again`)
     }
     return read.state.pluginIds.includes(pluginId)
   }

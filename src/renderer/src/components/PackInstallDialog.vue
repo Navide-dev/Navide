@@ -7,6 +7,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { vTruncate } from '@navide/plugin-ui/foundation'
 import type { PackInstallFlow } from '../composables/usePackInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 const props = defineProps<{ flow: PackInstallFlow }>()
 
@@ -172,6 +173,7 @@ function stepState(m: PackMemberSummary): 'current' | 'done' | 'skipped' | 'fail
                   {{ cap }} · {{ $t('settings.extensions.sensitive') }}
                 </span>
               </p>
+              <PluginAgentToolsList v-if="prepared.agentTools?.length" :tools="prepared.agentTools" />
               <p v-if="!prepared.containsBackendExecutable && !prepared.sensitive.length" class="pack-plain">
                 {{ $t('settings.extensions.pack.noSensitive', { name: prepared.id }) }}
               </p>

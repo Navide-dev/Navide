@@ -85,6 +85,19 @@ describe('validateAgentTools', () => {
     expect(validateAgentTools({ ...manifest, backend: { ...manifest.backend, agentTools: [atCap] } })).toEqual([])
   })
 
+  it('limits neither the number of tools nor the size of the whole declaration', () => {
+    const tool = (index: number, size: number) => ({
+      name: `devmap_t${index}`, method: 'devmap.read', risk: 'read', title: 'T',
+      description: 'x'.repeat(size), inputSchema: { type: 'object' },
+    })
+    const manifest = (tools: unknown[]) => ({ id: 'nerdtechnic.devmap', backend: { methods: ['devmap.read'], agentTools: tools } })
+    // Two tools of ~600 KiB: each item is under the per-field cap; the total
+    // over 1 MiB is disclosed (count and size), not refused.
+    const many = Array.from({ length: 2 }, (_, index) => tool(index, 600 * 1024))
+    expect(validateAgentTools(manifest(many))).toEqual([])
+    expect(validateAgentTools(manifest(Array.from({ length: 500 }, (_, index) => tool(index, 100))))).toEqual([])
+  })
+
   it('keeps the timeout bounds of the existing Host backend call', () => {
     expect(AGENT_TOOL_DEFAULT_TIMEOUT_MS).toBe(30_000)
     // Read as text: src/shared is also compiled by the web project, which cannot import src/main.
@@ -94,11 +107,21 @@ describe('validateAgentTools', () => {
   })
 })
 
-describe('contract fragments that are not wired yet', () => {
-  it('leaves plugin-manifest-v2.schema.json refusing backend.agentTools until B1-a', () => {
-    const schema = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/plugin-manifest-v2.schema.json'), 'utf8'))
-    expect(schema.$defs.backend.additionalProperties).toBe(false)
-    expect(schema.$defs.backend.properties).not.toHaveProperty('agentTools')
+describe('contract fragments', () => {
+  it('has plugin-manifest-v2.schema.json (both copies) accept backend.agentTools exactly as the fragment', () => {
+    const fragment = load('manifest-agent-tools.fragment.schema.json')
+    for (const path of [
+      'docs/plugin-contracts/plugin-manifest-v2.schema.json',
+      'packages/plugin-contracts/src/schemas/plugin-manifest-v2.schema.json',
+    ]) {
+      const schema = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'))
+      expect(schema.$defs.backend.additionalProperties).toBe(false)
+      const { description, ...field } = schema.$defs.backend.properties.agentTools
+      expect(typeof description).toBe('string')
+      expect(field).toEqual(fragment.backendProperties.agentTools)
+      expect(schema.$defs.agentTool).toEqual(fragment.$defs.agentTool)
+      expect(schema.$defs.agentToolText).toEqual(fragment.$defs.agentToolText)
+    }
   })
 
   it('keeps the schema fragment consistent with the validator constants', () => {

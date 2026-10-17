@@ -113,6 +113,42 @@
       ]
     },
     {
+      "test": "backend/tests/channels/test_media_adapters.py::test_a_download_that_never_finishes_times_out_and_leaves_no_file",
+      "category": "product-defect",
+      "count": 1,
+      "firstSeen": "2026-10-17T00:27:25Z",
+      "lastSeen": "2026-10-17T00:27:25Z",
+      "runs": [
+        {
+          "run": 38983916856,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": 355,
+          "at": "2026-10-17T00:27:25Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_media_adapters.py::test_a_download_that_never_finishes_times_out_and_leaves_no_file - PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\\\Users\\\\runneradmin\\\\AppData\\\\Local\\\\Temp\\\\pytest-of-runneradmin\\\\pytest-0\\\\test_a_download_that_never_fin0\\\\f.bin'"
+        }
+      ],
+      "status": "fixed",
+      "fixedBy": "#357"
+    },
+    {
+      "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#329",
+      "count": 1,
+      "firstSeen": "2026-10-16T12:35:26Z",
+      "lastSeen": "2026-10-16T12:35:26Z",
+      "runs": [
+        {
+          "run": 38899029640,
+          "job": "Backend tests (Windows, 3/4)",
+          "pr": null,
+          "at": "2026-10-16T12:35:26Z",
+          "evidence": "FAILED backend\\tests\\channels\\test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt - AssertionError: assert [] == [('pane-1', {...'option': 1})]"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/cli_regression/test_vendor_transport.py::test_managed_login_rejects_unverifiable_command[opencode]",
       "category": "needs-review",
       "count": 1,
@@ -161,6 +197,24 @@
       ]
     },
     {
+      "test": "backend/tests/test_onboarding_run.py::test_the_commands_exit_code_reaches_the_window",
+      "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#357",
+      "count": 1,
+      "firstSeen": "2026-10-17T00:31:16Z",
+      "lastSeen": "2026-10-17T00:31:16Z",
+      "runs": [
+        {
+          "run": 38984784655,
+          "job": "Backend tests (Linux, 1/1)",
+          "pr": 353,
+          "at": "2026-10-17T00:31:16Z",
+          "evidence": "FAILED backend/tests/test_onboarding_run.py::test_the_commands_exit_code_reaches_the_window - assert None == 3"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete",
       "category": "test-race",
       "status": "fixed",
@@ -175,24 +229,6 @@
           "pr": 321,
           "at": "2026-10-16T10:10:14Z",
           "evidence": "FAILED backend\\tests\\test_plan_mcp_cli_read.py::test_wait_idle_returns_immediately_on_turn_complete - assert 0.1 == 0.0"
-        }
-      ]
-    },
-    {
-      "test": "backend/tests/test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token",
-      "category": "test-race",
-      "status": "fixed",
-      "fixedBy": "#322",
-      "count": 1,
-      "firstSeen": "2026-10-16T08:45:40Z",
-      "lastSeen": "2026-10-16T08:45:40Z",
-      "runs": [
-        {
-          "run": 38871697083,
-          "job": "Backend tests (Windows, 2/4)",
-          "pr": null,
-          "at": "2026-10-16T08:45:40Z",
-          "evidence": "FAILED backend\\tests\\test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token - AssertionError: condition never became true"
         }
       ]
     },
@@ -251,6 +287,24 @@
       ]
     },
     {
+      "test": "backend/tests/test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token",
+      "category": "test-race",
+      "status": "fixed",
+      "fixedBy": "#322",
+      "count": 1,
+      "firstSeen": "2026-10-16T08:45:40Z",
+      "lastSeen": "2026-10-16T08:45:40Z",
+      "runs": [
+        {
+          "run": 38871697083,
+          "job": "Backend tests (Windows, 2/4)",
+          "pr": null,
+          "at": "2026-10-16T08:45:40Z",
+          "evidence": "FAILED backend\\tests\\test_server_link.py::test_rotation_carries_the_member_pin_to_the_new_token - AssertionError: condition never became true"
+        }
+      ]
+    },
+    {
       "test": "backend/tests/test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on",
       "category": "test-race",
       "count": 1,
@@ -263,24 +317,6 @@
           "pr": 276,
           "at": "2026-10-15T05:37:34Z",
           "evidence": "FAILED backend\\tests\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'segments': True, 'cancelled': True, 'prompt': None, ...}, {'bytes': 320000, 'segments': True, 'cancelled': False, 'prompt': None, ...})"
-        }
-      ]
-    },
-    {
-      "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
-      "category": "product-defect",
-      "status": "fixed",
-      "fixedBy": "#329",
-      "count": 1,
-      "firstSeen": "2026-10-16T12:35:26Z",
-      "lastSeen": "2026-10-16T12:35:26Z",
-      "runs": [
-        {
-          "run": 38899029640,
-          "job": "Backend tests (Windows, 3/4)",
-          "pr": null,
-          "at": "2026-10-16T12:35:26Z",
-          "evidence": "FAILED backend\\tests\\channels\\test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt - AssertionError: assert [] == [('pane-1', {...'option': 1})]"
         }
       ]
     }

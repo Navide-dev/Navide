@@ -53,6 +53,7 @@ import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
 import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
+import { createBuiltinSwitchReconciler } from './plugins/builtinSwitchReconciler'
 import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
@@ -1704,13 +1705,12 @@ agentToolsHost = new PluginAgentToolsHost({
     !nativeBackendStore.isEnabled() ||
     frontendPluginManager.isPluginDisabled(pluginId) ||
     nativeBackendStore.record(pluginId).disabled === true,
-  // Until B1-a records the tool-list digest in the consent, nothing qualifies.
   hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
-  // Collision order: when the consent first covered the tools (B1-a's
-  // agentToolsSince), else when it was granted.
-  consentGrantedAt: (pluginId) => {
-    const consent = nativeBackendStore.record(pluginId).consent
-    return consent?.agentToolsSince ?? consent?.grantedAt ?? null
+  // DB1 collision order, per name (B1-a): when a consented version first
+  // declared this name, else when the package first declared tools.
+  agentToolSince: (pluginId, name) => {
+    const record = nativeBackendStore.record(pluginId)
+    return record.agentToolNamesSince?.[name] ?? record.agentToolsSince ?? null
   },
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
@@ -1924,6 +1924,7 @@ const pluginTrustRefresh = registerPluginIpc(
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
     onBuiltinSwitchReset: () => {
+      builtinSwitchReconciler.sync()
       for (const hostWindow of mainWindows) {
         if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
           hostWindow.webContents.send('plugins:contributionsChanged')
@@ -1931,32 +1932,49 @@ const pluginTrustRefresh = registerPluginIpc(
       }
     },
     setBuiltinDisabled: async (pluginId, disabled) => {
-      if (disabled) {
-        for (const [key, hostWindow] of contributionWindows) {
-          if (key.startsWith(`${pluginId}.`) && !hostWindow.isDestroyed()) hostWindow.close()
-        }
-        if (pluginId === 'navide.plans') {
-          for (const hostWindow of BrowserWindow.getAllWindows()) {
-            if (!hostWindow.isDestroyed() && planWindows.hasWindow(hostWindow)) hostWindow.close()
-          }
-        }
-        await frontendPluginManager.suspendBuiltinPlugin(pluginId)
-      } else {
-        frontendPluginManager.resumeBuiltinPlugin(pluginId)
-        // Enabled once, it starts from the empty storage the old removal left.
-        builtinRemovedEarlier.remove(pluginId)
-        if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
-          registerForcedLegacyGit()
-        }
-      }
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('plugins:contributionsChanged')
-        }
-      }
+      await applyBuiltinSwitch(pluginId, disabled)
+      // Enabled once, it starts from the empty storage the old removal left.
+      if (!disabled) builtinRemovedEarlier.remove(pluginId)
+      builtinSwitchReconciler.sync()
     },
+    holdBuiltinSwitch: (task) => builtinSwitchReconciler.hold(task),
   }
 )
+/** The Host side of a built-in's Disabled switch: drain and close it, or bring
+ *  it back. Used by the Extensions switch and by a store change the switch did
+ *  not make (see builtinSwitchReconciler). */
+async function applyBuiltinSwitch(pluginId: string, disabled: boolean): Promise<void> {
+  if (disabled) {
+    for (const [key, hostWindow] of contributionWindows) {
+      if (key.startsWith(`${pluginId}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+    }
+    if (pluginId === 'navide.plans') {
+      for (const hostWindow of BrowserWindow.getAllWindows()) {
+        if (!hostWindow.isDestroyed() && planWindows.hasWindow(hostWindow)) hostWindow.close()
+      }
+    }
+    await frontendPluginManager.suspendBuiltinPlugin(pluginId)
+  } else {
+    frontendPluginManager.resumeBuiltinPlugin(pluginId)
+    if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
+      registerForcedLegacyGit()
+    }
+  }
+  for (const hostWindow of mainWindows) {
+    if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+      hostWindow.webContents.send('plugins:contributionsChanged')
+    }
+  }
+}
+// A store that turns unreadable while the app runs fails closed for the
+// built-ins; apply that at once (drain the views, re-register the Host so the
+// backend refuses Plans work) instead of at the next registration.
+const builtinSwitchReconciler = createBuiltinSwitchReconciler({
+  list: () => frontendPluginManager.listDisabledBuiltinPlugins(),
+  apply: applyBuiltinSwitch,
+  warn: (message) => warnMain(`[main] ${message}`),
+})
+setInterval(() => { void builtinSwitchReconciler.check() }, 15_000).unref()
 registerExecutionPolicyIpc(
   executionPolicySourceStore,
   (event) => isTrustedPluginManagementSender(event, mainWindows),

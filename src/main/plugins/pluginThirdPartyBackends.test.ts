@@ -843,7 +843,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confi
     expect(promptAgentToolWrite).toHaveBeenCalledTimes(3)
   })
 
-  it('counts agent tools as consented only when the consent recorded their current digest', async () => {
+  it('counts agent tools as consented only when the consent covers their current set and their DB1 time is recorded', async () => {
     const parsed = (() => {
       writePackage({ system: ['fs'] })
       return readInstalledManifestV2(packageDir)
@@ -855,15 +855,20 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confi
     )!
     const spec = make(tools)
     const { instance } = controller()
-    await instance.allow(spec)
-    // Every consent until B1-a: the native backend is allowed, the tools are not.
-    await expect(instance.hasConsent(spec)).resolves.toBe(true)
+    // A consent from before the package declared tools covers the backend, not the tools.
+    const plain = make(undefined)
+    await instance.allow(plain)
+    await expect(instance.hasConsent(plain)).resolves.toBe(true)
+    await expect(instance.hasAgentToolsConsent(plain)).resolves.toBe(false)
     await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(false)
-    const consent = store.record('acme.indexer').consent!
-    store.grantConsent('acme.indexer', { ...consent, agentToolsSha256: agentToolsDigest(spec)! })
+    // B1-a: the tools' digest is part of the permissions key, and the consent records the DB1 time.
+    await instance.allow(spec)
+    expect(store.record('acme.indexer').consent!.permissionsKey).toContain(agentToolsDigest(spec.thirdParty.agentTools!))
     await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(true)
     await expect(instance.hasAgentToolsConsent(make([{ ...tools[0], description: 'Search better.' }]))).resolves.toBe(false)
-    expect(agentToolsDigest(writePackage({ system: ['fs'] }))).toBeNull()
+    // Without its DB1 time the package holds no names, as in the listing.
+    store.clearAgentToolsSince('acme.indexer')
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(false)
   })
 
   it('lets an agent write through the bridge only inside a write-tool call with the DB3 answer, never prompting', async () => {
@@ -920,17 +925,6 @@ describe('NativeBackendStore agent-tool switches', () => {
     expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
   })
 
-  it('keeps the agent-tool consent fields B1-a writes', () => {
-    const consents = new NativeBackendStore(join(root, 'consent-store'))
-    consents.grantConsent('acme.indexer', {
-      binarySha256: 'a'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0',
-      agentToolsSha256: 'b'.repeat(64), agentToolsSince: '2026-10-01T00:00:00.000Z',
-    })
-    expect(new NativeBackendStore(join(root, 'consent-store')).record('acme.indexer').consent).toMatchObject({
-      agentToolsSha256: 'b'.repeat(64), agentToolsSince: '2026-10-01T00:00:00.000Z',
-    })
-  })
-
   it('turns external clients off with the agent switch, so turning it on never re-enables them silently', () => {
     const switches = new NativeBackendStore(join(root, 'switch-store'))
     switches.setAgentToolSwitches({ enabled: true })
@@ -959,7 +953,9 @@ describe('NativeBackendStore agent-tool switches', () => {
 })
 
 describe('native backend consent text', () => {
-  const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
+  const base = {
+    pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], agentTools: [], update: false,
+  }
 
   it('says "no network access" only for a package without shell', () => {
     for (const system of [[], ['fs']] as const) {
@@ -992,5 +988,34 @@ describe('native backend consent text', () => {
     const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
     expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
     expect(update.detail).not.toMatch(/no network/i)
+  })
+
+  it('lists each agent tool with its method, declared claim, timeout and whole input schema, plus count and size', () => {
+    const agentTools = [
+      { name: 'indexer_find', method: 'files.search', risk: 'read', title: 'Find', description: 'Find files.',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' } } }, timeoutMs: 30000 },
+      { name: 'indexer_tag', method: 'files.tag', risk: 'write', title: 'Tag', description: 'Tag a file.',
+        inputSchema: { type: 'object' }, timeoutMs: 5000 },
+    ] as const
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [...agentTools] })
+    expect(detail).toContain(
+      `Agents will be able to call these 2 tools of Indexer (their text and input schemas total ${
+        Buffer.byteLength(JSON.stringify(agentTools))} bytes):`,
+    )
+    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s): Find files.')
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"q":{"type":"string"}}}')
+    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
+    expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
+    expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
+  })
+
+  it('spells out invisible characters in a tool schema instead of showing them raw', () => {
+    const tool = {
+      name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
+      inputSchema: { type: 'object', properties: { 'k\u202ex': { enum: ['a\u200bb', 'v\ufe0f'] } } }, timeoutMs: 30000,
+    }
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] })
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"k\\u{202e}x":{"enum":["a\\u{200b}b","v\\u{fe0f}"]}}}')
+    expect(detail).not.toMatch(/[\u200b\u202e\ufe0f]/)
   })
 })

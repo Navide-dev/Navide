@@ -49,7 +49,10 @@ interface Harness {
   packages: ThirdPartyLaunchSpec[]
   disabled: Set<string>
   consented: Set<string>
-  grantedAt: Map<string, string>
+  /** B1-a's agentToolsSince per package. */
+  since: Map<string, string>
+  /** B1-a's agentToolNamesSince, keyed `<pluginId>\u0000<name>`. */
+  nameSince: Map<string, string>
   sent: AgentToolsSyncPayload[]
   methods: Map<string, string[]>
   setAgentMethods: ReturnType<typeof vi.fn>
@@ -62,7 +65,8 @@ function harness(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: 
     packages: [DEVMAP],
     disabled: new Set(),
     consented: new Set(['nerdtechnic.devmap']),
-    grantedAt: new Map([['nerdtechnic.devmap', '2026-10-01T00:00:00.000Z']]),
+    since: new Map([['nerdtechnic.devmap', '2026-10-01T00:00:00.000Z']]),
+    nameSince: new Map(),
     sent: [],
     methods: new Map(),
     sessionUp: { value: true },
@@ -78,7 +82,7 @@ function harness(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: 
     listPackages: () => state.packages,
     isDisabled: (pluginId) => state.disabled.has(pluginId),
     hasConsent: async (candidate) => state.consented.has(candidate.pluginId),
-    consentGrantedAt: (pluginId) => state.grantedAt.get(pluginId) ?? null,
+    agentToolSince: (pluginId, name) => state.nameSince.get(`${pluginId}\u0000${name}`) ?? state.since.get(pluginId) ?? null,
     setAgentMethods,
     confirmWrite: async () => true,
     send: async (payload) => {
@@ -198,7 +202,7 @@ describe('PluginAgentToolsHost catalog', () => {
     const h = harness({}, { enabled: true })
     h.packages = [DEVMAP, other]
     h.consented.add('acme.devmap')
-    h.grantedAt.set('acme.devmap', '2026-10-05T00:00:00.000Z')
+    h.since.set('acme.devmap', '2026-10-05T00:00:00.000Z')
     await h.host.refresh()
     const states = Object.fromEntries(h.sent.at(-1)!.tools.map((entry) => [`${entry.pluginId}:${entry.name}`, entry.state]))
     expect(states).toEqual({
@@ -210,6 +214,25 @@ describe('PluginAgentToolsHost catalog', () => {
     await expect(h.host.admit({
       pluginId: 'acme.devmap', toolName: 'devmap_read', pluginVersion: '1.0.0', caller: PANE,
     }, notStopping)).resolves.toEqual({ ok: false, reason: 'name-collision' })
+  })
+
+  it('ranks a name an update added from that update, not from the package\'s first consent (DB1, per name)', async () => {
+    const other = spec('acme.devmap', '1.1.0', [tool('acme_read', 'map.list'), tool('devmap_read', 'map.read')])
+    const h = harness({}, { enabled: true })
+    h.packages = [DEVMAP, other]
+    h.consented.add('acme.devmap')
+    // acme first declared tools before devmap did, but added devmap_read later.
+    h.since.set('acme.devmap', '2026-09-01T00:00:00.000Z')
+    h.nameSince.set('acme.devmap\u0000acme_read', '2026-09-01T00:00:00.000Z')
+    h.nameSince.set('acme.devmap\u0000devmap_read', '2026-10-05T00:00:00.000Z')
+    await h.host.refresh()
+    const states = Object.fromEntries(h.sent.at(-1)!.tools.map((entry) => [`${entry.pluginId}:${entry.name}`, entry.state]))
+    expect(states).toEqual({
+      'acme.devmap:acme_read': 'available',
+      'acme.devmap:devmap_read': 'name-collision',
+      'nerdtechnic.devmap:devmap_read': 'available',
+      'nerdtechnic.devmap:devmap_set_status': 'available',
+    })
   })
 
   it('leaves packages without agent tools out of the catalog but keeps their agentMethods empty', async () => {

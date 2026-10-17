@@ -22,11 +22,6 @@ export interface NativeBackendConsent {
   permissionsKey: string
   packageVersion: string
   grantedAt: string
-  /** SHA-256 of the canonical agent-tool list the user was shown and allowed
-   * (plan B, contract 2.8). Absent = the consent never covered agent tools. */
-  agentToolsSha256?: string
-  /** When the consent first covered agent tools (B1-a); orders name collisions. */
-  agentToolsSince?: string
 }
 
 /** DB3: workspaces where the user allowed agent write-risk tools of one
@@ -42,6 +37,16 @@ export interface NativeBackendPluginRecord {
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
+  /** When the user first allowed a version of the package that declares
+   * agent tools (ISO 8601, unique across packages): the DB1 name-collision
+   * order for a name without its own time below. Cleared when a version
+   * declares no tools, and on uninstall. */
+  agentToolsSince?: string
+  /** Per tool name, when the user first allowed a version declaring it (ISO
+   * 8601, unique across packages): a name added by an update ranks from that
+   * update's consent, so it cannot take over a name another package already
+   * holds. Names the package no longer declares are dropped. */
+  agentToolNamesSince?: Record<string, string>
   /** DB3 agent write-tool confirmations; separate from `workspaceWrite`. */
   agentToolWrite?: AgentToolWriteGrant
 }
@@ -73,21 +78,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function parseConsent(value: unknown): NativeBackendConsent | undefined {
   if (!isRecord(value)) return undefined
-  const { binarySha256, permissionsKey, packageVersion, grantedAt, agentToolsSha256, agentToolsSince } = value
+  const { binarySha256, permissionsKey, packageVersion, grantedAt } = value
   if (
     typeof binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(binarySha256) ||
     typeof permissionsKey !== 'string' ||
     typeof packageVersion !== 'string' ||
     typeof grantedAt !== 'string'
   ) return undefined
-  return {
-    binarySha256,
-    permissionsKey,
-    packageVersion,
-    grantedAt,
-    ...(typeof agentToolsSha256 === 'string' && /^[0-9a-f]{64}$/.test(agentToolsSha256) ? { agentToolsSha256 } : {}),
-    ...(typeof agentToolsSince === 'string' ? { agentToolsSince } : {}),
-  }
+  return { binarySha256, permissionsKey, packageVersion, grantedAt }
 }
 
 function parseAgentToolWrite(value: unknown): AgentToolWriteGrant | undefined {
@@ -113,6 +111,13 @@ function parseState(value: unknown): NativeBackendState {
     }
     const agentToolWrite = parseAgentToolWrite(raw.agentToolWrite)
     if (agentToolWrite) record.agentToolWrite = agentToolWrite
+    if (typeof raw.agentToolsSince === 'string') record.agentToolsSince = raw.agentToolsSince
+    if (isRecord(raw.agentToolNamesSince)) {
+      const names = Object.entries(raw.agentToolNamesSince).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      )
+      if (names.length > 0) record.agentToolNamesSince = Object.fromEntries(names)
+    }
     plugins[pluginId] = record
   }
   const agentTools = isRecord(value.agentTools)
@@ -265,6 +270,45 @@ export class NativeBackendStore {
       else paths.delete(workspacePath)
       if (paths.size > 0) record.workspaceWrite = [...paths].sort()
       else delete record.workspaceWrite
+      return record
+    })
+  }
+
+  /** Record the first consent to a tool-declaring version, and for each of
+   * `names` (the consented tool set) the first consent that declared it;
+   * names no longer declared are dropped. Times already recorded are kept, so
+   * an unchanged set saves nothing. Every new time is strictly later than
+   * every recorded one, so two packages never tie however fast they are
+   * allowed. */
+  noteAgentToolsSince(pluginId: string, now = new Date(), names: readonly string[] = []): void {
+    const current = this.state.plugins[pluginId]
+    const known = current?.agentToolNamesSince ?? {}
+    const added = names.filter((name) => known[name] === undefined)
+    const dropped = Object.keys(known).some((name) => !names.includes(name))
+    if (current?.agentToolsSince !== undefined && added.length === 0 && !dropped) return
+    let at = now.getTime()
+    for (const record of Object.values(this.state.plugins)) {
+      for (const recorded of [record.agentToolsSince, ...Object.values(record.agentToolNamesSince ?? {})]) {
+        const since = recorded === undefined ? Number.NaN : Date.parse(recorded)
+        if (since >= at) at = since + 1
+      }
+    }
+    const stamp = new Date(at).toISOString()
+    this.update(pluginId, (record) => {
+      const namesSince = Object.fromEntries(names.map((name) => [name, known[name] ?? stamp]))
+      if (names.length > 0) record.agentToolNamesSince = namesSince
+      else delete record.agentToolNamesSince
+      return { ...record, agentToolsSince: record.agentToolsSince ?? stamp }
+    })
+  }
+
+  /** The package declares no tools any more: it gives up its DB1 place. */
+  clearAgentToolsSince(pluginId: string): void {
+    const current = this.state.plugins[pluginId]
+    if (current?.agentToolsSince === undefined && current?.agentToolNamesSince === undefined) return
+    this.update(pluginId, (record) => {
+      delete record.agentToolsSince
+      delete record.agentToolNamesSince
       return record
     })
   }

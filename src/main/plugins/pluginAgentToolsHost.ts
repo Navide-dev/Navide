@@ -35,7 +35,8 @@ export interface PluginAgentToolsHostOptions {
    * list (the consent recorded the tool-list digest). */
   hasConsent: (spec: ThirdPartyLaunchSpec) => Promise<boolean>
   /** When the user consented (ISO time); decides which of two same-named tools is served. */
-  consentGrantedAt: (pluginId: string) => string | null
+  /** DB1 order for one tool name (B1-a's agentToolNamesSince, else agentToolsSince). */
+  agentToolSince: (pluginId: string, name: string) => string | null
   setAgentMethods: (pluginId: string, packageVersion: string, methods: string[]) => void
   /** DB3 first-write confirmation for one (package, workspace). */
   confirmWrite: (spec: ThirdPartyLaunchSpec, tool: DisclosureAgentTool, workspaceRoot: string) => Promise<boolean>
@@ -227,7 +228,7 @@ export class PluginAgentToolsHost {
     // first keeps it; the other is listed as a collision and not served.
     const winners = new Map<string, AgentToolSyncEntry>()
     const order = (entry: AgentToolSyncEntry): string =>
-      `${this.options.consentGrantedAt(entry.pluginId) ?? '￿'}\u0000${entry.pluginId}`
+      `${this.options.agentToolSince(entry.pluginId, entry.name) ?? '￿'}\u0000${entry.pluginId}`
     for (const entry of entries) {
       if (entry.state !== 'available') continue
       const winner = winners.get(entry.name)
