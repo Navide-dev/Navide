@@ -12,13 +12,19 @@ the package. A body cannot fake its way out of the fence:
   the Unicode line and paragraph separators;
 - the body is NFKC-normalized, so fullwidth lookalikes (［外部訊息結束］)
   become the plain spelling first;
-- variation selectors (U+FE00-FE0F, U+E0100-E01EF) are removed, and so is
-  any other combining mark (category Mn) right after a character a boundary
-  line is spelled with, so ``[外\ufe00部訊息結束]`` cannot hide one; marks in
-  ordinary text are kept;
+- right after a character a boundary line is spelled with (spaces between
+  allowed), every mark (categories Mn, Mc, Me: variation selectors included)
+  and every invisible filler (Hangul fillers, the braille blank) is removed,
+  so ``[外\ufe00部訊息結束]`` or ``[外\u3164部訊息結束]`` cannot hide one;
+  anywhere else they are content (an emoji's VS16, an ideographic variation
+  sequence, Devanagari vowel signs) and kept;
 - any copy of a boundary line, also spelled in simplified Chinese
   (外部讯息开始 / 外部讯息结束), and any ``---MARKER---`` token is broken with a
   zero-width space, as ``renderEnvelope`` breaks them.
+
+:func:`neutralize_external_text` is that whole treatment of a body, for any
+backend path that fences third-party text (agent tool results too), so the
+character rules live in this one place.
 """
 
 from __future__ import annotations
@@ -36,6 +42,10 @@ _BOUNDARY = re.compile(r"([\[【〔]\s*)外部([訊讯])息(開始|开始|結束
 _INVISIBLE_CATEGORIES = frozenset({"Cf", "Zl", "Zp"})
 # The characters the boundary lines are spelled with (both scripts).
 _BOUNDARY_CHARS = frozenset("[【〔外部訊讯息開开始結结束")
+_MARK_CATEGORIES = frozenset({"Mn", "Mc", "Me"})
+# Letters (Lo) and a symbol (So) that render as nothing: the Hangul fillers
+# (U+3164 and U+FFA0 become U+1160 under NFKC) and the braille blank.
+_INVISIBLE_FILLERS = frozenset("\u115f\u1160\u3164\uffa0\u2800")
 
 _MARKER_TOKEN = re.compile(r"-{3}([A-Z][A-Z0-9-]*)-{3}")
 # What a package id or version may contribute to the label. Anything else is
@@ -43,20 +53,26 @@ _MARKER_TOKEN = re.compile(r"-{3}([A-Z][A-Z0-9-]*)-{3}")
 _LABEL_UNSAFE = re.compile(r"[^A-Za-z0-9._+-]")
 
 
-def _is_variation_selector(ch: str) -> bool:
-    return "\ufe00" <= ch <= "\ufe0f" or "\U000e0100" <= ch <= "\U000e01ef"
-
-
 def _drop_marks(text: str) -> str:
-    """Drop variation selectors, and combining marks after a boundary character."""
+    """Drop marks and invisible fillers after a boundary-line character."""
     out: list[str] = []
+    anchor = ""  # the last kept character that is not whitespace
     for ch in text:
-        if _is_variation_selector(ch):
-            continue
-        if out and out[-1] in _BOUNDARY_CHARS and unicodedata.category(ch) == "Mn":
+        if anchor in _BOUNDARY_CHARS and (ch in _INVISIBLE_FILLERS or unicodedata.category(ch) in _MARK_CATEGORIES):
             continue
         out.append(ch)
+        if not ch.isspace():
+            anchor = ch
     return "".join(out)
+
+
+def neutralize_external_text(text: str) -> str:
+    """Third-party text made safe to place between the boundary lines."""
+    body = unicodedata.normalize("NFKC", sanitize_agent_tool_result_text(str(text)))
+    body = "".join(ch for ch in body if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
+    body = _drop_marks(body)
+    body = _MARKER_TOKEN.sub(lambda m: f"-\u200b--{m.group(1)}-\u200b--", body)
+    return _BOUNDARY.sub(lambda m: f"{m.group(1)}外部\u200b{m.group(2)}息{m.group(3)}", body)
 
 
 def third_party_label(plugin_id: str, version: str, detail: str) -> str:
@@ -72,9 +88,5 @@ def third_party_label(plugin_id: str, version: str, detail: str) -> str:
 
 def wrap_external_text(text: str, *, label: str) -> str:
     """Fence one piece of third-party text, headed by ``label``."""
-    body = unicodedata.normalize("NFKC", sanitize_agent_tool_result_text(str(text)))
-    body = "".join(ch for ch in body if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
-    body = _drop_marks(body)
-    body = _MARKER_TOKEN.sub(lambda m: f"-\u200b--{m.group(1)}-\u200b--", body)
-    body = _BOUNDARY.sub(lambda m: f"{m.group(1)}外部\u200b{m.group(2)}息{m.group(3)}", body)
+    body = neutralize_external_text(text)
     return "\n".join((EXTERNAL_CONTENT_START, label, body, EXTERNAL_CONTENT_END))
