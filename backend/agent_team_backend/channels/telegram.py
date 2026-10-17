@@ -74,7 +74,6 @@ CONFLICT_MIN_ATTEMPT = 4
 # is handled by the channel manager.
 BOT_COMMANDS = [
     {"command": "pending", "description": "列出等待確認的 pane"},
-    {"command": "menu", "description": "Prompt 與技能選單"},
     {"command": "prompts", "description": "Prompt 清單"},
     {"command": "skills", "description": "技能清單"},
     {"command": "mcp", "description": "MCP server 清單"},
@@ -88,7 +87,6 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     "zh-TW": {c["command"]: c["description"] for c in BOT_COMMANDS},
     "en-US": {
         "pending": "List panes waiting for confirmation",
-        "menu": "Prompts and skills menu",
         "prompts": "Prompt list",
         "skills": "Skill list",
         "mcp": "MCP server list",
@@ -99,7 +97,6 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
     "ja-JP": {
         "pending": "確認待ちの pane を一覧表示",
-        "menu": "プロンプトとスキルのメニュー",
         "prompts": "プロンプト一覧",
         "skills": "スキル一覧",
         "mcp": "MCP server 一覧",
@@ -110,7 +107,10 @@ BOT_COMMAND_DESCRIPTIONS: dict[str, dict[str, str]] = {
     },
 }
 # Descriptions earlier builds registered: a command still carrying one is ours to update.
-_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單"}}
+_OLD_COMMAND_DESCRIPTIONS = {"menu": {"快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"}}
+# Commands earlier builds registered and this one no longer offers: one still carrying a
+# description of ours is removed; worded otherwise it is the user's and stays.
+_RETIRED_COMMANDS = {"menu"}
 # A flat button list (prompt options, the busy buttons) is laid out a few to a row, so
 # labels show whole on a phone; a label too long for a shared row gets its own.
 ROW_MAX_BUTTONS = 3
@@ -245,8 +245,9 @@ class TelegramAdapter:
         """Add ours to the bot's "/" menu without touching the user's own commands: theirs
         keep their place and wording, and a list that cannot be read is not written. One of
         ours already there (a description this or an earlier build wrote) is reworded in
-        place to the Navide language; a same-named command worded otherwise is the user's
-        and is left as is. A failure only loses the menu."""
+        place to the Navide language, and a retired one of ours is dropped; a same-named
+        command worded otherwise is the user's and is left as is. A failure only loses the
+        menu."""
         try:
             current = await self._call("getMyCommands")
             if not isinstance(current, list):
@@ -263,6 +264,8 @@ class TelegramAdapter:
                 if isinstance(c, dict) and (name := str(c.get("command") or "").lower()) in ours
                 and c.get("description") in _known_descriptions(name) else c
                 for c in current
+                if not (isinstance(c, dict) and (name := str(c.get("command") or "").lower()) in _RETIRED_COMMANDS
+                        and c.get("description") in _known_descriptions(name))
             ]
             have = {str(c.get("command") or "").lower() for c in current if isinstance(c, dict)}
             missing = [{"command": k, "description": v} for k, v in ours.items() if k not in have]
@@ -614,7 +617,8 @@ def bot_commands(lang: str) -> list[dict[str, str]]:
 
 def _known_descriptions(command: str) -> set[str]:
     """Every description Navide has given ``command``, in any language or earlier build."""
-    return {t[command] for t in BOT_COMMAND_DESCRIPTIONS.values()} | _OLD_COMMAND_DESCRIPTIONS.get(command, set())
+    return ({t[command] for t in BOT_COMMAND_DESCRIPTIONS.values() if command in t}
+            | _OLD_COMMAND_DESCRIPTIONS.get(command, set()))
 
 
 def create_adapter(config: dict[str, Any], secret: dict[str, Any], *, store: OffsetStore | None = None) -> TelegramAdapter:

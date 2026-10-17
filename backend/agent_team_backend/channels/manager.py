@@ -57,7 +57,11 @@ RESUME_WORDS = {"/resume"}
 CANCEL_CALLBACK = "nv4:cancel"
 STOP_CALLBACK = "nv4:stop"
 RESUME_CALLBACK = "nv4:resume"
-_CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume"}
+PROMPTS_CALLBACK = "nv4:prompts"
+SKILLS_CALLBACK = "nv4:skills"
+MCP_CALLBACK = "nv4:mcp"
+_CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
+                      PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -104,6 +108,8 @@ MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
 MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
 MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
 RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
+# /menu and a bare /start point to the three commands that replaced the quick menu.
+MENU_MOVED_BUTTONS = [("💬 Prompts", PROMPTS_CALLBACK), ("🧩 Skills", SKILLS_CALLBACK), ("🔌 MCP", MCP_CALLBACK)]
 # Where a platform has no buttons, the reply names the commands they stand for.
 MSG_TYPED_HINT = "可直接輸入：{commands}"
 BUSY_BUTTONS = [("↩️ 撤回排隊中的訊息", CANCEL_CALLBACK), ("⏹ 中斷 pane", STOP_CALLBACK)]
@@ -1517,6 +1523,10 @@ class ChannelManager:
         if pick is not None:
             await self._quick_pick(msg, pick, mcp=True)
             return
+        scoped = quick_menu.scoped_pick(msg.text, self._identity(msg))
+        if scoped is not None:
+            await self._quick_pick(msg, scoped[1], scope=scoped[0])
+            return
         scope = quick_menu.menu_scope(msg.text, self._identity(msg))
         if scope is not None:
             await self._quick_menu(msg, scope)
@@ -2095,9 +2105,9 @@ class ChannelManager:
             return []
 
     async def _quick_menu(self, msg: InboundMessage, scope: str = "all") -> None:
-        """``/menu``: buttons for the bound pane's prompt skills and skills; ``/prompts``
-        (``scope`` "p") and ``/skills`` ("s") list only that group; ``/mcp`` ("mcp") lists
-        MCP servers, read-only."""
+        """``/prompts`` (``scope`` "p"): buttons for the bound pane's prompt skills;
+        ``/skills`` ("s"): its skills; ``/mcp`` ("mcp"): MCP servers, read-only. ``/menu``
+        and a bare ``/start`` ("all") answer with buttons pointing to those three."""
         settings = await self._ui_settings()
         lang = prompt_skills.language(settings)
         binding = self._binding_for(msg)
@@ -2105,6 +2115,11 @@ class ChannelManager:
             # Like any unbound message, a bot sharing a group with others stays quiet.
             if msg.is_direct or self._sole_bot(msg.platform):
                 await self._reply(msg, quick_menu.text(lang, "not_bound"))
+            return
+        if scope == "all":
+            adapter = self._adapters.get((msg.platform, msg.account))
+            buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
+            await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
             return
         pane_id = self._seams.resolve_pane(binding.pane_id)
         if not pane_id:
@@ -2136,7 +2151,7 @@ class ChannelManager:
             await self._reply(msg, quick_menu.text(lang, empty))
             return
         if not adapter.capabilities.buttons or not hasattr(adapter, "send_menu"):
-            # No buttons: the same menu as numbered lines, picked with "/menu <n>".
+            # No buttons: the same menu as numbered lines, picked with "/prompts <n>" or "/skills <n>".
             await self._reply(msg, redact.redact_text(self.quick.render_text(menu)))
             return
         body, rows = self.quick.render(menu, 0)
@@ -2166,11 +2181,13 @@ class ChannelManager:
             return
         await self._quick_cast(msg, press, binding, pane_id, settings, lang)
 
-    async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False) -> None:
-        """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/mcp <n>``
+    async def _quick_pick(self, msg: InboundMessage, number: int, mcp: bool = False,
+                          scope: str | None = None) -> None:
+        """``/menu <n>``: item ``n`` of the text menu this chat was sent; ``/prompts <n>``
+        and ``/skills <n>`` (``scope`` "p" / "s"): of that command's newest one; ``/mcp <n>``
         (``mcp``): server ``n`` of its /mcp list."""
         settings = await self._ui_settings()
-        menu = self.quick.latest(msg.location_key(), mcp)
+        menu = self.quick.latest(msg.location_key(), mcp, scope)
         lang = menu.lang if menu is not None else prompt_skills.language(settings)
         binding = self._binding_for(msg)
         if binding is None:
@@ -2182,7 +2199,7 @@ class ChannelManager:
         if menu is None or not pane_id or pane_id != self._seams.resolve_pane(menu.pane_id):
             await self._reply(msg, quick_menu.text(lang, "mcp_expired" if mcp else "expired"))
             return
-        press = self.quick.pick(msg.location_key(), number, mcp)
+        press = self.quick.pick(msg.location_key(), number, mcp, scope)
         if press is None:
             await self._reply(msg, quick_menu.text(lang, "bad_pick_mcp" if mcp else "bad_pick"))
             return
