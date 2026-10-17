@@ -547,9 +547,10 @@ PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"
 #: threshold, decision, at}]}``, answered ``{ok, accepted}``
 #: (``src/shared/pluginResourceDecision.ts``).
 PLUGIN_RESOURCE_DECISION_MESSAGE = "plugin.resource.decision"
-#: What went over its threshold: memory and disk in bytes, processes a count,
-#: cpu in cores.
-PLUGIN_RESOURCE_ITEMS = ("memory", "cpu", "processes", "disk")
+#: What went over its threshold: memory, disk and stdoutPending (stdout a
+#: child sent without a newline yet; reserved until DB9, #375) in bytes,
+#: processes a count, cpu in cores.
+PLUGIN_RESOURCE_ITEMS = ("memory", "cpu", "processes", "disk", "stdoutPending")
 #: The notice, then the user's choice.
 PLUGIN_RESOURCE_DECISIONS = ("notified", "continue", "terminate")
 

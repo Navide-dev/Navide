@@ -13,15 +13,17 @@
 /** Host → backend, Host-authenticated: `{rows: PluginResourceDecisionRow[]}`, answered `{ok, accepted}`. */
 export const PLUGIN_RESOURCE_DECISION_MESSAGE = 'plugin.resource.decision'
 
-/** What went over its threshold. */
-export type PluginResourceItem = 'memory' | 'cpu' | 'processes' | 'disk'
+/** What went over its threshold. `stdoutPending` (stdout a child sent without
+ *  a newline yet, in bytes; review M2 on #375) is reserved: measured by the
+ *  backend supervisor once DB9 (#375) lands, with the threshold DB9 sets. */
+export type PluginResourceItem = 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
 export type PluginResourceDecision = 'notified' | 'continue' | 'terminate'
 
-export const PLUGIN_RESOURCE_ITEMS: readonly PluginResourceItem[] = ['memory', 'cpu', 'processes', 'disk']
+export const PLUGIN_RESOURCE_ITEMS: readonly PluginResourceItem[] = ['memory', 'cpu', 'processes', 'disk', 'stdoutPending']
 export const PLUGIN_RESOURCE_DECISIONS: readonly PluginResourceDecision[] = ['notified', 'continue', 'terminate']
 
 /**
- * One row. Units by item: `memory` and `disk` in bytes, `processes` a count,
+ * One row. Units by item: `memory`, `disk` and `stdoutPending` in bytes, `processes` a count,
  * `cpu` in cores (1.0 = one core, sustained for the CPU window; the window
  * does not change). `threshold` is the level this notice was raised at: the
  * default limit, or after a `continue` twice the larger of that level and the

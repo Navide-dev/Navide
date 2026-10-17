@@ -67,7 +67,7 @@ async def _send(session: Any, payload: Any) -> dict[str, Any]:
 
 def test_the_wire_name_and_enums_are_the_contracts() -> None:
     assert contract.PLUGIN_RESOURCE_DECISION_MESSAGE == "plugin.resource.decision"
-    assert contract.PLUGIN_RESOURCE_ITEMS == ("memory", "cpu", "processes", "disk")
+    assert contract.PLUGIN_RESOURCE_ITEMS == ("memory", "cpu", "processes", "disk", "stdoutPending")
     assert contract.PLUGIN_RESOURCE_DECISIONS == ("notified", "continue", "terminate")
 
 
