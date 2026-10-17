@@ -142,13 +142,13 @@ describe('agent tool schema display', () => {
   it('spells out invisible characters in schema keys and enum values instead of showing them raw', () => {
     const tool = {
       ...TOOLS[0],
-      inputSchema: { type: 'object', properties: { 'k‮x': { type: 'string', enum: ['a​b', 'tag\u{e0041}'] } } },
+      inputSchema: { type: 'object', properties: { 'k\u202ex': { type: 'string', enum: ['a\u200bb', 'tag\u{e0041}'] } } },
     }
     wrapper = mount(PluginAgentToolsList, { props: { tools: [tool] }, global: { plugins: [i18n] } })
     const shown = wrapper.find('.agent-tool-schema-body').text()
     expect(shown).toContain('"k\\u{202e}x"')
     expect(shown).toContain('"a\\u{200b}b"')
     expect(shown).toContain('"tag\\u{e0041}"')
-    expect(shown).not.toMatch(/[​‮]|\u{e0041}/u)
+    expect(shown).not.toMatch(/[\u200b\u202e]|\u{e0041}/u)
   })
 })
