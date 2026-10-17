@@ -71,6 +71,7 @@ from agent_team_backend.plugins.agent_tools_contract import (
     validate_agent_tool_name,
     is_valid_agent_tool_text,
 )
+from agent_team_backend.agent_tool_result_worker import InvalidResult, ResultWorker, ResultWorkerError, strict_loads
 from agent_team_backend.plugins.external_content import neutralize_external_text
 
 _log = logging.getLogger(__name__)
@@ -204,6 +205,24 @@ def _fence(entry: dict[str, Any], what: str, text: str) -> str:
 def wrap_result(entry: dict[str, Any], result: Any) -> str:
     """The agent-facing text of one result, wrapped as external content."""
     return _fence(entry, "result", _result_text(result))
+
+
+_result_worker = ResultWorker()
+
+
+async def _large_result_text(name: str, entry: dict[str, Any], pieces: list[str]) -> str:
+    """``wrap_result`` of a result received in pieces, from the helper process.
+    Should the helper be unavailable, the same work runs here: slower for
+    every pane while it runs, but the call still gets its answer."""
+    try:
+        return await _result_worker.wrap(entry, pieces)
+    except ResultWorkerError as error:
+        _log.warning("plugin tool result %s: helper process unavailable (%s); wrapping in process", name, error)
+    try:
+        value = strict_loads("".join(pieces))
+    except (ValueError, RecursionError):
+        raise InvalidResult from None
+    return wrap_result(entry, value)
 
 
 # ── snapshot validation and registration ────────────────────────────────────
@@ -846,19 +865,22 @@ async def _answer(
         else:
             size = None
             _log.warning("plugin tool result %s: the Host sent no valid resultBytes; size unknown", name)
+        # Size is disclosed, not limited (DB9 ruling a). A result that came in
+        # pieces is parsed (strictly, as the Host would: no NaN or Infinity)
+        # and wrapped by a helper process, never on the event loop; one that
+        # came whole fits one piece and is wrapped here as before.
+        pieces = response.get("result_pieces")
+        if isinstance(pieces, list):
+            try:
+                text = await _large_result_text(name, entry, pieces)
+            except InvalidResult:
+                return refuse("The Navide plugin result did not arrive whole.", "PLUGIN_TOOL_CHUNKS_INVALID", "json")
+        else:
+            text = wrap_result(entry, result)
         audit["outcome"] = "ok"
         audit["error_code"] = ""
         # -1 = the Host sent no valid size (contract 2.7, 5).
         audit["result_bytes"] = -1 if size is None else size
-        # Size is disclosed, not limited (DB9 ruling a). A result longer than
-        # one piece (or of unknown size) is spelled and neutralized in a worker
-        # thread: that walks every character, and the event loop must keep
-        # serving other panes meanwhile. The plugin already ran, so the audit
-        # row above stays "ok" whatever happens to this call now.
-        if size is None or size > AGENT_TOOL_CHUNK_BYTES:
-            text = await asyncio.to_thread(wrap_result, entry, result)
-        else:
-            text = wrap_result(entry, result)
         return CallToolResult(
             content=[TextContent(type="text", text=text)],
             isError=False,

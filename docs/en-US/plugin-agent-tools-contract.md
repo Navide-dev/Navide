@@ -1101,14 +1101,20 @@ one large frame therefore still delivers its result and keeps running; it only
 holds its other calls behind that frame. A frame that is not valid JSON-RPC
 stays a protocol error, whatever its size.
 
-The Host's main thread never parses a large result. A frame over 1 MiB, and a
-result piece frame over 16 KiB, is joined, decoded, checked (the same checks as
-any frame) and parsed in a worker thread; the frames after it wait their turn,
-so the order is kept. For an agent tool the Host keeps the result as text: the
-pieces as they came (their data as UTF-8 bytes), or the worker's compact
-spelling of a one-frame value cut into pieces. It never joins or parses a
-result longer than one piece; it forwards that text to the core (R2), which
-parses it once. Reading a child's stdout yields to other work after about 8 ms
+A frame over 1 MiB, and a result piece frame over 16 KiB, is joined, decoded,
+checked (the same checks as any frame) and parsed in a worker thread; the
+frames after it wait their turn, so the order is kept, and a child that exits
+right after writing them still has them handled first. For an agent tool the
+Host's main thread never parses a large result: it keeps the result as text,
+the pieces as they came (their data as UTF-8 bytes) or the worker's compact
+spelling of a one-frame value cut into pieces, and forwards that text to the
+core (R2), which has it parsed once. A piece's data is UTF-8 by then, so a
+lone surrogate in it arrives as U+FFFD: pieces must be well-formed UTF-16
+text, as `splitAgentToolPayloadText` makes them. Every other caller (the
+built-in Plans, Git and mini-IDE views, a third-party view) receives the parsed
+value, so for them the main thread still decodes and parses a large result
+once, as before DB9 within the old 1 MiB bound; only the frame parsing has
+moved off it. Reading a child's stdout yields to other work after about 8 ms
 in one event-loop turn (pacing, not a limit: every byte is read).
 
 **R2: Host → backend (WebSocket session).** When the Host's response
@@ -1132,11 +1138,17 @@ Each piece is a separate WebSocket message, so other panes' requests and
 results interleave with the pieces on the same session; the one-at-a-time
 send gives flow control without a credit scheme. The backend accepts pieces
 only from the authenticated Host session and only for a pending request id,
-keeps them with that request's waiter, joins them when the final message
-arrives, and delivers `{ok: true, result: <parsed>, meta}` to the waiter as if
-it had arrived whole. The pieces are the plugin's own text, which the Host
-does not parse: text that does not parse as JSON answers the call with
-`PLUGIN_TOOL_CHUNKS_INVALID`, reason `json`. The backend's wait is the one described under Timing:
+keeps them with that request's waiter and, when the final message arrives,
+checks them against the summary and hands them on, unjoined, to the agent tool
+proxy. The pieces are the plugin's own text, which the Host does not parse, so
+the core parses it with the Host's rules (no `NaN`, no `Infinity`, no number
+that only parses as an infinity): text that breaks them answers the call with
+`PLUGIN_TOOL_CHUNKS_INVALID`, reason `json`. Parsing, spelling for the agent
+and neutralizing such a result run in a helper process the backend starts
+once (`<backend> --agent-tool-result-worker`, it exits with the backend), so
+the event loop only moves bytes; the agent sees exactly the text the
+in-process functions would give. Without the helper the same work runs in
+the backend process, slower for other panes while it runs. The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.

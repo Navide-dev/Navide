@@ -99,7 +99,9 @@ async def test_10_mib_arguments_go_in_pieces_and_a_10_mib_result_comes_back_in_p
     assert events[-1]["type"] == "agent.capability.request"
     assert set(events[-1]["payload"]["payload"]) == {"argumentChunks"}
     assert response["ok"] is True
-    assert _sha(json.dumps(response["result"], sort_keys=True)) == _sha(json.dumps(result, sort_keys=True))
+    # Handed on as the pieces that came; the proxy's helper process parses them.
+    assert "result" not in response
+    assert _sha("".join(response["result_pieces"])) == _sha(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
     assert response["meta"]["resultBytes"] > 10 * 1_048_576
     assert plan_mcp._agent_capability_pending.pending == {}
     assert plan_mcp._agent_transfers == {}
@@ -205,33 +207,36 @@ async def test_pieces_and_progress_need_an_authenticated_host_and_a_pending_requ
 
 
 async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, float]:
-    """``work``'s result and the most CPU time (``time.thread_time``) the
-    loop's thread spent between two hand-backs (``asyncio.sleep``) meanwhile.
-    CPU time leaves out the OS pausing the process, so a busy machine does
-    not change it; garbage is collected first, so a collection of the test's
-    own garbage is not counted."""
+    """``work``'s result and the most CPU time (``time.thread_time``) one
+    event-loop step took meanwhile: every callback the loop runs, a task's
+    step between two awaits included, is one step. CPU time leaves out the OS
+    pausing the process, so a busy machine does not change it; garbage is
+    collected first, so a collection of the test's own garbage is not counted."""
     import gc
     import time
 
     gc.collect()
-    slices: list[float] = []
-    mark = time.thread_time()
-    real_sleep = asyncio.sleep
+    longest = 0.0
+    run = asyncio.events.Handle._run
 
-    async def sleep(delay: float, result: Any = None) -> Any:
-        nonlocal mark
-        slices.append(time.thread_time() - mark)
-        value = await real_sleep(delay, result)
-        mark = time.thread_time()
-        return value
+    def timed(handle: asyncio.events.Handle) -> None:
+        nonlocal longest
+        started = time.thread_time()
+        try:
+            run(handle)
+        finally:
+            longest = max(longest, time.thread_time() - started)
 
-    monkeypatch.setattr(asyncio, "sleep", sleep)
+    monkeypatch.setattr(asyncio.events.Handle, "_run", timed)
     try:
+        # Hand back before and after, so `work` starts in a measured step and
+        # the step it ends in is counted before the result is read.
+        await asyncio.sleep(0)
         result = await work
+        await asyncio.sleep(0)
     finally:
-        slices.append(time.thread_time() - mark)
-        monkeypatch.setattr(asyncio, "sleep", real_sleep)
-    return result, max(slices)
+        monkeypatch.setattr(asyncio.events.Handle, "_run", run)
+    return result, longest
 
 
 @pytest.mark.asyncio
@@ -240,6 +245,10 @@ async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tup
     [
         pytest.param(lambda: _big(10 * 1_048_576), id="one 10 MiB string"),
         pytest.param(lambda: {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(345_000)]}, id="10 MiB of small values"),
+        pytest.param(
+            lambda: {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(345_000)], "odd": "a\ud800b"},
+            id="10 MiB with a lone surrogate",
+        ),
     ],
 )
 async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pytest.MonkeyPatch, shape: Any) -> None:
@@ -344,7 +353,7 @@ async def test_only_a_full_result_piece_restarts_the_wait(monkeypatch: pytest.Mo
     response = await request_host_agent_workspace_backend(
         "acme.devmap", "/workspace", {"arguments": {}}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
     )
-    assert response["ok"] is False and response["reason"] == "json"  # "xxx…y" is not JSON; the pieces were joined
+    assert response["ok"] is True and response["result_pieces"] == ["x" * contract.AGENT_TOOL_CHUNK_BYTES, "y"]
     # The short last piece did not restart the wait (contract 4.4, Timing).
     assert seen[1] == seen[0]
 

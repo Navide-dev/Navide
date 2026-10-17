@@ -25,7 +25,13 @@ from agent_team_backend.guard.taint import is_tainted, list_tainted
 from agent_team_backend.mcp_server import plugin_agent_tools as proxy
 from agent_team_backend.mcp_server import server as core
 from agent_team_backend.mcp_server.server import _Caller
-from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_IDLE_MS, reassemble_agent_tool_payload_text
+from agent_team_backend.plugins.agent_tools_contract import (
+    AGENT_TOOL_CHUNK_IDLE_MS,
+    agent_tool_payload_text,
+    reassemble_agent_tool_payload_text,
+    split_agent_tool_payload_text,
+    utf8_byte_length,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -880,12 +886,18 @@ async def test_a_call_is_audited_with_its_real_argument_and_result_sizes(host: F
     assert row["target_workspace"] == "/ws/project" and row["cross_workspace"] == 0
 
 
-async def test_an_unknown_result_size_is_audited_as_minus_one(host: FakeHost, tmp_path, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "meta",
+    [{}, None, {"resultBytes": -1}, {"resultBytes": True}, {"resultBytes": "7"}, {"resultBytes": None},
+     {"resultBytes": 1.5}, {"resultBytes": -5}],
+    ids=["empty", "absent", "-1", "True", "'7'", "None", "1.5", "-5"],
+)
+async def test_an_unknown_result_size_is_audited_as_minus_one(host: FakeHost, tmp_path, monkeypatch, meta) -> None:
     log = _audit(tmp_path, monkeypatch)
     agent_messaging.register("p-41", "dev", "/ws/project")
     _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
     _apply(_snapshot(1, [_entry("devmap_read")]))
-    host.response = {"ok": True, "result": {"status": "done"}, "meta": {}}
+    host.response = {"ok": True, "result": {"status": "done"}} | ({} if meta is None else {"meta": meta})
     await core.server.call_tool("devmap_read", {})
     [row] = await _rows(log)
     assert (row["outcome"], row["result_bytes"]) == ("ok", -1)
@@ -1016,3 +1028,81 @@ async def test_the_served_value_index_does_not_grow_across_sync_revisions(host: 
     # Each snapshot drops the index of the schemas it replaced: only the live
     # schema's nodes are cached (rebuilt on the next call).
     assert proxy._served_index.cache_info().currsize <= 2
+
+
+# ── results that came in pieces: parsed and wrapped by a helper process (contract 4.4, R3) ──
+
+
+def _pieces_host(monkeypatch, text: str) -> None:
+    pieces = split_agent_tool_payload_text(text)
+    meta = {"durationMs": 1, "resultBytes": utf8_byte_length(text), "crossWorkspace": False}
+
+    async def host(event: dict[str, Any]) -> bool:
+        if event["type"] == "agent.capability.request":
+            core.resolve_agent_capability(event["payload"]["request_id"], {"ok": True, "result_pieces": pieces, "meta": meta})
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", host)
+
+
+def _devmap_tool(monkeypatch) -> dict[str, Any]:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    return proxy._catalog.entries["devmap_read"]  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [
+        pytest.param(lambda: {"data": "abc中文😀" * (10 * 1_048_576 // 16)}, id="one 10 MiB string"),
+        pytest.param(lambda: {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(345_000)]}, id="10 MiB of small values"),
+    ],
+)
+async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loop(monkeypatch, shape) -> None:
+    from tests.test_agent_tool_chunked_transport import _longest_loop_slice
+
+    value = shape()
+    entry = _devmap_tool(monkeypatch)
+    # Start the helper first: starting a process is a one-time cost (fork and
+    # exec run on the calling thread), not part of handling a result.
+    _pieces_host(monkeypatch, agent_tool_payload_text({"warm": "x" * 200_000}))
+    assert (await proxy.call("devmap_read", {}, None)).isError is False
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    result, longest = await _longest_loop_slice(monkeypatch, proxy.call("devmap_read", {}, None))
+    assert result.isError is False
+    # Character for character what the in-process wrap gives (same function, in the helper).
+    assert result.content[0].text == proxy.wrap_result(entry, value)
+    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+
+
+@pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
+async def test_a_result_in_pieces_that_is_not_strict_json_is_refused(monkeypatch, bad: str) -> None:
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, '{"pad":"' + "x" * 200_000 + f'","v":{bad}}}')
+    result = await proxy.call("devmap_read", {}, None)
+    body = _body(result)
+    assert (body["error_code"], body["reason"]) == ("PLUGIN_TOOL_CHUNKS_INVALID", "json")
+
+
+async def test_a_deeply_nested_result_in_pieces_still_reads(monkeypatch) -> None:
+    entry = _devmap_tool(monkeypatch)
+    value = {"pad": "x" * 200_000, "deep": json.loads("[" * 3000 + "]" * 3000)}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    result = await proxy.call("devmap_read", {}, None)
+    assert result.isError is False
+    assert result.content[0].text == proxy.wrap_result(entry, value)
+
+
+async def test_without_the_helper_process_a_result_in_pieces_still_reads(monkeypatch) -> None:
+    import sys
+
+    entry = _devmap_tool(monkeypatch)
+    monkeypatch.setattr(proxy._result_worker, "argv", lambda: [sys.executable, "-c", "raise SystemExit(3)"])  # noqa: SLF001
+    proxy._result_worker.stop()  # noqa: SLF001
+    value = {"data": "abc中文😀" * 20_000}
+    _pieces_host(monkeypatch, agent_tool_payload_text(value))
+    result = await proxy.call("devmap_read", {}, None)
+    assert result.content[0].text == proxy.wrap_result(entry, value)
+    _pieces_host(monkeypatch, '{"pad":"' + "x" * 200_000 + '","v":NaN}')
+    assert _body(await proxy.call("devmap_read", {}, None))["reason"] == "json"

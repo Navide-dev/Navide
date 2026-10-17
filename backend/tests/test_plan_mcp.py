@@ -1299,3 +1299,30 @@ async def test_a_10_mib_plan_add_note_crosses_the_mcp_endpoint_while_other_calls
         await plan_mcp.shutdown()
         for tool in added:
             tools.pop(tool.__name__, None)
+
+
+async def test_a_tool_call_over_the_mcp_endpoint_sees_its_request_body_size(workspace: Path) -> None:
+    """The agent tool proxy skips its size walk for a small request (contract
+    4.4, A2): the body size must reach the tool call made by that request."""
+    from agent_team_backend.mcp_server import auth as plan_mcp_auth
+
+    async def zz_body_size() -> int:
+        seen = plan_mcp._request_body_bytes.get()  # noqa: SLF001
+        return -1 if seen is None else seen[0]
+
+    plan_mcp.server.tool()(zz_body_size)
+    await plan_mcp.startup()
+    try:
+        url = f"/?client=host&t={plan_mcp_auth.internal_token()}"
+        headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "zz_body_size", "arguments": {}}})
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as client:
+            response = await client.post(url, headers=headers, content=body)
+        assert response.status_code == 200, response.text[:300]
+        result = response.json()["result"]
+        assert result["isError"] is False
+        assert json.loads(result["content"][0]["text"]) == len(body.encode())
+    finally:
+        await plan_mcp.shutdown()
+        plan_mcp.server._tool_manager._tools.pop("zz_body_size", None)  # noqa: SLF001
