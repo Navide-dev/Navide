@@ -1,6 +1,7 @@
 import { execFile, spawnSync } from 'node:child_process'
 import { lstatSync, readdirSync } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
+import { totalmem } from 'node:os'
 import { basename, join } from 'node:path'
 import { isMac } from '../../shared/osplat'
 
@@ -227,7 +228,15 @@ export function killSandboxProcessesSync(
   return victims
 }
 
-export type ResourceViolation = 'memory' | 'cpu' | 'processes' | 'disk'
+/** `stdoutPending` (stdout a child sent without a newline yet) is noticed in
+ *  notify mode only; the automatic stop never produces it. */
+export type ResourceViolation = 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+
+/** Review M2 on #375 (contract 5.2): the stdoutPending threshold is the
+ *  smaller of 256 MiB and an eighth of the machine's memory. */
+export function defaultStdoutPendingThreshold(totalMemoryBytes: number = totalmem()): number {
+  return Math.min(256 * 1024 * 1024, Math.floor(totalMemoryBytes / 8))
+}
 
 export interface ResourceWatchdogDeps {
   listProcesses(): Promise<ProcessSample[]>
@@ -381,6 +390,9 @@ export interface ResourceExceeded {
  *  the backend on its own, as before. */
 export interface ResourceNotifyMode {
   onExceeded: (exceeded: ResourceExceeded) => void
+  /** The backend's stdout waiting for a newline, in bytes (#375's
+   *  `stdoutPending.bytes`); absent, the item reads 0 and is never noticed. */
+  stdoutPending?: { bytes: () => number; threshold: number }
 }
 
 /**
@@ -410,13 +422,16 @@ export function watchBackendResources(
 
   // Notify mode: each item's notice level, its latest usage, the items
   // announced and not yet answered, and the last tree (for Stop).
-  const levels: Record<ResourceViolation, number> = {
+  const stdoutPendingThreshold = notify?.stdoutPending?.threshold ?? defaultStdoutPendingThreshold()
+  const thresholds: Record<ResourceViolation, number> = {
     memory: limits.maxRssBytes,
     cpu: limits.maxCpuCores,
     processes: limits.maxProcesses,
     disk: limits.maxDataBytes,
+    stdoutPending: stdoutPendingThreshold,
   }
-  const latest: Record<ResourceViolation, number> = { memory: 0, cpu: 0, processes: 0, disk: 0 }
+  const levels: Record<ResourceViolation, number> = { ...thresholds }
+  const latest: Record<ResourceViolation, number> = { memory: 0, cpu: 0, processes: 0, disk: 0, stdoutPending: 0 }
   const pending = new Set<ResourceViolation>()
   let lastTree: readonly ProcessSample[] = []
   const exceed = (item: ResourceViolation, usage: number): void => {
@@ -470,6 +485,16 @@ export function watchBackendResources(
       latest.disk = bytes
       if (bytes > levels.disk) exceed('disk', bytes)
     }
+    if (notify?.stdoutPending) {
+      let pendingBytes = 0
+      try {
+        pendingBytes = notify.stdoutPending.bytes()
+      } catch {
+        // Unreadable reads as nothing pending.
+      }
+      latest.stdoutPending = pendingBytes
+      if (pendingBytes > levels.stdoutPending) exceed('stdoutPending', pendingBytes)
+    }
     return null
   }
 
@@ -486,7 +511,7 @@ export function watchBackendResources(
     status() {
       return {
         usage: { ...latest },
-        thresholds: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
+        thresholds: { ...thresholds },
         levels: { ...levels },
         waiting: [...pending],
       }

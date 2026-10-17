@@ -196,6 +196,7 @@ import {
   type AgentToolWritePrompt,
   type NativeBackendConsentPrompt,
   type NativeBackendWritePrompt,
+  stdoutPendingOf,
 } from './plugins/pluginThirdPartyBackends'
 
 protocol.registerSchemesAsPrivileged([
@@ -1210,6 +1211,8 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   // Watchdog option C (contract 5.2): rows for the backend's audit, and a
   // nudge so every main window reads the unanswered notices again.
   recordResourceDecision: (row) => frontendPluginManager.recordResourceDecision(row),
+  // Review M2 on #375: stdout waiting for a newline is noticed like the rest.
+  stdoutPendingBytes: (pluginId) => stdoutPendingOf(frontendPluginManager.backendResourceUsage(), pluginId),
   onResourceNoticesChanged: () => {
     for (const hostWindow of mainWindows) {
       if (hostWindow.isDestroyed()) continue

@@ -31,7 +31,7 @@ const backend = ref<PluginBackendUsage | null>(null)
 const queueGrowing = ref(false)
 // Watchdog option C: this backend's usage against its thresholds (live).
 const resources = ref<BackendResourceStatusView | null>(null)
-const RESOURCE_ITEMS = ['memory', 'cpu', 'processes', 'disk'] as const
+const RESOURCE_ITEMS = ['memory', 'cpu', 'processes', 'disk', 'stdoutPending'] as const
 const trend = createQueueTrend()
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -98,7 +98,7 @@ function word(group: 'source' | 'kind' | 'reason', value: string): string {
 }
 
 function resourceAmount(item: (typeof RESOURCE_ITEMS)[number], value: number): string {
-  if (item === 'memory' || item === 'disk') return formatBytes(value)
+  if (item === 'memory' || item === 'disk' || item === 'stdoutPending') return formatBytes(value)
   if (item === 'cpu') return t('backendResource.cores', { count: Number(value.toFixed(2)).toLocaleString(locale.value) })
   return String(value)
 }

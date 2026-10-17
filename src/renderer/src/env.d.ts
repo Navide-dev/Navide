@@ -512,10 +512,10 @@ declare global {
     pluginId: string
     name: string
     packageVersion: string
-    usage: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
-    thresholds: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
-    levels: Record<'memory' | 'cpu' | 'processes' | 'disk', number>
-    waiting: Array<'memory' | 'cpu' | 'processes' | 'disk'>
+    usage: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    thresholds: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    levels: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
   }
 
   interface BackendResourceNoticeView {

@@ -112,9 +112,9 @@ describe('PluginActivityPanel (D-f)', () => {
     const MiB = 1024 * 1024
     const status = {
       pluginId: 'nerdtechnic.devmap', name: 'Dev map', packageVersion: '0.2.0',
-      usage: { memory: 600 * MiB, cpu: 0.2, processes: 2, disk: 10 * MiB },
-      thresholds: { memory: 512 * MiB, cpu: 0.95, processes: 8, disk: 1024 * MiB },
-      levels: { memory: 512 * MiB, cpu: 1.9, processes: 8, disk: 1024 * MiB },
+      usage: { memory: 600 * MiB, cpu: 0.2, processes: 2, disk: 10 * MiB, stdoutPending: 300 * MiB },
+      thresholds: { memory: 512 * MiB, cpu: 0.95, processes: 8, disk: 1024 * MiB, stdoutPending: 256 * MiB },
+      levels: { memory: 512 * MiB, cpu: 1.9, processes: 8, disk: 1024 * MiB, stdoutPending: 256 * MiB },
       waiting: ['memory'],
     }
     mockPlugins()
@@ -130,6 +130,8 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(rows[1]).toContain('kept running; next notice above 1.9 cores')
     expect(rows[2]).toContain('Processes: 2 of 8')
     expect(rows[2]).not.toContain('over the threshold')
+    expect(rows[4]).toContain('Stdout waiting for a line break: 300 MB of 256 MB')
+    expect(rows[4]).toContain('over the threshold')
   })
 
   it('says why when the report is not available', async () => {

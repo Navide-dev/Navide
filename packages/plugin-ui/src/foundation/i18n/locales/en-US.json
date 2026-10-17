@@ -1735,7 +1735,8 @@
           "memory": "memory",
           "cpu": "CPU",
           "processes": "process",
-          "disk": "disk"
+          "disk": "disk",
+          "stdoutPending": "stdout waiting for a line break"
         },
         "shellRisk": "High risk: runs git, gh and glab",
         "shellRiskDetail": "Through git, gh and glab it can contact network hosts and send workspace data, and read and change workspace files without the separate file-change permission. Commands already started when you disable it or revoke its permission run to completion (up to about 30 seconds).",
@@ -11029,7 +11030,8 @@
         "memory": "Memory",
         "cpu": "CPU",
         "processes": "Processes",
-        "disk": "Data folder"
+        "disk": "Data folder",
+        "stdoutPending": "Stdout waiting for a line break"
       }
     },
     "source": {

@@ -397,7 +397,7 @@ export interface BackendResourceNoticeView {
   at: number
 }
 
-type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk', number>
+type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
 
 export interface BackendResourceStatusView {
   pluginId: string
@@ -406,7 +406,7 @@ export interface BackendResourceStatusView {
   usage: ResourceItemValues
   thresholds: ResourceItemValues
   levels: ResourceItemValues
-  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk'>
+  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
 }
 
 export interface PluginRescanNotice {

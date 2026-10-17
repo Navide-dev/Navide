@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createHostWatchdogDeps,
+  defaultStdoutPendingThreshold,
   DEFAULT_BACKEND_RESOURCE_LIMITS,
   escapeCandidates,
   killEscapedSandboxProcesses,
@@ -335,13 +336,57 @@ describe('watch status (the activity page reads it)', () => {
     const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: vi.fn() })
     await watch.sample()
     await watch.sample()
+    const stdoutPending = defaultStdoutPendingThreshold()
     expect(watch.status!()).toEqual({
-      usage: { memory: 600 * MiB, cpu: 0, processes: 1, disk: 0 },
-      thresholds: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
-      levels: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes },
+      usage: { memory: 600 * MiB, cpu: 0, processes: 1, disk: 0, stdoutPending: 0 },
+      thresholds: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes, stdoutPending },
+      levels: { memory: limits.maxRssBytes, cpu: limits.maxCpuCores, processes: limits.maxProcesses, disk: limits.maxDataBytes, stdoutPending },
       waiting: ['memory'],
     })
     watch.keepRunning('memory')
     expect(watch.status!()).toMatchObject({ levels: { memory: 1200 * MiB }, waiting: [] })
+  })
+})
+
+// Review M2 on #375 (contract 5.2): stdout a child sent without a newline yet
+// is a fifth item, noticed like the others; threshold min(256 MiB, RAM / 8).
+describe('stdoutPending in notify mode', () => {
+  it('defaults to the smaller of 256 MiB and an eighth of the memory', () => {
+    expect(defaultStdoutPendingThreshold(16 * 1024 * MiB)).toBe(256 * MiB)
+    expect(defaultStdoutPendingThreshold(1024 * MiB)).toBe(128 * MiB)
+  })
+
+  it('tells the user when it passes the threshold, again only at twice the level, and never stops the backend', async () => {
+    let pending = 10 * MiB
+    const { deps, killed } = fakeDeps(() => [{ pid: 10, ppid: 1, rssBytes: MiB, cpuMs: 0 }])
+    const onExceeded = vi.fn()
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, {
+      onExceeded, stdoutPending: { bytes: () => pending, threshold: 128 * MiB },
+    })
+    await watch.sample()
+    expect(onExceeded).not.toHaveBeenCalled()
+    pending = 200 * MiB
+    await watch.sample()
+    await watch.sample()
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    expect(onExceeded).toHaveBeenCalledWith({ item: 'stdoutPending', usage: 200 * MiB, threshold: 128 * MiB })
+    expect(watch.keepRunning('stdoutPending')).toBe(400 * MiB)
+    pending = 390 * MiB
+    await watch.sample()
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    pending = 401 * MiB
+    await watch.sample()
+    expect(onExceeded).toHaveBeenLastCalledWith({ item: 'stdoutPending', usage: 401 * MiB, threshold: 400 * MiB })
+    expect(killed).toEqual([])
+    expect(watch.status!()).toMatchObject({ usage: { stdoutPending: 401 * MiB }, thresholds: { stdoutPending: 128 * MiB } })
+  })
+
+  it('without a source (before #375) it is never noticed', async () => {
+    const { deps } = fakeDeps(() => [{ pid: 10, ppid: 1, rssBytes: MiB, cpuMs: 0 }])
+    const onExceeded = vi.fn()
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded })
+    await watch.sample()
+    expect(onExceeded).not.toHaveBeenCalled()
+    expect(watch.status!().usage.stdoutPending).toBe(0)
   })
 })

@@ -1735,7 +1735,8 @@
           "memory": "記憶體",
           "cpu": "CPU",
           "processes": "行程數",
-          "disk": "磁碟"
+          "disk": "磁碟",
+          "stdoutPending": "尚未換行的輸出"
         },
         "shellRisk": "高風險：會執行 git、gh、glab",
         "shellRiskDetail": "可以透過 git、gh、glab 連到網路主機並送出工作區資料，也可以不經「修改檔案」的允許就讀取與修改工作區檔案。停用或撤銷權限時已經開始的指令會繼續執行到結束（最多約 30 秒）。",
@@ -11029,7 +11030,8 @@
         "memory": "記憶體",
         "cpu": "CPU",
         "processes": "程序數",
-        "disk": "資料夾大小"
+        "disk": "資料夾大小",
+        "stdoutPending": "尚未換行的輸出"
       }
     },
     "source": {

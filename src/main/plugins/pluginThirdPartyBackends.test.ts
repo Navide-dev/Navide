@@ -9,6 +9,7 @@ import { NativeBackendStore } from './pluginNativeBackendStore'
 import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
 import { isWindows } from '../../shared/osplat'
 import {
+  stdoutPendingOf,
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
   agentToolsDigest,
@@ -23,6 +24,7 @@ import {
 import type { PluginActivationCatalogEntry } from './installedPlugins'
 import {
   DEFAULT_BACKEND_RESOURCE_LIMITS,
+  defaultStdoutPendingThreshold,
   watchBackendResources,
   type BackendResourceWatch,
   type ResourceNotifyMode,
@@ -625,6 +627,42 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
       })])
       exit!()
       expect(instance.resourceStatus()).toEqual([])
+    })
+
+    it('passes the plugin\'s pending stdout to the watch, with the default threshold (review M2 on #375)', async () => {
+      const seen: Array<ResourceNotifyMode | undefined> = []
+      const stdoutPendingBytes = vi.fn(() => 42)
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never,
+        stdoutPendingBytes,
+        watchResources: (_pid, _dir, _onViolation, notify) => {
+          seen.push(notify)
+          return { dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }
+        },
+      })
+      const spec = writePackage()
+      const admission = await instance.admit(spec)
+      admission.spawnProcess(spec.entryFile, {})
+      expect(seen[0]?.stdoutPending?.bytes()).toBe(42)
+      expect(stdoutPendingBytes).toHaveBeenCalledWith('acme.indexer')
+      expect(seen[0]?.stdoutPending?.threshold).toBe(defaultStdoutPendingThreshold())
+    })
+
+    it('reads pending stdout from the backend usage, and 0 before #375 adds it', () => {
+      const usage = (child: Record<string, unknown> | null) => ({
+        children: { current: 1, peak: 1, retained: 0 },
+        views: [
+          { pluginId: 'acme.indexer', instanceId: 'v1', subscriptions: { current: 0, peak: 0 }, child },
+          { pluginId: 'acme.indexer', instanceId: 'v2', subscriptions: { current: 0, peak: 0 }, child },
+          { pluginId: 'acme.other', instanceId: 'v3', subscriptions: { current: 0, peak: 0 }, child },
+        ],
+        plugins: [],
+      })
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer')).toBe(10)
+      expect(stdoutPendingOf(usage({}) as never, 'acme.indexer')).toBe(0)
+      expect(stdoutPendingOf(usage(null) as never, 'acme.indexer')).toBe(0)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 'x' } }) as never, 'acme.indexer')).toBe(0)
     })
 
     it('an unknown or answered notice is refused', async () => {

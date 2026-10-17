@@ -23,6 +23,7 @@ import {
 } from './pluginBackendSandbox'
 import {
   killEscapedSandboxProcesses,
+  defaultStdoutPendingThreshold,
   killSandboxProcessesSync,
   sandboxIdentity,
   watchBackendResources,
@@ -335,6 +336,23 @@ export interface NativeBackendStatusRow {
   shell?: 'allowlist' | 'full'
 }
 
+/** One plugin's stdout waiting for a newline, summed over its children, from
+ *  the backend usage (#375 adds `views[].child.stdoutPending`); 0 where the
+ *  field is absent or malformed, so it reads nothing before #375 lands. */
+export function stdoutPendingOf(
+  usage: { views: ReadonlyArray<{ pluginId: string; child: unknown }> },
+  pluginId: string,
+): number {
+  let total = 0
+  for (const view of usage.views) {
+    if (view.pluginId !== pluginId || typeof view.child !== 'object' || view.child === null) continue
+    const pending = (view.child as { stdoutPending?: unknown }).stdoutPending
+    const bytes = typeof pending === 'object' && pending !== null ? (pending as { bytes?: unknown }).bytes : undefined
+    if (typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0) total += bytes
+  }
+  return total
+}
+
 /** A third-party backend went over a resource threshold and waits for the
  *  user's Stop or Keep running (contract 5.2). It stays listed until answered
  *  or until that backend exits; it is not kept across a restart. */
@@ -575,6 +593,9 @@ export interface ThirdPartyBackendControllerOptions {
   recordResourceDecision?: (row: PluginResourceDecisionRow) => void
   /** The list of unanswered resource notices changed (show it to the user). */
   onResourceNoticesChanged?: () => void
+  /** One plugin's stdout waiting for a newline across its children (#375's
+   *  `stdoutPending.bytes`, see `stdoutPendingOf`); absent = not watched. */
+  stdoutPendingBytes?: (pluginId: string) => number
   /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
   onConsentGranted?: (pluginId: string) => void
   /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
@@ -852,8 +873,12 @@ export class ThirdPartyBackendController {
           }
           // Option C: over a threshold the user is told and decides; the
           // backend keeps running meanwhile (contract 5.2).
+          const stdoutPendingBytes = this.options.stdoutPendingBytes
           const notify: ResourceNotifyMode = {
             onExceeded: (exceeded) => this.raiseResourceNotice(spec, watch, exceeded),
+            ...(stdoutPendingBytes
+              ? { stdoutPending: { bytes: () => stdoutPendingBytes(spec.pluginId), threshold: defaultStdoutPendingThreshold() } }
+              : {}),
           }
           const watch: BackendResourceWatch = this.options.watchResources
             ? this.options.watchResources(rootPid, canonicalDataDir, report, notify)
