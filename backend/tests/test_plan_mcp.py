@@ -874,8 +874,10 @@ async def test_mounted_endpoint_serves_mcp(workspace: Path) -> None:
     try:
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+            # Every Navide CLI's URL carries a credential, checked before the
+            # body is read (review M2); the host one is the fallback wiring's.
             resp = await client.post(
-                "/plan-mcp",
+                f"/plan-mcp?client=host&t={plan_mcp_auth.internal_token()}",
                 json={
                     "jsonrpc": "2.0",
                     "id": 1,
@@ -1299,6 +1301,98 @@ async def test_a_10_mib_plan_add_note_crosses_the_mcp_endpoint_while_other_calls
         await plan_mcp.shutdown()
         for tool in added:
             tools.pop(tool.__name__, None)
+
+
+def _mcp_scope(query: str, headers: list[tuple[bytes, bytes]] | None = None) -> dict[str, Any]:
+    return {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": "POST", "scheme": "http",
+        "path": "/", "raw_path": b"/", "root_path": "", "query_string": query.encode(),
+        "headers": [(b"content-type", b"application/json"), (b"content-length", str(6 * 1_048_576).encode())]
+        + (headers or []),
+        "client": ("127.0.0.1", 50000), "server": ("127.0.0.1", 8000),
+    }
+
+
+@pytest.mark.parametrize(
+    ("query", "headers"),
+    [
+        ("", None),
+        ("client=host", None),
+        ("client=host&t=wrong", None),
+        ("client=host", [(b"authorization", b"Bearer wrong")]),
+        ("client=external&t=wrong", None),
+        ("client=external&t={external}", None),
+        ("pane=p-gate", None),
+        ("pane=p-gate&t=wrong", None),
+        ("pane=p-unwired&t={pane}", None),
+    ],
+    ids=["none", "host-no-token", "host-wrong", "host-wrong-bearer", "external-wrong",
+         "external-disabled", "pane-no-token", "pane-wrong", "pane-other-token"],
+)
+async def test_a_request_without_a_valid_credential_is_refused_before_its_body_is_read(
+    monkeypatch: pytest.MonkeyPatch, clean_registry: Any, query: str, headers: list[tuple[bytes, bytes]] | None,
+) -> None:
+    """Review M2 on main 8b477cbcd: bodies have no size limit (A1), so the
+    credential is checked first and an unauthenticated body is never read."""
+    monkeypatch.setattr(plan_mcp_auth, "external_enabled", lambda: False)
+    monkeypatch.setattr(plan_mcp_wiring, "_PANE_TOKENS", {})
+    agent_messaging.register("p-gate", "gate", "/ws/project")
+    query = query.format(external=plan_mcp_auth.external_token(), pane=plan_mcp_wiring.caller_token("p-gate"))
+
+    async def receive() -> dict[str, Any]:
+        raise AssertionError("the body of an unauthenticated request was read")
+
+    sent: list[dict[str, Any]] = []
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await plan_mcp.startup()
+    try:
+        await plan_mcp.asgi_app(_mcp_scope(query, headers), receive, send)
+    finally:
+        await plan_mcp.shutdown()
+    assert sent[0]["type"] == "http.response.start" and sent[0]["status"] == 401
+    assert b"".join(message.get("body", b"") for message in sent[1:])
+
+
+async def test_every_credential_a_navide_cli_carries_still_reaches_the_tools(
+    monkeypatch: pytest.MonkeyPatch, clean_registry: Any,
+) -> None:
+    """Review M2: the check before the body accepts exactly what the tool
+    calls accept: the pane token in the query (claude, gemini-style config
+    documents) or as a bearer header (codex, NAVIDE_MCP_TOKEN), the host
+    token either way, and the external token while external access is on."""
+    monkeypatch.setattr(plan_mcp_auth, "external_enabled", lambda: True)
+    monkeypatch.setattr(plan_mcp_wiring, "_PANE_TOKENS", {})
+    agent_messaging.register("p-gate", "gate", "/ws/project")
+    pane_token = plan_mcp_wiring.caller_token("p-gate")
+    unregistered_token = plan_mcp_wiring.caller_token("p-not-registered")
+    cases = {
+        "pane-query": (plan_mcp_wiring.plan_mcp_url(1, "p-gate").split("?", 1)[1], {}),
+        "pane-bearer": (plan_mcp_wiring.plan_mcp_url(1, "p-gate", with_token=False).split("?", 1)[1],
+                        {"authorization": f"Bearer {pane_token}"}),
+        "host-query": (plan_mcp_wiring.plan_mcp_url(1).split("?", 1)[1], {}),
+        "host-bearer": (plan_mcp_wiring.plan_mcp_url(1, with_token=False).split("?", 1)[1],
+                        {"authorization": f"Bearer {plan_mcp_auth.internal_token()}"}),
+        "external-query": (f"client=external&t={plan_mcp_auth.external_token()}", {}),
+        "external-bearer": ("client=external", {"authorization": f"Bearer {plan_mcp_auth.external_token()}"}),
+        # A valid token for a pane the registry does not know yet keeps its
+        # tool-level explanation rather than a 401.
+        "pane-unregistered": (f"pane=p-not-registered&t={unregistered_token}", {}),
+    }
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    await plan_mcp.startup()
+    try:
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as client:
+            for name, (query, extra) in cases.items():
+                headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"} | extra
+                response = await client.post(f"/?{query}", headers=headers, json=body)
+                assert response.status_code == 200, (name, response.status_code, response.text[:200])
+                assert response.json()["result"]["tools"], name
+    finally:
+        await plan_mcp.shutdown()
 
 
 async def test_a_tool_call_over_the_mcp_endpoint_sees_its_request_body_size(workspace: Path) -> None:

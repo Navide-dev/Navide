@@ -1051,7 +1051,11 @@ next, so other sessions' and other panes' messages interleave with the pieces.
 The backend spells and cuts the arguments in a worker thread, then sends the
 pieces and the request in order. Cancelling the MCP call stops that sequence:
 a cancelled call's request is never sent, so the plugin does not run it (the
-audit row records `cancelled`). The Host keeps the pieces by `request_id` and
+audit row records `cancelled`). A call cancelled after its request was sent
+is not stopped: the Host is not told, the plugin runs it to the end, the core
+refuses its result pieces (`accepted: false`) and discards its answer, and the
+audit row still records `cancelled`, since nobody waits for that answer.
+The Host keeps the pieces by `request_id` and
 accepts them only on the authenticated Host session; it joins them when the
 request arrives, then runs the checks of 4.2 on the joined arguments exactly
 as on inline ones. It drops the pieces it holds when the request arrives, the
@@ -1284,7 +1288,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
-| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, `result_helper_failed`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it), anything else `other` |
+| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, `result_helper_failed`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it; once the request was sent the plugin may already be running it and finishes it, see 4.4), anything else `other` |
 | `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); `0` when the call has no result; `-1` when the Host sent no valid size (unknown) |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
