@@ -1367,7 +1367,11 @@ characters of `stdout` and of `stderr` each, the rest is not returned. This
 limit is unchanged. Since 0.2.25 the result says when that happened:
 `truncated` is `true` when either was cut, `stdoutBytes` is the size of the
 whole `stdout` in UTF-8 bytes (always present), and `stderrBytes` the same for
-`stderr`, present only when `stderr` was cut. `exitCode`, `stdout` and
+`stderr`, present only when `stderr` was cut. The two units differ on
+purpose: what is kept is the first 8000 **characters** (Unicode code points),
+while `stdoutBytes` and `stderrBytes` count the original output in UTF-8
+**bytes**. For example 8001 `é` come back as 8000 `é`, with `truncated: true`
+and `stdoutBytes: 16002`. `exitCode`, `stdout` and
 `stderr` are exactly what they were before. A plugin that needs the whole
 output asks for less at a time (for example `git log -n`, a path filter).
 Whether the limit is lifted is the user's decision and not part of this
