@@ -15233,6 +15233,146 @@ describe('third-party workspace filesystem (real package bridge, port and grant 
   })
 })
 
+describe('third-party backend shell broker (real package bridge, port and grant check)', () => {
+  // Same admission prerequisites as the filesystem suite above (macOS sandbox
+  // admission on host temp paths; Windows refuses third-party backends in v1).
+  it.skipIf(isWindows())('runs allowlisted commands as the view shell.run does, only through its own live shell grant at the bound root', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'third-party-shell-')))
+    const workspace = join(root, 'workspace')
+    const packageDir = join(root, 'package')
+    mkdirSync(workspace)
+    mkdirSync(join(packageDir, 'backend'), { recursive: true })
+    writeFileSync(join(packageDir, 'backend', 'acme-indexer'), 'binary', { mode: 0o700 })
+    writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify({
+      schemaVersion: 2, apiVersion: '^1.0.0', id: 'acme.indexer', name: 'Indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { shell: 'allowlist' },
+      marketplace: { description: 'Index files.', license: 'MIT' },
+      contributes: { views: [{ id: 'left', kind: 'custom', location: 'left', title: 'Indexer', entry: 'frontend/left/index.html' }] },
+      backend: { entry: 'backend/acme-indexer', protocolVersion: 1, activation: 'startup', methods: ['files.search'] },
+    }))
+    const spec = thirdPartyBackendLaunchSpec({
+      pluginId: 'acme.indexer', packageVersion: '1.0.0', packageDir, views: [],
+      backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' },
+    })!
+    expect(spec.approvedBridgePorts).toEqual(['shell'])
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'left', contributionKey: 'acme.indexer.left', kind: 'custom', location: 'left', title: 'Indexer',
+      entryFile: join(packageDir, 'frontend/left/index.html'),
+    }
+    const pluginDescriptor: PluginLaunchDescriptor = {
+      id: 'acme.indexer', packageVersion: '1.0.0', packageDir, requires: ['shell'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ shell: 'allowlist' }),
+      devUrl: '', entryFile: view.entryFile, views: [view],
+    }
+    const mgr = new FrontendPluginManager()
+    let grant: { packageVersion: string; system: never[]; shell?: 'allowlist'; storage: boolean } | null = {
+      packageVersion: '1.0.0', system: [], shell: 'allowlist', storage: true,
+    }
+    mgr.setCapabilityGrantResolver(() => grant)
+    mgr.registerDescriptor(pluginDescriptor, { builtin: true })
+    mgr.registerBackendActivation(spec)
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue(undefined)
+    let answer: Record<string, unknown> = { ok: true, stdout: 'abc123\n', stderr: '', exit_code: 0 }
+    const service = vi.spyOn(
+      mgr as unknown as { sendPublicBackend: (type: string, payload: Record<string, unknown>, before?: () => boolean) => Promise<unknown> },
+      'sendPublicBackend',
+    ).mockImplementation(async (_type, _payload, before) => {
+      if (before && !before()) throw new Error('request denied before dispatch')
+      return answer
+    })
+    const store = new NativeBackendStore(join(root, 'store'))
+    store.setEnabled(true)
+    const controller = new ThirdPartyBackendController({
+      store,
+      dataRoot: join(root, 'data'),
+      probe: { platform: 'darwin', sandboxExec: () => '/usr/bin/sandbox-exec', bubblewrap: () => null },
+      promptConsent: async () => true,
+      shellPort: () => mgr.createThirdPartyShellPort(),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null }),
+    })
+    const host = new FakeBrowserWindow()
+    try {
+      const handle = await mgr.openView(pluginDescriptor, view, {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        workspacePath: workspace,
+        capabilityContext: {
+          publisherEligible: false,
+          userGrant: grant,
+          runtimeBinding: {
+            pluginId: 'acme.indexer', packageVersion: '1.0.0',
+            workspaceId: mgr.workspaceIdForPath(workspace), instanceId: null, audience: view.contributionKey,
+          },
+        } as HostCapabilityContext,
+      })
+      expect(bind).toHaveBeenCalled()
+      const admission = await controller.admit(spec, workspace)
+      expect(admission.workspaceRoot).toBe(workspace)
+      const context = (instanceId: string, overrides: Partial<PlansBridgeContext> = {}): PlansBridgeContext => ({
+        runtime: {
+          pluginId: 'acme.indexer', packageVersion: '1.0.0', workspaceId: mgr.workspaceIdForPath(workspace),
+          instanceId, contributionKey: view.contributionKey, hostWindowId: 'w', initiator: { kind: 'user', id: 'u' },
+        },
+        workspacePath: workspace,
+        authorizedPlanRoot: workspace,
+        requestId: 'bridge:1',
+        signal: new AbortController().signal,
+        emit: () => undefined,
+        ...overrides,
+      })
+      const request = (command: string) => ({
+        id: 'bridge:1', origin: { kind: 'call' as const, requestId: 'r' }, port: 'shell' as const, operation: 'run', arguments: { command },
+      })
+
+      // The same backend message and mode as a view's shell.run: the Python
+      // Host shell broker parses argv and refuses auth subcommands and -c/-C.
+      await expect(admission.bridgeDispatcher.dispatch(request('git rev-parse HEAD'), context(handle.instanceId)))
+        .resolves.toEqual({ exitCode: 0, stdout: 'abc123\n', stderr: '' })
+      expect(service).toHaveBeenLastCalledWith(
+        'shell.run',
+        { workspace_path: workspace, command: 'git rev-parse HEAD', host_mode: 'allowlist' },
+        expect.any(Function),
+        expect.any(Number),
+      )
+
+      // A broker policy refusal (for example `gh auth token`) is a denial, not output.
+      answer = { ok: false, error: 'command is not allowed by the public shell policy' }
+      await expect(admission.bridgeDispatcher.dispatch(request('gh auth token'), context(handle.instanceId)))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      answer = { ok: true, stdout: '', stderr: 'fatal', exit_code: 128 }
+      await expect(admission.bridgeDispatcher.dispatch(request('git rev-parse nope'), context(handle.instanceId)))
+        .resolves.toEqual({ exitCode: 128, stdout: '', stderr: 'fatal' })
+
+      // Another instance, another root, or an agent initiator is refused.
+      service.mockClear()
+      await expect(admission.bridgeDispatcher.dispatch(request('git status'), context('not-running')))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      await expect(admission.bridgeDispatcher.dispatch(request('git status'), context(handle.instanceId, { authorizedPlanRoot: root })))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      const agent = context(handle.instanceId)
+      await expect(admission.bridgeDispatcher.dispatch(request('git status'), {
+        ...agent, runtime: { ...agent.runtime, initiator: { kind: 'agent', source: 'mcp', id: 'a' } as never },
+      })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      expect(service).not.toHaveBeenCalled()
+
+      // Revoking the user Grant's shell mode takes effect at the next dispatch.
+      grant = { packageVersion: '1.0.0', system: [], storage: true }
+      await expect(admission.bridgeDispatcher.dispatch(request('git status'), context(handle.instanceId)))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      grant = null
+      await expect(admission.bridgeDispatcher.dispatch(request('git status'), context(handle.instanceId)))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+      expect(service).not.toHaveBeenCalled()
+      mgr.destroyInstance(handle.instanceId)
+    } finally {
+      bind.mockRestore()
+      service.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('agent capability requests the Host cannot serve', () => {
   type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
 

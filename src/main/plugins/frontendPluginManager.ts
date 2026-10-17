@@ -122,6 +122,7 @@ import {
   type PlansFilesystemPort,
   type PlansFilesystemServiceOperation,
 } from './plansBridge'
+import type { PackageShellPort } from './pluginThirdPartyBackends'
 import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
@@ -738,6 +739,12 @@ const IPC_RECEIVER_OPEN_LEFT = 'plugin:receiver:open-left'
 const IPC_RECEIVER_MOUNT = 'plugin:receiver:mount'
 const IPC_RECEIVER_ACCEPT_EXISTING = 'plugin:receiver:accept-existing'
 const DETAIL_OPEN_TIMEOUT_MS = 10_000
+/** The supervisor's 30 s bridge timer (pluginBackendSupervisor callTimeoutMs)
+ *  answers the backend first, with TIMEOUT; this Host wait is only longer than
+ *  the Python broker's own 30 s (ws_handlers `shell.run`) so the Host request
+ *  itself never ends first. A command the broker already started is not
+ *  cancelled: it runs to completion (disclosed in the consent text). */
+const THIRD_PARTY_SHELL_RUN_TIMEOUT_MS = 35_000
 const IPC_RECEIVER_DISPOSE = 'plugin:receiver:dispose'
 const IPC_RECEIVER_ABORT = 'plugin:receiver:abort'
 const IPC_RECEIVER_BLANK_READY = 'plugin:receiver:blank-ready'
@@ -2378,6 +2385,85 @@ export class FrontendPluginManager {
         throw new PlansBridgeError('CAPABILITY_DENIED', 'Filesystem capability is denied.')
       }
       throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Filesystem service is unavailable.')
+    }
+  }
+
+  /** The Host shell broker for third-party backends that declare
+   *  `shell: "allowlist"` (DB5): the same `shell.run` backend message and
+   *  `allowlist` mode a view's shell.run uses, so the Python broker applies the
+   *  same argv rules (git/gh/glab only, auth subcommands and -c/-C refused). */
+  createThirdPartyShellPort(): PackageShellPort {
+    return {
+      run: (command, context) => this.sendThirdPartyShellRun(command, context),
+    }
+  }
+
+  /** Revalidated at every dispatch, like the filesystem port: a live
+   *  user-initiated binding of the registered package version, whose manifest
+   *  declares `shell: "allowlist"` and whose user Grant for that version has
+   *  the same shell mode, at the bound workspace root only. */
+  private thirdPartyShellGrantAllows(context: PlansBridgeContext): boolean {
+    const runtime = context.runtime
+    if (
+      context.signal.aborted ||
+      runtime.pluginId === PLANS_PLUGIN_ID ||
+      runtime.initiator.kind !== 'user' ||
+      !nonEmptyString(runtime.packageVersion) ||
+      !nonEmptyString(runtime.instanceId) ||
+      !nonEmptyString(context.workspacePath) ||
+      !nonEmptyString(context.authorizedPlanRoot)
+    ) return false
+    const activation = this.pluginBackendHost.activationForPlugin(runtime.pluginId)
+    if (
+      activation?.thirdParty?.shell !== 'allowlist' ||
+      activation.packageVersion !== runtime.packageVersion
+    ) return false
+    const view = this.running.get(runtime.instanceId)
+    if (
+      !view ||
+      view.id !== runtime.pluginId ||
+      !view.workspacePath ||
+      resolve(view.workspacePath) !== resolve(context.workspacePath) ||
+      runtime.workspaceId !== this.workspaceIdForPath(context.workspacePath)
+    ) return false
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    if (!grant || grant.packageVersion !== runtime.packageVersion || grant.shell !== 'allowlist') return false
+    const root = canonicalExistingDirectory(context.workspacePath)
+    return root !== null && root === context.authorizedPlanRoot
+  }
+
+  private async sendThirdPartyShellRun(command: string, context: PlansBridgeContext): Promise<JsonValue> {
+    if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+    if (!this.thirdPartyShellGrantAllows(context)) {
+      throw new PlansBridgeError('CAPABILITY_DENIED', 'Shell capability is denied.')
+    }
+    let response: unknown
+    try {
+      response = await this.sendPublicBackend(
+        'shell.run',
+        { workspace_path: context.authorizedPlanRoot, command, host_mode: 'allowlist' },
+        () => this.thirdPartyShellGrantAllows(context),
+        THIRD_PARTY_SHELL_RUN_TIMEOUT_MS,
+      )
+    } catch (error) {
+      if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+      if (error instanceof Error && error.message === 'request denied before dispatch') {
+        throw new PlansBridgeError('CAPABILITY_DENIED', 'Shell capability is denied.')
+      }
+      throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Shell broker is unavailable.')
+    }
+    const record = response !== null && typeof response === 'object' && !Array.isArray(response)
+      ? response as Record<string, unknown>
+      : null
+    if (!record) throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Shell broker returned an invalid response.')
+    if (record.ok === false) {
+      // The broker refused the command (policy, workspace); not command output.
+      throw new PlansBridgeError('CAPABILITY_DENIED', typeof record.error === 'string' ? record.error : 'Shell command was refused.')
+    }
+    return {
+      exitCode: Number(record.exit_code ?? 0),
+      stdout: String(record.stdout ?? record.output ?? ''),
+      stderr: String(record.stderr ?? ''),
     }
   }
 

@@ -182,6 +182,7 @@ import { registerNativeBackendIpc } from './plugins/pluginNativeBackendIpc'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
+  nativeBackendConsentText,
   thirdPartyBackendLaunchSpec,
   ThirdPartyBackendController,
   type NativeBackendConsentPrompt,
@@ -1138,6 +1139,7 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   store: nativeBackendStore,
   dataRoot: join(nativeBackendRoot, 'data'),
   filesystemPort: () => frontendPluginManager.createWorkspaceFilesystemPort(),
+  shellPort: () => frontendPluginManager.createThirdPartyShellPort(),
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
@@ -1168,20 +1170,12 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 }
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
-  const access = prompt.system.includes('fs')
-    ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
-    : 'It asks for no access to your files.'
+  const { message, detail } = nativeBackendConsentText(prompt)
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Native code',
-    message: prompt.update
-      ? `${prompt.name} ${prompt.packageVersion} changed its native code or permissions. Allow it to run?`
-      : `${prompt.name} contains native code that runs on your computer. Allow it to run?`,
-    detail: [
-      'Navide runs it in a sandbox: it has no network access and cannot read your home folder.',
-      access,
-      'You can disable it at any time in Settings → Extensions.',
-    ].filter(Boolean).join('\n\n'),
+    message,
+    detail,
     buttons: ['Not now', 'Allow'],
     defaultId: 0,
     cancelId: 0,

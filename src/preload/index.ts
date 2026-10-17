@@ -223,6 +223,7 @@ export interface NativeBackendStatusRow {
   canWriteWorkspace: boolean
   workspaceWrite: string[]
   lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+  shell?: 'allowlist' | 'full'
 }
 
 export interface NativeBackendOverview {

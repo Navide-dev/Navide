@@ -561,6 +561,7 @@ declare global {
     canWriteWorkspace: boolean
     workspaceWrite: string[]
     lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+    shell?: 'allowlist' | 'full'
   }
 
   interface NativeBackendOverview {
