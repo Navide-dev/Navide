@@ -435,7 +435,12 @@ class PluginAuditLog:
         error_code: str = "",
         at_ms: int | None = None,
     ) -> int | None:
-        """Queue one agent tool call; returns its row id, or None when it is not recorded."""
+        """Queue one agent tool call; returns its row id, or None when it is not recorded.
+
+        ``at_ms`` is when the call **ended** (contract section 5; the call ran
+        over ``[at_ms - duration_ms, at_ms]``); without it, now. Record a call
+        once it is over, never with its start time.
+        """
         if not self.enabled:
             return None
         try:
