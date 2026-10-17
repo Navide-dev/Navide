@@ -1737,6 +1737,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       expect(ask).toHaveBeenCalledWith({
         plugin_id: 'acme.demo',
         declared: expect.arrayContaining([{ kind: 'shell', key: 'allowlist' }]),
+        installedAt: expect.any(Number),
       })
 
       ask.mockResolvedValue({ ...fixture, schemaVersion: 2 })
@@ -1769,6 +1770,68 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     const declared = declaredForActivity(disclosure)
     expect(declared.some((item) => item.kind === 'backendMethod')).toBe(false)
     expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
+  })
+
+  // #373 follow-up (N2): installedAt is when the id was installed since its
+  // last removal; updates and rollbacks keep it, and without one the request
+  // carries none and still succeeds.
+  it('sends installedAt from the fresh install, kept by update and rollback, renewed by a reinstall', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', {}, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      const report = handlers.get('plugins:activityReport')!
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(
+        JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid,
+      )
+      const sentInstalledAt = async () => {
+        await expect(report(null, { id: 'acme.demo' })).resolves.toMatchObject({ ok: true })
+        return (ask.mock.calls.at(-1)![0] as { installedAt?: number }).installedAt
+      }
+      const install = async (pkg: { bytes: Uint8Array; digest: string }, version: string, at: number) => {
+        vi.setSystemTime(at)
+        installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', version), pkg.bytes, pkg.digest)
+        await prepare(null, { namespace: 'acme', name: 'demo', version })
+        await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+        await restart(null, { id: 'acme.demo' })
+      }
+
+      await install(first, '1.0.0', 1_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      await install(second, '1.0.1', 2_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      vi.setSystemTime(3_000_000)
+      await handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })
+      expect(await sentInstalledAt()).toBe(1_000_000)
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      await install(first, '1.0.0', 4_000_000)
+      expect(await sentInstalledAt()).toBe(4_000_000)
+
+      // Installed before this was recorded: no field, and the request succeeds.
+      const file = join(root, '.navide-install-scans.json')
+      const state = JSON.parse(readFileSync(file, 'utf8'))
+      delete state.installedAt['acme.demo']
+      writeFileSync(file, JSON.stringify(state))
+      expect(await sentInstalledAt()).toBeUndefined()
+      expect(ask.mock.calls.at(-1)![0]).not.toHaveProperty('installedAt')
+      // A later update does not invent one either.
+      await install(second, '1.0.1', 5_000_000)
+      expect(await sentInstalledAt()).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('D-f: the activity IPC refuses an unauthorized sender', async () => {

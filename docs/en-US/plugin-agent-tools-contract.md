@@ -1292,7 +1292,12 @@ sends no `backendMethod` entries: a frontend's calls to its own backend
 entry could only ever read "declared but not used". The Host also sends
 `installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
 then counts only writes since then, so a first-seen row left by an earlier
-install of the same id counts as absent. Answer `PluginActivityReport`
+install of the same id counts as absent. It is the time of the install since
+the id was last removed: the Host records it in its own
+`.navide-install-scans.json` (owner-only, `0600`) when a commit finds nothing
+of that id active, keeps it through updates and rollbacks, and drops it when
+the plugin is removed. An id installed before this was recorded has none, and
+the request then carries no `installedAt`. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the

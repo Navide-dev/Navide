@@ -797,7 +797,14 @@ export function registerPluginIpc(
     const disclosure = activeDisclosure(id)
     const declared = disclosure ? declaredForActivity(disclosure) : []
     try {
-      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({ plugin_id: id, declared }))
+      // Sent only when known: an id installed before this was recorded has
+      // none, and the backend then keeps its earlier behaviour (#373).
+      const installedAt = installScans.installedAt(id)
+      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({
+        plugin_id: id,
+        declared,
+        ...(installedAt !== null ? { installedAt } : {}),
+      }))
       return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -1738,6 +1745,9 @@ export function registerPluginIpc(
         if (!isManifestV2(pkg.manifest)) {
           return await commitLegacyInstall(pkg, publisherRequiresTrust, commitTrust)
         }
+        // A fresh install: nothing of this id is active (never installed, or
+        // removed since). Only then is installedAt recorded (#373, N2).
+        const freshInstall = !lifecycleSelector.read(pkg.id)?.active
         const staged = stageInstallCandidate(pkg, pluginsRoot)
         const scanned = loadPluginDir(staged.candidateDir)
         if (scanned.error) throw new Error(`staged candidate is invalid: ${scanned.error}`)
@@ -1792,6 +1802,7 @@ export function registerPluginIpc(
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
         try {
+          if (freshInstall) installScans.markInstalled(pkg.id, Date.now())
           if (pkg.scan) installScans.record(pkg.id, pkg.version, pkg.scan)
           const kept = lifecycleSelector.read(pkg.id)
           installScans.keepVersions(pkg.id, [kept?.active, kept?.previous, kept?.candidate]
