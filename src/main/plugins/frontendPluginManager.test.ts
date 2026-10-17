@@ -15494,6 +15494,121 @@ describe('third-party backend shell broker (real package bridge, port and grant 
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  // 0.2.25: an agent tool call gets no shell. dispatchShell admits an agent
+  // read tool's read-only VCS command and a write tool's command with the DB3
+  // answer, but the real port (thirdPartyShellGrantAllows) serves only a
+  // user-initiated call from a live view, so both are refused before the
+  // broker. Opening it would widen what agents can do: the user's decision,
+  // disclosed in the consent dialog.
+  it.skipIf(isWindows())('refuses shell.run to an agent tool call, read or write, at the real shell port', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'third-party-shell-agent-')))
+    const workspace = join(root, 'workspace')
+    const packageDir = join(root, 'package')
+    mkdirSync(workspace)
+    mkdirSync(join(packageDir, 'backend'), { recursive: true })
+    writeFileSync(join(packageDir, 'backend', 'acme-indexer'), 'binary', { mode: 0o700 })
+    writeFileSync(join(packageDir, 'manifest.json'), JSON.stringify({
+      schemaVersion: 2, apiVersion: '^1.0.0', id: 'acme.indexer', name: 'Indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { shell: 'allowlist' },
+      marketplace: { description: 'Index files.', license: 'MIT' },
+      contributes: { views: [{ id: 'left', kind: 'custom', location: 'left', title: 'Indexer', entry: 'frontend/left/index.html' }] },
+      backend: { entry: 'backend/acme-indexer', protocolVersion: 1, activation: 'startup', methods: ['files.search'] },
+    }))
+    const spec = thirdPartyBackendLaunchSpec({
+      pluginId: 'acme.indexer', packageVersion: '1.0.0', packageDir, views: [],
+      backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' },
+    })!
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'left', contributionKey: 'acme.indexer.left', kind: 'custom', location: 'left', title: 'Indexer',
+      entryFile: join(packageDir, 'frontend/left/index.html'),
+    }
+    const pluginDescriptor: PluginLaunchDescriptor = {
+      id: 'acme.indexer', packageVersion: '1.0.0', packageDir, requires: ['shell'],
+      capabilityPolicy: manifestV2CapabilityPolicy({ shell: 'allowlist' }),
+      devUrl: '', entryFile: view.entryFile, views: [view],
+    }
+    const mgr = new FrontendPluginManager()
+    const grant = { packageVersion: '1.0.0', system: [] as never[], shell: 'allowlist' as const, storage: true }
+    mgr.setCapabilityGrantResolver(() => grant)
+    mgr.registerDescriptor(pluginDescriptor, { builtin: true })
+    mgr.registerBackendActivation(spec)
+    const bind = vi.spyOn(PluginBackendHost.prototype, 'bindView').mockResolvedValue(undefined)
+    const service = vi.spyOn(
+      mgr as unknown as { sendPublicBackend: (type: string, payload: Record<string, unknown>, before?: () => boolean) => Promise<unknown> },
+      'sendPublicBackend',
+    ).mockImplementation(async (_type, _payload, before) => {
+      if (before && !before()) throw new Error('request denied before dispatch')
+      return { ok: true, stdout: 'main\n', stderr: '', exit_code: 0 }
+    })
+    const store = new NativeBackendStore(join(root, 'store'))
+    store.setEnabled(true)
+    // An admitted agent tool call, as FrontendPluginManager.agentToolCallFor reports it.
+    let call: { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
+    const controller = new ThirdPartyBackendController({
+      store,
+      dataRoot: join(root, 'data'),
+      probe: { platform: 'darwin', sandboxExec: () => '/usr/bin/sandbox-exec', bubblewrap: () => null },
+      promptConsent: async () => true,
+      shellPort: () => mgr.createThirdPartyShellPort(),
+      agentToolCall: (id) => (id === 'agent-call' ? call : undefined),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
+    })
+    const host = new FakeBrowserWindow()
+    try {
+      const handle = await mgr.openView(pluginDescriptor, view, {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        workspacePath: workspace,
+        capabilityContext: {
+          publisherEligible: false,
+          userGrant: grant,
+          runtimeBinding: {
+            pluginId: 'acme.indexer', packageVersion: '1.0.0',
+            workspaceId: mgr.workspaceIdForPath(workspace), instanceId: null, audience: view.contributionKey,
+          },
+        } as HostCapabilityContext,
+      })
+      const admission = await controller.admit(spec, workspace)
+      const context = (initiator: PlansBridgeContext['runtime']['initiator']): PlansBridgeContext => ({
+        runtime: {
+          pluginId: 'acme.indexer', packageVersion: '1.0.0', workspaceId: mgr.workspaceIdForPath(workspace),
+          instanceId: handle.instanceId, contributionKey: view.contributionKey, hostWindowId: 'w', initiator,
+        },
+        workspacePath: workspace,
+        authorizedPlanRoot: workspace,
+        requestId: 'bridge:1',
+        signal: new AbortController().signal,
+        emit: () => undefined,
+      })
+      const run = (command: string, initiator: PlansBridgeContext['runtime']['initiator']) => admission.bridgeDispatcher.dispatch({
+        id: 'bridge:1', origin: { kind: 'call' as const, requestId: 'r' }, port: 'shell' as const, operation: 'run', arguments: { command },
+      }, context(initiator))
+      const agent = { kind: 'agent', source: 'mcp', id: 'agent-call' } as never
+
+      // Everything a call needs is in place: the user's own call runs.
+      await expect(run('git status', { kind: 'user', id: 'u' })).resolves.toEqual({ exitCode: 0, stdout: 'main\n', stderr: '' })
+      service.mockClear()
+
+      // A read tool, read-only VCS command: past dispatchShell, refused by the port.
+      call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: workspace }
+      await expect(run('git status', agent)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED', message: 'Shell capability is denied.' })
+      // A write tool with the user's DB3 answer: the same.
+      call = { pluginId: 'acme.indexer', risk: 'write', workspaceRoot: workspace }
+      store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, workspace)
+      for (const command of ['git status', 'git commit -m x']) {
+        await expect(run(command, agent)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED', message: 'Shell capability is denied.' })
+      }
+      // Nothing reached the shell broker.
+      expect(service).not.toHaveBeenCalled()
+      mgr.destroyInstance(handle.instanceId)
+    } finally {
+      bind.mockRestore()
+      service.mockRestore()
+      await mgr.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('agent capability requests the Host cannot serve', () => {
