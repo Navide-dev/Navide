@@ -159,6 +159,9 @@ def _has_non_integer_number(value: Any) -> bool:
 #: Schema keywords whose values are data, not schema: never refused for their
 #: text (the core neutralizes every schema string in tools/list instead).
 _SCHEMA_DATA_KEYWORDS = frozenset(("const", "default", "enum", "examples"))
+#: Keywords whose value maps names (property names, definition names) to
+#: subschemas: a name such as ``enum`` there is a name, not a keyword.
+_SCHEMA_MAP_KEYWORDS = frozenset(("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"))
 
 
 def _has_invalid_schema_text(value: Any) -> bool:
@@ -170,6 +173,8 @@ def _has_invalid_schema_text(value: Any) -> bool:
     return any(
         False
         if key in _SCHEMA_DATA_KEYWORDS
+        else any(_has_invalid_schema_text(sub) for sub in item.values())
+        if key in _SCHEMA_MAP_KEYWORDS and isinstance(item, dict)
         else (not is_valid_agent_tool_text(item))
         if key in ("description", "title") and isinstance(item, str)
         else _has_invalid_schema_text(item)

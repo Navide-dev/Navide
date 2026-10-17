@@ -196,6 +196,11 @@ function hasNonIntegerNumber(value: unknown): boolean {
 /** Schema keywords whose values are data, not schema: never refused for their
  *  text (the core neutralizes every schema string in tools/list instead). */
 const SCHEMA_DATA_KEYWORDS: ReadonlySet<string> = new Set(['const', 'default', 'enum', 'examples'])
+/** Keywords whose value maps names (property names, definition names) to
+ *  subschemas: a name such as `enum` there is a name, not a keyword. */
+const SCHEMA_MAP_KEYWORDS: ReadonlySet<string> = new Set([
+  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas',
+])
 
 /** Every `description` / `title` string anywhere in a schema follows the text rules too:
  *  agents read the whole schema in tools/list. */
@@ -205,9 +210,11 @@ function hasInvalidSchemaText(value: unknown): boolean {
   return Object.entries(value).some(([key, item]) =>
     SCHEMA_DATA_KEYWORDS.has(key)
       ? false
-      : (key === 'description' || key === 'title') && typeof item === 'string'
-        ? !isValidAgentToolText(item)
-        : hasInvalidSchemaText(item))
+      : SCHEMA_MAP_KEYWORDS.has(key) && isPlainObject(item)
+        ? Object.values(item).some(hasInvalidSchemaText)
+        : (key === 'description' || key === 'title') && typeof item === 'string'
+          ? !isValidAgentToolText(item)
+          : hasInvalidSchemaText(item))
 }
 
 function isValidTimeout(value: unknown): boolean {
