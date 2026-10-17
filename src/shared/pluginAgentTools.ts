@@ -129,10 +129,25 @@ export function validateAgentToolName(name: unknown, pluginId: unknown): AgentTo
 
 // ── text rules ──────────────────────────────────────────────────────────────
 
+/** The characters that reorder or hide text: bidi controls, zero-width and
+ *  other invisible format characters (soft hyphen, Mongolian vowel separator,
+ *  combining grapheme joiner), variation selectors and tag characters (which
+ *  can smuggle ASCII an agent reads but a dialog does not show). One set for
+ *  the text rule and for display. */
+const INVISIBLE_CHARACTERS =
+  '\\u00ad\\u034f\\u061c\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\ufe00-\\ufe0f\\ufeff\\u{e0000}-\\u{e007f}'
 // Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
-// bidi controls and zero-width characters that reorder or hide text.
-// eslint-disable-next-line no-control-regex
-const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/
+// invisible characters above.
+const FORBIDDEN_TEXT = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>${INVISIBLE_CHARACTERS}]`, 'u')
+const INVISIBLE_TEXT = new RegExp(`[${INVISIBLE_CHARACTERS}]`, 'gu')
+
+/** Text from a package shown to the user verbatim except that every invisible
+ *  character is spelled out (`\u{202e}`), so a schema key or enum value cannot
+ *  reorder or hide what a consent surface shows. Nothing is refused for it. */
+export function revealInvisibleText(text: string): string {
+  return text.replace(INVISIBLE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
+}
+
 // Cc except tab and line feed.
 // eslint-disable-next-line no-control-regex
 const RESULT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g

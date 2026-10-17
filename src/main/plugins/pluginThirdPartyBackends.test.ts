@@ -765,4 +765,14 @@ describe('native backend consent text', () => {
     expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
     expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
   })
+
+  it('spells out invisible characters in a tool schema instead of showing them raw', () => {
+    const tool = {
+      name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
+      inputSchema: { type: 'object', properties: { 'k‮x': { enum: ['a​b', 'v️'] } } }, timeoutMs: 30000,
+    }
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] })
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"k\\u{202e}x":{"enum":["a\\u{200b}b","v\\u{fe0f}"]}}}')
+    expect(detail).not.toMatch(/[​‮️]/)
+  })
 })

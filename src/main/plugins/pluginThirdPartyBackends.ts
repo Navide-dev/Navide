@@ -44,6 +44,7 @@ import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
 import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } from '../../shared/pluginDisclosure'
+import { revealInvisibleText } from '../../shared/pluginAgentTools'
 import type { JsonValue } from './pluginBackendSupervisor'
 
 /**
@@ -312,7 +313,9 @@ function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string
     ...prompt.agentTools.map((tool) => [
       `• ${tool.name} → ${tool.method} (declared ${tool.risk === 'write' ? 'as changing data' : 'read-only'}, ` +
         `times out after ${tool.timeoutMs / 1000} s): ${tool.description}`,
-      `  Input schema: ${JSON.stringify(tool.inputSchema)}`,
+      // Keys and enum values may hold invisible characters (never refused):
+      // spelled out so they cannot reorder or hide the dialog's text.
+      `  Input schema: ${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
     ].join('\n')),
     'What these tools return is shown to the agent, which may pass it on elsewhere.',
   ].join('\n')

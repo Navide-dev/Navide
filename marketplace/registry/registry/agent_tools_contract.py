@@ -47,10 +47,12 @@ CORE_TOOL_NAMES = (
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
-    "mcp_list", "memory_list", "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
+    "marketplace_detail", "marketplace_search", "mcp_list", "memory_list", "pipeline_abort",
+    "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
-    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "preview_clear", "preview_list",
+    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_list_installed",
+    "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
     "share_list", "share_revoke", "skills_inspect", "skills_install", "skills_install_status", "skills_list",
@@ -105,8 +107,13 @@ def validate_agent_tool_name(name: Any, plugin_id: Any) -> str | None:
 # ── text rules ──────────────────────────────────────────────────────────────
 
 # Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
-# bidi controls and zero-width characters that reorder or hide text.
-_FORBIDDEN_TEXT = re.compile("[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+# characters that reorder or hide text: bidi controls, zero-width and other
+# invisible format characters (U+00AD, U+034F, U+180E), variation selectors
+# and tag characters.
+_FORBIDDEN_TEXT = re.compile(
+    "[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u00ad\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e"
+    "\u2060-\u2069\ufe00-\ufe0f\ufeff\U000e0000-\U000e007f]"
+)
 # Cc except tab and line feed.
 _RESULT_CONTROL = re.compile("[\u0000-\u0008\u000b-\u001f\u007f-\u009f]")
 

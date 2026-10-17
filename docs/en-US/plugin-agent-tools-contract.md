@@ -159,11 +159,14 @@ tool means adding it there (or giving it a reserved prefix).
 ### 2.4 Text rules
 
 - `title` and `description`: non-empty strings containing no character in
-  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no bidi
-  control or zero-width character (U+061C, U+200B–U+200F, U+202A–U+202E,
-  U+2060–U+2069, U+FEFF) (`isValidAgentToolText`). These are what could fake a
-  second tool or a system message in a tool list or a terminal, or reorder and
-  hide text in a dialog.
+  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no
+  character that reorders or hides text: bidi controls and zero-width or other
+  invisible characters (U+00AD, U+034F, U+061C, U+180E, U+200B–U+200F,
+  U+202A–U+202E, U+2060–U+2069, U+FEFF), variation selectors (U+FE00–U+FE0F)
+  and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
+  what could fake a second tool or a system message in a tool list or a
+  terminal, reorder and hide text in a dialog, or smuggle text an agent reads
+  but the user does not see.
 - The same rule applies to every `description` and `title` string anywhere in
   `inputSchema` (agents read the whole schema in tools/list); a violation is
   `AGENT_TOOL_TEXT_INVALID` on field `inputSchema`. Values of the data keywords
@@ -174,7 +177,8 @@ tool means adding it there (or giving it a reserved prefix).
   (property names included, `pattern` values excepted): control characters,
   bidi controls, zero-width characters and variation selectors
   (U+FE00–U+FE0F, U+E0100–U+E01EF) are removed and boundary markers are broken,
-  with the same `external_content` rules that fence results.
+  with the same `external_content` rules that fence results. Consent surfaces
+  show such characters in schema strings spelled out (`\u{202e}`).
 - Consent surfaces show each tool's `method` and its whole `inputSchema`
   (collapsible), the number of tools and their total size. Nothing limits the
   number of tools or the size of the whole declaration; DB9 applies per field

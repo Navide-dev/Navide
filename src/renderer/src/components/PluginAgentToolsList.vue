@@ -5,6 +5,7 @@
 // agent will read (collapsed). Presentation only; the Host decides whether any
 // of them is served.
 import { computed } from 'vue'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 const props = defineProps<{
   tools: ReadonlyArray<{
@@ -49,7 +50,7 @@ const totalSize = computed(() => {
         <span class="agent-tool-description">{{ tool.description }}</span>
         <details v-if="tool.inputSchema" class="agent-tool-schema">
           <summary>{{ $t('settings.extensions.agentTools.inputSchema') }}</summary>
-          <pre class="agent-tool-schema-body">{{ JSON.stringify(tool.inputSchema, null, 2) }}</pre>
+          <pre class="agent-tool-schema-body">{{ revealInvisibleText(JSON.stringify(tool.inputSchema, null, 2)) }}</pre>
         </details>
         <span v-if="tool.collidesWith" class="agent-tool-collision" role="note">
           {{ $t('settings.extensions.agentTools.collision', { heldBy: tool.collidesWith }) }}
