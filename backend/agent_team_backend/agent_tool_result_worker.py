@@ -101,9 +101,32 @@ def _end_when_parent_goes(parent: int, group: int) -> None:
         time.sleep(HEARTBEAT_S)
         if not osplat.process_tree.is_alive(parent):
             try:
+                # The tree contain() made in main(): a kill-on-close job on
+                # Windows (this process and all it started, not this process
+                # first and its children never), this process's group on
+                # POSIX when it leads one.
+                osplat.process_tree.end_contained(os.getpid())
+            except OSError:
+                pass
+            try:
+                # Under a onefile bootloader on POSIX the group is the bootloader's.
                 osplat.process_tree.kill_group(group, force=True)
+            except OSError:
+                pass
             finally:
                 os._exit(1)
+
+
+def _outlive_no_parent(parent: int, group: int) -> None:
+    """Put this process's tree in reach (what it starts from now on is in it
+    too), then end that tree once the backend `parent` is gone."""
+    from agent_team_backend import osplat
+
+    try:
+        osplat.process_tree.contain(os.getpid())
+    except OSError:
+        pass
+    threading.Thread(target=_end_when_parent_goes, args=(parent, group), daemon=True).start()
 
 
 def main() -> int:
@@ -117,8 +140,7 @@ def main() -> int:
     if parent.isdigit():
         # The group the backend started: this process, or under a onefile
         # bootloader that process.
-        group = os.getppid() if getattr(sys, "frozen", False) else os.getpid()
-        threading.Thread(target=_end_when_parent_goes, args=(int(parent), group), daemon=True).start()
+        _outlive_no_parent(int(parent), os.getppid() if getattr(sys, "frozen", False) else os.getpid())
     from agent_team_backend.mcp_server.plugin_agent_tools import wrap_result
 
     _write_frame(out, _READY)

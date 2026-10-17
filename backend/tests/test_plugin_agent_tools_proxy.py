@@ -1402,9 +1402,10 @@ import os, subprocess, sys, time
 sys.path.insert(0, {backend_dir!r})
 from agent_team_backend import agent_tool_result_worker as worker
 worker.HEARTBEAT_S = 0.2
+worker._outlive_no_parent({stand_in.pid}, os.getpid())
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
 open({str(pids)!r}, "w").write(f"{{os.getpid()}} {{child.pid}}")
-worker._end_when_parent_goes({stand_in.pid}, os.getpid())
+time.sleep(3600)
 """],
         start_new_session=True,
     )
