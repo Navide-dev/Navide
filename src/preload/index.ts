@@ -383,6 +383,17 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   readme: string | null
 }
 
+export interface BackendResourceNoticeView {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: 'memory' | 'cpu' | 'processes' | 'disk'
+  usage: number
+  threshold: number
+  at: number
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
@@ -1249,6 +1260,16 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
       setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
+      /** Watchdog option C: unanswered resource notices (contract 5.2). */
+      resourceNotices: (): Promise<BackendResourceNoticeView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceNotices'),
+      answerResourceNotice: (id: string, choice: 'terminate' | 'continue'): Promise<boolean> =>
+        ipcRenderer.invoke('plugins:nativeBackends:answerResourceNotice', { id, choice }),
+      onResourceNoticesChanged: (handler: () => void): (() => void) => {
+        const listener = (): void => handler()
+        ipcRenderer.on('plugins:nativeBackends:resourceNoticesChanged', listener)
+        return () => ipcRenderer.removeListener('plugins:nativeBackends:resourceNoticesChanged', listener)
+      },
     },
   },
 })

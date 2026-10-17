@@ -487,9 +487,24 @@ declare global {
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
           setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
+          /** Watchdog option C: unanswered resource notices (contract 5.2). */
+          resourceNotices?: () => Promise<BackendResourceNoticeView[]>
+          answerResourceNotice?: (id: string, choice: 'terminate' | 'continue') => Promise<boolean>
+          onResourceNoticesChanged?: (handler: () => void) => () => void
         }
       }
     }
+  }
+
+  interface BackendResourceNoticeView {
+    id: string
+    pluginId: string
+    name: string
+    packageVersion: string
+    item: 'memory' | 'cpu' | 'processes' | 'disk'
+    usage: number
+    threshold: number
+    at: number
   }
 
   interface InstalledPluginSummary {

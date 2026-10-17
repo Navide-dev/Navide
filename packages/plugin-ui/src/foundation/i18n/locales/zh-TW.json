@@ -11007,6 +11007,21 @@
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
     "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
   },
+  "backendResource": {
+    "title": "Navide 外掛的 backend 用量超過門檻",
+    "body": "{name}（{id} {version}）：{item}目前是 {usage}，超過門檻 {threshold}。",
+    "keepsRunning": "在你選擇之前，它會繼續執行。",
+    "again": "選「繼續執行」後，要超過目前門檻的兩倍，Navide 才會再通知你。這只決定什麼時候通知，不會限制任何事。",
+    "stop": "停止",
+    "continue": "繼續執行",
+    "cores": "{count} 核",
+    "item": {
+      "memory": "記憶體",
+      "cpu": "CPU",
+      "processes": "程序數",
+      "disk": "資料夾大小"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "這次更新的權限變化",

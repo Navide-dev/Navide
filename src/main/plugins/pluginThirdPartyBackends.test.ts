@@ -84,7 +84,7 @@ function controller(options: Partial<ConstructorParameters<typeof ThirdPartyBack
     dataRoot: join(root, 'data'),
     probe: DARWIN,
     spawnImpl: spawnImpl as never,
-    watchResources: () => ({ dispose: vi.fn(), sample: async () => null }),
+    watchResources: () => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     killSandbox: vi.fn(),
     sweepEscapees: vi.fn(async () => []),
     ...options,
@@ -619,7 +619,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
       spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never,
       watchResources: (_pid, _dir, onViolation) => {
         report = onViolation as never
-        return { dispose: vi.fn(), sample: async () => null }
+        return { dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }
       },
     })
     const spec = writePackage()
@@ -780,7 +780,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('package bridge', () => {
 
 describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
   it('needs the full admission for this exact content, never prompts, and runs under the watchdog', async () => {
-    const watchResources = vi.fn(() => ({ dispose: vi.fn(), sample: async () => null }))
+    const watchResources = vi.fn(() => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }))
     const spawnImpl = vi.fn(() => ({ pid: 7, once: vi.fn() }))
     const { instance } = controller({ promptConsent: allow, watchResources, spawnImpl: spawnImpl as never })
     const spec = writePackage({}, 'binary-v1')

@@ -170,6 +170,7 @@ import {
 } from './pluginFrameAssetProtocol'
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
+import { PLUGIN_RESOURCE_DECISION_MESSAGE, type PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
 import {
   MARKETPLACE_QUERY_REQUEST_EVENT,
   MARKETPLACE_QUERY_RESULT_MESSAGE,
@@ -8803,6 +8804,23 @@ export class FrontendPluginManager {
    *  and inventory; see marketplaceQuery.ts. */
   setMarketplaceQueryHandler(handler: (query: unknown) => Promise<MarketplaceQueryAnswer>): void {
     this.marketplaceQueryHandler = handler
+  }
+
+  /** Plan B watchdog option C (contract 5.2): one resource decision row for
+   *  the backend's audit, over this Host's authenticated session. Never throws
+   *  and never waits: a row that cannot be sent is logged and dropped, so the
+   *  user's choice is never held up. */
+  recordResourceDecision(row: PluginResourceDecisionRow): void {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) {
+      console.warn(`[plugin-backend] resource decision for ${row.plugin_id} not recorded: Navide Host session is not ready`)
+      return
+    }
+    void client.send(PLUGIN_RESOURCE_DECISION_MESSAGE, { rows: [row] }, 10_000).then((response) => {
+      if (!response.ok) console.warn(`[plugin-backend] resource decision for ${row.plugin_id} not recorded: ${response.error?.message ?? 'refused'}`)
+    }).catch((error: unknown) => {
+      console.warn(`[plugin-backend] resource decision for ${row.plugin_id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    })
   }
 
   /** Install the function that carries out an agent's plugins_disable /

@@ -117,6 +117,21 @@ export function registerNativeBackendIpc(
     await agentTools.setSwitches(change)
     return overview()
   })
+  // Plan B watchdog option C (contract 5.2): the main window reads the
+  // unanswered resource notices (on load and when told they changed) and
+  // passes the user's Stop or Keep running on.
+  handle('plugins:nativeBackends:resourceNotices', async (event) => {
+    assertAuthorized(event)
+    return controller.resourceNotices()
+  })
+  handle('plugins:nativeBackends:answerResourceNotice', async (event, args) => {
+    assertAuthorized(event)
+    const { id, choice } = record(args)
+    if (typeof id !== 'string' || id.length === 0 || (choice !== 'terminate' && choice !== 'continue')) {
+      throw new Error('invalid resource notice answer')
+    }
+    return controller.answerResourceNotice(id, choice)
+  })
   handle('plugins:nativeBackends:revokeWorkspaceWrite', async (event, args) => {
     assertAuthorized(event)
     const { id, workspacePath } = record(args)

@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ResourceViolation } from './pluginBackendResourceWatchdog'
 import { SANDBOX_EXEC_PATH, type BackendSandboxProbe } from './pluginBackendSandbox'
 import { NativeBackendStore } from './pluginNativeBackendStore'
 import { canonicalContractJson } from '../../shared/pluginDisclosure'
@@ -89,7 +90,7 @@ function controller(options: Partial<ConstructorParameters<typeof ThirdPartyBack
     dataRoot: join(root, 'data'),
     probe: DARWIN,
     spawnImpl: vi.fn(() => ({ pid: undefined, once: vi.fn() })) as never,
-    watchResources: () => ({ dispose: vi.fn(), sample: async () => null }),
+    watchResources: () => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     killSandbox: vi.fn(),
     sweepEscapees: vi.fn(async () => []),
     digestBackend: async () => 'a'.repeat(64),

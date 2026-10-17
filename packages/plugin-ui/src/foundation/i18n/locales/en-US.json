@@ -11007,6 +11007,21 @@
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   },
+  "backendResource": {
+    "title": "A Navide plugin's backend is over a resource threshold",
+    "body": "{name} ({id} {version}): {item} is {usage}, over its threshold of {threshold}.",
+    "keepsRunning": "It keeps running until you choose.",
+    "again": "If you keep it running, Navide tells you again only when this goes past twice the current level. That only decides when you are told; nothing is limited.",
+    "stop": "Stop",
+    "continue": "Keep running",
+    "cores": "{count} cores",
+    "item": {
+      "memory": "memory",
+      "cpu": "CPU",
+      "processes": "the number of processes",
+      "disk": "its data folder"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "What this update changes",
