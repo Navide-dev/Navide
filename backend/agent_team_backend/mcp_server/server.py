@@ -25,6 +25,7 @@ lifespan task — safe for the anyio task group inside.
 from __future__ import annotations
 
 import asyncio
+import sys
 import hashlib
 import json
 import logging
@@ -4930,9 +4931,109 @@ def _host_answer_timeout_s(payload: dict[str, Any]) -> float:
     return _AGENT_CAPABILITY_TIMEOUT_S
 
 
+# ── chunked transfer with the Host (agent-tools contract 4.4, A2 and R2) ────
+# Per pending agent request: the result pieces received so far and when the
+# Host last showed the call is alive (a progress message, a piece, the result).
+_agent_transfers: dict[str, dict[str, Any]] = {}
+
+
+def _agent_transfer_start(request_id: str) -> None:
+    _agent_transfers[request_id] = {
+        "pieces": [],
+        "short": False,
+        "activity": asyncio.get_running_loop().time(),
+    }
+
+
+def note_agent_capability_activity(request_id: str) -> bool:
+    """The Host says a pending request is alive; False when nobody waits for it any more."""
+    transfer = _agent_transfers.get(request_id)
+    if transfer is None or request_id not in _agent_capability_pending.pending:
+        return False
+    transfer["activity"] = asyncio.get_running_loop().time()
+    return True
+
+
+def accept_agent_result_piece(request_id: str, seq: Any, data: Any) -> bool:
+    """Keep one result piece from the Host (R2). False tells the Host to stop sending.
+
+    Each piece is checked on arrival: one out of order, or any piece after a
+    short one, fails that call at once with PLUGIN_TOOL_CHUNKS_INVALID.
+    """
+    from agent_team_backend.plugins.agent_tools_contract import (
+        AGENT_TOOL_CHUNKS_INVALID,
+        agent_tool_chunk_arrival,
+    )
+
+    transfer = _agent_transfers.get(request_id)
+    if transfer is None or request_id not in _agent_capability_pending.pending:
+        return False
+    arrival = agent_tool_chunk_arrival(transfer["short"], data, seq=seq, expected_seq=len(transfer["pieces"]))
+    if not arrival["ok"]:
+        _agent_capability_pending.resolve(request_id, {
+            "ok": False,
+            "error": "The Navide plugin result did not arrive whole.",
+            "error_code": AGENT_TOOL_CHUNKS_INVALID,
+            "reason": arrival["reason"],
+        })
+        return False
+    transfer["pieces"].append(data)
+    transfer["short"] = arrival["short"]
+    transfer["activity"] = asyncio.get_running_loop().time()
+    return True
+
+
 def resolve_agent_capability(request_id: str, result: dict[str, Any]) -> bool:
-    """Resolve one Host-brokered agent operation."""
+    """Resolve one Host-brokered agent operation.
+
+    A result sent in pieces (``resultChunks`` in place of ``result``) is joined
+    here and delivered as if it had arrived whole.
+    """
+    if isinstance(result, dict) and "resultChunks" in result and "result" not in result:
+        from agent_team_backend.plugins.agent_tools_contract import (
+            AGENT_TOOL_CHUNKS_INVALID,
+            reassemble_agent_tool_payload_text,
+        )
+
+        transfer = _agent_transfers.get(request_id) or {"pieces": []}
+        joined = reassemble_agent_tool_payload_text(
+            [{"seq": seq, "data": data} for seq, data in enumerate(transfer["pieces"])], result["resultChunks"]
+        )
+        reason = joined.get("reason", "json")
+        if joined["ok"]:
+            try:
+                value = json.loads(joined["text"])
+                result = {key: item for key, item in result.items() if key != "resultChunks"} | {"result": value}
+                reason = None
+            except ValueError:
+                reason = "json"
+        if reason is not None:
+            result = {
+                "ok": False,
+                "error": "The Navide plugin result did not arrive whole.",
+                "error_code": AGENT_TOOL_CHUNKS_INVALID,
+                "reason": reason,
+            }
     return _agent_capability_pending.resolve(request_id, result)
+
+
+async def _wait_for_host_answer(request_id: str, future: "asyncio.Future[dict[str, Any]]", window: float) -> Any:
+    """Wait for the Host's answer; every sign of life from it restarts the window (contract 4.4, Timing).
+
+    The window is ``max(timeoutMs, AGENT_TOOL_CHUNK_IDLE_MS) + 5 s``, so neither
+    a long plugin run nor a long transfer ends the wait while data still moves.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + window
+    while True:
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), timeout=max(0.0, deadline - loop.time()))
+        except asyncio.TimeoutError:
+            transfer = _agent_transfers.get(request_id)
+            restarted = (transfer["activity"] + window) if transfer else deadline
+            if restarted <= loop.time():
+                return TIMEOUT
+            deadline = restarted
 
 
 async def request_host_agent_capability(
@@ -5040,19 +5141,29 @@ async def request_host_agent_workspace_backend(
         wait_payload = {"timeoutMs": agent_tool["timeout_ms"]}
     request_id = request["request_id"]
     future = _agent_capability_pending.register(request_id)
+    _agent_transfer_start(request_id)
     try:
-        sent = await app.unicast_host(make_event("agent.capability.request", request))
+        if agent_tool is not None:
+            sent = await asyncio.shield(_send_agent_tool_request(app, make_event, request))
+        else:
+            sent = await app.unicast_host(make_event("agent.capability.request", request))
         if not sent:
             return {
                 "ok": False,
                 "error": "Navide Host is not connected",
                 "error_code": "host_unavailable",
             }
-        result = await _agent_capability_pending.wait(
-            request_id,
-            future,
-            timeout=_host_answer_timeout_s(wait_payload),
-        )
+        if agent_tool is not None:
+            from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_IDLE_MS
+
+            window = max(_host_answer_timeout_s(wait_payload) - _HOST_ANSWER_GRACE_S, AGENT_TOOL_CHUNK_IDLE_MS / 1000)
+            result = await _wait_for_host_answer(request_id, future, window + _HOST_ANSWER_GRACE_S)
+        else:
+            result = await _agent_capability_pending.wait(
+                request_id,
+                future,
+                timeout=_host_answer_timeout_s(wait_payload),
+            )
         if result is TIMEOUT:
             return {
                 "ok": False,
@@ -5062,6 +5173,36 @@ async def request_host_agent_workspace_backend(
         return result
     finally:
         _agent_capability_pending.discard(request_id)
+        _agent_transfers.pop(request_id, None)
+
+
+async def _send_agent_tool_request(app: Any, make_event: Any, request: dict[str, Any]) -> bool:
+    """Send an agent tool request to the Host: arguments longer than one piece
+    first go as ``agent.capability.request_chunk`` events, each awaited, then
+    the request with ``payload.argumentChunks`` (contract 4.4, A2). The caller
+    shields this, so a cancelled MCP call never leaves the Host half a request.
+    """
+    from agent_team_backend.plugins.agent_tools_contract import (
+        AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+        AGENT_TOOL_CHUNK_BYTES,
+        agent_tool_payload_text,
+        split_agent_tool_payload_text,
+        utf8_byte_length,
+    )
+
+    payload = request.get("payload")
+    arguments = payload.get("arguments") if isinstance(payload, dict) else None
+    if isinstance(payload, dict) and set(payload) == {"arguments"}:
+        text = agent_tool_payload_text(arguments)
+        size = utf8_byte_length(text)
+        if size > AGENT_TOOL_CHUNK_BYTES:
+            pieces = split_agent_tool_payload_text(text)
+            for seq, data in enumerate(pieces):
+                event = {"request_id": request["request_id"], "seq": seq, "data": data}
+                if not await app.unicast_host(make_event(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, event)):
+                    return False
+            request = request | {"payload": {"argumentChunks": {"chunks": len(pieces), "bytes": size}}}
+    return await app.unicast_host(make_event("agent.capability.request", request))
 
 
 # ── UI control (ui_invoke / ui_snapshot / ui_list_actions) ─────────────────
@@ -9248,7 +9389,25 @@ class _PlanMcpASGI:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
-        await manager.handle_request(scope, receive, send)
+        # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
+        # size is disclosed in the backend log instead: every body longer than
+        # one transfer piece is logged with its byte count.
+        received = 0
+
+        async def counting_receive() -> Any:
+            nonlocal received
+            message = await receive()
+            if message.get("type") == "http.request":
+                received += len(message.get("body", b""))
+            return message
+
+        try:
+            await manager.handle_request(scope, counting_receive, send)
+        finally:
+            from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
+
+            if received > AGENT_TOOL_CHUNK_BYTES:
+                _log.info("mcp request body: %d bytes", received)
 
 
 asgi_app = _PlanMcpASGI()
@@ -9268,6 +9427,11 @@ async def startup() -> None:
         app=server._mcp_server,  # noqa: SLF001
         json_response=True,
         stateless=True,
+        # No request body limit for any tool, core or plugin (contract 4.4, A1;
+        # the SDK default is 4 MiB and it needs a positive integer). The body is
+        # read incrementally from the socket and parsed once as one JSON-RPC
+        # message; its size is logged by _PlanMcpASGI.
+        max_request_body_size=sys.maxsize,
     )
     await _lifecycle.enter_async_context(manager.run())
     _session_manager = manager

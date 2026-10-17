@@ -25,6 +25,7 @@ from agent_team_backend.guard.taint import is_tainted, list_tainted
 from agent_team_backend.mcp_server import plugin_agent_tools as proxy
 from agent_team_backend.mcp_server import server as core
 from agent_team_backend.mcp_server.server import _Caller
+from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_IDLE_MS, reassemble_agent_tool_payload_text
 
 pytestmark = pytest.mark.asyncio
 
@@ -72,10 +73,21 @@ class FakeHost:
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
         self.response: dict[str, Any] = {"ok": True, "result": {"status": "done"}, "meta": {}}
+        self.argument_pieces: list[dict[str, Any]] = []
 
     async def unicast_host(self, event: dict[str, Any]) -> bool:
+        # Arguments longer than one piece arrive first as request_chunk events
+        # (contract 4.4, A2); the Host joins them when the request comes.
+        if event["type"] == "agent.capability.request_chunk":
+            self.argument_pieces.append(event["payload"])
+            return True
         assert event["type"] == "agent.capability.request"
         request = event["payload"]
+        if "argumentChunks" in request["payload"]:
+            joined = reassemble_agent_tool_payload_text(self.argument_pieces, request["payload"]["argumentChunks"])
+            assert joined["ok"], joined
+            request = request | {"payload": {"arguments": json.loads(joined["text"])}}
+            self.argument_pieces = []
         self.requests.append(request)
         assert core.resolve_agent_capability(request["request_id"], self.response)
         return True
@@ -361,15 +373,17 @@ async def test_the_wait_follows_the_tool_timeout(host: FakeHost, monkeypatch) ->
     _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
     _apply(_snapshot(1, [_entry("devmap_read", timeoutMs=1234)]))
     waits: list[float] = []
-    original = core._agent_capability_pending.wait
+    original = core._wait_for_host_answer
 
-    async def recording_wait(request_id: str, future: Any, *, timeout: float) -> Any:
-        waits.append(timeout)
-        return await original(request_id, future, timeout=timeout)
+    async def recording_wait(request_id: str, future: Any, window: float) -> Any:
+        waits.append(window)
+        return await original(request_id, future, window)
 
-    monkeypatch.setattr(core._agent_capability_pending, "wait", recording_wait)
+    monkeypatch.setattr(core, "_wait_for_host_answer", recording_wait)
     await core.server.call_tool("devmap_read", {})
-    assert waits == [1.234 + core._HOST_ANSWER_GRACE_S]
+    # Contract 4.4, Timing: max(timeoutMs, the 30 s transfer idle time) + 5 s,
+    # restarted by every sign of life from the Host.
+    assert waits == [max(1.234, AGENT_TOOL_CHUNK_IDLE_MS / 1000) + core._HOST_ANSWER_GRACE_S]
 
 
 @pytest.mark.parametrize("state", [
