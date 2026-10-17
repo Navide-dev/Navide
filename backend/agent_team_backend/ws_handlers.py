@@ -359,6 +359,32 @@ _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "
 #: The Host records broker and shell-broker calls; agent tool calls are the
 #: backend's own rows (B1).
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: Calls into a plugin's own backend, counted by the Host per batch.
+_BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
+
+
+def _backend_call_row(app: Any, row: dict) -> str | None:
+    """Record one counted backend-call row; the skip reason when it is not recorded.
+
+    Exact fields (``at`` optional: the minute the calls fell in, Unix ms), a
+    ``backend.`` address and a positive count.
+    """
+    from .plugins import agent_tools_contract as contract
+
+    if set(row) - {"at"} != _BACKEND_CALL_ROW_FIELDS:
+        return "malformed"
+    if not all(isinstance(row[key], str) for key in _BACKEND_CALL_ROW_FIELDS - {"count"}):
+        return "malformed"
+    if not row["address"].startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
+        return "malformed"
+    at = row.get("at")
+    if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+        return "bad at"
+    recorded = app.plugin_audit_log.record_backend_calls(
+        plugin_id=row["plugin_id"], plugin_version=row["plugin_version"], workspace=row["workspace"],
+        address=row["address"], outcome=row["outcome"], count=row["count"], at_ms=at,
+    )
+    return None if recorded else "refused"
 
 
 @handler("plugin.activity.record")
@@ -369,6 +395,10 @@ async def plugin_activity_record(
 
     Write-only: each row is redacted and queued by ``record_activity``; a row
     it refuses is skipped, and nothing here can fail the calls it records.
+    Rows with source ``backend`` (calls into a plugin's own backend, counted)
+    go to the per-minute counts instead. The ``backend.`` address prefix and
+    the source must agree: a backend row with another address, or another row
+    with a ``backend.`` address, is skipped.
     """
     from . import app
 
@@ -387,10 +417,18 @@ async def plugin_activity_record(
     # Skipped rows are counted by reason and logged, never their content (#373 F3).
     skipped = {"malformed": 0, "bad at": 0, "refused": 0}
     for row in rows:
+        if isinstance(row, dict) and row.get("source") == "backend":
+            reason = _backend_call_row(app, row)
+            if reason is None:
+                accepted += 1
+            else:
+                skipped[reason] += 1
+            continue
         if (
             not isinstance(row, dict)
             or not _ACTIVITY_ROW_REQUIRED <= set(row) <= _ACTIVITY_ROW_FIELDS
             or row.get("source") not in _HOST_ACTIVITY_SOURCES
+            or (isinstance(row.get("address"), str) and row["address"].startswith("backend."))
         ):
             skipped["malformed"] += 1
             continue

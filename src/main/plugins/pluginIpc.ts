@@ -12,6 +12,7 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { backendCallAddress } from './pluginActivity'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
@@ -246,14 +247,15 @@ function listingDisclosure(item: Record<string, unknown>): {
 const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
 
 /** What the installed manifest declares, for `declaredUnused` (contract 5.1).
- *  Backend methods are left out: a frontend's calls to its own backend
- *  (plugin:backend:call) are not recorded in plugin_activity, so they could
- *  only ever read "declared but not used" (review M2 on #371). */
+ *  A backend method is keyed `backend.<method>`: a frontend's calls to its own
+ *  backend (plugin:backend:call) are recorded under that address (#374). */
 export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
     if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
       out.push({ kind: item.kind, key: item.key })
+    } else if (item.kind === 'backendMethod') {
+      out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
     }
   }
   return out
