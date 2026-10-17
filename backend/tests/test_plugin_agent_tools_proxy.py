@@ -944,11 +944,6 @@ async def test_an_audit_write_failure_never_changes_the_call(host: FakeHost, mon
     assert '{"status": "done"}' in result.content[0].text
 
 
-@pytest.mark.xfail(
-    not hasattr(__import__("agent_team_backend.plugins.audit_log", fromlist=["_with_digest"]), "_with_digest"),
-    reason="queuing digests synchronously until #368 moves the digest to flush",
-    strict=True,
-)
 async def test_auditing_10_mib_of_arguments_does_not_hold_the_event_loop(host: FakeHost, tmp_path, monkeypatch) -> None:
     import time
 
@@ -966,3 +961,51 @@ async def test_auditing_10_mib_of_arguments_does_not_hold_the_event_loop(host: F
     assert time.perf_counter() - started < 0.02
     [row] = await _rows(log)
     assert row["args_bytes"] == len(json.dumps(arguments, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+
+
+async def test_a_declared_value_another_one_is_served_as_is_refused_not_guessed(host: FakeHost, monkeypatch) -> None:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    schema = {"type": "object", "properties": {"mode": {"enum": ["ab", "a\u200bb", "ok"]}}}
+    _apply(_snapshot(1, [_entry("devmap_read", inputSchema=schema)]))
+    [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
+    assert tool.inputSchema["properties"]["mode"]["enum"] == ["ab", "ab", "ok"]
+    # "ab" is declared, but it is also how "a\u200bb" is served: which one the
+    # agent means cannot be told, so nothing is sent.
+    body = _body(await core.server.call_tool("devmap_read", {"mode": "ab"}))
+    assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS" and "ambiguous" in body["error"]
+    assert host.requests == []
+    # Values that are not shared still go through.
+    await core.server.call_tool("devmap_read", {"mode": "ok"})
+    await core.server.call_tool("devmap_read", {"mode": "a\u200bb"})
+    assert [r["payload"]["arguments"]["mode"] for r in host.requests] == ["ok", "a\u200bb"]
+
+
+async def test_property_names_served_alike_are_logged_and_refused(host: FakeHost, monkeypatch, caplog) -> None:
+    import logging
+
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    schema = {"type": "object", "properties": {"kx": {"type": "integer"}, "k\u202ex": {"type": "integer"}}}
+    with caplog.at_level(logging.WARNING, logger=proxy.__name__):
+        _apply(_snapshot(1, [_entry("devmap_read", inputSchema=schema)]))
+    assert any("devmap_read" in record.getMessage() and "schema member names" in record.getMessage()
+               for record in caplog.records)
+    [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
+    assert list(tool.inputSchema["properties"]) == ["kx"]
+    body = _body(await core.server.call_tool("devmap_read", {"kx": 1}))
+    assert body["error_code"] == "PLUGIN_TOOL_INVALID_ARGUMENTS" and "ambiguous" in body["error"]
+    assert host.requests == []
+
+
+async def test_the_served_value_index_does_not_grow_across_sync_revisions(host: FakeHost, monkeypatch) -> None:
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    for revision in range(1, 21):
+        schema = {"type": "object", "properties": {"mode": {"enum": [f"r{revision}a", f"r{revision}b"]}}}
+        _apply(_snapshot(revision, [_entry("devmap_read", inputSchema=schema)]))
+        await core.server.call_tool("devmap_read", {"mode": f"r{revision}a"})
+    assert len(host.requests) == 20
+    # Each snapshot drops the index of the schemas it replaced: only the live
+    # schema's nodes are cached (rebuilt on the next call).
+    assert proxy._served_index.cache_info().currsize <= 2
