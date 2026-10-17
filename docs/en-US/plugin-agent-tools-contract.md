@@ -1149,13 +1149,22 @@ unchanged. A plugin request:
   remove): a second request with the same key returns the pending record. There
   is no count limit.
 - Plugin statuses: `pending` → `applying` → `completed` | `failed`, or
-  `rejected` / `expired` (15 minutes).
+  `rejected` / `expired` (15 minutes, `pending` only). Only `applying` ends as
+  `completed` or `failed`; every other transition is refused. `applying` does
+  not expire.
+- `target.id` is `<namespace>.<name>`. `reason` and the requester's `paneId`,
+  `paneName` and `workspace` are strings (`null` allowed for the requester
+  fields), stored with every Cc character except TAB and LF, every bidi or
+  zero-width (Cf) character and U+2028 / U+2029 removed; no length limit. The
+  card labels `reason` as written by the agent.
 - The request tools take only namespace, name and version: no consent argument
   exists. The decision is the WebSocket message
   `plugins.agent_request.decide` `{approval_id, approve, confirmation}`, where
   `confirmation` is a trust confirmation the main window mints for the action
   `plugins.agent_request.decide` (added to `TRUST_CONFIRM_ACTIONS`) with
-  subject `approval_id`. Without it the backend answers
+  subject `<approval_id>:approve` or `<approval_id>:reject` matching `approve`,
+  as `skills.install_approval.decide` binds its decision: a confirmation minted
+  to reject cannot be spent to approve. Without it the backend answers
   `CONFIRMATION_REQUIRED`. On approval the main window itself runs
   `prepareInstall` → trust dialog → `commitInstall`.
 
