@@ -1739,7 +1739,8 @@
           "memory": "記憶體",
           "cpu": "CPU",
           "processes": "行程數",
-          "disk": "磁碟"
+          "disk": "磁碟",
+          "stdoutPending": "尚未換行的輸出"
         },
         "shellRisk": "高風險：會執行 git、gh、glab",
         "shellRiskDetail": "可以透過 git、gh、glab 連到網路主機並送出工作區資料，也可以不經「修改檔案」的允許就讀取與修改工作區檔案。停用或撤銷權限時已經開始的指令會繼續執行到結束（最多約 30 秒）。",
@@ -11059,6 +11060,20 @@
   },
   "pluginActivity": {
     "title": "活動",
+    "resources": {
+      "heading": "資源用量（即時）",
+      "row": "{item}：{usage}／門檻 {threshold}",
+      "over": "超過門檻",
+      "waiting": "等你選擇",
+      "kept": "已選擇繼續執行；超過 {level} 才會再通知",
+      "item": {
+        "memory": "記憶體",
+        "cpu": "CPU",
+        "processes": "程序數",
+        "disk": "資料夾大小",
+        "stdoutPending": "尚未換行的輸出"
+      }
+    },
     "source": {
       "broker": "Navide 功能",
       "shell": "shell 指令",
@@ -11156,6 +11171,22 @@
       "activity": "最近活動",
       "undeclaredCount": "{count} 次沒宣告的使用被拒絕",
       "anomalyCount": "{count} 項異常"
+    }
+  },
+  "backendResource": {
+    "title": "Navide 外掛的 backend 用量超過門檻",
+    "body": "{name}（{id} {version}）：{item}目前是 {usage}，超過門檻 {threshold}。",
+    "keepsRunning": "在你選擇之前，它會繼續執行。",
+    "again": "選「繼續執行」後，要超過「門檻與當時用量兩者中較大者」的兩倍，Navide 才會再通知你。這只決定什麼時候通知，不會限制任何事。",
+    "stop": "停止",
+    "continue": "繼續執行",
+    "cores": "{count} 核",
+    "item": {
+      "memory": "記憶體",
+      "cpu": "CPU",
+      "processes": "程序數",
+      "disk": "資料夾大小",
+      "stdoutPending": "尚未換行的輸出量"
     }
   },
   "pluginDisclosure": {

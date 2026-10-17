@@ -81,3 +81,46 @@ describe('native backend IPC: agent-tool switches (plan B1-b)', () => {
     expect(controls.refresh).toHaveBeenCalledTimes(4)
   })
 })
+
+// Plan B watchdog option C (contract 5.2): the main window lists the notices
+// and answers them; only the trusted Host window may.
+describe('resource notice IPC', () => {
+  const notice = { id: 'n-1', pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', item: 'memory', usage: 1, threshold: 1, at: 1 }
+
+  function withNotices(authorized = true) {
+    const handlers = new Map<string, (event: IpcMainInvokeEvent, args?: unknown) => unknown>()
+    const controller = {
+      resourceNotices: vi.fn(() => [notice]),
+      resourceStatus: vi.fn(() => [{ pluginId: 'acme.indexer', waiting: [] }]),
+      answerResourceNotice: vi.fn(async () => true),
+    }
+    registerNativeBackendIpc(
+      (channel, listener) => handlers.set(channel, listener),
+      () => authorized,
+      controller as unknown as ThirdPartyBackendController,
+      () => [],
+      () => true,
+    )
+    const invoke = (channel: string, args?: unknown) => Promise.resolve(handlers.get(channel)!({} as IpcMainInvokeEvent, args))
+    return { invoke, controller }
+  }
+
+  it('lists the unanswered notices and passes a Stop or Keep running answer on', async () => {
+    const { invoke, controller } = withNotices()
+    await expect(invoke('plugins:nativeBackends:resourceNotices')).resolves.toEqual([notice])
+    await expect(invoke('plugins:nativeBackends:resourceStatus')).resolves.toEqual([{ pluginId: 'acme.indexer', waiting: [] }])
+    await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'continue' })).resolves.toBe(true)
+    expect(controller.answerResourceNotice).toHaveBeenCalledWith('n-1', 'continue')
+    await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'later' })).rejects.toThrow(/invalid/)
+    await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 7, choice: 'terminate' })).rejects.toThrow(/invalid/)
+  })
+
+  it('refuses an unauthorized sender', async () => {
+    const { invoke, controller } = withNotices(false)
+    await expect(invoke('plugins:nativeBackends:resourceNotices')).rejects.toThrow(/unauthorized/)
+    await expect(invoke('plugins:nativeBackends:resourceStatus')).rejects.toThrow(/unauthorized/)
+    await expect(invoke('plugins:nativeBackends:answerResourceNotice', { id: 'n-1', choice: 'terminate' })).rejects.toThrow(/unauthorized/)
+    expect(controller.answerResourceNotice).not.toHaveBeenCalled()
+  })
+})
+
