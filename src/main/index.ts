@@ -4823,6 +4823,9 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'p2p.trust.rebuild',
   // Writes an agent-requested skill into the shared library.
   'skills.install_approval.decide',
+  // Decides an agent's request to install, update, roll back or remove a
+  // Navide plugin; the subject is the approval_id.
+  'plugins.agent_request.decide',
   // Loosening terminal command protection (switching a category off, adding
   // an allow prefix, removing a block pattern) — the backend demands a token
   // only for those, so tightening needs no prompt.
