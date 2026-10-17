@@ -304,6 +304,29 @@ def test_daily_rollups_older_than_90_days_are_pruned(audit: PluginAuditLog, cloc
         assert [r["address"] for r in cur.execute("SELECT address FROM plugin_activity_daily")] == ["fs.kept"]
 
 
+def test_backend_call_minutes_last_7_days_and_their_day_counts_90(audit: PluginAuditLog, clock: Clock) -> None:
+    def record(address: str, at: int) -> None:
+        audit.record_backend_calls(
+            plugin_id="a.b", plugin_version="1.0.0", workspace="/w", address=address, outcome="allowed", count=2,
+            at_ms=at,
+        )
+
+    record("backend.old", NOW - 91 * DAY_MS)
+    record("backend.week", NOW - 8 * DAY_MS)
+    record("backend.week", NOW - 8 * DAY_MS + 60_000)
+    record("backend.new", NOW - 60_000)
+    audit.flush()
+    audit.prune()
+    with audit.db.transaction() as cur:
+        minutes = [r["address"] for r in cur.execute("SELECT address FROM plugin_backend_call_minutes")]
+        days = {r["address"]: r["count"] for r in cur.execute("SELECT address, count FROM plugin_backend_call_days")}
+    assert minutes == ["backend.new"]
+    assert days == {"backend.week": 4, "backend.new": 2}
+    # The report reads the day counts, so pruning the minutes loses no count.
+    report = audit.backend_call_report("a.b", window_from=NOW - 30 * DAY_MS)
+    assert {(m["address"], m["count"]) for m in report["methods"]} == {("backend.week", 4), ("backend.new", 2)}
+
+
 def test_a_record_call_never_writes_or_prunes(audit: PluginAuditLog, monkeypatch: pytest.MonkeyPatch) -> None:
     """Review of #349: the call path only queues; one flush writes everything in one transaction."""
     _call(audit)  # reads the id counter once

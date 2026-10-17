@@ -386,4 +386,6 @@ async def test_forgetting_a_plugin_drops_its_backend_call_counts(audit: PluginAu
     audit.flush()
     audit.forget_plugin("nerdtechnic.devmap")
     assert [r["plugin_id"] for r in _minutes(audit)] == ["acme.other"]
+    with audit.db.transaction() as cur:
+        assert [r["plugin_id"] for r in cur.execute("SELECT plugin_id FROM plugin_backend_call_days")] == ["acme.other"]
 

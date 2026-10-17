@@ -677,6 +677,16 @@ class PluginAuditLog:
                         " DO UPDATE SET count = count + excluded.count",
                         [(*key, n) for key, n in backend_calls.items()],
                     )
+                    cur.executemany(
+                        "INSERT INTO plugin_backend_call_days (plugin_id, address, outcome, day, plugin_version,"
+                        " workspace, count, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                        " ON CONFLICT(plugin_id, address, outcome, day, plugin_version, workspace)"
+                        " DO UPDATE SET count = count + excluded.count, last_at = MAX(last_at, excluded.last_at)",
+                        [
+                            (plugin_id, address, outcome, _utc_day(minute), version, workspace, n, minute)
+                            for (plugin_id, version, workspace, address, outcome, minute), n in backend_calls.items()
+                        ],
+                    )
             except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
                 log.warning("plugin audit: %d backend-call rows not written: %s", len(backend_calls), err)
         if actions:
@@ -761,12 +771,20 @@ class PluginAuditLog:
                 log.warning("plugin audit: pruning backend calls failed: %s", err)
 
     def _prune_backend_calls(self, now: int) -> None:
-        """Minute counts are kept as long as the activity day counts."""
-        cutoff = now - contract.PLUGIN_BACKEND_CALL_RETENTION_DAYS * _DAY_MS
+        """Minute counts are kept as long as detail rows, day counts as long as the activity day counts."""
+        cutoff = now - contract.PLUGIN_BACKEND_CALL_MINUTE_RETENTION_DAYS * _DAY_MS
         while self._batch(
             "DELETE FROM plugin_backend_call_minutes WHERE rowid IN"
             " (SELECT rowid FROM plugin_backend_call_minutes WHERE minute < ? LIMIT ?)",
             (cutoff, PRUNE_BATCH_ROWS),
+        ):
+            pass
+        day = _utc_day(now - contract.PLUGIN_BACKEND_CALL_RETENTION_DAYS * _DAY_MS)
+        while self._batch(
+            "DELETE FROM plugin_backend_call_days WHERE (plugin_id, address, outcome, day, plugin_version, workspace)"
+            " IN (SELECT plugin_id, address, outcome, day, plugin_version, workspace FROM plugin_backend_call_days"
+            " WHERE day < ? LIMIT ?)",
+            (day, PRUNE_BATCH_ROWS),
         ):
             pass
 
@@ -775,18 +793,19 @@ class PluginAuditLog:
         out: dict[str, Any] = {"methods": [], "daily": []}
         if not self.backend_calls_enabled:
             return out
+        # From the day counts: a few rows per method a day, however busy.
         with self.db.transaction() as cur:
             methods = cur.execute(
-                "SELECT address, outcome, SUM(count), MAX(minute) FROM plugin_backend_call_minutes"
-                " WHERE plugin_id = ? AND minute >= ? GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2",
-                (plugin_id, window_from - window_from % _MINUTE_MS),
+                "SELECT address, outcome, SUM(count), MAX(last_at) FROM plugin_backend_call_days"
+                " WHERE plugin_id = ? AND day >= ? GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2",
+                (plugin_id, _utc_day(window_from)),
             ).fetchall()
             daily = cur.execute(
-                "SELECT strftime('%Y-%m-%d', minute / 1000, 'unixepoch'), SUM(count),"
+                "SELECT day, SUM(count),"
                 " SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
                 " SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END),"
                 " SUM(CASE WHEN outcome = 'cancelled' THEN count ELSE 0 END)"
-                " FROM plugin_backend_call_minutes WHERE plugin_id = ? GROUP BY 1 ORDER BY 1",
+                " FROM plugin_backend_call_days WHERE plugin_id = ? GROUP BY 1 ORDER BY 1",
                 (plugin_id,),
             ).fetchall()
         out["methods"] = [
@@ -807,7 +826,7 @@ class PluginAuditLog:
         with self.db.transaction() as cur:
             return {
                 address: int(last) for address, last in cur.execute(
-                    "SELECT address, MAX(minute) FROM plugin_backend_call_minutes WHERE plugin_id = ? GROUP BY 1",
+                    "SELECT address, MAX(last_at) FROM plugin_backend_call_days WHERE plugin_id = ? GROUP BY 1",
                     (plugin_id,),
                 ).fetchall()
             }
@@ -1174,6 +1193,7 @@ class PluginAuditLog:
                     cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
                 if self.backend_calls_enabled:
                     cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))
+                    cur.execute("DELETE FROM plugin_backend_call_days WHERE plugin_id = ?", (plugin_id,))
         except Exception as err:  # noqa: BLE001 - the audit never fails what it records
             log.warning("plugin audit: %s not forgotten: %s", plugin_id, err)
 

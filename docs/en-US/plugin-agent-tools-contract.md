@@ -1214,8 +1214,12 @@ system namespace (`fs.read`) never counts as a use of it; a `backend` row
 without that prefix, or another source with it, is skipped. `outcome` is
 `allowed` | `denied` | `cancelled` (the caller cancelled it; not a refusal) |
 `error` (a call to a method the manifest did not declare is an error: the
-backend host answers it as an invalid argument). Kept as long as
-`plugin_activity_daily` (90 days); a removed plugin's rows go with
+backend host answers it as an invalid argument). The same flush also adds
+each count into `plugin_backend_call_days` (per UTC day, with the latest
+minute as `last_at`), which is what the report reads: a few rows per method a
+day however busy the plugin, so a report stays fast at any call rate. Minute
+rows are kept 7 days, like detail rows; day rows as long as
+`plugin_activity_daily` (90 days); a removed plugin's rows of both go with
 `forget_plugin`. The bundled `navide.*` packages are not recorded.
 
 `plugin_activity_daily`: `(day, plugin_id, workspace, source, address,
@@ -1305,7 +1309,7 @@ the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
 `backendMethod` keys `backend.<method>`, `agentTool` names) from the installed
 manifest, since the backend has no third-party manifest; without `declared`,
 `declaredUnused` is `[]`. Calls into a plugin's own backend, whichever path
-made them, are counted in `plugin_backend_call_minutes` under address
+made them, are counted in `plugin_backend_call_days` under address
 `backend.<method>` (section 5), so a `backendMethod` entry reads "declared but
 never called" only when the method was not called at all, whatever the
 outcome. (Before those calls were recorded, the Host sent no `backendMethod`
@@ -1335,7 +1339,7 @@ malformed one whole.
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
-| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_minutes`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) within `window`, and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in, and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted

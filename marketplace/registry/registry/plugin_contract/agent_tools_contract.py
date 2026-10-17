@@ -745,7 +745,9 @@ PLUGIN_BACKEND_CALL_SOURCE = "backend"
 PLUGIN_BACKEND_CALL_ADDRESS_PREFIX = "backend."
 #: ``cancelled``: the caller cancelled the call (abort, cancel message); not a refusal.
 PLUGIN_BACKEND_CALL_OUTCOMES = ("allowed", "denied", "cancelled", "error")
-#: Kept as long as the activity day counts.
+#: Minute counts are kept as long as activity detail rows, day counts as long
+#: as the activity day counts (the report reads the day counts).
+PLUGIN_BACKEND_CALL_MINUTE_RETENTION_DAYS = PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS
 PLUGIN_BACKEND_CALL_RETENTION_DAYS = PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS
 
 PLUGIN_BACKEND_CALLS_DDL = (
@@ -761,5 +763,18 @@ PLUGIN_BACKEND_CALLS_DDL = (
     "CREATE INDEX IF NOT EXISTS plugin_backend_call_minutes_minute ON plugin_backend_call_minutes (minute)",
     "CREATE INDEX IF NOT EXISTS plugin_backend_call_minutes_plugin_minute"
     " ON plugin_backend_call_minutes (plugin_id, minute)",
+    # Per UTC day, added up with every flush: what the report reads (a few
+    # rows per method a day, however busy the plugin).
+    "CREATE TABLE IF NOT EXISTS plugin_backend_call_days ("
+    " plugin_id TEXT NOT NULL,"
+    " address TEXT NOT NULL,"
+    " outcome TEXT NOT NULL,"
+    " day TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " count INTEGER NOT NULL,"
+    " last_at INTEGER NOT NULL,"
+    " PRIMARY KEY (plugin_id, address, outcome, day, plugin_version, workspace)) WITHOUT ROWID",
+    "CREATE INDEX IF NOT EXISTS plugin_backend_call_days_day ON plugin_backend_call_days (day)",
 )
 
