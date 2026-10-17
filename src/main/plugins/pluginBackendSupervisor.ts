@@ -2680,13 +2680,14 @@ export class PluginBackendSupervisor {
   }
 
   /**
-   * Serialize all Host→child frames and keep the internal Bridge bounded.
+   * Serialize all Host→child frames.
    *
    * A 'control' frame - a request, a response, a cancellation - is part of a
-   * settled protocol exchange, so an overflow there stays fatal. A
-   * 'notification' frame carries a Host event nobody is waiting on; a backlog
-   * of those is backpressure, not a dead child, so it is dropped and counted
-   * instead of taking the whole generation down.
+   * protocol exchange someone is waiting on, so it is always queued: a backlog
+   * of requests is load, not a dead child (with no cap on in-flight calls, 500
+   * concurrent calls used to overflow the queue and kill the child). A
+   * 'notification' frame carries a Host event nobody is waiting on; once the
+   * backlog passes the queue bound it is dropped and counted instead.
    */
   private writeFrame(
     generation: ChildGeneration,
@@ -2699,22 +2700,17 @@ export class PluginBackendSupervisor {
       generation.child.stdin.destroyed ||
       generation.child.stdin.writableEnded
     ) throw new Error('closed')
-    if (generation.outputQueueBytes + frame.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
-      if (kind === 'notification') {
-        generation.droppedNotifications += 1
-        if (generation.droppedNotifications === 1) {
-          this.emitDiagnostic(
-            new Error(
-              'Host event notification dropped: output queue limit reached. Further drops for this child are counted but not reported.',
-            ),
-            generation,
-          )
-        }
-        return
+    if (kind === 'notification' && generation.outputQueueBytes + frame.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
+      generation.droppedNotifications += 1
+      if (generation.droppedNotifications === 1) {
+        this.emitDiagnostic(
+          new Error(
+            'Host event notification dropped: output queue limit reached. Further drops for this child are counted but not reported.',
+          ),
+          generation,
+        )
       }
-      const overflow = new Error('output queue limit reached')
-      this.failProcess(generation, 'BACKEND_UNAVAILABLE', false, overflow)
-      throw overflow
+      return
     }
     generation.outputQueue.push(frame)
     generation.outputQueueBytes += frame.length

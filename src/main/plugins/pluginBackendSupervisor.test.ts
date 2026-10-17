@@ -2493,7 +2493,7 @@ describe('PluginBackendSupervisor', () => {
       expect(stderrSink).toHaveBeenCalledWith(expect.stringContaining('output queue limit'))
     })
 
-    it('still fails the child when a request frame overflows the output queue', async () => {
+    it('queues request frames past the output queue bound instead of failing the child', async () => {
       const onFailure = vi.fn()
       const harness = makeStallableChild()
       const supervisor = makeSupervisor({ onFailure, spawnProcess: () => harness.child })
@@ -2503,17 +2503,19 @@ describe('PluginBackendSupervisor', () => {
 
       const client = supervisor.clientFor(authenticatedRuntime)
       const payload = 'y'.repeat(48 * 1024)
-      const settled = await Promise.all(
+      const calls = Promise.all(
         Array.from({ length: 12 }, (_, index) =>
           client.call('fixture.echo', { index, payload }).catch((error: unknown) => error)
         )
       )
+      await new Promise((resolve) => setTimeout(resolve, 50))
       harness.release()
+      const settled = await calls
 
-      expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ code: 'BACKEND_UNAVAILABLE' }))
-      expect(
-        settled.some((entry) => entry instanceof BackendPluginError && entry.code === 'BACKEND_UNAVAILABLE')
-      ).toBe(true)
+      // 12 x 48 KiB is past the 256 KiB bound: every call is still delivered.
+      expect(settled.filter((entry) => entry instanceof Error)).toEqual([])
+      expect(onFailure).not.toHaveBeenCalled()
+      expect(harness.kill).not.toHaveBeenCalled()
     })
 
     it('refuses a single request frame larger than the whole queue without failing the child', async () => {
