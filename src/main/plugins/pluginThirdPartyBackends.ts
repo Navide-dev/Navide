@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readdir, readlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -27,9 +27,12 @@ import {
   sandboxIdentity,
   watchBackendResources,
   type BackendResourceWatch,
+  type ResourceExceeded,
+  type ResourceNotifyMode,
   type ResourceViolation,
   type SandboxIdentity,
 } from './pluginBackendResourceWatchdog'
+import type { PluginResourceDecision, PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
 import type { NativeBackendStore } from './pluginNativeBackendStore'
 import { OFFICIAL_RECEIPT_NAME, type PluginActivationCatalogEntry } from './installedPlugins'
 import {
@@ -331,6 +334,21 @@ export interface NativeBackendStatusRow {
   shell?: 'allowlist' | 'full'
 }
 
+/** A third-party backend went over a resource threshold and waits for the
+ *  user's Stop or Keep running (contract 5.2). It stays listed until answered
+ *  or until that backend exits; it is not kept across a restart. */
+export interface BackendResourceNotice {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: ResourceViolation
+  /** memory and disk in bytes, processes a count, cpu in cores. */
+  usage: number
+  threshold: number
+  at: number
+}
+
 export interface NativeBackendConsentPrompt {
   pluginId: string
   name: string
@@ -549,7 +567,13 @@ export interface ThirdPartyBackendControllerOptions {
     pid: number,
     dataDir: string,
     onViolation: (violation: ResourceViolation) => void,
+    notify?: ResourceNotifyMode,
   ) => BackendResourceWatch
+  /** Plan B watchdog option C: send one decision row (notified, continue,
+   *  terminate) to the backend's audit. Failures are only logged. */
+  recordResourceDecision?: (row: PluginResourceDecisionRow) => void
+  /** The list of unanswered resource notices changed (show it to the user). */
+  onResourceNoticesChanged?: () => void
   /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
   onConsentGranted?: (pluginId: string) => void
   /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
@@ -672,6 +696,7 @@ export class ThirdPartyBackendController {
   private readonly failures = new Map<string, number[]>()
   private readonly tripped = new Set<string>()
   private readonly lastViolation = new Map<string, ResourceViolation>()
+  private readonly resourceNoticeMap = new Map<string, { notice: BackendResourceNotice; watch: BackendResourceWatch }>()
 
   constructor(options: ThirdPartyBackendControllerOptions) {
     this.options = options
@@ -822,14 +847,20 @@ export class ThirdPartyBackendController {
             this.lastViolation.set(spec.pluginId, violation)
             console.warn(`[plugin-backend] ${spec.pluginId} exceeded its ${violation} limit and was stopped`)
           }
-          const watch = this.options.watchResources
-            ? this.options.watchResources(rootPid, canonicalDataDir, report)
-            : watchBackendResources(rootPid, canonicalDataDir, report, undefined, undefined, identity)
+          // Option C: over a threshold the user is told and decides; the
+          // backend keeps running meanwhile (contract 5.2).
+          const notify: ResourceNotifyMode = {
+            onExceeded: (exceeded) => this.raiseResourceNotice(spec, watch, exceeded),
+          }
+          const watch: BackendResourceWatch = this.options.watchResources
+            ? this.options.watchResources(rootPid, canonicalDataDir, report, notify)
+            : watchBackendResources(rootPid, canonicalDataDir, report, undefined, undefined, identity, notify)
           // Registered before the supervisor's own listener, so the whole
           // sandbox is gone before a stop, idle close or quit completes.
           child.once('exit', () => {
             watch.dispose()
             killSandbox(rootPid, identity)
+            this.dropResourceNotices(watch)
           })
         }
         return child
@@ -1152,6 +1183,68 @@ export class ThirdPartyBackendController {
     this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
     this.options.onConsentGranted?.(spec.pluginId)
+  }
+
+  /** Unanswered resource notices, oldest first. */
+  resourceNotices(): BackendResourceNotice[] {
+    return [...this.resourceNoticeMap.values()].map((entry) => ({ ...entry.notice }))
+  }
+
+  /** The user's answer to one notice: `terminate` runs the stop that used to
+   *  happen on its own; `continue` raises that item's notice level (contract
+   *  5.2). False for an unknown or already answered notice. */
+  async answerResourceNotice(id: string, choice: 'terminate' | 'continue'): Promise<boolean> {
+    const entry = this.resourceNoticeMap.get(id)
+    if (!entry) return false
+    this.resourceNoticeMap.delete(id)
+    this.options.onResourceNoticesChanged?.()
+    this.recordResourceDecision(entry.notice, choice)
+    if (choice === 'terminate') await entry.watch.terminate(entry.notice.item)
+    else entry.watch.keepRunning(entry.notice.item)
+    return true
+  }
+
+  private raiseResourceNotice(spec: ThirdPartyLaunchSpec, watch: BackendResourceWatch, exceeded: ResourceExceeded): void {
+    const notice: BackendResourceNotice = {
+      id: randomUUID(),
+      pluginId: spec.pluginId,
+      name: spec.thirdParty.name,
+      packageVersion: spec.packageVersion,
+      item: exceeded.item,
+      usage: exceeded.usage,
+      threshold: exceeded.threshold,
+      at: (this.options.now ?? Date.now)(),
+    }
+    this.resourceNoticeMap.set(notice.id, { notice, watch })
+    this.recordResourceDecision(notice, 'notified')
+    this.options.onResourceNoticesChanged?.()
+  }
+
+  /** A backend that exited has nothing left to decide about. */
+  private dropResourceNotices(watch: BackendResourceWatch): void {
+    let dropped = false
+    for (const [id, entry] of this.resourceNoticeMap) {
+      if (entry.watch !== watch) continue
+      this.resourceNoticeMap.delete(id)
+      dropped = true
+    }
+    if (dropped) this.options.onResourceNoticesChanged?.()
+  }
+
+  private recordResourceDecision(notice: BackendResourceNotice, decision: PluginResourceDecision): void {
+    try {
+      this.options.recordResourceDecision?.({
+        plugin_id: notice.pluginId,
+        plugin_version: notice.packageVersion,
+        item: notice.item,
+        usage: notice.usage,
+        threshold: notice.threshold,
+        decision,
+        at: (this.options.now ?? Date.now)(),
+      })
+    } catch (error) {
+      console.warn(`[plugin-backend] resource decision for ${notice.pluginId} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   resetFailures(pluginId: string): void {

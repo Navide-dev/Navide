@@ -21,6 +21,13 @@ import {
   type ThirdPartyLaunchSpec,
 } from './pluginThirdPartyBackends'
 import type { PluginActivationCatalogEntry } from './installedPlugins'
+import {
+  DEFAULT_BACKEND_RESOURCE_LIMITS,
+  watchBackendResources,
+  type BackendResourceWatch,
+  type ResourceNotifyMode,
+  type ResourceViolation,
+} from './pluginBackendResourceWatchdog'
 
 const DARWIN: BackendSandboxProbe = { platform: 'darwin', sandboxExec: () => SANDBOX_EXEC_PATH, bubblewrap: () => null }
 
@@ -506,6 +513,105 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
     }
   })
 
+  // Plan B watchdog option C (contract 5.2).
+  describe('resource notices', () => {
+    function realWatch(rss: () => number) {
+      const killed: number[] = []
+      const deps = {
+        listProcesses: async () => [{ pid: 42, ppid: 1, rssBytes: rss(), cpuMs: 0 }],
+        dataDirBytes: async () => 0,
+        kill: (pid: number) => killed.push(pid),
+        now: () => 0,
+        setInterval: () => 'handle',
+        clearInterval: vi.fn(),
+      }
+      let watch: BackendResourceWatch | undefined
+      const watchResources = (pid: number, dir: string, onViolation: (v: ResourceViolation) => void, notify?: ResourceNotifyMode) => {
+        watch = watchBackendResources(pid, dir, onViolation, { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, deps, undefined, notify)
+        return watch
+      }
+      return { killed, watchResources, sample: () => watch!.sample() }
+    }
+
+    async function running(options: Partial<ConstructorParameters<typeof ThirdPartyBackendController>[0]>) {
+      const { instance } = controller({ promptConsent: allow, spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never, ...options })
+      const spec = writePackage()
+      const admission = await instance.admit(spec)
+      admission.spawnProcess(spec.entryFile, {})
+      return { instance, spec }
+    }
+
+    it('over a threshold: tells the user and records it, but does not stop the backend', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const decisions: unknown[] = []
+      const changed = vi.fn()
+      const { instance, spec } = await running({
+        watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row), onResourceNoticesChanged: changed,
+      })
+      await w.sample()
+      await w.sample()
+      expect(w.killed).toEqual([])
+      expect(instance.resourceNotices()).toEqual([expect.objectContaining({
+        pluginId: 'acme.indexer', name: expect.any(String), packageVersion: '1.0.0', item: 'memory', usage: 600 * 1024 * 1024, threshold: 512 * 1024 * 1024,
+      })])
+      expect(changed).toHaveBeenCalled()
+      expect(decisions).toEqual([expect.objectContaining({ plugin_id: 'acme.indexer', item: 'memory', decision: 'notified' })])
+      expect((await instance.status(spec)).lastViolation).toBeUndefined()
+    })
+
+    it('Stop ends it exactly like the automatic stop did (whole tree killed, lastViolation)', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const decisions: Array<Record<string, unknown>> = []
+      const { instance, spec } = await running({ watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row as never) })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'terminate')).toBe(true)
+      expect(w.killed).toEqual([42])
+      expect((await instance.status(spec)).lastViolation).toBe('memory')
+      expect(instance.resourceNotices()).toEqual([])
+      expect(decisions.map((row) => row.decision)).toEqual(['notified', 'terminate'])
+    })
+
+    it('Keep running records the choice, keeps the backend and tells again only at twice the level', async () => {
+      let rss = 600 * 1024 * 1024
+      const w = realWatch(() => rss)
+      const decisions: Array<Record<string, unknown>> = []
+      const { instance } = await running({ watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row as never) })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'continue')).toBe(true)
+      expect(instance.resourceNotices()).toEqual([])
+      rss = 1100 * 1024 * 1024
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceNotices()).toEqual([])
+      rss = 1300 * 1024 * 1024
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceNotices()).toEqual([expect.objectContaining({ item: 'memory', threshold: 1200 * 1024 * 1024 })])
+      expect(w.killed).toEqual([])
+      expect(decisions.map((row) => row.decision)).toEqual(['notified', 'continue', 'notified'])
+      expect(decisions[1]).toMatchObject({ item: 'memory', usage: 600 * 1024 * 1024, threshold: 512 * 1024 * 1024 })
+    })
+
+    it('a failed record never holds up the choice', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const { instance } = await running({ watchResources: w.watchResources, recordResourceDecision: () => { throw new Error('backend down') } })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'terminate')).toBe(true)
+      expect(w.killed).toEqual([42])
+    })
+
+    it('an unknown or answered notice is refused', async () => {
+      const { instance } = await running({})
+      expect(await instance.answerResourceNotice('nope', 'terminate')).toBe(false)
+    })
+  })
+
   it('reports the resource limit that stopped the child', async () => {
     let report: ((violation: 'memory') => void) | undefined
     const { instance } = controller({
@@ -688,7 +794,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
     expect(admission).not.toBeNull()
     admission!.spawnProcess(spec.entryFile, {})
     expect(spawnImpl).toHaveBeenCalledWith(SANDBOX_EXEC_PATH, expect.any(Array), expect.any(Object))
-    expect(watchResources).toHaveBeenCalledWith(7, expect.any(String), expect.any(Function))
+    expect(watchResources).toHaveBeenCalledWith(7, expect.any(String), expect.any(Function), expect.objectContaining({ onExceeded: expect.any(Function) }))
 
     // A changed binary, a disabled plugin, the switch off, a tripped breaker
     // or no sandbox: never executed.
