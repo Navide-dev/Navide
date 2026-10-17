@@ -9,10 +9,10 @@ import PaneGuardIcon from '../PaneGuardIcon.vue'
 let wrapper: VueWrapper | undefined
 let mock: ReturnType<typeof createMockBackend>
 
-async function title(): Promise<string | undefined> {
-  wrapper = mount(PaneGuardIcon, {
+async function title(store = useGuard(mock.backend)): Promise<string | undefined> {
+  wrapper ??= mount(PaneGuardIcon, {
     props: { paneId: 'p1' },
-    global: { plugins: [i18n], provide: { [guardKey as symbol]: useGuard(mock.backend) } },
+    global: { plugins: [i18n], provide: { [guardKey as symbol]: store } },
   })
   await flushPromises()
   return wrapper.get('[data-testid="guard-sidebar-icon"]').attributes('title')
@@ -27,6 +27,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   wrapper?.unmount()
+  wrapper = undefined
 })
 
 describe('PaneGuardIcon', () => {
@@ -38,5 +39,19 @@ describe('PaneGuardIcon', () => {
   it('says nothing is asked while Guard is off', async () => {
     mock.setResponse('guard.status', { enabled: false, counts: {}, hook_support: {} })
     expect(await title()).toBe(`External influence — ${i18n.global.t('guard.pane.explain-off')}`)
+  })
+
+  it('follows the switch on, off and on again, keeping the mark', async () => {
+    mock.setResponse('guard.status', { enabled: true, counts: {}, hook_support: {} })
+    mock.setResponse('guard.set_enabled', {})
+    const store = useGuard(mock.backend)
+    expect(await title(store)).toBe('External influence')
+    mock.setResponse('guard.status', { enabled: false, counts: {}, hook_support: {} })
+    await store.setEnabled(false)
+    expect(await title(store)).toBe(`External influence — ${i18n.global.t('guard.pane.explain-off')}`)
+    mock.setResponse('guard.status', { enabled: true, counts: {}, hook_support: {} })
+    await store.setEnabled(true)
+    expect(await title(store)).toBe('External influence')
+    expect(store.taintFor('p1')).not.toBeNull()
   })
 })

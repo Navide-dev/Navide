@@ -12,7 +12,9 @@ import time
 import pytest
 
 from agent_team_backend import guard_hooks
+from agent_team_backend.db import Database
 from agent_team_backend.guard import engine, evaluate, runtime
+from agent_team_backend.guard.store import GuardStore
 
 CLAUDE_RM = {"tool_name": "Bash", "tool_input": {"command": "rm -rf ~"}}
 
@@ -69,6 +71,25 @@ def test_unreadable_switch_still_announces(guard_store, events, monkeypatch):
     def locked():
         raise RuntimeError("database is locked")
 
-    monkeypatch.setattr(guard_store, "enabled", locked)
-    assert _broken_evaluate(monkeypatch, "local").action == "allow"
+    monkeypatch.setattr(guard_store, "enabled_cached", locked)
+    guard_hooks._announce_failure("p1", "x")
+    assert [(t, p["action"]) for t, p in events] == [("guard.decision", "error")]
+
+
+def test_announcing_on_the_loop_never_touches_the_database(guard_store, events, monkeypatch, tmp_path):
+    """_announce_failure runs on the event loop: a switch not read yet counts
+    as on (announced, as on main) rather than being loaded from the database."""
+    db = Database(tmp_path / "cold.db")
+    GuardStore(db).set_enabled(False)
+    cold = GuardStore(db)  # same saved switch (off), nothing cached yet
+    runtime.set_store_for_test(cold)
+    monkeypatch.setattr(db, "kv_get", lambda *a, **k: pytest.fail("kv_get on the event loop"))
+    guard_hooks._announce_failure("p1", "x")
+    assert [(t, p["action"]) for t, p in events] == [("guard.decision", "error")]
+
+
+def test_announcing_before_any_store_never_opens_one(guard_store, events, monkeypatch):
+    runtime.set_store_for_test(None)
+    monkeypatch.setattr(runtime, "GuardStore", lambda *a, **k: pytest.fail("GuardStore built on the event loop"))
+    guard_hooks._announce_failure("p1", "x")
     assert [(t, p["action"]) for t, p in events] == [("guard.decision", "error")]

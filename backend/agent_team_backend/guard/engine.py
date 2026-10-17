@@ -110,9 +110,10 @@ def evaluate(
 def switched_off() -> bool:
     """Whether the user turned Guard off. A failure that let an action through
     is then not announced: the switch is off, so the notice would read as Guard
-    still checking. A switch that cannot be read counts as on."""
+    still checking. A switch that cannot be read, or was never read, counts
+    as on: this runs on the event loop, so it reads only the in-memory value."""
     try:
-        return not runtime.store().enabled()
+        return runtime.enabled_cached() is False
     except Exception:  # noqa: BLE001
         return False
 
