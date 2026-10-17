@@ -3674,6 +3674,29 @@ async def skills_install_approval_decide(session: "Session", msg_id: str, msg_ty
     await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
 
 
+@handler("plugins.agent_request.decide")
+async def plugins_agent_request_decide(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The user's decision on an agent's plugin request (contract section 6).
+
+    Only the main window can mint the confirmation, bound to this approval_id,
+    so an agent cannot approve its own request; no other field grants anything.
+    """
+    from .skills_approvals import SkillApprovalError, decide_plugin
+
+    approval_id = str(payload.get("approval_id") or "")
+    approve = payload.get("approve") is True
+    if not await _confirmed(
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=approval_id
+    ):
+        return
+    try:
+        approval = await decide_plugin(approval_id, approve)
+    except SkillApprovalError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
+        return
+    await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
+
+
 # ── CLI instruction files (memory.*) ────────────────────────────────────────
 def _memory_workspace(payload: dict) -> Path | None:
     """The workspace root a memory request is scoped to, or None.
