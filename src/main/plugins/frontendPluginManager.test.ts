@@ -4209,6 +4209,71 @@ describe('devPlansPluginDescriptor', () => {
     }
   })
 
+  it('runs more renderer backend calls at once than the old 64-call cap', async () => {
+    const mgr = new FrontendPluginManager()
+    const packageVersion = '1.0.0'
+    const view: NonNullable<PluginLaunchDescriptor['views']>[number] = {
+      id: 'window',
+      contributionKey: `${PLANS_PLUGIN_ID}.window`,
+      kind: 'custom',
+      location: 'window',
+      title: 'Plans',
+      entryFile: '/plugins/navide.plans/index.html',
+    }
+    const packageDescriptor: PluginLaunchDescriptor = {
+      id: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      requires: [],
+      devUrl: '',
+      entryFile: view.entryFile,
+      views: [view],
+    }
+    mgr.registerDescriptor(packageDescriptor, { builtin: true })
+    mgr.registerBackendActivation({
+      pluginId: PLANS_PLUGIN_ID,
+      packageVersion,
+      packageDir: process.cwd(),
+      entryFile: '/plugins/navide.plans/backend',
+      protocolVersion: 1,
+      activation: 'startup',
+      approvedMethods: ['plans.resolve_root'],
+      approvedEvents: ['plans.changed'],
+    })
+    let release!: () => void
+    const released = new Promise<void>((resolve) => { release = resolve })
+    const hostCall = vi.spyOn(PluginBackendHost.prototype, 'call').mockImplementation(async () => {
+      await released
+      return { root: '/workspace' }
+    })
+    const host = new FakeBrowserWindow()
+    try {
+      const handle = await mgr.openView(packageDescriptor, view, {
+        hostWindow: asHost(host),
+        bounds: 'fill',
+        workspacePath: '/workspace',
+        query: '?workspace_path=%2Fworkspace',
+      })
+      const webContents = (host.children[0] as FakeViewLike).webContents
+      // User ruling L3: no concurrency cap; the 65th call used to get RESOURCE_LIMIT.
+      const responses = Array.from({ length: 100 }, (_, index) =>
+        ipcHandlers.get('plugin:backend:call')?.(
+          { sender: { id: webContents.id } },
+          { reqId: `concurrent-${index}`, name: 'plans.resolve_root', args: { workspace_path: '/workspace' } },
+        )
+      )
+      await vi.waitFor(() => expect(hostCall).toHaveBeenCalledTimes(100))
+      release()
+      const settled = await Promise.all(responses)
+      expect(settled.filter((response) => (response as { ok?: boolean }).ok !== true)).toEqual([])
+      mgr.destroyInstance(handle.instanceId)
+    } finally {
+      release()
+      hostCall.mockRestore()
+      await mgr.closeBackendPlugins()
+    }
+  })
+
   it('reports backend activity only while a backend runtime is bound, not for a startup registration', async () => {
     const mgr = new FrontendPluginManager()
     const packageVersion = '1.0.0'

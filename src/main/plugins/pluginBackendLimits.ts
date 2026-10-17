@@ -1,6 +1,5 @@
 /** Host-private resource limits for package-local Backend Wire routing. */
 export const MAX_BACKEND_CHILDREN = 16
-export const MAX_BACKEND_CALLS_PER_INSTANCE = 64
 export const MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE = 32
 export const MAX_BACKEND_TIMEOUT_MS = 120_000
 /** Host-private bound for queued Bridge frames and stream payloads. */
