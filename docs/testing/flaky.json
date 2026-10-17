@@ -199,6 +199,8 @@
     {
       "test": "backend/tests/test_onboarding_run.py::test_the_commands_exit_code_reaches_the_window",
       "category": "product-defect",
+      "status": "fixed",
+      "fixedBy": "#357",
       "count": 1,
       "firstSeen": "2026-10-17T00:31:16Z",
       "lastSeen": "2026-10-17T00:31:16Z",
