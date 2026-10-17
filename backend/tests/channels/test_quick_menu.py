@@ -70,6 +70,35 @@ def test_menu_pick(body: str, identity: str, want: int | None) -> None:
     assert qm.menu_pick(body, identity) == want
 
 
+@pytest.mark.parametrize("body,identity,want", [
+    ("/prompts 3", "", ("p", 3)),
+    ("/skills 12", "", ("s", 12)),
+    ("/Prompts@navide_bot 2", "@navide_bot", ("p", 2)),
+    ("<@U123> /skills 1", "", ("s", 1)),
+    ("/prompts@other_bot 2", "@navide_bot", None),
+    ("/prompts", "", None),
+    ("/skills two", "", None),
+    ("/skills 0", "", None),
+    ("/menu 2", "", None),
+    ("/mcp 2", "", None),
+])
+def test_scoped_pick(body: str, identity: str, want: tuple[str, int] | None) -> None:
+    assert qm.scoped_pick(body, identity) == want
+
+
+def test_a_scoped_text_menu_names_its_own_pick_command() -> None:
+    menus = qm.QuickMenus()
+    for scope, key in (("p", "pick_hint_p"), ("s", "pick_hint_s")):
+        menu = menus.create(platform="matrix", location_key="m", pane_id="pane-1", pane_title="api",
+                            agent_key="claude", lang="zh-TW",
+                            prompts=[{"id": "a", "name": "A"}] if scope == "p" else [],
+                            skills=["deploy"] if scope == "s" else [], scope=scope)
+        assert menus.render_text(menu).splitlines()[-1] == qm.text("zh-TW", key)
+    for lang in qm.STRINGS:
+        assert "/prompts" in qm.text(lang, "pick_hint_p") and "/skills" in qm.text(lang, "pick_hint_s")
+        assert all(c in qm.text(lang, "menu_moved") for c in ("/prompts", "/skills", "/mcp"))
+
+
 def test_text_menu_numbers_every_item_across_pages() -> None:
     menus = qm.QuickMenus()
     menu = _menu(menus, prompts=12, skills=["deploy"])

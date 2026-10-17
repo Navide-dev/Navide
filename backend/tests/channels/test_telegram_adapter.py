@@ -528,7 +528,7 @@ async def test_the_command_menu_is_added_to_an_empty_list(api: FakeBotApi) -> No
     await _one_session(api)
     calls = api.calls_of("setMyCommands")
     assert len(calls) == 1
-    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "menu", "prompts", "skills", "mcp", "status", "stop", "cancel", "resume"]
+    assert [c["command"] for c in calls[0]["commands"]] == ["pending", "prompts", "skills", "mcp", "status", "stop", "cancel", "resume"]
 
 
 async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
@@ -538,7 +538,7 @@ async def test_existing_commands_are_preserved(api: FakeBotApi) -> None:
     commands = api.calls_of("setMyCommands")[0]["commands"]
     # The user's commands first, unchanged and in order; "status" was theirs already.
     assert commands[:2] == mine
-    assert [c["command"] for c in commands[2:]] == ["pending", "menu", "prompts", "skills", "mcp", "stop", "cancel", "resume"]
+    assert [c["command"] for c in commands[2:]] == ["pending", "prompts", "skills", "mcp", "stop", "cancel", "resume"]
 
 
 async def test_a_complete_command_list_is_not_written(api: FakeBotApi) -> None:
@@ -558,15 +558,38 @@ async def test_an_unreadable_command_list_is_not_written(api: FakeBotApi) -> Non
 async def test_our_command_with_an_old_description_is_updated_in_place(api: FakeBotApi) -> None:
     from agent_team_backend.channels.telegram import BOT_COMMANDS
 
-    # A bot registered by an older build: /menu still says "快速選單".
+    # A bot registered in another language: /pending still says it in English.
     old = [{"command": "deploy", "description": "my own"},
-           *[dict(c, description="快速選單") if c["command"] == "menu" else dict(c) for c in BOT_COMMANDS]]
+           *[dict(c, description="List panes waiting for confirmation") if c["command"] == "pending" else dict(c)
+             for c in BOT_COMMANDS]]
     api.handlers["getMyCommands"] = lambda params: [dict(c) for c in old]
     await _one_session(api)
     commands = api.calls_of("setMyCommands")[0]["commands"]
     assert [c["command"] for c in commands] == [c["command"] for c in old]
     assert commands[0] == {"command": "deploy", "description": "my own"}
-    assert next(c for c in commands if c["command"] == "menu")["description"] == "Prompt 與技能選單"
+    assert next(c for c in commands if c["command"] == "pending")["description"] == "列出等待確認的 pane"
+
+
+@pytest.mark.parametrize("description", ["快速選單", "Prompt 與技能選單", "Prompts and skills menu", "プロンプトとスキルのメニュー"])
+async def test_our_retired_menu_command_is_removed(api: FakeBotApi, description: str) -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS
+
+    # A bot registered by an earlier build still lists /menu, worded by Navide.
+    mine = [{"command": "deploy", "description": "my own"}, {"command": "menu", "description": description}]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in mine]
+    await _one_session(api)
+    commands = api.calls_of("setMyCommands")[0]["commands"]
+    assert commands == [mine[0], *BOT_COMMANDS]
+
+
+async def test_a_list_missing_nothing_but_holding_our_menu_is_rewritten_without_it(api: FakeBotApi) -> None:
+    from agent_team_backend.channels.telegram import BOT_COMMANDS
+
+    old = [*[dict(c) for c in BOT_COMMANDS[:1]], {"command": "menu", "description": "Prompt 與技能選單"},
+           *[dict(c) for c in BOT_COMMANDS[1:]]]
+    api.handlers["getMyCommands"] = lambda params: [dict(c) for c in old]
+    await _one_session(api)
+    assert api.calls_of("setMyCommands")[0]["commands"] == BOT_COMMANDS
 
 
 async def test_a_users_own_command_sharing_our_name_is_left_alone(api: FakeBotApi) -> None:
@@ -592,7 +615,7 @@ async def test_commands_are_described_in_the_navide_language(api: FakeBotApi) ->
     finally:
         await ad.stop()
     commands = api.calls_of("setMyCommands")[0]["commands"]
-    assert next(c for c in commands if c["command"] == "menu")["description"] == "Prompts and skills menu"
+    assert next(c for c in commands if c["command"] == "prompts")["description"] == "Prompt list"
 
 
 async def test_a_language_change_rewrites_our_descriptions_only(api: FakeBotApi) -> None:
