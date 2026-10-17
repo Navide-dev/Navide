@@ -10,6 +10,7 @@ import { HOST_DEFAULT_EXECUTION_POLICY } from './executionPolicy'
 import { FrontendPluginManager } from './frontendPluginManager'
 import { PluginAgentToolsHost } from './pluginAgentToolsHost'
 import type { PluginBackendHost } from './pluginBackendHost'
+import { BackendPluginError } from './pluginBackendSupervisor'
 import { manifestV2CapabilityPolicy } from './pluginPermissions'
 import { readInstalledManifestV2, thirdPartyBackendLaunchSpec, type ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
@@ -50,12 +51,17 @@ interface Live {
   confirmWrite: ReturnType<typeof vi.fn>
   sent: AgentToolsSyncPayload[]
   pids: number[]
+  /** The global third-party native backend switch the admitter honours. */
+  native: { enabled: boolean }
+  /** Hold the next backend admission (the bind) until released. */
+  holdBind: () => { release: () => void; waiting: () => boolean }
   request: (pluginId: string, name: string, args?: Record<string, unknown>, revision?: number) => Record<string, unknown>
   call: (pluginId: string, name: string, args?: Record<string, unknown>, revision?: number) => Promise<Record<string, unknown>>
   backendHost: () => PluginBackendHost
 }
 
-const lives: Live[] = []
+/** One cleanup per live(), registered as soon as its tmp root exists. */
+const cleanups: Array<() => Promise<void>> = []
 
 function alive(pid: number): boolean {
   try {
@@ -75,13 +81,19 @@ async function waitUntil(condition: () => boolean, timeoutMs = 10_000): Promise<
 }
 
 afterEach(async () => {
-  for (const live of lives.splice(0)) {
-    await live.mgr.closeBackendPlugins()
-    // Only the PIDs this file started, each waited for until it is gone.
-    await waitUntil(() => live.pids.every((pid) => !alive(pid)))
-    rmSync(live.root, { recursive: true, force: true })
+  // Every cleanup runs, and every tmp root is removed, even when one fails.
+  const failures: unknown[] = []
+  for (const cleanup of cleanups.splice(0)) {
+    try {
+      await cleanup()
+    } catch (error) {
+      failures.push(error)
+    }
   }
-})
+  if (failures.length > 0) throw failures[0]
+  // Longer than a cleanup's own wait (10 s), so its finally always runs
+  // before the hook could be abandoned.
+}, 30_000)
 
 function writePackage(root: string, pkg: PackageFixture): ThirdPartyLaunchSpec {
   const packageDir = join(root, 'packages', pkg.id, pkg.version)
@@ -112,9 +124,21 @@ function writePackage(root: string, pkg: PackageFixture): ThirdPartyLaunchSpec {
 
 async function live(packages: PackageFixture[], options: { enabled?: boolean } = {}): Promise<Live> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tools-integration-')))
+  const pids: number[] = []
+  let managed: FrontendPluginManager | undefined
+  cleanups.push(async () => {
+    try {
+      await managed?.closeBackendPlugins()
+      // Only the PIDs this file started, each waited for until it is gone.
+      await waitUntil(() => pids.every((pid) => !alive(pid)))
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
   const workspace = join(root, 'workspace')
   mkdirSync(workspace)
   const mgr = new FrontendPluginManager()
+  managed = mgr
   const policy: ExecutionPolicySnapshot = { policy: HOST_DEFAULT_EXECUTION_POLICY, revision: 1, state: 'default' }
   mgr.setExecutionPolicyResolver(() => policy)
   mgr.setCapabilityGrantResolver((_pluginId, packageVersion) => ({ packageVersion, system: ['fs'], storage: true }))
@@ -129,11 +153,23 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
     mgr.registerBackendActivation(spec)
     specs.set(pkg.id, spec)
   }
-  const pids: number[] = []
   // A real child on stdio, without the OS sandbox (that is the live
   // pluginBackendHost.thirdParty test's job): what is under test is the
-  // agent tool path in front of it.
-  mgr.setThirdPartyBackendAdmitter(async () => ({
+  // agent tool path in front of it. Like ThirdPartyBackendController, it
+  // refuses while the global native backend switch is off.
+  const native = { enabled: true }
+  let bindHold: Promise<void> | undefined
+  let bindWaiting = false
+  const refuseWhenOff = (): void => {
+    if (!native.enabled) throw new BackendPluginError('BACKEND_UNAVAILABLE', 'third-party native backends are turned off')
+  }
+  mgr.setThirdPartyBackendAdmitter(async () => {
+    if (bindHold) {
+      bindWaiting = true
+      await bindHold
+    }
+    refuseWhenOff()
+    return {
     spawnProcess: (_entryFile, spawnOptions) => {
       const child = spawn(process.execPath, [FIXTURE], {
         ...spawnOptions,
@@ -143,10 +179,11 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
       return child
     },
     bridgeDispatcher: { dispatch: vi.fn() },
-    beforeSpawn: async () => undefined,
+    beforeSpawn: async () => refuseWhenOff(),
     noteFailure: () => null,
     workspaceRoot: workspace,
-  }))
+    }
+  })
   const switches = { enabled: options.enabled ?? true, externalCallers: false }
   const disabled = new Set<string>()
   const consented = new Set(packages.map((pkg) => pkg.id))
@@ -185,7 +222,18 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
     payload: { arguments: args },
   })
   const result: Live = {
-    mgr, gate, root, workspace, specs, switches, disabled, consented, since, nameSince, confirmWrite, sent, pids, request,
+    mgr, gate, root, workspace, specs, switches, disabled, consented, since, nameSince, confirmWrite, sent, pids, native, request,
+    holdBind: () => {
+      let release!: () => void
+      bindHold = new Promise((done) => {
+        release = () => {
+          bindHold = undefined
+          done()
+        }
+      })
+      bindWaiting = false
+      return { release, waiting: () => bindWaiting }
+    },
     remove: (pluginId) => {
       specs.delete(pluginId)
     },
@@ -193,7 +241,6 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
       await mgr.executeAgentToolCall(request(pluginId, name, args, revision)) as unknown as Record<string, unknown>,
     backendHost: () => (mgr as unknown as { pluginBackendHost: PluginBackendHost }).pluginBackendHost,
   }
-  lives.push(result)
   return result
 }
 
@@ -256,7 +303,19 @@ const STOPS: Array<[string, string, (f: Live) => Promise<void>]> = [
   ['turn the master switch off', 'master-switch-off', async (f) => {
     await f.gate.setSwitches({ enabled: false })
   }],
+  // Spawn-time trust revocation (index.ts scheduleDeniedBackendRuntimeQuarantine).
+  ['revoke trust', 'plugin-revoked', async (f) => {
+    f.gate.mark('acme.fixture', 'revoked')
+    await f.gate.refresh()
+    await f.mgr.revokePackageVersion('acme.fixture', '1.0.0')
+  }],
 ]
+
+/** The global third-party kill switch, in ThirdPartyBackendController.setEnabled(false)'s order. */
+async function nativeBackendsOff(f: Live): Promise<void> {
+  f.native.enabled = false
+  await f.mgr.stopThirdPartyBackends(null)
+}
 
 function agentToolCallsInFlight(f: Live): number {
   return (f.mgr as unknown as { agentToolCalls: Map<string, unknown> }).agentToolCalls.size
@@ -273,14 +332,14 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
       hold.release(true)
       const response = await pending
       expect(response).toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
-      // The reason names the stop, except that a stop which also took the
-      // tool out of the served methods may be seen first as that.
-      expect([reason, 'tool-not-consented']).toContain(response.reason)
+      // The reason names the stop. Only a revoked consent may be seen first
+      // as the tool leaving the served methods: recheck does not ask consent.
+      expect(label === 'revoke consent' ? [reason, 'tool-not-consented'] : [reason]).toContain(response.reason)
       expect(f.pids).toEqual([])
       expect(agentToolCallsInFlight(f)).toBe(0)
     }, 30_000)
 
-    it(`${label}, then a call from a CLI that still lists the old catalog: refused by the Host`, async () => {
+    it(`${label}, then a call as from a CLI that still lists the old catalog: refused by the Host`, async () => {
       const f = await live([DEVMAP])
       const listed = f.sent.at(-1)!.revision
       await stop(f)
@@ -290,14 +349,15 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
     }, 30_000)
   }
 
-  // Disable, remove and a revoked consent also stop the child; quarantine and
-  // the master switch leave it to its idle shutdown (THIRD_PARTY_BACKEND_IDLE_MS).
-  const STOPS_THE_CHILD = new Set(['disable', 'remove', 'revoke consent'])
+  // These stops also stop the child; quarantine and the agent-tools master
+  // switch leave it to its idle shutdown (THIRD_PARTY_BACKEND_IDLE_MS).
+  const STOPS_THE_CHILD = new Set(['disable', 'remove', 'revoke consent', 'revoke trust'])
 
   for (const [label, , stop] of STOPS) {
     it(`${label} while the call runs in the child: the call ends as stopping, nothing is left behind`, async () => {
       const f = await live([DEVMAP])
-      const pending = f.call('acme.fixture', 'fixture_slow', { milliseconds: 2_000 })
+      // Long enough that only the stop can end it, whatever the load.
+      const pending = f.call('acme.fixture', 'fixture_slow', { milliseconds: 20_000 })
       await waitUntil(() => agentToolCallsInFlight(f) === 1)
       await stop(f)
       // The answer the child would still give is not waited for.
@@ -311,6 +371,81 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
       expect(agentToolCallsInFlight(f)).toBe(0)
     }, 30_000)
   }
+})
+
+describe('a package stops while its binding is made (the bind-to-dispatch window)', () => {
+  // These stops drain the backend, which cancels the bind in progress.
+  const CANCELS_THE_BIND = new Set(['disable', 'remove', 'revoke consent'])
+
+  for (const [label, reason, stop] of STOPS) {
+    it(`${label} while the backend is being bound for a read call: refused before dispatch`, async () => {
+      const f = await live([DEVMAP])
+      // A read tool asks no confirmation: only the check after the bind is
+      // left between this stop and the child.
+      const hold = f.holdBind()
+      const pending = f.call('acme.fixture', 'fixture_echo', { block: 'b1' })
+      await waitUntil(hold.waiting)
+      // A stop that drains the backend waits for the bind in progress: start
+      // it (its state changes apply at once), then let the bind finish.
+      const stopping = stop(f)
+      hold.release()
+      await stopping
+      const response = await pending
+      // Never dispatched, whichever stop.
+      expect(response).toMatchObject({ ok: false })
+      expect(response.result).toBeUndefined()
+      if (CANCELS_THE_BIND.has(label)) {
+        // Reported with the native switch case: a bind cancelled by the stop
+        // (USER_CANCELLED) is answered PLUGIN_TOOL_FAILED, not unavailable.
+        expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_FAILED', plugin_error: 'USER_CANCELLED' })
+      } else {
+        // Quarantine and the master switch leave the bind alone: only the
+        // check after the bind (beforeCall) stops these.
+        expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
+        expect([reason, 'plugin-stopping']).toContain(response.reason)
+      }
+      expect(agentToolCallsInFlight(f)).toBe(0)
+    }, 30_000)
+  }
+})
+
+// Reported to the coordinator (2026-10-17): with the global third-party native
+// backend switch off, the Host answers PLUGIN_TOOL_FAILED (plugin_error
+// BACKEND_UNAVAILABLE) and the catalog still lists the tools as available.
+// These tests pin only what holds today, which is the safety property: no
+// call succeeds and none reaches a child. The expected answer is a todo.
+describe('the global native backend switch turns off around a call', () => {
+  it('while the call is admitted but not dispatched: it does not succeed and no child starts', async () => {
+    const f = await live([DEVMAP])
+    const hold = holdWrites(f)
+    const pending = f.call('acme.fixture', 'fixture_write', { block: 'b1' })
+    await waitUntil(hold.waiting)
+    await nativeBackendsOff(f)
+    hold.release(true)
+    await expect(pending).resolves.toMatchObject({ ok: false })
+    expect(f.pids).toEqual([])
+    expect(agentToolCallsInFlight(f)).toBe(0)
+  }, 30_000)
+
+  it('before a call: it does not succeed and no child starts', async () => {
+    const f = await live([DEVMAP])
+    await nativeBackendsOff(f)
+    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({ ok: false })
+    expect(f.pids).toEqual([])
+  }, 30_000)
+
+  it('while the call runs in the child: the call ends, the child stops, nothing is left behind', async () => {
+    const f = await live([DEVMAP])
+    const pending = f.call('acme.fixture', 'fixture_slow', { milliseconds: 20_000 })
+    await waitUntil(() => agentToolCallsInFlight(f) === 1)
+    await nativeBackendsOff(f)
+    await expect(pending).resolves.toMatchObject({ ok: false })
+    await waitUntil(() => f.pids.every((pid) => !alive(pid)))
+    expect(agentToolCallsInFlight(f)).toBe(0)
+  }, 30_000)
+
+  it.todo('answers PLUGIN_TOOL_UNAVAILABLE with a reason and takes the tools out of the catalog (reported, pending a decision)')
+  it.todo('a bind cancelled by disable, remove or a revoked consent answers PLUGIN_TOOL_UNAVAILABLE (reported, pending a decision)')
 })
 
 describe('two packages claim the same name (DB1)', () => {
