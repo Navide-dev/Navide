@@ -379,6 +379,29 @@ async def marketplace_query_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("plugins.agent_action.result")
+async def plugins_agent_action_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.agent_action.request`` (plan B, B2-c)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_action.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_plugin_agent_action(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
 #: The Host records broker and shell-broker calls; agent tool calls are the
@@ -3856,11 +3879,90 @@ async def plugins_agent_request_decide(session: "Session", msg_id: str, msg_type
         session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=subject
     ):
         return
+    from . import app
+
     try:
-        approval = await decide_plugin(approval_id, approve)
+        approval = await decide_plugin(
+            approval_id, approve, window_id=session.window_id if app.is_main_window(session) else "",
+        )
     except SkillApprovalError as err:
         await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
         return
+    _audit_user_decision(approval, "decide-approve" if approve else "decide-reject")
+    await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
+
+
+def _audit_user_decision(approval: dict, action: str, error_code: str = "") -> None:
+    """A person's decision or result on a plugin request, in plugin_agent_actions (B2-c)."""
+    from . import app
+
+    target = approval.get("target") if isinstance(approval.get("target"), dict) else {}
+    app.plugin_audit_log.record_agent_action(
+        plugin_id=str(target.get("id") or ""), plugin_version=str(target.get("version") or ""),
+        action=action, caller_kind="user", approval_id=str(approval.get("approval_id") or ""),
+        outcome="allowed" if not error_code else "error", error_code=error_code,
+    )
+
+
+@handler("plugins.agent_requests.list")
+async def plugins_agent_requests_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The plugin requests still open (pending and applying), e.g. to recover after a window restart.
+
+    Main windows only: a record names the requester's pane and workspace.
+    ``applyingInLiveWindow`` lists the applying requests a connected main
+    window approved and is still carrying out; recovery leaves those alone.
+    """
+    from . import app
+    from .skills_approvals import registry
+
+    if not app.is_main_window(session):
+        await session.send_json(make_error(msg_id, msg_type, "FORBIDDEN", "only a Navide main window may list plugin requests"))
+        return
+    requests = registry.plugin_requests()
+    live = app.live_main_window_ids()
+    in_live_window = [
+        r["approval_id"] for r in requests
+        if r["status"] == "applying" and registry.applying_by(r["approval_id"]) in live
+    ]
+    await session.send_json(make_response(msg_id, msg_type, {"requests": requests, "applyingInLiveWindow": in_live_window}))
+
+
+@handler("plugins.agent_request.finish")
+async def plugins_agent_request_finish(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The window carried out an approved plugin request: applying -> completed | failed.
+
+    Only a window can mint the confirmation, bound to the approval_id and the
+    status (``<approval_id>:completed|failed``), so an agent cannot report a
+    change that never happened and a "failed" confirmation cannot report success.
+    """
+    from . import app
+    from .ipc import make_event
+    from .plugins import agent_tools_contract as contract
+    from .skills_approvals import SkillApprovalError, registry
+
+    approval_id = str(payload.get("approval_id") or "")
+    status = payload.get("status")
+    error = payload.get("error")
+    if status not in {"completed", "failed"} or (error is not None and not isinstance(error, str)):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "status must be completed or failed"))
+        return
+    if not await _confirmed(
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=f"{approval_id}:{status}"
+    ):
+        return
+    try:
+        approval = registry.finish_plugin(approval_id, status, error=error if status == "failed" else None)
+    except SkillApprovalError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
+        return
+    _audit_user_decision(
+        approval, f"finish-{status}",
+        "" if status == "completed" else ("INTERRUPTED" if error == "interrupted" else "ACTION_FAILED"),
+    )
+    await app.broadcast(make_event(
+        contract.PLUGIN_APPROVAL_RESOLVED_EVENT,
+        {"approval_id": approval_id, "status": approval["status"], "error": approval["error"]},
+    ))
     await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
 
 
@@ -11706,6 +11808,10 @@ async def ui_invoke_result(session: "Session", msg_id: str, msg_type: str, paylo
 _UI_FOCUS_SEQ = itertools.count(1)
 
 
+#: A main window's page-load id (B2-c): what renderer code generates (a UUID).
+_WINDOW_ID = re.compile(r"[A-Za-z0-9-]{8,64}")
+
+
 @handler("ui.invoke.ready")
 async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """A main window announcing that it answers ui.invoke.request — sent on
@@ -11713,6 +11819,9 @@ async def ui_invoke_ready(session: "Session", msg_id: str, msg_type: str, payloa
     so app.unicast_any can hand a global UI action to a window that will
     answer it, preferring the one the user touched last."""
     session.ui_bus_ready = True
+    window_id = payload.get("window_id")
+    if isinstance(window_id, str) and _WINDOW_ID.fullmatch(window_id):
+        session.window_id = window_id
     if payload.get("focused"):
         session.ui_focused_at = next(_UI_FOCUS_SEQ)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True}))

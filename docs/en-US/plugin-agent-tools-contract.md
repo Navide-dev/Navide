@@ -897,6 +897,35 @@ error, error_code}` with `BAD_REQUEST` | `NOT_FOUND` | `REGISTRY_UNAVAILABLE` |
 `HOST_UNAVAILABLE`. Every piece of third-party text (names, descriptions) is
 wrapped as external content by the backend before an agent sees it.
 
+The B2 request tools (section 6) use `detail` and `installed` to resolve their
+target: the Registry must list the requested version, and update, rollback
+and remove need the package installed.
+
+### 4.3.1 Backend → Host: `plugins.agent_action` (B2-c)
+
+For `plugins_disable` / `plugins_enable`. The backend unicasts
+`plugins.agent_action.request` to the authenticated Host session:
+
+```json
+{ "request_id": "pa:5d1e...", "action": "disable", "plugin_id": "nerdtechnic.devmap",
+  "requester": { "paneId": "p-41", "paneName": "dev", "workspace": "/Users/me/project", "callerKind": "pane" } }
+```
+
+The Host answers with the WebSocket message `plugins.agent_action.result`:
+`{request_id, ok: true, pluginId, pluginVersion, disabled, changed}` or `{request_id,
+ok: false, error, error_code}` with `BAD_REQUEST` | `NOT_INSTALLED` |
+`BUILTIN_PLUGIN` | `ACTION_FAILED` | `HOST_UNAVAILABLE`. Only installed
+Marketplace packages qualify: the bundled Navide plugins (the reserved
+`navide.*` namespace) are refused with `BUILTIN_PLUGIN` by the backend before
+it asks, and by the Host again. The Host switches the package exactly as the
+user's Extensions switch does (enable keeps the consent the user already
+gave). When that changed the package (`changed: true`) it tells the user which
+caller did it (pane name, or "external MCP client" / "Navide Host") with a
+one-click undo; a package already in that state is left alone, nobody is told
+and the audit records `no-op`. The undo acts only while the package is still
+in the state the agent left it in. The requester's pane name and workspace go
+through `neutralize_external_text`.
+
 ### 4.4 Chunked transfer of results and arguments
 
 A result or an argument object of any size reaches the other end intact. A
@@ -1216,6 +1245,29 @@ child process; a view whose child has not started yet, or has stopped while
 idle, still counts), not live processes; `children.retained` counts children
 whose close failed and that may still be running.
 
+`plugin_agent_actions` (B2-c; one row per attempt to request, decide, finish,
+disable or enable a change to a Navide plugin). Its DDL is
+`PLUGIN_AGENT_ACTIONS_DDL`, run as its own schema component
+(`plugin_agent_actions`, version 1): an older navide.db gets the table at start
+and no other table changes. If it cannot be created, only this record is off
+(`PLUGIN_AGENT_ACTIONS_AUDIT_DISABLED` in the diagnostics) and the backend
+starts as usual.
+
+| Column | Type | Content |
+|---|---|---|
+| `id` | INTEGER PK | autoincrement |
+| `at` | INTEGER | when |
+| `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` |
+| `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
+| `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
+| `approval_id` | TEXT | the request's id, `''` when none |
+| `outcome` | TEXT | `allowed` / `no-op` (allowed, already in that state) / `denied` / `error` |
+| `error_code` | TEXT | `''` when allowed or no-op; otherwise one of `PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES`, anything else `other` |
+
+Indexes `(at)` and `(plugin_id, at)`. Retention is `plugin_tool_calls`'s: 30
+days, then the newest 10,000. Every text is shown as plain text.
+
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
 
@@ -1318,6 +1370,45 @@ unchanged. A plugin request:
   to reject cannot be spent to approve. Without it the backend answers
   `CONFIRMATION_REQUIRED`. On approval the main window itself runs
   `prepareInstall` → trust dialog → `commitInstall`.
+
+B2-c tools and messages:
+
+- `marketplace_request_install` / `_update` / `_rollback` `(namespace, name,
+  version, reason)` and `plugins_request_remove` `(namespace, name, reason)`
+  file a request. The backend checks the grammar (package id, SemVer), refuses
+  the `navide.*` namespace (`BUILTIN_PLUGIN`), and takes the target from the
+  Host (4.3): install needs the package not installed, update a newer and
+  rollback an older version than the installed one, remove an installed
+  package (`NOT_INSTALLED` otherwise); install, update and rollback need the
+  version listed by the Registry (`NOT_FOUND` otherwise). `card` is the
+  Registry listing's card, unverified (prepareInstall verifies). `reason` and
+  the requester are stored through `neutralize_external_text`. A tool returns
+  only `{ok, approval_id, status, expires_at, note}`: a coalesced request
+  names its first requester, whose pane, workspace and reason no other caller
+  sees. Each new or coalesced request is broadcast to the main windows only
+  as `plugins.agent_request` (the record).
+- `marketplace_request_status (approval_id, wait_s 0-60)` returns `{ok,
+  approval_id, kind, target: {id, version}, status, error, expires_at}`,
+  waiting while the request is `pending` or `applying`.
+- `plugins.agent_requests.list` (main windows only, `FORBIDDEN` otherwise)
+  returns `{requests, applyingInLiveWindow}`: the `pending` and `applying`
+  plugin requests, and the ids of the applying ones a still-connected main
+  window approved and is carrying out. A main window sends its page-load id
+  (`window_id`, stable across reconnects, new on reload) with
+  `ui.invoke.ready`; `decide` records it for an approval. On its first
+  connection a main window settles every other `applying` request against the
+  installed packages: remove and the package is gone, or update / rollback /
+  install and the installed version equals `target.version` → `completed`;
+  anything else → `failed` with error `interrupted`.
+- A rollback restores the version Extensions keeps for rollback: the window
+  rolls back only when that is `target.version`, else it finishes `failed`
+  with the reason (it never installs a version the user did not approve).
+- `plugins.agent_request.finish` `{approval_id, status: completed | failed,
+  error, confirmation}` (window): the confirmation is minted for the action
+  `plugins.agent_request.finish` (in `TRUST_CONFIRM_ACTIONS`) with subject
+  `<approval_id>:<status>`, so a confirmation to report failure cannot report
+  success; only `applying` moves. The result is broadcast as
+  `plugins.agent_request_resolved` `{approval_id, status, error}`.
 
 ## 7. Changing this contract
 

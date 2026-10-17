@@ -50,11 +50,13 @@ CORE_TOOL_NAMES = (
     "cli_message_log", "cli_open_agent", "cli_pending_incoming", "cli_permission_settings", "cli_place_pane",
     "cli_read_incoming", "cli_read_log", "cli_reclaim_agent", "cli_send", "cli_send_and_wait", "cli_token_stats",
     "cli_usage", "cli_wait_idle", "cli_whoami", "credentials_findings", "credentials_list", "evolve_report",
-    "marketplace_detail", "marketplace_search", "mcp_list", "memory_list", "pipeline_abort",
-    "pipeline_define", "pipeline_gate", "pipeline_graph",
+    "marketplace_detail", "marketplace_request_install", "marketplace_request_rollback",
+    "marketplace_request_status", "marketplace_request_update", "marketplace_search", "mcp_list", "memory_list",
+    "pipeline_abort", "pipeline_define", "pipeline_gate", "pipeline_graph",
     "pipeline_list", "pipeline_next", "pipeline_reset", "pipeline_restart", "pipeline_restart_from",
     "pipeline_resume", "pipeline_start", "pipeline_status", "plan_add_note", "plan_add_todo", "plan_create",
-    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_list_installed",
+    "plan_list", "plan_read", "plan_update_stage", "plan_update_todo", "plugins_disable", "plugins_enable",
+    "plugins_list_installed", "plugins_request_remove",
     "preview_clear", "preview_list",
     "preview_record", "preview_show", "prompt_list", "role_define", "scheduler_list", "scheduler_remove",
     "scheduler_run_now", "scheduler_runs", "scheduler_set_enabled", "scheduler_upsert", "share_create",
@@ -572,6 +574,17 @@ APPROVAL_KINDS = ("skill", "plugin-install", "plugin-update", "plugin-rollback",
 PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "failed", "expired")
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
+#: Window -> backend: end an approved request (``applying`` -> completed | failed),
+#: with a trust confirmation minted for this action, subject ``<approval_id>:<status>``.
+PLUGIN_APPROVAL_FINISH_ACTION = "plugins.agent_request.finish"
+#: Window -> backend: the plugin requests the registry holds (pending and applying).
+PLUGIN_APPROVAL_LIST_MESSAGE = "plugins.agent_requests.list"
+#: Backend -> windows: a plugin request was filed, or a pending one was asked for again.
+PLUGIN_APPROVAL_REQUEST_EVENT = "plugins.agent_request"
+#: Backend -> windows: a plugin request was decided, finished or expired.
+PLUGIN_APPROVAL_RESOLVED_EVENT = "plugins.agent_request_resolved"
+#: The longest marketplace_request_status waits for a decision.
+PLUGIN_APPROVAL_STATUS_MAX_WAIT_S = 60
 
 
 class PluginApprovalRequester(TypedDict):
@@ -608,6 +621,23 @@ class PluginApprovalDecision(TypedDict):
     approval_id: str
     approve: bool
     confirmation: str
+
+
+# ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
+
+PLUGIN_AGENT_ACTION_REQUEST_EVENT = "plugins.agent_action.request"
+PLUGIN_AGENT_ACTION_RESULT_MESSAGE = "plugins.agent_action.result"
+PLUGIN_AGENT_ACTION_KINDS = ("disable", "enable")
+PLUGIN_AGENT_ACTION_ERROR_CODES = (
+    "BAD_REQUEST", "NOT_INSTALLED", "BUILTIN_PLUGIN", "ACTION_FAILED", "HOST_UNAVAILABLE",
+)
+
+
+class PluginAgentActionRequest(TypedDict):
+    request_id: str
+    action: Literal["disable", "enable"]
+    plugin_id: str
+    requester: PluginApprovalRequester
 
 
 # ── navide.db: audit and activity (B1-d, D-e) ───────────────────────────────
@@ -676,4 +706,43 @@ PLUGIN_AUDIT_DDL = (
     " denied_reason TEXT NOT NULL,"
     " count INTEGER NOT NULL,"
     " PRIMARY KEY (day, plugin_id, workspace, source, address, denied_reason))",
+)
+
+# ── navide.db: agent plugin actions (B2-c) ──────────────────────────────────
+# Who asked for, decided or carried out a change to a Navide plugin. Its own
+# schema component: created if missing, nothing else touched.
+
+PLUGIN_AGENT_ACTIONS = (
+    "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
+    "decide-approve", "decide-reject", "finish-completed", "finish-failed",
+)
+#: ``user`` is a person in a Navide window (deciding or finishing a request).
+PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")
+#: ``no-op``: allowed, but the package was already in that state (nothing changed, nobody told).
+PLUGIN_AGENT_ACTION_OUTCOMES = ("allowed", "no-op", "denied", "error")
+PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES = (
+    *PLUGIN_AGENT_ACTION_ERROR_CODES, "NOT_FOUND", "REGISTRY_UNAVAILABLE", "INTERRUPTED",
+    "CONFIRMATION_REQUIRED", "PLUGIN_APPROVAL_NOT_FOUND", "PLUGIN_APPROVAL_NOT_PENDING",
+    "PLUGIN_APPROVAL_NOT_APPLYING",
+)
+#: The same retention as plugin_tool_calls.
+PLUGIN_AGENT_ACTIONS_RETENTION_DAYS = PLUGIN_TOOL_CALLS_RETENTION_DAYS
+PLUGIN_AGENT_ACTIONS_MAX_ROWS = PLUGIN_TOOL_CALLS_MAX_ROWS
+
+PLUGIN_AGENT_ACTIONS_DDL = (
+    "CREATE TABLE IF NOT EXISTS plugin_agent_actions ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL DEFAULT '',"
+    " action TEXT NOT NULL,"
+    " caller_kind TEXT NOT NULL,"
+    " caller_pane_id TEXT NOT NULL DEFAULT '',"
+    " caller_pane_name TEXT NOT NULL DEFAULT '',"
+    " caller_workspace TEXT NOT NULL DEFAULT '',"
+    " approval_id TEXT NOT NULL DEFAULT '',"
+    " outcome TEXT NOT NULL,"
+    " error_code TEXT NOT NULL DEFAULT '')",
+    "CREATE INDEX IF NOT EXISTS plugin_agent_actions_at ON plugin_agent_actions (at)",
+    "CREATE INDEX IF NOT EXISTS plugin_agent_actions_plugin_at ON plugin_agent_actions (plugin_id, at)",
 )
