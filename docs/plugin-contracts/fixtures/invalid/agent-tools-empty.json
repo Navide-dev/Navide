@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "nerdtechnic.devmap",
+  "name": "Dev Map",
+  "version": "0.2.0",
+  "publisher": "nerdtechnic",
+  "permissions": {
+    "system": [
+      "fs"
+    ]
+  },
+  "marketplace": {
+    "description": "Show this workspace's development map.",
+    "license": "MIT"
+  },
+  "backend": {
+    "entry": "backend/devmap",
+    "protocolVersion": 1,
+    "activation": "startup",
+    "methods": [
+      "devmap.read",
+      "devmap.status"
+    ],
+    "agentTools": []
+  }
+}

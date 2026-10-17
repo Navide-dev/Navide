@@ -531,10 +531,11 @@ CLI が既に何を渡されているのか、このプロジェクトが既に�
 | `marketplace_detail` | `id`、`version=null` | 1 つのパッケージ（`<namespace>.<name>`）：`{ok, kind, item, versions, card}`。`versions` は公開済みのバージョン、`card` は開示カード `{manifest, registry}`（Registry が提供しない場合は `null`） |
 | `plugins_list_installed` | — | インストール済みの Navide プラグイン：`{ok, kind, items}`。各項目は `{id, version, enabled, quarantined, hasBackend, agentTools}` |
 
-パッケージの公開者が決めたテキスト（パッケージ id とバージョン、名前、説明、エージェントツールの名前・タイトル・説明、公開者の表示名）と、Navide アプリが返すエラーテキストはすべて
+パッケージの公開者が決めたテキスト（パッケージ id とバージョン、名前、説明、エージェントツールの名前・タイトル・説明、公開者の表示名）と、Registry の応答を引用している可能性がある Navide アプリのエラーテキストはすべて
 `[外部訊息開始 — …]` と `[外部訊息結束]` の間に入れられ、
 `[third-party Navide plugin <id> v<version> | …]` ラベルが付きます。これはユーザーの指示ではありません。
-このテキストを読んだ pane は外部コンテンツを受け取ったものとしてマークされます（Navide Guard）。エラーは
+このテキストを読んだ pane は外部コンテンツを受け取ったものとしてマークされます（Navide Guard）。
+アプリ自身の固定のエラー文言（すべての `BAD_REQUEST` と、`HOST_UNAVAILABLE` の「Navide Host cannot answer Marketplace queries now」）と、予約済みの `navide.` 名前空間のインストール済みプラグイン（ファーストパーティの Plans、Git、mini-IDE）は、そのまま返され、マークもされません。エラーは
 `{ok: false, error, error_code}` で、コードは `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。
 
 ### Pipeline

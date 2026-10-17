@@ -29,6 +29,16 @@ const validManifestFixtures = readdirSync(join(MANIFEST_FIXTURES, 'valid'))
 const invalidManifestFixtures = readdirSync(join(MANIFEST_FIXTURES, 'invalid'))
   .filter((name) => name.endsWith('.json'))
   .sort()
+// Agent-tools rules the manifest schema cannot express (contract section 2.6):
+// the public parser mirrors the schema, so only the Host and package seams
+// (and the Registry) refuse these.
+const contractRuleOnlyManifestFixtures = new Set([
+  'agent-tools-duplicate-name.json',
+  'agent-tools-fractional-number.json',
+  'agent-tools-method-undeclared.json',
+  'agent-tools-prefix-mismatch.json',
+  'agent-tools-reserved-prefix.json',
+])
 const rawManifestFixtures = readdirSync(join(MANIFEST_FIXTURES, 'invalid-raw'))
   .filter((name) => name.endsWith('.json'))
   .sort()
@@ -120,7 +130,8 @@ describe('B0 integrated Manifest v2 corpus gate', () => {
     const raw = readFixture('invalid', name)
     const source = parsePublicManifestJson(raw)
 
-    expect(() => parsePublicManifestV2(source)).toThrow()
+    if (contractRuleOnlyManifestFixtures.has(name)) expect(() => parsePublicManifestV2(source)).not.toThrow()
+    else expect(() => parsePublicManifestV2(source)).toThrow()
     expect(() => parseInstalledManifest(source)).toThrow()
     expect(() => parseInstalledManifest(readManifestFromEntries([manifestEntry(raw)]))).toThrow()
   })

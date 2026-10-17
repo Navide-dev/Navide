@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 2,
+  "apiVersion": "^1.0.0",
+  "id": "nerdtechnic.plan",
+  "name": "Dev Map",
+  "version": "0.2.0",
+  "publisher": "nerdtechnic",
+  "permissions": {
+    "system": [
+      "fs"
+    ]
+  },
+  "marketplace": {
+    "description": "Show this workspace's development map.",
+    "license": "MIT"
+  },
+  "backend": {
+    "entry": "backend/devmap",
+    "protocolVersion": 1,
+    "activation": "startup",
+    "methods": [
+      "devmap.read",
+      "devmap.status"
+    ],
+    "agentTools": [
+      {
+        "name": "plan_read",
+        "method": "devmap.read",
+        "risk": "read",
+        "title": "Read dev map",
+        "description": "Read this workspace's dev map.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "plan_set_status",
+        "method": "devmap.status",
+        "risk": "write",
+        "title": "Set block status",
+        "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+        "timeoutMs": 30000,
+        "inputSchema": {
+          "type": "object",
+          "required": [
+            "block_id",
+            "status"
+          ],
+          "properties": {
+            "block_id": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "status": {
+              "enum": [
+                "done",
+                "wip",
+                "plan"
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}

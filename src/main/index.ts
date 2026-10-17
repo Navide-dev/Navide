@@ -53,6 +53,7 @@ import { registerExecutionPolicyIpc } from './plugins/executionPolicyIpc'
 import { FAIL_CLOSED_EXECUTION_POLICY, type ExecutionPolicySnapshot } from './plugins/executionPolicy'
 import { PluginFactoryOptOutStore } from './plugins/pluginFactoryOptOutStore'
 import { BuiltinRemovedEarlierStore, migrateBuiltinRemovalsToDisabled, PluginDisabledStore } from './plugins/pluginDisabledStore'
+import { createBuiltinSwitchReconciler } from './plugins/builtinSwitchReconciler'
 import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/frontendPluginManager'
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
@@ -1844,7 +1845,9 @@ const pluginTrustRefresh = registerPluginIpc(
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
-    onBuiltinSwitchReset: () => {
+    onBuiltinSwitchReset: (resumed) => {
+      for (const pluginId of resumed) completeBuiltinEnable(pluginId)
+      builtinSwitchReconciler.sync()
       for (const hostWindow of mainWindows) {
         if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
           hostWindow.webContents.send('plugins:contributionsChanged')
@@ -1852,32 +1855,55 @@ const pluginTrustRefresh = registerPluginIpc(
       }
     },
     setBuiltinDisabled: async (pluginId, disabled) => {
-      if (disabled) {
-        for (const [key, hostWindow] of contributionWindows) {
-          if (key.startsWith(`${pluginId}.`) && !hostWindow.isDestroyed()) hostWindow.close()
-        }
-        if (pluginId === 'navide.plans') {
-          for (const hostWindow of BrowserWindow.getAllWindows()) {
-            if (!hostWindow.isDestroyed() && planWindows.hasWindow(hostWindow)) hostWindow.close()
-          }
-        }
-        await frontendPluginManager.suspendBuiltinPlugin(pluginId)
-      } else {
-        frontendPluginManager.resumeBuiltinPlugin(pluginId)
-        // Enabled once, it starts from the empty storage the old removal left.
-        builtinRemovedEarlier.remove(pluginId)
-        if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
-          registerForcedLegacyGit()
-        }
-      }
-      for (const hostWindow of mainWindows) {
-        if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
-          hostWindow.webContents.send('plugins:contributionsChanged')
-        }
-      }
+      await applyBuiltinSwitch(pluginId, disabled)
+      // Enabled once, it starts from the empty storage the old removal left.
+      if (!disabled) builtinRemovedEarlier.remove(pluginId)
+      builtinSwitchReconciler.sync()
     },
+    holdBuiltinSwitch: (task) => builtinSwitchReconciler.hold(task),
   }
 )
+/** The Host side of a built-in's Disabled switch: drain and close it, or bring
+ *  it back. Used by the Extensions switch and by a store change the switch did
+ *  not make (see builtinSwitchReconciler). */
+async function applyBuiltinSwitch(pluginId: string, disabled: boolean): Promise<void> {
+  if (disabled) {
+    for (const [key, hostWindow] of contributionWindows) {
+      if (key.startsWith(`${pluginId}.`) && !hostWindow.isDestroyed()) hostWindow.close()
+    }
+    if (pluginId === 'navide.plans') {
+      for (const hostWindow of BrowserWindow.getAllWindows()) {
+        if (!hostWindow.isDestroyed() && planWindows.hasWindow(hostWindow)) hostWindow.close()
+      }
+    }
+    await frontendPluginManager.suspendBuiltinPlugin(pluginId)
+  } else {
+    frontendPluginManager.resumeBuiltinPlugin(pluginId)
+    completeBuiltinEnable(pluginId)
+  }
+  for (const hostWindow of mainWindows) {
+    if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
+      hostWindow.webContents.send('plugins:contributionsChanged')
+    }
+  }
+}
+/** What enabling a built-in needs after `resumeBuiltinPlugin`, shared by the
+ *  Enable switch and the reset of an unreadable store: a forced legacy Git
+ *  recovery session registers the legacy Git it would have at startup. */
+function completeBuiltinEnable(pluginId: string): void {
+  if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
+    registerForcedLegacyGit()
+  }
+}
+// A store that turns unreadable while the app runs fails closed for the
+// built-ins; apply that at once (drain the views, re-register the Host so the
+// backend refuses Plans work) instead of at the next registration.
+const builtinSwitchReconciler = createBuiltinSwitchReconciler({
+  list: () => frontendPluginManager.listDisabledBuiltinPlugins(),
+  apply: applyBuiltinSwitch,
+  warn: (message) => warnMain(`[main] ${message}`),
+})
+setInterval(() => { void builtinSwitchReconciler.check() }, 15_000).unref()
 registerExecutionPolicyIpc(
   executionPolicySourceStore,
   (event) => isTrustedPluginManagementSender(event, mainWindows),
@@ -4798,6 +4824,9 @@ const TRUST_CONFIRM_ACTIONS = new Set([
   'p2p.trust.rebuild',
   // Writes an agent-requested skill into the shared library.
   'skills.install_approval.decide',
+  // Decides an agent's request to install, update, roll back or remove a
+  // Navide plugin; the subject is the approval_id.
+  'plugins.agent_request.decide',
   // Loosening terminal command protection (switching a category off, adding
   // an allow prefix, removing a block pattern) — the backend demands a token
   // only for those, so tightening needs no prompt.

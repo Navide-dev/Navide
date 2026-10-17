@@ -8981,6 +8981,31 @@ def _fence_untrusted(value: Any, label: str, fenced: list[int], key: str = "", p
     return None
 
 
+def _mq_known_keys_only(value: Any) -> Any:
+    """A copy of ``value`` keeping only contract keys, its strings unfenced."""
+    if isinstance(value, dict):
+        return {
+            key: _mq_known_keys_only(child)
+            for key, child in value.items()
+            if isinstance(key, str) and key in _MQ_KNOWN_KEYS
+        }
+    if isinstance(value, list):
+        return [_mq_known_keys_only(entry) for entry in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    return None
+
+
+def _mq_first_party(item: Any) -> bool:
+    """An installed package in the reserved ``navide.`` namespace (``isReservedPluginId``).
+
+    The Host installs such an id only from the bundled packages or an install
+    whose official-key verification passed, so its texts are Navide's own.
+    """
+    plugin_id = item.get("id") if isinstance(item, dict) else None
+    return isinstance(plugin_id, str) and plugin_id.startswith("navide.") and _MQ_PACKAGE_ID.fullmatch(plugin_id) is not None
+
+
 def _mq_label(item: Any) -> str:
     from agent_team_backend.plugins.external_content import third_party_label
 
@@ -8991,12 +9016,26 @@ def _mq_label(item: Any) -> str:
 
 
 #: Errors this backend writes itself; anything else came from the Host and
-#: may quote the Registry's answer.
+#: may quote the Registry's answer, except the Host's own fixed words below.
 _MQ_OWN_ERRORS = frozenset({
     "Navide Host is not connected",
     "Navide Host did not answer the Marketplace query",
     "caller is not authenticated",
 })
+#: The Host's fixed refusal when it cannot serve the query
+#: (``handleMarketplaceQueryRequest``). Its catch-all HOST_UNAVAILABLE carries
+#: an exception message instead, which may quote the Registry, so the code
+#: alone does not make the text Navide's.
+_MQ_HOST_UNAVAILABLE = "Navide Host cannot answer Marketplace queries now"
+
+
+def _mq_host_wrote(code: str, error: str) -> bool:
+    """Whether the Host's error text is its own fixed wording.
+
+    Every BAD_REQUEST is a literal in ``marketplaceQuery.ts`` /
+    ``handleMarketplaceQueryRequest`` about the agent's own query.
+    """
+    return code == "BAD_REQUEST" or (code == "HOST_UNAVAILABLE" and error == _MQ_HOST_UNAVAILABLE)
 
 
 def _host_marketplace_error(caller: _Caller, answer: dict[str, Any], kind: str) -> dict[str, Any]:
@@ -9008,7 +9047,7 @@ def _host_marketplace_error(caller: _Caller, answer: dict[str, Any], kind: str) 
     code = code if code in contract.MARKETPLACE_QUERY_ERROR_CODES else "HOST_UNAVAILABLE"
     error = answer.get("error")
     error = error if isinstance(error, str) and error else "Marketplace query failed"
-    if error not in _MQ_OWN_ERRORS:
+    if error not in _MQ_OWN_ERRORS and not _mq_host_wrote(code, error):
         error = wrap_external_text(error, label="[Navide Marketplace error, may quote the Registry's answer]")
         _taint_marketplace_reader(caller, f"marketplace {kind} error")
     return {"ok": False, "error": error, "error_code": code}
@@ -9146,7 +9185,11 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
     out = {
         "ok": True,
         "kind": "installed",
-        "items": [_fence_untrusted(item, _mq_label(item), fenced) for item in items if isinstance(item, dict)],
+        "items": [
+            _mq_known_keys_only(item) if _mq_first_party(item) else _fence_untrusted(item, _mq_label(item), fenced)
+            for item in items
+            if isinstance(item, dict)
+        ],
     }
     if fenced[0]:
         _taint_marketplace_reader(caller, "plugins_list_installed")

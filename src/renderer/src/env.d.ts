@@ -582,6 +582,19 @@ declare global {
       | 'stopped-after-crashes'
       | 'unavailable'
     reason?: string
+    /** Declared agent tools; absent when none. `collidesWith`: the plugin id
+     *  that holds the same name, so this tool stays offline. */
+    agentTools?: Array<{
+      name: string
+      title: string
+      description: string
+      risk: 'read' | 'write'
+      timeoutMs: number
+      method: string
+      inputSchema: Record<string, unknown>
+      collidesWith?: string
+      sharedWith?: string[]
+    }>
     changedSinceConsent: boolean
     canWriteWorkspace: boolean
     workspaceWrite: string[]
@@ -668,6 +681,16 @@ declare global {
     trustTier: 'signed-verified' | 'unsigned'
     sensitive: string[]
     containsBackendExecutable: boolean
+    /** Declared agent tools (sorted, timeouts defaulted); absent when none. */
+    agentTools?: Array<{
+      name: string
+      method: string
+      risk: 'read' | 'write'
+      title: string
+      description: string
+      timeoutMs: number
+      inputSchema: Record<string, unknown>
+    }>
     requiresConfirmation: boolean
     publisherId: string
     requiresPublisherTrust: boolean

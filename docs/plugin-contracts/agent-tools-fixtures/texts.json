@@ -15,7 +15,22 @@
     { "value": "line separator", "valid": false },
     { "value": "para separator", "valid": false },
     { "value": 42, "valid": false },
-    { "value": null, "valid": false }
+    { "value": null, "valid": false },
+    { "value": "\u202eetirw safe", "valid": false },
+    { "value": "zero\u200bwidth", "valid": false },
+    { "value": "joiner\u200d", "valid": false },
+    { "value": "\ufeffbom", "valid": false },
+    { "value": "mark\u200e", "valid": false },
+    { "value": "isolate\u2066x\u2069", "valid": false },
+    { "value": "word\u2060joiner", "valid": false },
+    { "value": "arabic\u061cmark", "valid": false },
+    { "value": "tag\udb40\udc41smuggled", "valid": false },
+    { "value": "tag end\udb40\udc7f", "valid": false },
+    { "value": "select\ufe0for", "valid": false },
+    { "value": "select\ufe00or", "valid": false },
+    { "value": "soft\u00adhyphen", "valid": false },
+    { "value": "mongolian\u180evowel", "valid": false },
+    { "value": "grapheme\u034fjoiner", "valid": false }
   ],
   "results": [
     { "value": "plain text", "expected": "plain text" },

@@ -25,6 +25,7 @@ import {
 } from './pluginCapabilityBroker'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import type { PluginSystemNamespace } from './pluginManifestV2'
+import type { DisclosureAgentTool } from '../../shared/pluginDisclosure'
 
 /** Private Electron-main seam for Backend Wire v1 conformance tests. */
 export const MCP_PROTOCOL_REVISION = '2026-07-28'
@@ -95,6 +96,9 @@ export interface BackendPluginLaunchSpec {
     name: string
     system: readonly PluginSystemNamespace[]
     shell?: 'allowlist' | 'full'
+    /** The package's declared agent tools as the disclosure spells them
+     *  (defaulted timeouts, sorted by name); absent when it declares none. */
+    agentTools?: readonly DisclosureAgentTool[]
   }
 }
 
@@ -678,7 +682,9 @@ function isRuntimeContext(value: unknown): value is BackendRuntimeContext {
   )
 }
 
-function isMethodName(value: unknown): value is string {
+/** The method/event name rule every backend frame and launch spec is held to.
+ * Exported so manifest validation refuses at install what activation would. */
+export function isMethodName(value: unknown): value is string {
   return typeof value === 'string' && /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*$/u.test(value)
 }
 
