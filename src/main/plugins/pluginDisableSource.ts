@@ -2,6 +2,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, 
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
+import { DISABLED_PLUGINS_FILE } from './pluginDisabledStore'
 
 export const DISABLE_SOURCES_FILE = '.navide-disabled-source.json'
 
@@ -25,9 +26,12 @@ export interface DisableSource {
  *  conservative answer: an agent cannot turn it back on by itself. */
 export const UNKNOWN_DISABLE_SOURCE: DisableSource = { by: 'user', at: null, agent: null }
 
+/** A source as kept on disk: with the Disabled list's state when it was written. */
+type StoredSource = DisableSource & { list?: string }
+
 interface PersistedSources {
   schemaVersion: 1
-  sources: Record<string, DisableSource>
+  sources: Record<string, StoredSource>
 }
 
 function isAgent(value: unknown): value is DisablingAgent {
@@ -52,6 +56,12 @@ function isSource(value: unknown): value is DisableSource {
  * Navide versions read and which therefore stays as it is. Only an entry
  * saying "agent" lets an agent enable the package again by itself; a missing,
  * unreadable or malformed entry reads as the user.
+ *
+ * An entry is written right after the Disabled list changed, with that list
+ * file's state (inode, size, modification time). An "agent" entry whose list
+ * state no longer matches reads as the user: the list changed since, by this
+ * version or by an older one that does not know this file, so the entry may
+ * describe a disable that is gone.
  */
 export class PluginDisableSourceStore {
   private readonly file: string
@@ -63,12 +73,14 @@ export class PluginDisableSourceStore {
   /** Who disabled `pluginId`; UNKNOWN_DISABLE_SOURCE when not recorded. */
   get(pluginId: string): DisableSource {
     const source = this.read().sources[pluginId]
-    return source ? { ...source, agent: source.agent ? { ...source.agent } : null } : UNKNOWN_DISABLE_SOURCE
+    if (!source || (source.by === 'agent' && source.list !== this.listState())) return UNKNOWN_DISABLE_SOURCE
+    return { by: source.by, at: source.at, agent: source.agent ? { ...source.agent } : null }
   }
 
   set(pluginId: string, source: DisableSource): void {
     const state = this.read()
-    this.write({ schemaVersion: 1, sources: { ...state.sources, [pluginId]: source } })
+    const stored: StoredSource = { by: source.by, at: source.at, agent: source.agent, list: this.listState() }
+    this.write({ schemaVersion: 1, sources: { ...state.sources, [pluginId]: stored } })
   }
 
   remove(pluginId: string): void {
@@ -77,6 +89,16 @@ export class PluginDisableSourceStore {
     const sources = { ...state.sources }
     delete sources[pluginId]
     this.write({ schemaVersion: 1, sources })
+  }
+
+  /** The Disabled list file's state; it changes with every write of the list. */
+  private listState(): string {
+    try {
+      const entry = lstatSync(join(this.root, DISABLED_PLUGINS_FILE), { bigint: true })
+      return `${entry.ino}:${entry.size}:${entry.mtimeNs}`
+    } catch {
+      return 'absent'
+    }
   }
 
   private read(): PersistedSources {
@@ -89,9 +111,12 @@ export class PluginDisableSourceStore {
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return empty
       const record = parsed as Record<string, unknown>
       if (record.schemaVersion !== 1 || typeof record.sources !== 'object' || record.sources === null) return empty
-      const sources: Record<string, DisableSource> = {}
+      const sources: Record<string, StoredSource> = {}
       for (const [id, value] of Object.entries(record.sources as Record<string, unknown>)) {
-        if (id && isSource(value)) sources[id] = value
+        if (id && isSource(value)) {
+          const list = (value as { list?: unknown }).list
+          sources[id] = { ...value, list: typeof list === 'string' ? list : undefined }
+        }
       }
       return { schemaVersion: 1, sources }
     } catch {

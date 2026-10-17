@@ -590,11 +590,12 @@ export function registerPluginIpc(
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
   // Who disabled each Marketplace package (B2-c option B). A write that fails
-  // leaves no entry, which reads as the user: the conservative side.
+  // leaves an older entry behind, but the Disabled list changed since, so an
+  // agent's entry then reads as the user: the conservative side.
   const disableSources = new PluginDisableSourceStore(pluginsRoot)
-  const recordDisableSource = (id: string, disabled: boolean, source: DisableSource): void => {
+  const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
     try {
-      if (disabled) disableSources.set(id, source)
+      if (disabled && source) disableSources.set(id, source)
       else disableSources.remove(id)
     } catch (error) {
       console.warn(`[plugins] who disabled ${id} was not recorded: ${errorText(error)}`)
@@ -2457,6 +2458,8 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      // A reinstalled package starts with no record of who disabled it.
+      recordDisableSource(id, null)
       try {
         installScans.removePlugin(id)
       } catch (error) {

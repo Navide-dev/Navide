@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DISABLE_SOURCES_FILE, PluginDisableSourceStore, UNKNOWN_DISABLE_SOURCE } from './pluginDisableSource'
+import { PluginDisabledStore } from './pluginDisabledStore'
 
 const roots: string[] = []
 function root(): string {
@@ -44,7 +45,26 @@ describe('PluginDisableSourceStore', () => {
     // A malformed file is replaced whole on the next write.
     store.set('acme.c', { by: 'user', at: 1, agent: null })
     expect(JSON.parse(readFileSync(join(dir, DISABLE_SOURCES_FILE), 'utf8')).sources).toEqual({
-      'acme.c': { by: 'user', at: 1, agent: null },
+      'acme.c': { by: 'user', at: 1, agent: null, list: 'absent' },
     })
+  })
+
+  it('reads an agent entry as the user once the Disabled list changed after it was written', () => {
+    const dir = root()
+    const list = new PluginDisabledStore(dir)
+    list.add('acme.a')
+    const store = new PluginDisableSourceStore(dir)
+    const agent = { by: 'agent' as const, at: 1, agent: { callerKind: 'pane' as const, paneId: 'p-41', paneName: 'dev' } }
+    store.set('acme.a', agent)
+    store.set('acme.b', { by: 'user', at: 2, agent: null })
+    expect(store.get('acme.a')).toEqual(agent)
+    // Any later write of the list (here: off and on again, as an older Navide would).
+    list.remove('acme.a')
+    list.add('acme.a')
+    expect(store.get('acme.a')).toEqual(UNKNOWN_DISABLE_SOURCE)
+    expect(store.get('acme.b')).toEqual({ by: 'user', at: 2, agent: null })
+    // An agent entry written before the list state was kept reads as the user too.
+    writeFileSync(join(dir, DISABLE_SOURCES_FILE), JSON.stringify({ schemaVersion: 1, sources: { 'acme.a': agent } }))
+    expect(store.get('acme.a')).toEqual(UNKNOWN_DISABLE_SOURCE)
   })
 })
