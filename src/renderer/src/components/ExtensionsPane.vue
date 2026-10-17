@@ -273,10 +273,15 @@ async function uninstallPack(members: string[]): Promise<void> {
 // The user's "Disabled" switch. A disabled package keeps its files, grant and
 // stored data; the Host only stops loading its views and backend. The row says
 // so with a badge and an Enable button, never silently.
+// Which switch (a plugin id, or 'reset') the Host is still applying. A
+// built-in waits for a store check in progress and then drains (Plans can
+// take about half a minute), so the row says it is working.
+const switching = ref<string | null>(null)
 async function setDisabled(id: string, disabled: boolean): Promise<void> {
   const api = pluginsApi()
   if (!api?.setDisabled) return
   busy.value = true
+  switching.value = id
   error.value = ''
   try {
     await api.setDisabled(id, disabled)
@@ -286,6 +291,7 @@ async function setDisabled(id: string, disabled: boolean): Promise<void> {
     await reloadInventory()
   } finally {
     busy.value = false
+    switching.value = null
   }
 }
 
@@ -303,6 +309,7 @@ async function resetDisabledStore(): Promise<void> {
   const api = pluginsApi()
   if (!api?.resetDisabledStore) return
   busy.value = true
+  switching.value = 'reset'
   error.value = ''
   try {
     disabledStoreStatus.value = (await api.resetDisabledStore()).status
@@ -311,6 +318,7 @@ async function resetDisabledStore(): Promise<void> {
     error.value = pluginErrorMessage(err)
   } finally {
     busy.value = false
+    switching.value = null
   }
 }
 
@@ -358,6 +366,9 @@ watch(installed, () => void refreshPacks())
         <button class="ext-store-reset nv-btn nv-btn--primary nv-btn--sm" :disabled="busy" @click="resetDisabledStore()">
           {{ $t('settings.extensions.disabledStoreReset') }}
         </button>
+        <span v-if="switching === 'reset'" class="ext-switch-busy" role="status">
+          <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
+        </span>
       </div>
       <ul class="ext-list ext-bundled-list">
         <li
@@ -437,6 +448,9 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.restartPlugin') }}
             </button>
+            <span v-if="switching === p.id" class="ext-switch-busy" role="status">
+              <span class="ext-switch-spinner" aria-hidden="true"></span>{{ $t('settings.extensions.builtinSwitchBusy') }}
+            </span>
           </div>
         </li>
       </ul>
@@ -958,6 +972,26 @@ watch(installed, () => void refreshPacks())
 }
 .ext-store-unreadable p {
   margin: 0 0 6px;
+}
+.ext-switch-busy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.ext-switch-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: ext-switch-spin 0.8s linear infinite;
+}
+@keyframes ext-switch-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ext-switch-spinner { animation: none; }
 }
 .ext-disabled-note {
   margin: 0;

@@ -1758,6 +1758,7 @@
       "disabledStoreRestored": "已從備份恢復：Navide 外掛的停用設定檔已損壞，已用備份重建。",
       "disabledStoreUnreadable": "Navide 外掛的停用設定檔與其備份都無法讀取。為了安全，Plans、Git 與 Mini-IDE 暫時視為已停用。損壞的檔案會保留。按「重設」會讓所有開關回到啟用。",
       "disabledStoreReset": "重設",
+      "builtinSwitchBusy": "正在套用…Navide 會先讓進行中的工作完成，Plans 可能需要約半分鐘。",
       "disabledBadge": "已停用",
       "disabledNote": "已停用：它的畫面與後端不會執行，檔案、權限與儲存的資料都會保留。",
       "rollback": {

@@ -10,6 +10,7 @@ docs/plugin-contracts/agent-tools-fixtures/ by their tests.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from typing import Any, Literal, TypedDict
@@ -24,7 +25,9 @@ _PREFIX_PATTERN = re.compile(r"[a-z][a-z0-9]{1,15}")
 AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
 #: Same bound as the Host's backend calls (pluginBackendLimits.MAX_BACKEND_TIMEOUT_MS).
 AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
-#: DB9: the technical cap on one description, one canonical input schema and one result, in UTF-8 bytes.
+#: DB9: the technical cap on one description and one canonical input schema, in UTF-8 bytes.
+#: Results and arguments have no cap (DB9 decision a): they travel in pieces
+#: (section 4.4) and their sizes are disclosed as ``resultBytes`` and ``args_bytes``.
 AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 #: The largest integer both languages print the same way.
 MAX_SAFE_INTEGER = 2**53 - 1
@@ -336,7 +339,9 @@ AGENT_TOOL_CALL_ERROR_CODES = (
     "PLUGIN_TOOL_INVALID_ARGUMENTS",
     "PLUGIN_TOOL_TIMEOUT",
     "PLUGIN_TOOL_FAILED",
+    # No longer produced: results have no size cap (DB9 decision a). Kept for older readers.
     "PLUGIN_TOOL_RESULT_TOO_LARGE",
+    "PLUGIN_TOOL_CHUNKS_INVALID",
 )
 
 #: ``reason`` of PLUGIN_TOOL_UNAVAILABLE, in Host check order.
@@ -356,8 +361,157 @@ AGENT_TOOL_UNAVAILABLE_REASONS = (
 
 class AgentToolCallMeta(TypedDict):
     durationMs: int
+    #: UTF-8 bytes of the result's compact JSON text as the Host received it; 0 without a result.
     resultBytes: int
     crossWorkspace: bool
+
+
+# ── chunked transfer of results and arguments (section 4.4) ────────────────
+
+#: UTF-8 bytes of the ``data`` of one piece, in both directions. A transport
+#: unit, not a cap: a value of any size is sent as as many pieces as it needs.
+#: Even fully escaped (6 bytes per byte) a piece stays under 1 MiB, the frame
+#: size child readers use (Plans backend MAX_FRAME_BYTES).
+AGENT_TOOL_CHUNK_BYTES = 131_072
+#: Backend Wire notification, child -> Host, one per result piece.
+BACKEND_WIRE_RESULT_CHUNK_METHOD = "notifications/navide/resultChunk"
+#: Host client capability in ``navide/call`` ``_meta`` and summary key in the final response ``_meta``.
+BACKEND_WIRE_RESULT_CHUNKS_KEY = "io.navide/resultChunks"
+#: Backend Wire notification, Host -> child, one per argument piece.
+BACKEND_WIRE_ARGUMENT_CHUNK_METHOD = "notifications/navide/argumentChunk"
+#: Child capability in the ``navide/health`` success ``_meta`` and summary key in ``navide/call`` ``_meta``.
+BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = "io.navide/argumentChunks"
+#: WebSocket request, Host -> backend, one per result piece; answered like any request.
+AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = "agent.capability.result_chunk"
+#: WebSocket event, backend -> Host, one per argument piece, sent before ``agent.capability.request``.
+AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = "agent.capability.request_chunk"
+#: WebSocket request, Host -> backend: the call is alive (keeps the backend's wait running).
+AGENT_CAPABILITY_PROGRESS_MESSAGE = "agent.capability.progress"
+#: Idle timer of a transfer of pieces, restarted by every piece. It detects a
+#: stalled peer; it is not a size limit (section 4.4, Timing).
+AGENT_TOOL_CHUNK_IDLE_MS = 30_000
+#: ``reason`` of PLUGIN_TOOL_TIMEOUT: the plugin's own work, or a stalled transfer.
+AGENT_TOOL_TIMEOUT_REASONS = ("execution", "transfer-idle")
+#: ``phase`` of ``agent.capability.progress``.
+AGENT_TOOL_PROGRESS_PHASES = ("arguments", "execution", "result")
+AGENT_TOOL_CHUNKS_INVALID = "PLUGIN_TOOL_CHUNKS_INVALID"
+
+
+class AgentToolChunkMessage(TypedDict):
+    """Payload of ``agent.capability.result_chunk`` and ``agent.capability.request_chunk``."""
+
+    request_id: str
+    seq: int
+    data: str
+
+
+class AgentToolChunksSummary(TypedDict):
+    chunks: int
+    bytes: int
+
+
+def agent_tool_payload_text(value: Any) -> str:
+    """The compact JSON spelling a value is cut from (``JSON.stringify`` in TypeScript)."""
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def split_agent_tool_payload_text(text: str, max_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> list[str]:
+    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 4:
+        raise ValueError("max_bytes must be an integer >= 4")
+    pieces: list[str] = []
+    start = 0
+    size = 0
+    for index, char in enumerate(text):
+        point = ord(char)
+        width = 1 if point < 0x80 else 2 if point < 0x800 else 4 if point > 0xFFFF else 3
+        if size + width > max_bytes:
+            pieces.append(text[start:index])
+            start = index
+            size = 0
+        size += width
+    pieces.append(text[start:])
+    return pieces
+
+
+def agent_tool_chunk_arrival(short_seen: bool, data: Any, chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> dict[str, Any]:
+    """Check one piece on arrival (section 4.4).
+
+    Senders send pieces in ``seq`` order and only the last may be short (under
+    ``chunk_bytes - 3`` UTF-8 bytes), so any piece after a short one is
+    ``short``. A short piece does not restart the idle timer (``short: True``);
+    a full one does. A format rule, not a limit. Returns ``{"ok": True,
+    "short": bool}`` or ``{"ok": False, "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+    "reason": "seq" | "short"}``.
+    """
+    if not isinstance(data, str):
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "seq"}
+    if short_seen:
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "short"}
+    return {"ok": True, "short": utf8_byte_length(data) < chunk_bytes - 3}
+
+
+def _is_count(value: Any, minimum: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= MAX_SAFE_INTEGER
+
+
+def reassemble_agent_tool_payload_text(
+    chunks: list[dict[str, Any]], summary: Any, chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES
+) -> dict[str, Any]:
+    """Join the pieces received for one request (any arrival order) and check them against the summary.
+
+    Returns ``{"ok": True, "text": ...}`` or ``{"ok": False, "code":
+    "PLUGIN_TOOL_CHUNKS_INVALID", "reason": "summary" | "seq" | "count" | "short" | "bytes"}``.
+    Every piece but the last must be full, at least ``chunk_bytes - 3`` UTF-8
+    bytes (what ``split_agent_tool_payload_text`` always produces): a format
+    rule, so a sender cannot drip a value to stretch the transfer. No size
+    limit beyond memory. A joined text that does not parse as JSON is reported
+    by the caller with reason ``"json"``.
+    """
+
+    def invalid(reason: str) -> dict[str, Any]:
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": reason}
+
+    if not isinstance(summary, dict) or not _is_count(summary.get("chunks"), 1) or not _is_count(summary.get("bytes"), 0):
+        return invalid("summary")
+    if any(not _is_count(c.get("seq"), 0) or not isinstance(c.get("data"), str) for c in chunks):
+        return invalid("seq")
+    count = summary["chunks"]
+    if len(chunks) != count:
+        return invalid("count")
+    ordered: list[str | None] = [None] * count
+    for chunk in chunks:
+        seq = chunk["seq"]
+        if seq >= count or ordered[seq] is not None:
+            return invalid("seq")
+        ordered[seq] = chunk["data"]
+    if any(utf8_byte_length(piece or "") < chunk_bytes - 3 for piece in ordered[:-1]):
+        return invalid("short")
+    text = "".join(piece for piece in ordered if piece is not None)
+    if utf8_byte_length(text) != summary["bytes"]:
+        return invalid("bytes")
+    return {"ok": True, "text": text}
+
+
+def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
+    """``args_sha256`` and ``args_bytes`` of the audit row (section 5): the only arguments-size field.
+
+    ``args_bytes`` is measured like ``resultBytes``: the UTF-8 byte length of
+    the compact spelling the arguments travel in (``agent_tool_payload_text``).
+    ``args_sha256`` hashes the canonical spelling, so equal arguments hash
+    equally whatever their key order. Arguments with a fraction cannot be
+    spelled canonically (safe integers only); they are hashed in the same
+    sorted, compact, ASCII spelling with the numbers as JSON writes them.
+    Anything that is not JSON raises.
+    """
+    # Imported here: disclosure_contract imports this module.
+    from .disclosure_contract import CanonicalJsonError, canonical_contract_json
+
+    try:
+        spelled = canonical_contract_json(arguments)
+    except CanonicalJsonError:
+        spelled = json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    return hashlib.sha256(spelled.encode("utf-8")).hexdigest(), utf8_byte_length(agent_tool_payload_text(arguments))
 
 
 # ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────
