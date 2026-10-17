@@ -6,12 +6,12 @@
 // `plugins.agent_request.finish`. recoverApplyingRequests settles requests a
 // restart left `applying`.
 
-export type PluginRequestKind = 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove'
+export type PluginRequestKind = 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
 
 /** The kinds applyApprovedRequest carries out. A card must not approve any
  *  other kind: approving moves it to `applying`, and nothing here would apply it. */
 const APPLIABLE_KINDS: ReadonlySet<string> = new Set<PluginRequestKind>([
-  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove',
+  'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
 ])
 
 export function isAppliableKind(kind: string): kind is PluginRequestKind {
@@ -30,6 +30,8 @@ export interface InstalledPackage {
   packageVersion?: string
   /** The retained previous version a rollback restores (Extensions' rollback). */
   rollbackToVersion?: string
+  /** The Extensions Disabled switch (Marketplace packages). */
+  disabled?: boolean
 }
 
 export type FinishStatus = { status: 'completed'; error: null } | { status: 'failed'; error: string }
@@ -42,6 +44,8 @@ export interface PluginRequestApplyDeps {
   rollback(pluginId: string): Promise<void>
   /** The Extensions remove flow (it asks whether to keep native backend data). */
   remove(pluginId: string): Promise<void>
+  /** The Extensions Enable switch (the user's own action: plugins.setDisabled(id, false)). */
+  enable(pluginId: string): Promise<void>
   listInstalled(): Promise<InstalledPackage[]>
   /** `plugins.agent_request.finish` with a window confirmation (subject: approval_id). */
   finish(approvalId: string, result: FinishStatus): Promise<void>
@@ -51,6 +55,7 @@ export interface PluginRequestApplyDeps {
 export function requestApplied(record: PluginRequestRecord, installed: readonly InstalledPackage[]): boolean {
   const current = installed.find((pkg) => pkg.id === record.target.id)
   if (record.kind === 'plugin-remove') return current === undefined
+  if (record.kind === 'plugin-enable') return current !== undefined && current.disabled === false
   return current !== undefined && current.packageVersion === record.target.version
 }
 
@@ -86,6 +91,7 @@ export async function applyApprovedRequest(record: PluginRequestRecord, deps: Pl
   let failure: string | null = null
   try {
     if (record.kind === 'plugin-remove') await deps.remove(id)
+    else if (record.kind === 'plugin-enable') await deps.enable(id)
     else if (record.kind === 'plugin-rollback') failure = await rollbackToApproved(id, version, deps)
     else if (version !== null) await deps.install(namespace, name, version)
     else failure = 'the request names no version'

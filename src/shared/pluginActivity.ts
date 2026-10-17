@@ -140,6 +140,26 @@ export interface PluginActivityReport {
   anomalies: PluginActivityAnomaly[]
   /** null until B2-c's `plugin_agent_actions` exists. */
   agentActions: PluginAgentAction[] | null
+  /** Calls into the plugin's own backend (any path), counted per minute; not in
+   *  `totals`, `daily` or `volumeSpike`. */
+  backendCalls: PluginActivityBackendCalls
+}
+
+export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
+
+/** The one address every call of a method the plugin's backend does not
+ *  declare is counted under (contract 5): such names are the caller's free
+ *  text, with no length or variety limit, so they are never keys. A report
+ *  shows them as "called undeclared methods N times". */
+export const BACKEND_CALL_UNDECLARED_ADDRESS = 'backend.<undeclared>'
+
+export interface PluginActivityBackendCalls {
+  /** Per `backend.<method>` address and outcome, from the UTC day `window`
+   *  starts in; calls of undeclared methods are all under
+   *  BACKEND_CALL_UNDECLARED_ADDRESS. */
+  methods: Array<{ address: string; outcome: PluginBackendCallOutcome; count: number; lastAt: number }>
+  /** Per UTC day still kept. */
+  daily: Array<{ day: string; calls: number; denied: number; errors: number; cancelled: number }>
 }
 
 /** `plugins.activity.report` request: one plugin's report. The Host sends it
@@ -278,8 +298,9 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
   const undeclaredUses = list(value.undeclared, undeclared)
   const anomalies = list(value.anomalies, anomaly)
   const agentActions = value.agentActions === null ? null : list(value.agentActions, agentAction)
+  const backendCalls = backendCallsOf(value.backendCalls)
   if (!toolCalls || !files || !commands || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
-    (value.agentActions !== null && agentActions === null)) return null
+    (value.agentActions !== null && agentActions === null) || !backendCalls) return null
   return {
     schemaVersion: PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION,
     pluginId: value.pluginId,
@@ -289,5 +310,22 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     historicalPeakConcurrency: value.historicalPeakConcurrency,
     undeclaredSince: value.undeclaredSince,
     toolCalls, files, commands, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
+    backendCalls,
   }
+}
+
+const BACKEND_CALL_OUTCOMES: readonly PluginBackendCallOutcome[] = ['allowed', 'denied', 'cancelled', 'error']
+
+function backendCallsOf(value: unknown): PluginActivityBackendCalls | null {
+  if (!isRec(value)) return null
+  const methods = list(value.methods, (e) =>
+    isText(e.address) && e.address.startsWith('backend.') && oneOf(BACKEND_CALL_OUTCOMES, e.outcome) &&
+    isCount(e.count) && isTime(e.lastAt)
+      ? { address: e.address, outcome: e.outcome, count: e.count, lastAt: e.lastAt }
+      : null)
+  const daily = list(value.daily, (e) =>
+    isText(e.day) && isCount(e.calls) && isCount(e.denied) && isCount(e.errors) && isCount(e.cancelled)
+      ? { day: e.day, calls: e.calls, denied: e.denied, errors: e.errors, cancelled: e.cancelled }
+      : null)
+  return methods && daily ? { methods, daily } : null
 }

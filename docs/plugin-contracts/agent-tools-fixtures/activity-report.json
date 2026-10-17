@@ -214,7 +214,26 @@
         "baseline": null
       }
     ],
-    "agentActions": null
+    "agentActions": null,
+    "backendCalls": {
+      "methods": [
+        {
+          "address": "backend.devmap.block.import",
+          "outcome": "allowed",
+          "count": 1200,
+          "lastAt": 1792108740000
+        }
+      ],
+      "daily": [
+        {
+          "day": "2026-10-15",
+          "calls": 1201,
+          "denied": 0,
+          "errors": 1,
+          "cancelled": 0
+        }
+      ]
+    }
   },
   "invalid": [
     {
@@ -264,6 +283,36 @@
       "patch": {
         "historicalPeakConcurrency": null
       }
+    },
+    {
+      "name": "backend-call-unknown-outcome",
+      "path": [
+        "backendCalls",
+        "methods",
+        0,
+        "outcome"
+      ],
+      "value": "maybe"
+    },
+    {
+      "name": "backend-call-address-without-prefix",
+      "path": [
+        "backendCalls",
+        "methods",
+        0,
+        "address"
+      ],
+      "value": "devmap.block.import"
+    },
+    {
+      "name": "backend-call-fractional-count",
+      "path": [
+        "backendCalls",
+        "daily",
+        0,
+        "cancelled"
+      ],
+      "value": 1.5
     }
   ]
 }

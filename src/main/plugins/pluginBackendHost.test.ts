@@ -55,7 +55,7 @@ const runtime = {
   initiator: { kind: 'user', id: 'user-1' },
 } as const
 
-function makeHost(entryFile = fixture): PluginBackendHost {
+function makeHost(entryFile = fixture, extra: Partial<PluginBackendHostOptions> = {}): PluginBackendHost {
   const options: PluginBackendSupervisorOptions = {
     // PyInstaller --onefile needs a writable temp directory for extraction;
     // keep the test launcher aligned with the Host's minimal environment.
@@ -72,6 +72,7 @@ function makeHost(entryFile = fixture): PluginBackendHost {
       return new PluginBackendSupervisor({ ...nextActivation, entryFile }, options)
     },
     resolvePlanRoot: async ({ workspacePath }) => workspacePath,
+    ...extra,
   }
   return new PluginBackendHost(hostOptions)
 }
@@ -82,6 +83,53 @@ describe('PluginBackendHost', () => {
   afterEach(async () => {
     delete (globalThis as unknown as { nav?: unknown }).nav
     await Promise.all(hosts.splice(0).map((host) => host.close()))
+  })
+
+  // D-e: every settled call is reported once, whichever path made it, so the
+  // activity record sees agent-tool calls as well as a frontend's own.
+  it('reports each settled call with its method and outcome', async () => {
+    const settled: unknown[] = []
+    const host = makeHost(fixture, { onCallSettled: (call) => settled.push(call) })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+
+    await expect(host.call('view-1', 'fixture.echo', { value: 1 })).resolves.toBeTruthy()
+    await expect(host.call('view-1', 'fixture.undeclared', null)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(host.call('view-1', 'fixture.echo', null, {
+      initiator: { kind: 'agent', source: 'mcp', id: 'a-1' } as never,
+    })).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    const controller = new AbortController()
+    const delayed = host.call('view-1', 'fixture.delay', { ms: 5_000 }, { signal: controller.signal })
+    setTimeout(() => controller.abort(), 50)
+    await expect(delayed).rejects.toMatchObject({ code: 'USER_CANCELLED' })
+
+    const base = { pluginId: 'navide.plans', packageVersion: '0.1.92', workspacePath: process.cwd() }
+    expect(settled).toEqual([
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'allowed' },
+      { ...base, method: 'fixture.undeclared', declared: false, outcome: 'error' },
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'denied' },
+      { ...base, method: 'fixture.delay', declared: true, outcome: 'cancelled' },
+    ])
+  })
+
+  it('lets a plugin whose calls are not observed call straight through', async () => {
+    const settled: unknown[] = []
+    const host = makeHost(fixture, { onCallSettled: (call) => settled.push(call), observesCallsOf: () => false })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    await expect(host.call('view-1', 'fixture.echo', { value: 3 })).resolves.toBeTruthy()
+    await expect(host.call('view-1', 'fixture.undeclared', null)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(settled).toEqual([])
+  })
+
+  it('never lets the observer fail the call it reports', async () => {
+    const host = makeHost(fixture, { onCallSettled: () => { throw new Error('observer broke') } })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    await expect(host.call('view-1', 'fixture.echo', { value: 2 })).resolves.toBeTruthy()
   })
 
   it('routes a bound view through the matching package version', async () => {

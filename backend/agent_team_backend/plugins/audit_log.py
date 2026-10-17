@@ -83,6 +83,8 @@ log = logging.getLogger(__name__)
 
 _COMPONENT = "plugin_audit"
 _ACTIONS_COMPONENT = "plugin_agent_actions"
+_BACKEND_CALLS_COMPONENT = "plugin_backend_calls"
+_MINUTE_MS = 60_000
 _DAY_MS = 86_400_000
 #: Rows per prune transaction (an internal batch size, not a retention cap):
 #: at 500k expired rows a batch holds navide.db for ~11 ms median. Smaller
@@ -157,6 +159,7 @@ def _declared_unused(
     rolled_uses: list[Any],
     tool_uses: dict[str, int],
     since: int,
+    backend_uses: dict[str, int] | None = None,
 ) -> list[dict[str, Any]]:
     """The declared entries with no allowed use since ``since``, each with its last use.
 
@@ -176,6 +179,10 @@ def _declared_unused(
 
         if kind == "agentTool":
             seen(tool_uses.get(key))
+        elif kind == "backendMethod" and backend_uses is not None:
+            # Called at all counts as used, whatever the outcome: "declared but
+            # never called" is what the row means for a backend method.
+            seen(backend_uses.get(key))
         else:
             for source, address, at in [*uses, *rolled_uses]:
                 if _declared_match(kind, key, source, address):
@@ -378,6 +385,11 @@ def _report_disabled(reason: str, code: str = "PLUGIN_AUDIT_DISABLED", what: str
         log.warning("plugin audit: could not record the disabled state: %s", err)
 
 
+def _create_backend_calls_schema(cur: sqlite3.Cursor) -> None:
+    for statement in contract.PLUGIN_BACKEND_CALLS_DDL:
+        cur.execute(statement)
+
+
 def _create_actions_schema(cur: sqlite3.Cursor) -> None:
     for statement in contract.PLUGIN_AGENT_ACTIONS_DDL:
         cur.execute(statement)
@@ -400,6 +412,9 @@ class PluginAuditLog:
         self._activity: list[tuple[Any, ...]] = []
         self._decisions: list[tuple[Any, ...]] = []
         self._actions: list[tuple[Any, ...]] = []
+        # Backend calls, added up per (plugin, version, workspace, address,
+        # outcome, minute) until the next flush.
+        self._backend_calls: dict[tuple[str, str, str, str, str, int], int] = {}
         self._next_call_id: int | None = None
         self.enabled = False
         self.disabled_reason = ""
@@ -427,6 +442,19 @@ class PluginAuditLog:
             _report_disabled(
                 self.actions_disabled_reason, "PLUGIN_AGENT_ACTIONS_AUDIT_DISABLED", "Navide plugin agent-action audit",
             )
+        self.backend_calls_enabled = False
+        self.backend_calls_disabled_reason = ""
+        try:
+            self.db.migrate(_BACKEND_CALLS_COMPONENT, 1, _create_backend_calls_schema)
+            self.backend_calls_enabled = True
+        except Exception as err:  # noqa: BLE001 - the backend starts without this record
+            self.backend_calls_disabled_reason = f"{type(err).__name__}: {err}"
+            log.error("plugin backend-call record disabled: the table could not be created: %s",
+                      self.backend_calls_disabled_reason)
+            _report_disabled(
+                self.backend_calls_disabled_reason, "PLUGIN_BACKEND_CALLS_AUDIT_DISABLED",
+                "Navide plugin backend-call record",
+            )
 
     def _now_ms(self) -> int:
         return int(self._clock() * 1000)
@@ -437,10 +465,15 @@ class PluginAuditLog:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            pending = len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
+            pending = (
+                len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
+                + len(self._backend_calls)
+            )
         return {
             "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
             "actions_enabled": self.actions_enabled, "actions_reason": self.actions_disabled_reason,
+            "backend_calls_enabled": self.backend_calls_enabled,
+            "backend_calls_reason": self.backend_calls_disabled_reason,
         }
 
     # ── writes (queue only) ─────────────────────────────────────────────
@@ -643,13 +676,70 @@ class PluginAuditLog:
             return False
         return True
 
+    def record_backend_calls(
+        self,
+        *,
+        plugin_id: str,
+        plugin_version: str,
+        workspace: str,
+        address: str,
+        outcome: str,
+        count: int,
+        at_ms: int | None = None,
+    ) -> bool:
+        """Add ``count`` calls into the current minute's row for this key; False when not recorded.
+
+        One dictionary update per batch row, nothing written here: ``flush``
+        adds the totals into ``plugin_backend_call_minutes``.
+        """
+        if not self.backend_calls_enabled:
+            return False
+        try:
+            if outcome not in contract.PLUGIN_BACKEND_CALL_OUTCOMES:
+                raise ValueError(f"unknown outcome {outcome!r}")
+            if not isinstance(address, str) or not address.startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
+                raise ValueError("address must be backend.<method>")
+            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+                raise ValueError("count must be a positive integer")
+            minute = self._at(at_ms) // _MINUTE_MS * _MINUTE_MS
+            key = (str(plugin_id), str(plugin_version), str(workspace), address, outcome, minute)
+            with self._lock:
+                self._backend_calls[key] = self._backend_calls.get(key, 0) + count
+        except Exception as err:  # noqa: BLE001 - the record never fails the call it records
+            log.warning("plugin audit: backend calls not recorded: %s", err)
+            return False
+        return True
+
     def flush(self) -> None:
         """Write every queued row in one short transaction; never raises."""
         with self._lock:
             calls, self._calls = self._calls, []
             activity, self._activity = self._activity, []
             actions, self._actions = self._actions, []
+            backend_calls, self._backend_calls = self._backend_calls, {}
             decisions, self._decisions = self._decisions, []
+        if backend_calls:
+            try:
+                with self.db.transaction() as cur:
+                    cur.executemany(
+                        "INSERT INTO plugin_backend_call_minutes (plugin_id, plugin_version, workspace, address,"
+                        " outcome, minute, count) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                        " ON CONFLICT(plugin_id, plugin_version, workspace, address, outcome, minute)"
+                        " DO UPDATE SET count = count + excluded.count",
+                        [(*key, n) for key, n in backend_calls.items()],
+                    )
+                    cur.executemany(
+                        "INSERT INTO plugin_backend_call_days (plugin_id, address, outcome, day, plugin_version,"
+                        " workspace, count, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                        " ON CONFLICT(plugin_id, address, outcome, day, plugin_version, workspace)"
+                        " DO UPDATE SET count = count + excluded.count, last_at = MAX(last_at, excluded.last_at)",
+                        [
+                            (plugin_id, address, outcome, _utc_day(minute), version, workspace, n, minute)
+                            for (plugin_id, version, workspace, address, outcome, minute), n in backend_calls.items()
+                        ],
+                    )
+            except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
+                log.warning("plugin audit: %d backend-call rows not written: %s", len(backend_calls), err)
         if decisions:
             # Its own short transaction: a failure here never drops the activity rows.
             try:
@@ -715,7 +805,7 @@ class PluginAuditLog:
 
     def prune(self, now_ms: int | None = None) -> None:
         """Apply the contract's retention in small batches; never raises."""
-        if not self.enabled and not self.actions_enabled:
+        if not self.enabled and not self.actions_enabled and not self.backend_calls_enabled:
             return
         now = self._now_ms() if now_ms is None else now_ms
         self.flush()
@@ -734,6 +824,74 @@ class PluginAuditLog:
                 log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
             except Exception as err:  # noqa: BLE001 - retention must not break anything
                 log.warning("plugin audit: pruning agent actions failed: %s", err)
+        if self.backend_calls_enabled:
+            try:
+                self._prune_backend_calls(now)
+            except _PruneStopped:
+                log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
+            except Exception as err:  # noqa: BLE001 - retention must not break anything
+                log.warning("plugin audit: pruning backend calls failed: %s", err)
+
+    def _prune_backend_calls(self, now: int) -> None:
+        """Minute counts are kept as long as detail rows, day counts as long as the activity day counts."""
+        cutoff = now - contract.PLUGIN_BACKEND_CALL_MINUTE_RETENTION_DAYS * _DAY_MS
+        while self._batch(
+            "DELETE FROM plugin_backend_call_minutes WHERE rowid IN"
+            " (SELECT rowid FROM plugin_backend_call_minutes WHERE minute < ? LIMIT ?)",
+            (cutoff, PRUNE_BATCH_ROWS),
+        ):
+            pass
+        day = _utc_day(now - contract.PLUGIN_BACKEND_CALL_RETENTION_DAYS * _DAY_MS)
+        while self._batch(
+            "DELETE FROM plugin_backend_call_days WHERE (plugin_id, address, outcome, day, plugin_version, workspace)"
+            " IN (SELECT plugin_id, address, outcome, day, plugin_version, workspace FROM plugin_backend_call_days"
+            " WHERE day < ? LIMIT ?)",
+            (day, PRUNE_BATCH_ROWS),
+        ):
+            pass
+
+    def backend_call_report(self, plugin_id: str, *, window_from: int) -> dict[str, Any]:
+        """``backendCalls`` of a report: per method and outcome in the window, and per day kept."""
+        out: dict[str, Any] = {"methods": [], "daily": []}
+        if not self.backend_calls_enabled:
+            return out
+        # From the day counts: a few rows per method a day, however busy.
+        with self.db.transaction() as cur:
+            methods = cur.execute(
+                "SELECT address, outcome, SUM(count), MAX(last_at) FROM plugin_backend_call_days"
+                " WHERE plugin_id = ? AND day >= ? GROUP BY 1, 2 ORDER BY 3 DESC, 1, 2",
+                (plugin_id, _utc_day(window_from)),
+            ).fetchall()
+            daily = cur.execute(
+                "SELECT day, SUM(count),"
+                " SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
+                " SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END),"
+                " SUM(CASE WHEN outcome = 'cancelled' THEN count ELSE 0 END)"
+                " FROM plugin_backend_call_days WHERE plugin_id = ? GROUP BY 1 ORDER BY 1",
+                (plugin_id,),
+            ).fetchall()
+        out["methods"] = [
+            {"address": address, "outcome": outcome, "count": int(n), "lastAt": int(last)}
+            for address, outcome, n, last in methods
+        ]
+        out["daily"] = [
+            {"day": day, "calls": int(n), "denied": int(denied or 0), "errors": int(errors or 0),
+             "cancelled": int(cancelled or 0)}
+            for day, n, denied, errors, cancelled in daily
+        ]
+        return out
+
+    def backend_method_last_calls(self, plugin_id: str) -> dict[str, int]:
+        """Per backend address, the last minute it was called with any outcome (L4: called, not just succeeded)."""
+        if not self.backend_calls_enabled:
+            return {}
+        with self.db.transaction() as cur:
+            return {
+                address: int(last) for address, last in cur.execute(
+                    "SELECT address, MAX(last_at) FROM plugin_backend_call_days WHERE plugin_id = ? GROUP BY 1",
+                    (plugin_id,),
+                ).fetchall()
+            }
 
     def _prune_actions(self, now: int) -> None:
         """plugin_agent_actions keeps what plugin_tool_calls keeps: 30 days, then the newest 10,000."""
@@ -932,6 +1090,11 @@ class PluginAuditLog:
         - ``agentActions``: what agents did to the plugin in
           ``plugin_agent_actions`` over the same 30 days, newest first (a
           person's decisions are not listed); null when that table is off.
+        - ``backendCalls``: calls into the plugin's own backend, from
+          ``plugin_backend_call_days`` (``methods`` per address and outcome
+          from the UTC day ``window`` starts in, ``daily`` for every day kept). They are not in
+          ``totals``, ``daily`` or ``volumeSpike``, which mean broker, shell and
+          agent-tool activity as before.
 
         Sizes are passed through as stored: ``-1`` (``UNKNOWN_SIZE``) is never
         added up. Reads only, in one short transaction; run it off the event loop.
@@ -946,6 +1109,7 @@ class PluginAuditLog:
             "window": {"from": window_from, "to": now}, "totals": {"calls": 0, "denied": 0, "errors": 0},
             "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "files": [], "commands": [],
             "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
+            "backendCalls": {"methods": [], "daily": []},
         }
         if not self.enabled:
             return report
@@ -1062,7 +1226,10 @@ class PluginAuditLog:
             {"day": day, "calls": int(calls), "denied": int(denied or 0), "errors": int(errors or 0)}
             for day, calls, denied, errors in daily
         ]
-        report["declaredUnused"] = _declared_unused(declared or [], uses, rolled_uses, tool_uses, since)
+        report["backendCalls"] = self.backend_call_report(plugin_id, window_from=window_from)
+        report["declaredUnused"] = _declared_unused(
+            declared or [], uses, rolled_uses, tool_uses, since, self.backend_method_last_calls(plugin_id),
+        )
         report["undeclared"] = _undeclared_uses(refusals)
         anomalies: list[dict[str, Any]] = []
         counts = {row["day"]: row["calls"] for row in report["daily"]}
@@ -1106,14 +1273,19 @@ class PluginAuditLog:
 
     def forget_plugin(self, plugin_id: str) -> None:
         """A removed plugin: drop its first-seen rows, so a reinstall's first
-        write in a workspace is new again. Never raises."""
-        if not self.enabled:
+        write in a workspace is new again, its resource decisions and its
+        backend-call counts. Never raises."""
+        if not self.enabled and not self.backend_calls_enabled:
             return
         self.flush()
         try:
             with self.db.transaction() as cur:
-                cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
-                cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
+                if self.enabled:
+                    cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+                    cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
+                if self.backend_calls_enabled:
+                    cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))
+                    cur.execute("DELETE FROM plugin_backend_call_days WHERE plugin_id = ?", (plugin_id,))
         except Exception as err:  # noqa: BLE001 - the audit never fails what it records
             log.warning("plugin audit: %s not forgotten: %s", plugin_id, err)
 

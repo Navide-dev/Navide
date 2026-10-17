@@ -47,7 +47,7 @@ import {
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
 } from './pluginCapabilityBroker'
-import { activityRowFor, PluginActivityRecorder } from './pluginActivity'
+import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -180,7 +180,7 @@ import {
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
 } from '../../shared/pluginAgentTools'
-import type { PluginActivityReportRequest } from '../../shared/pluginActivity'
+import { BACKEND_CALL_UNDECLARED_ADDRESS, type PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
@@ -1350,6 +1350,23 @@ export class FrontendPluginManager {
   /** Package-local Backend Wire children receive only Host-approved temp paths. */
   private readonly pluginBackendHost = new PluginBackendHost({
     environment: createPluginBackendChildEnvironment(),
+    // D-e: every settled backend call of a third-party plugin, whichever path
+    // made it (its own frontend, an agent tool, an agent capability request),
+    // counted per key and flushed with the other activity rows. The bundled
+    // navide.* packages are not recorded, as for broker calls.
+    // A name the backend does not declare is counted under one fixed address:
+    // names have no length or variety limit, so they cannot be keys.
+    observesCallsOf: (pluginId) => !isReservedPluginId(pluginId),
+    onCallSettled: (call) => {
+      if (isReservedPluginId(call.pluginId)) return
+      this.activityRecorder.recordBackendCall({
+        plugin_id: call.pluginId,
+        plugin_version: call.packageVersion,
+        workspace: call.workspacePath ?? '',
+        address: call.declared ? backendCallAddress(call.method) : BACKEND_CALL_UNDECLARED_ADDRESS,
+        outcome: call.outcome,
+      })
+    },
     onStderr: (chunk) => {
       this.emitHostDiagnosticChunk(chunk)
     },

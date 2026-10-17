@@ -12,6 +12,7 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { backendCallAddress } from './pluginActivity'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
@@ -73,6 +74,7 @@ import type { ContributionIcon } from './pluginContributionIcon'
 import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { PluginDisableSourceStore, type DisableSource } from './pluginDisableSource'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
@@ -246,14 +248,15 @@ function listingDisclosure(item: Record<string, unknown>): {
 const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
 
 /** What the installed manifest declares, for `declaredUnused` (contract 5.1).
- *  Backend methods are left out: a frontend's calls to its own backend
- *  (plugin:backend:call) are not recorded in plugin_activity, so they could
- *  only ever read "declared but not used" (review M2 on #371). */
+ *  A backend method is keyed `backend.<method>`: a frontend's calls to its own
+ *  backend (plugin:backend:call) are recorded under that address (#374). */
 export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
     if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
       out.push({ kind: item.kind, key: item.key })
+    } else if (item.kind === 'backendMethod') {
+      out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
     }
   }
   return out
@@ -600,6 +603,18 @@ export function registerPluginIpc(
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
   const disabledPlugins = new PluginDisabledStore(pluginsRoot)
+  // Who disabled each Marketplace package (B2-c option B). A write that fails
+  // leaves an older entry behind, but the Disabled list changed since, so an
+  // agent's entry then reads as the user: the conservative side.
+  const disableSources = new PluginDisableSourceStore(pluginsRoot)
+  const recordDisableSource = (id: string, disabled: boolean | null, source?: DisableSource): void => {
+    try {
+      if (disabled && source) disableSources.set(id, source)
+      else disableSources.remove(id)
+    } catch (error) {
+      console.warn(`[plugins] who disabled ${id} was not recorded: ${errorText(error)}`)
+    }
+  }
   // Update, rollback and restart re-register a package. While it is disabled
   // they may change which version is selected, but they never hand the Host an
   // activation to start.
@@ -2466,6 +2481,8 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      // A reinstalled package starts with no record of who disabled it.
+      recordDisableSource(id, null)
       try {
         installScans.removePlugin(id)
       } catch (error) {
@@ -2598,6 +2615,8 @@ export function registerPluginIpc(
       if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
       if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
       const result = await setInstalledPackageDisabled(id, disabled)
+      // The user's own switch (and the undo on an agent notice).
+      if (result.changed) recordDisableSource(id, disabled, { by: 'user', at: Date.now(), agent: null })
       return { id: result.id, disabled: result.disabled }
     }
   )
@@ -2679,8 +2698,17 @@ export function registerPluginIpc(
         const installed = manager.listInstalledPackages().find((pkg) => pkg.id === pluginId)
         return installed?.provenance === 'official-registry' ? installed.packageVersion ?? null : null
       },
-      setDisabled: (pluginId, disabled) => setInstalledPackageDisabled(pluginId, disabled),
+      setDisabled: async (pluginId, disabled, source) => {
+        const result = await setInstalledPackageDisabled(pluginId, disabled)
+        if (result.changed) {
+          recordDisableSource(pluginId, disabled, source ?? { by: 'agent', at: Date.now(), agent: null })
+        }
+        return result
+      },
       notify: (notice) => options.onPluginAgentAction?.(notice),
+      isDisabled: (pluginId) => disabledPlugins.has(pluginId),
+      disableSource: (pluginId) => disableSources.get(pluginId),
+      now: () => Date.now(),
     })
   )
 
