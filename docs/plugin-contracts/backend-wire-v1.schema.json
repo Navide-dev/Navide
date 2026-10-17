@@ -136,7 +136,35 @@
           "properties": {
             "kind": { "const": "agent" },
             "source": { "const": "mcp" },
-            "id": { "type": "string", "minLength": 1 }
+            "id": { "type": "string", "minLength": 1 },
+            "caller": { "$ref": "#/$defs/agentCaller" }
+          }
+        }
+      ]
+    },
+    "agentCaller": {
+      "description": "Who called a third-party agent tool, as the core MCP server resolved it from its credential. Present only on calls made through a consented agent tool (backend.agentTools); additive and optional. verifiedTo says how far the identity is proven: `pane` = the pane's own MCP token, `caller-kind` = only that the caller is an external client or the Host.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paneId", "workspace", "verifiedTo"],
+          "properties": {
+            "kind": { "const": "pane" },
+            "paneId": { "type": "string", "minLength": 1 },
+            "workspace": { "type": ["string", "null"], "minLength": 1 },
+            "verifiedTo": { "const": "pane" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paneId", "workspace", "verifiedTo"],
+          "properties": {
+            "kind": { "enum": ["external", "host"] },
+            "paneId": { "const": null },
+            "workspace": { "const": null },
+            "verifiedTo": { "const": "caller-kind" }
           }
         }
       ]

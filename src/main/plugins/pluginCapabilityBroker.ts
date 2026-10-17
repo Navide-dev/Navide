@@ -111,7 +111,41 @@ export interface HostCapabilityContext {
  * never accepted from a Plugin request or exposed through the preload API. */
 export type AuthenticatedInitiator =
   | Readonly<{ kind: 'user'; id: string }>
-  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string }>
+  | Readonly<{ kind: 'agent'; source: 'mcp'; id: string; caller?: AgentInitiatorCaller }>
+
+/** Who called a third-party agent tool, as the core MCP server resolved it
+ * from its credential (never from tool arguments). `verifiedTo` says how far
+ * that identity is proven: `pane` = the pane's own MCP token (nothing about
+ * the model or person behind it); `caller-kind` = only that it is an external
+ * client or the Host, which share one credential each. */
+export type AgentInitiatorCaller = Readonly<{
+  kind: 'pane' | 'external' | 'host'
+  paneId: string | null
+  workspace: string | null
+  verifiedTo: 'pane' | 'caller-kind'
+}>
+
+export function isAgentInitiatorCaller(value: unknown): value is AgentInitiatorCaller {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  const keys = Object.keys(record)
+  if (keys.length !== 4 || !keys.every((key) => ['kind', 'paneId', 'workspace', 'verifiedTo'].includes(key))) {
+    return false
+  }
+  if (record.kind === 'pane') {
+    return (
+      typeof record.paneId === 'string' && record.paneId.length > 0 &&
+      (record.workspace === null || (typeof record.workspace === 'string' && record.workspace.length > 0)) &&
+      record.verifiedTo === 'pane'
+    )
+  }
+  return (
+    (record.kind === 'external' || record.kind === 'host') &&
+    record.paneId === null &&
+    record.workspace === null &&
+    record.verifiedTo === 'caller-kind'
+  )
+}
 
 /** Stable Host identity used for direct user work when no account identity is
  * available at this internal boundary. It is not a credential. */
@@ -132,10 +166,11 @@ export function isAuthenticatedInitiator(value: unknown): value is Authenticated
       record.id.length > 0
     )
   }
+  const keys = Object.keys(record)
   return (
     record.kind === 'agent' &&
-    Object.keys(record).length === 3 &&
-    Object.keys(record).every((key) => key === 'kind' || key === 'source' || key === 'id') &&
+    (keys.length === 3 || (keys.length === 4 && isAgentInitiatorCaller(record.caller))) &&
+    keys.every((key) => key === 'kind' || key === 'source' || key === 'id' || key === 'caller') &&
     record.source === 'mcp' &&
     typeof record.id === 'string' &&
     record.id.length > 0
