@@ -481,6 +481,22 @@ Skills 工作流另提供經使用者授權的安裝與投遞變更；mutation a
 App 自己的固定錯誤文字（所有 `BAD_REQUEST`，以及 `HOST_UNAVAILABLE` 的「Navide Host cannot answer Marketplace queries now」），和保留給官方的 `navide.` 命名空間裡已安裝的外掛（Plans、Git、mini-IDE），都原樣回傳，不做標記。錯誤是
 `{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。
 
+### Navide 市集的請求、停用與啟用
+
+這幾個工具用來請求變更 Navide 外掛，或停用、啟用外掛。和唯讀工具一樣，所有呼叫端都能用。沒有任何工具有同意參數：安裝、更新、回退和移除，都要使用者在 Navide 視窗核准請求後才會執行，一起送來的同意旗標會被忽略。內建的 Navide 外掛（Plans、Git、Mini-IDE，也就是 `navide.*` 命名空間）一律拒絕（`BUILTIN_PLUGIN`），由使用者在擴充頁管理。
+
+| 工具 | 參數 | 作用 |
+|---|---|---|
+| `marketplace_request_install` | `namespace`、`name`、`version`、`reason=""` | 送出請求，要安裝 `<namespace>.<name>` 的 `version`。這個版本必須是市集列出的（否則回 `NOT_FOUND`），而且還沒安裝。使用者會看到誰提出、`reason`（標明是 agent 寫的）和揭露卡，再自己決定。回傳 `{ok, approval_id, status: "pending", expires_at, note}`；請求 15 分鐘後過期，同一個套件和版本再請求一次會拿到原本那筆等待中的請求 |
+| `marketplace_request_update` | `namespace`、`name`、`version`、`reason=""` | 同上，請求把已安裝的套件更新到較新的版本（沒安裝時回 `NOT_INSTALLED`） |
+| `marketplace_request_rollback` | `namespace`、`name`、`version`、`reason=""` | 同上，請求把已安裝的套件回退到較舊的版本 |
+| `plugins_request_remove` | `namespace`、`name`、`reason=""` | 請求移除已安裝的套件 |
+| `marketplace_request_status` | `approval_id`、`wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`；`status` 是 `pending`、`applying`（已核准，正在執行）、`completed`、`failed`、`rejected` 或 `expired`。`wait_s`（0–60）會等這麼久，看狀態有沒有變化 |
+| `plugins_disable` | `namespace`、`name` | 立刻停用一個從市集安裝的套件，效果和使用者在擴充頁按停用一樣：畫面、後端和 agent 工具停止，檔案、授權和資料保留。使用者會收到通知，寫明是哪個呼叫端做的，並附一鍵還原；這次變更也會記錄下來。回傳 `{ok, pluginId, pluginVersion, disabled: true, changed}`；原本就已停用時 `changed` 為 false，什麼都不做，也不通知 |
+| `plugins_enable` | `namespace`、`name` | 沿用使用者先前給的同意，重新啟用。回傳 `{ok, pluginId, pluginVersion, disabled: false, changed}` |
+
+錯誤是 `{ok: false, error, error_code}`，代碼為 `BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE` 或 `HOST_UNAVAILABLE`。每一次請求、決定、結果、停用和啟用，都會連同呼叫端（pane 名稱、外部用戶端或 Navide Host）記在 navide.db 的 `plugin_agent_actions` 表。
+
 ### Pipeline
 
 Pipeline 是一份存起來的多階段執行：一組有序的 Stage，每個 Stage 有若干 Slot，

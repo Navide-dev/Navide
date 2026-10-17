@@ -11,6 +11,13 @@ Two record tables, created from the contract's ``PLUGIN_AUDIT_DDL``
   tool call (written by D-e), with ``plugin_activity_daily`` holding the
   per-day counts of detail rows once they expire.
 
+A third table, ``plugin_agent_actions`` (``PLUGIN_AGENT_ACTIONS_DDL``, B2-c),
+records who asked for, decided or carried out a change to a Navide plugin
+(disable, enable, install / update / rollback / remove requests and their
+decisions). It is its own schema component: an older navide.db gets it
+created at start and nothing else changes, and if it cannot be created only
+that record is off.
+
 Both are write-only: they decide nothing. A record call only validates and
 queues the row in memory; ``flush`` writes the queue in one short
 transaction, off the call path (``run`` flushes every second). A write that
@@ -74,6 +81,7 @@ from . import agent_tools_contract as contract
 log = logging.getLogger(__name__)
 
 _COMPONENT = "plugin_audit"
+_ACTIONS_COMPONENT = "plugin_agent_actions"
 _DAY_MS = 86_400_000
 #: Rows per prune transaction (an internal batch size, not a retention cap):
 #: at 500k expired rows a batch holds navide.db for ~11 ms median. Smaller
@@ -349,13 +357,21 @@ class _PruneStopped(Exception):
     """A prune asked to stop between two batches (shutdown)."""
 
 
-def _report_disabled(reason: str) -> None:
+def _report_disabled(reason: str, code: str = "PLUGIN_AUDIT_DISABLED", what: str = "Navide plugin audit") -> None:
     try:
         from .. import error_ledger
 
-        error_ledger.record("backend", "error", "PLUGIN_AUDIT_DISABLED", f"Navide plugin audit is off: {reason}")
+        error_ledger.record("backend", "error", code, f"{what} is off: {reason}")
     except Exception as err:  # noqa: BLE001 - diagnostics must not break start-up either
         log.warning("plugin audit: could not record the disabled state: %s", err)
+
+
+def _create_actions_schema(cur: sqlite3.Cursor) -> None:
+    for statement in contract.PLUGIN_AGENT_ACTIONS_DDL:
+        cur.execute(statement)
+
+
+_APPROVAL_ID = re.compile(r"[0-9a-f]{32}")
 
 
 class PluginAuditLog:
@@ -370,6 +386,7 @@ class PluginAuditLog:
         self._stopping = threading.Event()
         self._calls: list[tuple[Any, ...]] = []
         self._activity: list[tuple[Any, ...]] = []
+        self._actions: list[tuple[Any, ...]] = []
         self._next_call_id: int | None = None
         self.enabled = False
         self.disabled_reason = ""
@@ -385,6 +402,18 @@ class PluginAuditLog:
             self.disabled_reason = f"{type(err).__name__}: {err}"
             log.error("plugin audit disabled: the tables could not be created: %s", self.disabled_reason)
             _report_disabled(self.disabled_reason)
+        self.actions_enabled = False
+        self.actions_disabled_reason = ""
+        try:
+            self.db.migrate(_ACTIONS_COMPONENT, 1, _create_actions_schema)
+            self.actions_enabled = True
+        except Exception as err:  # noqa: BLE001 - the backend starts without this record
+            self.actions_disabled_reason = f"{type(err).__name__}: {err}"
+            log.error("plugin agent-action audit disabled: the table could not be created: %s",
+                      self.actions_disabled_reason)
+            _report_disabled(
+                self.actions_disabled_reason, "PLUGIN_AGENT_ACTIONS_AUDIT_DISABLED", "Navide plugin agent-action audit",
+            )
 
     def _now_ms(self) -> int:
         return int(self._clock() * 1000)
@@ -395,8 +424,11 @@ class PluginAuditLog:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            pending = len(self._calls) + len(self._activity)
-        return {"enabled": self.enabled, "reason": self.disabled_reason, "pending": pending}
+            pending = len(self._calls) + len(self._activity) + len(self._actions)
+        return {
+            "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
+            "actions_enabled": self.actions_enabled, "actions_reason": self.actions_disabled_reason,
+        }
 
     # ── writes (queue only) ─────────────────────────────────────────────
 
@@ -517,11 +549,70 @@ class PluginAuditLog:
             return False
         return True
 
+    def record_agent_action(
+        self,
+        *,
+        plugin_id: str,
+        action: str,
+        caller_kind: str,
+        outcome: str,
+        plugin_version: str = "",
+        pane_id: str = "",
+        pane_name: str = "",
+        caller_workspace: str = "",
+        approval_id: str = "",
+        error_code: str = "",
+        at_ms: int | None = None,
+    ) -> bool:
+        """Queue one agent plugin action (B2-c); False when it is not recorded.
+
+        Pane fields are kept only for a pane caller; ``error_code`` is a
+        contract code or "other"; an ``approval_id`` that is not one is dropped.
+        """
+        if not self.actions_enabled:
+            return False
+        try:
+            if action not in contract.PLUGIN_AGENT_ACTIONS:
+                raise ValueError(f"unknown action {action!r}")
+            if caller_kind not in contract.PLUGIN_AGENT_ACTION_CALLER_KINDS:
+                raise ValueError(f"unknown caller kind {caller_kind!r}")
+            if outcome not in contract.PLUGIN_AGENT_ACTION_OUTCOMES:
+                raise ValueError(f"unknown outcome {outcome!r}")
+            is_pane = caller_kind == "pane"
+            row = (
+                self._at(at_ms), str(plugin_id), str(plugin_version), action, caller_kind,
+                str(pane_id) if is_pane else "", str(pane_name) if is_pane else "",
+                str(caller_workspace) if is_pane else "",
+                approval_id if isinstance(approval_id, str) and _APPROVAL_ID.fullmatch(approval_id) else "",
+                outcome,
+                "" if outcome in ("allowed", "no-op") else (
+                    _code(error_code, frozenset(contract.PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES)) or OTHER
+                ),
+            )
+            with self._lock:
+                self._actions.append(row)
+        except Exception as err:  # noqa: BLE001 - the audit never fails the action it records
+            log.warning("plugin audit: agent action not recorded: %s", err)
+            return False
+        return True
+
     def flush(self) -> None:
         """Write every queued row in one short transaction; never raises."""
         with self._lock:
             calls, self._calls = self._calls, []
             activity, self._activity = self._activity, []
+            actions, self._actions = self._actions, []
+        if actions:
+            try:
+                with self.db.transaction() as cur:
+                    cur.executemany(
+                        "INSERT INTO plugin_agent_actions (at, plugin_id, plugin_version, action, caller_kind,"
+                        " caller_pane_id, caller_pane_name, caller_workspace, approval_id, outcome, error_code)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        actions,
+                    )
+            except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
+                log.warning("plugin audit: %d agent-action rows not written: %s", len(actions), err)
         if not calls and not activity:
             return
         calls = [row for row in map(_with_digest, calls) if row is not None]
@@ -558,16 +649,48 @@ class PluginAuditLog:
 
     def prune(self, now_ms: int | None = None) -> None:
         """Apply the contract's retention in small batches; never raises."""
-        if not self.enabled:
+        if not self.enabled and not self.actions_enabled:
             return
         now = self._now_ms() if now_ms is None else now_ms
         self.flush()
-        try:
-            self._prune(now)
-        except _PruneStopped:
-            log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
-        except Exception as err:  # noqa: BLE001 - retention must not break anything
-            log.warning("plugin audit: pruning failed: %s", err)
+        if self.enabled:
+            try:
+                self._prune(now)
+            except _PruneStopped:
+                log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
+                return
+            except Exception as err:  # noqa: BLE001 - retention must not break anything
+                log.warning("plugin audit: pruning failed: %s", err)
+        if self.actions_enabled:
+            try:
+                self._prune_actions(now)
+            except _PruneStopped:
+                log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
+            except Exception as err:  # noqa: BLE001 - retention must not break anything
+                log.warning("plugin audit: pruning agent actions failed: %s", err)
+
+    def _prune_actions(self, now: int) -> None:
+        """plugin_agent_actions keeps what plugin_tool_calls keeps: 30 days, then the newest 10,000."""
+        cutoff = now - contract.PLUGIN_AGENT_ACTIONS_RETENTION_DAYS * _DAY_MS
+        batch = PRUNE_BATCH_ROWS
+        while self._batch(
+            "DELETE FROM plugin_agent_actions WHERE id IN (SELECT id FROM plugin_agent_actions WHERE at < ? LIMIT ?)",
+            (cutoff, batch),
+        ):
+            pass
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT id FROM plugin_agent_actions ORDER BY id DESC LIMIT 1 OFFSET ?",
+                (contract.PLUGIN_AGENT_ACTIONS_MAX_ROWS,),
+            ).fetchone()
+        if row is not None:
+            keep_above = int(row[0])
+            while self._batch(
+                "DELETE FROM plugin_agent_actions WHERE id IN"
+                " (SELECT id FROM plugin_agent_actions WHERE id <= ? LIMIT ?)",
+                (keep_above, batch),
+            ):
+                pass
 
     def _prune(self, now: int) -> None:
         calls_cutoff = now - contract.PLUGIN_TOOL_CALLS_RETENTION_DAYS * _DAY_MS
@@ -685,6 +808,21 @@ class PluginAuditLog:
         for row in rows:
             row["caller_verified"] = "pane-token" if row["caller_kind"] == "pane" else "none"
         return rows
+
+    def recent_agent_actions(self, *, plugin_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        """Newest written agent plugin actions first (B2-c; shown as plain text by D-f)."""
+        if not self.actions_enabled:
+            return []
+        self.flush()
+        query = "SELECT * FROM plugin_agent_actions"
+        params: list[Any] = []
+        if plugin_id is not None:
+            query += " WHERE plugin_id = ?"
+            params.append(plugin_id)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(max(1, min(int(limit), contract.PLUGIN_AGENT_ACTIONS_MAX_ROWS)))
+        with self.db.transaction() as cur:
+            return [dict(row) for row in cur.execute(query, params).fetchall()]
 
     def activity_report(
         self, plugin_id: str, *, declared: list[dict[str, str]] | None = None, now_ms: int | None = None

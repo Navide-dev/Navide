@@ -1,6 +1,7 @@
 import { watch } from 'vue'
 import { invokeCommand, listCommands } from '@navide/plugin-ui/shared'
 import { currentDiagnosticSeq, takeDiagnosticsSince } from '../lib/uiDiagnostics'
+import { WINDOW_INSTANCE_ID } from '../lib/windowInstanceId'
 
 /**
  * Bridges an external MCP client's `ui.invoke.request` broadcasts into this
@@ -211,7 +212,7 @@ export function useUiActionBus(opts: UseUiActionBusOptions): () => void {
 
   const announce = (focused: boolean) => {
     if (status.value !== 'connected') return
-    opts.backend.send('ui.invoke.ready', { focused })
+    opts.backend.send('ui.invoke.ready', { focused, window_id: WINDOW_INSTANCE_ID })
       .catch(() => { /* best-effort — announced again on reconnect and focus */ })
   }
   const stopWatch = watch(

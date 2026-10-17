@@ -170,7 +170,13 @@ import {
 } from './pluginFrameAssetProtocol'
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
-import { MARKETPLACE_QUERY_REQUEST_EVENT, MARKETPLACE_QUERY_RESULT_MESSAGE } from '../../shared/pluginAgentTools'
+import {
+  MARKETPLACE_QUERY_REQUEST_EVENT,
+  MARKETPLACE_QUERY_RESULT_MESSAGE,
+  PLUGIN_AGENT_ACTION_REQUEST_EVENT,
+  PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
+  type PluginAgentActionAnswer,
+} from '../../shared/pluginAgentTools'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
@@ -1461,6 +1467,8 @@ export class FrontendPluginManager {
   private wsClient: WsClient | null = null
   /** Answers `marketplace.query.request` (B2-a); set by registerPluginIpc. */
   private marketplaceQueryHandler: ((query: unknown) => Promise<MarketplaceQueryAnswer>) | null = null
+  /** Answers `plugins.agent_action.request` (B2-c); set by registerPluginIpc. */
+  private pluginAgentActionHandler: ((request: unknown) => Promise<PluginAgentActionAnswer>) | null = null
   private readonly editorAiCapability = new EditorAiCapability({
     request: (type, payload, beforeDispatch) => this.sendPublicBackend(type, payload, beforeDispatch),
     createReviewClient: (onDisconnected) => {
@@ -8512,6 +8520,9 @@ export class FrontendPluginManager {
       client.on(MARKETPLACE_QUERY_REQUEST_EVENT, (payload) => {
         void this.handleMarketplaceQueryRequest(client, payload)
       })
+      client.on(PLUGIN_AGENT_ACTION_REQUEST_EVENT, (payload) => {
+        void this.handlePluginAgentActionRequest(client, payload)
+      })
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
@@ -8792,6 +8803,46 @@ export class FrontendPluginManager {
    *  and inventory; see marketplaceQuery.ts. */
   setMarketplaceQueryHandler(handler: (query: unknown) => Promise<MarketplaceQueryAnswer>): void {
     this.marketplaceQueryHandler = handler
+  }
+
+  /** Install the function that carries out an agent's plugins_disable /
+   *  plugins_enable (plan B, B2-c): the Extensions Disabled switch for an
+   *  installed Marketplace package, then a notice naming the caller. */
+  setPluginAgentActionHandler(handler: (request: unknown) => Promise<PluginAgentActionAnswer>): void {
+    this.pluginAgentActionHandler = handler
+  }
+
+  /** Answer one `plugins.agent_action.request` on the registered Host session.
+   *  Only the backend this Host authenticated to can ask, over this client. */
+  private async handlePluginAgentActionRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null) {
+      console.warn('[plugin-backend] plugin agent action without a request_id was not served')
+      return
+    }
+    let answer: PluginAgentActionAnswer
+    const handler = this.pluginAgentActionHandler
+    if (this.wsClient !== client || !this.hostSessionRegistered || !handler) {
+      answer = { ok: false, error: 'Navide Host cannot change plugins now', error_code: 'HOST_UNAVAILABLE' }
+    } else {
+      try {
+        answer = await handler(record)
+      } catch (error) {
+        answer = { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
+      }
+    }
+    if (this.wsClient !== client) return
+    await client.send(
+      PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
+      { request_id: requestId, ...answer },
+      10_000,
+    ).catch(() => {
+      // The backend's waiter has its own timeout and reports it there.
+    })
   }
 
   /** Answer one `marketplace.query.request` on the registered Host session.

@@ -130,3 +130,7 @@ Successful observations from the existing Claude quota polling service are saved
 ### 透過 MCP 查詢 Navide 市集
 
 `marketplace_search` 與 `marketplace_detail` 會讓 Navide App 向設定的 Registry 送出和 Navide 市集頁面相同的請求：搜尋文字、分類與頁數，或套件名稱。`plugins_list_installed` 不對外送出任何東西，只讀取本機的清單。三者都把結果（公開的上架資料，以及已安裝 Navide 外掛的 id、版本與狀態）回傳給發出請求的 coding agent，其設定的模型供應商可能依該 CLI 自己的資料政策收到這些內容。
+
+### 透過 MCP 對 Navide 市集提出請求
+
+使用 `marketplace_request_install`、`_update`、`_rollback` 時，Navide 應用程式會用和 `marketplace_detail` 相同的方式查詢套件；所有請求工具都會讀取本機的已安裝清單。請求連同提出請求的 pane 名稱、workspace 和 agent 寫的理由，會留在後端記憶體中，直到被決定或過期，並在 Navide 視窗顯示給使用者。`plugins_disable` 與 `plugins_enable` 不會對外送出任何資料。每一次請求、決定、停用和啟用都會記在本機的 navide.db（`plugin_agent_actions`：外掛、動作、呼叫端類型、pane id、pane 名稱、workspace、結果），保留 30 天，之後只留最新的 10,000 筆。
