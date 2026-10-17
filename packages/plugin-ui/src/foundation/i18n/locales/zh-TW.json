@@ -11130,7 +11130,8 @@
       "memory": "記憶體",
       "cpu": "CPU",
       "processes": "程序數",
-      "disk": "資料夾大小"
+      "disk": "資料夾大小",
+      "stdoutPending": "尚未換行的輸出量"
     }
   },
   "pluginDisclosure": {

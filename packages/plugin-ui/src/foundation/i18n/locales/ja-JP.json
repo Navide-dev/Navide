@@ -11130,7 +11130,8 @@
       "memory": "メモリ",
       "cpu": "CPU",
       "processes": "プロセス数",
-      "disk": "データフォルダのサイズ"
+      "disk": "データフォルダのサイズ",
+      "stdoutPending": "改行待ちの出力量"
     }
   },
   "pluginDisclosure": {

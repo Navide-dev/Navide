@@ -391,7 +391,7 @@ export interface BackendResourceNoticeView {
   pluginId: string
   name: string
   packageVersion: string
-  item: 'memory' | 'cpu' | 'processes' | 'disk'
+  item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
   usage: number
   threshold: number
   at: number

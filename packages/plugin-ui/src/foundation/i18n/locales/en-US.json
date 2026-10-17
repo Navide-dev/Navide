@@ -11130,7 +11130,8 @@
       "memory": "memory",
       "cpu": "CPU",
       "processes": "the number of processes",
-      "disk": "its data folder"
+      "disk": "its data folder",
+      "stdoutPending": "output waiting for a line break"
     }
   },
   "pluginDisclosure": {

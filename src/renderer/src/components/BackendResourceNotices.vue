@@ -38,7 +38,7 @@ async function answer(id: string, choice: 'terminate' | 'continue'): Promise<voi
 }
 
 function amount(item: BackendResourceNoticeView['item'], value: number): string {
-  if (item === 'memory' || item === 'disk') return formatBytes(value)
+  if (item === 'memory' || item === 'disk' || item === 'stdoutPending') return formatBytes(value)
   if (item === 'cpu') return t('backendResource.cores', { count: Number(value.toFixed(2)).toLocaleString(locale.value) })
   return String(value)
 }

@@ -63,6 +63,15 @@
       "threshold": 1073741824,
       "decision": "notified",
       "at": 1792800000000
+    },
+    {
+      "plugin_id": "acme.render",
+      "plugin_version": "0.3.1",
+      "item": "stdoutPending",
+      "usage": 2097152,
+      "threshold": 1048576,
+      "decision": "notified",
+      "at": 1792800000000
     }
   ],
   "invalid": [
