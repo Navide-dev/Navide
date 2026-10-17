@@ -146,15 +146,19 @@ describe('backend calls are counted per key within a batch (H1)', () => {
     const sent: unknown[] = []
     const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
     const call = { plugin_id: 'acme.x', plugin_version: '1.0.0', workspace: '/w', address: backendCallAddress('devmap.read') }
-    for (let i = 0; i < 1000; i++) recorder.recordBackendCall({ ...call, outcome: 'allowed' })
-    recorder.recordBackendCall({ ...call, outcome: 'cancelled' })
-    recorder.recordBackendCall({ ...call, workspace: '/other', outcome: 'allowed' })
-    expect(recorder.pending).toBe(3)
+    const minute = 1_792_108_800_000
+    for (let i = 0; i < 1000; i++) recorder.recordBackendCall({ ...call, outcome: 'allowed' }, minute + i)
+    recorder.recordBackendCall({ ...call, outcome: 'cancelled' }, minute + 5)
+    recorder.recordBackendCall({ ...call, workspace: '/other', outcome: 'allowed' }, minute + 5)
+    // The next minute is its own row.
+    recorder.recordBackendCall({ ...call, outcome: 'allowed' }, minute + 60_000)
+    expect(recorder.pending).toBe(4)
     await recorder.flush()
     expect(sent).toEqual([{ rows: [
-      { ...call, source: 'backend', outcome: 'allowed', count: 1000 },
-      { ...call, source: 'backend', outcome: 'cancelled', count: 1 },
-      { ...call, workspace: '/other', source: 'backend', outcome: 'allowed', count: 1 },
+      { ...call, at: minute, source: 'backend', outcome: 'allowed', count: 1000 },
+      { ...call, at: minute, source: 'backend', outcome: 'cancelled', count: 1 },
+      { ...call, at: minute, workspace: '/other', source: 'backend', outcome: 'allowed', count: 1 },
+      { ...call, at: minute + 60_000, source: 'backend', outcome: 'allowed', count: 1 },
     ] }])
     expect(recorder.pending).toBe(0)
   })

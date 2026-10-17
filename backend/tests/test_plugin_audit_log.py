@@ -958,6 +958,11 @@ def _seeded_report(tmp_path: Path) -> dict[str, Any]:
     _act(audit, NOW - 2 * DAY_MS, fs_path="docs/devmap.md")
     _act(audit, NOW - 2 * DAY_MS, "shell.run", source="shell", shell_command="git status")
     _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    for outcome, count in (("allowed", 1200), ("error", 1), ("cancelled", 2)):
+        audit.record_backend_calls(
+            plugin_id=_PLUGIN, plugin_version="0.2.0", workspace="/Users/me/project",
+            address="backend.devmap.block.import", outcome=outcome, count=count, at_ms=NOW - DAY_MS,
+        )
     audit.flush()
     return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
 
@@ -1196,3 +1201,4 @@ def test_a_future_installed_at_counts_as_now(audit: PluginAuditLog, clock: Clock
     flags = [a["workspace"] for a in audit.activity_report(_PLUGIN, installed_at=NOW + DAY_MS, now_ms=NOW)["anomalies"]
              if a["kind"] == "writeToolNewWorkspace"]
     assert flags == ["/w/c"]
+

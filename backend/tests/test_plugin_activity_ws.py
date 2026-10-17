@@ -345,3 +345,45 @@ async def test_skipped_rows_are_logged_by_count_and_reason_without_their_content
     messages = [r.getMessage() for r in caplog.records if "plugin activity" in r.getMessage()]
     assert messages == ["plugin activity: 4 of 5 rows skipped (malformed: 2, bad at: 1, refused: 1)"]
     assert secret not in caplog.text
+
+
+async def test_backend_calls_fall_in_the_minute_the_host_names(audit: PluginAuditLog) -> None:
+    import time
+
+    now = int(time.time() * 1000)
+    minute = now - now % 60_000 - 3 * 60_000
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        {**_backend_row(), "at": minute}, {**_backend_row(count=4), "at": minute + 59_000},
+        {**_backend_row(), "at": now + 3_600_000},  # a future time is clamped to now
+    ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
+    audit.flush()
+    with audit.db.transaction() as cur:
+        rows = cur.execute("SELECT minute, count FROM plugin_backend_call_minutes ORDER BY minute").fetchall()
+    assert rows[0][0] == minute and rows[0][1] == 7
+    assert rows[1][0] <= now
+
+
+async def test_bad_backend_rows_are_counted_by_reason(audit: PluginAuditLog, caplog: pytest.LogCaptureFixture) -> None:
+    import logging
+
+    host = _session(host=True)
+    with caplog.at_level(logging.WARNING):
+        await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+            _backend_row(), _backend_row(address="devmap.x"), {**_backend_row(), "at": -1}, _backend_row(outcome="maybe"),
+        ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+    messages = [r.getMessage() for r in caplog.records if "plugin activity" in r.getMessage()]
+    assert messages == ["plugin activity: 3 of 4 rows skipped (malformed: 1, bad at: 1, refused: 1)"]
+
+
+async def test_forgetting_a_plugin_drops_its_backend_call_counts(audit: PluginAuditLog) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        _backend_row(), _backend_row(plugin_id="acme.other"),
+    ]})
+    audit.flush()
+    audit.forget_plugin("nerdtechnic.devmap")
+    assert [r["plugin_id"] for r in _minutes(audit)] == ["acme.other"]
+

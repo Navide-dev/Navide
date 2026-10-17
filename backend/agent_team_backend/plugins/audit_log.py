@@ -1164,13 +1164,16 @@ class PluginAuditLog:
 
     def forget_plugin(self, plugin_id: str) -> None:
         """A removed plugin: drop its first-seen rows, so a reinstall's first
-        write in a workspace is new again. Never raises."""
-        if not self.enabled:
+        write in a workspace is new again, and its backend-call counts. Never raises."""
+        if not self.enabled and not self.backend_calls_enabled:
             return
         self.flush()
         try:
             with self.db.transaction() as cur:
-                cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+                if self.enabled:
+                    cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+                if self.backend_calls_enabled:
+                    cur.execute("DELETE FROM plugin_backend_call_minutes WHERE plugin_id = ?", (plugin_id,))
         except Exception as err:  # noqa: BLE001 - the audit never fails what it records
             log.warning("plugin audit: %s not forgotten: %s", plugin_id, err)
 

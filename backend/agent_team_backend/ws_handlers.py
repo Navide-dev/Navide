@@ -362,18 +362,28 @@ _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
 _BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
 
 
-def _backend_call_row(app: Any, row: dict) -> bool:
-    """One counted backend-call row: exact fields, ``backend.`` address, positive count."""
+def _backend_call_row(app: Any, row: dict) -> str | None:
+    """Record one counted backend-call row; the skip reason when it is not recorded.
+
+    Exact fields (``at`` optional: the minute the calls fell in, Unix ms), a
+    ``backend.`` address and a positive count.
+    """
     from .plugins import agent_tools_contract as contract
 
-    if set(row) != _BACKEND_CALL_ROW_FIELDS:
-        return False
+    if set(row) - {"at"} != _BACKEND_CALL_ROW_FIELDS:
+        return "malformed"
     if not all(isinstance(row[key], str) for key in _BACKEND_CALL_ROW_FIELDS - {"count"}):
-        return False
-    return app.plugin_audit_log.record_backend_calls(
+        return "malformed"
+    if not row["address"].startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
+        return "malformed"
+    at = row.get("at")
+    if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+        return "bad at"
+    recorded = app.plugin_audit_log.record_backend_calls(
         plugin_id=row["plugin_id"], plugin_version=row["plugin_version"], workspace=row["workspace"],
-        address=row["address"], outcome=row["outcome"], count=row["count"],
-    ) if row["address"].startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX) else False
+        address=row["address"], outcome=row["outcome"], count=row["count"], at_ms=at,
+    )
+    return None if recorded else "refused"
 
 
 @handler("plugin.activity.record")
@@ -407,8 +417,11 @@ async def plugin_activity_record(
     skipped = {"malformed": 0, "bad at": 0, "refused": 0}
     for row in rows:
         if isinstance(row, dict) and row.get("source") == "backend":
-            if _backend_call_row(app, row):
+            reason = _backend_call_row(app, row)
+            if reason is None:
                 accepted += 1
+            else:
+                skipped[reason] += 1
             continue
         if (
             not isinstance(row, dict)

@@ -16987,7 +16987,7 @@ describe('plugin activity (D-e)', () => {
     await vi.advanceTimersByTimeAsync(1000)
     const [batch, ...more] = activityOf(socket)
     expect(more).toEqual([])
-    const base = { plugin_id: 'acme.backend-activity', plugin_version: '1.0.0', workspace: '/w', source: 'backend' }
+    const base = { plugin_id: 'acme.backend-activity', plugin_version: '1.0.0', workspace: '/w', source: 'backend', at: expect.any(Number) }
     expect(batch.payload.rows).toEqual([
       { ...base, address: 'backend.devmap.block.import', outcome: 'allowed', count: 500 },
       { ...base, address: 'backend.devmap.fail', outcome: 'error', count: 1 },

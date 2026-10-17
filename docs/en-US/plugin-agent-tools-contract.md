@@ -1190,12 +1190,10 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
 
-`plugin_activity` (D-e; one row per broker or shell-broker call, one per call
-a third-party plugin's own frontend makes to its own backend, plus one per
+`plugin_activity` (D-e; one row per broker or shell-broker call, plus one per
 agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
-`plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool` |
-`backend`), `address` (`namespace.method`; for `backend`, `backend.<method>`,
-so a method named like a system namespace never counts as a use of it),
+`plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
+`address` (`namespace.method`; never `backend.…`, see below),
 `outcome` (`allowed` | `denied` | `error`),
 `denied_reason` (only for `denied`: a `PLUGIN_TOOL_UNAVAILABLE` reason, a
 call error code, or `undeclared` for a use the manifest did not declare;
@@ -1203,6 +1201,22 @@ call error code, or `undeclared` for a use the manifest did not declare;
 (workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
 Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
+
+`plugin_backend_call_minutes` (D-e; calls into a third-party plugin's own
+backend, whichever path made them: its frontend, an agent tool, an agent
+capability request). Counted, never one row per call: the Host counts calls
+per `(plugin, version, workspace, address, outcome, minute)` within each batch
+and sends rows `{at, plugin_id, plugin_version, workspace, source: "backend",
+address, outcome, count}` (`at`: start of the minute, Unix ms); the backend
+adds `count` into the row of that minute (`PLUGIN_BACKEND_CALLS_DDL`, its own
+schema component). `address` is `backend.<method>`, so a method named like a
+system namespace (`fs.read`) never counts as a use of it; a `backend` row
+without that prefix, or another source with it, is skipped. `outcome` is
+`allowed` | `denied` | `cancelled` (the caller cancelled it; not a refusal) |
+`error` (a call to a method the manifest did not declare is an error: the
+backend host answers it as an invalid argument). Kept as long as
+`plugin_activity_daily` (90 days); a removed plugin's rows go with
+`forget_plugin`. The bundled `navide.*` packages are not recorded.
 
 `plugin_activity_daily`: `(day, plugin_id, workspace, source, address,
 outcome)` primary key and `count`; filled before detail rows expire and kept
@@ -1321,6 +1335,7 @@ malformed one whole.
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_minutes`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) within `window`, and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted

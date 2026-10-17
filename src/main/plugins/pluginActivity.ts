@@ -40,8 +40,10 @@ export interface PluginActivityRow {
   at: number
 }
 
-/** Backend calls counted within one batch (source `backend`). */
+/** Backend calls counted within one batch (source `backend`), per minute. */
 export interface BackendCallActivityRow {
+  /** Start of the minute (Unix ms) the calls fell in. */
+  at: number
   plugin_id: string
   plugin_version: string
   workspace: string
@@ -130,12 +132,13 @@ export class PluginActivityRecorder {
     this.schedule()
   }
 
-  /** Count one backend call into this batch's row for its key; never throws. */
-  recordBackendCall(call: Omit<BackendCallActivityRow, 'source' | 'count'>): void {
-    const key = `${call.plugin_id}\u0000${call.plugin_version}\u0000${call.workspace}\u0000${call.address}\u0000${call.outcome}`
+  /** Count one backend call into this batch's row for its key and minute; never throws. */
+  recordBackendCall(call: Omit<BackendCallActivityRow, 'source' | 'count' | 'at'>, at: number = Date.now()): void {
+    const minute = at - (at % 60_000)
+    const key = `${minute}\u0000${call.plugin_id}\u0000${call.plugin_version}\u0000${call.workspace}\u0000${call.address}\u0000${call.outcome}`
     const row = this.backendCalls.get(key)
     if (row) row.count += 1
-    else this.backendCalls.set(key, { ...call, source: 'backend', count: 1 })
+    else this.backendCalls.set(key, { ...call, at: minute, source: 'backend', count: 1 })
     this.schedule()
   }
 
