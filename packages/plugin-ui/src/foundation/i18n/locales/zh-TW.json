@@ -11005,5 +11005,160 @@
     "unpin-body": "改為跟隨會用目前的登入重開 pane，並接續對話。可以等它們跑完再改，或這次先跳過。閒置的 pane 會立即改。",
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
     "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
+  },
+  "pluginDisclosure": {
+    "diff": {
+      "heading": "這次更新的權限變化",
+      "versions": "目前安裝 {from} → 更新到 {to}；以下只列出不同的地方。",
+      "risk": "風險等級：{from} → {to}",
+      "none": "沒有新增或移除任何權限。",
+      "added": "新增",
+      "removed": "已移除",
+      "unchanged": "沒有變動（{count} 項）",
+      "fullCard": "完整揭露卡",
+      "badgeMore": "權限變多",
+      "badgeSame": "權限沒變",
+      "badgeTitle": "依 Navide Registry 提供的資料，尚未驗證；更新前 Navide 會用下載的套件重新比對。",
+      "item": {
+        "system": "權限：{key}",
+        "shell": "shell 模式：{key}",
+        "shellExecutable": "可執行：{key}",
+        "fsScopeRoot": "檔案範圍：{key}",
+        "fsScopeRead": "可讀取：{key}",
+        "fsScopeWrite": "可寫入：{key}",
+        "nativeBackend": "附帶原生程式",
+        "backendMethod": "原生程式的方法：{key}",
+        "backendEvent": "原生程式的事件：{key}",
+        "network": "可以透過指令連到遠端",
+        "agentTool": "agent 工具：{key}"
+      }
+    },
+    "title": "揭露卡",
+    "riskLabel": "風險等級：{level}",
+    "risk": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "highest": "最高"
+    },
+    "undeclaredHeading": "掃描到但未宣告",
+    "undeclaredIntro": "程式碼做了這個 Navide 外掛沒有宣告的事。Navide 執行時會拒絕這些呼叫，但宣告和程式碼不一致。",
+    "undeclared": {
+      "shell": "會執行 {key}，但沒有宣告 shell 權限",
+      "shellDynamic": "有執行時才組出來的指令，但沒有宣告 shell 權限",
+      "shellExecutable": "會執行 {key}，但宣告的 shell 範圍只有 git、gh、glab",
+      "system": "會使用 {key}，但沒有宣告這項權限",
+      "fsScopeWrite": "會寫入 {key}，不在宣告的寫入範圍內",
+      "fsScopeRead": "會讀取 {key}，不在宣告的讀取範圍內"
+    },
+    "notSeenHeading": "宣告了，靜態掃描未發現",
+    "notSeen": {
+      "shell": "shell（{key}）",
+      "system": "{key}"
+    },
+    "scanHeading": "上架時系統掃描的結果",
+    "declaredHeading": "這個 Navide 外掛宣告的權限",
+    "registryHeading": "Navide Registry 的紀錄（未簽章）",
+    "provenance": {
+      "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
+      "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
+      "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"
+    },
+    "noDisclosure": "這個版本上架時尚未提供揭露資料。",
+    "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
+    "scannedByRegistry": "掃描由 Navide Registry 執行。",
+    "limitsWithoutScan": "這個版本沒有系統掃描，以上只有這個 Navide 外掛自己的宣告。",
+    "summary": {
+      "nativeBackend": "附帶原生程式（在沙盒裡執行）",
+      "files": {
+        "read": "讀取你專案裡的檔案",
+        "readWrite": "讀寫你專案裡的檔案"
+      },
+      "shell": {
+        "allowlist": "執行指令：{executables}",
+        "full": "執行任何指令"
+      },
+      "networkViaShell": "可以透過這些指令連到遠端",
+      "aiCli": "操作 AI CLI 工作階段",
+      "ui": "顯示自己的畫面",
+      "agentTools": "提供 agent 可呼叫的工具（唯讀 {read} 個、寫入 {write} 個）",
+      "network": "可以連網",
+      "noPermissions": "沒有宣告任何權限"
+    },
+    "scan": {
+      "shell": {
+        "remoteWrite": "這個 Navide 外掛會執行 {commands}，可能把專案資料送到遠端。",
+        "other": "這個 Navide 外掛會執行 {commands}，可以把資料送到任何地方。",
+        "unknownSubcommand": "這個 Navide 外掛會執行 {commands}；這個子指令不在 Navide 的對照表裡，請當成可能連到遠端。",
+        "remoteRead": "這個 Navide 外掛會執行 {commands}，會用你的登入身分連到遠端讀取資料。",
+        "localWrite": "這個 Navide 外掛會執行 {commands}，會改變你本機儲存庫的內容。",
+        "local": "這個 Navide 外掛會執行 {commands}，讀取本機儲存庫的狀態。",
+        "dynamic": "有 {count} 處指令是在執行時才組出來的，靜態掃描無法完全判斷會執行什麼。"
+      },
+      "files": {
+        "write": "這個 Navide 外掛會寫入 {paths}（另有 {dynamic} 處路徑在執行時才決定）。",
+        "read": "這個 Navide 外掛會讀取 {paths}。"
+      },
+      "network": {
+        "hosts": "程式碼裡出現這些網址：{hosts}。Navide 外掛頁框與原生程式都不能直接連網，這些網址可能用來開啟瀏覽器，或交給 git、gh 等指令。"
+      },
+      "code": {
+        "eval": {
+          "frontend": "畫面程式碼會在執行時產生並執行程式碼（{count} 處）；Navide 外掛頁框的安全政策會擋下這類呼叫。",
+          "backend": "原生程式裡有在執行時產生並執行程式碼的跡象（{count} 處）。"
+        },
+        "obfuscated": "程式碼有混淆跡象（{signals}），掃描結果可能不完整。"
+      },
+      "native": {
+        "summary": "原生程式 {path}（{format}，{arch}）連結了：{libraries}。",
+        "unscannable": "原生程式 {path} {reason}，裡面的程式碼這次無法掃描。"
+      },
+      "coverage": {
+        "base": "上架時由 Navide Registry 掃描（掃描器 {scannerVersion}，{scannedAt}，掃了 {filesScanned}／{filesTotal} 個檔案）。靜態掃描看不到執行時才決定的行為，以上不代表完整清單。",
+        "incomplete": "掃描不完整：{reasons}。"
+      },
+      "notFound": {
+        "shell": "靜態掃描未發現執行指令。",
+        "network": "靜態掃描未發現網址。",
+        "files": "靜態掃描未發現檔案讀寫路徑。",
+        "dynamicCode": "靜態掃描未發現執行時產生程式碼。"
+      },
+      "noScan": "這個版本上架時尚未有系統掃描，以下只有這個 Navide 外掛自己的宣告。"
+    },
+    "incompleteReason": {
+      "timedOut": "超過掃描時間",
+      "truncated": "內容超過掃描上限",
+      "obfuscated": "程式碼有混淆",
+      "packed": "原生程式經過壓縮殼處理",
+      "embeddedRuntime": "原生程式內嵌執行環境",
+      "scannerError": "掃描器在部分內容上失敗",
+      "tooComplex": "部分內容結構過於複雜，無法掃描"
+    },
+    "unscannableReason": {
+      "packed": "經過壓縮殼（{detail}）處理",
+      "embeddedRuntime": "內嵌 {detail} 執行環境"
+    },
+    "registry": {
+      "domainVerified": "Navide Registry 紀錄：發佈者擁有網域 {domain}（{date} 確認）",
+      "domainNotVerified": "發佈者網域未驗證",
+      "signedClaim": "Navide Registry 紀錄：這個版本已簽章（金鑰 {keyId}）",
+      "unsigned": "Navide Registry 紀錄：這個版本沒有簽章",
+      "reviewApproved": "已通過人工審核（{date}）",
+      "review": {
+        "not-required": "自動發佈，未經人工審核",
+        "pending": "等待人工審核",
+        "rejected": "人工審核未通過",
+        "approved": "已通過人工審核"
+      },
+      "nativeInspected": "原生程式已由審核者檢查",
+      "nativeNotInspected": "原生程式未經人工檢查",
+      "secret": {
+        "clean": "機密掃描：未發現",
+        "not-run": "機密掃描：未執行",
+        "findings": "機密掃描：有發現"
+      },
+      "secretFindings": "機密掃描：{count} 筆疑似機密，審核者已確認",
+      "similar": "名稱和其他 Navide 外掛相近"
+    }
   }
 }

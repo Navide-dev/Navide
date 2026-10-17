@@ -957,6 +957,36 @@ describe('native backend consent text', () => {
     pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], agentTools: [], update: false,
   }
 
+  // Plan B D-g: localized, with the methods listed.
+  it('lists the methods the backend serves, sorted, in every locale', () => {
+    const prompt = { ...base, system: [], methods: ['files.search', 'files.index'] }
+    expect(nativeBackendConsentText(prompt).detail).toContain('Methods it serves: files.index, files.search.')
+    expect(nativeBackendConsentText(prompt, 'zh-TW').detail).toContain('它提供的方法：files.index、files.search。')
+    expect(nativeBackendConsentText(prompt, 'ja-JP').detail).toContain('提供するメソッド：files.index、files.search。')
+    expect(nativeBackendConsentText({ ...prompt, methods: [] }).detail).toContain('It declares no methods.')
+  })
+
+  it.each(['zh-TW', 'ja-JP'] as const)('localizes the whole dialog (%s) and keeps the shell disclosure honest', (locale) => {
+    const plain = nativeBackendConsentText({ ...base, system: ['fs'] }, locale)
+    const shell = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' }, locale)
+    for (const text of [plain, shell]) {
+      expect(`${text.title}${text.message}${text.detail}${text.buttons.join('')}`).not.toMatch(/[A-Za-z]{4,} [a-z]{3,} [a-z]{3,}/)
+      expect(text.detail).toContain('Navide')
+    }
+    expect(shell.detail).toMatch(/高風險|高リスク/)
+    expect(shell.detail).toContain('git push')
+    expect(shell.detail).not.toContain(plain.detail.split('\n\n')[0])
+    expect(shell.detail).toMatch(/30/)
+  })
+
+  it('names the Navide plugins settings page, not the CLI extensions page', () => {
+    const { detail, title, buttons } = nativeBackendConsentText({ ...base, system: [] })
+    expect(detail).toContain('Settings → Navide Plugins')
+    expect(detail).not.toContain('Settings → Extensions')
+    expect(title).toBe('Native code')
+    expect(buttons).toEqual(['Not now', 'Allow'])
+  })
+
   it('says "no network access" only for a package without shell', () => {
     for (const system of [[], ['fs']] as const) {
       const { message, detail } = nativeBackendConsentText({ ...base, system: [...system] })
@@ -1007,6 +1037,22 @@ describe('native backend consent text', () => {
     expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
     expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
     expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
+  })
+
+  // D-g with #346: the agent-tool section is in the dialog's language too.
+  it.each([
+    ['zh-TW', 'agent 將可以呼叫 Indexer 的這 1 個工具', '• indexer_find → files.search（外掛宣告為唯讀，30 秒後逾時）：Find files.', '  輸入結構描述：{"type":"object"}'],
+    ['ja-JP', 'agent は Indexer のこれら 1 個のツールを呼び出せるようになります', '• indexer_find → files.search（プラグインの宣言：読み取り専用、30 秒でタイムアウト）：Find files.', '  入力スキーマ：{"type":"object"}'],
+  ] as const)('words the agent tools in the dialog language (%s)', (locale, intro, line, schema) => {
+    const tool = {
+      name: 'indexer_find', method: 'files.search', risk: 'read' as const, title: 'Find', description: 'Find files.',
+      inputSchema: { type: 'object' }, timeoutMs: 30000,
+    }
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [tool] }, locale)
+    expect(detail).toContain(intro)
+    expect(detail).toContain(line)
+    expect(detail).toContain(schema)
+    expect(detail).not.toMatch(/Agents will|Input schema|declared read-only|What these tools return/)
   })
 
   it('spells out invisible characters in a tool schema instead of showing them raw', () => {
