@@ -243,6 +243,28 @@ async def test_backend_calls_are_added_up_per_minute_and_count_as_use_of_the_dec
     assert (day["calls"], day["errors"], day["cancelled"], day["denied"]) == (8, 1, 1, 0)
 
 
+async def test_undeclared_backend_calls_are_one_address_and_leave_declared_unused_alone(audit: PluginAuditLog) -> None:
+    # Review of #374 (H2): the Host counts every undeclared name under one address.
+    host = _session(host=True)
+    undeclared = contract.PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS
+    assert undeclared == "backend.<undeclared>"  # BACKEND_CALL_UNDECLARED_ADDRESS in src/shared/pluginActivity.ts
+    rows = [_backend_row(address=undeclared, outcome="error", count=1000), _backend_row(count=2)]
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": rows})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
+    declared = [
+        {"kind": "backendMethod", "key": "backend.devmap.block.import"},
+        {"kind": "backendMethod", "key": "backend.devmap.block.export"},
+    ]
+    await ws_handlers.plugins_activity_report(
+        host, "2", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "nerdtechnic.devmap", "declared": declared},
+    )
+    report = host.websocket.sent[-1]["payload"]
+    assert [(u["kind"], u["key"]) for u in report["declaredUnused"]] == [("backendMethod", "backend.devmap.block.export")]
+    assert {(m["address"], m["outcome"], m["count"]) for m in report["backendCalls"]["methods"]} == {
+        (undeclared, "error", 1000), ("backend.devmap.block.import", "allowed", 2),
+    }
+
+
 @pytest.mark.parametrize("row", [
     _backend_row(address="devmap.block.import"),           # backend source, no backend. prefix
     _backend_row(outcome="maybe"),

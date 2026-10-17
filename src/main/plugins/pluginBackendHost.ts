@@ -49,6 +49,9 @@ export interface BackendCallSettled {
   packageVersion: string
   workspacePath: string | undefined
   method: string
+  /** False for a name the package's backend does not declare: the Host refused
+   *  it before any child ran, and the name itself is the caller's free text. */
+  declared: boolean
   outcome: BackendCallOutcome
 }
 
@@ -97,6 +100,9 @@ export interface PluginBackendHostOptions {
    *  frontend, an agent tool, an agent capability request). Called once per
    *  call after it settles; it must be cheap and never throw into the call. */
   onCallSettled?: (call: BackendCallSettled) => void
+  /** Whether calls of this plugin are observed at all (the bundled packages
+   *  are not); a skipped plugin's call goes straight through. */
+  observesCallsOf?: (pluginId: string) => boolean
 }
 
 export type ThirdPartyAdmitter = (
@@ -284,6 +290,7 @@ export class PluginBackendHost {
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
   private admitThirdParty?: ThirdPartyAdmitter
   private readonly onCallSettled?: (call: BackendCallSettled) => void
+  private readonly observesCallsOf?: (pluginId: string) => boolean
   private readonly thirdPartyIdleMs: number
   private readonly backends = new Map<string, RegisteredBackend>()
   private readonly views = new Map<string, BoundView>()
@@ -320,6 +327,7 @@ export class PluginBackendHost {
     this.admitThirdParty = options.admitThirdParty
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
     this.onCallSettled = options.onCallSettled
+    this.observesCallsOf = options.observesCallsOf
     this.createSupervisor = options.createSupervisor ?? defaultSupervisor
   }
 
@@ -902,7 +910,9 @@ export class PluginBackendHost {
     options?: BackendPluginCallOptions,
   ): Promise<Result> {
     const view = this.views.get(instanceId)
-    if (!this.onCallSettled || !view) return this.callWithIdle<Result>(instanceId, name, args, options)
+    if (!this.onCallSettled || !view || this.observesCallsOf?.(view.activation.pluginId) === false) {
+      return this.callWithIdle<Result>(instanceId, name, args, options)
+    }
     const settled = (outcome: BackendCallOutcome): void => {
       try {
         this.onCallSettled?.({
@@ -910,6 +920,7 @@ export class PluginBackendHost {
           packageVersion: view.activation.packageVersion,
           workspacePath: view.workspacePath,
           method: name,
+          declared: view.activation.approvedMethods.includes(name),
           outcome,
         })
       } catch {

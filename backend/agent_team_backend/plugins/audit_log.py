@@ -1021,8 +1021,8 @@ class PluginAuditLog:
           ``undeclaredDenied`` (per workspace, last 7 days).
         - ``agentActions`` is null until B2-c's table exists.
         - ``backendCalls``: calls into the plugin's own backend, from
-          ``plugin_backend_call_minutes`` (``methods`` per address and outcome
-          in ``window``, ``daily`` for every day kept). They are not in
+          ``plugin_backend_call_days`` (``methods`` per address and outcome
+          from the UTC day ``window`` starts in, ``daily`` for every day kept). They are not in
           ``totals``, ``daily`` or ``volumeSpike``, which mean broker, shell and
           agent-tool activity as before.
 

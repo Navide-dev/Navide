@@ -106,11 +106,22 @@ describe('PluginBackendHost', () => {
 
     const base = { pluginId: 'navide.plans', packageVersion: '0.1.92', workspacePath: process.cwd() }
     expect(settled).toEqual([
-      { ...base, method: 'fixture.echo', outcome: 'allowed' },
-      { ...base, method: 'fixture.undeclared', outcome: 'error' },
-      { ...base, method: 'fixture.echo', outcome: 'denied' },
-      { ...base, method: 'fixture.delay', outcome: 'cancelled' },
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'allowed' },
+      { ...base, method: 'fixture.undeclared', declared: false, outcome: 'error' },
+      { ...base, method: 'fixture.echo', declared: true, outcome: 'denied' },
+      { ...base, method: 'fixture.delay', declared: true, outcome: 'cancelled' },
     ])
+  })
+
+  it('lets a plugin whose calls are not observed call straight through', async () => {
+    const settled: unknown[] = []
+    const host = makeHost(fixture, { onCallSettled: (call) => settled.push(call), observesCallsOf: () => false })
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    await expect(host.call('view-1', 'fixture.echo', { value: 3 })).resolves.toBeTruthy()
+    await expect(host.call('view-1', 'fixture.undeclared', null)).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    expect(settled).toEqual([])
   })
 
   it('never lets the observer fail the call it reports', async () => {

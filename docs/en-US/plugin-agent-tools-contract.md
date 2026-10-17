@@ -1211,14 +1211,21 @@ address, outcome, count}` (`at`: start of the minute, Unix ms); the backend
 adds `count` into the row of that minute (`PLUGIN_BACKEND_CALLS_DDL`, its own
 schema component). `address` is `backend.<method>`, so a method named like a
 system namespace (`fs.read`) never counts as a use of it; a `backend` row
-without that prefix, or another source with it, is skipped. `outcome` is
-`allowed` | `denied` | `cancelled` (the caller cancelled it; not a refusal) |
-`error` (a call to a method the manifest did not declare is an error: the
-backend host answers it as an invalid argument). The same flush also adds
+without that prefix, or another source with it, is skipped. A call of a method
+the manifest does not declare is counted under the one address
+`backend.<undeclared>` (`PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS`), its name
+not kept: the name is the caller's free text with no limit on its length or on
+how many different names there are, so it cannot be a key; the number of keys
+follows the declared methods only. The report shows those calls as "called
+undeclared methods N times". `outcome` is `allowed` | `denied` | `cancelled`
+(the caller cancelled it; not a refusal) | `error` (a call to an undeclared
+method is an error: the backend host answers it as an invalid argument). The same flush also adds
 each count into `plugin_backend_call_days` (per UTC day, with the latest
 minute as `last_at`), which is what the report reads: a few rows per method a
-day however busy the plugin, so a report stays fast at any call rate. Minute
-rows are kept 7 days, like detail rows; day rows as long as
+day however busy the plugin, so a report stays fast at any call rate. The
+minute rows are written and never read by the report: they keep the 7-day
+per-minute detail for inspecting a burst (for example, which minute a spike of
+calls came in). Minute rows are kept 7 days, like detail rows; day rows as long as
 `plugin_activity_daily` (90 days); a removed plugin's rows of both go with
 `forget_plugin`. The bundled `navide.*` packages are not recorded.
 
@@ -1339,7 +1346,7 @@ malformed one whole.
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
-| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in, and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted

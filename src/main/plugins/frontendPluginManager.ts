@@ -179,7 +179,7 @@ import {
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
 } from '../../shared/pluginAgentTools'
-import type { PluginActivityReportRequest } from '../../shared/pluginActivity'
+import { BACKEND_CALL_UNDECLARED_ADDRESS, type PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
@@ -1326,13 +1326,16 @@ export class FrontendPluginManager {
     // made it (its own frontend, an agent tool, an agent capability request),
     // counted per key and flushed with the other activity rows. The bundled
     // navide.* packages are not recorded, as for broker calls.
+    // A name the backend does not declare is counted under one fixed address:
+    // names have no length or variety limit, so they cannot be keys.
+    observesCallsOf: (pluginId) => !isReservedPluginId(pluginId),
     onCallSettled: (call) => {
       if (isReservedPluginId(call.pluginId)) return
       this.activityRecorder.recordBackendCall({
         plugin_id: call.pluginId,
         plugin_version: call.packageVersion,
         workspace: call.workspacePath ?? '',
-        address: backendCallAddress(call.method),
+        address: call.declared ? backendCallAddress(call.method) : BACKEND_CALL_UNDECLARED_ADDRESS,
         outcome: call.outcome,
       })
     },

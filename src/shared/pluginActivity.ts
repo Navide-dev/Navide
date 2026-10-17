@@ -147,8 +147,16 @@ export interface PluginActivityReport {
 
 export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
 
+/** The one address every call of a method the plugin's backend does not
+ *  declare is counted under (contract 5): such names are the caller's free
+ *  text, with no length or variety limit, so they are never keys. A report
+ *  shows them as "called undeclared methods N times". */
+export const BACKEND_CALL_UNDECLARED_ADDRESS = 'backend.<undeclared>'
+
 export interface PluginActivityBackendCalls {
-  /** Per `backend.<method>` address and outcome, within `window`. */
+  /** Per `backend.<method>` address and outcome, from the UTC day `window`
+   *  starts in; calls of undeclared methods are all under
+   *  BACKEND_CALL_UNDECLARED_ADDRESS. */
   methods: Array<{ address: string; outcome: PluginBackendCallOutcome; count: number; lastAt: number }>
   /** Per UTC day still kept. */
   daily: Array<{ day: string; calls: number; denied: number; errors: number; cancelled: number }>

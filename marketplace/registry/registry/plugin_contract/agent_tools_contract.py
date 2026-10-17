@@ -743,6 +743,10 @@ PLUGIN_AGENT_ACTIONS_DDL = (
 
 PLUGIN_BACKEND_CALL_SOURCE = "backend"
 PLUGIN_BACKEND_CALL_ADDRESS_PREFIX = "backend."
+#: Every call of a method the plugin's backend does not declare is counted
+#: under this one address: such names are the caller's free text, with no
+#: length or variety limit, so they are never keys.
+PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS = "backend.<undeclared>"
 #: ``cancelled``: the caller cancelled the call (abort, cancel message); not a refusal.
 PLUGIN_BACKEND_CALL_OUTCOMES = ("allowed", "denied", "cancelled", "error")
 #: Minute counts are kept as long as activity detail rows, day counts as long
