@@ -16178,7 +16178,7 @@ describe('plugin activity (D-e)', () => {
       .find((message) => message.type === 'host.register')!
     socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
     const view = host.children[0] as FakeViewLike
-    const call = (ns: string, method: string, args: Record<string, unknown>) =>
+    const call = async (ns: string, method: string, args: Record<string, unknown>): Promise<unknown> =>
       ipcHandlers.get('plugin:cap:call')!({ sender: { id: view.webContents.id } }, { reqId: 'r1', ns, method, args })
     return { mgr, socket, call }
   }
