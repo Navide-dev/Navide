@@ -1117,6 +1117,13 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
 
+`plugin_activity_denied_daily` (D-e): `(day, plugin_id, denied_reason)` primary
+key and `count`; the refusals among the detail rows, by reason, rolled up in the
+same transaction as `plugin_activity_daily` and kept as long (90 days), so the
+reason of a refusal ("used but not declared" above all) outlives the 7 days of
+detail. It was added after the first tables: every open runs the audit DDL (all
+`CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
@@ -1138,8 +1145,8 @@ a dispatched cast (terminal input) is not.
 `plugin.activity.summary` (`PLUGIN_ACTIVITY_SUMMARY_MESSAGE`, Host-authenticated,
 `{plugin_id, declared?}`) answers the activity page with
 `PluginAuditLog.activity_summary`: 30-day call counts by `address`, `source` and
-`outcome`, `denied30d`, `deniedUndeclared {count7d, lastAt}` (the daily rollup
-keeps no reason, so 7 days of detail), `declaredUnused`, and the anomaly flags
+`outcome`, `denied30d`, `deniedUndeclared {count30d, count7d, lastAt}`
+(`count30d` adds `plugin_activity_denied_daily`), `declaredUnused`, and the anomaly flags
 `volume-spike`, `write-tool-new-workspace` and `undeclared-denied`. The flags
 refuse nothing.
 

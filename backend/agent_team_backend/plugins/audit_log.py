@@ -300,6 +300,10 @@ class PluginAuditLog:
         self.disabled_reason = ""
         try:
             self.db.migrate(_COMPONENT, 1, _create_schema)
+            # Every statement is CREATE ... IF NOT EXISTS: a table the contract
+            # added after this database was created appears; nothing else changes.
+            with self.db.transaction() as cur:
+                _create_schema(cur)
             self._next_call_id = self._read_next_call_id()
             self.enabled = True
         except Exception as err:  # noqa: BLE001 - the backend starts without the audit
@@ -530,12 +534,26 @@ class PluginAuditLog:
                     " DO UPDATE SET count = count + excluded.count",
                     ids,
                 )
+                cur.execute(
+                    "INSERT INTO plugin_activity_denied_daily (day, plugin_id, denied_reason, count)"
+                    " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch'), plugin_id, denied_reason, COUNT(*)"
+                    f" FROM plugin_activity WHERE id IN ({marks}) AND outcome = 'denied'"  # noqa: S608 - placeholders only
+                    " GROUP BY 1, 2, 3 ORDER BY 1"
+                    " ON CONFLICT(day, plugin_id, denied_reason) DO UPDATE SET count = count + excluded.count",
+                    ids,
+                )
                 cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
             self._between_batches()
         day = time.strftime("%Y-%m-%d", time.gmtime(daily_cutoff / 1000))
         while self._batch(
             "DELETE FROM plugin_activity_daily WHERE rowid IN"
             " (SELECT rowid FROM plugin_activity_daily WHERE day < ? LIMIT ?)",
+            (day, batch),
+        ):
+            pass
+        while self._batch(
+            "DELETE FROM plugin_activity_denied_daily WHERE rowid IN"
+            " (SELECT rowid FROM plugin_activity_denied_daily WHERE day < ? LIMIT ?)",
             (day, batch),
         ):
             pass
@@ -615,7 +633,8 @@ class PluginAuditLog:
         now = self._now_ms() if now_ms is None else int(now_ms)
         summary: dict[str, Any] = {
             "pluginId": plugin_id, "enabled": self.enabled, "windowDays": SUMMARY_WINDOW_DAYS, "now": now,
-            "calls": [], "total": 0, "denied30d": 0, "deniedUndeclared": {"count7d": 0, "lastAt": None},
+            "calls": [], "total": 0, "denied30d": 0,
+            "deniedUndeclared": {"count30d": 0, "count7d": 0, "lastAt": None},
             "declaredUnused": None if declared is None else list(declared), "anomalies": [],
         }
         if not self.enabled:
@@ -640,6 +659,13 @@ class PluginAuditLog:
                 " WHERE plugin_id = ? AND at >= ? AND outcome = 'denied' AND denied_reason = 'undeclared'",
                 (plugin_id, now - 7 * _DAY_MS),
             ).fetchone()
+            undeclared_30d = cur.execute(
+                "SELECT (SELECT COUNT(*) FROM plugin_activity WHERE plugin_id = ? AND at >= ?"
+                "  AND outcome = 'denied' AND denied_reason = 'undeclared')"
+                " + (SELECT COALESCE(SUM(count), 0) FROM plugin_activity_denied_daily"
+                "  WHERE plugin_id = ? AND day >= ? AND denied_reason = 'undeclared')",
+                (plugin_id, since, plugin_id, since_day),
+            ).fetchone()[0]
             per_day = cur.execute(
                 "SELECT day, SUM(n) FROM ("
                 " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch') AS day, COUNT(*) AS n FROM plugin_activity"
@@ -661,7 +687,7 @@ class PluginAuditLog:
         summary["total"] = sum(row["count"] for row in summary["calls"])
         summary["denied30d"] = sum(row["count"] for row in summary["calls"] if row["outcome"] == "denied")
         count7d, last_at = int(undeclared[0] or 0), undeclared[1]
-        summary["deniedUndeclared"] = {"count7d": count7d, "lastAt": last_at}
+        summary["deniedUndeclared"] = {"count30d": int(undeclared_30d or 0), "count7d": count7d, "lastAt": last_at}
         if declared is not None:
             used = {row["address"] for row in summary["calls"] if row["outcome"] == "allowed"}
             summary["declaredUnused"] = [

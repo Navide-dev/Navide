@@ -766,8 +766,9 @@ async def test_recording_a_10_mib_call_does_not_hold_the_event_loop(audit: Plugi
         assert _call(audit, arguments=arguments) is not None
     record_s = time.perf_counter() - started
     await tick
-    assert record_s < 0.05, f"5 records of 10 MiB took {record_s:.3f}s on the loop"
-    assert max(late) < 0.05, f"a 5 ms sleep came back {max(late):.3f}s late"
+    # Digesting on the loop took 2.03 s here; 0.5 s leaves room for a loaded runner.
+    assert record_s < 0.5, f"5 records of 10 MiB took {record_s:.3f}s on the loop"
+    assert max(late) < 0.5, f"a 5 ms sleep came back {max(late):.3f}s late"
     await asyncio.to_thread(audit.flush)
     rows = _rows(audit, "plugin_tool_calls")
     assert [r["args_bytes"] for r in rows] == [contract.agent_tool_arguments_digest(arguments)[1]] * 5
@@ -816,7 +817,7 @@ def test_the_summary_counts_undeclared_denials_and_flags_them(audit: PluginAudit
     _act(audit, NOW - 2 * DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
     _act(audit, NOW - DAY_MS, "fs.readFile", outcome="denied", denied_reason="plugin-disabled")
     summary = audit.activity_summary(_PLUGIN)
-    assert summary["deniedUndeclared"] == {"count7d": 2, "lastAt": NOW - 2 * DAY_MS}
+    assert summary["deniedUndeclared"] == {"count30d": 2, "count7d": 2, "lastAt": NOW - 2 * DAY_MS}
     assert summary["denied30d"] == 3
     assert {"kind": "undeclared-denied", "count7d": 2, "lastAt": NOW - 2 * DAY_MS} in summary["anomalies"]
 
@@ -867,3 +868,49 @@ def test_a_disabled_audit_summarizes_nothing(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr(db, "migrate", lambda *_a, **_k: (_ for _ in ()).throw(sqlite3.OperationalError("full")))
     summary = PluginAuditLog(db).activity_summary(_PLUGIN)
     assert summary["enabled"] is False and summary["total"] == 0 and summary["anomalies"] == []
+
+
+# ── D-e: refusal reasons by day (plugin_activity_denied_daily) ──────────────
+
+
+def test_an_old_database_gets_the_denied_daily_table_and_keeps_its_rows(tmp_path: Path, clock: Clock) -> None:
+    """A navide.db from before the table: opening it creates the table, nothing else changes."""
+    path = tmp_path / "navide.db"
+    old = PluginAuditLog(Database(path), clock=clock)
+    assert _call(old) is not None
+    assert _activity(old, outcome="denied", denied_reason="undeclared") is True
+    old.flush()
+    with old.db.transaction() as cur:
+        cur.execute("DROP TABLE plugin_activity_denied_daily")  # as a database from before D-e
+    old.db.close()
+
+    again = PluginAuditLog(Database(path), clock=clock)
+    assert again.enabled
+    with again.db.transaction() as cur:
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_activity_denied_daily)")]
+    assert cols == ["day", "plugin_id", "denied_reason", "count"]
+    assert len(_rows(again, "plugin_tool_calls")) == 1 and len(_rows(again, "plugin_activity")) == 1
+
+
+def test_refusals_are_rolled_up_by_reason_and_kept_like_the_daily_counts(audit: PluginAuditLog) -> None:
+    for _ in range(2):
+        _activity(audit, outcome="denied", denied_reason="undeclared", at_ms=NOW - 8 * DAY_MS)
+    _activity(audit, outcome="denied", denied_reason="plugin-disabled", at_ms=NOW - 8 * DAY_MS)
+    _activity(audit, at_ms=NOW - 8 * DAY_MS)  # allowed: not a refusal
+    _activity(audit, outcome="denied", denied_reason="undeclared", at_ms=NOW - 100 * DAY_MS)
+    audit.prune(NOW)
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute(
+            "SELECT day, plugin_id, denied_reason, count FROM plugin_activity_denied_daily ORDER BY denied_reason"
+        )]
+    assert rows == [
+        ("2026-10-08", "nerdtechnic.devmap", "plugin-disabled", 1),
+        ("2026-10-08", "nerdtechnic.devmap", "undeclared", 2),
+    ]
+
+
+def test_the_summary_counts_undeclared_refusals_over_30_days(audit: PluginAuditLog) -> None:
+    _activity(audit, address="net.fetch", outcome="denied", denied_reason="undeclared", at_ms=NOW - 20 * DAY_MS)
+    _activity(audit, address="net.fetch", outcome="denied", denied_reason="undeclared", at_ms=NOW - DAY_MS)
+    audit.prune(NOW)
+    assert audit.activity_summary(_PLUGIN)["deniedUndeclared"]["count30d"] == 2

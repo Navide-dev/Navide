@@ -635,4 +635,13 @@ PLUGIN_AUDIT_DDL = (
     " outcome TEXT NOT NULL,"
     " count INTEGER NOT NULL,"
     " PRIMARY KEY (day, plugin_id, workspace, source, address, outcome))",
+    # D-e: refusals by reason and day, rolled up beside plugin_activity_daily
+    # (which keeps no reason) and kept as long. Added after the first tables:
+    # every open runs this DDL, so an older navide.db gains it.
+    "CREATE TABLE IF NOT EXISTS plugin_activity_denied_daily ("
+    " day TEXT NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " denied_reason TEXT NOT NULL,"
+    " count INTEGER NOT NULL,"
+    " PRIMARY KEY (day, plugin_id, denied_reason))",
 )
