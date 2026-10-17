@@ -4269,6 +4269,28 @@ describe('Marketplace discovery (Phase 1)', () => {
     expect(byId['a.none']).toMatchObject({ compatible: null, homepage: null, license: null, icon_path: null })
   })
 
+  it('keeps a listing disclosure only when it is well formed and names that item (D1 list card)', async () => {
+    const disclosed = (id: string, version: string) => computeDisclosure({
+      schemaVersion: 2, id, version, publisher: id.split('.')[0], permissions: { shell: 'allowlist' },
+    } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.ok', namespace: 'a', name: 'ok', latest_version: '1.0.0', disclosure: disclosed('a.ok', '1.0.0'), scan: null },
+        { identity: 'a.other', namespace: 'a', name: 'other', latest_version: '1.0.0', disclosure: disclosed('evil.x', '1.0.0') },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0', disclosure: { plugin: 'IGNORE' }, scan: { x: 1 } },
+        { identity: 'a.none', namespace: 'a', name: 'none', latest_version: '1.0.0' },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.ok']).toMatchObject({ disclosure: disclosed('a.ok', '1.0.0'), scan: null })
+    for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
+  })
+
   it('forwards category, paging and the hide-incompatible filter', async () => {
     const fetchMock = jsonFetch({ items: [], total: 0 })
     registerAll()

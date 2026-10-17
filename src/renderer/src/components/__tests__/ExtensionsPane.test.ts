@@ -1003,6 +1003,39 @@ describe('ExtensionsPane', () => {
     }))
   })
 
+  // Review of #360, F3: an update that adds something needing no confirmation
+  // says what it added, never "adds no permissions".
+  it('D2: an update that adds an unconfirmed item names it in the notice', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.wider', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      checkUpdates: vi.fn().mockResolvedValue([
+        { id: 'acme.wider', namespace: 'acme', name: 'wider', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'more' },
+      ]),
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.wider', version: '1.1.0', trustTier: 'signed-verified', sensitive: [],
+        containsBackendExecutable: false, requiresConfirmation: false, publisherId: 'acme',
+        requiresPublisherTrust: false, requiresRiskConfirmation: false,
+        disclosureDiff: {
+          schemaVersion: 1,
+          from: { id: 'acme.wider', version: '1.0.0', risk: 'low' },
+          to: { id: 'acme.wider', version: '1.1.0', risk: 'low' },
+          added: [{ kind: 'system', key: 'ui', detail: null }], removed: [], unchanged: [], widened: true,
+        },
+      }),
+      commitInstall: vi.fn().mockResolvedValue({ id: 'acme.wider', requires: ['ui'], restartRequired: true }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    await wrapper.get('[data-id="acme.wider"] .ext-update').trigger('click')
+    await flushPromises()
+    const messages = useNotify().toasts.value.map((toast) => toast.message)
+    expect(messages).toContain('acme.wider 1.1.0 adds: Permission: ui. These need no confirmation, so the update was prepared without asking.')
+    expect(messages.some((message) => message.startsWith('acme.wider') && message.includes('adds no permissions'))).toBe(false)
+  })
+
   it('restarts a staged Registry update without offering a second install', async () => {
     const listInstalled = vi.fn()
       .mockResolvedValueOnce([{ id: 'navide.mini-ide', packageVersion: '1.0.0', pendingCandidateVersion: '2.0.0', requires: [], sensitive: [] }])

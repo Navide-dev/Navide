@@ -11001,6 +11001,7 @@
       "badgeSame": "権限は同じ",
       "badgeTitle": "Navide Registry の情報で、まだ検証されていません。更新前に Navide がダウンロードしたパッケージで改めて比較します。",
       "updatedNoNew": "{name} {version} は権限を追加しないため、確認なしで更新を準備しました。",
+      "updatedAdded": "{name} {version} で追加：{items}。確認が不要なため、そのまま更新を準備しました。",
       "item": {
         "system": "権限：{key}",
         "shell": "shell モード：{key}",
@@ -11043,7 +11044,8 @@
     "registryHeading": "Navide Registry の記録（署名なし）",
     "provenance": {
       "unverified": "Navide Registry が提供した内容で、まだ検証されていません。インストール前に Navide が署名を検証し、パッケージと照合します。",
-      "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。"
+      "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。",
+      "verifiedNoScan": "検証済み：開示内容はダウンロードしたパッケージと一致しています。この版にはシステムスキャンがありません。"
     },
     "noDisclosure": "このバージョンは開示データなしで公開されました。",
     "signedByRegistry": "スキャンは Navide Registry が実行し署名しました。",
@@ -11122,9 +11124,8 @@
     "registry": {
       "domainVerified": "Navide Registry の記録：発行者はドメイン {domain} を所有（{date} に確認）",
       "domainNotVerified": "公開者のドメインは未確認",
-      "signedClaim": "Navide Registry によると署名済み（鍵 {keyId}）、未検証",
-      "signedVerified": "Navide Registry の署名を検証済み（鍵 {keyId}）",
-      "unsigned": "Navide Registry の署名なし",
+      "signedClaim": "Navide Registry の記録：この版は署名済み（鍵 {keyId}）",
+      "unsigned": "Navide Registry の記録：この版には署名がありません",
       "reviewApproved": "担当者の審査で承認済み（{date}）",
       "review": {
         "not-required": "自動公開・担当者の審査なし",

@@ -422,7 +422,7 @@ function disclosureCard(value: unknown): DisclosureCard | null {
  *  and a detail version row (review L1 on #345). Null when the disclosure is
  *  absent, anything is malformed, or the disclosure names another package or
  *  version than the row it came with. */
-function rowCard(row: Record<string, unknown>, id: string, version: string): DisclosureCard | null {
+export function rowCard(row: Record<string, unknown>, id: string, version: string): DisclosureCard | null {
   const card = disclosureCard({ manifest: row.disclosure, scan: row.scan, registry: row.registry })
   return card && card.manifest.plugin.id === id && card.manifest.plugin.version === version ? card : null
 }

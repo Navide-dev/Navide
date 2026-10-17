@@ -71,7 +71,7 @@ import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManage
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
-import { answerMarketplaceQuery, MarketplaceHttpError } from './marketplaceQuery'
+import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
@@ -87,6 +87,7 @@ import {
   type DisclosureManifestInput,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
+import type { ScanReport } from '../../shared/pluginDisclosureScan'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -212,6 +213,18 @@ function newestInstallableVersion(
 /** SemVer prerelease suffix ⇒ pre-release channel (build metadata is not one). */
 export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
+}
+
+/** The list card's disclosure and scan (plan B D1) from a Registry listing
+ * item: display data, kept only when well formed and naming that item's
+ * package and latest version (the MCP card's rule), else both null. */
+function listingDisclosure(item: Record<string, unknown>): {
+  disclosure: ManifestDisclosure | null
+  scan: ScanReport | null
+} {
+  const id = `${String(item.namespace)}.${String(item.name)}`
+  const card = rowCard(item, id, typeof item.latest_version === 'string' ? item.latest_version : '')
+  return { disclosure: card?.manifest ?? null, scan: card?.scan ?? null }
 }
 
 /** A Registry-supplied JSON object (disclosure data), or null for anything
@@ -756,6 +769,9 @@ export function registerPluginIpc(
           repository: httpsLink(item.repository),
           homepage: httpsLink(item.homepage),
           icon_path: typeof item.icon_path === 'string' ? item.icon_path : null,
+          // Plan B D1 list card: display data, kept only when well formed and
+          // naming this item's package and latest version (as for the MCP card).
+          ...listingDisclosure(item),
         })),
       }
     }

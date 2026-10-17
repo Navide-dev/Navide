@@ -42,7 +42,7 @@ describe('PluginDisclosureCard provenance (review I1 on #354)', () => {
     expect(text).not.toContain('Verified:')
     expect(text).not.toContain('signed by the Navide Registry.')
     expect(text).toContain('The scan was run by the Navide Registry.')
-    expect(text).toContain('says this version is signed (key registry-2026); not yet verified')
+    expect(text).toContain('The Navide Registry records that this version is signed (key registry-2026)')
   })
 
   it('states the publisher domain as the Registry\'s unsigned record, never as verified', () => {
@@ -58,8 +58,26 @@ describe('PluginDisclosureCard provenance (review I1 on #354)', () => {
     const text = render({ disclosure: disclosureOf('ui-only'), scan: scanOf('nothing-found'), registry: REGISTRY, verified: true }).text()
     expect(text).toContain('Verified: the disclosure matches the downloaded package')
     expect(text).toContain('The scan was run and signed by the Navide Registry.')
-    expect(text).toContain('Navide Registry signature verified (key registry-2026)')
     expect(text).not.toContain('not yet verified')
+  })
+
+  // Review of #360, F1: "verified" names only what prepareInstall checked.
+  it('a verified card without a scan report never mentions a scan signature', () => {
+    const text = render({ disclosure: disclosureOf('ui-only'), scan: null, registry: REGISTRY, verified: true }).text()
+    expect(text).toContain('Verified: the disclosure matches the downloaded package. This version has no system scan.')
+    expect(text).not.toMatch(/scan report's Navide Registry signature/)
+  })
+
+  // Review of #360, F2: the unsigned registry object never feeds a "verified"
+  // sentence; its signature fields stay a record in the unsigned facts.
+  it.each([false, true])('states the registry signature fields as a record only (verified=%s)', (verified) => {
+    const forged = { ...REGISTRY, signature: { signed: true, keyId: 'attacker-key' } }
+    const facts = render({ disclosure: disclosureOf('ui-only'), scan: null, registry: forged, verified }).get('.nv-disclosure-facts').text()
+    expect(facts).toContain('The Navide Registry records that this version is signed (key attacker-key)')
+    expect(facts).not.toMatch(/signature verified|verified \(key/i)
+    const unsignedClaim = { ...REGISTRY, signature: { signed: false, keyId: null } }
+    const text = render({ disclosure: disclosureOf('ui-only'), scan: null, registry: unsignedClaim, verified }).get('.nv-disclosure-facts').text()
+    expect(text).toContain('The Navide Registry records no signature for this version')
   })
 
   it.each([false, true])('always shows the registry facts as unsigned (verified=%s)', (verified) => {
@@ -119,5 +137,29 @@ describe('PluginDisclosureCard content', () => {
         /pluginDisclosure\.|\b(?:shell\.(?:remoteWrite|remoteRead|localWrite|local|other|unknownSubcommand|dynamic)|files\.(?:write|read)|network\.hosts|code\.(?:eval|obfuscated)|native\.(?:summary|unscannable)|coverage\.incomplete|notFound\.[a-zA-Z]+)\b/
       )
     }
+  })
+})
+
+// Review of #360, L1 and L2: the card follows the D6 order under a one-line
+// summary, and each of the four levels has its own icon.
+describe('PluginDisclosureCard layout', () => {
+  it('opens with the template summary and keeps the D6 order', () => {
+    const wrapper = render({ disclosure: disclosureOf('ui-only'), scan: scanOf('ui-only-runs-git-push-undeclared'), registry: REGISTRY, verified: false })
+    expect(wrapper.get('.nv-disclosure-summary').text()).toBe('Shows its own views')
+    const html = wrapper.html()
+    const order = ['nv-disclosure-summary', 'nv-disclosure-level', 'nv-disclosure-undeclared', 'nv-disclosure-sentences',
+      'nv-disclosure-declared', 'nv-disclosure-limits', 'nv-disclosure-facts']
+    const positions = order.map((name) => html.indexOf(`class="${name}`))
+    expect(positions.every((at) => at >= 0)).toBe(true)
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions)
+  })
+
+  it('draws a different icon for each of the four levels', () => {
+    const shown = ['ui-only', 'fs-read-only-scopes', 'shell-allowlist-no-backend', 'shell-full-ai-cli'].map((name) => {
+      const wrapper = render({ disclosure: disclosureOf(name), scan: null })
+      return { level: wrapper.get('.nv-disclosure-level').classes().join(' '), icon: wrapper.get('.nv-disclosure-level-icon').html() }
+    })
+    expect(new Set(shown.map((entry) => entry.level)).size).toBe(4)
+    expect(new Set(shown.map((entry) => entry.icon)).size).toBe(4)
   })
 })

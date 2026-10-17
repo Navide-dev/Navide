@@ -11001,6 +11001,7 @@
       "badgeSame": "權限沒變",
       "badgeTitle": "依 Navide Registry 提供的資料，尚未驗證；更新前 Navide 會用下載的套件重新比對。",
       "updatedNoNew": "{name} {version} 沒有新增權限，已直接準備好更新，沒有再次詢問。",
+      "updatedAdded": "{name} {version} 新增了：{items}。這些不需要確認，已直接準備好更新。",
       "item": {
         "system": "權限：{key}",
         "shell": "shell 模式：{key}",
@@ -11043,7 +11044,8 @@
     "registryHeading": "Navide Registry 的紀錄（未簽章）",
     "provenance": {
       "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
-      "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。"
+      "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
+      "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"
     },
     "noDisclosure": "這個版本上架時尚未提供揭露資料。",
     "signedByRegistry": "掃描由 Navide Registry 執行並簽章。",
@@ -11122,9 +11124,8 @@
     "registry": {
       "domainVerified": "Navide Registry 紀錄：發佈者擁有網域 {domain}（{date} 確認）",
       "domainNotVerified": "發佈者網域未驗證",
-      "signedClaim": "Navide Registry 表示這個版本已簽章（金鑰 {keyId}），尚未驗證",
-      "signedVerified": "Navide Registry 的簽章已驗證（金鑰 {keyId}）",
-      "unsigned": "沒有 Navide Registry 簽章",
+      "signedClaim": "Navide Registry 紀錄：這個版本已簽章（金鑰 {keyId}）",
+      "unsigned": "Navide Registry 紀錄：這個版本沒有簽章",
       "reviewApproved": "已通過人工審核（{date}）",
       "review": {
         "not-required": "自動發佈，未經人工審核",

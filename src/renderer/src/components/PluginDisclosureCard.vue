@@ -4,26 +4,29 @@
 // dialog. Presentation only: every sentence comes from the contract's pure
 // functions and an i18n template, never from text the publisher wrote.
 //
-// Order: risk level, then what the scan found that the package does not
-// declare (red, the only red on the card), the scan sentences, what the
-// package declares (collapsed), what was declared but not seen (grey), the
-// Registry's facts, and last the fixed scan-coverage and honest-limits text.
+// Order (D6): the one-line summary, risk level, then what the scan found that
+// the package does not declare (red, the only red on the card), the scan
+// sentences, what the package declares (collapsed), what was declared but
+// not seen (grey), the fixed scan-coverage and honest-limits text, and last
+// the Registry's facts.
 //
 // Provenance (review I1 on #354): listing and detail data is raw Registry
 // output that nothing has verified yet; only a prepareInstall result has had
 // its disclosure envelope and scanDigest checked. `verified` says which one
 // this is, and the card never calls unverified data signed. The `registry`
-// facts are unsigned everywhere and are always labelled so.
+// facts are unsigned everywhere: they are stated as the Registry's records
+// and never feed a "verified" sentence (review F2 on #360).
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ManifestDisclosure, RegistryDisclosureFacts } from '../../../shared/pluginDisclosure'
 import {
-  cardRiskLevel,
   declaredVsScanned,
   scanSentences,
   type ScanReport,
   type ScanSentence,
 } from '../../../shared/pluginDisclosureScan'
+import { disclosureClauses, disclosureList } from '../lib/disclosureText'
+import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
 
 const props = defineProps<{
   disclosure: ManifestDisclosure | null | undefined
@@ -35,7 +38,6 @@ const props = defineProps<{
 const { t, te, locale } = useI18n()
 
 const scan = computed(() => (props.disclosure ? props.scan ?? null : null))
-const level = computed(() => (props.disclosure ? cardRiskLevel(props.disclosure, scan.value) : null))
 const comparison = computed(() =>
   props.disclosure && scan.value ? declaredVsScanned(props.disclosure, scan.value) : null
 )
@@ -44,8 +46,7 @@ const bodySentences = computed(() => sentences.value.filter((s) => s.key !== 'co
 const coverageSentence = computed(() => sentences.value.find((s) => s.key === 'coverage') ?? null)
 
 function list(values: unknown): string {
-  const items = Array.isArray(values) ? values.map(String) : []
-  return items.join(locale.value.startsWith('en') ? ', ' : '、')
+  return disclosureList(locale.value, values)
 }
 
 /** `coverage` is both a sentence and the prefix of `coverage.incomplete`, so
@@ -71,16 +72,16 @@ function scanText(sentence: ScanSentence): string {
   return te(key) ? t(key, params) : sentence.key
 }
 
-const clauses = computed(() =>
-  (props.disclosure?.summary.clauses ?? []).map((clause) => {
-    const p = clause.params as Record<string, unknown>
-    if (clause.key === 'files') return t(`pluginDisclosure.summary.files.${String(p.access)}`)
-    if (clause.key === 'shell') {
-      return t(`pluginDisclosure.summary.shell.${String(p.mode)}`, { executables: list(p.executables) })
-    }
-    if (clause.key === 'agentTools') return t('pluginDisclosure.summary.agentTools', p)
-    return t(`pluginDisclosure.summary.${clause.key}`)
-  })
+const clauses = computed(() => (props.disclosure ? disclosureClauses(t, locale.value, props.disclosure) : []))
+
+/** F1 on #360: "verified" names only what prepareInstall checked; without a
+ *  scan report there is no scan signature to speak of. */
+const provenance = computed(() =>
+  !props.verified
+    ? 'pluginDisclosure.provenance.unverified'
+    : scan.value
+      ? 'pluginDisclosure.provenance.verified'
+      : 'pluginDisclosure.provenance.verifiedNoScan'
 )
 
 function itemText(prefix: 'undeclared' | 'notSeen', item: { kind: string; key: string }): string {
@@ -104,11 +105,10 @@ const facts = computed(() => {
       ? t('pluginDisclosure.registry.domainVerified', { domain: r.publisher.verifiedDomain, date: date(r.publisher.domainVerifiedAt) })
       : t('pluginDisclosure.registry.domainNotVerified')
   )
+  // A record of the Registry's, whatever prepareInstall verified (F2 on #360).
   out.push(
     r.signature.signed
-      ? t(props.verified ? 'pluginDisclosure.registry.signedVerified' : 'pluginDisclosure.registry.signedClaim', {
-          keyId: r.signature.keyId ?? '',
-        })
+      ? t('pluginDisclosure.registry.signedClaim', { keyId: r.signature.keyId ?? '' })
       : t('pluginDisclosure.registry.unsigned')
   )
   const review = r.review.status
@@ -134,18 +134,9 @@ const facts = computed(() => {
     <p v-if="!disclosure" class="nv-disclosure-none">{{ $t('pluginDisclosure.noDisclosure') }}</p>
     <template v-else>
       <p class="nv-disclosure-provenance" :class="verified ? 'nv-disclosure-provenance--verified' : 'nv-disclosure-provenance--unverified'">
-        {{ verified ? $t('pluginDisclosure.provenance.verified') : $t('pluginDisclosure.provenance.unverified') }}
+        {{ $t(provenance) }}
       </p>
-      <p class="nv-disclosure-level" :class="`nv-disclosure-level--${level}`">
-        <span class="nv-disclosure-level-icon" aria-hidden="true">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M8 1.8 13 3.7v4c0 3-2.1 5.4-5 6.5-2.9-1.1-5-3.5-5-6.5v-4L8 1.8Z" />
-            <path v-if="level === 'low'" d="m5.7 8.1 1.6 1.6 3-3.2" />
-            <path v-else d="M8 5.2v3.2M8 10.6v.1" />
-          </svg>
-        </span>
-        <span class="nv-disclosure-level-text">{{ $t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${level}`) }) }}</span>
-      </p>
+      <PluginDisclosureSummary :disclosure="disclosure" :scan="scan" />
 
       <div v-if="comparison?.undeclared.length" class="nv-disclosure-undeclared" role="alert">
         <h5>{{ $t('pluginDisclosure.undeclaredHeading') }}</h5>
@@ -180,12 +171,6 @@ const facts = computed(() => {
         </template>
       </details>
 
-      <template v-if="facts.length">
-        <h5 class="nv-disclosure-heading">{{ $t('pluginDisclosure.registryHeading') }}</h5>
-        <ul class="nv-disclosure-facts">
-          <li v-for="fact in facts" :key="fact">{{ fact }}</li>
-        </ul>
-      </template>
 
       <p class="nv-disclosure-limits">
         <template v-if="coverageSentence">
@@ -194,6 +179,13 @@ const facts = computed(() => {
         </template>
         <template v-else>{{ $t('pluginDisclosure.limitsWithoutScan') }}</template>
       </p>
+
+      <template v-if="facts.length">
+        <h5 class="nv-disclosure-heading">{{ $t('pluginDisclosure.registryHeading') }}</h5>
+        <ul class="nv-disclosure-facts">
+          <li v-for="fact in facts" :key="fact">{{ fact }}</li>
+        </ul>
+      </template>
     </template>
   </section>
 </template>
@@ -213,25 +205,6 @@ const facts = computed(() => {
 .nv-disclosure h6 {
   margin: var(--space-2) 0 0;
 }
-.nv-disclosure-level {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  font-weight: 600;
-  align-self: flex-start;
-}
-.nv-disclosure-level-icon svg {
-  width: 14px;
-  height: 14px;
-  display: block;
-}
-.nv-disclosure-level--low { color: var(--success-fg); background: var(--success-subtle); }
-.nv-disclosure-level--medium { color: var(--attention-fg); background: var(--attention-subtle); }
-.nv-disclosure-level--high { color: var(--risk-fg); background: var(--risk-subtle); }
-.nv-disclosure-level--highest { color: var(--danger-fg); background: var(--danger-subtle); }
 .nv-disclosure-undeclared {
   border-left: 3px solid var(--danger-fg);
   background: var(--danger-subtle);

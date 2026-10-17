@@ -11001,6 +11001,7 @@
       "badgeSame": "Same permissions",
       "badgeTitle": "From the Navide Registry's data, not yet verified; before updating, Navide compares again against the downloaded package.",
       "updatedNoNew": "{name} {version} adds no permissions, so the update was prepared without asking again.",
+      "updatedAdded": "{name} {version} adds: {items}. These need no confirmation, so the update was prepared without asking.",
       "item": {
         "system": "Permission: {key}",
         "shell": "Shell mode: {key}",
@@ -11043,7 +11044,8 @@
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
-      "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid."
+      "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
+      "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
     },
     "noDisclosure": "This version was published without disclosure data.",
     "signedByRegistry": "The scan was run and signed by the Navide Registry.",
@@ -11122,9 +11124,8 @@
     "registry": {
       "domainVerified": "The Navide Registry records that the publisher controls {domain} (checked {date})",
       "domainNotVerified": "Publisher domain not verified",
-      "signedClaim": "The Navide Registry says this version is signed (key {keyId}); not yet verified",
-      "signedVerified": "Navide Registry signature verified (key {keyId})",
-      "unsigned": "Not signed by the Navide Registry",
+      "signedClaim": "The Navide Registry records that this version is signed (key {keyId})",
+      "unsigned": "The Navide Registry records no signature for this version",
       "reviewApproved": "Reviewed and approved by a person ({date})",
       "review": {
         "not-required": "Published automatically, not reviewed by a person",

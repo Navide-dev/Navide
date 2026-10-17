@@ -189,6 +189,11 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Plan B D1 list card: the latest version's manifest disclosure and scan
+   *  report as the Registry listed them, kept by the main process only when
+   *  well formed and naming this item; unverified display data. */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
 }
 
 export interface PackMemberSummary {
