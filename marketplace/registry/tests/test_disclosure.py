@@ -405,3 +405,79 @@ def test_a_scan_report_is_signed_through_its_own_digest(signed_env: SignedEnv) -
     _verify(signed_env.registry_signer_public_pem, envelope, signature)
     with pytest.raises(ValueError):
         sign_disclosure(signer, manifest, package_envelope, dict(report, artifactDigest="c" * 64))
+
+
+# -- review findings on #353 -------------------------------------------------
+
+ELF_X64 = b"\x7fELF\x02\x01\x01" + b"\0" * 9 + (2).to_bytes(2, "little") + (62).to_bytes(2, "little") + b"\0" * 44
+
+
+def test_approving_two_targets_signs_one_disclosure_envelope_per_artifact(cloud, dns) -> None:
+    token = new_token(cloud, "acme-tools")
+    with Session(cloud.app.state.registry.engine) as session:
+        publisher = session.exec(select(Publisher).where(Publisher.name == "acme-tools")).one()
+        publisher.native_backend_allowed = True
+        session.add(publisher)
+        session.commit()
+    _verify_domain(cloud, dns)
+    manifest = _backend_manifest("acme-tools.indexer", "acme-tools")
+    for target, binary in (("darwin-arm64", MACHO_ARM64), ("linux-x64", ELF_X64)):
+        response = publish(cloud, token, build_v2_package(manifest, backend_data=binary), target=target)
+        assert response.status_code == 201, response.text
+    artifacts = queued_artifacts(cloud, "acme-tools", "indexer")
+    assert len(artifacts) == 2
+    sign_in(cloud, member_id=ADMIN_MEMBER, name="Admin")
+    approved = cloud.post(
+        "/admin/review/acme-tools/indexer/1.0.0/approve",
+        data={"csrf": csrf_of(cloud, "/admin/review"), "artifact": artifacts, "inspected_backend": "yes"},
+    )
+    assert approved.status_code == 303, approved.text
+
+    detail = cloud.get("/api/extensions/acme-tools/indexer").json()
+    signer_key = detail["trust_metadata"]["signers"][0]["publicKey"]
+    rows = sorted(detail["versions"], key=lambda row: row["target"])
+    assert [row["target"] for row in rows] == ["darwin-arm64", "linux-x64"]
+    for row in rows:
+        envelope = row["disclosure_envelope"]
+        for field in ("artifactDigest", "packageId", "version", "target", "keyId", "signedAt"):
+            assert envelope[field] == row["registry_envelope"][field], (row["target"], field)
+        assert envelope["artifactDigest"] == row["package_digest"]
+        _verify(signer_key, envelope, row["disclosure_signature"])
+    assert rows[0]["disclosure_envelope"]["artifactDigest"] != rows[1]["disclosure_envelope"]["artifactDigest"]
+
+
+def test_a_disclosure_envelope_fails_the_v0_2_24_package_envelope_check(signed_env: SignedEnv) -> None:
+    # No shared context string separates the two signed objects; their exact
+    # field sets do (contract 3.5), so neither can stand in for the other.
+    assert _publish_signed(signed_env, build_v2_package(_v2_manifest())).status_code == 201
+    version = signed_env.client.get("/api/extensions/acme/scoped").json()["versions"][0]
+    with pytest.raises(AssertionError, match="unsupported field 'disclosureDigest'"):
+        _v0_2_24_assert_registry_package_envelope_shape(version["disclosure_envelope"])
+    assert set(version["registry_envelope"]) != set(version["disclosure_envelope"])
+
+
+@pytest.mark.parametrize("status", ["expired", "revoked"])
+def test_the_disclosure_signer_checks_its_own_status(signed_env: SignedEnv, status: str) -> None:
+    from dataclasses import replace as dataclass_replace
+
+    signer = signed_env.client.app.state.registry.trust_signer
+    package_envelope, _ = signer.sign_envelope(
+        artifact_digest="b" * 64, package_id="acme.scoped", version="1.0.0", target="universal", publisher_id="acme",
+    )
+    stale = dataclass_replace(signer, status=status)
+    with pytest.raises(ValueError, match=status):
+        stale.sign_disclosure_envelope(package_envelope=package_envelope, disclosure_digest="c" * 64)
+
+
+def test_the_disclosure_signer_checks_its_own_validity_window(signed_env: SignedEnv) -> None:
+    from datetime import timedelta
+
+    signer = signed_env.client.app.state.registry.trust_signer
+    package_envelope, _ = signer.sign_envelope(
+        artifact_digest="b" * 64, package_id="acme.scoped", version="1.0.0", target="universal", publisher_id="acme",
+    )
+    with pytest.raises(ValueError, match="validity"):
+        signer.sign_disclosure_envelope(
+            package_envelope=package_envelope, disclosure_digest="c" * 64,
+            now=signer.not_after + timedelta(days=1),
+        )

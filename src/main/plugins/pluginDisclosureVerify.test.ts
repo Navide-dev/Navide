@@ -7,6 +7,7 @@ import { createHash, generateKeyPairSync, sign as edSign, type KeyObject } from 
 import { prepareInstall, type InstallerDeps, type InstallerTrustConfig } from './pluginInstaller'
 import { sha256Hex } from './pluginVerify'
 import {
+  assertRegistryPackageEnvelopeShape,
   canonicalTrustJson,
   type RegistryDisclosureEnvelope,
   type RegistryPackageEnvelope,
@@ -14,7 +15,7 @@ import {
 } from './pluginRegistryTrust'
 import { makeZip } from './zipFixture'
 import { canonicalContractJson, computeDisclosure, type ManifestDisclosure } from '../../shared/pluginDisclosure'
-import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import { DISCLOSURE_ENVELOPE_FIELDS, type ScanReport } from '../../shared/pluginDisclosureScan'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -274,6 +275,37 @@ describe('prepareInstall disclosure verification', () => {
     const req = mutate(request(digest, manifestV2(), scanFor(digest)), digest)
     await expect(prepareInstall(req as never, deps(bytes).deps, TRUST))
       .rejects.toMatchObject({ code: 'DISCLOSURE_INVALID' })
+  })
+
+  // Review L1 on #354: both envelopes are signed by the same key and no
+  // context string tells them apart, so their exact field sets do. Pin both
+  // directions.
+  it('refuses a signed package envelope presented as the disclosure envelope', async () => {
+    const { bytes, digest } = v2Pkg()
+    const req = request(digest)
+    await expect(prepareInstall({
+      ...req,
+      disclosureEnvelope: req.registryEnvelope,
+      disclosureSignature: req.registrySignature,
+    }, deps(bytes).deps, TRUST)).rejects.toMatchObject({ code: 'DISCLOSURE_INVALID' })
+  })
+
+  it('refuses a signed disclosure envelope presented as the package envelope', async () => {
+    const { bytes, digest } = v2Pkg()
+    const req = request(digest)
+    await expect(prepareInstall({
+      ...req,
+      registryEnvelope: req.disclosureEnvelope as never,
+      registrySignature: req.disclosureSignature as string,
+    }, deps(bytes).deps, TRUST)).rejects.toMatchObject({ code: 'TRUST_METADATA_INVALID' })
+    expect(() => assertRegistryPackageEnvelopeShape(req.disclosureEnvelope)).toThrow(/unknown fields disclosureDigest, scanDigest/)
+  })
+
+  it('accepts exactly the nine contract fields in the disclosure envelope', () => {
+    expect([...DISCLOSURE_ENVELOPE_FIELDS].sort()).toEqual(
+      Object.keys(request('a'.repeat(64)).disclosureEnvelope as object).sort()
+    )
+    expect(DISCLOSURE_ENVELOPE_FIELDS).toHaveLength(9)
   })
 
   it('leaves the package-envelope checks unchanged: a bad package signature still fails first', async () => {
