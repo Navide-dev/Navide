@@ -369,6 +369,20 @@ def test_a_future_timestamp_is_clamped_to_now_and_still_expires(audit: PluginAud
         ("C:\\tools\\gh.exe pr list", "gh.exe pr"),
         ("git log --format=%H -n 5 secret-ref", "git log"),
         ("", ""),
+        # Review of #349: quoting is read the way a shell reads it.
+        ('PASS="correct horse battery" git push', "git push"),
+        ("PASS='correct horse battery' git push", "git push"),
+        ("pass=\"a b\" Token='c d' git push", "git push"),
+        ("'/Users/neil lu/bin/tool' run", "tool run"),
+        ('"/Users/neil lu/bin/tool" run', "tool run"),
+        ("tool --password " + "hunter2", "tool"),
+        ("tool --PASSWORD " + "hunter2 run", "tool"),
+        ("tool -P " + "Hunter2", "tool"),
+        ("tool 'run fast' x", "tool"),
+        ("'C:\\Program Files\\gh\\gh.exe' pr list", "gh.exe pr"),
+        ('PASS="unterminated git push', "<unparsable>"),
+        ("tool 'run", "<unparsable>"),
+        ("PASS=only-an-assignment", ""),
     ],
 )
 def test_the_shell_summary_keeps_only_the_executable_and_a_plain_subcommand(
@@ -389,6 +403,20 @@ def test_the_shell_summary_keeps_only_the_executable_and_a_plain_subcommand(
         ("/Users/me/project/src/a.py", "", "<outside-workspace>"),
         ("src/a.py", "/Users/me/project", "src/a.py"),
         ("/Users/me/project/src/a.py", "/Users/me/project/", "src/a.py"),
+        # Review of #349: a file: URI is a path, and a filesystem root or a
+        # missing or relative workspace makes every path "outside".
+        ("file:///Users/me/.ssh/id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("FILE:///Users/me/.ssh/id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("file://localhost/Users/me/.ssh/id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("file:/Users/me/.ssh/id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("file:///Users/me/project/src/a.py", "/Users/me/project", "src/a.py"),
+        ("file:///Users/me/project/src/a%20b.py", "/Users/me/project", "src/a b.py"),
+        ("file:///C:/Users/me/.ssh/id_rsa", "C:\\Users\\me\\project", "<outside-workspace>"),
+        ("https://user:" + "pw@host/x", "/Users/me/project", "<outside-workspace>"),
+        ("etc/passwd", "/", "<outside-workspace>"),
+        ("etc/passwd", "C:\\", "<outside-workspace>"),
+        ("src/a.py", "", "<outside-workspace>"),
+        ("src/a.py", "relative/ws", "<outside-workspace>"),
     ],
 )
 def test_a_path_outside_the_workspace_is_stored_as_the_marker(

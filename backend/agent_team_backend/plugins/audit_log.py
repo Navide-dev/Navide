@@ -22,13 +22,16 @@ What is kept, by field:
 - times are clamped to "now", so a row can never outlive its retention;
 - ``error_code`` and ``denied_reason`` are contract codes, anything else is
   "other"; ``address`` must be ``namespace.method``, otherwise "other";
-- ``fs_path`` is workspace-relative with ``/``; a path outside the workspace
-  (absolute elsewhere, ``~``, ``..``, or any path when the workspace is a
-  filesystem root) is the fixed marker ``<outside-workspace>``;
-- ``shell_command`` is the executable's basename and a plain subcommand word:
-  leading ``NAME=value`` assignments, flags (``-pSECRET``, ``--password=``),
+- ``fs_path`` is workspace-relative with ``/``; a ``file:`` URI is read as
+  the path it names; a path outside the workspace (absolute elsewhere, ``~``,
+  ``..``, any other URI, or any path at all when the workspace is missing,
+  relative or a filesystem root) is the fixed marker ``<outside-workspace>``;
+- ``shell_command`` is the executable's basename and a plain subcommand word,
+  split with shell quoting rules: leading ``NAME=value`` assignments (quoted
+  values included), flags (``-pSECRET``, ``--password=``, ``--password x``),
   URLs (with or without ``user:pass@``) and every further argument are
-  dropped.
+  dropped; a command that cannot be split (an unterminated quote) is the
+  fixed marker ``<unparsable>``.
 
 Caller identity (B0 decision c): a ``pane`` caller is the pane whose MCP
 token it presented. The token proves the pane, not the process that used it:
@@ -59,11 +62,13 @@ import ntpath
 import os
 import posixpath
 import re
+import shlex
 import sqlite3
 import threading
 import time
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import unquote, urlsplit
 
 from ..db import Database
 from . import agent_tools_contract as contract
@@ -73,15 +78,17 @@ log = logging.getLogger(__name__)
 
 _COMPONENT = "plugin_audit"
 _DAY_MS = 86_400_000
-#: Rows per prune transaction: small enough that no batch holds navide.db
-#: for more than a few milliseconds.
-PRUNE_BATCH_ROWS = 500
+#: Rows per prune transaction (an internal batch size, not a retention cap):
+#: at 500k expired rows a batch holds navide.db for ~6 ms median, ~30 ms p95.
+PRUNE_BATCH_ROWS = 200
 FLUSH_INTERVAL_S = 1.0
 PRUNE_INTERVAL_S = 3_600.0
 #: The first prune waits this long after start, off the startup path.
 PRUNE_START_DELAY_S = 120.0
 
 OUTSIDE_WORKSPACE = "<outside-workspace>"
+#: A shell command that cannot be split the way a shell would split it.
+UNPARSABLE = "<unparsable>"
 OTHER = "other"
 
 CALLER_KINDS = ("pane", "external", "host")
@@ -102,6 +109,8 @@ _ADDRESS = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+")
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 _SUBCOMMAND = re.compile(r"[a-z][a-z0-9-]*")
 _EXECUTABLE = re.compile(r"[A-Za-z0-9._+-]+")
+# A URI scheme, but not a Windows drive ("C:\\x", "C:/x").
+_URI_SCHEME = re.compile(r"(?![A-Za-z]:[\\/])[A-Za-z][A-Za-z0-9+.-]*:")
 
 
 def _create_schema(cur: sqlite3.Cursor) -> None:
@@ -135,20 +144,39 @@ def _path_flavor(workspace: str) -> Any:
     return ntpath if re.match(r"[A-Za-z]:[\\/]|\\\\", workspace) else posixpath
 
 
+def _uri_path(path: str) -> str | None:
+    """The local path a ``file:`` URI names; None for any other URI."""
+    parts = urlsplit(path)
+    if parts.scheme.lower() != "file" or parts.netloc.lower() not in ("", "localhost"):
+        return None
+    local = unquote(parts.path)
+    # file:///C:/x names the Windows path C:/x.
+    if re.match(r"/[A-Za-z]:[\\/]", local):
+        local = local[1:]
+    return local
+
+
 def _relative_path(path: str, workspace: str) -> str:
     """``path`` relative to ``workspace`` spelled with ``/``; the outside marker
     when it is not inside it; "" when there is no path."""
     if not path:
         return ""
+    if _URI_SCHEME.match(path):
+        local = _uri_path(path)
+        if local is None:
+            return OUTSIDE_WORKSPACE
+        path = local
     if path.startswith("~"):
         return OUTSIDE_WORKSPACE
     flavor = _path_flavor(workspace or path)
+    # A missing or relative workspace, or a filesystem root ("/", "C:\\"),
+    # contains nothing a relative spelling could be checked against.
+    if not workspace or not flavor.isabs(workspace):
+        return OUTSIDE_WORKSPACE
+    root = flavor.normpath(workspace)
+    if flavor.dirname(root) == root:
+        return OUTSIDE_WORKSPACE
     if flavor.isabs(path):
-        if not workspace or not flavor.isabs(workspace):
-            return OUTSIDE_WORKSPACE
-        root = flavor.normpath(workspace)
-        if flavor.dirname(root) == root:  # "/" or "C:\": every path would be "inside"
-            return OUTSIDE_WORKSPACE
         try:
             relative = flavor.relpath(flavor.normpath(path), root)
         except ValueError:  # another drive on Windows
@@ -163,9 +191,26 @@ def _relative_path(path: str, workspace: str) -> str:
     return relative.replace(sep, "/")
 
 
+def _shell_words(command: str) -> list[str] | None:
+    """``command`` split with POSIX shell quoting; None when it cannot be.
+
+    Backslash is not an escape here, so a Windows path keeps its separators.
+    """
+    lexer = shlex.shlex(command, posix=True)
+    lexer.whitespace_split = True
+    lexer.escape = ""
+    lexer.commenters = ""
+    try:
+        return list(lexer)
+    except ValueError:  # an unterminated quote
+        return None
+
+
 def _shell_summary(command: str) -> str:
     """The executable's basename and a plain subcommand word, nothing else."""
-    tokens = command.split()
+    tokens = _shell_words(command)
+    if tokens is None:
+        return UNPARSABLE
     while tokens and _ASSIGNMENT.fullmatch(tokens[0]):
         tokens.pop(0)
     if not tokens:
