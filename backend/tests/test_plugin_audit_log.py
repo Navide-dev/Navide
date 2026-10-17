@@ -741,3 +741,357 @@ async def test_a_restarted_task_prunes_to_the_end_after_a_cancel(
     with db.transaction() as cur:
         assert cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0
         assert cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0] == rows
+
+
+# ── D-e: the call path never digests arguments (N2) ─────────────────────────
+
+
+async def test_recording_a_10_mib_call_does_not_hold_the_event_loop(audit: PluginAuditLog) -> None:
+    """The digest of large arguments is computed by flush, off the event loop."""
+    import asyncio
+
+    arguments = {"blob": "x" * (10 * 1024 * 1024)}
+    late: list[float] = []
+
+    async def ticker() -> None:
+        for _ in range(20):
+            started = time.perf_counter()
+            await asyncio.sleep(0.005)
+            late.append(time.perf_counter() - started - 0.005)
+
+    tick = asyncio.create_task(ticker())
+    await asyncio.sleep(0)
+    started = time.perf_counter()
+    for _ in range(5):
+        assert _call(audit, arguments=arguments) is not None
+    record_s = time.perf_counter() - started
+    await tick
+    # Digesting on the loop took 2.03 s here; 0.5 s leaves room for a loaded runner.
+    assert record_s < 0.5, f"5 records of 10 MiB took {record_s:.3f}s on the loop"
+    assert max(late) < 0.5, f"a 5 ms sleep came back {max(late):.3f}s late"
+    await asyncio.to_thread(audit.flush)
+    rows = _rows(audit, "plugin_tool_calls")
+    assert [r["args_bytes"] for r in rows] == [contract.agent_tool_arguments_digest(arguments)[1]] * 5
+
+
+def test_arguments_that_are_not_json_inside_are_dropped_at_flush(audit: PluginAuditLog) -> None:
+    assert _call(audit, arguments={"ok": 1}) is not None
+    assert _call(audit, arguments={"bad": object()}) is not None
+    assert _call(audit, arguments={"ok": 2}) is not None
+    assert [r["args_bytes"] for r in _rows(audit, "plugin_tool_calls")] == [
+        contract.agent_tool_arguments_digest({"ok": 1})[1], contract.agent_tool_arguments_digest({"ok": 2})[1],
+    ]
+
+
+# ── D-e: the activity report (contract 5.1, read by D-f) ────────────────────
+
+_PLUGIN = "nerdtechnic.devmap"
+_REPORT_FIXTURES = Path(__file__).resolve().parents[2] / "docs" / "plugin-contracts" / "agent-tools-fixtures"
+
+
+def _act(audit: PluginAuditLog, at_ms: int, address: str = "fs.readFile", **overrides: Any) -> None:
+    fields: dict[str, Any] = {"source": "broker", "address": address, "outcome": "allowed", "at_ms": at_ms}
+    fields.update(overrides)
+    assert _activity(audit, **fields) is True
+
+
+def test_totals_and_lists_cover_the_7_day_window_and_daily_every_day_kept(audit: PluginAuditLog) -> None:
+    _act(audit, NOW - 20 * DAY_MS)  # rolled up: daily only
+    for _ in range(3):
+        _act(audit, NOW - 2 * DAY_MS, fs_path="/Users/me/project/src/a.py")
+    _act(audit, NOW - DAY_MS, outcome="error", fs_path="src/a.py")
+    _act(audit, NOW - DAY_MS, "shell.run", source="shell", shell_command='PASS="x y" /usr/bin/git push')
+    _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    audit.prune(NOW)
+    report = audit.activity_report(_PLUGIN, now_ms=NOW)
+    assert report["window"] == {"from": NOW - 7 * DAY_MS, "to": NOW}
+    assert report["totals"] == {"calls": 6, "denied": 1, "errors": 1}
+    assert report["files"] == [
+        {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "error",
+         "count": 1, "lastAt": NOW - DAY_MS},
+        {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "allowed",
+         "count": 3, "lastAt": NOW - 2 * DAY_MS},
+    ]
+    assert report["commands"] == [
+        {"command": "git push", "workspace": "/Users/me/project", "outcome": "allowed", "count": 1, "lastAt": NOW - DAY_MS},
+    ]
+    assert report["daily"] == [
+        {"day": "2026-09-26", "calls": 1, "denied": 0, "errors": 0},
+        {"day": "2026-10-14", "calls": 3, "denied": 0, "errors": 0},
+        {"day": "2026-10-15", "calls": 3, "denied": 1, "errors": 1},
+    ]
+    assert report["agentActions"] is None and report["schemaVersion"] == 1
+
+
+def test_tool_calls_come_newest_first_with_unknown_sizes_as_stored(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 2 * DAY_MS
+    _call(audit, result_bytes=-1)
+    clock.now_ms = NOW - DAY_MS
+    _call(audit, tool="devmap_read", risk="read", caller_kind="external", result_bytes=10)
+    clock.now_ms = NOW - 9 * DAY_MS
+    _call(audit)  # outside the window
+    calls = audit.activity_report(_PLUGIN, now_ms=NOW)["toolCalls"]
+    assert [(c["tool"], c["callerKind"], c["paneId"], c["resultBytes"]) for c in calls] == [
+        ("devmap_read", "external", "", 10), ("devmap_set_status", "pane", "p-41", -1),
+    ]
+    assert calls[1]["crossWorkspace"] is False and calls[1]["argsBytes"] > 0
+
+
+def test_undeclared_groups_by_address_over_30_days_with_every_reason(audit: PluginAuditLog) -> None:
+    for at in (NOW - 20 * DAY_MS, NOW - 20 * DAY_MS, NOW - 2 * DAY_MS):
+        _act(audit, at, "net.fetch", outcome="denied", denied_reason="undeclared")
+    _act(audit, NOW - 3 * DAY_MS, "net.fetch", outcome="denied", denied_reason="plugin-disabled")
+    _act(audit, NOW - DAY_MS, "fs.readFile", outcome="denied", denied_reason="plugin-disabled")  # never undeclared
+    _act(audit, NOW - 40 * DAY_MS, "old.call", outcome="denied", denied_reason="undeclared")  # before the window
+    audit.prune(NOW)
+    report = audit.activity_report(_PLUGIN, now_ms=NOW)
+    assert report["undeclaredSince"] == NOW - 30 * DAY_MS
+    assert report["undeclared"] == [{
+        "source": "broker", "address": "net.fetch", "workspace": "/Users/me/project", "count": 3,
+        "lastAt": NOW - 2 * DAY_MS,
+        "reasons": [{"reason": "undeclared", "count": 3}, {"reason": "plugin-disabled", "count": 1}],
+    }]
+    assert {"kind": "undeclaredDenied", "at": NOW - 2 * DAY_MS, "workspace": "/Users/me/project", "tool": None,
+            "count": 1, "baseline": None} in report["anomalies"]
+
+
+def test_declared_but_unused_for_each_kind(audit: PluginAuditLog, clock: Clock) -> None:
+    _act(audit, NOW - DAY_MS, "fs.readFile")
+    _act(audit, NOW - 40 * DAY_MS, "ui.openExternal")  # used, but 40 days ago (rolled up)
+    _act(audit, NOW - DAY_MS, "shell.run", source="shell", outcome="denied", denied_reason="undeclared")
+    clock.now_ms = NOW - DAY_MS
+    _call(audit, tool="devmap_read", risk="read")
+    audit.prune(NOW)
+    declared = [
+        {"kind": "system", "key": "fs"}, {"kind": "system", "key": "ui"}, {"kind": "shell", "key": "allowlist"},
+        {"kind": "backendMethod", "key": "devmap.render"}, {"kind": "agentTool", "key": "devmap_read"},
+        {"kind": "agentTool", "key": "devmap_set_status"},
+    ]
+    unused = audit.activity_report(_PLUGIN, declared=declared, now_ms=NOW)["declaredUnused"]
+    assert unused == [
+        {"kind": "system", "key": "ui", "lastUsedAt": _utc_day_start(NOW - 40 * DAY_MS)},
+        {"kind": "shell", "key": "allowlist", "lastUsedAt": None},  # only a refused shell call
+        {"kind": "backendMethod", "key": "devmap.render", "lastUsedAt": None},
+        {"kind": "agentTool", "key": "devmap_set_status", "lastUsedAt": None},
+    ]
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["declaredUnused"] == []
+
+
+def _utc_day_start(at_ms: int) -> int:
+    return at_ms - at_ms % DAY_MS
+
+
+def test_a_day_over_ten_times_the_7_day_baseline_is_flagged(audit: PluginAuditLog) -> None:
+    for day in range(1, 8):
+        _act(audit, NOW - day * DAY_MS + 1000)
+    for _ in range(11):
+        _act(audit, NOW)
+    anomalies = audit.activity_report(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]
+    assert {"kind": "volumeSpike", "at": NOW, "workspace": "", "tool": None, "count": 11, "baseline": 1.0} in anomalies
+
+
+@pytest.mark.parametrize("today", [10, 0])
+def test_no_spike_at_ten_times_or_without_a_baseline(audit: PluginAuditLog, today: int) -> None:
+    if today:
+        for day in range(1, 8):
+            _act(audit, NOW - day * DAY_MS + 1000)
+    for _ in range(today or 50):
+        _act(audit, NOW)
+    kinds = [a["kind"] for a in audit.activity_report(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]]
+    assert "volumeSpike" not in kinds
+
+
+def test_a_write_tool_first_seen_in_a_workspace_is_flagged(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 5 * DAY_MS
+    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")
+    _call(audit, tool="devmap_read", risk="read", target_workspace="/w/new", caller_workspace="/w/new")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")
+    _call(audit, target_workspace="/w/new", caller_workspace="/w/new")
+    anomalies = audit.activity_report(_PLUGIN, now_ms=NOW)["anomalies"]
+    assert [a for a in anomalies if a["kind"] == "writeToolNewWorkspace"] == [{
+        "kind": "writeToolNewWorkspace", "at": NOW - 3600_000, "workspace": "/w/new", "tool": "devmap_set_status",
+        "count": None, "baseline": None,
+    }]
+
+
+def test_the_report_carries_the_historical_peak_of_the_window(audit: PluginAuditLog, clock: Clock) -> None:
+    _timed_call(audit, clock, NOW - DAY_MS + 1000, 1000)
+    _timed_call(audit, clock, NOW - DAY_MS + 1500, 1000)
+    clock.now_ms = NOW
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["historicalPeakConcurrency"] == 2
+
+
+def test_a_disabled_audit_reports_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db = Database(tmp_path / "navide.db")
+    monkeypatch.setattr(db, "migrate", lambda *_a, **_k: (_ for _ in ()).throw(sqlite3.OperationalError("full")))
+    report = PluginAuditLog(db).activity_report(_PLUGIN, now_ms=NOW)
+    assert report["totals"] == {"calls": 0, "denied": 0, "errors": 0} and report["toolCalls"] == []
+
+
+def _conforms(mine: Any, theirs: Any) -> bool:
+    """``mine`` has the fixture's structure: the same keys, every list entry
+    shaped like one of the fixture's entries, the same JSON types (null is
+    accepted where the fixture has a value, as for a nullable field)."""
+    if mine is None or theirs is None:
+        return True
+    if isinstance(theirs, dict):
+        return isinstance(mine, dict) and set(mine) == set(theirs) and all(_conforms(mine[k], theirs[k]) for k in theirs)
+    if isinstance(theirs, list):
+        return isinstance(mine, list) and all(any(_conforms(m, t) for t in theirs) for m in mine)
+    if isinstance(theirs, bool) or isinstance(mine, bool):
+        return isinstance(mine, bool) and isinstance(theirs, bool)
+    if isinstance(theirs, (int, float)):
+        return isinstance(mine, (int, float))
+    return type(mine) is type(theirs)
+
+
+def _seeded_report(tmp_path: Path) -> dict[str, Any]:
+    """A report with every list filled, from a seeded database (the backend fixture)."""
+    clock = Clock(NOW - 2 * DAY_MS)
+    audit = PluginAuditLog(Database(tmp_path / "seed.db"), clock=clock)
+    _call(audit, at_ms=NOW - 2 * DAY_MS, duration_ms=1000, result_bytes=-1)
+    _call(audit, at_ms=NOW - 2 * DAY_MS + 500, duration_ms=1000, tool="devmap_read", risk="read")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/Users/me/new", caller_workspace="/Users/me/new")
+    clock.now_ms = NOW
+    _act(audit, NOW - 2 * DAY_MS, fs_path="docs/devmap.md")
+    _act(audit, NOW - 2 * DAY_MS, "shell.run", source="shell", shell_command="git status")
+    _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    audit.flush()
+    return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
+
+
+def test_the_report_has_the_contract_fixtures_shape(tmp_path: Path) -> None:
+    import json
+
+    valid = json.loads((_REPORT_FIXTURES / "activity-report.json").read_text(encoding="utf-8"))["valid"]
+    report = _seeded_report(tmp_path)
+    assert all(isinstance(report[key], list) and report[key] for key in (
+        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies",
+    )), "the seed fills every list"
+    assert report["agentActions"] is None  # until B2-c
+    assert _conforms(report, valid)
+    # The check does refuse a wrong shape.
+    assert not _conforms({**report, "extra": 1}, valid)
+    assert not _conforms({**report, "totals": {**report["totals"], "calls": "6"}}, valid)
+    assert not _conforms({**report, "files": [{**report["files"][0], "count": True}]}, valid)
+
+
+def test_the_backend_report_fixture_is_what_the_backend_builds(tmp_path: Path) -> None:
+    """The TypeScript parser is held to this file (pluginActivity.test.ts)."""
+    import json
+
+    path = _REPORT_FIXTURES / "activity-report-backend.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == _seeded_report(tmp_path)
+
+
+# ── D-e: refusal reasons by day (plugin_activity_denied_daily) ──────────────
+
+
+def test_an_old_database_gets_the_denied_daily_table_and_keeps_its_rows(tmp_path: Path, clock: Clock) -> None:
+    """A navide.db from before the table: opening it creates the table, nothing else changes."""
+    path = tmp_path / "navide.db"
+    old = PluginAuditLog(Database(path), clock=clock)
+    assert _call(old) is not None
+    assert _activity(old, outcome="denied", denied_reason="undeclared") is True
+    old.flush()
+    with old.db.transaction() as cur:
+        cur.execute("DROP TABLE plugin_activity_denied_daily")  # as a database from before D-e
+    old.db.close()
+
+    again = PluginAuditLog(Database(path), clock=clock)
+    assert again.enabled
+    with again.db.transaction() as cur:
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_activity_denied_daily)")]
+    assert cols == ["day", "plugin_id", "workspace", "source", "address", "denied_reason", "count"]
+    assert len(_rows(again, "plugin_tool_calls")) == 1 and len(_rows(again, "plugin_activity")) == 1
+
+
+def test_refusals_are_rolled_up_by_reason_and_kept_like_the_daily_counts(audit: PluginAuditLog) -> None:
+    for _ in range(2):
+        _activity(audit, outcome="denied", denied_reason="undeclared", at_ms=NOW - 8 * DAY_MS)
+    _activity(audit, outcome="denied", denied_reason="plugin-disabled", at_ms=NOW - 8 * DAY_MS)
+    _activity(audit, at_ms=NOW - 8 * DAY_MS)  # allowed: not a refusal
+    _activity(audit, outcome="denied", denied_reason="undeclared", at_ms=NOW - 100 * DAY_MS)
+    audit.prune(NOW)
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute(
+            "SELECT day, plugin_id, address, denied_reason, count FROM plugin_activity_denied_daily"
+            " ORDER BY denied_reason"
+        )]
+    assert rows == [
+        ("2026-10-08", "nerdtechnic.devmap", "fs.readFile", "plugin-disabled", 1),
+        ("2026-10-08", "nerdtechnic.devmap", "fs.readFile", "undeclared", 2),
+    ]
+
+
+
+# ── D-e: historical peak of concurrent agent tool calls ─────────────────────
+
+
+def _timed_call(audit: PluginAuditLog, clock: Clock, end_ms: int, duration_ms: int, **overrides: Any) -> None:
+    clock.now_ms = end_ms
+    assert _call(audit, at_ms=end_ms, duration_ms=duration_ms, **overrides) is not None
+
+
+def test_the_historical_peak_counts_overlapping_calls(audit: PluginAuditLog, clock: Clock) -> None:
+    base = NOW - DAY_MS
+    _timed_call(audit, clock, base + 1000, 1000)   # [0, 1000]
+    _timed_call(audit, clock, base + 1500, 1000)   # [500, 1500]  -> 2 at 500..1000
+    _timed_call(audit, clock, base + 1800, 1000)   # [800, 1800]  -> 3 at 800..1000
+    _timed_call(audit, clock, base + 5000, 100)    # alone
+    _timed_call(audit, clock, base + 1700, 900, plugin_id="other.plugin")  # another plugin
+    clock.now_ms = NOW
+    peak = audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=NOW - 2 * DAY_MS, until_ms=NOW)
+    assert peak == {"historicalPeak": 3, "at": base + 800}
+
+
+def test_calls_that_only_touch_end_to_start_do_not_overlap(audit: PluginAuditLog, clock: Clock) -> None:
+    base = NOW - DAY_MS
+    _timed_call(audit, clock, base + 1000, 1000)   # [0, 1000]
+    _timed_call(audit, clock, base + 2000, 1000)   # [1000, 2000]
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == 1
+
+
+def test_the_peak_is_zero_without_calls_in_the_window(audit: PluginAuditLog, clock: Clock) -> None:
+    _timed_call(audit, clock, NOW - 10 * DAY_MS, 100)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=NOW - DAY_MS, until_ms=NOW) == {
+        "historicalPeak": 0, "at": None,
+    }
+
+
+def test_at_is_the_end_of_the_call_and_the_peak_uses_known_starts_and_ends(audit: PluginAuditLog, clock: Clock) -> None:
+    """#368 review M1: ``at`` is when the call ended (contract section 5)."""
+    base = NOW - DAY_MS
+    # (start, end) known: A 1000-3000, B 2500-4000, C 3500-5000 -> A+B overlap, B+C overlap, never all three.
+    for start, end in ((1000, 3000), (2500, 4000), (3500, 5000)):
+        _timed_call(audit, clock, base + end, end - start)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW) == {
+        "historicalPeak": 2, "at": base + 2500,
+    }
+    calls = audit.activity_report(_PLUGIN, now_ms=NOW)["toolCalls"]
+    assert sorted((c["at"] - c["durationMs"], c["at"]) for c in calls) == [
+        (base + 1000, base + 3000), (base + 2500, base + 4000), (base + 3500, base + 5000),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("calls", "peak"),
+    [
+        ([(1000, 0), (1000, 0)], 2),      # two 0 ms calls at the same instant
+        ([(1000, 500), (900, 0)], 2),     # a 0 ms call inside another
+    ],
+)
+def test_a_zero_ms_call_counts_toward_the_peak(
+    audit: PluginAuditLog, clock: Clock, calls: list[tuple[int, int]], peak: int
+) -> None:
+    """#368 review M2: (end, duration_ms) pairs; a 0 ms call lasts at least 1 ms."""
+    base = NOW - DAY_MS
+    for end, duration in calls:
+        _timed_call(audit, clock, base + end, duration)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == peak
