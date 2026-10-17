@@ -1155,9 +1155,15 @@ The activity page reads it back with `plugins.activity.report`
 
 ### 5.1 Reading activity: `plugins.activity.report`
 
-The activity page and the disclosure overview (D-f) read one plugin's report
-over the main window's WebSocket session: request
-`plugins.activity.report` `{plugin_id}`, answer `PluginActivityReport`
+The activity page and the disclosure overview (D-f) read one plugin's report.
+The backend accepts `plugins.activity.report` only from the Host's
+authenticated session (`host_authenticated`); the main window asks the Host
+over IPC, whose handler passes `assertAuthorized` (as
+`plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
+the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
+`backendMethod` methods, `agentTool` names) from the installed manifest, since
+the backend has no third-party manifest; without `declared`, `declaredUnused`
+is `[]`. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the
@@ -1169,16 +1175,16 @@ malformed one whole.
 | `schemaVersion` | `1` |
 | `pluginId`, `generatedAt` | the plugin; when the report was made (Unix ms) |
 | `window` | `{from, to}`: the detail window the lists cover (7 days) |
-| `totals` | `{calls, denied, errors}` within `window` |
-| `historicalPeakConcurrency` | the largest number of the plugin's calls that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
+| `totals` | `{calls, denied, errors}` of `plugin_activity` within `window` |
+| `historicalPeakConcurrency` | the largest number of the plugin's `plugin_tool_calls` that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
 | `undeclaredSince` | start of the window `undeclared` covers (30 days) |
 | `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
 | `files[]` | fs paths, newest first: `path` (workspace-relative), `address`, `workspace`, `outcome`, `count`, `lastAt` |
 | `commands[]` | shell commands (executable and subcommand only), newest first: `command`, `workspace`, `outcome`, `count`, `lastAt` |
-| `daily[]` | oldest first: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` |
+| `daily[]` | oldest first, up to the 90 days kept: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` (daily rows plus the detail rows not yet rolled up) |
 | `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool`), `key`, `lastUsedAt` (or null) |
-| `undeclared[]` | uses the manifest did not declare, refused, within 30 days: `source`, `address`, `workspace`, `count`, `lastAt`, `reasons[]` (`{reason, count}` by `denied_reason`, largest first) |
-| `anomalies[]` | marked only, never acted on: `kind` (`volumeSpike` / `writeToolNewWorkspace` / `undeclaredDenied`), `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable) |
+| `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
+| `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
