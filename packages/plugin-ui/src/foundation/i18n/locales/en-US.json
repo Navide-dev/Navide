@@ -1788,6 +1788,7 @@
       "sensitive": "sensitive",
       "empty": "No Navide plugins installed.",
       "permissionDetails": "Permissions and grants",
+      "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
       "searchPlaceholder": "Search Navide plugins",
       "search": "Search",
@@ -11012,6 +11013,7 @@
   "pluginActivity": {
     "title": "Activity",
     "tab": "Activity",
+    "openOverview": "View in Disclosure overview",
     "loading": "Loading activity…",
     "notSupported": "this Navide cannot read activity yet",
     "unavailable": "Activity is not available right now: {error}",

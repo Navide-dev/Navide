@@ -4522,7 +4522,7 @@ watch(activeTab, (tab) => {
               </div>
               <ExecutionPolicyPane :workspace-path="props.workspacePath" />
             </section>
-            <ExtensionsPane />
+            <ExtensionsPane @open-disclosure-overview="activeTab = 'disclosureOverview'" />
           </div>
         </div>
 

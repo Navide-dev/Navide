@@ -1788,6 +1788,7 @@
       "sensitive": "敏感權限",
       "empty": "尚未安裝任何 Navide 外掛。",
       "permissionDetails": "權限與授予",
+      "permissionDetailsWithActivity": "權限、授予與活動",
       "plansRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它處理目前專案的計畫文件：從往上找到的 Git 儲存庫根目錄起（含其下的巢狀儲存庫），任何深度的 .agent-team、.claude、.cursor 與 docs 底下的 plans／reports 類資料夾、根目錄的 .plans，以及這些資料夾的 .history（只讀）。讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行；刪除與改名仍經由 Navide 進行。",
       "searchPlaceholder": "搜尋 Navide 外掛",
       "search": "搜尋",
@@ -11012,6 +11013,7 @@
   "pluginActivity": {
     "title": "活動",
     "tab": "活動",
+    "openOverview": "在揭露總覽查看",
     "loading": "正在讀取活動紀錄…",
     "notSupported": "這個版本的 Navide 還不能讀取活動紀錄",
     "unavailable": "目前無法取得活動紀錄：{error}",

@@ -60,7 +60,9 @@ const updatesById = computed(
 )
 const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
-// D-f: rows whose activity section is open; the panel (and its reads) exists only then.
+// D-f: rows whose permissions section is open; the activity panel (and its
+// reads) exists only then.
+const emit = defineEmits<{ openDisclosureOverview: [] }>()
 const activityOpen = ref(new Set<string>())
 function onActivityToggle(id: string, event: Event): void {
   const next = new Set(activityOpen.value)
@@ -545,8 +547,12 @@ watch(installed, () => void refreshPacks())
             <p v-if="p.engineCompatible === false" class="ext-incompatible-reason">
               {{ $t('settings.extensions.incompatibleReason', { version: p.minNavideVersion ?? '' }) }}
             </p>
-            <details v-if="p.manifestPermissions || p.packageVersion" class="ext-permission-details">
-              <summary>{{ $t('settings.extensions.permissionDetails') }}</summary>
+            <details
+              v-if="p.manifestPermissions || p.packageVersion"
+              class="ext-permission-details"
+              @toggle="onActivityToggle(p.id, $event)"
+            >
+              <summary>{{ p.provenance === 'official-registry' ? $t('settings.extensions.permissionDetailsWithActivity') : $t('settings.extensions.permissionDetails') }}</summary>
               <span v-if="p.manifestPermissions" class="ext-manifest-permissions">
                 {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.manifestPermissions'), value: formatManifestPermissions(p.manifestPermissions) }) }}
               </span>
@@ -560,15 +566,14 @@ watch(installed, () => void refreshPacks())
               >
                 {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.packageVersionGrant'), value: formatPackageGrant(p.packageVersionGrant) }) }}
               </span>
-            </details>
-            <!-- Plan B D-f: the plugin's activity, read only when opened. -->
-            <details
-              v-if="p.provenance === 'official-registry'"
-              class="ext-permission-details ext-activity-details"
-              @toggle="onActivityToggle(p.id, $event)"
-            >
-              <summary>{{ $t('pluginActivity.tab') }}</summary>
-              <PluginActivityPanel v-if="activityOpen.has(p.id)" :plugin-id="p.id" />
+              <!-- Plan B D-f: the plugin's activity, mounted (and read) only
+                   while this section is open, so the page gains no element. -->
+              <template v-if="p.provenance === 'official-registry' && activityOpen.has(p.id)">
+                <PluginActivityPanel :plugin-id="p.id" />
+                <button type="button" class="ext-activity-overview-link nv-btn nv-btn--sm" @click="emit('openDisclosureOverview')">
+                  {{ $t('pluginActivity.openOverview') }}
+                </button>
+              </template>
             </details>
             <label v-if="p.getsPrereleases !== undefined" class="ext-prerelease-toggle">
               <input

@@ -1075,12 +1075,12 @@ describe('ExtensionsPane', () => {
 
   // D-f / RULE ZERO: opening the page reads no activity; a row's activity is
   // read only when the user opens it.
-  it('D-f: loads a plugin activity only when its section is opened', async () => {
+  it('D-f: loads a plugin activity only when its permissions section is opened, adding no element', async () => {
     const activityReport = vi.fn().mockResolvedValue({ ok: false, error: 'Navide Host session is not ready' })
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
-        { id: 'local.dev', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
+        { id: 'local.dev', requires: [], sensitive: [], packageVersion: '0.1.0', provenance: 'developer-local-unpacked' },
       ]),
       activityReport,
       backendCallConcurrency: vi.fn().mockResolvedValue([]),
@@ -1089,13 +1089,27 @@ describe('ExtensionsPane', () => {
     await flushPromises()
 
     expect(activityReport).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-id="local.dev"] .ext-activity-details').exists()).toBe(false)
-    const details = wrapper.get('[data-id="acme.demo"] .ext-activity-details')
+    // RULE ZERO: no new element per row; the existing section only says activity is in it.
+    expect(wrapper.findAll('[data-id="acme.demo"] details')).toHaveLength(1)
+    expect(wrapper.find('.nv-activity').exists()).toBe(false)
+    expect(wrapper.find('.ext-activity-overview-link').exists()).toBe(false)
+    expect(wrapper.get('[data-id="acme.demo"] .ext-permission-details summary').text()).toBe('Permissions, grants and activity')
+    expect(wrapper.get('[data-id="local.dev"] .ext-permission-details summary').text()).toBe('Permissions and grants')
+
+    const details = wrapper.get('[data-id="acme.demo"] .ext-permission-details')
     ;(details.element as HTMLDetailsElement).open = true
     await details.trigger('toggle')
     await flushPromises()
     expect(activityReport).toHaveBeenCalledWith('acme.demo')
     expect(details.text()).toContain('Activity is not available right now: Navide Host session is not ready')
+    await details.get('.ext-activity-overview-link').trigger('click')
+    expect(wrapper.emitted('openDisclosureOverview')).toHaveLength(1)
+
+    const local = wrapper.get('[data-id="local.dev"] .ext-permission-details')
+    ;(local.element as HTMLDetailsElement).open = true
+    await local.trigger('toggle')
+    await flushPromises()
+    expect(activityReport).toHaveBeenCalledTimes(1)
   })
 
   it('restarts a staged Registry update without offering a second install', async () => {
