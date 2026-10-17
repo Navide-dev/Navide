@@ -1125,8 +1125,8 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
 
-`plugin_activity_denied_daily` (D-e): `(day, plugin_id, denied_reason)` primary
-key and `count`; the refusals among the detail rows, by reason, rolled up in the
+`plugin_activity_denied_daily` (D-e): `(day, plugin_id, workspace, source,
+address, denied_reason)` primary key and `count`; the refusals among the detail rows, by reason, rolled up in the
 same transaction as `plugin_activity_daily` and kept as long (90 days), so the
 reason of a refusal ("used but not declared" above all) outlives the 7 days of
 detail. It was added after the first tables: every open runs the audit DDL (all
@@ -1150,13 +1150,8 @@ their redacted form. `denied_reason` is `undeclared` when the broker refused a
 namespace or shell use the manifest did not declare. A refused cast is recorded;
 a dispatched cast (terminal input) is not.
 
-`plugin.activity.summary` (`PLUGIN_ACTIVITY_SUMMARY_MESSAGE`, Host-authenticated,
-`{plugin_id, declared?}`) answers the activity page with
-`PluginAuditLog.activity_summary`: 30-day call counts by `address`, `source` and
-`outcome`, `denied30d`, `deniedUndeclared {count30d, count7d, lastAt}`
-(`count30d` adds `plugin_activity_denied_daily`), `declaredUnused`, and the anomaly flags
-`volume-spike`, `write-tool-new-workspace` and `undeclared-denied`. The flags
-refuse nothing.
+The activity page reads it back with `plugins.activity.report`
+(`PLUGIN_ACTIVITY_REPORT_MESSAGE`), section 5.1.
 
 ### 5.1 Reading activity: `plugins.activity.report`
 

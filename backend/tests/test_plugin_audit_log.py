@@ -783,9 +783,10 @@ def test_arguments_that_are_not_json_inside_are_dropped_at_flush(audit: PluginAu
     ]
 
 
-# ── D-e: activity summary (read by D-f) ─────────────────────────────────────
+# ── D-e: the activity report (contract 5.1, read by D-f) ────────────────────
 
 _PLUGIN = "nerdtechnic.devmap"
+_REPORT_FIXTURES = Path(__file__).resolve().parents[2] / "docs" / "plugin-contracts" / "agent-tools-fixtures"
 
 
 def _act(audit: PluginAuditLog, at_ms: int, address: str = "fs.readFile", **overrides: Any) -> None:
@@ -794,49 +795,99 @@ def _act(audit: PluginAuditLog, at_ms: int, address: str = "fs.readFile", **over
     assert _activity(audit, **fields) is True
 
 
-def test_the_summary_counts_detail_and_rolled_up_days_once(audit: PluginAuditLog, clock: Clock) -> None:
-    for day in (20, 10):  # rolled up into plugin_activity_daily by the prune below
-        _act(audit, NOW - day * DAY_MS)
-    _act(audit, NOW - 40 * DAY_MS)  # outside the 30-day window
+def test_totals_and_lists_cover_the_7_day_window_and_daily_every_day_kept(audit: PluginAuditLog) -> None:
+    _act(audit, NOW - 20 * DAY_MS)  # rolled up: daily only
     for _ in range(3):
-        _act(audit, NOW - 2 * DAY_MS)
-    _act(audit, NOW - DAY_MS, "shell.run", source="shell", shell_command="git log")
+        _act(audit, NOW - 2 * DAY_MS, fs_path="/Users/me/project/src/a.py")
+    _act(audit, NOW - DAY_MS, outcome="error", fs_path="src/a.py")
+    _act(audit, NOW - DAY_MS, "shell.run", source="shell", shell_command='PASS="x y" /usr/bin/git push')
+    _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
     audit.prune(NOW)
-    summary = audit.activity_summary(_PLUGIN)
-    assert summary["pluginId"] == _PLUGIN and summary["windowDays"] == 30
-    assert summary["total"] == 6
-    assert summary["calls"] == [
-        {"address": "fs.readFile", "source": "broker", "outcome": "allowed", "count": 5},
-        {"address": "shell.run", "source": "shell", "outcome": "allowed", "count": 1},
+    report = audit.activity_report(_PLUGIN, now_ms=NOW)
+    assert report["window"] == {"from": NOW - 7 * DAY_MS, "to": NOW}
+    assert report["totals"] == {"calls": 6, "denied": 1, "errors": 1}
+    assert report["files"] == [
+        {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "error",
+         "count": 1, "lastAt": NOW - DAY_MS},
+        {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "allowed",
+         "count": 3, "lastAt": NOW - 2 * DAY_MS},
     ]
-    assert audit.activity_summary("other.plugin")["total"] == 0
+    assert report["commands"] == [
+        {"command": "git push", "workspace": "/Users/me/project", "outcome": "allowed", "count": 1, "lastAt": NOW - DAY_MS},
+    ]
+    assert report["daily"] == [
+        {"day": "2026-09-26", "calls": 1, "denied": 0, "errors": 0},
+        {"day": "2026-10-14", "calls": 3, "denied": 0, "errors": 0},
+        {"day": "2026-10-15", "calls": 3, "denied": 1, "errors": 1},
+    ]
+    assert report["agentActions"] is None and report["schemaVersion"] == 1
 
 
-def test_the_summary_counts_undeclared_denials_and_flags_them(audit: PluginAuditLog) -> None:
-    _act(audit, NOW - 3 * DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
-    _act(audit, NOW - 2 * DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
-    _act(audit, NOW - DAY_MS, "fs.readFile", outcome="denied", denied_reason="plugin-disabled")
-    summary = audit.activity_summary(_PLUGIN)
-    assert summary["deniedUndeclared"] == {"count30d": 2, "count7d": 2, "lastAt": NOW - 2 * DAY_MS}
-    assert summary["denied30d"] == 3
-    assert {"kind": "undeclared-denied", "count7d": 2, "lastAt": NOW - 2 * DAY_MS} in summary["anomalies"]
+def test_tool_calls_come_newest_first_with_unknown_sizes_as_stored(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 2 * DAY_MS
+    _call(audit, result_bytes=-1)
+    clock.now_ms = NOW - DAY_MS
+    _call(audit, tool="devmap_read", risk="read", caller_kind="external", result_bytes=10)
+    clock.now_ms = NOW - 9 * DAY_MS
+    _call(audit)  # outside the window
+    calls = audit.activity_report(_PLUGIN, now_ms=NOW)["toolCalls"]
+    assert [(c["tool"], c["callerKind"], c["paneId"], c["resultBytes"]) for c in calls] == [
+        ("devmap_read", "external", "", 10), ("devmap_set_status", "pane", "p-41", -1),
+    ]
+    assert calls[1]["crossWorkspace"] is False and calls[1]["argsBytes"] > 0
 
 
-def test_declared_but_unused_lists_what_had_no_allowed_call_in_30_days(audit: PluginAuditLog) -> None:
+def test_undeclared_groups_by_address_over_30_days_with_every_reason(audit: PluginAuditLog) -> None:
+    for at in (NOW - 20 * DAY_MS, NOW - 20 * DAY_MS, NOW - 2 * DAY_MS):
+        _act(audit, at, "net.fetch", outcome="denied", denied_reason="undeclared")
+    _act(audit, NOW - 3 * DAY_MS, "net.fetch", outcome="denied", denied_reason="plugin-disabled")
+    _act(audit, NOW - DAY_MS, "fs.readFile", outcome="denied", denied_reason="plugin-disabled")  # never undeclared
+    _act(audit, NOW - 40 * DAY_MS, "old.call", outcome="denied", denied_reason="undeclared")  # before the window
+    audit.prune(NOW)
+    report = audit.activity_report(_PLUGIN, now_ms=NOW)
+    assert report["undeclaredSince"] == NOW - 30 * DAY_MS
+    assert report["undeclared"] == [{
+        "source": "broker", "address": "net.fetch", "workspace": "/Users/me/project", "count": 3,
+        "lastAt": NOW - 2 * DAY_MS,
+        "reasons": [{"reason": "undeclared", "count": 3}, {"reason": "plugin-disabled", "count": 1}],
+    }]
+    assert {"kind": "undeclaredDenied", "at": NOW - 2 * DAY_MS, "workspace": "/Users/me/project", "tool": None,
+            "count": 1, "baseline": None} in report["anomalies"]
+
+
+def test_declared_but_unused_for_each_kind(audit: PluginAuditLog, clock: Clock) -> None:
     _act(audit, NOW - DAY_MS, "fs.readFile")
+    _act(audit, NOW - 40 * DAY_MS, "ui.openExternal")  # used, but 40 days ago (rolled up)
     _act(audit, NOW - DAY_MS, "shell.run", source="shell", outcome="denied", denied_reason="undeclared")
-    summary = audit.activity_summary(_PLUGIN, declared=["fs", "shell", "storage.get"])
-    assert summary["declaredUnused"] == ["shell", "storage.get"]
-    assert audit.activity_summary(_PLUGIN)["declaredUnused"] is None
+    clock.now_ms = NOW - DAY_MS
+    _call(audit, tool="devmap_read", risk="read")
+    audit.prune(NOW)
+    declared = [
+        {"kind": "system", "key": "fs"}, {"kind": "system", "key": "ui"}, {"kind": "shell", "key": "allowlist"},
+        {"kind": "backendMethod", "key": "devmap.render"}, {"kind": "agentTool", "key": "devmap_read"},
+        {"kind": "agentTool", "key": "devmap_set_status"},
+    ]
+    unused = audit.activity_report(_PLUGIN, declared=declared, now_ms=NOW)["declaredUnused"]
+    assert unused == [
+        {"kind": "system", "key": "ui", "lastUsedAt": _utc_day_start(NOW - 40 * DAY_MS)},
+        {"kind": "shell", "key": "allowlist", "lastUsedAt": None},  # only a refused shell call
+        {"kind": "backendMethod", "key": "devmap.render", "lastUsedAt": None},
+        {"kind": "agentTool", "key": "devmap_set_status", "lastUsedAt": None},
+    ]
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["declaredUnused"] == []
+
+
+def _utc_day_start(at_ms: int) -> int:
+    return at_ms - at_ms % DAY_MS
 
 
 def test_a_day_over_ten_times_the_7_day_baseline_is_flagged(audit: PluginAuditLog) -> None:
-    for day in range(1, 8):  # one call a day for the 7 days before today
+    for day in range(1, 8):
         _act(audit, NOW - day * DAY_MS + 1000)
-    for i in range(11):  # today: 11 > 10 x 1
-        _act(audit, NOW + i)
-    summary = audit.activity_summary(_PLUGIN, now_ms=NOW + 60_000)
-    assert {"kind": "volume-spike", "day": "2026-10-16", "count": 11, "baselineDailyAverage": 1.0} in summary["anomalies"]
+    for _ in range(11):
+        _act(audit, NOW)
+    anomalies = audit.activity_report(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]
+    assert {"kind": "volumeSpike", "at": NOW, "workspace": "", "tool": None, "count": 11, "baseline": 1.0} in anomalies
 
 
 @pytest.mark.parametrize("today", [10, 0])
@@ -844,10 +895,10 @@ def test_no_spike_at_ten_times_or_without_a_baseline(audit: PluginAuditLog, toda
     if today:
         for day in range(1, 8):
             _act(audit, NOW - day * DAY_MS + 1000)
-    for i in range(today or 50):
-        _act(audit, NOW + i)
-    kinds = [a["kind"] for a in audit.activity_summary(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]]
-    assert "volume-spike" not in kinds
+    for _ in range(today or 50):
+        _act(audit, NOW)
+    kinds = [a["kind"] for a in audit.activity_report(_PLUGIN, now_ms=NOW + 60_000)["anomalies"]]
+    assert "volumeSpike" not in kinds
 
 
 def test_a_write_tool_first_seen_in_a_workspace_is_flagged(audit: PluginAuditLog, clock: Clock) -> None:
@@ -855,19 +906,84 @@ def test_a_write_tool_first_seen_in_a_workspace_is_flagged(audit: PluginAuditLog
     _call(audit, target_workspace="/w/old", caller_workspace="/w/old")
     _call(audit, tool="devmap_read", risk="read", target_workspace="/w/new", caller_workspace="/w/new")
     clock.now_ms = NOW - 3600_000
-    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")  # not new
-    _call(audit, target_workspace="/w/new", caller_workspace="/w/new")  # first write here
-    summary = audit.activity_summary(_PLUGIN, now_ms=NOW)
-    flagged = [a for a in summary["anomalies"] if a["kind"] == "write-tool-new-workspace"]
-    assert flagged == [{"kind": "write-tool-new-workspace", "tool": "devmap_set_status", "workspace": "/w/new",
-                        "firstAt": NOW - 3600_000}]
+    _call(audit, target_workspace="/w/old", caller_workspace="/w/old")
+    _call(audit, target_workspace="/w/new", caller_workspace="/w/new")
+    anomalies = audit.activity_report(_PLUGIN, now_ms=NOW)["anomalies"]
+    assert [a for a in anomalies if a["kind"] == "writeToolNewWorkspace"] == [{
+        "kind": "writeToolNewWorkspace", "at": NOW - 3600_000, "workspace": "/w/new", "tool": "devmap_set_status",
+        "count": None, "baseline": None,
+    }]
 
 
-def test_a_disabled_audit_summarizes_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_report_carries_the_historical_peak_of_the_window(audit: PluginAuditLog, clock: Clock) -> None:
+    _timed_call(audit, clock, NOW - DAY_MS + 1000, 1000)
+    _timed_call(audit, clock, NOW - DAY_MS + 1500, 1000)
+    clock.now_ms = NOW
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["historicalPeakConcurrency"] == 2
+
+
+def test_a_disabled_audit_reports_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = Database(tmp_path / "navide.db")
     monkeypatch.setattr(db, "migrate", lambda *_a, **_k: (_ for _ in ()).throw(sqlite3.OperationalError("full")))
-    summary = PluginAuditLog(db).activity_summary(_PLUGIN)
-    assert summary["enabled"] is False and summary["total"] == 0 and summary["anomalies"] == []
+    report = PluginAuditLog(db).activity_report(_PLUGIN, now_ms=NOW)
+    assert report["totals"] == {"calls": 0, "denied": 0, "errors": 0} and report["toolCalls"] == []
+
+
+def _conforms(mine: Any, theirs: Any) -> bool:
+    """``mine`` has the fixture's structure: the same keys, every list entry
+    shaped like one of the fixture's entries, the same JSON types (null is
+    accepted where the fixture has a value, as for a nullable field)."""
+    if mine is None or theirs is None:
+        return True
+    if isinstance(theirs, dict):
+        return isinstance(mine, dict) and set(mine) == set(theirs) and all(_conforms(mine[k], theirs[k]) for k in theirs)
+    if isinstance(theirs, list):
+        return isinstance(mine, list) and all(any(_conforms(m, t) for t in theirs) for m in mine)
+    if isinstance(theirs, bool) or isinstance(mine, bool):
+        return isinstance(mine, bool) and isinstance(theirs, bool)
+    if isinstance(theirs, (int, float)):
+        return isinstance(mine, (int, float))
+    return type(mine) is type(theirs)
+
+
+def _seeded_report(tmp_path: Path) -> dict[str, Any]:
+    """A report with every list filled, from a seeded database (the backend fixture)."""
+    clock = Clock(NOW - 2 * DAY_MS)
+    audit = PluginAuditLog(Database(tmp_path / "seed.db"), clock=clock)
+    _call(audit, at_ms=NOW - 2 * DAY_MS, duration_ms=1000, result_bytes=-1)
+    _call(audit, at_ms=NOW - 2 * DAY_MS + 500, duration_ms=1000, tool="devmap_read", risk="read")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/Users/me/new", caller_workspace="/Users/me/new")
+    clock.now_ms = NOW
+    _act(audit, NOW - 2 * DAY_MS, fs_path="docs/devmap.md")
+    _act(audit, NOW - 2 * DAY_MS, "shell.run", source="shell", shell_command="git status")
+    _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    audit.flush()
+    return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
+
+
+def test_the_report_has_the_contract_fixtures_shape(tmp_path: Path) -> None:
+    import json
+
+    valid = json.loads((_REPORT_FIXTURES / "activity-report.json").read_text(encoding="utf-8"))["valid"]
+    report = _seeded_report(tmp_path)
+    assert all(isinstance(report[key], list) and report[key] for key in (
+        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies",
+    )), "the seed fills every list"
+    assert report["agentActions"] is None  # until B2-c
+    assert _conforms(report, valid)
+    # The check does refuse a wrong shape.
+    assert not _conforms({**report, "extra": 1}, valid)
+    assert not _conforms({**report, "totals": {**report["totals"], "calls": "6"}}, valid)
+    assert not _conforms({**report, "files": [{**report["files"][0], "count": True}]}, valid)
+
+
+def test_the_backend_report_fixture_is_what_the_backend_builds(tmp_path: Path) -> None:
+    """The TypeScript parser is held to this file (pluginActivity.test.ts)."""
+    import json
+
+    path = _REPORT_FIXTURES / "activity-report-backend.json"
+    assert json.loads(path.read_text(encoding="utf-8")) == _seeded_report(tmp_path)
 
 
 # ── D-e: refusal reasons by day (plugin_activity_denied_daily) ──────────────
@@ -888,7 +1004,7 @@ def test_an_old_database_gets_the_denied_daily_table_and_keeps_its_rows(tmp_path
     assert again.enabled
     with again.db.transaction() as cur:
         cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_activity_denied_daily)")]
-    assert cols == ["day", "plugin_id", "denied_reason", "count"]
+    assert cols == ["day", "plugin_id", "workspace", "source", "address", "denied_reason", "count"]
     assert len(_rows(again, "plugin_tool_calls")) == 1 and len(_rows(again, "plugin_activity")) == 1
 
 
@@ -901,19 +1017,14 @@ def test_refusals_are_rolled_up_by_reason_and_kept_like_the_daily_counts(audit: 
     audit.prune(NOW)
     with audit.db.transaction() as cur:
         rows = [tuple(r) for r in cur.execute(
-            "SELECT day, plugin_id, denied_reason, count FROM plugin_activity_denied_daily ORDER BY denied_reason"
+            "SELECT day, plugin_id, address, denied_reason, count FROM plugin_activity_denied_daily"
+            " ORDER BY denied_reason"
         )]
     assert rows == [
-        ("2026-10-08", "nerdtechnic.devmap", "plugin-disabled", 1),
-        ("2026-10-08", "nerdtechnic.devmap", "undeclared", 2),
+        ("2026-10-08", "nerdtechnic.devmap", "fs.readFile", "plugin-disabled", 1),
+        ("2026-10-08", "nerdtechnic.devmap", "fs.readFile", "undeclared", 2),
     ]
 
-
-def test_the_summary_counts_undeclared_refusals_over_30_days(audit: PluginAuditLog) -> None:
-    _activity(audit, address="net.fetch", outcome="denied", denied_reason="undeclared", at_ms=NOW - 20 * DAY_MS)
-    _activity(audit, address="net.fetch", outcome="denied", denied_reason="undeclared", at_ms=NOW - DAY_MS)
-    audit.prune(NOW)
-    assert audit.activity_summary(_PLUGIN)["deniedUndeclared"]["count30d"] == 2
 
 
 # ── D-e: historical peak of concurrent agent tool calls ─────────────────────

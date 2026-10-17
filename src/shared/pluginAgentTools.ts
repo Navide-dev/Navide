@@ -597,8 +597,8 @@ export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 
 /** Host-authenticated: `{rows}`, one row per broker or shell-broker call, batched. */
 export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
-/** Host-authenticated: `{plugin_id, declared?}` → the activity summary. */
-export const PLUGIN_ACTIVITY_SUMMARY_MESSAGE = 'plugin.activity.summary'
+/** Host-authenticated: `{plugin_id, declared?}` → a `PluginActivityReport` (contract 5.1). */
+export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 

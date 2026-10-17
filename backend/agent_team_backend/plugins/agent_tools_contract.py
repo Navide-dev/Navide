@@ -532,8 +532,9 @@ MARKETPLACE_QUERY_ERROR_CODES = ("BAD_REQUEST", "NOT_FOUND", "REGISTRY_UNAVAILAB
 #: address, outcome, denied_reason?, fs_path?, shell_command?}]}``, one row per
 #: broker or shell-broker call, batched. The backend redacts and stores them.
 PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
-#: Host-authenticated: ``{plugin_id, declared?}`` → the activity summary.
-PLUGIN_ACTIVITY_SUMMARY_MESSAGE = "plugin.activity.summary"
+#: Host-authenticated: ``{plugin_id, declared?: [{kind, key}]}`` → a
+#: ``PluginActivityReport`` (contract 5.1, ``src/shared/pluginActivity.ts``).
+PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
 
 
 class MarketplaceQueryRequest(TypedDict):
@@ -645,7 +646,10 @@ PLUGIN_AUDIT_DDL = (
     "CREATE TABLE IF NOT EXISTS plugin_activity_denied_daily ("
     " day TEXT NOT NULL,"
     " plugin_id TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " source TEXT NOT NULL,"
+    " address TEXT NOT NULL,"
     " denied_reason TEXT NOT NULL,"
     " count INTEGER NOT NULL,"
-    " PRIMARY KEY (day, plugin_id, denied_reason))",
+    " PRIMARY KEY (day, plugin_id, workspace, source, address, denied_reason))",
 )

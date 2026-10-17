@@ -1,8 +1,8 @@
 """D-e: the Host's broker and shell-broker activity reaches the audit tables.
 
 ``plugin.activity.record`` (Host-authenticated) carries a batch of rows the
-Host's capability broker recorded; ``plugin.activity.summary`` answers the
-activity page's read. Both are write-only / read-only views of
+Host's capability broker recorded; ``plugins.activity.report`` answers the
+activity page's read (contract 5.1). Both are write-only / read-only views of
 ``app.plugin_audit_log``: nothing here can fail a plugin call.
 """
 
@@ -62,7 +62,7 @@ def _stored(audit: PluginAuditLog) -> list[dict[str, Any]]:
 
 def test_the_wire_names_are_the_contracts() -> None:
     assert contract.PLUGIN_ACTIVITY_RECORD_MESSAGE == "plugin.activity.record"
-    assert contract.PLUGIN_ACTIVITY_SUMMARY_MESSAGE == "plugin.activity.summary"
+    assert contract.PLUGIN_ACTIVITY_REPORT_MESSAGE == "plugins.activity.report"
 
 
 async def test_only_the_host_can_record(audit: PluginAuditLog) -> None:
@@ -136,30 +136,45 @@ async def test_a_disabled_audit_accepts_nothing_and_never_fails(tmp_path: Path, 
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 0}
 
 
-async def test_only_the_host_can_read_the_summary(audit: PluginAuditLog) -> None:
+async def test_only_the_host_can_read_a_report(audit: PluginAuditLog) -> None:
     window = _session(host=False)
-    await ws_handlers.plugin_activity_summary(
-        window, "1", contract.PLUGIN_ACTIVITY_SUMMARY_MESSAGE, {"plugin_id": "nerdtechnic.devmap"}
+    await ws_handlers.plugins_activity_report(
+        window, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "nerdtechnic.devmap"}
     )
     assert window.websocket.sent[-1]["error"]["code"] == "UNAUTHORIZED"
 
 
-async def test_the_host_reads_the_summary_with_its_declared_list(audit: PluginAuditLog) -> None:
+async def test_the_host_reads_a_report_with_the_declared_items(audit: PluginAuditLog) -> None:
     host = _session(host=True)
     await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row()]})
-    await ws_handlers.plugin_activity_summary(
-        host, "2", contract.PLUGIN_ACTIVITY_SUMMARY_MESSAGE,
-        {"plugin_id": "nerdtechnic.devmap", "declared": ["fs", "shell"]},
+    await ws_handlers.plugins_activity_report(
+        host, "2", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE,
+        {"plugin_id": "nerdtechnic.devmap", "declared": [{"kind": "system", "key": "fs"}, {"kind": "shell", "key": "allowlist"}]},
     )
-    summary = host.websocket.sent[-1]["payload"]
-    assert summary["total"] == 1 and summary["declaredUnused"] == ["shell"]
+    report = host.websocket.sent[-1]["payload"]
+    assert report["schemaVersion"] == 1 and report["totals"]["calls"] == 1
+    assert report["declaredUnused"] == [{"kind": "shell", "key": "allowlist", "lastUsedAt": None}]
+
+
+async def test_without_declared_items_nothing_is_listed_unused(audit: PluginAuditLog) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "nerdtechnic.devmap"}
+    )
+    assert host.websocket.sent[-1]["payload"]["declaredUnused"] == []
 
 
 @pytest.mark.parametrize(
     "payload",
-    [{}, {"plugin_id": ""}, {"plugin_id": 3}, {"plugin_id": "a.b", "declared": "fs"}, {"plugin_id": "a.b", "x": 1}],
+    [
+        {}, {"plugin_id": ""}, {"plugin_id": 3}, {"plugin_id": "a.b", "x": 1},
+        {"plugin_id": "a.b", "declared": "fs"}, {"plugin_id": "a.b", "declared": ["fs"]},
+        {"plugin_id": "a.b", "declared": [{"kind": "net", "key": "x"}]},
+        {"plugin_id": "a.b", "declared": [{"kind": "system", "key": 1}]},
+        {"plugin_id": "a.b", "declared": [{"kind": "system", "key": "fs", "extra": 1}]},
+    ],
 )
-async def test_a_malformed_summary_request_is_refused(audit: PluginAuditLog, payload: Any) -> None:
+async def test_a_malformed_report_request_is_refused(audit: PluginAuditLog, payload: Any) -> None:
     host = _session(host=True)
-    await ws_handlers.plugin_activity_summary(host, "1", contract.PLUGIN_ACTIVITY_SUMMARY_MESSAGE, payload)
+    await ws_handlers.plugins_activity_report(host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, payload)
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"

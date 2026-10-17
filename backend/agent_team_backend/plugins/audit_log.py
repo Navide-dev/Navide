@@ -89,6 +89,8 @@ PRUNE_START_DELAY_S = 120.0
 #: day's calls must be to be flagged (D3: "10x the 7-day baseline").
 SUMMARY_WINDOW_DAYS = 30
 SPIKE_FACTOR = 10
+#: ``PluginActivityReport.schemaVersion`` (``PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION``).
+ACTIVITY_REPORT_SCHEMA_VERSION = 1
 
 OUTSIDE_WORKSPACE = "<outside-workspace>"
 #: A shell command that cannot be split the way a shell would split it.
@@ -130,6 +132,79 @@ def _arguments_digest(arguments: Any) -> tuple[str, int]:
 
 def _utc_day(at_ms: int) -> str:
     return time.strftime("%Y-%m-%d", time.gmtime(at_ms / 1000))
+
+
+def _day_start_ms(at_ms: int) -> int:
+    return at_ms - at_ms % _DAY_MS
+
+
+def _declared_unused(
+    declared: list[dict[str, str]],
+    uses: list[Any],
+    rolled_uses: list[Any],
+    tool_uses: dict[str, int],
+    since: int,
+) -> list[dict[str, Any]]:
+    """The declared entries with no allowed use since ``since``, each with its last use.
+
+    ``system`` keys are namespaces (``fs`` matches ``fs.*``), ``backendMethod``
+    keys are addresses, ``agentTool`` keys are tool names, and a ``shell`` key
+    is the declared mode (``allowlist`` / ``full``): any allowed shell call uses it.
+    """
+    out: list[dict[str, Any]] = []
+    for entry in declared:
+        kind, key = entry.get("kind"), entry.get("key", "")
+        last: int | None = None
+
+        def seen(at: int | None) -> None:
+            nonlocal last
+            if at is not None and (last is None or at > last):
+                last = int(at)
+
+        if kind == "agentTool":
+            seen(tool_uses.get(key))
+        else:
+            for source, address, at in [*uses, *rolled_uses]:
+                if _declared_match(kind, key, source, address):
+                    seen(at)
+        if last is None or last < since:
+            out.append({"kind": kind, "key": key, "lastUsedAt": last})
+    return out
+
+
+def _declared_match(kind: Any, key: str, source: str, address: str) -> bool:
+    if kind == "system":
+        return address.startswith(f"{key}.")
+    if kind == "backendMethod":
+        return address == key
+    if kind == "shell":
+        return source == "shell"
+    return False
+
+
+def _undeclared_uses(refusals: list[Any]) -> list[dict[str, Any]]:
+    """``undeclared`` entries from refusals grouped by source, address, workspace and reason."""
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for source, address, workspace, reason, n, last_at in refusals:
+        group = groups.setdefault((source, address, workspace), {"reasons": {}, "count": 0, "lastAt": 0})
+        group["reasons"][reason or OTHER] = group["reasons"].get(reason or OTHER, 0) + int(n)
+        if reason == "undeclared":
+            group["count"] += int(n)
+            group["lastAt"] = max(group["lastAt"], int(last_at))
+    out = [
+        {
+            "source": source, "address": address, "workspace": workspace, "count": group["count"],
+            "lastAt": group["lastAt"],
+            "reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in sorted(group["reasons"].items(), key=lambda item: (-item[1], item[0]))
+            ],
+        }
+        for (source, address, workspace), group in groups.items()
+        if group["count"]
+    ]
+    out.sort(key=lambda item: (-item["lastAt"], item["source"], item["address"], item["workspace"]))
+    return out
 
 
 def _non_negative_int(value: Any) -> int:
@@ -535,11 +610,14 @@ class PluginAuditLog:
                     ids,
                 )
                 cur.execute(
-                    "INSERT INTO plugin_activity_denied_daily (day, plugin_id, denied_reason, count)"
-                    " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch'), plugin_id, denied_reason, COUNT(*)"
+                    "INSERT INTO plugin_activity_denied_daily"
+                    " (day, plugin_id, workspace, source, address, denied_reason, count)"
+                    " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch'), plugin_id, workspace, source, address,"
+                    " denied_reason, COUNT(*)"
                     f" FROM plugin_activity WHERE id IN ({marks}) AND outcome = 'denied'"  # noqa: S608 - placeholders only
-                    " GROUP BY 1, 2, 3 ORDER BY 1"
-                    " ON CONFLICT(day, plugin_id, denied_reason) DO UPDATE SET count = count + excluded.count",
+                    " GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1"
+                    " ON CONFLICT(day, plugin_id, workspace, source, address, denied_reason)"
+                    " DO UPDATE SET count = count + excluded.count",
                     ids,
                 )
                 cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
@@ -603,112 +681,164 @@ class PluginAuditLog:
             row["caller_verified"] = "pane-token" if row["caller_kind"] == "pane" else "none"
         return rows
 
-    def activity_summary(
-        self, plugin_id: str, *, declared: list[str] | None = None, now_ms: int | None = None
+    def activity_report(
+        self, plugin_id: str, *, declared: list[dict[str, str]] | None = None, now_ms: int | None = None
     ) -> dict[str, Any]:
-        """One plugin's activity for the activity page (D-f): counts and anomalies.
+        """One plugin's ``PluginActivityReport`` (contract 5.1; ``src/shared/pluginActivity.ts``).
 
-        Over the last ``SUMMARY_WINDOW_DAYS``, from the detail rows plus the
-        days already rolled up (each row is in exactly one of the two):
+        Built from the audit tables, aggregation and anomaly checks included:
 
-        - ``calls``: ``{address, source, outcome, count}``, most frequent first;
-          ``total`` and ``denied30d`` add them up.
-        - ``deniedUndeclared``: refusals of a use the manifest did not declare,
-          ``{count7d, lastAt}``. The daily rollup keeps the outcome but not the
-          reason, so this reads the 7 days of detail rows only.
-        - ``declaredUnused``: the entries of ``declared`` (a namespace such as
-          ``fs`` or an address such as ``storage.get``) with no allowed call in
-          the window, in the order given; None when ``declared`` is None.
-        - ``anomalies`` (flags only; nothing is refused because of them):
-          ``volume-spike`` when today's calls are over ``SPIKE_FACTOR`` times
-          the average of the 7 days before (not without a baseline);
-          ``write-tool-new-workspace`` for a write agent tool whose first call
-          in a workspace was in the last 24 hours; ``undeclared-denied`` when
-          there were any in the last 7 days.
+        - ``window`` is the 7 days of detail rows; ``totals``, ``toolCalls``,
+          ``files``, ``commands`` and ``historicalPeakConcurrency`` cover it.
+          The peak is historical (see :meth:`historical_peak_concurrent_calls`).
+        - ``daily``: every day still kept, detail rows plus rolled-up days,
+          oldest first.
+        - ``declaredUnused``: the ``declared`` entries (``{kind, key}``, from
+          the Host, which reads the manifest) with no allowed use in
+          ``SUMMARY_WINDOW_DAYS`` days, with their last use or null.
+        - ``undeclared``: per ``(source, address, workspace)`` with any
+          refusal as undeclared since ``undeclaredSince`` (30 days, the
+          refusal reasons outlive the detail in
+          ``plugin_activity_denied_daily``): ``count`` of those refusals,
+          ``lastAt``, and every refusal reason of that address, largest first.
+        - ``anomalies`` (flags only): ``volumeSpike`` (today over
+          ``SPIKE_FACTOR`` times the 7-day average, never without a baseline),
+          ``writeToolNewWorkspace`` (first write agent-tool call in a workspace
+          in the last 24 hours) and ``undeclaredDenied`` (per workspace, last
+          7 days).
+        - ``agentActions`` is null until B2-c's table exists.
 
-        Sizes are not summed here; ``result_bytes`` -1 means unknown (see
-        ``UNKNOWN_SIZE``). Reads only, in one short transaction; run it off
-        the event loop.
+        Sizes are passed through as stored: ``-1`` (``UNKNOWN_SIZE``) is never
+        added up. Reads only, in one short transaction; run it off the event loop.
         """
         now = self._now_ms() if now_ms is None else int(now_ms)
-        summary: dict[str, Any] = {
-            "pluginId": plugin_id, "enabled": self.enabled, "windowDays": SUMMARY_WINDOW_DAYS, "now": now,
-            "calls": [], "total": 0, "denied30d": 0,
-            "deniedUndeclared": {"count30d": 0, "count7d": 0, "lastAt": None},
-            "declaredUnused": None if declared is None else list(declared), "anomalies": [],
+        window_from = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
+        since = now - SUMMARY_WINDOW_DAYS * _DAY_MS
+        report: dict[str, Any] = {
+            "schemaVersion": ACTIVITY_REPORT_SCHEMA_VERSION, "pluginId": plugin_id, "generatedAt": now,
+            "window": {"from": window_from, "to": now}, "totals": {"calls": 0, "denied": 0, "errors": 0},
+            "historicalPeakConcurrency": 0, "undeclaredSince": since, "toolCalls": [], "files": [], "commands": [],
+            "daily": [], "declaredUnused": [], "undeclared": [], "anomalies": [], "agentActions": None,
         }
         if not self.enabled:
-            return summary
+            return report
         self.flush()
-        since = now - SUMMARY_WINDOW_DAYS * _DAY_MS
+        report["historicalPeakConcurrency"] = self.historical_peak_concurrent_calls(
+            plugin_id, since_ms=window_from, until_ms=now
+        )["historicalPeak"]
         since_day = _utc_day(since)
-        today = _utc_day(now)
         with self.db.transaction() as cur:
-            calls = cur.execute(
-                "SELECT address, source, outcome, SUM(n) FROM ("
-                " SELECT address, source, outcome, COUNT(*) AS n FROM plugin_activity"
-                "  WHERE plugin_id = ? AND at >= ? GROUP BY 1, 2, 3"
+            totals = cur.execute(
+                "SELECT COUNT(*), SUM(outcome = 'denied'), SUM(outcome = 'error') FROM plugin_activity"
+                " WHERE plugin_id = ? AND at >= ?",
+                (plugin_id, window_from),
+            ).fetchone()
+            tool_calls = cur.execute(
+                "SELECT * FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ? ORDER BY at DESC, id DESC",
+                (plugin_id, window_from),
+            ).fetchall()
+            files = cur.execute(
+                "SELECT fs_path, address, workspace, outcome, COUNT(*), MAX(at) FROM plugin_activity"
+                " WHERE plugin_id = ? AND at >= ? AND fs_path != '' GROUP BY 1, 2, 3, 4 ORDER BY 6 DESC, 1, 2, 3, 4",
+                (plugin_id, window_from),
+            ).fetchall()
+            commands = cur.execute(
+                "SELECT shell_command, workspace, outcome, COUNT(*), MAX(at) FROM plugin_activity"
+                " WHERE plugin_id = ? AND at >= ? AND shell_command != '' GROUP BY 1, 2, 3 ORDER BY 5 DESC, 1, 2, 3",
+                (plugin_id, window_from),
+            ).fetchall()
+            daily = cur.execute(
+                "SELECT day, SUM(calls), SUM(denied), SUM(errors) FROM ("
+                " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch') AS day, COUNT(*) AS calls,"
+                "  SUM(outcome = 'denied') AS denied, SUM(outcome = 'error') AS errors"
+                "  FROM plugin_activity WHERE plugin_id = ? GROUP BY 1"
                 " UNION ALL"
-                " SELECT address, source, outcome, SUM(count) FROM plugin_activity_daily"
-                "  WHERE plugin_id = ? AND day >= ? GROUP BY 1, 2, 3"
-                ") GROUP BY 1, 2, 3 ORDER BY 4 DESC, 1, 2, 3",
+                " SELECT day, SUM(count), SUM(CASE WHEN outcome = 'denied' THEN count ELSE 0 END),"
+                "  SUM(CASE WHEN outcome = 'error' THEN count ELSE 0 END)"
+                "  FROM plugin_activity_daily WHERE plugin_id = ? GROUP BY 1"
+                ") GROUP BY 1 ORDER BY 1",
+                (plugin_id, plugin_id),
+            ).fetchall()
+            refusals = cur.execute(
+                "SELECT source, address, workspace, denied_reason, SUM(n), MAX(last_at) FROM ("
+                " SELECT source, address, workspace, denied_reason, COUNT(*) AS n, MAX(at) AS last_at"
+                "  FROM plugin_activity WHERE plugin_id = ? AND at >= ? AND outcome = 'denied' GROUP BY 1, 2, 3, 4"
+                " UNION ALL"
+                " SELECT source, address, workspace, denied_reason, SUM(count),"
+                "  MAX(CAST(strftime('%s', day) AS INTEGER) * 1000)"
+                "  FROM plugin_activity_denied_daily WHERE plugin_id = ? AND day >= ? GROUP BY 1, 2, 3, 4"
+                ") GROUP BY 1, 2, 3, 4",
                 (plugin_id, since, plugin_id, since_day),
             ).fetchall()
-            undeclared = cur.execute(
-                "SELECT COUNT(*), MAX(at) FROM plugin_activity"
-                " WHERE plugin_id = ? AND at >= ? AND outcome = 'denied' AND denied_reason = 'undeclared'",
+            uses = cur.execute(
+                "SELECT source, address, MAX(at) FROM plugin_activity"
+                " WHERE plugin_id = ? AND outcome = 'allowed' GROUP BY 1, 2",
+                (plugin_id,),
+            ).fetchall()
+            rolled_uses = cur.execute(
+                "SELECT source, address, MAX(CAST(strftime('%s', day) AS INTEGER) * 1000) FROM plugin_activity_daily"
+                " WHERE plugin_id = ? AND outcome = 'allowed' GROUP BY 1, 2",
+                (plugin_id,),
+            ).fetchall()
+            tool_uses = dict(cur.execute(
+                "SELECT tool, MAX(at) FROM plugin_tool_calls WHERE plugin_id = ? AND outcome = 'ok' GROUP BY 1",
+                (plugin_id,),
+            ).fetchall())
+            recent_undeclared = cur.execute(
+                "SELECT workspace, COUNT(*), MAX(at) FROM plugin_activity WHERE plugin_id = ? AND at >= ?"
+                " AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1 ORDER BY 1",
                 (plugin_id, now - 7 * _DAY_MS),
-            ).fetchone()
-            undeclared_30d = cur.execute(
-                "SELECT (SELECT COUNT(*) FROM plugin_activity WHERE plugin_id = ? AND at >= ?"
-                "  AND outcome = 'denied' AND denied_reason = 'undeclared')"
-                " + (SELECT COALESCE(SUM(count), 0) FROM plugin_activity_denied_daily"
-                "  WHERE plugin_id = ? AND day >= ? AND denied_reason = 'undeclared')",
-                (plugin_id, since, plugin_id, since_day),
-            ).fetchone()[0]
-            per_day = cur.execute(
-                "SELECT day, SUM(n) FROM ("
-                " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch') AS day, COUNT(*) AS n FROM plugin_activity"
-                "  WHERE plugin_id = ? AND at >= ? GROUP BY 1"
-                " UNION ALL"
-                " SELECT day, SUM(count) FROM plugin_activity_daily WHERE plugin_id = ? AND day >= ? GROUP BY 1"
-                ") GROUP BY 1",
-                (plugin_id, now - 8 * _DAY_MS, plugin_id, _utc_day(now - 8 * _DAY_MS)),
             ).fetchall()
             new_writes = cur.execute(
                 "SELECT tool, target_workspace, MIN(at) FROM plugin_tool_calls"
                 " WHERE plugin_id = ? AND risk = 'write' GROUP BY 1, 2 HAVING MIN(at) >= ? ORDER BY 3, 1, 2",
                 (plugin_id, now - _DAY_MS),
             ).fetchall()
-        summary["calls"] = [
-            {"address": address, "source": source, "outcome": outcome, "count": int(count)}
-            for address, source, outcome, count in calls
+        report["totals"] = {"calls": int(totals[0] or 0), "denied": int(totals[1] or 0), "errors": int(totals[2] or 0)}
+        report["toolCalls"] = [
+            {
+                "id": row["id"], "at": row["at"], "callerKind": row["caller_kind"], "paneId": row["pane_id"],
+                "paneName": row["pane_name"], "callerWorkspace": row["caller_workspace"],
+                "targetWorkspace": row["target_workspace"], "crossWorkspace": bool(row["cross_workspace"]),
+                "pluginVersion": row["plugin_version"], "tool": row["tool"], "risk": row["risk"],
+                "outcome": row["outcome"], "errorCode": row["error_code"], "durationMs": row["duration_ms"],
+                "argsBytes": row["args_bytes"], "resultBytes": row["result_bytes"],
+            }
+            for row in tool_calls
         ]
-        summary["total"] = sum(row["count"] for row in summary["calls"])
-        summary["denied30d"] = sum(row["count"] for row in summary["calls"] if row["outcome"] == "denied")
-        count7d, last_at = int(undeclared[0] or 0), undeclared[1]
-        summary["deniedUndeclared"] = {"count30d": int(undeclared_30d or 0), "count7d": count7d, "lastAt": last_at}
-        if declared is not None:
-            used = {row["address"] for row in summary["calls"] if row["outcome"] == "allowed"}
-            summary["declaredUnused"] = [
-                entry for entry in declared
-                if not any(address == entry or address.startswith(f"{entry}.") for address in used)
-            ]
+        report["files"] = [
+            {"path": path, "address": address, "workspace": ws, "outcome": outcome, "count": int(n), "lastAt": last}
+            for path, address, ws, outcome, n, last in files
+        ]
+        report["commands"] = [
+            {"command": command, "workspace": ws, "outcome": outcome, "count": int(n), "lastAt": last}
+            for command, ws, outcome, n, last in commands
+        ]
+        report["daily"] = [
+            {"day": day, "calls": int(calls), "denied": int(denied or 0), "errors": int(errors or 0)}
+            for day, calls, denied, errors in daily
+        ]
+        report["declaredUnused"] = _declared_unused(declared or [], uses, rolled_uses, tool_uses, since)
+        report["undeclared"] = _undeclared_uses(refusals)
         anomalies: list[dict[str, Any]] = []
-        counts = {day: int(n) for day, n in per_day}
+        counts = {row["day"]: row["calls"] for row in report["daily"]}
+        today = _utc_day(now)
         baseline = sum(counts.get(_utc_day(now - d * _DAY_MS), 0) for d in range(1, 8)) / 7
         if baseline > 0 and counts.get(today, 0) > SPIKE_FACTOR * baseline:
             anomalies.append({
-                "kind": "volume-spike", "day": today, "count": counts[today], "baselineDailyAverage": baseline,
+                "kind": "volumeSpike", "at": _day_start_ms(now), "workspace": "", "tool": None,
+                "count": counts[today], "baseline": baseline,
             })
         anomalies.extend(
-            {"kind": "write-tool-new-workspace", "tool": tool, "workspace": workspace, "firstAt": first_at}
-            for tool, workspace, first_at in new_writes
+            {"kind": "writeToolNewWorkspace", "at": first_at, "workspace": ws, "tool": tool, "count": None, "baseline": None}
+            for tool, ws, first_at in new_writes
         )
-        if count7d:
-            anomalies.append({"kind": "undeclared-denied", "count7d": count7d, "lastAt": last_at})
-        summary["anomalies"] = anomalies
-        return summary
+        anomalies.extend(
+            {"kind": "undeclaredDenied", "at": last_at, "workspace": ws, "tool": None, "count": n, "baseline": None}
+            for ws, n, last_at in recent_undeclared
+        )
+        report["anomalies"] = anomalies
+        return report
 
     def historical_peak_concurrent_calls(self, plugin_id: str, *, since_ms: int, until_ms: int) -> dict[str, Any]:
         """The most agent tool calls of ``plugin_id`` that ran at once in the window.

@@ -348,11 +348,35 @@ async def plugin_activity_record(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
-@handler("plugin.activity.summary")
-async def plugin_activity_summary(
+_DECLARED_KINDS = frozenset(("system", "shell", "backendMethod", "agentTool"))
+
+
+def _declared_items(value: Any) -> list[dict[str, str]] | None:
+    """``declared`` of a report request: ``[{kind, key}]``, None when malformed."""
+    if not isinstance(value, list):
+        return None
+    items = []
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"kind", "key"}
+            or item["kind"] not in _DECLARED_KINDS
+            or not isinstance(item["key"], str)
+        ):
+            return None
+        items.append({"kind": item["kind"], "key": item["key"]})
+    return items
+
+
+@handler("plugins.activity.report")
+async def plugins_activity_report(
     session: "Session", msg_id: str, msg_type: str, payload: dict
 ) -> None:
-    """One plugin's activity counts and anomaly flags for the activity page (D-f)."""
+    """One plugin's ``PluginActivityReport`` for the activity page (contract 5.1, D-f).
+
+    Host-authenticated: the main window asks the Host over IPC and the Host
+    forwards, adding the ``declared`` items from the installed manifest.
+    """
     from . import app
 
     if not session.host_authenticated:
@@ -361,19 +385,14 @@ async def plugin_activity_summary(
         )
         return
     plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
-    declared = payload.get("declared") if isinstance(payload, dict) else None
-    if (
-        not isinstance(plugin_id, str)
-        or not plugin_id
-        or not set(payload) <= {"plugin_id", "declared"}
-        or not (declared is None or (isinstance(declared, list) and all(isinstance(d, str) for d in declared)))
-    ):
+    declared = _declared_items(payload.get("declared", [])) if isinstance(payload, dict) else None
+    if not isinstance(plugin_id, str) or not plugin_id or not set(payload) <= {"plugin_id", "declared"} or declared is None:
         await session.send_json(
-            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.summary is malformed")
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.report is malformed")
         )
         return
-    summary = await asyncio.to_thread(app.plugin_audit_log.activity_summary, plugin_id, declared=declared)
-    await session.send_json(make_response(msg_id, msg_type, summary))
+    report = await asyncio.to_thread(app.plugin_audit_log.activity_report, plugin_id, declared=declared)
+    await session.send_json(make_response(msg_id, msg_type, report))
 
 
 @handler("editor.rewrite")
