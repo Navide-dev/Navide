@@ -48,6 +48,7 @@ import itertools
 import json
 import logging
 import re
+import unicodedata
 import weakref
 from dataclasses import dataclass, field
 from typing import Any
@@ -196,18 +197,6 @@ def _fence(entry: dict[str, Any], what: str, text: str) -> str:
     ])
 
 
-def result_bytes(result: Any) -> int:
-    """Size of a result spelled as the Host measures it (contract 2.7,
-    agentToolResultBytes): the UTF-8 bytes of the result value's compact JSON,
-    ``null`` when there is none; never the fenced or sanitized text.
-    Disclosed, never limited here. Becomes agent_tool_payload_text with DB9 PR1."""
-    try:
-        text = json.dumps(result, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    except ValueError:  # NaN/Infinity parsed from the Host's frame
-        text = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
-    return utf8_byte_length(text)
-
-
 def wrap_result(entry: dict[str, Any], result: Any) -> str:
     """The agent-facing text of one result, wrapped as external content."""
     return _fence(entry, "result", _result_text(result))
@@ -314,16 +303,57 @@ def _without_regexes(value: Any) -> Any:
     return out
 
 
-# Variation selectors supplement (Mn), on top of the text-rule set.
-_VARIATION_SELECTORS = re.compile("[\U000e0100-\U000e01ef]")
-
-
 def _served_string(text: str) -> str:
-    """external_content's body rules, plus every character of the text-rule set
-    and the variation selectors supplement (some are Mn, which it keeps)."""
-    # Removed first: neutralizing breaks boundary lines with U+200B, which
-    # this set would otherwise take out again.
-    return neutralize_external_text(_VARIATION_SELECTORS.sub("", _INVISIBLE.sub("", text)))
+    """A schema string as tools/list serves it. Only a dangerous string is
+    rewritten: one that external_content's neutralize_external_text changes
+    beyond NFKC (control, Cf and tag characters, a boundary line, a
+    ---MARKER--- token) or that poses as a source label; it is served
+    neutralized. Anything else (①, fullwidth letters, an emoji's VS16, ligatures) is
+    served exactly as declared: NFKC only detects, it never rewrites a safe
+    value, so the agent can send back what the plugin declared."""
+    neutral = _neutralize(text)
+    return text if neutral == unicodedata.normalize("NFKC", text) else neutral
+
+
+class _AmbiguousArgument(Exception):
+    """An argument names a served value two declared values share."""
+
+
+def _restored_string(value: str, declared: list[str]) -> str:
+    """``value`` as the plugin declared it: a declared value is kept; the
+    served spelling of exactly one declared value becomes that value."""
+    if value in declared:
+        return value
+    matches = {original for original in declared if original != value and _served_string(original) == value}
+    if len(matches) > 1:
+        raise _AmbiguousArgument
+    return matches.pop() if matches else value
+
+
+def _restored_arguments(schema: Any, value: Any) -> Any:
+    """Arguments the agent built from tools/list, mapped back to what the
+    plugin declared (contract 2.4): enum and const strings and property names
+    along properties, additionalProperties and items. Values under other
+    keywords are not mapped (a rewritten one there fails the schema check)."""
+    if not isinstance(schema, dict):
+        return value
+    if isinstance(value, str):
+        declared = [schema["const"]] if "const" in schema else []
+        if isinstance(schema.get("enum"), list):
+            declared += schema["enum"]
+        return _restored_string(value, [item for item in declared if isinstance(item, str)])
+    if isinstance(value, dict):
+        properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
+        extra = schema.get("additionalProperties")
+        out: dict[str, Any] = {}
+        for key, item in value.items():
+            original = _restored_string(key, list(properties))
+            out[original] = _restored_arguments(properties.get(original, extra), item)
+        return out
+    if isinstance(value, list):
+        items = schema.get("items")
+        return [_restored_arguments(items, item) for item in value]
+    return value
 
 
 def _served_data(value: Any) -> Any:
@@ -456,6 +486,20 @@ def _argument_error(name: str, schema: dict[str, Any], arguments: dict[str, Any]
         f"arguments do not match the input schema of {name} at {where}: "
         f"the value ({size} bytes) fails the '{first.validator}' keyword"
     )
+
+
+def _prepared_arguments(name: str, schema: dict[str, Any], arguments: dict[str, Any]) -> tuple[Any, str | None]:
+    """The arguments mapped back to the declared values, and the first schema
+    violation or None. Runs in a worker thread."""
+    try:
+        restored = _restored_arguments(schema, arguments)
+    except _AmbiguousArgument:
+        _log.warning("plugin tool call %s refused: an argument is a served value two declared values share", name)
+        return None, (
+            f"an argument of {name} is ambiguous: two values the plugin declared are served as the same text "
+            "in tools/list, so which one is meant cannot be told; the call was not sent"
+        )
+    return restored, _argument_error(name, schema, restored)
 
 
 def _valid_payload(payload: Any) -> bool:
@@ -643,7 +687,7 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         return _refusal("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
     # The whole consented inputSchema (regexes excepted), off the event loop;
     # the Host checks again.
-    invalid = await asyncio.to_thread(_argument_error, name, entry["inputSchema"], arguments)
+    arguments, invalid = await asyncio.to_thread(_prepared_arguments, name, entry["inputSchema"], arguments)
     if invalid is not None:
         return _refusal(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
     # A pane targets its own workspace; a caller without a pane has none to compare.
@@ -669,18 +713,21 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
     if response.get("ok") is True:
         _taint(caller, entry)
         result = response.get("result")
-        # The Host measures the size once (contract 2.7, agentToolResultBytes);
-        # measured here only when an older Host sends none.
+        # The Host measures the size once (contract 2.7, agentToolResultBytes)
+        # and the backend never measures again: without a valid one the size
+        # is unknown, never a reason to fail the call.
         meta = response.get("meta")
-        host_size = meta.get("resultBytes") if isinstance(meta, dict) else None
-        valid = isinstance(host_size, int) and not isinstance(host_size, bool) and host_size >= 0
-        size = host_size if valid else result_bytes(result)
-        _log.info("plugin tool result %s: resultBytes=%d", name, size)
+        size = meta.get("resultBytes") if isinstance(meta, dict) else None
+        if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+            _log.info("plugin tool result %s: resultBytes=%d", name, size)
+        else:
+            size = None
+            _log.warning("plugin tool result %s: the Host sent no valid resultBytes; size unknown", name)
         # Size is disclosed, not limited (DB9 ruling a).
         return CallToolResult(
             content=[TextContent(type="text", text=wrap_result(entry, result))],
             isError=False,
-            _meta={"resultBytes": size},
+            _meta=None if size is None else {"resultBytes": size},
         )
     raw_code = response.get("error_code")
     error_code = raw_code if isinstance(raw_code, str) and raw_code in _HOST_ERROR_CODES else "PLUGIN_TOOL_FAILED"

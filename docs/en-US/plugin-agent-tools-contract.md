@@ -203,6 +203,11 @@ refusing a call. The sizes are disclosed instead, one field each:
 | result | the Host, once (`agentToolResultBytes`, 4.2) | `meta.resultBytes` | `plugin_tool_calls.result_bytes` |
 | arguments | the backend, once (`agent_tool_arguments_digest`, 5) | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
 
+When the Host sends no valid `meta.resultBytes` (absent, not a non-negative
+integer), the backend never measures the result itself: the size is unknown,
+the agent's result carries no `meta.resultBytes`, the audit `result_bytes` is
+NULL, a warning is logged, and the call still succeeds.
+
 The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
 the error-code list for older readers but is no longer produced.
 
@@ -786,6 +791,19 @@ replaces them):
   shows as `*`).
 - A Host `error_code` outside the table above is reported as
   `PLUGIN_TOOL_FAILED`, its text fenced like a result.
+
+tools/list serves the schema with only dangerous strings rewritten: a string
+that `neutralize_external_text` changes beyond NFKC (control, Cf and tag
+characters, a boundary line, a `---MARKER---` token) or that poses as a source
+label is served neutralized; every other string, property names included, is
+served exactly as declared (NFKC detects, it never rewrites). Before the
+check, arguments are mapped back to the declared values: an `enum` or `const`
+string, or a property name (along `properties`, `additionalProperties` and
+`items`), that is the served spelling of exactly one declared value becomes
+that value, so the plugin receives what it declared; a declared value sent as
+is stays. When two declared values are served as the same text, a call that
+sends it is refused with `PLUGIN_TOOL_INVALID_ARGUMENTS` (an "ambiguous"
+message, logged), never guessed. Values under other keywords are not mapped.
 
 ### 4.3 Backend → Host: `marketplace.query`
 
