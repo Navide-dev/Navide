@@ -354,7 +354,7 @@ async def plugins_agent_action_result(
 
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
-_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
+_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at"}
 #: The Host records broker and shell-broker calls; agent tool calls are the
 #: backend's own rows (B1).
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
@@ -403,6 +403,8 @@ async def plugin_activity_record(
         )
         return
     accepted = 0
+    # Skipped rows are counted by reason and logged, never their content (#373 F3).
+    skipped = {"malformed": 0, "bad at": 0, "refused": 0}
     for row in rows:
         if isinstance(row, dict) and row.get("source") == "backend":
             if _backend_call_row(app, row):
@@ -414,10 +416,25 @@ async def plugin_activity_record(
             or row.get("source") not in _HOST_ACTIVITY_SOURCES
             or (isinstance(row.get("address"), str) and row["address"].startswith("backend."))
         ):
+            skipped["malformed"] += 1
             continue
-        fields = {key: value for key, value in row.items() if isinstance(value, str)}
-        if len(fields) == len(row) and app.plugin_audit_log.record_activity(**fields):
+        # `at`: when the call happened on the Host (Unix ms); record_activity
+        # clamps it to now. Without it, the row is dated when it arrives.
+        at = row.get("at")
+        if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+            skipped["bad at"] += 1
+            continue
+        fields = {key: value for key, value in row.items() if key != "at" and isinstance(value, str)}
+        if len(fields) != len(row) - ("at" in row):
+            skipped["malformed"] += 1
+            continue
+        if app.plugin_audit_log.record_activity(**fields, at_ms=at):
             accepted += 1
+        else:
+            skipped["refused"] += 1
+    if accepted < len(rows):
+        reasons = ", ".join(f"{reason}: {n}" for reason, n in skipped.items() if n)
+        log.warning("plugin activity: %d of %d rows skipped (%s)", len(rows) - accepted, len(rows), reasons)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
@@ -441,6 +458,28 @@ def _declared_items(value: Any) -> list[dict[str, str]] | None:
     return items
 
 
+@handler("plugin.activity.forget")
+async def plugin_activity_forget(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """A plugin was removed: forget its first-seen rows (Host-authenticated)."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
+    if not isinstance(plugin_id, str) or not plugin_id or set(payload) != {"plugin_id"}:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.forget is malformed")
+        )
+        return
+    await asyncio.to_thread(app.plugin_audit_log.forget_plugin, plugin_id)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("plugins.activity.report")
 async def plugins_activity_report(
     session: "Session", msg_id: str, msg_type: str, payload: dict
@@ -459,12 +498,23 @@ async def plugins_activity_report(
         return
     plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
     declared = _declared_items(payload.get("declared", [])) if isinstance(payload, dict) else None
-    if not isinstance(plugin_id, str) or not plugin_id or not set(payload) <= {"plugin_id", "declared"} or declared is None:
+    # When the Host installed this package (Unix ms), optional (#373 F1).
+    installed_at = payload.get("installedAt") if isinstance(payload, dict) else None
+    if installed_at is not None and (isinstance(installed_at, bool) or not isinstance(installed_at, int) or installed_at < 0):
+        declared = None
+    if (
+        not isinstance(plugin_id, str)
+        or not plugin_id
+        or not set(payload) <= {"plugin_id", "declared", "installedAt"}
+        or declared is None
+    ):
         await session.send_json(
             make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.activity.report is malformed")
         )
         return
-    report = await asyncio.to_thread(app.plugin_audit_log.activity_report, plugin_id, declared=declared)
+    report = await asyncio.to_thread(
+        app.plugin_audit_log.activity_report, plugin_id, declared=declared, installed_at=installed_at
+    )
     await session.send_json(make_response(msg_id, msg_type, report))
 
 

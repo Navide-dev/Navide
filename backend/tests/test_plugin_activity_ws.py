@@ -180,30 +180,168 @@ async def test_a_malformed_report_request_is_refused(audit: PluginAuditLog, payl
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
 
 
-# ── a plugin's frontend calling its own backend (source "backend") ──────────
+# ── calls into a plugin's own backend (source "backend", counted per minute) ─
 
 
-async def test_the_host_records_backend_calls_and_they_count_as_use_of_the_declared_method(audit: PluginAuditLog) -> None:
+def _backend_row(**overrides: Any) -> dict[str, Any]:
+    row = {
+        "plugin_id": "nerdtechnic.devmap", "plugin_version": "0.2.0", "workspace": "/Users/me/project",
+        "source": "backend", "address": "backend.devmap.block.import", "outcome": "allowed", "count": 3,
+    }
+    row.update(overrides)
+    return row
+
+
+def _minutes(audit: PluginAuditLog) -> list[dict[str, Any]]:
+    audit.flush()
+    with audit.db.transaction() as cur:
+        return [dict(r) for r in cur.execute("SELECT * FROM plugin_backend_call_minutes ORDER BY address, outcome")]
+
+
+async def test_backend_calls_are_added_up_per_minute_and_count_as_use_of_the_declared_method(
+    audit: PluginAuditLog,
+) -> None:
     host = _session(host=True)
     rows = [
-        _row(source="backend", address="backend.devmap.block.import", fs_path=""),
+        _backend_row(), _backend_row(count=2),
         # A backend method named like a system namespace is not a use of that namespace.
-        _row(source="backend", address="backend.fs.read", fs_path=""),
+        _backend_row(address="backend.fs.read", count=1),
+        # Called but failing still counts as called (L4).
+        _backend_row(address="backend.devmap.fail", outcome="error", count=1),
+        _backend_row(address="backend.devmap.slow", outcome="cancelled", count=1),
     ]
     await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": rows})
-    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
-    assert [(r["source"], r["address"]) for r in _stored(audit)] == [
-        ("backend", "backend.devmap.block.import"), ("backend", "backend.fs.read"),
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 5}
+    assert _stored(audit) == []  # not in plugin_activity
+    assert [(r["address"], r["outcome"], r["count"]) for r in _minutes(audit)] == [
+        ("backend.devmap.block.import", "allowed", 5),
+        ("backend.devmap.fail", "error", 1),
+        ("backend.devmap.slow", "cancelled", 1),
+        ("backend.fs.read", "allowed", 1),
     ]
     declared = [
         {"kind": "backendMethod", "key": "backend.devmap.block.import"},
+        {"kind": "backendMethod", "key": "backend.devmap.fail"},
         {"kind": "backendMethod", "key": "backend.devmap.block.export"},
         {"kind": "system", "key": "fs"},
     ]
     await ws_handlers.plugins_activity_report(
         host, "2", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "nerdtechnic.devmap", "declared": declared},
     )
-    unused = host.websocket.sent[-1]["payload"]["declaredUnused"]
-    assert [(u["kind"], u["key"]) for u in unused] == [
+    report = host.websocket.sent[-1]["payload"]
+    assert [(u["kind"], u["key"]) for u in report["declaredUnused"]] == [
         ("backendMethod", "backend.devmap.block.export"), ("system", "fs"),
     ]
+    # Totals, daily and spikes keep main's meaning: no backend calls in them (M3).
+    assert report["totals"] == {"calls": 0, "denied": 0, "errors": 0} and report["daily"] == []
+    calls = report["backendCalls"]
+    assert {(m["address"], m["outcome"], m["count"]) for m in calls["methods"]} == {
+        ("backend.devmap.block.import", "allowed", 5), ("backend.devmap.fail", "error", 1),
+        ("backend.devmap.slow", "cancelled", 1), ("backend.fs.read", "allowed", 1),
+    }
+    [day] = calls["daily"]
+    assert (day["calls"], day["errors"], day["cancelled"], day["denied"]) == (8, 1, 1, 0)
+
+
+@pytest.mark.parametrize("row", [
+    _backend_row(address="devmap.block.import"),           # backend source, no backend. prefix
+    _backend_row(outcome="maybe"),
+    _backend_row(count=0),
+    _backend_row(count=True),
+    {**_backend_row(), "extra": "x"},
+    _row(source="broker", address="backend.devmap.block.import", fs_path=""),  # prefix on another source
+])
+async def test_a_backend_row_and_its_prefix_must_agree(audit: PluginAuditLog, row: dict[str, Any]) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [row, _row()]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+    assert _minutes(audit) == []
+
+
+# ── #368 follow-up L3: the Host sends when the call happened ────────────────
+
+
+async def test_a_row_keeps_the_hosts_time_and_a_future_one_is_clamped_to_now(audit: PluginAuditLog) -> None:
+    import time
+
+    now = int(time.time() * 1000)
+    before_midnight = now - now % 86_400_000 - 1  # the last ms of yesterday (UTC)
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        _row(at=before_midnight), _row(at=now + 3_600_000), _row(),
+    ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
+    after = int(time.time() * 1000)
+    stored = [r["at"] for r in _stored(audit)]
+    assert stored[0] == before_midnight
+    assert now <= stored[1] <= after  # never later than now
+    assert now <= stored[2] <= after  # no time sent: when it arrived
+
+
+@pytest.mark.parametrize("at", ["1792108800000", True, -1, 1.5, None])
+async def test_a_row_with_a_bad_time_is_skipped(audit: PluginAuditLog, at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(
+        host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row(at=at), _row()]}
+    )
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+
+
+# ── #368 follow-up L4: a removed plugin is forgotten ────────────────────────
+
+
+async def test_only_the_host_can_forget_a_plugin_and_it_forgets_that_plugin(audit: PluginAuditLog) -> None:
+    calls: list[str] = []
+    audit.forget_plugin = lambda plugin_id: calls.append(plugin_id)  # type: ignore[method-assign]
+    window = _session(host=False)
+    await ws_handlers.plugin_activity_forget(window, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert window.websocket.sent[-1]["error"]["code"] == "UNAUTHORIZED" and calls == []
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "2", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True} and calls == ["a.b"]
+
+
+@pytest.mark.parametrize("payload", [{}, {"plugin_id": ""}, {"plugin_id": 1}, {"plugin_id": "a.b", "x": 1}, []])
+async def test_a_malformed_forget_is_refused(audit: PluginAuditLog, payload: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, payload)
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_the_report_request_carries_the_install_time(audit: PluginAuditLog) -> None:
+    seen: list[Any] = []
+    real = audit.activity_report
+    audit.activity_report = lambda plugin_id, **kw: (seen.append(kw), real(plugin_id, **kw))[1]  # type: ignore[method-assign]
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": 1_792_000_000_000}
+    )
+    assert host.websocket.sent[-1]["payload"]["schemaVersion"] == 1
+    assert seen == [{"declared": [], "installed_at": 1_792_000_000_000}]
+
+
+@pytest.mark.parametrize("installed_at", ["1", True, -1, 1.5])
+async def test_a_bad_install_time_is_refused(audit: PluginAuditLog, installed_at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": installed_at}
+    )
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_skipped_rows_are_logged_by_count_and_reason_without_their_content(
+    audit: PluginAuditLog, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#373 review F3."""
+    import logging
+
+    host = _session(host=True)
+    secret = "/Users/me/.ssh/id_rsa"
+    with caplog.at_level(logging.WARNING):
+        await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+            _row(), _row(source="agentTool", fs_path=secret), _row(at=-1), "x", _row(outcome="ok"),
+        ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+    messages = [r.getMessage() for r in caplog.records if "plugin activity" in r.getMessage()]
+    assert messages == ["plugin activity: 4 of 5 rows skipped (malformed: 2, bad at: 1, refused: 1)"]
+    assert secret not in caplog.text

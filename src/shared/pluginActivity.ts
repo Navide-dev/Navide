@@ -161,6 +161,10 @@ export interface PluginActivityBackendCalls {
 export interface PluginActivityReportRequest {
   plugin_id: string
   declared?: Array<{ kind: PluginActivityDeclaredUnused['kind']; key: string }>
+  /** When the Host installed this package (Unix ms): `writeToolNewWorkspace`
+   *  counts only writes since then, so a reinstall is new again even if the
+   *  removal's `plugin.activity.forget` was lost. */
+  installedAt?: number
 }
 
 /** Sum of the known sizes; unknown (-1) ones are counted, never added. */
