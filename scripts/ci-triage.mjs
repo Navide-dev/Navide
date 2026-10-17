@@ -10,7 +10,8 @@
 // Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
 //                   or a network/disk/cancel signature, or a vitest worker RPC timeout in a
-//                   run whose tests all passed);
+//                   run whose tests all passed, or a Windows shard stopped at its time cap
+//                   by backend/ci_windows_tests.py — "still running at cap");
 //   test-race       a test failed on time: a timeout signature, a wait that gave up, a port race,
 //                   or a test the ledger knows as a race — rerun before blaming code;
 //   needs-review    a test the ledger does not know as a race that either raised an IndexError or
@@ -24,7 +25,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time|An action could not be found at the URI|Failed to download archive|Unable to resolve action/i
+const ENVIRONMENT = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|getaddrinfo|Could not resolve host|operation timed out|No space left on device|rate limit|50[234] (Bad Gateway|Service Unavailable|Gateway Timeout)|The operation was canceled|runner has received a shutdown signal|lost communication with the server|exceeded the maximum execution time|An action could not be found at the URI|Failed to download archive|Unable to resolve action|still running at cap/i
 // Signatures, not bare words: an assertion diff can quote any text (a tool
 // description saying "timed out" is not a timeout).
 const TEST_RACE = /TimeoutExpired|timed out after \d|shutdown timed out|Test timed out in \d|TimeoutError|asyncio\.exceptions\.CancelledError|deadlock detected|EADDRINUSE|address already in use|condition never became true/i

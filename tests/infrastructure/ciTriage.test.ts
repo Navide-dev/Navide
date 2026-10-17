@@ -68,6 +68,20 @@ describe('classifyLog — one entry per failed test, in one of three categories'
     expect(classifyLog(log)).toEqual([expect.objectContaining({ test: '(job)', category: 'environment' })])
   })
 
+  it('reads a Windows shard stopped at its time cap as the environment (#356, run 38990627241, Windows 4/4)', () => {
+    // The whole shard ran slow (steady progress, VM CPU 3-16%); the test that
+    // was running at 1800 s did not fail. The rerun passed in 13m36s.
+    const log = `2026-10-17T01:32:42.5238093Z --- pytest pid 7572, cap 1800s, --shard 4/4 --junitxml test-results/ci/backend.xml --collection-report test-results/ci/backend-collection.json
+2026-10-17T02:02:13.0114721Z --- 1800s: 2486 results; last: backend\\tests\\test_sync_engine.py::test_the_disk_work_of_a_round_runs_in_a_worker_thread
+2026-10-17T02:02:13.0126472Z     vm: 19.9% of 16378 MiB used, cpu 4.6%, 135 processes
+2026-10-17T02:02:13.0139859Z --- pytest exit: still running at cap
+2026-10-17T02:02:13.1703968Z backend\\tests\\test_sync_engine.py::test_the_disk_work_of_a_round_runs_in_a_worker_thread --- summary:
+2026-10-17T02:02:13.1979855Z ##[error]Process completed with exit code 1.`
+    expect(classifyLog(log)).toEqual([expect.objectContaining({
+      test: '(job)', category: 'environment', evidence: '--- pytest exit: still running at cap',
+    })])
+  })
+
   it('keeps a test the ledger already knows as a race a race, whatever its message', () => {
     const log = `2026-10-15T05:30:00.0000000Z FAILED backend\\\\tests\\\\test_voice_handlers.py::test_a_partial_over_its_budget_is_cancelled_and_streaming_goes_on - AssertionError: ({'bytes': 88000, 'cancelled': True}, {'bytes': 320000, 'cancelled': False})`
     expect(classifyLog(log)[0].category).toBe('product-defect')
