@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, mkdirSync, readFileSync, realpathSync } from 'node:fs'
 import { readdir, readlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
@@ -23,13 +23,18 @@ import {
 } from './pluginBackendSandbox'
 import {
   killEscapedSandboxProcesses,
+  defaultStdoutPendingThreshold,
   killSandboxProcessesSync,
   sandboxIdentity,
   watchBackendResources,
+  type BackendResourceStatus,
   type BackendResourceWatch,
+  type ResourceExceeded,
+  type ResourceNotifyMode,
   type ResourceViolation,
   type SandboxIdentity,
 } from './pluginBackendResourceWatchdog'
+import type { PluginResourceDecision, PluginResourceDecisionRow } from '../../shared/pluginResourceDecision'
 import type { NativeBackendStore } from './pluginNativeBackendStore'
 import { OFFICIAL_RECEIPT_NAME, type PluginActivationCatalogEntry } from './installedPlugins'
 import {
@@ -331,6 +336,37 @@ export interface NativeBackendStatusRow {
   shell?: 'allowlist' | 'full'
 }
 
+/** One view's child stdout waiting for a newline, from the backend usage
+ *  (#375 adds `views[].child.stdoutPending`); 0 where the field is absent or
+ *  malformed, so it reads nothing before #375 lands. Each child has its own
+ *  watch, so only that view's child is read (review MED-1 on #386). */
+export function stdoutPendingOf(
+  usage: { views: ReadonlyArray<{ pluginId: string; instanceId: string; child: unknown }> },
+  pluginId: string,
+  instanceId: string,
+): number {
+  const view = usage.views.find((entry) => entry.pluginId === pluginId && entry.instanceId === instanceId)
+  if (!view || typeof view.child !== 'object' || view.child === null) return 0
+  const pending = (view.child as { stdoutPending?: unknown }).stdoutPending
+  const bytes = typeof pending === 'object' && pending !== null ? (pending as { bytes?: unknown }).bytes : undefined
+  return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0 ? bytes : 0
+}
+
+/** A third-party backend went over a resource threshold and waits for the
+ *  user's Stop or Keep running (contract 5.2). It stays listed until answered
+ *  or until that backend exits; it is not kept across a restart. */
+export interface BackendResourceNotice {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: ResourceViolation
+  /** memory and disk in bytes, processes a count, cpu in cores. */
+  usage: number
+  threshold: number
+  at: number
+}
+
 export interface NativeBackendConsentPrompt {
   pluginId: string
   name: string
@@ -549,7 +585,16 @@ export interface ThirdPartyBackendControllerOptions {
     pid: number,
     dataDir: string,
     onViolation: (violation: ResourceViolation) => void,
+    notify?: ResourceNotifyMode,
   ) => BackendResourceWatch
+  /** Plan B watchdog option C: send one decision row (notified, continue,
+   *  terminate) to the backend's audit. Failures are only logged. */
+  recordResourceDecision?: (row: PluginResourceDecisionRow) => void
+  /** The list of unanswered resource notices changed (show it to the user). */
+  onResourceNoticesChanged?: () => void
+  /** One view's child stdout waiting for a newline (#375's
+   *  `stdoutPending.bytes`, see `stdoutPendingOf`); absent = not watched. */
+  stdoutPendingBytes?: (pluginId: string, instanceId: string) => number
   /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
   onConsentGranted?: (pluginId: string) => void
   /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
@@ -672,6 +717,9 @@ export class ThirdPartyBackendController {
   private readonly failures = new Map<string, number[]>()
   private readonly tripped = new Set<string>()
   private readonly lastViolation = new Map<string, ResourceViolation>()
+  private readonly resourceNoticeMap = new Map<string, { notice: BackendResourceNotice; watch: BackendResourceWatch }>()
+  /** The watch of each running third-party backend, for the activity page. */
+  private readonly runningWatches = new Map<BackendResourceWatch, ThirdPartyLaunchSpec>()
 
   constructor(options: ThirdPartyBackendControllerOptions) {
     this.options = options
@@ -783,7 +831,7 @@ export class ThirdPartyBackendController {
   async admit(
     spec: ThirdPartyLaunchSpec,
     workspacePath?: string,
-    options: { prompt?: boolean } = {},
+    options: { prompt?: boolean; instanceId?: string } = {},
   ): Promise<ThirdPartyAdmission> {
     this.forgetDroppedAgentTools(spec)
     this.assertAdmissible(spec)
@@ -812,6 +860,7 @@ export class ThirdPartyBackendController {
     const workspaceRoot = (spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist') && workspacePath
       ? canonicalExistingDirectory(workspacePath) ?? undefined
       : undefined
+    const instanceId = options.instanceId
 
     return {
       spawnProcess: (entryFile, options) => {
@@ -822,14 +871,27 @@ export class ThirdPartyBackendController {
             this.lastViolation.set(spec.pluginId, violation)
             console.warn(`[plugin-backend] ${spec.pluginId} exceeded its ${violation} limit and was stopped`)
           }
-          const watch = this.options.watchResources
-            ? this.options.watchResources(rootPid, canonicalDataDir, report)
-            : watchBackendResources(rootPid, canonicalDataDir, report, undefined, undefined, identity)
+          // Option C: over a threshold the user is told and decides; the
+          // backend keeps running meanwhile (contract 5.2). Pending stdout is
+          // read for this view's child only; a preflight has no view.
+          const stdoutPendingBytes = this.options.stdoutPendingBytes
+          const notify: ResourceNotifyMode = {
+            onExceeded: (exceeded) => this.raiseResourceNotice(spec, watch, exceeded),
+            ...(stdoutPendingBytes && instanceId !== undefined
+              ? { stdoutPending: { bytes: () => stdoutPendingBytes(spec.pluginId, instanceId), threshold: defaultStdoutPendingThreshold() } }
+              : {}),
+          }
+          const watch: BackendResourceWatch = this.options.watchResources
+            ? this.options.watchResources(rootPid, canonicalDataDir, report, notify)
+            : watchBackendResources(rootPid, canonicalDataDir, report, undefined, undefined, identity, notify)
+          this.runningWatches.set(watch, spec)
           // Registered before the supervisor's own listener, so the whole
           // sandbox is gone before a stop, idle close or quit completes.
           child.once('exit', () => {
             watch.dispose()
             killSandbox(rootPid, identity)
+            this.runningWatches.delete(watch)
+            this.dropResourceNotices(watch)
           })
         }
         return child
@@ -1152,6 +1214,90 @@ export class ThirdPartyBackendController {
     this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
     this.options.onConsentGranted?.(spec.pluginId)
+  }
+
+  /** Each running third-party backend's usage against its thresholds
+   *  (contract 5.2); read only. */
+  resourceStatus(): Array<BackendResourceStatus & { pluginId: string; name: string; packageVersion: string }> {
+    const out: Array<BackendResourceStatus & { pluginId: string; name: string; packageVersion: string }> = []
+    for (const [watch, spec] of this.runningWatches) {
+      const status = watch.status?.()
+      if (!status) continue
+      out.push({ pluginId: spec.pluginId, name: spec.thirdParty.name, packageVersion: spec.packageVersion, ...status })
+    }
+    return out
+  }
+
+  /** Unanswered resource notices, oldest first. */
+  resourceNotices(): BackendResourceNotice[] {
+    return [...this.resourceNoticeMap.values()].map((entry) => ({ ...entry.notice }))
+  }
+
+  /** The user's answer to one notice: `terminate` runs the stop that used to
+   *  happen on its own; `continue` raises that item's notice level (contract
+   *  5.2). False for an unknown or already answered notice. */
+  async answerResourceNotice(id: string, choice: 'terminate' | 'continue'): Promise<boolean> {
+    const entry = this.resourceNoticeMap.get(id)
+    if (!entry) return false
+    this.resourceNoticeMap.delete(id)
+    this.noticesChanged()
+    this.recordResourceDecision(entry.notice, choice)
+    if (choice === 'terminate') await entry.watch.terminate(entry.notice.item)
+    else entry.watch.keepRunning(entry.notice.item)
+    return true
+  }
+
+  private raiseResourceNotice(spec: ThirdPartyLaunchSpec, watch: BackendResourceWatch, exceeded: ResourceExceeded): void {
+    const notice: BackendResourceNotice = {
+      id: randomUUID(),
+      pluginId: spec.pluginId,
+      name: spec.thirdParty.name,
+      packageVersion: spec.packageVersion,
+      item: exceeded.item,
+      usage: exceeded.usage,
+      threshold: exceeded.threshold,
+      at: (this.options.now ?? Date.now)(),
+    }
+    this.resourceNoticeMap.set(notice.id, { notice, watch })
+    this.recordResourceDecision(notice, 'notified')
+    this.noticesChanged()
+  }
+
+  /** Tell the window the list changed; a failing hook is logged and never
+   *  holds up an answer or a later notice (review LOW3 on #386). */
+  private noticesChanged(): void {
+    try {
+      this.options.onResourceNoticesChanged?.()
+    } catch (error) {
+      console.warn('[plugin-backend] resource notice change hook failed', error)
+    }
+  }
+
+  /** A backend that exited has nothing left to decide about. */
+  private dropResourceNotices(watch: BackendResourceWatch): void {
+    let dropped = false
+    for (const [id, entry] of this.resourceNoticeMap) {
+      if (entry.watch !== watch) continue
+      this.resourceNoticeMap.delete(id)
+      dropped = true
+    }
+    if (dropped) this.noticesChanged()
+  }
+
+  private recordResourceDecision(notice: BackendResourceNotice, decision: PluginResourceDecision): void {
+    try {
+      this.options.recordResourceDecision?.({
+        plugin_id: notice.pluginId,
+        plugin_version: notice.packageVersion,
+        item: notice.item,
+        usage: notice.usage,
+        threshold: notice.threshold,
+        decision,
+        at: (this.options.now ?? Date.now)(),
+      })
+    } catch (error) {
+      console.warn(`[plugin-backend] resource decision for ${notice.pluginId} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   resetFailures(pluginId: string): void {

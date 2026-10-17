@@ -29,6 +29,9 @@ const loading = ref(true)
 const live = ref<{ current: number; peak: number; droppedNotifications: number } | null>(null)
 const backend = ref<PluginBackendUsage | null>(null)
 const queueGrowing = ref(false)
+// Watchdog option C: this backend's usage against its thresholds (live).
+const resources = ref<BackendResourceStatusView | null>(null)
+const RESOURCE_ITEMS = ['memory', 'cpu', 'processes', 'disk', 'stdoutPending'] as const
 const trend = createQueueTrend()
 let timer: ReturnType<typeof setInterval> | null = null
 
@@ -59,6 +62,8 @@ async function loadLive(): Promise<void> {
     queueGrowing.value = backend.value
       ? trend.add(props.pluginId, backend.value.requests.bytes + backend.value.events.bytes)
       : false
+    const statuses = (await api()?.nativeBackends?.resourceStatus?.()) ?? []
+    resources.value = statuses.find((row) => row.pluginId === props.pluginId) ?? null
   } catch {
     // Live numbers are advisory; the report below still shows.
   }
@@ -90,6 +95,12 @@ function outcome(value: string): string {
 function word(group: 'source' | 'kind' | 'reason', value: string): string {
   const key = `pluginActivity.${group}.${value}`
   return te(key) ? t(key) : value
+}
+
+function resourceAmount(item: (typeof RESOURCE_ITEMS)[number], value: number): string {
+  if (item === 'memory' || item === 'disk' || item === 'stdoutPending') return formatBytes(value)
+  if (item === 'cpu') return t('backendResource.cores', { count: Number(value.toFixed(2)).toLocaleString(locale.value) })
+  return String(value)
 }
 
 function caller(call: PluginActivityToolCall): string {
@@ -130,6 +141,17 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         </p>
         <p v-if="queueGrowing" class="nv-activity-queue-growing" role="status">{{ $t('pluginActivity.live.queueGrowing') }}</p>
       </template>
+      <div v-if="resources" class="nv-activity-resources">
+        <h5>{{ $t('pluginActivity.resources.heading') }}</h5>
+        <ul>
+          <li v-for="item in RESOURCE_ITEMS" :key="item" :class="{ 'nv-activity-resource-over': resources.usage[item] > resources.thresholds[item] }">
+            {{ $t('pluginActivity.resources.row', { item: $t(`pluginActivity.resources.item.${item}`), usage: resourceAmount(item, resources.usage[item]), threshold: resourceAmount(item, resources.thresholds[item]) }) }}
+            <template v-if="resources.usage[item] > resources.thresholds[item]"> · {{ $t('pluginActivity.resources.over') }}</template>
+            <template v-if="resources.waiting.includes(item)"> · {{ $t('pluginActivity.resources.waiting') }}</template>
+            <template v-if="resources.levels[item] > resources.thresholds[item]"> · {{ $t('pluginActivity.resources.kept', { level: resourceAmount(item, resources.levels[item]) }) }}</template>
+          </li>
+        </ul>
+      </div>
     </div>
 
     <p v-if="loading" class="nv-activity-muted">{{ $t('pluginActivity.loading') }}</p>
@@ -253,6 +275,10 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
 }
 .nv-activity-undeclared h5 {
   margin: 0;
+}
+.nv-activity-resource-over {
+  font-weight: 600;
+  color: var(--attention-fg);
 }
 .nv-activity-queue-growing {
   font-weight: 600;
