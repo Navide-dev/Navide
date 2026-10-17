@@ -145,6 +145,9 @@ describe('text the plugin wrote is never a key', () => {
       outcome: 'allowed', fs_path: ACTIVITY_MISSING_TARGET,
     })
     expect(row(read, buildSuccess('req-1', { ok: true, content: 'x' })).fs_path).toBe('/tmp/nothing')
+    // A write keeps its path whatever it answered: it may have changed something first (security review).
+    const write = call({ method: 'writeFile', args: { path: 'src/new.ts', content: 'x' } })
+    expect(row(write, buildSuccess('req-1', { ok: false, error: 'conflict' })).fs_path).toBe('src/new.ts')
     for (const value of ['<denied>', '<failed>', '<unknown>', '<missing>']) {
       expect(row(stat(value), buildSuccess('req-1', { exists: true })).fs_path).toBe(`./${value}`)
     }

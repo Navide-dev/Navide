@@ -36,10 +36,11 @@ export const ACTIVITY_UNKNOWN_ADDRESS = '<unknown>'
  *  wrote it, the call cost it nothing, so it is never a key (contract 5). */
 export const ACTIVITY_DENIED_TARGET = '<denied>'
 export const ACTIVITY_FAILED_TARGET = '<failed>'
-/** The path of an allowed call whose result found nothing there or failed
+/** The path of an allowed read whose result found nothing there or failed
  *  (`exists: false`, as `fs.stat` answers for a missing path, or `ok: false`,
  *  as `fs.readFile` / `fs.listDirectory` answer for one): it cost a stat, so
- *  it is no key. */
+ *  it is no key. A write keeps its path whatever it answered: it may have
+ *  changed something before it failed. */
 export const ACTIVITY_MISSING_TARGET = '<missing>'
 const MARKERS: ReadonlySet<string> = new Set([
   ACTIVITY_UNKNOWN_ADDRESS, ACTIVITY_DENIED_TARGET, ACTIVITY_FAILED_TARGET, ACTIVITY_MISSING_TARGET,
@@ -51,7 +52,13 @@ function plainText(value: string): string {
   return MARKERS.has(value) ? `./${value}` : value
 }
 
-function foundNothing(response: CapabilityResponse): boolean {
+/** Read-only calls that answer a missing path inside a successful call. */
+const READS_ANSWERING_MISSING: ReadonlySet<string> = new Set([
+  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.stat', 'fs.statPath',
+])
+
+function foundNothing(call: CapabilityCall, response: CapabilityResponse): boolean {
+  if (!READS_ANSWERING_MISSING.has(`${call.ns}.${call.method}`)) return false
   const result = response.result
   if (typeof result !== 'object' || result === null) return false
   const fields = result as Record<string, unknown>
@@ -141,7 +148,7 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
   const target = (value: string): string =>
     outcome === 'allowed' ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined
-  if (fsPath) row.fs_path = outcome === 'allowed' && foundNothing(response) ? ACTIVITY_MISSING_TARGET : target(fsPath)
+  if (fsPath) row.fs_path = outcome === 'allowed' && foundNothing(call, response) ? ACTIVITY_MISSING_TARGET : target(fsPath)
   const command = call.ns === 'shell' ? stringArg(call.args, 'command') : undefined
   if (command) row.shell_command = target(command)
   return row
