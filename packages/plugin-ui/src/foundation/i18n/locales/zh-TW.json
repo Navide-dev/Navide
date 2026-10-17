@@ -1697,6 +1697,18 @@
     },
     "extensions": {
       "devUnpacked": "未簽章的本機資料夾，僅限開發者模式",
+      "agentTools": {
+        "heading": "agent 可呼叫的工具（{count} 個）",
+        "read": "Navide 外掛宣告為唯讀",
+        "write": "Navide 外掛宣告為寫入",
+        "timeout": "{seconds} 秒逾時",
+        "dataFlow": "這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。",
+        "collision": "agent 無法使用：較早允許的 {heldBy} 已經用了這個名稱。",
+        "method": "呼叫 {method}",
+        "inputSchema": "輸入結構（agent 送出的內容）",
+        "sharedWith": "{others} 也宣告了這個名稱，那邊的工具不會上線。",
+        "total": "共 {count} 個工具，文字與輸入結構合計 {size}。"
+      },
       "nativeBackends": {
         "title": "原生後端",
         "description": "部分 Navide 外掛內含原生程式。Navide 會把它放在沙盒裡執行，它本身沒有網路：只能讀取你一起開啟的工作區，也只能在你允許的地方修改檔案。但同時會執行 git、gh、glab 指令的 Navide 外掛（下方標示為高風險）可以透過這些指令連到網路主機、送出工作區資料，也可以不經上述允許就讀取與修改工作區檔案。在你打開下方開關之前，不會執行任何原生程式。",

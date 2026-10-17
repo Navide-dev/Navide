@@ -43,6 +43,8 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
+import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } from '../../shared/pluginDisclosure'
+import { revealInvisibleText } from '../../shared/pluginAgentTools'
 import type { JsonValue } from './pluginBackendSupervisor'
 
 /**
@@ -58,7 +60,9 @@ import type { JsonValue } from './pluginBackendSupervisor'
  * when it declares `shell: "allowlist"`, the Host shell broker (DB5). The
  * backend never executes anything itself: the broker runs git/gh/glab under the
  * same rules as a view's shell.run. MCP agents never reach third-party methods
- * (no `agentMethods`).
+ * (no `agentMethods`). Declared agent tools are part of what the user consents
+ * to (backendPermissionsKey) and are listed in the consent dialog; serving
+ * them is not wired here.
  */
 
 export type ThirdPartyBackendInfo = NonNullable<BackendPluginLaunchSpec['thirdParty']>
@@ -88,6 +92,7 @@ export function thirdPartyBackendLaunchSpec(
   if (!activation.backend || !manifest.backend || manifest.id !== activation.pluginId) return null
   if (!manifest.backend.methods?.length) return null
   const system = [...(manifest.permissions.system ?? [])]
+  const agentTools = computeDisclosure(manifest).agentTools
   return {
     pluginId: activation.pluginId,
     packageVersion: activation.packageVersion,
@@ -106,18 +111,82 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
+      ...(agentTools.length > 0 ? { agentTools } : {}),
     },
   }
 }
 
-/** Canonical permission set a consent is bound to. */
+/** SHA-256 of the canonical spelling of the disclosure's `agentTools` array.
+ * Any change to any tool (name, method, risk, text, schema, timeout) changes it. */
+export function agentToolsDigest(agentTools: readonly DisclosureAgentTool[]): string {
+  return createHash('sha256').update(canonicalContractJson(agentTools)).digest('hex')
+}
+
+/** Canonical permission set a consent is bound to. The agent tools digest is
+ * part of it only when the package declares tools, so a package without them
+ * keeps the key (and the consent records) it had before agent tools existed. */
 export function backendPermissionsKey(spec: ThirdPartyLaunchSpec): string {
+  const agentTools = spec.thirdParty.agentTools ?? []
   return JSON.stringify({
     system: [...spec.thirdParty.system].sort(),
     shell: spec.thirdParty.shell ?? null,
     methods: [...spec.approvedMethods].sort(),
     events: [...spec.approvedEvents].sort(),
+    ...(agentTools.length > 0 ? { agentTools: agentToolsDigest(agentTools) } : {}),
   })
+}
+
+/** A declared agent tool whose name an earlier package already holds. */
+export interface AgentToolNameCollision {
+  name: string
+  /** Plugin id of the package that holds the name. */
+  heldBy: string
+}
+
+export interface AgentToolNameClaimant {
+  pluginId: string
+  /** When the package began declaring agent tools (ISO 8601); unknown sorts last. */
+  since?: string
+  /** Per name, when a consented version first declared it; overrides `since`. */
+  sinceByName?: Readonly<Record<string, string>>
+  names: readonly string[]
+}
+
+/**
+ * DB1: when two packages declare the same tool name, the one whose consent
+ * first covered that name holds it and the later one's tool stays offline
+ * (sync state `name-collision`). The order is per name, so a name an update
+ * adds ranks from that update and cannot take over one another package
+ * already holds. Ties fall back to plugin id order, so the answer never
+ * depends on the order the packages are listed in.
+ */
+export function agentToolNameCollisions(
+  claimants: readonly AgentToolNameClaimant[],
+): Map<string, AgentToolNameCollision[]> {
+  const byName = new Map<string, Array<{ pluginId: string; since?: string }>>()
+  for (const claimant of claimants) {
+    for (const name of claimant.names) {
+      const since = claimant.sinceByName?.[name] ?? claimant.since
+      byName.set(name, [...(byName.get(name) ?? []), { pluginId: claimant.pluginId, since }])
+    }
+  }
+  const collisions = new Map<string, AgentToolNameCollision[]>()
+  for (const claimant of claimants) {
+    for (const name of claimant.names) {
+      const [holder] = [...(byName.get(name) ?? [])].sort((left, right) => {
+        if (left.since !== right.since) {
+          if (left.since === undefined) return 1
+          if (right.since === undefined) return -1
+          return left.since < right.since ? -1 : 1
+        }
+        return left.pluginId < right.pluginId ? -1 : left.pluginId > right.pluginId ? 1 : 0
+      })
+      if (holder && holder.pluginId !== claimant.pluginId) {
+        collisions.set(claimant.pluginId, [...(collisions.get(claimant.pluginId) ?? []), { name, heldBy: holder.pluginId }])
+      }
+    }
+  }
+  return collisions
 }
 
 function sha256File(path: string): Promise<string> {
@@ -186,12 +255,30 @@ export type NativeBackendStatus =
   | 'stopped-after-crashes'
   | 'unavailable'
 
+/** One declared agent tool as the Extensions page shows it. */
+export interface NativeBackendAgentToolRow {
+  name: string
+  title: string
+  description: string
+  risk: DisclosureAgentTool['risk']
+  timeoutMs: number
+  method: string
+  /** The whole input schema the agent reads in tools/list. */
+  inputSchema: Record<string, unknown>
+  /** Set when an earlier package holds this name: the tool stays offline. */
+  collidesWith?: string
+  /** On the holder: the later packages that also declare this name. */
+  sharedWith?: string[]
+}
+
 export interface NativeBackendStatusRow {
   pluginId: string
   packageVersion: string
   name: string
   status: NativeBackendStatus
   reason?: string
+  /** Declared agent tools; absent when the package declares none. */
+  agentTools?: NativeBackendAgentToolRow[]
   /** Consent exists but for another binary or permission set. */
   changedSinceConsent: boolean
   canWriteWorkspace: boolean
@@ -209,8 +296,29 @@ export interface NativeBackendConsentPrompt {
   /** Declared shell mode; `allowlist` is disclosed as high risk (DB5). */
   shell?: 'allowlist' | 'full'
   methods: string[]
+  /** Declared agent tools, listed in the dialog; empty when there are none. */
+  agentTools: DisclosureAgentTool[]
   /** A consent existed for a different binary or permission set. */
   update: boolean
+}
+
+/** The declared agent tools, each with the method it calls, its full
+ * description, the plugin's own read/write claim, its timeout and its whole
+ * input schema: allowing the backend also allows agents to call these. */
+function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string {
+  if (prompt.agentTools.length === 0) return ''
+  return [
+    `Agents will be able to call these ${prompt.agentTools.length} tools of ${prompt.name} ` +
+      `(their text and input schemas total ${Buffer.byteLength(JSON.stringify(prompt.agentTools))} bytes):`,
+    ...prompt.agentTools.map((tool) => [
+      `• ${tool.name} → ${tool.method} (declared ${tool.risk === 'write' ? 'as changing data' : 'read-only'}, ` +
+        `times out after ${tool.timeoutMs / 1000} s): ${tool.description}`,
+      // Keys and enum values may hold invisible characters (never refused):
+      // spelled out so they cannot reorder or hide the dialog's text.
+      `  Input schema: ${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
+    ].join('\n')),
+    'What these tools return is shown to the agent, which may pass it on elsewhere.',
+  ].join('\n')
 }
 
 /** The native-backend consent dialog's text. A package that declares shell
@@ -244,6 +352,7 @@ export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { 
       sandbox,
       access,
       shell,
+      nativeBackendAgentToolsText(prompt),
       'You can disable it at any time in Settings → Extensions.',
     ].filter(Boolean).join('\n\n'),
   }
@@ -422,6 +531,7 @@ export class ThirdPartyBackendController {
     workspacePath?: string,
     options: { prompt?: boolean } = {},
   ): Promise<ThirdPartyAdmission> {
+    this.forgetDroppedAgentTools(spec)
     this.assertAdmissible(spec)
     const digest = await this.digestBackend(spec)
     if (!this.consentMatches(spec, digest)) {
@@ -505,6 +615,7 @@ export class ThirdPartyBackendController {
         system: [...spec.thirdParty.system],
         ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
         methods: [...spec.approvedMethods],
+        agentTools: [...(spec.thirdParty.agentTools ?? [])],
         update: consent !== undefined,
       }).catch(() => false)
       this.pendingPrompts.set(identity, pending)
@@ -521,7 +632,40 @@ export class ThirdPartyBackendController {
         permissionsKey: backendPermissionsKey(spec),
         packageVersion: spec.packageVersion,
       })
+      this.noteAgentTools(spec)
     }
+  }
+
+  /** Record when the user first allowed a version of this package that
+   * declares agent tools (the DB1 order; unique across packages, so there is
+   * never a tie). Bookkeeping only: a failed save never affects admission. */
+  private noteAgentTools(spec: ThirdPartyLaunchSpec): void {
+    if (!spec.thirdParty.agentTools?.length) return
+    try {
+      this.store.noteAgentToolsSince(
+        spec.pluginId,
+        new Date(this.now()),
+        spec.thirdParty.agentTools.map((tool) => tool.name),
+      )
+    } catch {
+      // The package then holds no names until its next consent.
+    }
+  }
+
+  /** A version that declares no tools gives up its place in the DB1 order:
+   * declaring tools again later counts from that later consent. */
+  private forgetDroppedAgentTools(spec: ThirdPartyLaunchSpec): void {
+    if (spec.thirdParty.agentTools?.length) return
+    try {
+      this.store.clearAgentToolsSince(spec.pluginId)
+    } catch {
+      // Retried on the next admission or listing.
+    }
+  }
+
+  /** Whether the user's consent covers this exact tool set. */
+  private agentToolsConsented(spec: ThirdPartyLaunchSpec): boolean {
+    return this.store.record(spec.pluginId).consent?.permissionsKey === backendPermissionsKey(spec)
   }
 
   private noteFailure(pluginId: string): number | null {
@@ -646,8 +790,68 @@ export class ThirdPartyBackendController {
       canWriteWorkspace: spec.thirdParty.system.includes('fs'),
       workspaceWrite: record.workspaceWrite ?? [],
       ...(lastViolation ? { lastViolation } : {}),
+      ...(spec.thirdParty.agentTools?.length
+        ? {
+            agentTools: spec.thirdParty.agentTools.map((tool) => ({
+              name: tool.name,
+              title: tool.title,
+              description: tool.description,
+              risk: tool.risk,
+              timeoutMs: tool.timeoutMs,
+              method: tool.method,
+              inputSchema: tool.inputSchema,
+            })),
+          }
+        : {}),
       ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
     }
+  }
+
+  /** Rows for every listed package, with DB1 name collisions marked in both
+   * rows. Only a package whose consent covers its current tool set, that the
+   * user has not disabled and that has its consent time recorded holds names;
+   * a package that declares tools no longer gives its place up. */
+  async statuses(specs: readonly ThirdPartyLaunchSpec[]): Promise<NativeBackendStatusRow[]> {
+    for (const spec of specs) this.forgetDroppedAgentTools(spec)
+    const rows = await Promise.all(specs.map((spec) => this.status(spec)))
+    const claimants = specs.flatMap((spec, index) => {
+      const row = rows[index]
+      const record = this.store.record(spec.pluginId)
+      return row.agentTools && !record.disabled && record.agentToolsSince !== undefined && this.agentToolsConsented(spec)
+        ? [{
+            pluginId: row.pluginId,
+            since: record.agentToolsSince,
+            sinceByName: record.agentToolNamesSince,
+            names: row.agentTools.map((tool) => tool.name),
+          }]
+        : []
+    })
+    const collisions = agentToolNameCollisions(claimants)
+    const sharedWith = new Map<string, Map<string, string[]>>()
+    for (const [loser, lost] of collisions) {
+      for (const { name, heldBy } of lost) {
+        const byName = sharedWith.get(heldBy) ?? new Map<string, string[]>()
+        byName.set(name, [...(byName.get(name) ?? []), loser].sort())
+        sharedWith.set(heldBy, byName)
+      }
+    }
+    return rows.map((row) => {
+      const lost = collisions.get(row.pluginId)
+      const shared = sharedWith.get(row.pluginId)
+      if ((!lost && !shared) || !row.agentTools) return row
+      return {
+        ...row,
+        agentTools: row.agentTools.map((tool) => {
+          const collision = lost?.find((entry) => entry.name === tool.name)
+          const others = shared?.get(tool.name)
+          return {
+            ...tool,
+            ...(collision ? { collidesWith: collision.heldBy } : {}),
+            ...(others ? { sharedWith: others } : {}),
+          }
+        }),
+      }
+    })
   }
 
   /** User consent from the Extensions page (no prompt). */
@@ -658,6 +862,7 @@ export class ThirdPartyBackendController {
       permissionsKey: backendPermissionsKey(spec),
       packageVersion: spec.packageVersion,
     })
+    this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
   }
 

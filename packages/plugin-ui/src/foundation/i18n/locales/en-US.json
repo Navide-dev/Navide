@@ -1697,6 +1697,18 @@
     },
     "extensions": {
       "devUnpacked": "Unsigned local folder — Developer Mode only",
+      "agentTools": {
+        "heading": "Tools agents can call ({count})",
+        "read": "Declared read-only",
+        "write": "Declared as changing data",
+        "timeout": "Times out after {seconds} s",
+        "dataFlow": "What these tools return is shown to the agent, which may pass it on elsewhere.",
+        "collision": "Not available to agents: {heldBy}, allowed earlier, already uses this name.",
+        "method": "Calls {method}",
+        "inputSchema": "Input schema (what the agent sends)",
+        "sharedWith": "{others} also declares this name; that tool stays offline.",
+        "total": "{count} tools; their text and input schemas total {size}."
+      },
       "nativeBackends": {
         "title": "Native backends",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. Nothing native runs until you turn the switch below on.",

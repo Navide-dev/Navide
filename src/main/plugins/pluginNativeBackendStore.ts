@@ -24,6 +24,16 @@ export interface NativeBackendPluginRecord {
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
+  /** When the user first allowed a version of the package that declares
+   * agent tools (ISO 8601, unique across packages): the DB1 name-collision
+   * order for a name without its own time below. Cleared when a version
+   * declares no tools, and on uninstall. */
+  agentToolsSince?: string
+  /** Per tool name, when the user first allowed a version declaring it (ISO
+   * 8601, unique across packages): a name added by an update ranks from that
+   * update's consent, so it cannot take over a name another package already
+   * holds. Names the package no longer declares are dropped. */
+  agentToolNamesSince?: Record<string, string>
 }
 
 export interface NativeBackendState {
@@ -67,6 +77,13 @@ function parseState(value: unknown): NativeBackendState {
     if (Array.isArray(raw.workspaceWrite)) {
       const paths = raw.workspaceWrite.filter((path): path is string => typeof path === 'string')
       if (paths.length > 0) record.workspaceWrite = [...new Set(paths)]
+    }
+    if (typeof raw.agentToolsSince === 'string') record.agentToolsSince = raw.agentToolsSince
+    if (isRecord(raw.agentToolNamesSince)) {
+      const names = Object.entries(raw.agentToolNamesSince).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string',
+      )
+      if (names.length > 0) record.agentToolNamesSince = Object.fromEntries(names)
     }
     plugins[pluginId] = record
   }
@@ -164,6 +181,45 @@ export class NativeBackendStore {
       else paths.delete(workspacePath)
       if (paths.size > 0) record.workspaceWrite = [...paths].sort()
       else delete record.workspaceWrite
+      return record
+    })
+  }
+
+  /** Record the first consent to a tool-declaring version, and for each of
+   * `names` (the consented tool set) the first consent that declared it;
+   * names no longer declared are dropped. Times already recorded are kept, so
+   * an unchanged set saves nothing. Every new time is strictly later than
+   * every recorded one, so two packages never tie however fast they are
+   * allowed. */
+  noteAgentToolsSince(pluginId: string, now = new Date(), names: readonly string[] = []): void {
+    const current = this.state.plugins[pluginId]
+    const known = current?.agentToolNamesSince ?? {}
+    const added = names.filter((name) => known[name] === undefined)
+    const dropped = Object.keys(known).some((name) => !names.includes(name))
+    if (current?.agentToolsSince !== undefined && added.length === 0 && !dropped) return
+    let at = now.getTime()
+    for (const record of Object.values(this.state.plugins)) {
+      for (const recorded of [record.agentToolsSince, ...Object.values(record.agentToolNamesSince ?? {})]) {
+        const since = recorded === undefined ? Number.NaN : Date.parse(recorded)
+        if (since >= at) at = since + 1
+      }
+    }
+    const stamp = new Date(at).toISOString()
+    this.update(pluginId, (record) => {
+      const namesSince = Object.fromEntries(names.map((name) => [name, known[name] ?? stamp]))
+      if (names.length > 0) record.agentToolNamesSince = namesSince
+      else delete record.agentToolNamesSince
+      return { ...record, agentToolsSince: record.agentToolsSince ?? stamp }
+    })
+  }
+
+  /** The package declares no tools any more: it gives up its DB1 place. */
+  clearAgentToolsSince(pluginId: string): void {
+    const current = this.state.plugins[pluginId]
+    if (current?.agentToolsSince === undefined && current?.agentToolNamesSince === undefined) return
+    this.update(pluginId, (record) => {
+      delete record.agentToolsSince
+      delete record.agentToolNamesSince
       return record
     })
   }

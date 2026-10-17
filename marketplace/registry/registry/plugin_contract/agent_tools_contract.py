@@ -1,8 +1,9 @@
 """Step-0 contract for Navide plugin agent tools (plan B, B1 and B2).
 
-Types, constants and pure functions only: nothing in the backend imports this
-module yet, and plugin-manifest-v2.schema.json still refuses
-``backend.agentTools``. The normative text is
+Types, constants and pure functions only. Since B1-a the Registry validates
+``backend.agentTools`` with ``validate_agent_tools`` through its byte-identical
+copy (marketplace/registry/registry/agent_tools_contract.py, held by
+marketplace/registry/tests/test_agent_tools_contract_copy.py). The normative text is
 docs/en-US/plugin-agent-tools-contract.md; the TypeScript twin is
 src/shared/pluginAgentTools.ts, and both are held to
 docs/plugin-contracts/agent-tools-fixtures/ by their tests.
@@ -31,10 +32,12 @@ MAX_SAFE_INTEGER = 2**53 - 1
 AGENT_TOOL_REQUIRED_FIELDS = ("name", "method", "risk", "title", "description", "inputSchema")
 _AGENT_TOOL_FIELDS = frozenset((*AGENT_TOOL_REQUIRED_FIELDS, "timeoutMs"))
 
-#: Prefixes no plugin may derive. ``navide_`` is reserved on top of the design list (impersonation).
+#: Prefixes no plugin may derive. ``navide_`` is reserved on top of the design list (impersonation), and so
+#: are the prefixes the built-in packages derive (``git_``, ``plans_``, ``miniide_``).
 RESERVED_TOOL_PREFIXES = (
-    "cli_", "credentials_", "evolve_", "marketplace_", "mcp_", "memory_", "navide_", "pipeline_", "plan_",
-    "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "skills_", "stage_", "ui_", "workspace_",
+    "cli_", "credentials_", "evolve_", "git_", "marketplace_", "mcp_", "memory_", "miniide_", "navide_", "pipeline_",
+    "plan_", "plans_", "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "skills_", "stage_", "ui_",
+    "workspace_",
 )
 
 #: tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned.
@@ -103,8 +106,14 @@ def validate_agent_tool_name(name: Any, plugin_id: Any) -> str | None:
 
 # ── text rules ──────────────────────────────────────────────────────────────
 
-# Cc (C0, DEL, C1) plus the two Unicode line/paragraph separators, and markup.
-_FORBIDDEN_TEXT = re.compile("[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]")
+# Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
+# characters that reorder or hide text: bidi controls, zero-width and other
+# invisible format characters (U+00AD, U+034F, U+180E), variation selectors
+# and tag characters.
+_FORBIDDEN_TEXT = re.compile(
+    "[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u00ad\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e"
+    "\u2060-\u2069\ufe00-\ufe0f\ufeff\U000e0000-\U000e007f]"
+)
 # Cc except tab and line feed.
 _RESULT_CONTROL = re.compile("[\u0000-\u0008\u000b-\u001f\u007f-\u009f]")
 
@@ -145,6 +154,32 @@ def _has_non_integer_number(value: Any) -> bool:
     if isinstance(value, dict):
         return any(_has_non_integer_number(item) for item in value.values())
     return False
+
+
+#: Schema keywords whose values are data, not schema: never refused for their
+#: text (the core neutralizes every schema string in tools/list instead).
+_SCHEMA_DATA_KEYWORDS = frozenset(("const", "default", "enum", "examples"))
+#: Keywords whose value maps names (property names, definition names) to
+#: subschemas: a name such as ``enum`` there is a name, not a keyword.
+_SCHEMA_MAP_KEYWORDS = frozenset(("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"))
+
+
+def _has_invalid_schema_text(value: Any) -> bool:
+    """Every ``description`` / ``title`` string anywhere in a schema follows the text rules too."""
+    if isinstance(value, list):
+        return any(_has_invalid_schema_text(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    return any(
+        False
+        if key in _SCHEMA_DATA_KEYWORDS
+        else any(_has_invalid_schema_text(sub) for sub in item.values())
+        if key in _SCHEMA_MAP_KEYWORDS and isinstance(item, dict)
+        else (not is_valid_agent_tool_text(item))
+        if key in ("description", "title") and isinstance(item, str)
+        else _has_invalid_schema_text(item)
+        for key, item in value.items()
+    )
 
 
 def _is_valid_timeout(value: Any) -> bool:
@@ -215,6 +250,8 @@ def validate_agent_tools(manifest: dict[str, Any]) -> list[AgentToolValidationEr
                 fail("inputSchema", "AGENT_TOOL_SCHEMA_INVALID")
             elif _has_non_integer_number(schema):
                 fail("inputSchema", "AGENT_TOOL_NON_INTEGER_NUMBER")
+            elif _has_invalid_schema_text(schema):
+                fail("inputSchema", "AGENT_TOOL_TEXT_INVALID")
             elif _schema_bytes(schema) > AGENT_TOOL_STABILITY_CAP_BYTES:
                 fail("inputSchema", "AGENT_TOOL_TOO_LARGE")
         if "timeoutMs" in tool and not _is_valid_timeout(tool["timeoutMs"]):

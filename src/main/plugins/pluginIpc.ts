@@ -79,6 +79,7 @@ import {
   type ManifestPermissionsSummary,
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
+import { computeDisclosure } from '../../shared/pluginDisclosure'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -345,6 +346,9 @@ export interface PluginIpcOptions {
   /** Called after the user reset an unreadable Disabled store: the built-ins
    *  it held off are enabled again. */
   onBuiltinSwitchReset?: () => void
+  /** Runs the built-in switch and the reset, so the Host's own check of the
+   *  Disabled store never interleaves with them. */
+  holdBuiltinSwitch?: <T>(task: () => Promise<T>) => Promise<T>
   onFactoryPackageRemoved?: (pluginId: string) => void
   /** Load the App-bundled package and its grant after an installed package
    *  that replaced it was unregistered; the rollback path back to the factory. */
@@ -1316,12 +1320,15 @@ export function registerPluginIpc(
         throw new Error(`${result.id} is an extension pack; install it from its Marketplace page`)
       }
       prepared.set(result.id, { pkg: result })
+      // Declared agent tools, for the trust dialog; absent when there are none.
+      const agentTools = isManifestV2(result.manifest) ? computeDisclosure(result.manifest).agentTools : []
       return {
         id: result.id,
         version: result.version,
         trustTier: result.trustTier,
         sensitive: result.sensitive,
         containsBackendExecutable: result.containsBackendExecutable,
+        ...(agentTools.length > 0 ? { agentTools } : {}),
         requiresConfirmation: result.requiresConfirmation,
         publisherId: result.publisherId,
         requiresPublisherTrust:
@@ -2255,7 +2262,11 @@ export function registerPluginIpc(
   // the Marketplace switch below; the package stays loaded and the Host stops
   // offering, mounting and serving it (FrontendPluginManager.isBuiltinPluginDisabled).
   // Nothing here touches its storage, grant or lifecycle selection.
+  const holdBuiltinSwitch = options.holdBuiltinSwitch ?? (<T>(task: () => Promise<T>) => task())
   async function setBuiltinDisabled(id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> {
+    return holdBuiltinSwitch(() => switchBuiltin(id, disabled))
+  }
+  async function switchBuiltin(id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> {
     const hostSwitch = options.setBuiltinDisabled
     if (!hostSwitch) throw new Error('built-in plugin disable is unavailable')
     if (activeTransactions.has(id)) {
@@ -2299,15 +2310,17 @@ export function registerPluginIpc(
 
   // The user's one-click reset of an unreadable Disabled store. Both damaged
   // copies are kept aside; every switch starts from enabled.
-  ipcMain.handle('plugins:resetDisabledStore', (event): { status: PluginIdStoreStatus } => {
+  ipcMain.handle('plugins:resetDisabledStore', async (event): Promise<{ status: PluginIdStoreStatus }> => {
     assertAuthorized(event)
-    if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
-    disabledPlugins.resetUnreadable()
-    for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
-      if (!manager.isBuiltinPluginDisabled(id)) manager.resumeBuiltinPlugin(id)
-    }
-    options.onBuiltinSwitchReset?.()
-    return { status: disabledPlugins.status() }
+    return holdBuiltinSwitch(async () => {
+      if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
+      disabledPlugins.resetUnreadable()
+      for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
+        if (!manager.isBuiltinPluginDisabled(id)) manager.resumeBuiltinPlugin(id)
+      }
+      options.onBuiltinSwitchReset?.()
+      return { status: disabledPlugins.status() }
+    })
   })
 
   // The user's "Disabled" switch for an installed Marketplace package. Disable
