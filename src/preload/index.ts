@@ -180,6 +180,35 @@ export interface FactoryPluginSummary {
   optedOut: boolean
 }
 
+interface BackendUsageCount {
+  current: number
+  peak: number
+}
+
+interface BackendQueueUsage {
+  frames: number
+  bytes: number
+  peakFrames: number
+  peakBytes: number
+}
+
+/** Backend resources the Host holds now and at the most (none capped): children, per-view subscriptions and child usage, per-plugin calls. */
+export interface BackendResourceUsage {
+  children: BackendUsageCount & { retained: number }
+  views: Array<{
+    pluginId: string
+    instanceId: string
+    subscriptions: BackendUsageCount
+    child: {
+      subscriptions: BackendUsageCount
+      bridgeRequests: BackendUsageCount
+      outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
+      droppedNotifications: number
+    } | null
+  }>
+  plugins: BackendCallConcurrency[]
+}
+
 /** In-flight backend calls of one plugin: now, and the most at once since the Host started;
  *  plus the Host event notifications its children dropped because their event backlog was full. */
 export interface BackendCallConcurrency {
@@ -1102,6 +1131,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    backendResourceUsage: (): Promise<BackendResourceUsage> =>
+      ipcRenderer.invoke('plugins:backendResourceUsage'),
     disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
     disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:disabledStoreStatus'),

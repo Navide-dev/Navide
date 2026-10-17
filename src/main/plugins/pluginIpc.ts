@@ -70,7 +70,7 @@ import type {
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
 import { answerPluginAgentAction, type PluginAgentActionNotice } from './pluginAgentAction'
 import type { ContributionIcon } from './pluginContributionIcon'
-import type { BackendCallConcurrency } from './pluginBackendHost'
+import type { BackendCallConcurrency, BackendResourceUsage } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { answerMarketplaceQuery, MarketplaceHttpError, rowCard } from './marketplaceQuery'
@@ -366,6 +366,8 @@ export interface PluginIpcOptions {
   listFactoryPackages?: () => FactoryPackageSummary[]
   /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
   backendCallConcurrency?: () => BackendCallConcurrency[]
+  /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most; none are capped. */
+  backendResourceUsage?: () => BackendResourceUsage
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
   /** Host side of the Disabled switch for the built-in Plans, Git and
    *  Mini-IDE, called after the switch is recorded: drain on disable, reload
@@ -713,6 +715,11 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
     assertAuthorized(event)
     return options.backendCallConcurrency?.() ?? []
+  })
+
+  ipcMain.handle('plugins:backendResourceUsage', (event): BackendResourceUsage => {
+    assertAuthorized(event)
+    return options.backendResourceUsage?.() ?? { children: { current: 0, peak: 0, retained: 0 }, views: [], plugins: [] }
   })
 
   ipcMain.handle(
