@@ -11106,6 +11106,7 @@
     "marker": {
       "denied": "path or command not kept: the call was refused",
       "failed": "path or command not kept: the call failed",
+      "missing": "nothing there: the path does not exist",
       "unknown": "not a Navide capability"
     },
     "empty": "Nothing recorded.",

@@ -91,20 +91,23 @@ function outcome(value: string): string {
   return te(key) ? t(key) : value
 }
 
-/** The fixed values recorded in place of text a plugin wrote (contract 5):
- *  shown as what they mean, styled apart from a real path, command or address. */
-const MARKERS: Readonly<Record<string, string>> = {
-  '<denied>': 'denied',
-  '<failed>': 'failed',
-  '<unknown>': 'unknown',
+/** The fixed values recorded in place of text a plugin wrote (contract 5),
+ *  each only with the outcome it is recorded for: shown as what it means,
+ *  styled apart from a real path, command or address. With any other outcome
+ *  the same spelling is the plugin's own text and is shown as it is. */
+const MARKERS: Readonly<Record<string, { key: string; outcome: (value: string) => boolean }>> = {
+  '<denied>': { key: 'denied', outcome: (value) => value === 'denied' },
+  '<failed>': { key: 'failed', outcome: (value) => value === 'error' },
+  '<missing>': { key: 'missing', outcome: (value) => value === 'allowed' },
+  '<unknown>': { key: 'unknown', outcome: (value) => value !== 'allowed' },
 }
 
-function isMarker(value: string): boolean {
-  return Object.hasOwn(MARKERS, value)
+function isMarker(value: string, outcome: string): boolean {
+  return Object.hasOwn(MARKERS, value) && MARKERS[value].outcome(outcome)
 }
 
-function shown(value: string): string {
-  return isMarker(value) ? t(`pluginActivity.marker.${MARKERS[value]}`) : value
+function shown(value: string, outcome: string): string {
+  return isMarker(value, outcome) ? t(`pluginActivity.marker.${MARKERS[value].key}`) : value
 }
 
 /** A source, kind or refusal reason in words; anything unknown stays as given (L5 on #371). */
@@ -183,9 +186,9 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
           <li
             v-for="entry in report.undeclared"
             :key="`${entry.source}:${entry.address}:${entry.workspace}`"
-            :class="{ 'nv-activity-marker': isMarker(entry.address) }"
+            :class="{ 'nv-activity-marker': isMarker(entry.address, 'denied') }"
           >
-            {{ $t('pluginActivity.undeclared.item', { address: shown(entry.address), source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
+            {{ $t('pluginActivity.undeclared.item', { address: shown(entry.address, 'denied'), source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
             <span class="nv-activity-muted">{{ $t('pluginActivity.undeclared.reasons', { reasons: list(entry.reasons.map((r) => `${word('reason', r.reason)} × ${r.count}`)) }) }}</span>
           </li>
         </ul>
@@ -231,9 +234,9 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <li
           v-for="entry in report.files"
           :key="`${entry.address}:${entry.path}`"
-          :class="{ 'nv-activity-marker': isMarker(entry.path) || isMarker(entry.address) }"
+          :class="{ 'nv-activity-marker': isMarker(entry.path, entry.outcome) || isMarker(entry.address, entry.outcome) }"
         >
-          {{ $t('pluginActivity.files.item', { path: shown(entry.path), address: shown(entry.address), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+          {{ $t('pluginActivity.files.item', { path: shown(entry.path, entry.outcome), address: shown(entry.address, entry.outcome), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
@@ -243,9 +246,9 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <li
           v-for="entry in report.commands"
           :key="`${entry.command}:${entry.outcome}`"
-          :class="{ 'nv-activity-marker': isMarker(entry.command) }"
+          :class="{ 'nv-activity-marker': isMarker(entry.command, entry.outcome) }"
         >
-          {{ $t('pluginActivity.commands.item', { command: shown(entry.command), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+          {{ $t('pluginActivity.commands.item', { command: shown(entry.command, entry.outcome), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>

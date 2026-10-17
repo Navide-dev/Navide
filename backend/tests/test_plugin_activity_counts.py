@@ -180,3 +180,51 @@ def test_the_fixed_values_are_the_hosts() -> None:
     assert contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS == "<unknown>"
     assert contract.PLUGIN_ACTIVITY_DENIED_TARGET == "<denied>"
     assert contract.PLUGIN_ACTIVITY_FAILED_TARGET == "<failed>"
+    assert contract.PLUGIN_ACTIVITY_MISSING_TARGET == "<missing>"
+
+
+def test_a_plugin_path_spelled_like_a_fixed_value_stays_a_path(tmp_path: Path) -> None:
+    """Review of #397 (MED-1): an allowed call's own path is never read as a fixed value."""
+    audit = _log(tmp_path / "navide.db")
+    for marker in ("<denied>", "<failed>", "<unknown>", "<missing>"):
+        for path in (f"{WORKSPACE}/{marker}", f"./{marker}"):  # as the plugin wrote it, as the Host escapes it
+            audit.record_activity(
+                plugin_id=PLUGIN, plugin_version="1", workspace=WORKSPACE, source="broker", address="fs.stat",
+                outcome="allowed", fs_path=path, at_ms=NOW - 1000,
+            )
+    assert [(r["fs_path"], r["count"]) for r in _counts(audit)] == [
+        ("./<denied>", 2), ("./<failed>", 2), ("./<unknown>", 2), ("./<missing>", 2),
+    ]
+
+
+def test_a_path_that_found_nothing_is_one_key(tmp_path: Path) -> None:
+    """Review of #397 (MED-2): fs.stat answers ok for a missing path, so the Host sends <missing>."""
+    audit = _log(tmp_path / "navide.db")
+    for _ in range(1000):
+        audit.record_activity(
+            plugin_id=PLUGIN, plugin_version="1", workspace=WORKSPACE, source="broker", address="fs.stat",
+            outcome="allowed", fs_path=contract.PLUGIN_ACTIVITY_MISSING_TARGET, at_ms=NOW - 1000,
+        )
+    assert [(r["fs_path"], r["count"]) for r in _counts(audit)] == [("<missing>", 1000)]
+
+
+async def test_a_count_outside_sqlites_integers_is_skipped_and_the_batch_is_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Review of #397 (LOW-1): 10**30 used to fail the flush, dropping every other plugin's rows."""
+    audit = _log(tmp_path / "navide.db")
+    monkeypatch.setattr(app, "plugin_audit_log", audit)
+    row = {
+        "plugin_id": PLUGIN, "plugin_version": "1", "workspace": WORKSPACE, "source": "broker",
+        "address": "fs.readFile", "outcome": "denied", "at": NOW - 1000,
+    }
+    backend = {
+        "plugin_id": "acme.other", "plugin_version": "1", "workspace": WORKSPACE, "source": "backend",
+        "address": "backend.index", "outcome": "allowed", "count": 10**30,
+    }
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        {**row, "count": 10**30}, {**row, "count": 2**63 - 1}, backend, {**row, "plugin_id": "acme.other", "count": 2},
+    ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
+    assert [(r["plugin_id"], r["count"]) for r in _counts(audit)] == [(PLUGIN, 2**63 - 1), ("acme.other", 2)]

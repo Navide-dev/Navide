@@ -705,6 +705,8 @@ PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS = 90
 PLUGIN_ACTIVITY_UNKNOWN_ADDRESS = "<unknown>"
 PLUGIN_ACTIVITY_DENIED_TARGET = "<denied>"
 PLUGIN_ACTIVITY_FAILED_TARGET = "<failed>"
+#: The path of an allowed call that found nothing there (``exists: false``).
+PLUGIN_ACTIVITY_MISSING_TARGET = "<missing>"
 
 #: Executed by B1-d / D-e inside navide.db's existing schema setup; not executed anywhere yet.
 PLUGIN_AUDIT_DDL = (

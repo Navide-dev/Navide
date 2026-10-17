@@ -351,6 +351,27 @@ def _shell_summary(command: str) -> str:
     return executable
 
 
+#: SQLite's INTEGER range: a count outside it would fail the whole flush
+#: transaction, and with it every other plugin's rows (a type range, not a limit).
+_SQLITE_INT_MAX = 2**63 - 1
+
+
+def _sqlite_count(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and 1 <= value <= _SQLITE_INT_MAX
+
+
+#: Fixed values recorded in place of a plugin's text (contract 5).
+_MARKERS = frozenset((
+    contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS, contract.PLUGIN_ACTIVITY_DENIED_TARGET,
+    contract.PLUGIN_ACTIVITY_FAILED_TARGET, contract.PLUGIN_ACTIVITY_MISSING_TARGET,
+))
+
+
+def _plain(value: str) -> str:
+    """A plugin's own path or command spelled like a fixed value, as ``./<value>``."""
+    return f"./{value}" if value in _MARKERS else value
+
+
 def _code(value: Any, allowed: frozenset[str]) -> str:
     text = str(value or "")
     if not text:
@@ -584,8 +605,8 @@ class PluginAuditLog:
         if not self.enabled:
             return False
         try:
-            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-                raise ValueError("count must be a positive integer")
+            if not _sqlite_count(count):
+                raise ValueError("count must be an integer from 1 to 2**63 - 1")
             if source not in ACTIVITY_SOURCES:
                 raise ValueError(f"unknown source {source!r}")
             if outcome not in ACTIVITY_OUTCOMES:
@@ -620,8 +641,10 @@ class PluginAuditLog:
         denied_reason: str, fs_path: str, shell_command: str, at: int, count: int,
     ) -> None:
         if outcome == "allowed":
-            path = _relative_path(str(fs_path), str(workspace))
-            command = _shell_summary(str(shell_command))
+            # The Host's <missing>: an allowed call that found nothing there.
+            missing = fs_path == contract.PLUGIN_ACTIVITY_MISSING_TARGET
+            path = fs_path if missing else _plain(_relative_path(str(fs_path), str(workspace)))
+            command = _plain(_shell_summary(str(shell_command)))
         else:
             marker = contract.PLUGIN_ACTIVITY_DENIED_TARGET if outcome == "denied" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
             path = marker if fs_path else ""
@@ -744,8 +767,8 @@ class PluginAuditLog:
                 raise ValueError(f"unknown outcome {outcome!r}")
             if not isinstance(address, str) or not address.startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX):
                 raise ValueError("address must be backend.<method>")
-            if isinstance(count, bool) or not isinstance(count, int) or count < 1:
-                raise ValueError("count must be a positive integer")
+            if not _sqlite_count(count):
+                raise ValueError("count must be an integer from 1 to 2**63 - 1")
             minute = self._at(at_ms) // _MINUTE_MS * _MINUTE_MS
             key = (str(plugin_id), str(plugin_version), str(workspace), address, outcome, minute)
             with self._lock:

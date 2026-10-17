@@ -3,6 +3,7 @@ import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
 import {
   ACTIVITY_DENIED_TARGET,
   ACTIVITY_FAILED_TARGET,
+  ACTIVITY_MISSING_TARGET,
   ACTIVITY_UNKNOWN_ADDRESS,
   activityRowFor,
   backendCallAddress,
@@ -127,6 +128,20 @@ describe('text the plugin wrote is never a key', () => {
     expect(row(shell, buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ shell_command: ACTIVITY_DENIED_TARGET })
     // An allowed call keeps them: that IO happened.
     expect(row(call(), buildSuccess('req-1', {}))).toMatchObject({ address: 'fs.readFile', fs_path: '/Users/me/project/src/a.py' })
+  })
+
+  // Review of #397: fs.stat answers ok for a path that does not exist (MED-2),
+  // and a plugin's own path may be spelled like a fixed value (MED-1).
+  it('records an allowed call that found nothing as <missing>, and escapes a path spelled like a fixed value', () => {
+    const stat = (path: string) => call({ method: 'stat', args: { path } })
+    for (let i = 0; i < 3; i++) {
+      expect(row(stat(`/tmp/nothing-${i}`), buildSuccess('req-1', { exists: false, is_directory: false, size: 0 })).fs_path)
+        .toBe(ACTIVITY_MISSING_TARGET)
+    }
+    expect(row(stat('src/a.py'), buildSuccess('req-1', { exists: true, size: 3 })).fs_path).toBe('src/a.py')
+    for (const value of ['<denied>', '<failed>', '<unknown>', '<missing>']) {
+      expect(row(stat(value), buildSuccess('req-1', { exists: true })).fs_path).toBe(`./${value}`)
+    }
   })
 
   it('knows exactly the capabilities the broker routes', () => {

@@ -1319,14 +1319,28 @@ the counts stay exact:
 - `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path` / `shell_command`:
   the call failed (`outcome` `error`; with `fs` granted, a path that does not
   exist costs one stat), so the path or command it named is not kept.
+- `<missing>` (`PLUGIN_ACTIVITY_MISSING_TARGET`), in `fs_path`: the call was
+  allowed but found nothing there (its result says `exists: false`, as
+  `fs.stat` / `fs.statPath` answer for a path that does not exist), so the path
+  is not kept. The other `fs` calls (`readFile`, `listDirectory`, `delete`, …)
+  answer a missing path with an error, which is `<failed>`.
 
-Displays show each as what it means, set apart from a real path, command or
-address (the activity page words them and styles them differently). An
-`allowed` call keeps its redacted path and command: that IO happened, so the
-number of different values follows the work the plugin really did. Kept and
+A fixed value means this only with its own outcome (`<denied>` with `denied`,
+`<failed>` with `error`, `<missing>` with `allowed`, `<unknown>` with anything
+but `allowed`). An `allowed` call keeps its redacted path and command: that IO
+happened, so the number of different values follows the work the plugin really
+did. A plugin's own path or command that is spelled like a fixed value is
+recorded as `./<value>` (the Host sends it so and the backend writes it so
+after redaction), so it is never read as one. Displays show each fixed value
+as what it means, set apart from a real path, command or address (the
+activity page words them and styles them differently), and only with its own
+outcome. Kept and
 rolled up into `plugin_activity_daily` / `plugin_activity_denied_daily` like
-detail rows (7 days, by the UTC day of `minute`); a removed plugin's rows go
-with `forget_plugin`. Every report field below reads `plugin_activity` and
+detail rows (7 days, by the UTC day of `minute`); a row is rolled up when its
+`minute` is before the cutoff, so the calls of the minute the cutoff falls in
+leave the detail up to 59 s early. A removed plugin's rows go with
+`forget_plugin`. `count` is an integer from 1 to 2^63 − 1 (SQLite's INTEGER
+range); a row outside it is skipped. Every report field below reads `plugin_activity` and
 `plugin_activity_counts` together, with the same values as one row per call;
 a window reads the minute it starts in whole.
 

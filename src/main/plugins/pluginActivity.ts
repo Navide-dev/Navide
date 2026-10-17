@@ -36,6 +36,23 @@ export const ACTIVITY_UNKNOWN_ADDRESS = '<unknown>'
  *  wrote it, the call cost it nothing, so it is never a key (contract 5). */
 export const ACTIVITY_DENIED_TARGET = '<denied>'
 export const ACTIVITY_FAILED_TARGET = '<failed>'
+/** The path of an allowed call that found nothing there (`exists: false`, as
+ *  `fs.stat` answers for a missing path): it cost a stat, so it is no key. */
+export const ACTIVITY_MISSING_TARGET = '<missing>'
+const MARKERS: ReadonlySet<string> = new Set([
+  ACTIVITY_UNKNOWN_ADDRESS, ACTIVITY_DENIED_TARGET, ACTIVITY_FAILED_TARGET, ACTIVITY_MISSING_TARGET,
+])
+
+/** A plugin's own path or command that is spelled like a fixed value is sent
+ *  as `./<value>`, so it is never read as one. */
+function plainText(value: string): string {
+  return MARKERS.has(value) ? `./${value}` : value
+}
+
+function foundNothing(response: CapabilityResponse): boolean {
+  const result = response.result
+  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).exists === false
+}
 
 export type PluginActivitySource = 'broker' | 'shell' | 'backend'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
@@ -97,7 +114,8 @@ function stringArg(args: unknown, key: string): string | undefined {
 
 /** The activity row of one broker call. Raw path and command text of an
  *  allowed call go to the backend, which keeps only their redacted form; a
- *  refused or failed call's are a fixed marker, and a capability the broker
+ *  refused or failed call's are a fixed marker, an allowed call that found
+ *  nothing there is ACTIVITY_MISSING_TARGET, and a capability the broker
  *  does not know is ACTIVITY_UNKNOWN_ADDRESS. */
 export function activityRowFor({ pluginId, packageVersion, workspace, call, response, at }: PluginActivityInput): PluginActivityRow {
   const outcome: PluginActivityOutcome = response.ok
@@ -117,9 +135,9 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
   const target = (value: string): string =>
-    outcome === 'allowed' ? value : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
+    outcome === 'allowed' ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined
-  if (fsPath) row.fs_path = target(fsPath)
+  if (fsPath) row.fs_path = outcome === 'allowed' && foundNothing(response) ? ACTIVITY_MISSING_TARGET : target(fsPath)
   const command = call.ns === 'shell' ? stringArg(call.args, 'command') : undefined
   if (command) row.shell_command = target(command)
   return row

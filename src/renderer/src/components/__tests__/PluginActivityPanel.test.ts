@@ -98,6 +98,30 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(panel.text()).not.toContain('<denied>')
   })
 
+  // Review of #397 (MED-1): a fixed value counts only with the outcome it is
+  // recorded for; an allowed path spelled like one is the plugin's own text.
+  it('shows an allowed path spelled like a fixed value as a plain path', async () => {
+    const file = (path: string, outcome = 'allowed') =>
+      ({ path, address: 'fs.stat', workspace: '/w', outcome, count: 1, lastAt: 1 })
+    const report = {
+      ...fixture,
+      files: [
+        file('<denied>'), file('<failed>'), file('<unknown>'), file('./<missing>'), file('./<denied>'),
+        file('<missing>'), file('<missing>', 'denied'),
+      ],
+      commands: [{ command: '<failed>', workspace: '/w', outcome: 'allowed', count: 1, lastAt: 1 }],
+    }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const panel = await render()
+    const files = panel.findAll('.nv-activity-files li')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([false, false, false, false, false, true, false])
+    expect(files[0].text()).toContain('<denied>')
+    expect(files[0].text()).not.toContain('the call was refused')
+    expect(files[3].text()).toContain('./<missing>')
+    expect(files[5].text()).toContain('nothing there: the path does not exist')
+    expect(panel.get('.nv-activity-commands li').classes()).not.toContain('nv-activity-marker')
+  })
+
   it('marks undeclared uses in red with their reasons, and anomalies as marks only', async () => {
     mockPlugins()
     const panel = await render()
