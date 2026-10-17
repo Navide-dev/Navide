@@ -1,8 +1,9 @@
-"""Guard: the Registry accepts a package-local backend name exactly when the
-App's backend supervisor accepts it at activation (isMethodName in
-src/main/plugins/pluginBackendSupervisor.ts), for backend.methods and
-backend.agentTools[].method. The TypeScript twin is
-src/main/plugins/pluginBackendNameRule.test.ts."""
+"""Guard for package-local backend names at publish. backend.methods and
+backend.events keep main's rule, which the App also loads installed packages
+with, so a package without agent tools is unchanged. backend.agentTools[].method
+must also be a name the App's backend supervisor accepts at activation
+(isMethodName in src/main/plugins/pluginBackendSupervisor.ts). The TypeScript
+twin is src/main/plugins/pluginBackendNameRule.test.ts."""
 
 from __future__ import annotations
 
@@ -21,6 +22,14 @@ NAMES = [
     "devmap.setStatus", "files.indexProgress", "Files.search", "files.", ".files", "files..search", "files.1x",
     "1files", "_files", "files-search", "files.search ", "files.search\n", "files/search", "fïles.search", "",
 ]
+
+
+#: main's backend.methods / backend.events rule (origin/main 99c9ea32d), pinned.
+MAIN_BACKEND_NAME = re.compile(r"^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$")
+
+
+def _main_accepts(name: str) -> bool:
+    return MAIN_BACKEND_NAME.fullmatch(name) is not None
 
 
 def _supervisor_accepts(name: str) -> bool:
@@ -52,12 +61,12 @@ def _accepts(manifest: dict) -> bool:
 
 
 @pytest.mark.parametrize("name", NAMES, ids=repr)
-def test_backend_methods_match_the_supervisor(name: str) -> None:
-    assert _accepts(_manifest([name])) is _supervisor_accepts(name)
+def test_backend_methods_keep_the_main_rule(name: str) -> None:
+    assert _accepts(_manifest([name])) is _main_accepts(name)
 
 
 @pytest.mark.parametrize("name", [n for n in NAMES if n], ids=repr)
 def test_agent_tool_methods_match_the_supervisor(name: str) -> None:
-    expected = _supervisor_accepts(name)
-    # The method must also be declared, so declare it beside a valid one.
+    # The method must also be declared (main's rule), so declare it beside a valid one.
+    expected = _supervisor_accepts(name) and _main_accepts(name)
     assert _accepts(_manifest(["files.search", name] if name != "files.search" else [name], name)) is expected

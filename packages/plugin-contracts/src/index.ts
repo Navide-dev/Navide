@@ -678,9 +678,10 @@ function agentToolList(value: unknown): PluginManifestV2AgentTool[] {
 /** Most package-local methods / events one backend may declare. */
 export const MAX_BACKEND_METHODS = 64
 export const MAX_BACKEND_EVENTS = 32
-// The Host backend supervisor's rule (isMethodName in src/main/plugins/pluginBackendSupervisor.ts):
-// a name it would refuse at activation is refused here. Pinned by pluginBackendNameRule.test.ts.
-const BACKEND_NAME_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/
+// Main's rule, unchanged: an installed package without agent tools loads as
+// before. agentTools[].method has the stricter AGENT_TOOL_METHOD_PATTERN.
+// Pinned by pluginBackendNameRule.test.ts.
+const BACKEND_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/
 
 function backendNameList(value: unknown, label: string, maxItems: number): string[] {
   const names = uniqueStringArray(value, label, 1, maxItems)

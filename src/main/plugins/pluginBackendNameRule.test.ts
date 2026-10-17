@@ -4,16 +4,21 @@ import { describe, expect, it } from 'vitest'
 import { isMethodName } from './pluginBackendSupervisor'
 import { parseManifestV2 as parsePublicManifestV2 } from '../../../packages/plugin-contracts/src/index'
 
-// Guard: a package-local backend name (backend.methods, backend.events and
-// backend.agentTools[].method) is accepted at install and publish exactly
-// when the backend supervisor accepts it at activation (isMethodName). The
-// Registry twin is marketplace/registry/tests/test_backend_name_rule.py.
+// Guard: backend.methods and backend.events keep main's rule at install, load
+// and publish, so an installed package without agent tools loads exactly as
+// before (a camelCase name is refused only at activation, as on main).
+// backend.agentTools[].method must also be a name the backend supervisor
+// accepts (isMethodName). The Registry twin is
+// marketplace/registry/tests/test_backend_name_rule.py.
 
 const NAMES = [
   'files.search', 'files.index', 'files.index_progress', 'devmap.block.status', 'search', 'a', 'a1', 'a_b',
   'devmap.setStatus', 'files.indexProgress', 'Files.search', 'files.', '.files', 'files..search', 'files.1x',
   '1files', '_files', 'files-search', 'files.search ', 'files.search\n', 'files/search', 'fïles.search', '',
 ]
+
+/** main's backend.methods / backend.events rule (origin/main 99c9ea32d), pinned. */
+const MAIN_BACKEND_NAME = /^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/
 
 const SCHEMAS = [
   'docs/plugin-contracts/plugin-manifest-v2.schema.json',
@@ -28,19 +33,17 @@ function manifest(methods: string[]) {
   }
 }
 
-describe('backend name rule: install and publish accept exactly what activation accepts', () => {
+describe('backend name rule: main for backend names, the supervisor for agent tool methods', () => {
   for (const path of SCHEMAS) {
-    it(`${path}: backendNames and agentTool.method use the supervisor rule`, () => {
+    it(`${path}: backendNames keep main's rule; agentTool.method uses the supervisor rule`, () => {
       const schema = JSON.parse(readFileSync(join(process.cwd(), path), 'utf8'))
-      const patterns = [schema.$defs.backendNames.items.pattern, schema.$defs.agentTool.properties.method.pattern]
-      for (const pattern of patterns) {
-        const regex = new RegExp(pattern, 'u')
-        for (const name of NAMES) expect(regex.test(name), `${pattern} vs ${JSON.stringify(name)}`).toBe(isMethodName(name))
-      }
+      expect(schema.$defs.backendNames.items.pattern).toBe(MAIN_BACKEND_NAME.source)
+      const regex = new RegExp(schema.$defs.agentTool.properties.method.pattern, 'u')
+      for (const name of NAMES) expect(regex.test(name), JSON.stringify(name)).toBe(isMethodName(name))
     })
   }
 
-  it('the public parser agrees for backend.methods', () => {
+  it('the public parser keeps main\'s rule for backend.methods', () => {
     for (const name of NAMES) {
       const accepted = (() => {
         try {
@@ -50,7 +53,7 @@ describe('backend name rule: install and publish accept exactly what activation 
           return false
         }
       })()
-      expect(accepted, JSON.stringify(name)).toBe(isMethodName(name))
+      expect(accepted, JSON.stringify(name)).toBe(MAIN_BACKEND_NAME.test(name))
     }
   })
 })

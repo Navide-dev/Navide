@@ -42,7 +42,7 @@ function manifest(overrides: { system?: string[]; shell?: string; methods?: stri
       protocolVersion: 1,
       activation: 'startup',
       methods: overrides.methods ?? ['files.search'],
-      events: ['files.index_progress'],
+      events: ['files.indexProgress'],
     },
   }
 }
@@ -117,7 +117,7 @@ describe('thirdPartyBackendLaunchSpec', () => {
     expect(spec).toMatchObject({
       approvedMethods: ['files.search'],
       agentMethods: [],
-      approvedEvents: ['files.index_progress'],
+      approvedEvents: ['files.indexProgress'],
       approvedBridgePorts: ['filesystem'],
       thirdParty: { name: 'Indexer', system: ['fs'] },
     })
@@ -139,7 +139,7 @@ describe('thirdPartyBackendLaunchSpec', () => {
     expect(spec.approvedBridgePorts).toEqual(['filesystem'])
     expect(spec.thirdParty).not.toHaveProperty('shell')
     expect(backendPermissionsKey(spec)).toBe(
-      '{"system":["fs"],"shell":null,"methods":["files.search"],"events":["files.index_progress"]}',
+      '{"system":["fs"],"shell":null,"methods":["files.search"],"events":["files.indexProgress"]}',
     )
   })
 

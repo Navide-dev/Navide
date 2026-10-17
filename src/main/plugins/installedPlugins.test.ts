@@ -25,6 +25,7 @@ import {
   isManifestV2,
 } from './installedPlugins'
 import { immutablePluginPackageDir, PluginActivationSelector } from './pluginActivationSelector'
+import { isMethodName } from './pluginBackendSupervisor'
 import { isWindows } from '../../shared/osplat'
 
 const VALID = { id: 'acme.demo', version: '1.2.3', entry: 'dist/main.js', requires: ['fs', 'git'] }
@@ -438,6 +439,29 @@ describe('loadPluginDir', () => {
       views: [],
       backend: { protocolVersion: 1, activation: 'startup' },
     })
+  })
+
+  it('loads an installed package with camelCase backend names and no agent tools exactly as main does', () => {
+    // Main's rule for backend.methods / events: the package and its views
+    // load; only activation refuses the camelCase name (isMethodName). The
+    // lower-case rule applies to agentTools[].method only.
+    const manifest = JSON.parse(readFixture('valid', 'backend-declared-methods.json'))
+    manifest.backend.methods = ['files.search', 'files.indexNow']
+    manifest.backend.events = ['files.indexProgress']
+    mkdirSync(join(root, 'backend'), { recursive: true })
+    mkdirSync(join(root, 'frontend', 'left'), { recursive: true })
+    writeFileSync(join(root, 'frontend', 'left', 'index.html'), '<!doctype html>')
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest))
+    const backendPath = join(root, backendEntryOnDisk('backend/acme-indexer'))
+    writeFileSync(backendPath, Buffer.from([0x7f, 0x45, 0x4c, 0x46]))
+    chmodSync(backendPath, 0o700)
+
+    const loaded = loadPluginDir(root)
+    expect(loaded.error).toBeUndefined()
+    expect(loaded.activation?.views.map((view) => view.id)).toEqual(['left'])
+    expect(loaded.activation?.backend).toMatchObject({ protocolVersion: 1, activation: 'startup' })
+    expect(loaded.packageSummary).toBeDefined()
+    expect(isMethodName('files.indexNow')).toBe(false)
   })
 
   // The exec-bit arm is POSIX-only: on Windows executability is the `.exe`

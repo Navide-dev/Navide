@@ -133,7 +133,7 @@ Extension Pack and declares neither.
 | `entry` | string | yes | Archive path of the executable, written without an extension (see below). A script name (`.py`, `.js`, `.sh`, `.ps1`, `.bat`, …) is refused. |
 | `protocolVersion` | `1` | yes | Navide Backend Wire v1. |
 | `activation` | `"startup"` | yes | |
-| `methods` | string[] | no | 1-64 unique package-local method names, lower-case segments of `a-z`, `0-9` and `_` joined by dots, such as `files.list` or `files.index_progress` (at most 128 characters; the rule the App backend supervisor enforces at activation, so a camelCase name such as `files.indexNow` is refused). The Host forwards only declared methods. |
+| `methods` | string[] | no | 1-64 unique package-local method names, dotted lowerCamel segments such as `files.list` (at most 128 characters). The Host forwards only declared methods. |
 | `events` | string[] | no | 1-32 unique package-local event names, same form as `methods`. The Host forwards only declared events. |
 | `agentTools` | object[] | no | 1 or more tools agents may call through the core navide MCP server, each forwarded to one of `methods`. Every rule (name prefix derived from the id, reserved names, plain-text title and description, integer-only `inputSchema`, `timeoutMs` 1-120000, the 1 MiB cap) is in `docs/en-US/plugin-agent-tools-contract.md` section 2; a package that breaks any of them is refused at publish. |
 

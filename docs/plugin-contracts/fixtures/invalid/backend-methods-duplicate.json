@@ -34,7 +34,7 @@
       "files.search"
     ],
     "events": [
-      "files.index_progress"
+      "files.indexProgress"
     ]
   }
 }
