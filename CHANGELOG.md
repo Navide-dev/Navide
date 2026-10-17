@@ -18,6 +18,7 @@ All notable released changes to Navide will be documented in this file. The form
 
 ### Fixed
 
+- Navide plugins: a `shell.run` result that was cut now says so. The Host shell broker still returns at most 8000 characters of `stdout` and of `stderr`; the result now also carries `truncated`, the full size of `stdout` in bytes (`stdoutBytes`) and, when `stderr` was cut, `stderrBytes`, for views and native backends alike. `exitCode`, `stdout` and `stderr` are unchanged, so the bundled Git reads exactly what it did before. Before, a cut result looked complete.
 - Guard: the Grep and Glob tools now go through the same credential-location check as Read and `ls`. Grep searching `~/.ssh`, `~/.aws` or another credential store (by its path or its glob filter) is graded critical like reading the file, and Glob listing one is graded high like `ls`; before, both were always normal. `~/.claude/secrets` now counts as a credential store for every tool and shell command. Grep and Glob calls that touch no credential location are graded exactly as before, and what Guard does with a grade (allow, ask or deny) follows your existing settings.
 
 ## [0.2.24] — 2026-10-16 — signed release

@@ -402,8 +402,9 @@ through the same shell broker as a view's `shell.run` in `allowlist` mode: only
 workspace the view is bound to, with credential/auth subcommands, `-c`/`-C` and
 the other overrides refused (the Host shell executable allowlist in
 "Host-managed storage partitions" below). The
-answer is `{exitCode, stdout, stderr}`; a refused command is the bridge error
-`CAPABILITY_DENIED`. The Host checks on every call that the package declares
+answer is `{exitCode, stdout, stderr, truncated, stdoutBytes, stderrBytes?}`,
+the same as a view's `shell.run` (see "`shell.run` output size" below); a
+refused command is the bridge error `CAPABILITY_DENIED`. The Host checks on every call that the package declares
 `shell: "allowlist"`, that the user's capability grant for this package version
 has the same shell mode, that the call comes from a live binding of this
 version at its bound workspace root. Today only user-initiated calls are
@@ -1360,6 +1361,17 @@ are not Manifest v2 permissions.
 | `system:ui` | `ui.openExternal` | `plugin` (HTTP/HTTPS web links; Host user-gesture gate) |
 | `system:aiCli` | `aiCli.listProfiles`, `startSession`, `resumeSession`, `cancelStart`, `reattachSession`, `sendInput`, `resizeSession`, `redrawSession`, `interruptSession`, `stopSession`, `output`, `exited` | `workspace` |
 | `shell` | `shell.run` | `workspace` |
+
+**`shell.run` output size.** The Host shell broker returns at most 8000
+characters of `stdout` and of `stderr` each, the rest is not returned. This
+limit is unchanged. Since 0.2.25 the result says when that happened:
+`truncated` is `true` when either was cut, `stdoutBytes` is the size of the
+whole `stdout` in UTF-8 bytes (always present), and `stderrBytes` the same for
+`stderr`, present only when `stderr` was cut. `exitCode`, `stdout` and
+`stderr` are exactly what they were before. A plugin that needs the whole
+output asks for less at a time (for example `git log -n`, a path filter).
+Whether the limit is lifted is the user's decision and not part of this
+change.
 
 The table shows representative entries; `capabilities-v1.json` lists all of
 them (for example `fs.writeFile`, `fs.rename` and many more `ui.*` and

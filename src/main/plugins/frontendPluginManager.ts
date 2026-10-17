@@ -795,6 +795,19 @@ const DETAIL_OPEN_TIMEOUT_MS = 10_000
  *  itself never ends first. A command the broker already started is not
  *  cancelled: it runs to completion (disclosed in the consent text). */
 const THIRD_PARTY_SHELL_RUN_TIMEOUT_MS = 35_000
+
+/** The broker cuts each shell.run text field at 8000 characters; passed on as
+ *  sent: `truncated`, and the full UTF-8 sizes (`stderrBytes` only when stderr
+ *  was cut). Fields the broker did not send are left out. */
+export function shellRunTruncation(
+  response: Record<string, unknown>,
+): { truncated?: boolean; stdoutBytes?: number; stderrBytes?: number } {
+  const out: { truncated?: boolean; stdoutBytes?: number; stderrBytes?: number } = {}
+  if (typeof response.truncated === 'boolean') out.truncated = response.truncated
+  if (Number.isSafeInteger(response.stdoutBytes)) out.stdoutBytes = response.stdoutBytes as number
+  if (Number.isSafeInteger(response.stderrBytes)) out.stderrBytes = response.stderrBytes as number
+  return out
+}
 const IPC_RECEIVER_DISPOSE = 'plugin:receiver:dispose'
 const IPC_RECEIVER_ABORT = 'plugin:receiver:abort'
 const IPC_RECEIVER_BLANK_READY = 'plugin:receiver:blank-ready'
@@ -2757,6 +2770,7 @@ export class FrontendPluginManager {
       exitCode: Number(record.exit_code ?? 0),
       stdout: String(record.stdout ?? record.output ?? ''),
       stderr: String(record.stderr ?? ''),
+      ...shellRunTruncation(record),
     }
   }
 
@@ -6657,6 +6671,7 @@ export class FrontendPluginManager {
         exitCode: Number((response as Record<string, unknown>).exit_code ?? 0),
         stdout: String((response as Record<string, unknown>).stdout ?? (response as Record<string, unknown>).output ?? ''),
         stderr: String((response as Record<string, unknown>).stderr ?? ''),
+        ...shellRunTruncation(response as Record<string, unknown>),
       }
     }
 
