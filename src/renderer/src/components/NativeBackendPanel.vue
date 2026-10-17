@@ -99,6 +99,11 @@ watch(installed, refresh)
           <span class="ext-requires">{{ row.pluginId }} · {{ row.packageVersion }}</span>
         </span>
         <span class="ext-badge native-backend-status" :class="`native-backend-status--${row.status}`" role="status">{{ statusText(row) }}</span>
+        <span
+          v-if="row.shell === 'allowlist'"
+          class="ext-badge native-backend-shell"
+          :title="$t('settings.extensions.nativeBackends.shellRiskDetail')"
+        >{{ $t('settings.extensions.nativeBackends.shellRisk') }}</span>
         <button
           v-if="row.status === 'needs-consent' || row.status === 'stopped-after-crashes'"
           class="nv-btn nv-btn--sm"
@@ -120,6 +125,9 @@ watch(installed, refresh)
           }}
         </button>
         <div class="ext-permission-details">
+          <span v-if="row.shell === 'allowlist'" class="native-backend-shell-detail">
+            {{ $t('settings.extensions.nativeBackends.shellRiskDetail') }}
+          </span>
           <span v-if="row.changedSinceConsent">{{ $t('settings.extensions.nativeBackends.changed') }}</span>
           <span v-if="row.reason && row.status !== 'needs-consent'">{{ row.reason }}</span>
           <span v-if="row.lastViolation">
@@ -270,6 +278,10 @@ watch(installed, refresh)
 }
 .native-backend-status--needs-consent,
 .native-backend-status--sandbox-unavailable,
+.native-backend-shell {
+  background: var(--risk-subtle);
+  color: var(--risk-fg);
+}
 .native-backend-status--shell-not-allowed {
   background: var(--risk-subtle);
   color: var(--risk-fg);

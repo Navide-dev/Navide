@@ -1,0 +1,1700 @@
+{
+  "$comment": "Contract sections 3.6, 3.8, 3.9. cases: a scan report plus the disclosure case it is compared with; expected holds every derived value both languages must produce. classify: classifyShellCommand. globs: scopePatternMatches. scanDigestExpected: lowercase hex SHA-256 of canonicalContractJson(scan) of scanDigestCase.",
+  "cases": [
+    {
+      "name": "nothing-found",
+      "disclosureCase": "ui-only",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [],
+        "code": {
+          "frontend": {
+            "eval": 0,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "notFound.shell",
+            "params": {}
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [],
+        "cardRiskLevel": "low",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": []
+      }
+    },
+    {
+      "name": "devmap-push-and-reads",
+      "disclosureCase": "devmap-0.2.0",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [
+            {
+              "executable": "gh",
+              "subcommand": "api",
+              "category": "remoteRead",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            },
+            {
+              "executable": "git",
+              "subcommand": "push",
+              "category": "remoteWrite",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            },
+            {
+              "executable": "git",
+              "subcommand": "status",
+              "category": "local",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            }
+          ],
+          "dynamic": {
+            "count": 1,
+            "files": 1
+          }
+        },
+        "network": {
+          "hosts": [
+            {
+              "host": "github.com",
+              "source": "frontend",
+              "count": 2
+            }
+          ]
+        },
+        "files": {
+          "readPaths": [
+            ".navide/devmap.json",
+            "src/index.ts"
+          ],
+          "writePaths": [
+            ".navide/devmap.json"
+          ],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "fs.readFile",
+            "source": "frontend"
+          },
+          {
+            "address": "fs.writeFile",
+            "source": "frontend"
+          },
+          {
+            "address": "shell.run",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": {
+            "eval": 0,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "shell.remoteWrite",
+            "params": {
+              "commands": [
+                "git push"
+              ]
+            }
+          },
+          {
+            "key": "shell.remoteRead",
+            "params": {
+              "commands": [
+                "gh api"
+              ]
+            }
+          },
+          {
+            "key": "shell.local",
+            "params": {
+              "commands": [
+                "git status"
+              ]
+            }
+          },
+          {
+            "key": "shell.dynamic",
+            "params": {
+              "count": 1
+            }
+          },
+          {
+            "key": "files.write",
+            "params": {
+              "paths": [
+                ".navide/devmap.json"
+              ],
+              "dynamic": 0
+            }
+          },
+          {
+            "key": "files.read",
+            "params": {
+              "paths": [
+                ".navide/devmap.json",
+                "src/index.ts"
+              ]
+            }
+          },
+          {
+            "key": "network.hosts",
+            "params": {
+              "hosts": [
+                "github.com"
+              ]
+            }
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.shell.remoteWrite",
+            "level": "highest"
+          },
+          {
+            "key": "scan.shell.dynamic",
+            "level": "high"
+          },
+          {
+            "key": "scan.shell.remoteRead",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "highest",
+        "declaredVsScanned": {
+          "undeclared": [
+            {
+              "kind": "fsScopeRead",
+              "key": "src/index.ts"
+            }
+          ],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "fs.readFile"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "fs.writeFile"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanHost",
+            "key": "github.com"
+          },
+          {
+            "kind": "scanReadPath",
+            "key": ".navide/devmap.json"
+          },
+          {
+            "kind": "scanReadPath",
+            "key": "src/index.ts"
+          },
+          {
+            "kind": "scanShell",
+            "key": "gh api"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git push"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git status"
+          },
+          {
+            "kind": "scanShellDynamic",
+            "key": "dynamic"
+          },
+          {
+            "kind": "scanWritePath",
+            "key": ".navide/devmap.json"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ui-only-runs-git-push-undeclared",
+      "disclosureCase": "ui-only",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [
+            {
+              "executable": "git",
+              "subcommand": "push",
+              "category": "remoteWrite",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            }
+          ],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": [
+            {
+              "host": "example.com",
+              "source": "frontend",
+              "count": 1
+            }
+          ]
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "shell.run",
+            "source": "frontend"
+          },
+          {
+            "address": "ui.openExternal",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": null,
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "shell.remoteWrite",
+            "params": {
+              "commands": [
+                "git push"
+              ]
+            }
+          },
+          {
+            "key": "network.hosts",
+            "params": {
+              "hosts": [
+                "example.com"
+              ]
+            }
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.shell.remoteWrite",
+            "level": "highest"
+          }
+        ],
+        "cardRiskLevel": "highest",
+        "declaredVsScanned": {
+          "undeclared": [
+            {
+              "kind": "shell",
+              "key": "git push"
+            },
+            {
+              "kind": "shell",
+              "key": "shell.run"
+            }
+          ],
+          "declaredNotSeen": []
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "ui.openExternal"
+          },
+          {
+            "kind": "scanHost",
+            "key": "example.com"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git push"
+          }
+        ]
+      }
+    },
+    {
+      "name": "allowlist-runs-curl",
+      "disclosureCase": "shell-allowlist-no-backend",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [
+            {
+              "executable": "curl",
+              "subcommand": null,
+              "category": "other",
+              "source": "frontend",
+              "evidence": "commandLikeString",
+              "files": 1
+            },
+            {
+              "executable": "git",
+              "subcommand": "fetch",
+              "category": "remoteRead",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            }
+          ],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "shell.run",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": null,
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "shell.other",
+            "params": {
+              "commands": [
+                "curl"
+              ]
+            }
+          },
+          {
+            "key": "shell.remoteRead",
+            "params": {
+              "commands": [
+                "git fetch"
+              ]
+            }
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.shell.other",
+            "level": "highest"
+          },
+          {
+            "key": "scan.shell.remoteRead",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "highest",
+        "declaredVsScanned": {
+          "undeclared": [
+            {
+              "kind": "shellExecutable",
+              "key": "curl"
+            }
+          ],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "fs"
+            },
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanShell",
+            "key": "curl"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git fetch"
+          }
+        ]
+      }
+    },
+    {
+      "name": "full-shell-dynamic",
+      "disclosureCase": "shell-full-ai-cli",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 2,
+            "files": 1
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "aiCli.startSession",
+            "source": "frontend"
+          },
+          {
+            "address": "shell.run",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": {
+            "eval": 1,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "shell.dynamic",
+            "params": {
+              "count": 2
+            }
+          },
+          {
+            "key": "code.eval.frontend",
+            "params": {
+              "count": 1
+            }
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.shell.dynamic",
+            "level": "highest"
+          }
+        ],
+        "cardRiskLevel": "highest",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": []
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "aiCli.startSession"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanDynamicCode",
+            "key": "frontend"
+          },
+          {
+            "kind": "scanShellDynamic",
+            "key": "dynamic"
+          }
+        ]
+      }
+    },
+    {
+      "name": "native-packed-and-embedded",
+      "disclosureCase": "backend-without-names",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 2,
+          "filesScanned": 2,
+          "bytesScanned": 9000000,
+          "skipped": [],
+          "truncated": true,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [],
+        "code": {
+          "frontend": null,
+          "backend": {
+            "eval": 1,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": [
+              "hexEscapes"
+            ]
+          }
+        },
+        "native": [
+          {
+            "path": "backend/a",
+            "format": "mach-o",
+            "arch": "arm64",
+            "libraries": [
+              "/usr/lib/libSystem.B.dylib"
+            ],
+            "notableImports": [
+              "_execve"
+            ],
+            "importCount": 120,
+            "packer": "upx",
+            "embeddedRuntime": null
+          },
+          {
+            "path": "backend/b",
+            "format": "elf",
+            "arch": "x86_64",
+            "libraries": [
+              "libc.so.6"
+            ],
+            "notableImports": [],
+            "importCount": 40,
+            "packer": null,
+            "embeddedRuntime": "pyinstaller"
+          }
+        ]
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "code.eval.backend",
+            "params": {
+              "count": 1
+            }
+          },
+          {
+            "key": "code.obfuscated",
+            "params": {
+              "signals": [
+                "hexEscapes"
+              ]
+            }
+          },
+          {
+            "key": "native.summary",
+            "params": {
+              "path": "backend/a",
+              "format": "mach-o",
+              "arch": "arm64",
+              "libraries": [
+                "/usr/lib/libSystem.B.dylib"
+              ]
+            }
+          },
+          {
+            "key": "native.unscannable",
+            "params": {
+              "path": "backend/a",
+              "reason": "packed",
+              "detail": "upx"
+            }
+          },
+          {
+            "key": "native.summary",
+            "params": {
+              "path": "backend/b",
+              "format": "elf",
+              "arch": "x86_64",
+              "libraries": [
+                "libc.so.6"
+              ]
+            }
+          },
+          {
+            "key": "native.unscannable",
+            "params": {
+              "path": "backend/b",
+              "reason": "embeddedRuntime",
+              "detail": "pyinstaller"
+            }
+          },
+          {
+            "key": "coverage.incomplete",
+            "params": {
+              "reasons": [
+                "embeddedRuntime",
+                "obfuscated",
+                "packed",
+                "truncated"
+              ]
+            }
+          },
+          {
+            "key": "notFound.shell",
+            "params": {}
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 2,
+              "filesTotal": 2
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.code.eval.backend",
+            "level": "high"
+          },
+          {
+            "key": "scan.incomplete",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "high",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": []
+        },
+        "items": [
+          {
+            "kind": "scanDynamicCode",
+            "key": "backend"
+          }
+        ]
+      }
+    },
+    {
+      "name": "scanner-error-and-too-complex",
+      "disclosureCase": "ui-only",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 1,
+          "bytesScanned": 100,
+          "skipped": [
+            {
+              "reason": "scannerError",
+              "count": 1
+            },
+            {
+              "reason": "tooComplex",
+              "count": 1
+            }
+          ],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [],
+        "code": {
+          "frontend": {
+            "eval": 0,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "coverage.incomplete",
+            "params": {
+              "reasons": [
+                "scannerError",
+                "tooComplex"
+              ]
+            }
+          },
+          {
+            "key": "notFound.shell",
+            "params": {}
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 1,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.incomplete",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "high",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": []
+      }
+    },
+    {
+      "name": "git-unknown-subcommand",
+      "disclosureCase": "shell-allowlist-no-backend",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 3,
+          "bytesScanned": 4096,
+          "skipped": [],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [
+            {
+              "executable": "git",
+              "subcommand": "frobnicate",
+              "category": "unknownSubcommand",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            },
+            {
+              "executable": "git",
+              "subcommand": "commit",
+              "category": "localWrite",
+              "source": "frontend",
+              "evidence": "callSite",
+              "files": 1
+            }
+          ],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [
+          {
+            "address": "shell.run",
+            "source": "frontend"
+          }
+        ],
+        "code": {
+          "frontend": null,
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "shell.unknownSubcommand",
+            "params": {
+              "commands": [
+                "git frobnicate"
+              ]
+            }
+          },
+          {
+            "key": "shell.localWrite",
+            "params": {
+              "commands": [
+                "git commit"
+              ]
+            }
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 3,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.shell.localWrite",
+            "level": "high"
+          },
+          {
+            "key": "scan.shell.unknownSubcommand",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "high",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "fs"
+            },
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": [
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git commit"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git frobnicate"
+          }
+        ]
+      }
+    }
+  ],
+  "classify": [
+    {
+      "executable": "git",
+      "args": [
+        "push",
+        "origin",
+        "main"
+      ],
+      "expected": [
+        "push",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "-C",
+        "x"
+      ],
+      "expected": [
+        null,
+        "local"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "-C",
+        "repo",
+        "push"
+      ],
+      "expected": [
+        "push",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "https://evil/x"
+      ],
+      "expected": [
+        null,
+        "unknownSubcommand"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "-R",
+        "o/r",
+        "pr",
+        "view",
+        "1"
+      ],
+      "expected": [
+        "pr view",
+        "remoteRead"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [],
+      "expected": [
+        null,
+        "local"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "fetch"
+      ],
+      "expected": [
+        "fetch",
+        "remoteRead"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "status",
+        "--short"
+      ],
+      "expected": [
+        "status",
+        "local"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "commit",
+        "-m",
+        "x"
+      ],
+      "expected": [
+        "commit",
+        "localWrite"
+      ]
+    },
+    {
+      "executable": "git",
+      "args": [
+        "frobnicate"
+      ],
+      "expected": [
+        "frobnicate",
+        "unknownSubcommand"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "repos/o/r/pulls"
+      ],
+      "expected": [
+        "api",
+        "remoteRead"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "-X",
+        "POST",
+        "repos/o/r/issues"
+      ],
+      "expected": [
+        "api",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "--method=PATCH",
+        "x"
+      ],
+      "expected": [
+        "api",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "-XDELETE",
+        "x"
+      ],
+      "expected": [
+        "api",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "x",
+        "-f",
+        "title=y"
+      ],
+      "expected": [
+        "api",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "api",
+        "x",
+        "--raw-field=a=b"
+      ],
+      "expected": [
+        "api",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "pr",
+        "create",
+        "--fill"
+      ],
+      "expected": [
+        "pr create",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "pr",
+        "list"
+      ],
+      "expected": [
+        "pr list",
+        "remoteRead"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "pr"
+      ],
+      "expected": [
+        "pr",
+        "unknownSubcommand"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "repo",
+        "frob"
+      ],
+      "expected": [
+        "repo frob",
+        "unknownSubcommand"
+      ]
+    },
+    {
+      "executable": "gh",
+      "args": [
+        "--version"
+      ],
+      "expected": [
+        null,
+        "local"
+      ]
+    },
+    {
+      "executable": "glab",
+      "args": [
+        "mr",
+        "create"
+      ],
+      "expected": [
+        "mr create",
+        "remoteWrite"
+      ]
+    },
+    {
+      "executable": "glab",
+      "args": [
+        "mr",
+        "view",
+        "1"
+      ],
+      "expected": [
+        "mr view",
+        "remoteRead"
+      ]
+    },
+    {
+      "executable": "curl",
+      "args": [
+        "https://x"
+      ],
+      "expected": [
+        null,
+        "other"
+      ]
+    },
+    {
+      "executable": "sh",
+      "args": [
+        "-c",
+        "x"
+      ],
+      "expected": [
+        null,
+        "other"
+      ]
+    }
+  ],
+  "globs": [
+    {
+      "pattern": "**/.navide/devmap.json",
+      "path": ".navide/devmap.json",
+      "matches": true
+    },
+    {
+      "pattern": "**/.navide/devmap.json",
+      "path": "a/b/.navide/devmap.json",
+      "matches": true
+    },
+    {
+      "pattern": "**/.navide/devmap.json",
+      "path": "a/.navide/devmap.jsonx",
+      "matches": false
+    },
+    {
+      "pattern": "src/*.ts",
+      "path": "src/a.ts",
+      "matches": true
+    },
+    {
+      "pattern": "src/*.ts",
+      "path": "src/a/b.ts",
+      "matches": false
+    },
+    {
+      "pattern": "src/**",
+      "path": "src/a/b.ts",
+      "matches": true
+    },
+    {
+      "pattern": "**",
+      "path": "anything/at/all",
+      "matches": true
+    },
+    {
+      "pattern": "README.md",
+      "path": "README.md",
+      "matches": true
+    },
+    {
+      "pattern": "README.md",
+      "path": "readme.md",
+      "matches": false
+    },
+    {
+      "pattern": "a.b",
+      "path": "axb",
+      "matches": false
+    },
+    {
+      "pattern": "docs/**/*.md",
+      "path": "docs/x.md",
+      "matches": true
+    },
+    {
+      "pattern": "docs/**/*.md",
+      "path": "docs/a/b/x.md",
+      "matches": true
+    }
+  ],
+  "diffs": [
+    {
+      "from": "nothing-found",
+      "to": "ui-only-runs-git-push-undeclared",
+      "expected": {
+        "added": [
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "ui.openExternal"
+          },
+          {
+            "kind": "scanHost",
+            "key": "example.com"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git push"
+          }
+        ],
+        "removed": [],
+        "widened": true
+      }
+    },
+    {
+      "from": "devmap-push-and-reads",
+      "to": "nothing-found",
+      "expected": {
+        "added": [],
+        "removed": [
+          {
+            "kind": "scanCapability",
+            "key": "fs.readFile"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "fs.writeFile"
+          },
+          {
+            "kind": "scanCapability",
+            "key": "shell.run"
+          },
+          {
+            "kind": "scanHost",
+            "key": "github.com"
+          },
+          {
+            "kind": "scanReadPath",
+            "key": ".navide/devmap.json"
+          },
+          {
+            "kind": "scanReadPath",
+            "key": "src/index.ts"
+          },
+          {
+            "kind": "scanShell",
+            "key": "gh api"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git push"
+          },
+          {
+            "kind": "scanShell",
+            "key": "git status"
+          },
+          {
+            "kind": "scanShellDynamic",
+            "key": "dynamic"
+          },
+          {
+            "kind": "scanWritePath",
+            "key": ".navide/devmap.json"
+          }
+        ],
+        "widened": false
+      }
+    },
+    {
+      "from": null,
+      "to": "nothing-found",
+      "expected": {
+        "added": [],
+        "removed": [],
+        "widened": false
+      }
+    }
+  ],
+  "disclosureEnvelopeFields": [
+    "schemaVersion",
+    "artifactDigest",
+    "packageId",
+    "version",
+    "target",
+    "keyId",
+    "signedAt",
+    "disclosureDigest",
+    "scanDigest"
+  ],
+  "scanLimits": {
+    "maxItemsPerKind": 100,
+    "maxPaths": 50,
+    "maxPathLength": 200,
+    "maxScriptBytes": 20971520,
+    "maxNativeBytes": 536870912,
+    "timeBudgetMs": 30000
+  },
+  "scanRiskRules": [
+    [
+      "scan.shell.remoteWrite",
+      "highest"
+    ],
+    [
+      "scan.shell.other",
+      "highest"
+    ],
+    [
+      "scan.shell.dynamic",
+      "high"
+    ],
+    [
+      "scan.shell.remoteRead",
+      "high"
+    ],
+    [
+      "scan.shell.localWrite",
+      "high"
+    ],
+    [
+      "scan.shell.unknownSubcommand",
+      "high"
+    ],
+    [
+      "scan.code.eval.backend",
+      "high"
+    ],
+    [
+      "scan.incomplete",
+      "high"
+    ]
+  ],
+  "shellCategoryOrder": [
+    "remoteWrite",
+    "other",
+    "unknownSubcommand",
+    "remoteRead",
+    "localWrite",
+    "local"
+  ],
+  "scannerId": "navide-static-scan",
+  "incompleteSkipReasons": [
+    "scannerError",
+    "tooComplex"
+  ],
+  "scanDigestCase": "devmap-push-and-reads",
+  "scanDigestExpected": "3c0fe709e19b8a9fded974d3112c58e83b5ca4846fadfcc5c8d027cd365e080a"
+}

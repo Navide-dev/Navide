@@ -617,6 +617,30 @@ describe('MarketplacePane', () => {
     expect(api.remove).toHaveBeenCalledWith('acme.demo', 'keep')
   })
 
+  it('offers no Uninstall on the detail page of an installed built-in Navide plugin', async () => {
+    const item = {
+      namespace: 'navide', name: 'git', identity: 'navide.git', display_name: 'Git', description: null,
+      categories: [], latest_version: '2.0.0', download_count: 0, rating_average: 0, featured: false,
+    }
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'navide.git', requires: [], sensitive: [], packageVersion: '2.0.0', provenance: 'official-registry' },
+      ]),
+      marketplaceSearch: vi.fn().mockResolvedValue({ items: [item], total: 1, offset: 0, limit: 20 }),
+      marketplaceDetail: vi.fn().mockResolvedValue(
+        demoDetail({ namespace: 'navide', name: 'git', identity: 'navide.git', publisher: 'navide' }),
+      ),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="navide.git"]').trigger('click')
+    await flushPromises()
+    const detail = wrapper.get('[data-detail-id="navide.git"]')
+    expect(detail.find('.mkt-installed').exists()).toBe(true)
+    expect(detail.find('.ext-uninstall').exists()).toBe(false)
+    expect(api.remove).not.toHaveBeenCalled()
+  })
+
   it('removes without a data choice when the plugin has no native backend data', async () => {
     const api = mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
