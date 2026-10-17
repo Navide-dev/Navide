@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
+import type { ResourceViolation } from './pluginBackendResourceWatchdog'
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -15235,7 +15236,7 @@ describe('third-party workspace filesystem (real package bridge, port and grant 
       promptConsent: async () => true,
       promptWorkspaceWrite,
       filesystemPort: () => mgr.createWorkspaceFilesystemPort(),
-      watchResources: () => ({ dispose: () => undefined, sample: async () => null }),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     })
     const host = new FakeBrowserWindow()
     try {
@@ -15373,7 +15374,7 @@ describe('third-party backend shell broker (real package bridge, port and grant 
       probe: { platform: 'darwin', sandboxExec: () => '/usr/bin/sandbox-exec', bubblewrap: () => null },
       promptConsent: async () => true,
       shellPort: () => mgr.createThirdPartyShellPort(),
-      watchResources: () => ({ dispose: () => undefined, sample: async () => null }),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     })
     const host = new FakeBrowserWindow()
     try {
@@ -17213,5 +17214,57 @@ describe('plugin activity forget (D-e L4)', () => {
       expect(sent().filter((m) => m.type === 'plugin.activity.forget').length).toBeGreaterThan(0)
     })
     expect(sent().find((m) => m.type === 'plugin.activity.forget')!.payload).toEqual({ plugin_id: 'acme.gone' })
+  })
+})
+
+// Plan B watchdog option C (contract 5.2): decision rows go to the backend
+// over the registered Host session; a failure only warns.
+describe('plugin.resource.decision rows to the backend', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+  const row = {
+    plugin_id: 'acme.indexer', plugin_version: '1.0.0', item: 'memory' as const,
+    usage: 600, threshold: 512, decision: 'notified' as const, at: 1,
+  }
+
+  function connect(id: string, registered: boolean) {
+    const mgr = new FrontendPluginManager()
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { id, requires: ['terminal'], devUrl: '', entryFile: `/plugins/${id}/index.html` },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl(`ws://${id}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    if (registered) {
+      const registration = (socket.sent.map((raw) => JSON.parse(raw) as SentMessage))
+        .find((message) => message.type === 'host.register')!
+      socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+    }
+    return { mgr, socket }
+  }
+  const sentRows = (socket: InstanceType<typeof wsMock.FakeNodeWebSocket>) =>
+    socket.sent.map((raw) => JSON.parse(raw) as SentMessage).filter((m) => m.type === 'plugin.resource.decision')
+
+  it('sends the row on the registered session', async () => {
+    const { mgr, socket } = connect('acme.rd-ok', true)
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    mgr.recordResourceDecision(row)
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+    expect(sentRows(socket).map((m) => m.payload)).toEqual([{ rows: [row] }])
+  })
+
+  it('without a registered session it only warns and never throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const { mgr, socket } = connect('acme.rd-none', false)
+      expect(() => mgr.recordResourceDecision(row)).not.toThrow()
+      for (let i = 0; i < 10; i++) await Promise.resolve()
+      expect(sentRows(socket)).toEqual([])
+      expect(warn).toHaveBeenCalled()
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

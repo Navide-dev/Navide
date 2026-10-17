@@ -506,9 +506,35 @@ declare global {
           setDisabled: (id: string, disabled: boolean) => Promise<NativeBackendOverview>
           revokeWorkspaceWrite: (id: string, workspacePath: string) => Promise<NativeBackendOverview>
           setAgentTools?: (change: { enabled: boolean } | { externalCallers: boolean }) => Promise<NativeBackendOverview>
+          /** Watchdog option C: unanswered resource notices (contract 5.2). */
+          resourceNotices?: () => Promise<BackendResourceNoticeView[]>
+          resourceStatus?: () => Promise<BackendResourceStatusView[]>
+          answerResourceNotice?: (id: string, choice: 'terminate' | 'continue') => Promise<boolean>
+          onResourceNoticesChanged?: (handler: () => void) => () => void
         }
       }
     }
+  }
+
+  interface BackendResourceStatusView {
+    pluginId: string
+    name: string
+    packageVersion: string
+    usage: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    thresholds: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    levels: Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+    waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
+  }
+
+  interface BackendResourceNoticeView {
+    id: string
+    pluginId: string
+    name: string
+    packageVersion: string
+    item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+    usage: number
+    threshold: number
+    at: number
   }
 
   interface InstalledPluginSummary {
@@ -635,7 +661,7 @@ declare global {
     changedSinceConsent: boolean
     canWriteWorkspace: boolean
     workspaceWrite: string[]
-    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
     shell?: 'allowlist' | 'full'
   }
 

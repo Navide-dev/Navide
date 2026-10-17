@@ -110,6 +110,7 @@ export interface PluginBackendHostOptions {
 export type ThirdPartyAdmitter = (
   activation: BackendPluginLaunchSpec,
   workspacePath: string | undefined,
+  instanceId?: string,
 ) => Promise<ThirdPartyAdmission>
 
 interface RegisteredBackend {
@@ -718,7 +719,7 @@ export class PluginBackendHost {
       if (!this.admitThirdParty) {
         throw new BackendPluginError('BACKEND_UNAVAILABLE', 'Third-party backends are not available.')
       }
-      const admission = await this.admitThirdParty(view.activation, view.workspacePath)
+      const admission = await this.admitThirdParty(view.activation, view.workspacePath, view.runtime.instanceId ?? undefined)
       if (view.bindingController.signal.aborted || view.closing) {
         throw new BackendPluginError('USER_CANCELLED')
       }

@@ -315,7 +315,7 @@ export interface NativeBackendStatusRow {
   changedSinceConsent: boolean
   canWriteWorkspace: boolean
   workspaceWrite: string[]
-  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+  lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
   shell?: 'allowlist' | 'full'
 }
 
@@ -389,6 +389,29 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   versions: MarketplaceVersionInfo[]
   /** Raw README markdown; rendered as text nodes, never as HTML. */
   readme: string | null
+}
+
+export interface BackendResourceNoticeView {
+  id: string
+  pluginId: string
+  name: string
+  packageVersion: string
+  item: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
+  usage: number
+  threshold: number
+  at: number
+}
+
+type ResourceItemValues = Record<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending', number>
+
+export interface BackendResourceStatusView {
+  pluginId: string
+  name: string
+  packageVersion: string
+  usage: ResourceItemValues
+  thresholds: ResourceItemValues
+  levels: ResourceItemValues
+  waiting: Array<'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'>
 }
 
 export interface PluginRescanNotice {
@@ -1287,6 +1310,19 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
       setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
+      /** Watchdog option C: unanswered resource notices (contract 5.2). */
+      resourceNotices: (): Promise<BackendResourceNoticeView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceNotices'),
+      /** Each running third-party backend's usage against its thresholds. */
+      resourceStatus: (): Promise<BackendResourceStatusView[]> =>
+        ipcRenderer.invoke('plugins:nativeBackends:resourceStatus'),
+      answerResourceNotice: (id: string, choice: 'terminate' | 'continue'): Promise<boolean> =>
+        ipcRenderer.invoke('plugins:nativeBackends:answerResourceNotice', { id, choice }),
+      onResourceNoticesChanged: (handler: () => void): (() => void) => {
+        const listener = (): void => handler()
+        ipcRenderer.on('plugins:nativeBackends:resourceNoticesChanged', listener)
+        return () => ipcRenderer.removeListener('plugins:nativeBackends:resourceNoticesChanged', listener)
+      },
     },
   },
 })

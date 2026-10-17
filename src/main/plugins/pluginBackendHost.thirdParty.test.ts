@@ -103,7 +103,7 @@ describe('PluginBackendHost third-party branch', () => {
     hosts.push(host)
     host.register(thirdParty())
     await host.bindView(runtime('acme.indexer'), workspace, workspace)
-    expect(admitThirdParty).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer' }), workspace)
+    expect(admitThirdParty).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'acme.indexer' }), workspace, expect.any(String))
     expect(resolvePlanRoot).not.toHaveBeenCalled()
     expect(options?.spawnProcess).toBe(granted.spawnProcess)
     expect(options?.bridgeDispatcher).toBe(granted.bridgeDispatcher)

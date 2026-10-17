@@ -1739,7 +1739,8 @@
           "memory": "memory",
           "cpu": "CPU",
           "processes": "process",
-          "disk": "disk"
+          "disk": "disk",
+          "stdoutPending": "stdout waiting for a line break"
         },
         "shellRisk": "High risk: runs git, gh and glab",
         "shellRiskDetail": "Through git, gh and glab it can contact network hosts and send workspace data, and read and change workspace files without the separate file-change permission. Commands already started when you disable it or revoke its permission run to completion (up to about 30 seconds).",
@@ -11066,6 +11067,20 @@
   },
   "pluginActivity": {
     "title": "Activity",
+    "resources": {
+      "heading": "Resources (live)",
+      "row": "{item}: {usage} of {threshold}",
+      "over": "over the threshold",
+      "waiting": "waiting for your choice",
+      "kept": "kept running; next notice above {level}",
+      "item": {
+        "memory": "Memory",
+        "cpu": "CPU",
+        "processes": "Processes",
+        "disk": "Data folder",
+        "stdoutPending": "Stdout waiting for a line break"
+      }
+    },
     "source": {
       "broker": "Navide capability",
       "shell": "shell command",
@@ -11163,6 +11178,22 @@
       "activity": "Recent activity",
       "undeclaredCount": "{count} undeclared uses refused",
       "anomalyCount": "{count} unusual items"
+    }
+  },
+  "backendResource": {
+    "title": "A Navide plugin's backend is over a resource threshold",
+    "body": "{name} ({id} {version}): {item} is {usage}, over its threshold of {threshold}.",
+    "keepsRunning": "It keeps running until you choose.",
+    "again": "If you keep it running, Navide tells you again only when this goes past twice the current level. That only decides when you are told; nothing is limited.",
+    "stop": "Stop",
+    "continue": "Keep running",
+    "cores": "{count} cores",
+    "item": {
+      "memory": "memory",
+      "cpu": "CPU",
+      "processes": "the number of processes",
+      "disk": "its data folder",
+      "stdoutPending": "output waiting for a line break"
     }
   },
   "pluginDisclosure": {
