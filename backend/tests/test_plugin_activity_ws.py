@@ -178,3 +178,32 @@ async def test_a_malformed_report_request_is_refused(audit: PluginAuditLog, payl
     host = _session(host=True)
     await ws_handlers.plugins_activity_report(host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, payload)
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+# ── #368 follow-up L3: the Host sends when the call happened ────────────────
+
+
+async def test_a_row_keeps_the_hosts_time_and_a_future_one_is_clamped_to_now(audit: PluginAuditLog) -> None:
+    import time
+
+    now = int(time.time() * 1000)
+    before_midnight = now - now % 86_400_000 - 1  # the last ms of yesterday (UTC)
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        _row(at=before_midnight), _row(at=now + 3_600_000), _row(),
+    ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
+    after = int(time.time() * 1000)
+    stored = [r["at"] for r in _stored(audit)]
+    assert stored[0] == before_midnight
+    assert now <= stored[1] <= after  # never later than now
+    assert now <= stored[2] <= after  # no time sent: when it arrived
+
+
+@pytest.mark.parametrize("at", ["1792108800000", True, -1, 1.5, None])
+async def test_a_row_with_a_bad_time_is_skipped(audit: PluginAuditLog, at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(
+        host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row(at=at), _row()]}
+    )
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}

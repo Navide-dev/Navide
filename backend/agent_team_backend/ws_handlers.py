@@ -331,7 +331,7 @@ async def marketplace_query_result(
 
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
-_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
+_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at"}
 #: The Host records broker and shell-broker calls; agent tool calls are the
 #: backend's own rows (B1).
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
@@ -367,8 +367,15 @@ async def plugin_activity_record(
             or row.get("source") not in _HOST_ACTIVITY_SOURCES
         ):
             continue
-        fields = {key: value for key, value in row.items() if isinstance(value, str)}
-        if len(fields) == len(row) and app.plugin_audit_log.record_activity(**fields):
+        # `at`: when the call happened on the Host (Unix ms); record_activity
+        # clamps it to now. Without it, the row is dated when it arrives.
+        at = row.get("at")
+        if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
+            continue
+        fields = {key: value for key, value in row.items() if key != "at" and isinstance(value, str)}
+        if len(fields) != len(row) - ("at" in row):
+            continue
+        if app.plugin_audit_log.record_activity(**fields, at_ms=at):
             accepted += 1
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 

@@ -16860,10 +16860,12 @@ describe('plugin activity (D-e)', () => {
       {
         plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
         address: 'fs.readFile', outcome: 'denied', denied_reason: 'undeclared', fs_path: '/Users/me/project/a.py',
+        at: expect.any(Number),
       },
       {
         plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
         address: 'net.fetch', outcome: 'denied', denied_reason: 'undeclared',
+        at: expect.any(Number),
       },
     ])
   })

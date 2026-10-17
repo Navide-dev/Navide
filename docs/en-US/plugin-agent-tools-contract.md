@@ -1196,7 +1196,9 @@ third-party plugins (the bundled `navide.*` packages are not recorded) and sends
 them in batches, about once a second, as `plugin.activity.record`
 (`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
 plugin_version, workspace, source: "broker" | "shell", address, outcome,
-denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+denied_reason?, fs_path?, shell_command?, at?}]}`; answered `{ok, accepted}`).
+`at` is when the call completed on the Host (Unix ms); the backend clamps it to
+its own now, and dates a row without one when it arrives. Raw
 paths and command lines cross the local Host session only; the backend keeps
 their redacted form. `denied_reason` is `undeclared` when the broker refused a
 namespace or shell use the manifest did not declare. A refused cast is recorded;
