@@ -13,8 +13,10 @@ A request is a JSON header frame (``{"entry": {...}}``) and the result text
 (UTF-8, ``surrogatepass``). The answer is a JSON header frame (``{"ok": true}``
 or ``{"ok": false, "reason": "json" | "error"}``) and, when ok, the wrapped text.
 Once its imports are done the helper writes ``{"ready": true}``: a helper that
-has not said so within ``READY_S``, or fails before it has answered once, is
-counted as unavailable. While it works it writes an empty frame every
+does not start or has not said so within ``READY_S`` is counted as
+unavailable. Whatever fails after that is one request's failure (``crashed``
+or ``timeout``), never the helper's unavailability: a result that breaks the
+helper must not keep other Navide plugins' results from it. While it works it writes an empty frame every
 ``HEARTBEAT_S`` seconds; the backend waits ``IDLE_S`` for each frame, so a
 helper that crashes or hangs is given up on in bounded time (a time window,
 not a size limit).
@@ -48,8 +50,9 @@ IDLE_S = 30.0
 STOP_GRACE_S = 2.0
 #: Seconds after a failed start before the next start is tried (each try forks).
 RETRY_START_S = 60.0
-#: Seconds a new helper has to say it is ready.
-READY_S = 10.0
+#: Seconds a new helper has to say it is ready: a onefile build unpacks
+#: itself on every start, which a virus scan can slow down; as IDLE_S.
+READY_S = 30.0
 #: The backend's pid, handed to the helper: it ends itself when that is gone.
 PARENT_ENV = "NAVIDE_RESULT_HELPER_PARENT"
 #: Characters encoded, and bytes decoded, per step on the event loop.
@@ -167,9 +170,9 @@ class ResultWorkerError(Exception):
 
 
 class ResultWorkerUnavailable(ResultWorkerError):
-    """The helper process cannot be used: it did not start, did not say it
-    was ready, or failed before answering once. ``attempted`` is true when
-    this call tried a start (false while waiting for the retry)."""
+    """The helper process cannot be used: it did not start or did not say it
+    was ready. ``attempted`` is true when this call tried a start (false
+    while waiting for the retry)."""
 
     def __init__(self, detail: str = "", *, attempted: bool) -> None:
         super().__init__("unavailable", detail)
@@ -191,7 +194,6 @@ class ResultWorker:
         self._lock: asyncio.Lock | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._start_failed: tuple[float, str] | None = None
-        self._answered = False
         self.state = "idle"
         self.last_error = ""
         self.since = int(time.time() * 1000)
@@ -269,7 +271,6 @@ class ResultWorker:
         if ready != _READY:
             raise self._unavailable("it answered something other than ready")
         self._start_failed = None
-        self._answered = False
         self._set_state("ready")
         return process
 
@@ -311,8 +312,8 @@ class ResultWorker:
         """``wrap_result(entry, strict_loads("".join(pieces)))``, computed by the helper.
 
         Raises InvalidResult when the text is not strict JSON,
-        ResultWorkerUnavailable when no working helper can be had, and
-        ResultWorkerError when a helper that has answered before fails. The
+        ResultWorkerUnavailable when no helper starts and says it is ready,
+        and ResultWorkerError when a ready helper fails this request. The
         event loop only encodes, writes, reads and decodes, a slice at a time.
         """
         self._bind()
@@ -334,11 +335,9 @@ class ResultWorker:
                 answer = json.loads(await self._frame(process.stdout))
                 if not answer.get("ok"):
                     if answer.get("reason") == "json":
-                        self._answered = True
                         raise InvalidResult
                     raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
                 data = await self._frame(process.stdout)
-                self._answered = True
             except (InvalidResult, ResultWorkerUnavailable):
                 raise
             except BaseException as error:
@@ -352,10 +351,8 @@ class ResultWorker:
                 else:
                     self.stop()
                     raise
-                if not self._answered:
-                    # Never answered once: a helper that cannot work (a broken
-                    # build), not a result that broke it.
-                    raise self._unavailable(f"it failed before answering once ({failure})") from error
+                # A ready helper that fails is this request's failure: the next
+                # request starts a new helper at once.
                 self.stop()
                 raise failure from error
         parts: list[str] = []

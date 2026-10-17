@@ -207,6 +207,13 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
     app.note_host_disabled_plugins(session.disabled_plugins)
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
+    # A Host that connects again (its session dropped, this backend did not)
+    # starts from idle: tell it the result helper's state when there is one.
+    from .mcp_server.plugin_agent_tools import _result_worker
+    from .plugins.agent_tools_contract import AGENT_TOOLS_RESULT_HELPER_EVENT
+
+    if _result_worker.state != "idle":
+        await session.send_json(make_event(AGENT_TOOLS_RESULT_HELPER_EVENT, _result_worker.snapshot()))
 
 
 @handler("window.prove")

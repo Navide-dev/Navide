@@ -368,3 +368,23 @@ async def test_cut_arguments_are_the_contract_pieces_lone_surrogates_too() -> No
         assert pieces == contract.split_agent_tool_payload_text(text)
         assert size == contract.utf8_byte_length(text)
     assert await plan_mcp._agent_tool_argument_pieces({"payload": {"arguments": {"a": 1}}}) is None  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_a_host_that_registers_again_hears_the_result_helper_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent_team_backend.mcp_server import plugin_agent_tools as proxy
+
+    monkeypatch.setattr(app, "_HOST_SESSION_TOKEN", "host-secret")
+    session = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    # Idle (never started): nothing to tell, the registration answer comes last.
+    await _send(session, "host.register", {"token": "host-secret"})
+    assert session.websocket.sent[-1]["payload"] == {"registered": True}  # type: ignore[attr-defined]
+    monkeypatch.setattr(proxy._result_worker, "state", "unavailable")  # noqa: SLF001
+    monkeypatch.setattr(proxy._result_worker, "last_error", "it did not say it was ready within 30 s")  # noqa: SLF001
+    again = app.Session(FakeWebSocket())  # type: ignore[arg-type]
+    await app.handle_message(again, {"id": "h2", "type": "host.register", "payload": {"token": "host-secret"}})
+    sent = again.websocket.sent  # type: ignore[attr-defined]
+    assert sent[0]["payload"] == {"registered": True}
+    assert sent[1]["type"] == contract.AGENT_TOOLS_RESULT_HELPER_EVENT
+    assert sent[1]["payload"]["state"] == "unavailable"
+    assert sent[1]["payload"]["lastError"] == "it did not say it was ready within 30 s"

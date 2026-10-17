@@ -16253,7 +16253,7 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       try {
         const heard: unknown[] = []
         f.mgr.onResultHelperState = (state) => heard.push(state)
-        expect(f.mgr.backendResourceUsage().backend).toEqual({ resultHelper: { state: 'idle', lastError: '', since: 0 } })
+        expect(f.mgr.backendResourceUsage().backend).toMatchObject({ resultHelper: { state: 'idle', lastError: '' } })
         const unavailable = { state: 'unavailable', lastError: 'it exited before it was ready', since: 1_700_000_000_000 }
         f.socket.receive({ type: 'agent.tools.result_helper', payload: unavailable })
         await settle()
@@ -16264,6 +16264,13 @@ describe('third-party agent tool calls (contract 4.2)', () => {
         await settle()
         expect(heard).toHaveLength(1)
         expect(f.mgr.backendResourceUsage().backend?.resultHelper.state).toBe('unavailable')
+        // A new backend session (the backend restarted) starts from idle, not the old state.
+        const before = wsMock.FakeNodeWebSocket.instances.length
+        f.socket.close()
+        await vi.waitFor(() => expect(wsMock.FakeNodeWebSocket.instances.length).toBeGreaterThan(before), { timeout: 10_000 })
+        wsMock.FakeNodeWebSocket.instances.at(-1)!.open()
+        await vi.waitFor(() => expect(f.mgr.backendResourceUsage().backend?.resultHelper.state).toBe('idle'))
+        expect(heard.at(-1)).toMatchObject({ state: 'idle' })
       } finally {
         await f.cleanup()
       }

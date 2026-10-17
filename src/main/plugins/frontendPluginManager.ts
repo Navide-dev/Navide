@@ -8651,7 +8651,14 @@ export class FrontendPluginManager {
             this.agentRequestPieces.clear()
           }
           this.dispatchBackendStatus(s)
-          if (s === 'connected') this.registerHostSession(client)
+          if (s === 'connected') {
+            // A new backend session (a restarted backend among them) starts
+            // from idle; a backend whose helper is ready or unavailable
+            // reports it again once the session is registered.
+            this.resultHelperState = { state: 'idle', lastError: '', since: Date.now() }
+            this.onResultHelperState?.({ ...this.resultHelperState })
+            this.registerHostSession(client)
+          }
         },
       })
       this.wsClient = client

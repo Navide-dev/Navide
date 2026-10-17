@@ -1272,7 +1272,6 @@ time.sleep(3600)
     [
         pytest.param("sys.exit(3)", id="exits at once"),
         pytest.param("time.sleep(3600)", id="never says it is ready"),
-        pytest.param("ready()\nread(); read()\nsys.exit(3)", id="fails its first request"),
         pytest.param("print('a second backend starting up')\ntime.sleep(3600)", id="answers something else"),
     ],
 )
@@ -1306,6 +1305,30 @@ async def test_a_helper_that_never_works_is_unavailable_and_results_main_handled
     assert "about a minute" in body["error"]
     assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     assert len(recorded) == 1
+
+
+async def test_a_result_that_breaks_a_ready_helper_fails_alone_and_the_next_large_result_arrives(monkeypatch, tmp_path) -> None:
+    started_once = tmp_path / "started"
+    # The first helper is ready, then dies on its first request; the next one works.
+    _fake_helper(monkeypatch, f"""
+if not os.path.exists({str(started_once)!r}):
+    open({str(started_once)!r}, "w").close()
+    ready()
+    read(); read()
+    os._exit(9)
+ready()
+answer("from a new helper")
+read()
+""")
+    _devmap_tool(monkeypatch)
+    _pieces_host(monkeypatch, agent_tool_payload_text(_SMALL_RESULT))
+    body = _body(await proxy.call("devmap_read", {}, None))
+    # This result's failure: not the helper being unavailable.
+    assert (body["error_code"], body["reason"]) == ("result_helper_failed", "crashed")
+    assert proxy._result_worker.state != "unavailable"  # noqa: SLF001
+    # The next large result, as from another Navide plugin, starts a new helper and arrives.
+    _pieces_host(monkeypatch, agent_tool_payload_text(_BIG_RESULT))
+    assert (await proxy.call("devmap_read", {}, None)).content[0].text == "from a new helper"
 
 
 async def test_a_helper_that_cannot_start_leaves_results_main_handled_and_refuses_larger(monkeypatch) -> None:
