@@ -149,7 +149,7 @@ in Navide:
 navide-plugin dev-backend dist/package --call files.search --args '{"query":"todo"}'
 
 # subscribe first, then watch events arrive while the call runs
-navide-plugin dev-backend dist/package --subscribe files.indexProgress --call files.index
+navide-plugin dev-backend dist/package --subscribe files.index_progress --call files.index
 
 # interactive: type `<method> [json]`, `:subscribe <event>`, or `:quit`
 navide-plugin dev-backend dist/package

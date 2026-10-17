@@ -139,7 +139,7 @@ describe('thirdPartyBackendLaunchSpec', () => {
     expect(spec.approvedBridgePorts).toEqual(['filesystem'])
     expect(spec.thirdParty).not.toHaveProperty('shell')
     expect(backendPermissionsKey(spec)).toBe(
-      '{"system":["fs"],"shell":null,"methods":["files.search"],"events":["files.indexProgress"]}',
+      '{"system":["fs"],"shell":null,"methods":["files.search"],"events":["files.index_progress"]}',
     )
   })
 
@@ -710,7 +710,9 @@ describe('NativeBackendStore', () => {
 })
 
 describe('native backend consent text', () => {
-  const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
+  const base = {
+    pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], agentTools: [], update: false,
+  }
 
   it('says "no network access" only for a package without shell', () => {
     for (const system of [[], ['fs']] as const) {
@@ -743,5 +745,24 @@ describe('native backend consent text', () => {
     const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
     expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
     expect(update.detail).not.toMatch(/no network/i)
+  })
+
+  it('lists each agent tool with its method, declared claim, timeout and whole input schema, plus count and size', () => {
+    const agentTools = [
+      { name: 'indexer_find', method: 'files.search', risk: 'read', title: 'Find', description: 'Find files.',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' } } }, timeoutMs: 30000 },
+      { name: 'indexer_tag', method: 'files.tag', risk: 'write', title: 'Tag', description: 'Tag a file.',
+        inputSchema: { type: 'object' }, timeoutMs: 5000 },
+    ] as const
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [...agentTools] })
+    expect(detail).toContain(
+      `Agents will be able to call these 2 tools of Indexer (their text and input schemas total ${
+        Buffer.byteLength(JSON.stringify(agentTools))} bytes):`,
+    )
+    expect(detail).toContain('• indexer_find → files.search (declared read-only, times out after 30 s): Find files.')
+    expect(detail).toContain('  Input schema: {"type":"object","properties":{"q":{"type":"string"}}}')
+    expect(detail).toContain('• indexer_tag → files.tag (declared as changing data, times out after 5 s): Tag a file.')
+    expect(detail.indexOf('Agents will be able')).toBeLessThan(detail.indexOf('You can disable it at any time'))
+    expect(nativeBackendConsentText({ ...base, system: ['fs'], agentTools: [] }).detail).not.toContain('Agents will')
   })
 })
