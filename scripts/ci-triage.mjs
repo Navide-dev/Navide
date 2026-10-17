@@ -10,7 +10,8 @@
 // Four categories, the triage habit RELEASING.md describes, made repeatable:
 //   environment     the runner or the network failed, not a test (no failing test in the log,
 //                   or a network/disk/cancel signature, or a vitest worker RPC timeout in a
-//                   run whose tests all passed);
+//                   run whose tests all passed, or a Windows shard stopped at its time cap
+//                   by backend/ci_windows_tests.py — "still running at cap");
 //   test-race       a test failed on time: a timeout signature, a wait that gave up, a port race,
 //                   or a test the ledger knows as a race — rerun before blaming code;
 //   needs-review    a test the ledger does not know as a race that either raised an IndexError or
@@ -40,6 +41,24 @@ const AGGREGATE_JOB = 'Lint and test'
 // an unhandled error that fails a run whose tests may all have passed.
 const VITEST_RPC_TIMEOUT = /\[vitest-worker\]: Timeout calling "onTaskUpdate"/
 const MAX_RUNS_PER_TEST = 20
+// backend/ci_windows_tests.py ends a shard still running at its time cap with
+// this line, after a progress line every minute. Only progress tells a slow
+// runner (results still rising) from one test hung at the cap (they stood
+// still); it is read only for a job with no failing test.
+const SHARD_CAP = /--- pytest exit: still running at cap/
+const SHARD_PROGRESS = /^--- (\d+)s: (\d+) results; last: (\S+)/
+const PROGRESS_WINDOW = 3
+
+/** The shard's last progress lines, oldest first, one per reported second
+ *  (the wrapper prints its log twice). */
+function shardProgress(lines) {
+  const bySecond = new Map()
+  for (const line of lines) {
+    const m = SHARD_PROGRESS.exec(line)
+    if (m) bySecond.set(Number(m[1]), { results: Number(m[2]), test: m[3].replace(/\\+/g, '/') })
+  }
+  return [...bySecond].sort((a, b) => a[0] - b[0]).map(([, v]) => v).slice(-PROGRESS_WINDOW)
+}
 
 /** The file of the innermost frame pytest reported for `test` when it raised an
  *  IndexError or KeyError: the `path:line: IndexError` line closing the test's
@@ -96,8 +115,18 @@ export function classifyLog(text, { knownRaces = new Set() } = {}) {
   }
   if (out.length === 0) {
     const failed = lines.find((l) => /##\[error\]/.test(l))
-    if (failed) {
-      const env = lines.find((l) => ENVIRONMENT.test(l))
+    const cap = failed ? lines.find((l) => SHARD_CAP.test(l)) : undefined
+    const progress = cap ? shardProgress(lines) : []
+    const stalled = cap && !(progress.length > 1 && progress.at(-1).results > progress[0].results)
+    if (stalled) {
+      const last = progress.at(-1)
+      out.push({
+        test: last?.test ?? '(job)',
+        category: knownRaces.has(last?.test) ? 'test-race' : 'needs-review',
+        evidence: (last ? `${cap.trim()}; results stood at ${last.results}` : cap.trim()).slice(0, 400),
+      })
+    } else if (failed) {
+      const env = cap ?? lines.find((l) => ENVIRONMENT.test(l))
       const rpcTimeout = env ? undefined : lines.find((l) => VITEST_RPC_TIMEOUT.test(l))
       const timedOut = !env && !rpcTimeout && lines.some((l) => PYTEST_TIMEOUT.test(l))
       const frame = timedOut ? lines.map((l) => TEST_FRAME.exec(l)).find(Boolean) : null
