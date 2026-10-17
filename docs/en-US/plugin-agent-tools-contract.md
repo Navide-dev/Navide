@@ -824,6 +824,15 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
+A call whose package stops being callable while its backend is being bound
+(the bind is refused or cancelled) answers `PLUGIN_TOOL_UNAVAILABLE` with the
+reason the checks then give, or `plugin-stopping` for a bind or call the stop
+cancelled; it is never reported as `PLUGIN_TOOL_FAILED`, which is the plugin's
+own failure. A call running when Navide closes every backend (a quit) is
+cancelled the same way and also answers `plugin-stopping`. Any other bind
+failure keeps its own error, even when the deadline passes or the workspace
+closes meanwhile.
+
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
 
@@ -1292,7 +1301,17 @@ sends no `backendMethod` entries: a frontend's calls to its own backend
 entry could only ever read "declared but not used". The Host also sends
 `installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
 then counts only writes since then, so a first-seen row left by an earlier
-install of the same id counts as absent. Answer `PluginActivityReport`
+install of the same id counts as absent. It is the time of the install since
+the id was last removed: the Host records it in its own
+`.navide-install-scans.json` (owner-only, `0600`) when a fresh install becomes
+active (the activation finds no version of the id in place: no registered
+package, no active selection, no legacy backend-only install), keeps it
+through updates (over any layout, legacy included) and rollbacks, records
+nothing for a candidate that is staged and then discarded or fails to
+activate, and drops it when the plugin is removed. An id installed before
+this was recorded has none, and Manifest v1 packages (installed in place,
+without the staged activation) never have one; the request then carries no
+`installedAt` and the backend keeps its earlier behaviour. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the

@@ -41,7 +41,8 @@ WRITE_TOOLS = {
 READ_TOOLS = {"read", "read_file", "view", "cat", "notebookread"}
 #: Search tools: grep reads the contents under its path (like a read), glob
 #: lists names (like ls). Grep's pattern is the text searched for, not a path.
-GREP_TOOLS = {"grep"}
+#: Qwen Code calls its grep `grep_search`; Copilot CLI offers `grep` or `rg`.
+GREP_TOOLS = {"grep", "grep_search", "rg"}
 GLOB_TOOLS = {"glob"}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
@@ -1259,15 +1260,16 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
     """Grep / Glob: the locations they reach, against the same credential
     rules as Read (grep) and ls (glob). These tools expand nothing, so a path
     that does not resolve statically is skipped rather than made opaque."""
-    root = tool_input.get("path")
-    root = root if isinstance(root, str) and root else None
+    # Copilot CLI names the root `paths`: one directory, or a list of them.
+    root = tool_input.get("path") or tool_input.get("paths")
+    roots = [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
     # Glob's pattern and Grep's glob filter are paths under root (or absolute).
     sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
     sub = sub if isinstance(sub, str) and sub else None
-    raws = [root] if root else []
+    raws = list(roots)
     if sub:
         absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
-        raws.append(sub if absolute or not root else posixpath.join(root, sub))
+        raws += [sub] if absolute or not roots else [posixpath.join(r, sub) for r in roots]
     for raw in raws:
         path = _resolve(raw, ctx)
         if path is not None:
