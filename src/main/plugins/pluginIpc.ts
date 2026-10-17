@@ -2462,6 +2462,8 @@ export function registerPluginIpc(
       } catch (error) {
         console.warn(`[plugins] install scan record for ${id} not removed: ${error instanceof Error ? error.message : String(error)}`)
       }
+      // Its activity "first write in a workspace" rows go with it (D-e).
+      manager.forgetPluginActivity(id)
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')
