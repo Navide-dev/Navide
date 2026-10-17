@@ -14,7 +14,7 @@ import { loopBackoffMs, loopInjectFailures, LOOP_INJECT_FAIL_LIMIT } from '../..
 const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 const source = parse(appSource).descriptor.scriptSetup!.content
 const ast = ts.createSourceFile('App.ts', source, ts.ScriptTarget.Latest, true)
-const NAMES = ['fireLoopContinue', 'stopLoopSpinning', 'armLoopTurn', 'onInterrupt']
+const NAMES = ['fireLoopContinue', 'stopLoopSpinning', 'armLoopTurn', 'onInterrupt', 'batchInterrupt', 'onEvolveAction']
 
 function appFunctions(scope: Record<string, unknown>) {
   const selected = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && NAMES.includes(node.name?.text ?? ''))
@@ -54,6 +54,7 @@ function harness() {
     stopLoopLimitWatcher: (id: string) => { loopLimitWatchers.delete(id) },
     sysNotify: { notifyPaneState: notify }, i18n: { global: { t: (k: string) => k } },
     paneRefs: { p1: { sessionId: 's1', interrupt } }, persistPaneStopped,
+    closePopover: vi.fn(), focusPaneFromNotification: vi.fn(), reclaimPaneFromMenu: vi.fn(), evolve: { openPanel: vi.fn() },
   }
   return { pane, watcher, loopLimitWatchers, loopGen, acquire, inject, notify, interrupt, persistPaneStopped, fns: appFunctions(scope) }
 }
@@ -155,6 +156,32 @@ describe('F1: interrupting a pane stops its loop', () => {
     await h.fns.onInterrupt('p1')
     await h.fns.fireLoopContinue('p1')
     expect(h.inject).not.toHaveBeenCalled()
+  })
+
+  it('an explicit interrupt from an agent (ui.pane.interrupt) stops the loop', async () => {
+    // ui.pane.interrupt calls onInterrupt(paneId) with no options.
+    expect(source).toContain('const sent = await onInterrupt(paneId)\n')
+    const h = harness()
+    await h.fns.onInterrupt('p1')
+    expect(h.pane.loopActive).toBe(false)
+  })
+
+  it('a batch interrupt keeps the loop running', async () => {
+    const h = harness()
+    await h.fns.batchInterrupt(['p1'])
+    expect(h.interrupt).toHaveBeenCalledTimes(1)
+    expect(h.pane.loopActive).toBe(true)
+    expect(h.loopLimitWatchers.has('p1')).toBe(true)
+    expect(h.notify).not.toHaveBeenCalled()
+  })
+
+  it('an evolve interrupt keeps the loop running', async () => {
+    const h = harness()
+    h.fns.onEvolveAction({ kind: 'evolve-interrupt', paneId: 'p1' })
+    await vi.waitFor(() => expect(h.interrupt).toHaveBeenCalledTimes(1))
+    expect(h.pane.loopActive).toBe(true)
+    expect(h.loopLimitWatchers.has('p1')).toBe(true)
+    expect(h.notify).not.toHaveBeenCalled()
   })
 
   it('a pane without an active loop is interrupted exactly as before', async () => {

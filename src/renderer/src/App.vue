@@ -8919,15 +8919,19 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
  *
  *  The UI callers ignore this; ui.pane.interrupt reports it, because
  *  "nothing was sent" and "it was sent and the agent kept going" are different
- *  answers and an MCP caller cannot tell them apart otherwise. */
-async function onInterrupt(paneId: string): Promise<boolean> {
+ *  answers and an MCP caller cannot tell them apart otherwise.
+ *
+ *  `keepLoop` is for interrupts not aimed at this one pane (batch, evolve):
+ *  they leave its loop running. */
+async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (!ref?.sessionId) return false
-  // The user stopping the agent stops its loop too — otherwise the interrupted
-  // turn's end reads as a finished turn and the loop answers it with a
-  // continue. Stopped before the interrupt so an in-flight continue aborts.
-  if (panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
+  // An explicit interrupt of this pane (user or agent) stops its loop too —
+  // otherwise the interrupted turn's end reads as a finished turn and the loop
+  // answers it with a continue. Stopped before the interrupt so an in-flight
+  // continue aborts.
+  if (!opts.keepLoop && panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
     const issued = await ref.interrupt()
     persistPaneStopped(paneId, true)
@@ -8953,7 +8957,7 @@ async function onKillAll(paneIds?: readonly string[]): Promise<void> {
 
 // ── Batch actions on the multi-select set (right-click a selected pane) ───────
 async function batchInterrupt(ids: string[]): Promise<void> {
-  for (const id of ids) await onInterrupt(id)
+  for (const id of ids) await onInterrupt(id, { keepLoop: true })
 }
 
 function batchMinimize(ids: string[]): void {
@@ -14734,7 +14738,7 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
       if (paneId) void focusPaneFromNotification(paneId)
       break
     case 'evolve-interrupt':
-      if (paneId) void onInterrupt(paneId)
+      if (paneId) void onInterrupt(paneId, { keepLoop: true })
       break
     case 'evolve-reclaim':
       if (paneId) void reclaimPaneFromMenu(paneId)
