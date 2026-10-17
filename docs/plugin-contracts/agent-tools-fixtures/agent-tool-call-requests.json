@@ -311,6 +311,38 @@
           }
         }
       }
+    },
+    {
+      "name": "top-level-caller-identity",
+      "request": {
+        "request_id": "mcp:3f2a",
+        "operation": "agentTool",
+        "target": {
+          "plugin_id": "nerdtechnic.devmap",
+          "workspace_path": "/Users/me/project"
+        },
+        "tool": {
+          "name": "devmap_set_status",
+          "plugin_version": "0.2.0",
+          "sync_revision": 12
+        },
+        "caller": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "workspace": "/Users/me/project"
+        },
+        "payload": {
+          "arguments": {
+            "block_id": "b1",
+            "status": "done"
+          }
+        },
+        "caller_identity": {
+          "kind": "pane",
+          "paneId": "p-41",
+          "verifiedTo": "pane"
+        }
+      }
     }
   ]
 }

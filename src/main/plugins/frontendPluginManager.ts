@@ -175,7 +175,6 @@ import { MARKETPLACE_QUERY_REQUEST_EVENT, MARKETPLACE_QUERY_RESULT_MESSAGE } fro
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
-  AGENT_TOOL_STABILITY_CAP_BYTES,
   AGENT_TOOLS_SYNC_EVENT,
   utf8ByteLength,
   type AgentToolCaller,
@@ -7080,10 +7079,9 @@ export class FrontendPluginManager {
         initiator,
         timeoutMs: Math.max(1, Math.min(tool.timeoutMs, Math.ceil(deadline - Date.now()))),
       })
+      // DB9: no result cap. The tool already ran, so the result goes back
+      // whole and carries its size.
       const resultBytes = utf8ByteLength(JSON.stringify(result ?? null))
-      if (resultBytes > AGENT_TOOL_STABILITY_CAP_BYTES) {
-        return { ...agentToolError('PLUGIN_TOOL_RESULT_TOO_LARGE', 'The tool result is over the 1 MiB cap.'), meta: meta(resultBytes) }
-      }
       return { ok: true, result, meta: meta(resultBytes) }
     } catch (error) {
       return this.agentToolBackendError(error, meta(0))

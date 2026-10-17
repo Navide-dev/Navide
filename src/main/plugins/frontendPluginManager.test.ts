@@ -16299,8 +16299,20 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       await expect(ask(f, toolRequest(f, { request_id: 'mcp:2' }))).resolves.toMatchObject({
         ok: false, error_code: 'PLUGIN_TOOL_FAILED', plugin_error: 'DEVMAP_LOCKED',
       })
-      f.call.mockResolvedValueOnce('x'.repeat(1_048_577) as never)
-      await expect(ask(f, toolRequest(f, { request_id: 'mcp:3' }))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_RESULT_TOO_LARGE' })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('returns a result over 1 MiB whole, with its size (DB9: no result cap)', async () => {
+    const f = await fixture()
+    try {
+      const big = 'x'.repeat(1_048_577)
+      f.call.mockResolvedValueOnce(big as never)
+      const answer = await ask(f, toolRequest(f, { request_id: 'mcp:big' })) as { ok: boolean; result: unknown; meta: { resultBytes: number } }
+      expect(answer.ok).toBe(true)
+      expect(answer.result).toBe(big)
+      expect(answer.meta.resultBytes).toBe(1_048_579)
     } finally {
       await f.cleanup()
     }
