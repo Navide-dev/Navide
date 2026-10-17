@@ -1366,8 +1366,13 @@ EXISTS`), kept 90 days like the daily rows, and removes a plugin's rows with
 
 Backend side (`PLUGIN_RESOURCE_DECISION_MESSAGE`, `PLUGIN_RESOURCE_ITEMS`,
 `PLUGIN_RESOURCE_DECISIONS` in `agent_tools_contract.py`): a row is accepted
-only with exactly these seven fields and types (`parsePluginResourceDecisionRow`'s
-rules; any other field, such as a path, refuses the row). Accepted rows are
+only with exactly these seven fields and types; any other field, such as a
+path, refuses the whole row. The Host's `parsePluginResourceDecisionRow`
+checks the same seven fields and types but drops an extra field instead of
+refusing the row, so a row the Host built never carries one. Known gaps:
+`plugin_id` and `plugin_version` get no format check beyond being strings
+(non-empty for the id), and an internal `ValueError` message can carry the
+refused value; it reaches only the backend log. Accepted rows are
 queued and written by the audit's batched flush, in a transaction of their own
 so a failure there never drops the activity rows. A skipped row is counted in
 the log, never with its content. Columns: `id`, `at`, `plugin_id`,
