@@ -9879,7 +9879,12 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     `wait_s` (0-60) waits that long for the user's decision or the change to
     finish. Returns {ok, approval_id, kind, target: {id, version}, status,
     error, expires_at}; status is pending, applying (approved, being carried
-    out), completed, failed, rejected or expired.
+    out), completed, failed, rejected or expired. When another Navide window
+    had settled the request first (the window carrying it out was
+    reconnecting) and that window then reported what really happened, the
+    answer also has `finished_late: true` and `settled: {status, error}`,
+    what had been recorded before; `status` and `error` are then the late,
+    actual result.
     """
     from agent_team_backend import skills_approvals
     from agent_team_backend.plugins import agent_tools_contract as contract
@@ -9897,18 +9902,28 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     while record["status"] in {"pending", "applying"} and time.monotonic() < deadline:
         await asyncio.sleep(0.2)
         record = skills_approvals.registry.get(approval_id) or record
-    return {
+
+    def request_error(error: Any) -> Any:
+        return (
+            error if error is None or error in _REQUEST_OWN_ERRORS
+            else _fenced_request_error(caller, str(error), tool="marketplace_request_status")
+        )
+
+    answer = {
         "ok": True,
         "approval_id": record["approval_id"],
         "kind": record["kind"],
         "target": {"id": record["target"]["id"], "version": record["target"]["version"]},
         "status": record["status"],
-        "error": (
-            record["error"] if record["error"] is None or record["error"] in _REQUEST_OWN_ERRORS
-            else _fenced_request_error(caller, str(record["error"]), tool="marketplace_request_status")
-        ),
+        "error": request_error(record["error"]),
         "expires_at": record["expires_at"],
     }
+    settled = record.get("settled")
+    if record.get("finished_late") is True and isinstance(settled, dict):
+        # Added only for a late result; every other answer is unchanged.
+        answer["finished_late"] = True
+        answer["settled"] = {"status": settled.get("status"), "error": request_error(settled.get("error"))}
+    return answer
 
 
 async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: Any) -> dict[str, Any]:

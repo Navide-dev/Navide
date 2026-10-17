@@ -587,6 +587,10 @@ async def test_a_window_back_within_the_grace_period_finishes_its_request_as_usu
     assert (approval["status"], approval["error"], approval.get("finished_late")) == ("completed", None, None)
     assert broadcasts[-1]["payload"] == {"approval_id": approval_id, "status": "completed", "error": None}
     assert [r["action"] for r in _actions(audit)][-1] == "finish-completed"
+    # marketplace_request_status answers exactly as before: no late fields.
+    status = await mcp.marketplace_request_status(None, approval_id)
+    assert set(status) == {"ok", "approval_id", "kind", "target", "status", "error", "expires_at"}
+    assert (status["status"], status["error"]) == ("completed", None)
 
 
 @pytest.mark.parametrize(("status", "error"), [("completed", None), ("failed", "download failed")])
@@ -623,6 +627,18 @@ async def test_a_window_back_after_recovery_settled_its_request_records_what_rea
     # Once only.
     again = await _finish_in(window_a, approval_id, status, error)
     assert again["error"]["code"] == "PLUGIN_APPROVAL_NOT_APPLYING"
+    # The agent reads the late result and what had been recorded before.
+    answer = await mcp.marketplace_request_status(None, approval_id)
+    assert set(answer) == {
+        "ok", "approval_id", "kind", "target", "status", "error", "expires_at", "finished_late", "settled",
+    }
+    assert (answer["status"], answer["finished_late"]) == (status, True)
+    assert answer["settled"] == {"status": "failed", "error": "interrupted"}  # Navide's own word, plain
+    if error is None:
+        assert answer["error"] is None
+    else:
+        # The window's own error text stays fenced, as on every other answer.
+        assert answer["error"] != error and error in answer["error"]
 
 
 # ── error text that may quote a package or the Registry is fenced (security review) ──
