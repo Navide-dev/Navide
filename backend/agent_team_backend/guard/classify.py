@@ -39,6 +39,10 @@ WRITE_TOOLS = {
     "replace", "apply_patch", "str_replace_editor", "create",
 }
 READ_TOOLS = {"read", "read_file", "view", "cat", "notebookread"}
+#: Search tools: grep reads the contents under its path (like a read), glob
+#: lists names (like ls). Grep's pattern is the text searched for, not a path.
+GREP_TOOLS = {"grep"}
+GLOB_TOOLS = {"glob"}
 
 WRAPPERS_NO_ARG = {"nohup", "time", "command", "builtin", "exec", "caffeinate", "stdbuf"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"}
@@ -237,6 +241,8 @@ def _credential_kind(path: str, ctx: _Ctx) -> str | None:
             return "credential"
         base = posixpath.basename(path)
         if rel.startswith(".claude/") and base.startswith(".credentials"):
+            return "credential"
+        if rel == ".claude/secrets" or rel.startswith(".claude/secrets/"):
             return "credential"
         if rel.startswith(".codex/") and base.startswith("auth"):
             return "credential"
@@ -1244,7 +1250,28 @@ def classify(
                 acc.opaque("dynamic-path", f"path is not static: {raw}")
                 continue
             _check_path(acc, path, ctx, write=name in WRITE_TOOLS)
+    elif name in GREP_TOOLS or name in GLOB_TOOLS:
+        _check_search(acc, name, tool_input, ctx)
     return acc.verdict()
+
+
+def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
+    """Grep / Glob: the locations they reach, against the same credential
+    rules as Read (grep) and ls (glob). These tools expand nothing, so a path
+    that does not resolve statically is skipped rather than made opaque."""
+    root = tool_input.get("path")
+    root = root if isinstance(root, str) and root else None
+    # Glob's pattern and Grep's glob filter are paths under root (or absolute).
+    sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
+    sub = sub if isinstance(sub, str) and sub else None
+    raws = [root] if root else []
+    if sub:
+        absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
+        raws.append(sub if absolute or not root else posixpath.join(root, sub))
+    for raw in raws:
+        path = _resolve(raw, ctx)
+        if path is not None:
+            _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")

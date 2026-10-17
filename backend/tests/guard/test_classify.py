@@ -211,6 +211,86 @@ def test_file_tools(tool, path, level, rule):
         assert rule in v.rule_ids
 
 
+@pytest.mark.parametrize(
+    "tool, tool_input, level, rule",
+    [
+        # Grep reads file contents: the same verdict as Read on that path.
+        ("Grep", {"pattern": "x", "path": "~/.aws"}, "critical", "credential-access"),
+        ("Grep", {"pattern": "x", "path": f"{HOME}/.ssh/"}, "critical", "credential-access"),
+        ("grep", {"pattern": "x", "path": "~/.codex/auth.json"}, "critical", "credential-access"),
+        ("Grep", {"pattern": "x", "path": "~/elsewhere/.env"}, "critical", "dotenv-outside-workspace"),
+        # Its glob filter narrows the search under path, so it can name the store.
+        ("Grep", {"pattern": "x", "path": "~", "glob": ".aws/*"}, "critical", "credential-access"),
+        # Glob lists names only: the same verdict as ls on that location.
+        ("Glob", {"pattern": "*", "path": "~/.ssh"}, "high", "credential-path-list"),
+        ("Glob", {"pattern": "~/.aws/*"}, "high", "credential-path-list"),
+        ("glob", {"pattern": f"{HOME}/.gnupg/**"}, "high", "credential-path-list"),
+        ("Glob", {"pattern": ".ssh/*", "path": "~"}, "high", "credential-path-list"),
+    ],
+)
+def test_search_tools_check_credential_paths(tool, tool_input, level, rule):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert v.level == level, (tool, tool_input, v)
+    assert rule in v.rule_ids
+
+
+def test_claude_hook_payload_reaches_search_check():
+    from agent_team_backend import guard_hooks
+
+    payload = {"tool_name": "Grep", "tool_input": {"pattern": "x", "path": "~/.aws"}}
+    [(tool, tool_input)] = guard_hooks.normalise("claude", payload)
+    assert classify(tool, tool_input, cwd=WS, workspace=WS).level == "critical"
+
+
+#: Grep and Glob calls that touch no credential path. On main every Grep and
+#: Glob call came out exactly this verdict; it must not change.
+_MAIN_SEARCH_VERDICT = classify("WebFetch", {"url": "https://x"}, cwd=WS, workspace=WS)
+
+
+@pytest.mark.parametrize("path", [
+    None, ".", "src", "src/main.py", ".env", ".github/workflows", "~", "~/.claude", "~/.claude/CLAUDE.md",
+    "~/Documents/notes", "/tmp/x", "/etc", "/", "$HOME/x", "~other/x", "../sibling", "~/.kube", "~/.docker",
+])
+@pytest.mark.parametrize("tool", ["Grep", "Glob"])
+def test_search_tools_unchanged_off_credential_paths(tool, path):
+    tool_input = {"pattern": "**/*.py" if tool == "Glob" else "TODO"}
+    if path is not None:
+        tool_input["path"] = path
+    assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+@pytest.mark.parametrize("tool_input", [
+    {"pattern": "src/**/*.ts"}, {"pattern": "**/.env"}, {"pattern": "*.md", "path": "~/Documents"},
+    {"pattern": "/tmp/**"}, {"pattern": "~/.claude/*.md"}, {"pattern": "**/*", "path": "~"},
+])
+def test_glob_patterns_unchanged_off_credential_paths(tool_input):
+    assert classify("Glob", tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+def test_grep_pattern_is_a_regex_not_a_path():
+    # Grep's pattern is the text searched for: naming a store there reads nothing from it.
+    assert classify("Grep", {"pattern": "~/.ssh/id_rsa", "path": "."}, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+@pytest.mark.parametrize("tool, tool_input, level, rule", [
+    ("Read", {"file_path": "~/.claude/secrets/accounts.md"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~/.claude/secrets"}, "critical", "credential-access"),
+    ("Glob", {"pattern": "*", "path": "~/.claude/secrets"}, "high", "credential-path-list"),
+    ("Bash", {"command": "cat ~/.claude/secrets/accounts.md"}, "critical", "credential-access"),
+    ("Bash", {"command": "grep -rn 2026-10-17 ~/.claude/secrets"}, "critical", "credential-access"),
+    ("Bash", {"command": "ls ~/.claude/secrets"}, "high", "credential-path-list"),
+])
+def test_claude_secrets_folder_is_a_credential_store(tool, tool_input, level, rule):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert v.level == level, (tool, tool_input, v)
+    assert rule in v.rule_ids
+
+
+@pytest.mark.parametrize("path", ["~/.claude/secrets-notes.md", "~/.claude/skills/secrets/SKILL.md", "~/proj/secrets"])
+def test_claude_secrets_neighbours_stay_normal(path):
+    assert classify("Read", {"file_path": path}, cwd=WS, workspace=WS).level == "normal"
+
+
 def test_unknown_tool_is_normal():
     assert classify("WebFetch", {"url": "https://x"}, cwd=WS, workspace=WS).level == "normal"
     assert classify("Bash", {}, cwd=WS, workspace=WS).level == "normal"
