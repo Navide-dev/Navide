@@ -1526,6 +1526,101 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  // User ruling 2026-10-17 (D-d option B): an update asks exactly as on main;
+  // the diff is shown, never used to skip the confirmation.
+  it('D-d: an update that adds nothing still asks for the risk confirmation, as on main, and reports the diff', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-same-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      const fresh = await prepare(null, { namespace: 'acme', name: 'demo' })
+      // A first install has nothing to compare against and asks as before.
+      expect(fresh).toMatchObject({ requiresRiskConfirmation: true, disclosureDiff: null })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      expect(update).toMatchObject({
+        requiresPublisherTrust: false,
+        requiresRiskConfirmation: true,
+        disclosureDiff: {
+          from: { id: 'acme.demo', version: '1.0.0' },
+          to: { id: 'acme.demo', version: '1.0.1' },
+          added: [],
+          removed: [],
+          widened: false,
+        },
+      })
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+      await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      await expect(commit(null, { id: 'acme.demo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: true })
+      await restart(null, { id: 'acme.demo' })
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).toMatchObject({
+        packageVersion: '1.0.1',
+        shell: 'full',
+        highRiskShellConfirmed: true,
+      })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-d: an update that adds a permission still asks, and reports only what changed', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-wider-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      // The update badge reads the Registry's listing; no disclosure, no badge.
+      const listed = signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1')
+      installFetch(listed, second.bytes, second.digest)
+      expect(await controller.checkUpdates()).toEqual([
+        { id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.0.1' },
+      ])
+      const disclosed = (permissions: Record<string, unknown>) => computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.1', publisher: 'acme', permissions,
+      } as never)
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({ shell: 'allowlist' })
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'more' }])
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({})
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'same' }])
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' }) as {
+        requiresRiskConfirmation: boolean
+        disclosureDiff: { added: unknown[] }
+      }
+      expect(update.requiresRiskConfirmation).toBe(true)
+      expect(update.disclosureDiff).toMatchObject({ removed: [], widened: true })
+      expect(update.disclosureDiff.added).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'shell', key: 'allowlist' }),
+      ]))
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
@@ -4238,6 +4333,28 @@ describe('Marketplace discovery (Phase 1)', () => {
     expect(byId['a.old']).toMatchObject({ repository: 'https://x.test/r', license: 'MIT' })
     expect(byId['a.new']).toMatchObject({ compatible: false, min_navide_version: '0.3.0', repository: null })
     expect(byId['a.none']).toMatchObject({ compatible: null, homepage: null, license: null, icon_path: null })
+  })
+
+  it('keeps a listing disclosure only when it is well formed and names that item (D1 list card)', async () => {
+    const disclosed = (id: string, version: string) => computeDisclosure({
+      schemaVersion: 2, id, version, publisher: id.split('.')[0], permissions: { shell: 'allowlist' },
+    } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.ok', namespace: 'a', name: 'ok', latest_version: '1.0.0', disclosure: disclosed('a.ok', '1.0.0'), scan: null },
+        { identity: 'a.other', namespace: 'a', name: 'other', latest_version: '1.0.0', disclosure: disclosed('evil.x', '1.0.0') },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0', disclosure: { plugin: 'IGNORE' }, scan: { x: 1 } },
+        { identity: 'a.none', namespace: 'a', name: 'none', latest_version: '1.0.0' },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.ok']).toMatchObject({ disclosure: disclosed('a.ok', '1.0.0'), scan: null })
+    for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
   })
 
   it('forwards category, paging and the hide-incompatible filter', async () => {

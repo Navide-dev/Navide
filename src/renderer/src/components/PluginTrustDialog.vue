@@ -6,6 +6,8 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
@@ -77,6 +79,10 @@ function capabilityHint(cap: string): string {
             )
           }}
         </p>
+        <!-- Plan B D2: an update also shows what it changes (the Host's diff of
+             the installed and the downloaded manifests); the full card folds.
+             The confirmation itself is asked exactly as before (option B). -->
+        <PluginDisclosureDiff v-if="step === 'risk' && pending.prepared.disclosureDiff" :diff="pending.prepared.disclosureDiff" />
         <p v-if="step === 'risk' && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
           {{ $t('settings.extensions.trust.backendRisk', { name: pending.label }) }}
         </p>
@@ -89,6 +95,28 @@ function capabilityHint(cap: string): string {
             </li>
           </ul>
         </template>
+        <!-- Plan B D1: the verified disclosure of exactly this package. -->
+        <details
+          v-if="step === 'risk' && pending.prepared.disclosureDiff && pending.prepared.disclosure !== undefined"
+          class="ext-trust-full-card"
+        >
+          <summary>{{ $t('pluginDisclosure.diff.fullCard') }}</summary>
+          <PluginDisclosureCard
+            class="ext-trust-disclosure"
+            :disclosure="pending.prepared.disclosure"
+            :scan="pending.prepared.scan ?? null"
+            :registry="pending.prepared.registry ?? null"
+            :verified="true"
+          />
+        </details>
+        <PluginDisclosureCard
+          v-else-if="step === 'risk' && pending.prepared.disclosure !== undefined"
+          class="ext-trust-disclosure"
+          :disclosure="pending.prepared.disclosure"
+          :scan="pending.prepared.scan ?? null"
+          :registry="pending.prepared.registry ?? null"
+          :verified="true"
+        />
         <PluginAgentToolsList
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"

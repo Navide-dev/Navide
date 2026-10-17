@@ -18,6 +18,8 @@ import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import { ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
 import PluginTrustDialog from './PluginTrustDialog.vue'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
@@ -897,6 +899,18 @@ watch(
               </p>
             </section>
 
+            <!-- Plan B D1: the disclosure card of the version install would pick.
+                 Raw Registry data here; prepareInstall verifies it. -->
+            <section v-if="latestVersionInfo && !isPack(detail)" class="mkt-side-card mkt-disclosure">
+              <h4>{{ $t('pluginDisclosure.title') }}</h4>
+              <PluginDisclosureCard
+                :disclosure="latestVersionInfo.disclosure"
+                :scan="latestVersionInfo.scan"
+                :registry="latestVersionInfo.registry"
+                :verified="false"
+              />
+            </section>
+
             <section
               v-if="detail.repository || detail.homepage || detail.license || detail.categories.length"
               class="mkt-side-card"
@@ -1122,6 +1136,11 @@ watch(
                 </span>
               </div>
               <p v-if="ext.description" class="mkt-card-desc" v-truncate>{{ ext.description }}</p>
+              <!-- Plan B D1: summary and risk level of the listed version;
+                   Registry data that nothing has verified yet. -->
+              <div v-if="ext.disclosure" class="mkt-card-disclosure" :title="$t('pluginDisclosure.provenance.unverified')">
+                <PluginDisclosureSummary :disclosure="ext.disclosure" :scan="ext.scan ?? null" />
+              </div>
               <p v-if="isIncompatible(ext)" class="mkt-card-incompatible">
                 {{ $t('settings.extensions.marketplace.updateNavideToInstall', { current: ext.app_version ?? '' }) }}
               </p>
@@ -1733,6 +1752,14 @@ watch(
   outline: none;
   border-color: var(--accent-focus);
   box-shadow: 0 0 0 2px var(--accent-focus);
+}
+.mkt-card-disclosure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-xs);
 }
 .mkt-card-main {
   flex: 1;
