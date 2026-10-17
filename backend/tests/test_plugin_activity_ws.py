@@ -178,3 +178,32 @@ async def test_a_malformed_report_request_is_refused(audit: PluginAuditLog, payl
     host = _session(host=True)
     await ws_handlers.plugins_activity_report(host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, payload)
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+# ── a plugin's frontend calling its own backend (source "backend") ──────────
+
+
+async def test_the_host_records_backend_calls_and_they_count_as_use_of_the_declared_method(audit: PluginAuditLog) -> None:
+    host = _session(host=True)
+    rows = [
+        _row(source="backend", address="backend.devmap.block.import", fs_path=""),
+        # A backend method named like a system namespace is not a use of that namespace.
+        _row(source="backend", address="backend.fs.read", fs_path=""),
+    ]
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": rows})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
+    assert [(r["source"], r["address"]) for r in _stored(audit)] == [
+        ("backend", "backend.devmap.block.import"), ("backend", "backend.fs.read"),
+    ]
+    declared = [
+        {"kind": "backendMethod", "key": "backend.devmap.block.import"},
+        {"kind": "backendMethod", "key": "backend.devmap.block.export"},
+        {"kind": "system", "key": "fs"},
+    ]
+    await ws_handlers.plugins_activity_report(
+        host, "2", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "nerdtechnic.devmap", "declared": declared},
+    )
+    unused = host.websocket.sent[-1]["payload"]["declaredUnused"]
+    assert [(u["kind"], u["key"]) for u in unused] == [
+        ("backendMethod", "backend.devmap.block.export"), ("system", "fs"),
+    ]

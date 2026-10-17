@@ -1,5 +1,7 @@
 /**
- * Plugin activity (plan B, D-e): one row per capability-broker call.
+ * Plugin activity (plan B, D-e): one row per capability-broker call, and one
+ * per call a third-party plugin's own frontend makes to its own backend
+ * (`plugin:backend:call`: source `backend`, address `backend.<method>`).
  *
  * The broker records what a Navide plugin asked for and what came of it: the
  * plugin, the `namespace.method` address, the workspace, an fs path or a shell
@@ -17,7 +19,7 @@
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
 import { isUndeclaredDenial, type CapabilityCall, type CapabilityResponse } from './pluginCapabilityBroker'
 
-export type PluginActivitySource = 'broker' | 'shell'
+export type PluginActivitySource = 'broker' | 'shell' | 'backend'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
 
 export interface PluginActivityRow {
@@ -74,6 +76,29 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
   const command = call.ns === 'shell' ? stringArg(call.args, 'command') : undefined
   if (command) row.shell_command = command
   return row
+}
+
+export interface BackendCallActivityInput {
+  pluginId: string
+  packageVersion: string | null | undefined
+  workspace: string | null | undefined
+  /** The backend method the frontend called. */
+  method: string
+  response: CapabilityResponse
+}
+
+/** The activity row of one call a plugin's frontend made to its own backend:
+ *  source `backend`, address `backend.<method>` (so a method named like a
+ *  system namespace, `fs.read`, never counts as a use of that namespace). */
+export function backendCallRowFor({ pluginId, packageVersion, workspace, method, response }: BackendCallActivityInput): PluginActivityRow {
+  return {
+    plugin_id: pluginId,
+    plugin_version: packageVersion ?? '',
+    workspace: workspace ?? '',
+    source: 'backend',
+    address: `backend.${method}`,
+    outcome: response.ok ? 'allowed' : DENIED_CODES.has(response.error?.code ?? '') ? 'denied' : 'error',
+  }
 }
 
 export type PluginActivitySend = (type: string, payload: { rows: PluginActivityRow[] }) => Promise<unknown> | unknown

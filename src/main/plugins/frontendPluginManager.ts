@@ -47,7 +47,7 @@ import {
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
 } from './pluginCapabilityBroker'
-import { activityRowFor, PluginActivityRecorder } from './pluginActivity'
+import { activityRowFor, backendCallRowFor, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -5762,7 +5762,7 @@ export class FrontendPluginManager {
       return this.admitPluginFrameDocument(event.senderFrame, event.sender.id, nonce)
     })
 
-    this.backendCallHandler = async (
+    const backendCall = async (
       plugin: RunningPlugin | undefined,
       payload: unknown,
     ): Promise<CapabilityResponse> => {
@@ -5875,6 +5875,11 @@ export class FrontendPluginManager {
           this.pendingBackendCalls.delete(plugin.instanceId)
         }
       }
+    }
+    this.backendCallHandler = async (plugin, payload) => {
+      const response = await backendCall(plugin, payload)
+      this.recordBackendCallActivity(plugin, payload, response)
+      return response
     }
     ipcMain.handle(IPC_BACKEND_CALL, (event, payload: unknown): Promise<CapabilityResponse> =>
       this.backendCallHandler!(this.instanceForIpc(event.sender.id, event.senderFrame), payload)
@@ -6624,6 +6629,34 @@ export class FrontendPluginManager {
       }))
     } catch (error) {
       console.debug('[plugins] activity not recorded:', error)
+    }
+  }
+
+  /** D-e: one `plugin_activity` row for a call a third-party plugin's frontend
+   *  made to its own backend (queued, sent in batches; never on the call path's
+   *  critical work). The bundled `navide.*` packages are not recorded, as for
+   *  broker calls. Never throws. */
+  private recordBackendCallActivity(
+    plugin: RunningPlugin | undefined,
+    payload: unknown,
+    response: CapabilityResponse,
+  ): void {
+    try {
+      if (!plugin || isReservedPluginId(plugin.id)) return
+      const name = typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>).name
+        : undefined
+      if (!nonEmptyString(name)) return
+      const context = plugin.capabilityContext
+      this.activityRecorder.record(backendCallRowFor({
+        pluginId: plugin.id,
+        packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion,
+        workspace: plugin.workspacePath,
+        method: name,
+        response,
+      }))
+    } catch (error) {
+      console.debug('[plugins] backend call activity not recorded:', error)
     }
   }
 

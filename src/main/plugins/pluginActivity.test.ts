@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
-import { activityRowFor, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
+import { activityRowFor, backendCallRowFor, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
 import {
   buildError,
   buildSuccess,
@@ -129,3 +129,24 @@ describe('PluginActivityRecorder', () => {
     release()
   })
 })
+
+describe('backendCallRowFor', () => {
+  const base = { pluginId: 'acme.x', packageVersion: '1.0.0', workspace: '/w', method: 'devmap.block.import' }
+
+  it('names the call backend.<method> with its outcome', () => {
+    expect(backendCallRowFor({ ...base, response: { reqId: 'r', ok: true, result: null } as never })).toEqual({
+      plugin_id: 'acme.x', plugin_version: '1.0.0', workspace: '/w', source: 'backend',
+      address: 'backend.devmap.block.import', outcome: 'allowed',
+    })
+    const refused = backendCallRowFor({ ...base, response: { reqId: 'r', ok: false, error: { code: 'CAPABILITY_DENIED', message: 'no' } } as never })
+    expect(refused.outcome).toBe('denied')
+    const failed = backendCallRowFor({ ...base, response: { reqId: 'r', ok: false, error: { code: 'TIMEOUT', message: 'slow' } } as never })
+    expect(failed.outcome).toBe('error')
+  })
+
+  it('keeps a method named like a system namespace apart from it', () => {
+    const row = backendCallRowFor({ ...base, method: 'fs.read', response: { reqId: 'r', ok: true, result: null } as never })
+    expect(row.address).toBe('backend.fs.read')
+  })
+})
+

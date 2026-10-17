@@ -1190,10 +1190,13 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
 
-`plugin_activity` (D-e; one row per broker or shell-broker call, plus one per
+`plugin_activity` (D-e; one row per broker or shell-broker call, one per call
+a third-party plugin's own frontend makes to its own backend, plus one per
 agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
-`plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
-`address` (`namespace.method`), `outcome` (`allowed` | `denied` | `error`),
+`plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool` |
+`backend`), `address` (`namespace.method`; for `backend`, `backend.<method>`,
+so a method named like a system namespace never counts as a use of it),
+`outcome` (`allowed` | `denied` | `error`),
 `denied_reason` (only for `denied`: a `PLUGIN_TOOL_UNAVAILABLE` reason, a
 call error code, or `undeclared` for a use the manifest did not declare;
 `PLUGIN_ACTIVITY_DENIED_REASONS`, anything else is `other`), `fs_path`
@@ -1265,7 +1268,8 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`backendMethod` methods, `agentTool` names) from the installed manifest, since
+`backendMethod` keys `backend.<method>` (the address its calls are recorded
+under), `agentTool` names) from the installed manifest, since
 the backend has no third-party manifest; without `declared`, `declaredUnused`
 is `[]`. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture

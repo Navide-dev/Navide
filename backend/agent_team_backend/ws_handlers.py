@@ -355,9 +355,9 @@ async def plugins_agent_action_result(
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
-#: The Host records broker and shell-broker calls; agent tool calls are the
-#: backend's own rows (B1).
-_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: The Host records broker and shell-broker calls and a plugin frontend's
+#: calls to its own backend; agent tool calls are the backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell", "backend"))
 
 
 @handler("plugin.activity.record")

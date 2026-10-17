@@ -17,7 +17,7 @@ export const PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION = 1
  *  summed, never averaged; the page shows "unknown". */
 export const UNKNOWN_BYTES = -1
 
-export type PluginActivitySource = 'broker' | 'shell' | 'agentTool'
+export type PluginActivitySource = 'broker' | 'shell' | 'agentTool' | 'backend'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
 export type PluginToolCallerKind = 'pane' | 'external' | 'host'
 
@@ -179,7 +179,7 @@ const oneOf = <T extends string>(values: readonly T[], value: unknown): value is
   typeof value === 'string' && (values as readonly string[]).includes(value)
 const nullable = <T>(value: unknown, check: (v: unknown) => v is T): value is T | null => value === null || check(value)
 
-const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool']
+const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool', 'backend']
 const OUTCOMES: readonly PluginActivityOutcome[] = ['allowed', 'denied', 'error']
 const CALLER_KINDS: readonly PluginToolCallerKind[] = ['pane', 'external', 'host']
 const UNUSED_KINDS: readonly PluginActivityDeclaredUnused['kind'][] = ['system', 'shell', 'backendMethod', 'agentTool']

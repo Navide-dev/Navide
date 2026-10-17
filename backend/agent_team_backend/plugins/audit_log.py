@@ -108,7 +108,8 @@ OTHER = "other"
 CALLER_KINDS = ("pane", "external", "host")
 TOOL_CALL_OUTCOMES = ("ok", "error")
 TOOL_RISKS = ("read", "write")
-ACTIVITY_SOURCES = ("broker", "shell", "agentTool")
+#: ``backend``: a plugin's own frontend calling its own backend (address ``backend.<method>``).
+ACTIVITY_SOURCES = ("broker", "shell", "agentTool", "backend")
 ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 #: The contract's call error codes plus the two transport codes the backend
 #: produces itself (contract 4.2).
