@@ -345,7 +345,13 @@ import {
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
 import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
-import { pluginAgentNoticeTitle, releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
+import {
+  pluginAgentNoticeTitle,
+  pluginAgentUndoApplies,
+  releaseAnnouncementId,
+  useAnnouncements,
+  type SchedulerDisabledNotice,
+} from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
 import type {
   ConvenienceAnnouncementAction,
@@ -14720,6 +14726,12 @@ const convenience = useConvenience(backend, {
  *  user's own Extensions switch, set back (B2-c). */
 async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
   try {
+    // Only what the agent did: if the user changed it since, leave it be.
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginAgentUndoApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+      return
+    }
     await window.agentTeam?.plugins?.setDisabled?.(action.pluginId, action.disable)
   } catch (error) {
     notifyRestore.toast(

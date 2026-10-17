@@ -21,8 +21,9 @@ export interface PluginAgentActionDeps {
   isBuiltin(pluginId: string): boolean
   /** Installed version of a Marketplace (official-registry) package, else null. */
   installedVersion(pluginId: string): string | null
-  /** The Extensions Disabled switch for an installed Marketplace package. */
-  setDisabled(pluginId: string, disabled: boolean): Promise<unknown>
+  /** The Extensions Disabled switch for an installed Marketplace package;
+   *  `changed` is false when the package was already in that state. */
+  setDisabled(pluginId: string, disabled: boolean): Promise<{ changed: boolean }>
   notify(notice: PluginAgentActionNotice): void
 }
 
@@ -85,11 +86,14 @@ export async function answerPluginAgentAction(
     return { ok: false, error: `${pluginId} is not an installed Marketplace package`, error_code: 'NOT_INSTALLED' }
   }
   const disabled = action === 'disable'
+  let changed: boolean
   try {
-    await deps.setDisabled(pluginId, disabled)
+    ({ changed } = await deps.setDisabled(pluginId, disabled))
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
   }
-  deps.notify({ action, pluginId, pluginVersion: version, requester })
-  return { ok: true, pluginId, pluginVersion: version, disabled }
+  // Nothing changed (already in that state): no notice, so no undo that
+  // would flip the user's own choice.
+  if (changed) deps.notify({ action, pluginId, pluginVersion: version, requester })
+  return { ok: true, pluginId, pluginVersion: version, disabled, changed }
 }

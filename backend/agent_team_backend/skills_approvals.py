@@ -64,6 +64,9 @@ class ApprovalRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._records: dict[str, dict[str, Any]] = {}
+        # approval_id -> page-load id of the main window that approved a plugin
+        # request and is carrying it out (B2-c); not part of the record shape.
+        self._applying_by: dict[str, str] = {}
 
     def _expire(self) -> None:
         """Caller holds the lock."""
@@ -211,6 +214,16 @@ class ApprovalRegistry:
             if record is not None:
                 record.update(status=status, result=copy.deepcopy(result), error=error)
 
+    def set_applying_by(self, approval_id: str, window_id: str) -> None:
+        with self._lock:
+            if window_id:
+                self._applying_by[approval_id] = window_id
+
+    def applying_by(self, approval_id: str) -> str:
+        """The page-load id of the main window carrying out an approved request, or ""."""
+        with self._lock:
+            return self._applying_by.get(approval_id, "")
+
     def finish_plugin(self, approval_id: str, status: str, *, error: str | None = None) -> dict[str, Any]:
         """End an approved plugin request: only applying -> completed | failed."""
         with self._lock:
@@ -224,11 +237,13 @@ class ApprovalRegistry:
                     f"approval request is {record['status']}; only applying ends as completed or failed",
                 )
             record.update(status=status, error=error)
+            self._applying_by.pop(approval_id, None)
             return copy.deepcopy(record)
 
     def _reset_for_test(self) -> None:
         with self._lock:
             self._records.clear()
+            self._applying_by.clear()
 
 
 registry = ApprovalRegistry()
@@ -276,7 +291,7 @@ async def decide(approval_id: str, approve: bool, installer: Any) -> dict[str, A
     return public(final)
 
 
-async def decide_plugin(approval_id: str, approve: bool) -> dict[str, Any]:
+async def decide_plugin(approval_id: str, approve: bool, *, window_id: str = "") -> dict[str, Any]:
     """Apply the user's decision on an agent's plugin request.
 
     Approval moves it to `applying`. The main window then runs prepareInstall ->
@@ -289,6 +304,9 @@ async def decide_plugin(approval_id: str, approve: bool) -> dict[str, Any]:
     from .ipc import make_event
 
     final = registry.claim(approval_id, "applying" if approve else "rejected", plugin=True)
+    if approve:
+        # Recovery after a reload leaves alone what a still-open window is applying.
+        registry.set_applying_by(approval_id, window_id)
     await app.broadcast(make_event(
         "plugins.agent_request_resolved",
         {"approval_id": approval_id, "status": final["status"], "error": final["error"]},

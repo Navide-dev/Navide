@@ -15849,7 +15849,7 @@ describe('plugins.agent_action requests from the backend', () => {
 
   it('answers from the installed handler on the registered session', async () => {
     const { mgr, socket } = connectHost('acme.pa-ok', true)
-    const handler = vi.fn(async () => ({ ok: true as const, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true }))
+    const handler = vi.fn(async () => ({ ok: true as const, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true, changed: true }))
     mgr.setPluginAgentActionHandler(handler)
     await flush()
 
@@ -15858,7 +15858,7 @@ describe('plugins.agent_action requests from the backend', () => {
 
     expect(handler).toHaveBeenCalledWith(request)
     expect(resultsOf(socket).map((m) => m.payload)).toEqual([
-      { request_id: 'pa:1', ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true },
+      { request_id: 'pa:1', ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true, changed: true },
     ])
   })
 

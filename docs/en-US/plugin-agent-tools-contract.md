@@ -907,15 +907,19 @@ For `plugins_disable` / `plugins_enable`. The backend unicasts
 ```
 
 The Host answers with the WebSocket message `plugins.agent_action.result`:
-`{request_id, ok: true, pluginId, pluginVersion, disabled}` or `{request_id,
+`{request_id, ok: true, pluginId, pluginVersion, disabled, changed}` or `{request_id,
 ok: false, error, error_code}` with `BAD_REQUEST` | `NOT_INSTALLED` |
 `BUILTIN_PLUGIN` | `ACTION_FAILED` | `HOST_UNAVAILABLE`. Only installed
 Marketplace packages qualify: the bundled Navide plugins (the reserved
 `navide.*` namespace) are refused with `BUILTIN_PLUGIN` by the backend before
 it asks, and by the Host again. The Host switches the package exactly as the
 user's Extensions switch does (enable keeps the consent the user already
-gave), then tells the user which caller did it (pane name, or "external MCP
-client" / "Navide Host") with a one-click undo.
+gave). When that changed the package (`changed: true`) it tells the user which
+caller did it (pane name, or "external MCP client" / "Navide Host") with a
+one-click undo; a package already in that state is left alone, nobody is told
+and the audit records `no-op`. The undo acts only while the package is still
+in the state the agent left it in. The requester's pane name and workspace go
+through `neutralize_external_text`.
 
 ### 4.4 Chunked transfer of results and arguments
 
@@ -1220,8 +1224,8 @@ starts as usual.
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |
-| `outcome` | TEXT | `allowed` / `denied` / `error` |
-| `error_code` | TEXT | `''` when allowed; otherwise one of `PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES`, anything else `other` |
+| `outcome` | TEXT | `allowed` / `no-op` (allowed, already in that state) / `denied` / `error` |
+| `error_code` | TEXT | `''` when allowed or no-op; otherwise one of `PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES`, anything else `other` |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention is `plugin_tool_calls`'s: 30
 days, then the newest 10,000. Every text is shown as plain text.
@@ -1290,20 +1294,29 @@ B2-c tools and messages:
   the requester are stored through `neutralize_external_text`. A tool returns
   only `{ok, approval_id, status, expires_at, note}`: a coalesced request
   names its first requester, whose pane, workspace and reason no other caller
-  sees. Each new or coalesced request is broadcast to windows as
-  `plugins.agent_request` (the record).
+  sees. Each new or coalesced request is broadcast to the main windows only
+  as `plugins.agent_request` (the record).
 - `marketplace_request_status (approval_id, wait_s 0-60)` returns `{ok,
   approval_id, kind, target: {id, version}, status, error, expires_at}`,
   waiting while the request is `pending` or `applying`.
-- `plugins.agent_requests.list` (window) returns the `pending` and `applying`
-  plugin requests. A window that restarts while one is `applying` compares it
-  with the installed packages: remove and the package is gone, or update /
-  rollback / install and the installed version equals `target.version` →
-  `completed`; anything else → `failed` with error `interrupted`.
+- `plugins.agent_requests.list` (main windows only, `FORBIDDEN` otherwise)
+  returns `{requests, applyingInLiveWindow}`: the `pending` and `applying`
+  plugin requests, and the ids of the applying ones a still-connected main
+  window approved and is carrying out. A main window sends its page-load id
+  (`window_id`, stable across reconnects, new on reload) with
+  `ui.invoke.ready`; `decide` records it for an approval. On its first
+  connection a main window settles every other `applying` request against the
+  installed packages: remove and the package is gone, or update / rollback /
+  install and the installed version equals `target.version` → `completed`;
+  anything else → `failed` with error `interrupted`.
+- A rollback restores the version Extensions keeps for rollback: the window
+  rolls back only when that is `target.version`, else it finishes `failed`
+  with the reason (it never installs a version the user did not approve).
 - `plugins.agent_request.finish` `{approval_id, status: completed | failed,
   error, confirmation}` (window): the confirmation is minted for the action
   `plugins.agent_request.finish` (in `TRUST_CONFIRM_ACTIONS`) with subject
-  `approval_id`; only `applying` moves. The result is broadcast as
+  `<approval_id>:<status>`, so a confirmation to report failure cannot report
+  success; only `applying` moves. The result is broadcast as
   `plugins.agent_request_resolved` `{approval_id, status, error}`.
 
 ## 7. Changing this contract

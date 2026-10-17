@@ -9258,14 +9258,15 @@ def resolve_plugin_agent_action(request_id: str, response: dict[str, Any]) -> bo
 def _approval_requester(caller: _Caller) -> dict[str, Any]:
     """Who asked, as the approval card and the audit name it."""
     from agent_team_backend import agent_messaging
+    from agent_team_backend.plugins.external_content import neutralize_external_text
 
     if caller.kind != "pane":
         return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
     pane = agent_messaging.get(caller.pane_id)
     return {
         "paneId": caller.pane_id,
-        "paneName": pane.name if pane else None,
-        "workspace": (pane.workspace_path if pane else "") or None,
+        "paneName": neutralize_external_text(pane.name) if pane else None,
+        "workspace": neutralize_external_text(pane.workspace_path) if pane and pane.workspace_path else None,
         "callerKind": "pane",
     }
 
@@ -9413,7 +9414,7 @@ async def _file_plugin_request(
         return refuse(err.code, str(err))
     _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=target["version"] or "",
                         action=action, outcome="allowed", approval_id=record["approval_id"])
-    await app.broadcast(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    await app.broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
     # Only what this caller needs: a coalesced record names its first requester.
     return {
         "ok": True,
@@ -9538,7 +9539,7 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     def finish(answer: dict[str, Any], *, version: str = "") -> dict[str, Any]:
         code = str(answer.get("error_code") or "")
         if answer.get("ok") is True:
-            outcome = "allowed"
+            outcome = "allowed" if answer.get("changed") is not False else "no-op"
         else:
             outcome = "error" if code in {"HOST_UNAVAILABLE", "ACTION_FAILED"} else "denied"
         _audit_agent_action(caller, requester, plugin_id=plugin_id or "", plugin_version=version,
@@ -9567,7 +9568,7 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
     if result.get("ok") is True and isinstance(result.get("pluginVersion"), str):
         version = result["pluginVersion"]
         return finish({"ok": True, "pluginId": plugin_id, "pluginVersion": version,
-                       "disabled": action == "disable"}, version=version)
+                       "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
     # The Host's refusals are its own fixed words; a failure may quote a package.
@@ -9586,9 +9587,10 @@ async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, 
     agent did it, with a one-click undo, and the change is recorded. The
     bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
 
-    Returns {ok, pluginId, pluginVersion, disabled: true} or {ok: false,
-    error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
-    ACTION_FAILED, HOST_UNAVAILABLE).
+    Returns {ok, pluginId, pluginVersion, disabled: true, changed} or {ok:
+    false, error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
+    ACTION_FAILED, HOST_UNAVAILABLE). `changed` is false when it was already
+    disabled: nothing happens then and the user is not notified.
     """
     return await _plugin_agent_action(ctx, "disable", namespace, name)
 
@@ -9601,8 +9603,8 @@ async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, A
     granted. The change is recorded. The bundled Navide plugins cannot be
     enabled here.
 
-    Returns {ok, pluginId, pluginVersion, disabled: false} or {ok: false,
-    error, error_code}.
+    Returns {ok, pluginId, pluginVersion, disabled: false, changed} or {ok:
+    false, error, error_code}; `changed` is false when it was already enabled.
     """
     return await _plugin_agent_action(ctx, "enable", namespace, name)
 

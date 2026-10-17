@@ -541,7 +541,7 @@ PLUGIN_APPROVAL_STATUSES = ("pending", "applying", "completed", "rejected", "fai
 PLUGIN_APPROVAL_DECIDE_ACTION = "plugins.agent_request.decide"
 PLUGIN_APPROVAL_TTL_S = 15 * 60
 #: Window -> backend: end an approved request (``applying`` -> completed | failed),
-#: with a trust confirmation minted for this action, subject the approval_id.
+#: with a trust confirmation minted for this action, subject ``<approval_id>:<status>``.
 PLUGIN_APPROVAL_FINISH_ACTION = "plugins.agent_request.finish"
 #: Window -> backend: the plugin requests the registry holds (pending and applying).
 PLUGIN_APPROVAL_LIST_MESSAGE = "plugins.agent_requests.list"
@@ -672,7 +672,8 @@ PLUGIN_AGENT_ACTIONS = (
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")
-PLUGIN_AGENT_ACTION_OUTCOMES = ("allowed", "denied", "error")
+#: ``no-op``: allowed, but the package was already in that state (nothing changed, nobody told).
+PLUGIN_AGENT_ACTION_OUTCOMES = ("allowed", "no-op", "denied", "error")
 PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES = (
     *PLUGIN_AGENT_ACTION_ERROR_CODES, "NOT_FOUND", "REGISTRY_UNAVAILABLE", "INTERRUPTED",
     "CONFIRMATION_REQUIRED", "PLUGIN_APPROVAL_NOT_FOUND", "PLUGIN_APPROVAL_NOT_PENDING",

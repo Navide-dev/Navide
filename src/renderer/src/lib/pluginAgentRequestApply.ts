@@ -18,6 +18,8 @@ export interface PluginRequestRecord {
 export interface InstalledPackage {
   id: string
   packageVersion?: string
+  /** The retained previous version a rollback restores (Extensions' rollback). */
+  rollbackToVersion?: string
 }
 
 export type FinishStatus = { status: 'completed'; error: null } | { status: 'failed'; error: string }
@@ -26,6 +28,7 @@ export interface PluginRequestApplyDeps {
   /** prepareInstall → trust dialog → commitInstall; resolves once the flow has
    *  settled (committed, cancelled or failed). */
   install(namespace: string, name: string, version: string): Promise<void>
+  /** Extensions' rollback: restores the retained previous version. */
   rollback(pluginId: string): Promise<void>
   /** The Extensions remove flow (it asks whether to keep native backend data). */
   remove(pluginId: string): Promise<void>
@@ -52,13 +55,28 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/** A rollback restores the retained previous version only; it runs only when
+ *  that is the version the user approved, else the reason it cannot. */
+async function rollbackToApproved(
+  pluginId: string,
+  version: string | null,
+  deps: Pick<PluginRequestApplyDeps, 'rollback' | 'listInstalled'>,
+): Promise<string | null> {
+  const retained = (await deps.listInstalled()).find((pkg) => pkg.id === pluginId)?.rollbackToVersion
+  if (version === null || retained !== version) {
+    return `the version kept for rollback is ${retained ?? 'none'}, not the approved ${version ?? 'none'}`
+  }
+  await deps.rollback(pluginId)
+  return null
+}
+
 /** Carry out one approved request in this window and report the result. */
 export async function applyApprovedRequest(record: PluginRequestRecord, deps: PluginRequestApplyDeps): Promise<FinishStatus> {
   const { id, namespace, name, version } = record.target
   let failure: string | null = null
   try {
     if (record.kind === 'plugin-remove') await deps.remove(id)
-    else if (record.kind === 'plugin-rollback') await deps.rollback(id)
+    else if (record.kind === 'plugin-rollback') failure = await rollbackToApproved(id, version, deps)
     else if (version !== null) await deps.install(namespace, name, version)
     else failure = 'the request names no version'
   } catch (error) {
@@ -77,12 +95,14 @@ export async function applyApprovedRequest(record: PluginRequestRecord, deps: Pl
   return result
 }
 
-/** Settle every request the backend still holds as `applying` (window start). */
+/** Settle every request the backend still holds as `applying` (window start),
+ *  except those a still-connected main window is carrying out (`inLiveWindow`). */
 export async function recoverApplyingRequests(
   requests: readonly PluginRequestRecord[],
   deps: Pick<PluginRequestApplyDeps, 'listInstalled' | 'finish'>,
+  inLiveWindow: ReadonlySet<string> = new Set(),
 ): Promise<Array<{ approvalId: string } & FinishStatus>> {
-  const applying = requests.filter((record) => record.status === 'applying')
+  const applying = requests.filter((record) => record.status === 'applying' && !inLiveWindow.has(record.approval_id))
   if (applying.length === 0) return []
   const installed = await deps.listInstalled()
   const settled: Array<{ approvalId: string } & FinishStatus> = []

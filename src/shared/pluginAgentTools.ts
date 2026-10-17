@@ -655,6 +655,6 @@ export interface PluginAgentActionRequest {
 }
 
 export type PluginAgentActionAnswer =
-  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean }
+  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean }
   | { ok: false; error: string; error_code: PluginAgentActionErrorCode }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000

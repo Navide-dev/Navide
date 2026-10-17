@@ -578,8 +578,8 @@ Extensions.
 | `marketplace_request_rollback` | `namespace`, `name`, `version`, `reason=""` | The same for an older version of an installed package |
 | `plugins_request_remove` | `namespace`, `name`, `reason=""` | Files a request to remove an installed package |
 | `marketplace_request_status` | `approval_id`, `wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`; `status` is `pending`, `applying` (approved, being carried out), `completed`, `failed`, `rejected` or `expired`. `wait_s` (0-60) waits that long for it to move on |
-| `plugins_disable` | `namespace`, `name` | Disables an installed Marketplace package at once, as the user's Extensions switch does: its views, backend and agent tools stop, its files, grants and data stay. The user is told which caller did it, with a one-click undo, and the change is recorded. Returns `{ok, pluginId, pluginVersion, disabled: true}` |
-| `plugins_enable` | `namespace`, `name` | Enables it again under the consent the user already gave. Returns `{ok, pluginId, pluginVersion, disabled: false}` |
+| `plugins_disable` | `namespace`, `name` | Disables an installed Marketplace package at once, as the user's Extensions switch does: its views, backend and agent tools stop, its files, grants and data stay. The user is told which caller did it, with a one-click undo, and the change is recorded. Returns `{ok, pluginId, pluginVersion, disabled: true, changed}`; when it was already disabled, `changed` is false, nothing happens and nobody is told |
+| `plugins_enable` | `namespace`, `name` | Enables it again under the consent the user already gave. Returns `{ok, pluginId, pluginVersion, disabled: false, changed}` |
 
 Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`,
 `BUILTIN_PLUGIN`, `NOT_INSTALLED`, `NOT_FOUND`, `ACTION_FAILED`,

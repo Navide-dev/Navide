@@ -542,5 +542,15 @@ describe('agent plugin notices (B2-c)', () => {
     expect(pluginAgentNoticeTitle(notice)).toContain('nerdtechnic.devmap')
     i18n.global.locale.value = 'en-US'
   })
-})
 
+  it('undoes only what the agent did: not after the user changed the plugin since', async () => {
+    const { pluginAgentUndoApplies } = await load()
+    const reEnable = { kind: 'plugin-agent-undo' as const, pluginId: 'nerdtechnic.devmap', disable: false }
+    const reDisable = { kind: 'plugin-agent-undo' as const, pluginId: 'nerdtechnic.devmap', disable: true }
+    expect(pluginAgentUndoApplies(reEnable, [{ id: 'nerdtechnic.devmap', disabled: true }])).toBe(true)
+    expect(pluginAgentUndoApplies(reEnable, [{ id: 'nerdtechnic.devmap', disabled: false }])).toBe(false)
+    expect(pluginAgentUndoApplies(reDisable, [{ id: 'nerdtechnic.devmap', disabled: false }])).toBe(true)
+    expect(pluginAgentUndoApplies(reDisable, [{ id: 'nerdtechnic.devmap', disabled: true }])).toBe(false)
+    expect(pluginAgentUndoApplies(reEnable, [])).toBe(false)
+  })
+})

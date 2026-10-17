@@ -2426,14 +2426,18 @@ export function registerPluginIpc(
       const disabled = args?.disabled
       if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
       if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
-      return setInstalledPackageDisabled(id, disabled)
+      const result = await setInstalledPackageDisabled(id, disabled)
+      return { id: result.id, disabled: result.disabled }
     }
   )
 
   // The Disabled switch for an installed Marketplace package, shared by the
   // user's Extensions page (above) and an agent's plugins_disable /
   // plugins_enable (B2-c, below).
-  const setInstalledPackageDisabled = async (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> => {
+  const setInstalledPackageDisabled = async (
+    id: string,
+    disabled: boolean,
+  ): Promise<{ id: string; disabled: boolean; changed: boolean }> => {
       if (!manager.canDisablePlugin(id)) throw new Error(`first-party plugin ${id} cannot be disabled`)
       if (activeTransactions.has(id)) {
         throw new Error(`plugin transaction already in progress for ${id}`)
@@ -2442,7 +2446,7 @@ export function registerPluginIpc(
       if (!installed || installed.provenance !== 'official-registry') {
         throw new Error(`plugin ${id} is not an installed Marketplace package`)
       }
-      if (disabledPlugins.has(id) === disabled) return { id, disabled }
+      if (disabledPlugins.has(id) === disabled) return { id, disabled, changed: false }
       activeTransactions.add(id)
       try {
         if (disabled) {
@@ -2452,7 +2456,7 @@ export function registerPluginIpc(
           await revokeInstalledPackageRuntime(manager, pluginsRoot, id)
           manager.suspendDisabledPlugin(id)
           options.onActivationChange?.({ pluginId: id })
-          return { id, disabled }
+          return { id, disabled, changed: true }
         }
         const selected = lifecycleSelector.read(id)
         const packageDir = selected?.active
@@ -2491,7 +2495,7 @@ export function registerPluginIpc(
             },
           })
         }
-        return { id, disabled }
+        return { id, disabled, changed: true }
       } finally {
         activeTransactions.delete(id)
       }

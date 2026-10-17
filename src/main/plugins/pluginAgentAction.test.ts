@@ -11,7 +11,7 @@ function deps(overrides: Partial<PluginAgentActionDeps> = {}): PluginAgentAction
   return {
     isBuiltin: (id: string) => id.startsWith('navide.'),
     installedVersion: (id: string) => (id === 'nerdtechnic.devmap' ? '0.2.0' : null),
-    setDisabled: vi.fn(async () => undefined),
+    setDisabled: vi.fn(async () => ({ changed: true })),
     notify: vi.fn(),
     ...overrides,
   } as never
@@ -41,12 +41,22 @@ describe('answerPluginAgentAction', () => {
   it('switches an installed Marketplace package and names the caller in the notice', async () => {
     const d = deps()
     await expect(answerPluginAgentAction(request, d)).resolves.toEqual({
-      ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true,
+      ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true, changed: true,
     })
     expect(d.setDisabled).toHaveBeenCalledWith('nerdtechnic.devmap', true)
     expect(d.notify).toHaveBeenCalledWith({ action: 'disable', pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', requester })
     await answerPluginAgentAction({ ...request, action: 'enable' }, d)
     expect(d.setDisabled).toHaveBeenLastCalledWith('nerdtechnic.devmap', false)
+  })
+
+  it('tells nobody and offers no undo when the package was already in that state', async () => {
+    // The user had disabled it themselves: an undo would turn their own choice around.
+    const d = deps({ setDisabled: vi.fn(async () => ({ changed: false })) })
+    await expect(answerPluginAgentAction(request, d)).resolves.toEqual({
+      ok: true, pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0', disabled: true, changed: false,
+    })
+    await answerPluginAgentAction({ ...request, action: 'enable' }, d)
+    expect(d.notify).not.toHaveBeenCalled()
   })
 
   it('refuses the bundled Navide plugins without touching their switch', async () => {

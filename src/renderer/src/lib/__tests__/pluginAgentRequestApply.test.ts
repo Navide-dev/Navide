@@ -3,6 +3,7 @@ import {
   applyApprovedRequest,
   recoverApplyingRequests,
   recoveryResult,
+  type InstalledPackage,
   type PluginRequestApplyDeps,
   type PluginRequestRecord,
 } from '../pluginAgentRequestApply'
@@ -16,7 +17,7 @@ function record(kind: PluginRequestRecord['kind'], version: string | null, statu
   }
 }
 
-function deps(installed: Array<{ id: string; packageVersion?: string }>): PluginRequestApplyDeps & {
+function deps(installed: InstalledPackage[]): PluginRequestApplyDeps & {
   finish: ReturnType<typeof vi.fn>
 } {
   return {
@@ -65,7 +66,7 @@ describe('applyApprovedRequest', () => {
     expect(updated.install).toHaveBeenCalledWith('nerdtechnic', 'devmap', '0.3.0')
     expect(updated.finish).toHaveBeenCalledWith('a-plugin-update', { status: 'completed', error: null })
 
-    const rolled = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.1.0' }])
+    const rolled = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.1.0', rollbackToVersion: '0.1.0' }])
     await applyApprovedRequest(record('plugin-rollback', '0.1.0'), rolled)
     expect(rolled.rollback).toHaveBeenCalledWith('nerdtechnic.devmap')
 
@@ -87,3 +88,36 @@ describe('applyApprovedRequest', () => {
     expect(thrown.finish).toHaveBeenCalledWith('a-plugin-install', { status: 'failed', error: 'signature check failed' })
   })
 })
+
+describe('a rollback only to the version the user approved', () => {
+  it('does not roll back when the kept version is another one, and says why', async () => {
+    const d = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.3.0', rollbackToVersion: '0.2.0' }])
+    await expect(applyApprovedRequest(record('plugin-rollback', '0.1.0'), d)).resolves.toEqual({
+      status: 'failed', error: 'the version kept for rollback is 0.2.0, not the approved 0.1.0',
+    })
+    expect(d.rollback).not.toHaveBeenCalled()
+    expect(d.finish).toHaveBeenCalledWith('a-plugin-rollback', {
+      status: 'failed', error: 'the version kept for rollback is 0.2.0, not the approved 0.1.0',
+    })
+  })
+
+  it('does not roll back when no version is kept', async () => {
+    const d = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.3.0' }])
+    await expect(applyApprovedRequest(record('plugin-rollback', '0.2.0'), d)).resolves.toMatchObject({ status: 'failed' })
+    expect(d.rollback).not.toHaveBeenCalled()
+  })
+})
+
+describe('recovery leaves alone what another open window is applying', () => {
+  it('skips the requests a live main window approved', async () => {
+    const d = deps([])
+    const settled = await recoverApplyingRequests(
+      [record('plugin-install', '0.3.0'), record('plugin-remove', null)],
+      d,
+      new Set(['a-plugin-install']),
+    )
+    expect(settled).toEqual([{ approvalId: 'a-plugin-remove', status: 'completed', error: null }])
+    expect(d.finish).toHaveBeenCalledTimes(1)
+  })
+})
+

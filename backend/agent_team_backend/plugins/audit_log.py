@@ -474,7 +474,7 @@ class PluginAuditLog:
                 str(caller_workspace) if is_pane else "",
                 approval_id if isinstance(approval_id, str) and _APPROVAL_ID.fullmatch(approval_id) else "",
                 outcome,
-                "" if outcome == "allowed" else (
+                "" if outcome in ("allowed", "no-op") else (
                     _code(error_code, frozenset(contract.PLUGIN_AGENT_ACTION_AUDIT_ERROR_CODES)) or OTHER
                 ),
             )

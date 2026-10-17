@@ -579,6 +579,17 @@ function pluginAgentItems(): Announcement[] {
   }))
 }
 
+/** Whether the undo still sets back what the agent did: the package is still
+ *  in the state the agent left it in (the user has not changed it since). */
+export function pluginAgentUndoApplies(
+  action: PluginAgentAnnouncementAction,
+  installed: ReadonlyArray<{ id: string; disabled?: boolean }>,
+): boolean {
+  const current = installed.find((pkg) => pkg.id === action.pluginId)
+  // The undo enables when the agent disabled, and the other way round.
+  return current !== undefined && current.disabled === !action.disable
+}
+
 /** Record that an agent disabled or enabled a Navide plugin. */
 function notePluginAgentNotice(notice: PluginAgentNotice, at: number = Date.now()): void {
   if (!notice?.pluginId) return
