@@ -184,6 +184,42 @@ describe('F1: interrupting a pane stops its loop', () => {
     expect(h.notify).not.toHaveBeenCalled()
   })
 
+  // Idle = the loop is between turns (backoff / LOOP_WAIT) and the interrupt
+  // key lands on a CLI with nothing running; busy = a turn is in progress.
+  const STATES = {
+    busy: (h: ReturnType<typeof harness>) => { h.interrupt.mockResolvedValue(true) },
+    idle: (h: ReturnType<typeof harness>) => {
+      h.interrupt.mockResolvedValue(false)
+      h.watcher.nextContinueAt = Date.now() + 60_000
+      h.pane.loopWaitUntil = Date.now() + 60_000
+    },
+  }
+
+  it.each(Object.keys(STATES))('an explicit interrupt stops the loop while %s', async (state) => {
+    const h = harness()
+    STATES[state as keyof typeof STATES](h)
+    await h.fns.onInterrupt('p1')
+    expect(h.pane.loopActive).toBe(false)
+    expect(h.loopLimitWatchers.has('p1')).toBe(false)
+  })
+
+  it.each(Object.keys(STATES))('batch and evolve interrupts keep the loop while %s', async (state) => {
+    for (const run of [
+      (h: ReturnType<typeof harness>) => h.fns.batchInterrupt(['p1']),
+      async (h: ReturnType<typeof harness>) => {
+        h.fns.onEvolveAction({ kind: 'evolve-interrupt', paneId: 'p1' })
+        await vi.waitFor(() => expect(h.interrupt).toHaveBeenCalledTimes(1))
+      },
+    ]) {
+      const h = harness()
+      STATES[state as keyof typeof STATES](h)
+      await run(h)
+      expect(h.interrupt).toHaveBeenCalledTimes(1)
+      expect(h.pane.loopActive).toBe(true)
+      expect(h.loopLimitWatchers.has('p1')).toBe(true)
+    }
+  })
+
   it('a pane without an active loop is interrupted exactly as before', async () => {
     const h = harness()
     h.pane.loopActive = false
