@@ -8,10 +8,11 @@
  * and maps those answers onto the contract shapes. It decides nothing about
  * trust: install still goes through prepareInstall and the user's consent.
  *
- * The disclosure (risk, summary, card) is reported when the Registry answer
- * carries it under `disclosure` as a DisclosureCard, and as null otherwise:
- * until D-b brings it through the IPC, a listing has none, and nothing here
- * invents one.
+ * The detail card is built from the selected version's `disclosure` and
+ * `registry` (D-b brings both through `plugins:marketplaceDetail`); a search
+ * row has a disclosure only when the Registry sends one under `disclosure`.
+ * When either is missing or malformed, risk, summary and card are null:
+ * nothing here invents one.
  */
 import type {
   MarketplaceInstalledItem,
@@ -114,7 +115,7 @@ function summaryClause(value: unknown): DisclosureSummaryClause | null {
   if (!isRecord(value)) return null
   const params = value.params
   switch (value.key) {
-    case 'nativeBackend': case 'aiCli': case 'ui': case 'network': case 'noPermissions':
+    case 'nativeBackend': case 'aiCli': case 'ui': case 'network': case 'networkViaShell': case 'noPermissions':
       return isEmptyParams(params) ? { key: value.key, params: {} } : null
     case 'files':
       return isRecord(params) && (params.access === 'read' || params.access === 'readWrite')
@@ -201,7 +202,9 @@ function projectWrites(value: unknown): DisclosureProjectWrites | null {
 }
 
 function manifestDisclosure(value: unknown): ManifestDisclosure | null {
-  if (!isRecord(value) || value.schemaVersion !== 1 || value.network !== 'none') return null
+  if (!isRecord(value) || value.schemaVersion !== 1 || (value.network !== 'none' && value.network !== 'via-shell')) {
+    return null
+  }
   const plugin = value.plugin
   if (
     !isRecord(plugin) || !isValidManifestV2PluginId(plugin.id) || !isSemver(plugin.version) ||
@@ -232,7 +235,7 @@ function manifestDisclosure(value: unknown): ManifestDisclosure | null {
     risk,
     permissions,
     nativeBackend,
-    network: 'none',
+    network: value.network,
     agentTools: tools as DisclosureAgentTool[],
     dataLocations: { hostStorage: true, backendDataDirectory: locations.backendDataDirectory, projectWrites: writes },
   }
@@ -291,8 +294,8 @@ function listingItem(
   version: string,
   signed: boolean,
   publisher: string,
+  card: DisclosureCard | null,
 ): MarketplaceQueryListingItem | null {
-  const card = disclosureCard(raw.disclosure)
   const namespace = text(raw.namespace)
   const name = text(raw.name)
   const id = `${namespace}.${name}`
@@ -367,10 +370,14 @@ export async function answerMarketplaceQuery(
     } catch (error) {
       return registryFailure(error, false)
     }
-    const rows = (body.items ?? []).filter(isRecord)
+    // The agent's own limit is honored even when the Registry sends more.
+    const rows = (body.items ?? []).filter(isRecord).slice(0, limit as number)
     const items = rows
       .map((row) =>
-        listingItem(row, text(row.latest_version), row.trust_tier === 'signed-verified', text(row.publisher) || text(row.namespace)))
+        listingItem(
+          row, text(row.latest_version), row.trust_tier === 'signed-verified',
+          text(row.publisher) || text(row.namespace), disclosureCard(row.disclosure),
+        ))
       .filter((item): item is MarketplaceQueryListingItem => item !== null)
     const next = offset + rows.length
     const nextCursor = typeof body.total === 'number' && rows.length > 0 && next < body.total ? String(next) : null
@@ -398,9 +405,16 @@ export async function answerMarketplaceQuery(
       return { ok: false, error: `${id} has no published version ${wanted}`, error_code: 'NOT_FOUND' }
     }
     const signed = published.some((row) => row.version === wanted && row.trust_tier === 'signed-verified')
-    const item = listingItem(detail, wanted, signed, text(detail.publisher) || text(detail.namespace))
+    // D-b: each version row carries its manifest disclosure and the Registry
+    // facts. A card that names another package or version is not this one's.
+    const cards = published
+      .filter((row) => row.version === wanted)
+      .map((row) => disclosureCard({ manifest: row.disclosure, registry: row.registry ?? null }))
+    const found = cards.find((entry) => entry !== null) ?? null
+    const card = found && found.manifest.plugin.id === id && found.manifest.plugin.version === wanted ? found : null
+    const item = listingItem(detail, wanted, signed, text(detail.publisher) || text(detail.namespace), card)
     if (!item) return { ok: false, error: `${id} is not a valid Navide plugin id`, error_code: 'NOT_FOUND' }
-    return { ok: true, result: { kind: 'detail', item, versions, card: disclosureCard(detail.disclosure) } }
+    return { ok: true, result: { kind: 'detail', item, versions, card } }
   }
   return bad('query.kind must be search, detail or installed')
 }

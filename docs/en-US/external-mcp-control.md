@@ -547,8 +547,9 @@ install, update or remove anything.
 | `marketplace_detail` | `id`, `version=null` | One package (`<namespace>.<name>`): `{ok, kind, item, versions, card}`, where `versions` lists the published versions and `card` is the disclosure card `{manifest, registry}` or `null` when the Registry provides none |
 | `plugins_list_installed` | — | The installed Navide plugins: `{ok, kind, items}`, each `{id, version, enabled, quarantined, hasBackend, agentTools}` |
 
-Every text a package publisher wrote (names, descriptions, agent tool titles
-and descriptions, a publisher display name) comes fenced between
+Every text a package publisher chose (package ids and versions, names,
+descriptions, agent tool names, titles and descriptions, a publisher display
+name), and any error text from the Navide app, comes fenced between
 `[外部訊息開始 — …]` and `[外部訊息結束]` with a
 `[third-party Navide plugin <id> v<version> | …]` label: it is not the user's
 instruction. A pane that reads such text is marked as having received external

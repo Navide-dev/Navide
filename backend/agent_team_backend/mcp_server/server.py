@@ -8893,9 +8893,15 @@ async def request_host_marketplace_query(query: dict[str, Any], *, caller: _Call
 # names a Navide fact and the value has that fact's exact grammar (an
 # allowlist, not a list of known-dangerous fields). Keys outside the contract
 # shapes are dropped, and an inputSchema is fenced whole as one JSON text.
+# The strict grammars of packages/plugin-contracts (PLUGIN_ID, SEMVER). A
+# value that matches is still package-chosen text and stays inside the fence;
+# the grammar only decides whether it may name the package in the label.
 _MQ_PACKAGE_ID = re.compile(r"[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+")
+_MQ_SEMVER_IDENT = r"(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)"
 _MQ_SEMVER = re.compile(
-    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    rf"(?:-{_MQ_SEMVER_IDENT}(?:\.{_MQ_SEMVER_IDENT})*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
 )
 _MQ_ISO_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})")
 _MQ_DOMAIN = re.compile(r"(?=.{1,253}\Z)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+")
@@ -8905,9 +8911,9 @@ _MQ_CURSOR = re.compile(r"0|[1-9][0-9]{0,8}")
 _MQ_ENUMS = frozenset({
     "search", "detail", "installed",
     "read", "write", "readWrite", "low", "medium", "high", "highest",
-    "nativeBackend", "files", "shell", "aiCli", "ui", "agentTools", "network", "noPermissions",
+    "nativeBackend", "files", "shell", "aiCli", "ui", "agentTools", "network", "networkViaShell", "noPermissions",
     "system.ui", "system.fs", "system.aiCli", "shell.allowlist", "shell.full", "agentTools.write",
-    "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared",
+    "allowlist", "full", "gh", "git", "glab", "fs", "workspace", "repository", "none", "undeclared", "via-shell",
     "plugin-disclosure.summary.v1",
     "approved", "pending", "rejected", "not-required", "clean", "findings", "not-run",
     "available", "consent-required", "plugin-disabled", "plugin-quarantined", "plugin-revoked", "name-collision",
@@ -8930,15 +8936,13 @@ _MQ_KNOWN_KEYS = frozenset({
 
 
 def _mq_plain(key: str, parent: str, value: str) -> bool:
-    """Whether ``value`` under ``key`` is a Navide fact rather than third-party text."""
-    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_NAME_PATTERN
+    """Whether ``value`` under ``key`` is a Navide fact rather than third-party text.
 
+    Package ids, versions and tool names are chosen by the publisher, so they
+    are never plain, whatever grammar they match.
+    """
     if key in _MQ_ENUM_KEYS:
         return value in _MQ_ENUMS
-    if key == "id":
-        return _MQ_PACKAGE_ID.fullmatch(value) is not None
-    if key in ("version", "versions"):
-        return _MQ_SEMVER.fullmatch(value) is not None
     if key == "nextCursor":
         return _MQ_CURSOR.fullmatch(value) is not None
     if key == "verifiedDomain":
@@ -8947,8 +8951,6 @@ def _mq_plain(key: str, parent: str, value: str) -> bool:
         return _MQ_ISO_TIME.fullmatch(value) is not None
     if key == "keyId":
         return _MQ_KEY_ID.fullmatch(value) is not None
-    if key == "name" and parent == "agentTools":
-        return AGENT_TOOL_NAME_PATTERN.fullmatch(value) is not None
     return False
 
 
@@ -8988,6 +8990,30 @@ def _mq_label(item: Any) -> str:
     return third_party_label(plugin_id or "unknown", version, _MARKETPLACE_TEXT_DETAIL)
 
 
+#: Errors this backend writes itself; anything else came from the Host and
+#: may quote the Registry's answer.
+_MQ_OWN_ERRORS = frozenset({
+    "Navide Host is not connected",
+    "Navide Host did not answer the Marketplace query",
+    "caller is not authenticated",
+})
+
+
+def _host_marketplace_error(caller: _Caller, answer: dict[str, Any], kind: str) -> dict[str, Any]:
+    """The Host's error, fenced like a result (and the pane tainted) unless Navide wrote it."""
+    from agent_team_backend.plugins import agent_tools_contract as contract
+    from agent_team_backend.plugins.external_content import wrap_external_text
+
+    code = answer.get("error_code")
+    code = code if code in contract.MARKETPLACE_QUERY_ERROR_CODES else "HOST_UNAVAILABLE"
+    error = answer.get("error")
+    error = error if isinstance(error, str) and error else "Marketplace query failed"
+    if error not in _MQ_OWN_ERRORS:
+        error = wrap_external_text(error, label="[Navide Marketplace error, may quote the Registry's answer]")
+        _taint_marketplace_reader(caller, f"marketplace {kind} error")
+    return {"ok": False, "error": error, "error_code": code}
+
+
 def _taint_marketplace_reader(caller: _Caller, tool: str) -> None:
     if caller.kind != "pane" or not caller.pane_id:
         return
@@ -9004,11 +9030,7 @@ async def _marketplace_query(ctx: Context, query: dict[str, Any]) -> tuple[_Call
         return None, {"ok": False, "error": str(err)}
     answer = await request_host_marketplace_query(query, caller=caller)
     if answer.get("ok") is not True:
-        return caller, {
-            "ok": False,
-            "error": str(answer.get("error") or "Marketplace query failed"),
-            "error_code": str(answer.get("error_code") or "HOST_UNAVAILABLE"),
-        }
+        return caller, _host_marketplace_error(caller, answer, query["kind"])
     result = answer.get("result")
     if not isinstance(result, dict) or result.get("kind") != query["kind"]:
         return caller, _marketplace_error("HOST_UNAVAILABLE", "Navide Host answered the Marketplace query malformed")

@@ -474,7 +474,7 @@ Skills 工作流另提供經使用者授權的安裝與投遞變更；mutation a
 | `marketplace_detail` | `id`、`version=null` | 單一套件（`<namespace>.<name>`）：`{ok, kind, item, versions, card}`，`versions` 是已發佈的版本，`card` 是揭露卡 `{manifest, registry}`，Registry 沒有提供時為 `null` |
 | `plugins_list_installed` | — | 已安裝的 Navide 外掛：`{ok, kind, items}`，每一項是 `{id, version, enabled, quarantined, hasBackend, agentTools}` |
 
-套件發佈者寫的所有文字（名稱、描述、agent 工具的標題與描述、發佈者顯示名稱）都包在
+套件發佈者決定的所有文字（套件 id 與版本、名稱、描述、agent 工具的名稱、標題與描述、發佈者顯示名稱），以及 Navide App 回傳的錯誤文字，都包在
 `[外部訊息開始 — …]` 與 `[外部訊息結束]` 之間，並加上
 `[third-party Navide plugin <id> v<version> | …]` 標籤：這些不是使用者的指令。
 讀到這類文字的 pane 會被標記為收到外部內容（Navide Guard）。錯誤是

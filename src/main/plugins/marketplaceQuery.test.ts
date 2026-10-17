@@ -198,7 +198,14 @@ describe('answerMarketplaceQuery: only validated fields leave the Host', () => {
       manifest: { ...card.manifest, changelog: INJECTION, plugin: { ...card.manifest.plugin, [INJECTION]: 1 } },
       registry: { ...registryFacts, notes: INJECTION },
     }
-    const src = sources({ detail: vi.fn(async () => ({ ...row(), disclosure: poisoned, homepage: INJECTION, versions: [] })) })
+    const src = sources({ detail: vi.fn(async () => ({
+      ...row(),
+      homepage: INJECTION,
+      versions: [{
+        version: '0.2.0', yanked: false, trust_tier: 'signed-verified',
+        disclosure: poisoned.manifest, registry: poisoned.registry, [INJECTION]: INJECTION,
+      }],
+    })) })
     const answer = await answerMarketplaceQuery({ kind: 'detail', id: 'nerdtechnic.devmap' }, src)
     if (!answer.ok || answer.result.kind !== 'detail') throw new Error('expected a detail result')
     expect(answer.result.card).toEqual(card)
@@ -230,5 +237,42 @@ describe('answerMarketplaceQuery: only validated fields leave the Host', () => {
     if (!answer.ok || answer.result.kind !== 'search') throw new Error('expected a search result')
     expect(answer.result.items).toHaveLength(1)
     expect(answer.result.items[0].version).toBe('')
+  })
+})
+
+// Review of #345: the agent's limit is honored, and the detail card comes from
+// the version row D-b brings through plugins:marketplaceDetail.
+describe('answerMarketplaceQuery: limit and per-version disclosure', () => {
+  it('returns at most `limit` items even when the Registry sends more', async () => {
+    const src = sources({ search: vi.fn(async () => ({ items: [row(), row({ name: 'b' }), row({ name: 'c' })], total: 9 })) })
+    const answer = await answerMarketplaceQuery({ kind: 'search', text: 'x', limit: 2 }, src)
+    if (!answer.ok || answer.result.kind !== 'search') throw new Error('expected a search result')
+    expect(answer.result.items.map((item) => item.id)).toEqual(['nerdtechnic.devmap', 'nerdtechnic.b'])
+    expect(answer.result.nextCursor).toBe('2')
+  })
+
+  const detailWith = (versions: Array<Record<string, unknown>>) =>
+    sources({ detail: vi.fn(async () => ({ ...row(), publisher: 'nerdtechnic', versions })) })
+
+  it("builds the card from the selected version's disclosure and Registry facts", async () => {
+    const answer = await answerMarketplaceQuery({ kind: 'detail', id: 'nerdtechnic.devmap' }, detailWith([
+      { version: '0.2.0', yanked: false, trust_tier: 'signed-verified', disclosure: card.manifest, registry: registryFacts },
+    ]))
+    if (!answer.ok || answer.result.kind !== 'detail') throw new Error('expected a detail result')
+    expect(answer.result.card).toEqual(card)
+    expect(answer.result.item.risk).toBe(card.manifest.risk.level)
+    expect(answer.result.item.summary).toEqual(card.manifest.summary)
+    expect(answer.result.item.publisher.verifiedDomain).toBe('nerdtechnic.com')
+  })
+
+  it('keeps a card without Registry facts, and drops one that names another package', async () => {
+    const bare = await answerMarketplaceQuery({ kind: 'detail', id: 'nerdtechnic.devmap' }, detailWith([
+      { version: '0.2.0', yanked: false, disclosure: card.manifest, registry: null },
+    ]))
+    expect(bare.ok && bare.result.kind === 'detail' && bare.result.card).toEqual({ manifest: card.manifest, registry: null })
+    const other = await answerMarketplaceQuery({ kind: 'detail', id: 'nerdtechnic.devmap' }, detailWith([
+      { version: '0.2.0', yanked: false, disclosure: { ...card.manifest, plugin: { ...card.manifest.plugin, id: 'acme.other' } } },
+    ]))
+    expect(other.ok && other.result.kind === 'detail' && other.result.card).toBeNull()
   })
 })
