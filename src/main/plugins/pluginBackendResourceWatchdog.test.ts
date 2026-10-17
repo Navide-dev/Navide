@@ -207,3 +207,124 @@ describe('watchBackendResources', () => {
     }
   }, 30_000)
 })
+
+// Plan B watchdog option C (contract 5.2): over a threshold the user is told
+// and decides; nothing is stopped until they choose Stop.
+describe('watchBackendResources in notify mode', () => {
+  const one = (rssBytes: number, cpuMs = 0) => [{ pid: 10, ppid: 1, rssBytes, cpuMs }]
+
+  it('notifies instead of killing, keeps watching, and does not repeat while the notice waits', async () => {
+    let rss = 600 * MiB
+    const { deps, killed } = fakeDeps(() => one(rss))
+    const onViolation = vi.fn()
+    const onExceeded = vi.fn()
+    const watch = watchBackendResources(10, '/data', onViolation, limits, deps, undefined, { onExceeded })
+    expect(await watch.sample()).toBeNull()
+    expect(await watch.sample()).toBeNull()
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    expect(onExceeded).toHaveBeenCalledWith({ item: 'memory', usage: 600 * MiB, threshold: limits.maxRssBytes })
+    rss = 700 * MiB
+    await watch.sample()
+    await watch.sample()
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    expect(killed).toEqual([])
+    expect(onViolation).not.toHaveBeenCalled()
+    expect(deps.clearInterval).not.toHaveBeenCalled()
+  })
+
+  it('Stop runs the same stop as before: the whole tree killed, onViolation, watching ends', async () => {
+    const tree = [
+      { pid: 10, ppid: 1, rssBytes: 400 * MiB, cpuMs: 0 },
+      { pid: 11, ppid: 10, rssBytes: 200 * MiB, cpuMs: 0 },
+    ]
+    const { deps, killed } = fakeDeps(() => tree)
+    const onViolation = vi.fn()
+    const watch = watchBackendResources(10, '/data', onViolation, limits, deps, undefined, { onExceeded: vi.fn() })
+    await watch.sample()
+    await watch.sample()
+    expect(await watch.terminate('memory')).toBe('memory')
+    expect(killed.sort()).toEqual([10, 11])
+    expect(onViolation).toHaveBeenCalledWith('memory')
+    expect(deps.clearInterval).toHaveBeenCalled()
+    expect(await watch.sample()).toBeNull()
+  })
+
+  it('Keep running tells again only at twice the larger of the level and the usage, and never lowers it', async () => {
+    let rss = 600 * MiB
+    const { deps, killed } = fakeDeps(() => one(rss))
+    const onExceeded = vi.fn()
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded })
+    await watch.sample()
+    await watch.sample()
+    expect(watch.keepRunning('memory')).toBe(1200 * MiB)
+    rss = 1100 * MiB
+    for (let i = 0; i < 4; i++) await watch.sample()
+    rss = 100 * MiB
+    await watch.sample()
+    rss = 700 * MiB
+    for (let i = 0; i < 4; i++) await watch.sample()
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    rss = 1300 * MiB
+    await watch.sample()
+    await watch.sample()
+    expect(onExceeded).toHaveBeenCalledTimes(2)
+    expect(onExceeded).toHaveBeenLastCalledWith({ item: 'memory', usage: 1300 * MiB, threshold: 1200 * MiB })
+    expect(killed).toEqual([])
+  })
+
+  it('doubles the CPU usage value and keeps the 5-minute window', async () => {
+    let now = 0
+    let cpu = 0
+    let rate = 1.0
+    const { deps } = fakeDeps(() => [{ pid: 10, ppid: 1, rssBytes: MiB, cpuMs: cpu }], { now: () => now })
+    const onExceeded = vi.fn()
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded })
+    const advance = async (ms: number) => {
+      for (let t = 0; t < ms; t += 5_000) {
+        now += 5_000
+        cpu += 5_000 * rate
+        await watch.sample()
+      }
+    }
+    await watch.sample()
+    await advance(limits.cpuKillAfterMs)
+    expect(onExceeded).toHaveBeenCalledWith({ item: 'cpu', usage: 1, threshold: limits.maxCpuCores })
+    expect(watch.keepRunning('cpu')).toBe(2)
+    rate = 1.9
+    await advance(limits.cpuKillAfterMs * 2)
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    rate = 2.5
+    await advance(limits.cpuKillAfterMs - 5_000)
+    expect(onExceeded).toHaveBeenCalledTimes(1)
+    await advance(10_000)
+    expect(onExceeded).toHaveBeenCalledTimes(2)
+    expect(onExceeded).toHaveBeenLastCalledWith({ item: 'cpu', usage: 2.5, threshold: 2 })
+  })
+
+  it('notifies for processes and disk with their own levels', async () => {
+    const tree = Array.from({ length: 9 }, (_, index) => ({ pid: 100 + index, ppid: index === 0 ? 1 : 100, rssBytes: MiB, cpuMs: 0 }))
+    const { deps, killed } = fakeDeps(() => tree, { dataBytes: limits.maxDataBytes + 1 })
+    const onExceeded = vi.fn()
+    await watchBackendResources(100, '/data', vi.fn(), limits, deps, undefined, { onExceeded }).sample()
+    expect(onExceeded).toHaveBeenCalledWith({ item: 'processes', usage: 9, threshold: limits.maxProcesses })
+    expect(onExceeded).toHaveBeenCalledWith({ item: 'disk', usage: limits.maxDataBytes + 1, threshold: limits.maxDataBytes })
+    expect(killed).toEqual([])
+  })
+
+  // Review (a) on #371: notices live in memory; after a restart the new watch
+  // measures again from the default levels and raises a new notice.
+  it('a new watch after a restart notices again at the default level', async () => {
+    const { deps } = fakeDeps(() => one(1300 * MiB))
+    const first = vi.fn()
+    const before = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: first })
+    await before.sample()
+    await before.sample()
+    before.keepRunning('memory')
+    before.dispose()
+    const after = vi.fn()
+    const restarted = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: after })
+    await restarted.sample()
+    await restarted.sample()
+    expect(after).toHaveBeenCalledWith({ item: 'memory', usage: 1300 * MiB, threshold: limits.maxRssBytes })
+  })
+})
