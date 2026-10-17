@@ -212,6 +212,12 @@ stages_store = StagesStore(db=database)
 tokens_store = TokensStore(db=database)
 # Which account each pane was pinned to, and when — global like the pane ids.
 pane_account_history = PaneAccountHistory(db=database)
+# Navide plugin audit (plan B, B1-d): agent tool calls and plugin activity,
+# write-only. Creating the tables is the only work done here; writing and
+# pruning run in the background task started at startup.
+from .plugins.audit_log import PluginAuditLog  # noqa: E402
+
+plugin_audit_log = PluginAuditLog(db=database)
 # Quota cycles per account: the usage poller files samples here; an open
 # cycle's token side is summed from the store's per-account slices.
 quota_ledger = QuotaLedger(db=database, totals_provider=tokens_store.account_window_totals)
@@ -1065,6 +1071,7 @@ _OWNERLESS_SINCE: dict[str, float] = {}
 _ownerless_sweeper_task: "asyncio.Task[None] | None" = None
 _mem_probe_task: "asyncio.Task[None] | None" = None
 _dev_time_sweeper_task: "asyncio.Task[None] | None" = None
+_plugin_audit_task: "asyncio.Task[None] | None" = None
 
 
 async def _sweep_ownerless_ptys_once(now: float | None = None) -> list[str]:
@@ -2294,6 +2301,10 @@ async def _start_log_watcher() -> None:
         lambda ws: broadcast(make_event("devtime.changed", {"workspace_path": ws}))
     ))
 
+    # Navide plugin audit: flush queued rows every second, prune hourly.
+    global _plugin_audit_task
+    _plugin_audit_task = asyncio.create_task(plugin_audit_log.run())
+
     # Navide's in-process scheduler (timed messages to CLI panes). Built off
     # the loop: its first use runs the schema migration.
     from . import scheduler
@@ -2451,6 +2462,10 @@ async def _stop_log_watcher() -> None:
             _mem_probe_task.cancel()
         if _dev_time_sweeper_task is not None:
             _dev_time_sweeper_task.cancel()
+        if _plugin_audit_task is not None:
+            # Cancelling runs its final flush; wait for it so queued rows land.
+            _plugin_audit_task.cancel()
+            await asyncio.gather(_plugin_audit_task, return_exceptions=True)
         from . import scheduler
 
         await scheduler.shutdown()

@@ -461,10 +461,16 @@ def pytest_addoption(parser):
         help="run only every Nth collected test, starting at the Kth (1-based); CI splits the Windows suite this way",
     )
     parser.addoption("--collection-report", default=None, help="write collected and selected node IDs as JSON")
+    parser.addoption("--run-slow", action="store_true", help="also run tests marked slow (skipped by default)")
 
 
 @pytest.hookimpl(trylast=True)
 def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-slow"):
+        skip_slow = pytest.mark.skip(reason="slow: run with --run-slow")
+        for item in items:
+            if item.get_closest_marker("slow") is not None:
+                item.add_marker(skip_slow)
     # Round-robin over the collected order, not whole files: the slow files
     # (real git, PTY and subprocess spawns) then land on every shard evenly
     # instead of on whichever shard drew them.
