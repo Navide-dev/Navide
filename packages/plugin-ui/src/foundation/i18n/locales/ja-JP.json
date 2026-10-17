@@ -10999,5 +10999,160 @@
     "unpin-body": "追従にすると、ペインを現在のログインで開き直して会話を続けます。終わるのを待つか、今回はスキップするかを選べます。待機中のペインはすぐに切り替わります。",
     "pin-default-refused": "組み込みの既定アカウントには専用フォルダーがないため、固定できません。先に別のアカウントに切り替えてください。",
     "pin-needs-dir-login": "このペインを {account} に固定するには、そのアカウントの専用フォルダーで一度サインインしてください。サインインを開きました。"
+  },
+  "pluginDisclosure": {
+    "diff": {
+      "heading": "この更新での権限の変化",
+      "versions": "インストール済み {from} → {to} に更新。違いだけを表示します。",
+      "risk": "リスク：{from} → {to}",
+      "none": "追加・削除された権限はありません。",
+      "added": "追加",
+      "removed": "削除",
+      "unchanged": "変更なし（{count} 件）",
+      "fullCard": "開示カード全体",
+      "badgeMore": "権限が増える",
+      "badgeSame": "権限は同じ",
+      "badgeTitle": "Navide Registry の情報で、まだ検証されていません。更新前に Navide がダウンロードしたパッケージで改めて比較します。",
+      "item": {
+        "system": "権限：{key}",
+        "shell": "shell モード：{key}",
+        "shellExecutable": "実行できる：{key}",
+        "fsScopeRoot": "ファイル範囲：{key}",
+        "fsScopeRead": "読み取れる：{key}",
+        "fsScopeWrite": "書き込める：{key}",
+        "nativeBackend": "ネイティブコードを含む",
+        "backendMethod": "ネイティブコードのメソッド：{key}",
+        "backendEvent": "ネイティブコードのイベント：{key}",
+        "network": "コマンド経由でリモートに接続できる",
+        "agentTool": "agent ツール：{key}"
+      }
+    },
+    "title": "開示",
+    "riskLabel": "リスク：{level}",
+    "risk": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "highest": "最高"
+    },
+    "undeclaredHeading": "スキャンで見つかったが宣言されていないもの",
+    "undeclaredIntro": "コードはこの Navide プラグインが宣言していない動作をします。実行時に Navide はこれらの呼び出しを拒否しますが、宣言とコードが一致していません。",
+    "undeclared": {
+      "shell": "{key} を実行しますが、shell 権限を宣言していません",
+      "shellDynamic": "実行時にコマンドを組み立てますが、shell 権限を宣言していません",
+      "shellExecutable": "{key} を実行しますが、宣言した shell の範囲は git・gh・glab だけです",
+      "system": "{key} を使いますが、この権限を宣言していません",
+      "fsScopeWrite": "{key} に書き込みますが、宣言した書き込み範囲の外です",
+      "fsScopeRead": "{key} を読み取りますが、宣言した読み取り範囲の外です"
+    },
+    "notSeenHeading": "宣言あり・静的スキャンでは未検出",
+    "notSeen": {
+      "shell": "shell（{key}）",
+      "system": "{key}"
+    },
+    "scanHeading": "公開時のシステムスキャンの結果",
+    "declaredHeading": "この Navide プラグインが宣言している権限",
+    "registryHeading": "Navide Registry の記録（署名なし）",
+    "provenance": {
+      "unverified": "Navide Registry が提供した内容で、まだ検証されていません。インストール前に Navide が署名を検証し、パッケージと照合します。",
+      "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。",
+      "verifiedNoScan": "検証済み：開示内容はダウンロードしたパッケージと一致しています。この版にはシステムスキャンがありません。"
+    },
+    "noDisclosure": "このバージョンは開示データなしで公開されました。",
+    "signedByRegistry": "スキャンは Navide Registry が実行し署名しました。",
+    "scannedByRegistry": "スキャンは Navide Registry が実行しました。",
+    "limitsWithoutScan": "このバージョンにはシステムスキャンがありません。上記はこの Navide プラグイン自身の宣言だけです。",
+    "summary": {
+      "nativeBackend": "ネイティブコードを含む（サンドボックスで実行）",
+      "files": {
+        "read": "プロジェクト内のファイルを読み取る",
+        "readWrite": "プロジェクト内のファイルを読み書きする"
+      },
+      "shell": {
+        "allowlist": "コマンドを実行：{executables}",
+        "full": "任意のコマンドを実行"
+      },
+      "networkViaShell": "これらのコマンド経由でリモートに接続できる",
+      "aiCli": "AI CLI のセッションを操作する",
+      "ui": "独自の画面を表示する",
+      "agentTools": "agent が呼び出せるツールを提供（読み取り {read} 個、書き込み {write} 個）",
+      "network": "ネットワークを使える",
+      "noPermissions": "権限を宣言していません"
+    },
+    "scan": {
+      "shell": {
+        "remoteWrite": "この Navide プラグインは {commands} を実行し、プロジェクトのデータをリモートに送ることがあります。",
+        "other": "この Navide プラグインは {commands} を実行し、データをどこへでも送れます。",
+        "unknownSubcommand": "この Navide プラグインは {commands} を実行します。このサブコマンドは Navide の対応表にないため、リモートに接続する可能性があるものとして扱ってください。",
+        "remoteRead": "この Navide プラグインは {commands} を実行し、あなたのログインでリモートに接続してデータを読み取ります。",
+        "localWrite": "この Navide プラグインは {commands} を実行し、ローカルのリポジトリを変更します。",
+        "local": "この Navide プラグインは {commands} を実行し、ローカルのリポジトリの状態を読み取ります。",
+        "dynamic": "{count} か所のコマンドは実行時に組み立てられるため、静的スキャンでは何を実行するか完全には判断できません。"
+      },
+      "files": {
+        "write": "この Navide プラグインは {paths} に書き込みます（ほかに {dynamic} か所のパスは実行時に決まります）。",
+        "read": "この Navide プラグインは {paths} を読み取ります。"
+      },
+      "network": {
+        "hosts": "コードに次のアドレスがあります：{hosts}。Navide プラグインのフレームもネイティブコードも直接ネットワークに接続できません。これらのアドレスはブラウザで開くか、git や gh などのコマンドに渡される可能性があります。"
+      },
+      "code": {
+        "eval": {
+          "frontend": "画面のコードが実行時にコードを生成して実行します（{count} か所）。Navide プラグインのフレームのセキュリティポリシーはこの呼び出しを止めます。",
+          "backend": "ネイティブコードに、実行時にコードを生成して実行する形跡があります（{count} か所）。"
+        },
+        "obfuscated": "コードに難読化の形跡があります（{signals}）。スキャン結果は不完全な可能性があります。"
+      },
+      "native": {
+        "summary": "ネイティブコード {path}（{format}、{arch}）のリンク先：{libraries}。",
+        "unscannable": "ネイティブコード {path} は{reason}ため、中のコードは今回スキャンできませんでした。"
+      },
+      "coverage": {
+        "base": "公開時に Navide Registry がスキャンしました（スキャナー {scannerVersion}、{scannedAt}、{filesTotal} ファイル中 {filesScanned}）。静的スキャンでは実行時に決まる動作は見えないため、これは完全な一覧ではありません。",
+        "incomplete": "スキャンが不完全です：{reasons}。"
+      },
+      "notFound": {
+        "shell": "静的スキャンではコマンドの実行は見つかりませんでした。",
+        "network": "静的スキャンではアドレスは見つかりませんでした。",
+        "files": "静的スキャンではファイルパスは見つかりませんでした。",
+        "dynamicCode": "静的スキャンでは実行時に生成されるコードは見つかりませんでした。"
+      },
+      "noScan": "このバージョンはシステムスキャン導入前に公開されました。以下はこの Navide プラグイン自身の宣言だけです。"
+    },
+    "incompleteReason": {
+      "timedOut": "スキャン時間を超えた",
+      "truncated": "内容がスキャン上限を超えた",
+      "obfuscated": "コードが難読化されている",
+      "packed": "ネイティブコードがパックされている",
+      "embeddedRuntime": "ネイティブコードが実行環境を内蔵している",
+      "scannerError": "一部の内容でスキャナーが失敗した",
+      "tooComplex": "一部の内容が複雑すぎてスキャンできない"
+    },
+    "unscannableReason": {
+      "packed": "パック（{detail}）されている",
+      "embeddedRuntime": "{detail} の実行環境を内蔵している"
+    },
+    "registry": {
+      "domainVerified": "Navide Registry の記録：発行者はドメイン {domain} を所有（{date} に確認）",
+      "domainNotVerified": "公開者のドメインは未確認",
+      "signedClaim": "Navide Registry の記録：この版は署名済み（鍵 {keyId}）",
+      "unsigned": "Navide Registry の記録：この版には署名がありません",
+      "reviewApproved": "担当者の審査で承認済み（{date}）",
+      "review": {
+        "not-required": "自動公開・担当者の審査なし",
+        "pending": "審査待ち",
+        "rejected": "審査で却下",
+        "approved": "担当者の審査で承認済み"
+      },
+      "nativeInspected": "ネイティブコードは審査担当者が確認済み",
+      "nativeNotInspected": "ネイティブコードは担当者による確認なし",
+      "secret": {
+        "clean": "機密スキャン：検出なし",
+        "not-run": "機密スキャン：未実施",
+        "findings": "機密スキャン：検出あり"
+      },
+      "secretFindings": "機密スキャン：機密の可能性 {count} 件（審査担当者が確認済み）",
+      "similar": "名前がほかの Navide プラグインと似ています"
+    }
   }
 }

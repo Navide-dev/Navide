@@ -30,7 +30,12 @@
     { "value": "select\ufe00or", "valid": false },
     { "value": "soft\u00adhyphen", "valid": false },
     { "value": "mongolian\u180evowel", "valid": false },
-    { "value": "grapheme\u034fjoiner", "valid": false }
+    { "value": "grapheme\u034fjoiner", "valid": false },
+    { "value": "filler\u115f here", "valid": false },
+    { "value": "filler\u1160 here", "valid": false },
+    { "value": "filler\u3164 here", "valid": false },
+    { "value": "filler\uffa0 here", "valid": false },
+    { "value": "filler\u2800 here", "valid": false }
   ],
   "results": [
     { "value": "plain text", "expected": "plain text" },

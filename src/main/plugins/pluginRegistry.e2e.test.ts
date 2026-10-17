@@ -417,7 +417,7 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
   it('(4) update to 0.1.1 is detected; its new shell permission needs new consent before it runs', async () => {
     await publish('0.1.1')
     await expect(main.controller.checkUpdates()).resolves.toEqual([
-      { id: ID, namespace: PUBLISHER, name: NAME, installedVersion: '0.1.0', latestVersion: '0.1.1' },
+      { id: ID, namespace: PUBLISHER, name: NAME, installedVersion: '0.1.0', latestVersion: '0.1.1', permissionChange: 'more' },
     ])
     const prepared = await main.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.1' })
     expect(prepared).toMatchObject({ version: '0.1.1', requiresPublisherTrust: false, requiresRiskConfirmation: true })

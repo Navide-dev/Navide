@@ -164,8 +164,9 @@ tool means adding it there (or giving it a reserved prefix).
   U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no
   character that reorders or hides text: bidi controls and zero-width or other
   invisible characters (U+00AD, U+034F, U+061C, U+180E, U+200B–U+200F,
-  U+202A–U+202E, U+2060–U+2069, U+FEFF), variation selectors (U+FE00–U+FE0F)
-  and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
+  U+202A–U+202E, U+2060–U+2069, U+FEFF), fillers that render as nothing
+  (U+115F, U+1160, U+3164, U+FFA0, U+2800), variation selectors
+  (U+FE00–U+FE0F) and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
   what could fake a second tool or a system message in a tool list or a
   terminal, reorder and hide text in a dialog, or smuggle text an agent reads
   but the user does not see.
@@ -400,6 +401,13 @@ sentences, its scan risk reasons and the declared-vs-scanned comparison
 ([3.9](#39-declared-vs-scanned)) from it. The `registry.scan` object above is
 the older submission check (secret scan and name similarity) and is unrelated
 to the static scan report.
+
+The list card reads `disclosure` and `scan` from the Registry's listing
+(`GET /api/extensions`), which carries them for `latest_version` (one
+artifact's scan). Like every listing and detail field they are display data
+that nothing has verified; the Host keeps them only when they are well formed
+and the disclosure names that item's package and `latest_version`, and the
+card says they are unverified.
 
 `nativeCodeInspected` is derived, never entered by hand:
 
@@ -1149,6 +1157,39 @@ a dispatched cast (terminal input) is not.
 (`count30d` adds `plugin_activity_denied_daily`), `declaredUnused`, and the anomaly flags
 `volume-spike`, `write-tool-new-workspace` and `undeclared-denied`. The flags
 refuse nothing.
+
+### 5.1 Reading activity: `plugins.activity.report`
+
+The activity page and the disclosure overview (D-f) read one plugin's report
+over the main window's WebSocket session: request
+`plugins.activity.report` `{plugin_id}`, answer `PluginActivityReport`
+(`src/shared/pluginActivity.ts`; fixture
+`docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
+(D-e) builds it from the tables above and does the aggregation and the
+anomaly checks; the renderer rebuilds it from validated fields and refuses a
+malformed one whole.
+
+| Field | Content |
+|---|---|
+| `schemaVersion` | `1` |
+| `pluginId`, `generatedAt` | the plugin; when the report was made (Unix ms) |
+| `window` | `{from, to}`: the detail window the lists cover (7 days) |
+| `totals` | `{calls, denied, errors}` within `window` |
+| `historicalPeakConcurrency` | the largest number of the plugin's calls that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
+| `undeclaredSince` | start of the window `undeclared` covers (30 days) |
+| `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
+| `files[]` | fs paths, newest first: `path` (workspace-relative), `address`, `workspace`, `outcome`, `count`, `lastAt` |
+| `commands[]` | shell commands (executable and subcommand only), newest first: `command`, `workspace`, `outcome`, `count`, `lastAt` |
+| `daily[]` | oldest first: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` |
+| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool`), `key`, `lastUsedAt` (or null) |
+| `undeclared[]` | uses the manifest did not declare, refused, within 30 days: `source`, `address`, `workspace`, `count`, `lastAt`, `reasons[]` (`{reason, count}` by `denied_reason`, largest first) |
+| `anomalies[]` | marked only, never acted on: `kind` (`volumeSpike` / `writeToolNewWorkspace` / `undeclaredDenied`), `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable) |
+| `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
+
+`argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
+known: such a value is shown as "unknown", never summed, averaged or counted
+in a statistic. Every string is shown as plain text: no link is made from a
+path or a command, and nothing is rendered as HTML.
 
 ## 6. Approval registry (B2)
 
