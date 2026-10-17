@@ -1843,7 +1843,8 @@ const pluginTrustRefresh = registerPluginIpc(
       if (pluginId === 'navide.git') pluginFactoryOptOuts.remove(pluginId)
       if (pluginId === MINI_IDE_PLUGIN_ID) pluginFactoryOptOuts.remove(pluginId)
     },
-    onBuiltinSwitchReset: () => {
+    onBuiltinSwitchReset: (resumed) => {
+      for (const pluginId of resumed) completeBuiltinEnable(pluginId)
       builtinSwitchReconciler.sync()
       for (const hostWindow of mainWindows) {
         if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
@@ -1876,14 +1877,20 @@ async function applyBuiltinSwitch(pluginId: string, disabled: boolean): Promise<
     await frontendPluginManager.suspendBuiltinPlugin(pluginId)
   } else {
     frontendPluginManager.resumeBuiltinPlugin(pluginId)
-    if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
-      registerForcedLegacyGit()
-    }
+    completeBuiltinEnable(pluginId)
   }
   for (const hostWindow of mainWindows) {
     if (!hostWindow.isDestroyed() && !detachedWindowIds.has(hostWindow.id)) {
       hostWindow.webContents.send('plugins:contributionsChanged')
     }
+  }
+}
+/** What enabling a built-in needs after `resumeBuiltinPlugin`, shared by the
+ *  Enable switch and the reset of an unreadable store: a forced legacy Git
+ *  recovery session registers the legacy Git it would have at startup. */
+function completeBuiltinEnable(pluginId: string): void {
+  if (pluginId === 'navide.git' && gitRecoveryForced && !legacyGitRegisteredForForcedRecovery) {
+    registerForcedLegacyGit()
   }
 }
 // A store that turns unreadable while the app runs fails closed for the

@@ -1746,6 +1746,7 @@
       "disabledStoreRestored": "Restored from backup: the Navide plugin Disabled switches were damaged and were rebuilt from their backup copy.",
       "disabledStoreUnreadable": "The Navide plugin Disabled switches cannot be read, and neither can their backup. To be safe, Plans, Git and Mini-IDE are treated as disabled. The damaged files are kept. Reset starts every switch from enabled.",
       "disabledStoreReset": "Reset switches",
+      "builtinSwitchBusy": "Applying… Navide first lets current work finish, which can take about half a minute for Plans.",
       "disabledBadge": "Disabled",
       "disabledNote": "Disabled: its views and backend do not run. Its files, permissions and stored data are kept.",
       "rollback": {
