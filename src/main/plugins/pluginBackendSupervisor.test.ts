@@ -2458,12 +2458,14 @@ describe('PluginBackendSupervisor', () => {
     it('drops Host event notifications instead of failing the child when the output queue overflows', async () => {
       const onFailure = vi.fn()
       const stderrSink = vi.fn()
+      const onNotificationDropped = vi.fn()
       const emitted = 12
       const payload = 'x'.repeat(48 * 1024)
       const harness = makeStallableChild()
       const supervisor = makeSupervisor({
         onFailure,
         onStderr: stderrSink,
+        onNotificationDropped,
         bridgeDispatcher: {
           dispatch: async (_request, context) => {
             harness.stall()
@@ -2491,9 +2493,47 @@ describe('PluginBackendSupervisor', () => {
       expect(onFailure).not.toHaveBeenCalled()
       expect(harness.kill).not.toHaveBeenCalled()
       expect(stderrSink).toHaveBeenCalledWith(expect.stringContaining('output queue limit'))
+      // Every drop is reported, not only the first one.
+      expect(onNotificationDropped).toHaveBeenCalledTimes(emitted - delivered)
     })
 
-    it('still fails the child when a request frame overflows the output queue', async () => {
+    it('keeps delivering Host event notifications while requests back up past the queue bound', async () => {
+      const onNotificationDropped = vi.fn()
+      const harness = makeStallableChild()
+      let backlog: Promise<unknown[]> | undefined
+      const payload = 'y'.repeat(48 * 1024)
+      const supervisor: PluginBackendSupervisor = makeSupervisor({
+        onNotificationDropped,
+        bridgeDispatcher: {
+          dispatch: async (_request, context) => {
+            harness.stall()
+            const client = supervisor.clientFor(authenticatedRuntime)
+            // 12 x 48 KiB of requests: past the 256 KiB bound on their own.
+            backlog = Promise.all(Array.from({ length: 12 }, (_, index) =>
+              client.call('fixture.echo', { index, payload }).catch((error: unknown) => error)
+            ))
+            for (let index = 0; index < 3; index += 1) context.emit('plans.changed', { index })
+            harness.release()
+            return { ok: true }
+          },
+        },
+        spawnProcess: () => harness.child,
+      })
+      supervisors.push(supervisor)
+      await supervisor.start()
+
+      await expect(
+        supervisor
+          .clientFor(authenticatedRuntime, { workspacePath: '/workspace' })
+          .call('fixture.bridge', null)
+      ).resolves.toEqual({ ok: true })
+      const settled = await backlog
+      expect(settled?.filter((entry) => entry instanceof Error)).toEqual([])
+      expect(harness.hostFrames.filter((frame) => frame.includes('navide/host/event'))).toHaveLength(3)
+      expect(onNotificationDropped).not.toHaveBeenCalled()
+    })
+
+    it('queues request frames past the output queue bound instead of failing the child', async () => {
       const onFailure = vi.fn()
       const harness = makeStallableChild()
       const supervisor = makeSupervisor({ onFailure, spawnProcess: () => harness.child })
@@ -2503,17 +2543,19 @@ describe('PluginBackendSupervisor', () => {
 
       const client = supervisor.clientFor(authenticatedRuntime)
       const payload = 'y'.repeat(48 * 1024)
-      const settled = await Promise.all(
+      const calls = Promise.all(
         Array.from({ length: 12 }, (_, index) =>
           client.call('fixture.echo', { index, payload }).catch((error: unknown) => error)
         )
       )
+      await new Promise((resolve) => setTimeout(resolve, 50))
       harness.release()
+      const settled = await calls
 
-      expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ code: 'BACKEND_UNAVAILABLE' }))
-      expect(
-        settled.some((entry) => entry instanceof BackendPluginError && entry.code === 'BACKEND_UNAVAILABLE')
-      ).toBe(true)
+      // 12 x 48 KiB is past the 256 KiB bound: every call is still delivered.
+      expect(settled.filter((entry) => entry instanceof Error)).toEqual([])
+      expect(onFailure).not.toHaveBeenCalled()
+      expect(harness.kill).not.toHaveBeenCalled()
     })
 
     it('refuses a single request frame larger than the whole queue without failing the child', async () => {

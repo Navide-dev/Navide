@@ -1777,6 +1777,7 @@ const pluginTrustRefresh = registerPluginIpc(
         return error instanceof Error ? error.message : String(error)
       }
     },
+    backendCallConcurrency: () => frontendPluginManager.backendCallConcurrency(),
     listFactoryPackages: () => {
       const descriptor = frontendPluginManager.getDescriptor('navide.git')
       const factoryActive = frontendPluginManager

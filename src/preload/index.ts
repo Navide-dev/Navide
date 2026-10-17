@@ -151,6 +151,15 @@ export interface FactoryPluginSummary {
   optedOut: boolean
 }
 
+/** In-flight backend calls of one plugin: now, and the most at once since the Host started;
+ *  plus the Host event notifications its children dropped because their event backlog was full. */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+  droppedNotifications: number
+}
+
 export interface MarketplaceExtension {
   namespace: string
   name: string
@@ -1032,6 +1041,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listInstalled'),
     listFactoryPackages: (): Promise<FactoryPluginSummary[]> =>
       ipcRenderer.invoke('plugins:listFactoryPackages'),
+    backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
+      ipcRenderer.invoke('plugins:backendCallConcurrency'),
     disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
     disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:disabledStoreStatus'),

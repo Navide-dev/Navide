@@ -68,6 +68,7 @@ import type {
 } from './frontendPluginManager'
 import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
 import type { ContributionIcon } from './pluginContributionIcon'
+import type { BackendCallConcurrency } from './pluginBackendHost'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { answerMarketplaceQuery, MarketplaceHttpError } from './marketplaceQuery'
@@ -338,6 +339,8 @@ export interface PluginIpcOptions {
    *  views are drained. */
   factoryRollbackRefusal?: (pluginId: string) => string | undefined
   listFactoryPackages?: () => FactoryPackageSummary[]
+  /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
+  backendCallConcurrency?: () => BackendCallConcurrency[]
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
   /** Host side of the Disabled switch for the built-in Plans, Git and
    *  Mini-IDE, called after the switch is recorded: drain on disable, reload
@@ -651,6 +654,11 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:listFactoryPackages', (event): FactoryPackageSummary[] => {
     assertAuthorized(event)
     return options.listFactoryPackages?.() ?? []
+  })
+
+  ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
+    assertAuthorized(event)
+    return options.backendCallConcurrency?.() ?? []
   })
 
   ipcMain.handle(
