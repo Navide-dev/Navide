@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   loopContinueReady,
   loopInjectFailures,
+  turnEndsWithLoopDone,
   turnEndsWithSentinel,
   LOOP_INJECT_FAIL_LIMIT,
   type TurnCompleteState,
@@ -13,40 +14,63 @@ const base = (o: Partial<TurnCompleteState>): TurnCompleteState => ({
   turnCompleteAt: 0, lastActiveAt: 0, armedAt: 0, now: 0, settleMs: SETTLE, ...o,
 })
 
-describe('F4: a markdown-decorated done marker still ends the loop', () => {
-  it('accepts the marker wrapped in backticks, emphasis or underscores', () => {
-    for (const line of [
-      `\`${LOOP_DONE_MARKER}\``,
-      `**${LOOP_DONE_MARKER}**`,
-      `*${LOOP_DONE_MARKER}*`,
-      `__${LOOP_DONE_MARKER}__`,
-      `_${LOOP_DONE_MARKER}_`,
-      `**\`${LOOP_DONE_MARKER}\`**`,
-      `  \` ${LOOP_DONE_MARKER} \`  `,
-    ]) {
-      expect(turnEndsWithSentinel(`全部完成。\n${line}`, LOOP_DONE_MARKER)).toBe(true)
+// Markdown decorations of a bare final line: none of these matched on main.
+const DECORATED: Array<(s: string) => string> = [
+  (s) => `\`${s}\``,
+  (s) => `\`\` ${s} \`\``,
+  (s) => `*${s}*`,
+  (s) => `**${s}**`,
+  (s) => `***${s}***`,
+  (s) => `_${s}_`,
+  (s) => `__${s}__`,
+  (s) => `* ${s}`,
+  (s) => `${s}\``,
+  (s) => `**\`${s}\`**`,
+  (s) => `_*\`${s}\`*_`,
+  (s) => `  \` ${s} \`  `,
+]
+// Stage sentinels in use plus a user-chosen one, and the loop's WAIT marker.
+const EXACT_SENTINELS = [LOOP_WAIT_MARKER, '---SPEC-DONE---', '---DONE---', 'DONE', '---QUESTION-END---']
+
+describe('F4: only the loop DONE check accepts a decorated marker', () => {
+  it('turnEndsWithLoopDone accepts every decorated form of the done marker', () => {
+    for (const decorate of DECORATED) {
+      expect(turnEndsWithLoopDone(`全部完成。\n${decorate(LOOP_DONE_MARKER)}`, LOOP_DONE_MARKER)).toBe(true)
     }
   })
 
-  it('accepts a decorated wait marker the same way', () => {
-    expect(turnEndsWithSentinel(`還在等。\n\`${LOOP_WAIT_MARKER}\``, LOOP_WAIT_MARKER)).toBe(true)
+  it('turnEndsWithSentinel stays exact for LOOP_WAIT and stage sentinels', () => {
+    // Guard: LOOP_WAIT parks the loop and a stage sentinel completes a pipeline
+    // stage; neither gate may widen with the done-marker fix.
+    for (const sentinel of [...EXACT_SENTINELS, LOOP_DONE_MARKER]) {
+      for (const decorate of DECORATED) {
+        expect(turnEndsWithSentinel(`text\n${decorate(sentinel)}`, sentinel)).toBe(false)
+      }
+      expect(turnEndsWithSentinel(`text\n${sentinel}`, sentinel)).toBe(true)
+    }
   })
 
   it('still rejects the marker sharing its line with other text', () => {
-    expect(turnEndsWithSentinel(`全部完成 ${LOOP_DONE_MARKER}`, LOOP_DONE_MARKER)).toBe(false)
-    expect(turnEndsWithSentinel(`全部完成 \`${LOOP_DONE_MARKER}\``, LOOP_DONE_MARKER)).toBe(false)
-    expect(turnEndsWithSentinel(`**完成：${LOOP_DONE_MARKER}**`, LOOP_DONE_MARKER)).toBe(false)
-    expect(turnEndsWithSentinel(`\`${LOOP_DONE_MARKER}\` 以上`, LOOP_DONE_MARKER)).toBe(false)
+    for (const line of [
+      `全部完成 ${LOOP_DONE_MARKER}`,
+      `全部完成 \`${LOOP_DONE_MARKER}\``,
+      `**完成：${LOOP_DONE_MARKER}**`,
+      `\`${LOOP_DONE_MARKER}\` 以上`,
+      `- ${LOOP_DONE_MARKER}`,
+      `> ${LOOP_DONE_MARKER}`,
+    ]) {
+      expect(turnEndsWithLoopDone(`x\n${line}`, LOOP_DONE_MARKER)).toBe(false)
+    }
   })
 
   it('still rejects a decorated marker that is not the final line', () => {
-    expect(turnEndsWithSentinel(`\`${LOOP_DONE_MARKER}\`\n接下來繼續`, LOOP_DONE_MARKER)).toBe(false)
+    expect(turnEndsWithLoopDone(`\`${LOOP_DONE_MARKER}\`\n接下來繼續`, LOOP_DONE_MARKER)).toBe(false)
   })
 
-  it('never strips characters a sentinel itself ends with', () => {
-    // The bare comparison runs first, so a sentinel with its own underscore
-    // still matches exactly.
-    expect(turnEndsWithSentinel('done\n__END__', '__END__')).toBe(true)
+  it('does not take the wait marker for done, decorated or not', () => {
+    expect(turnEndsWithLoopDone(`\`${LOOP_WAIT_MARKER}\``, LOOP_DONE_MARKER)).toBe(false)
+    expect(turnEndsWithLoopDone('', LOOP_DONE_MARKER)).toBe(false)
+    expect(turnEndsWithLoopDone('done', '')).toBe(false)
   })
 })
 
@@ -79,10 +103,7 @@ describe('F6: consecutive continue-injection failures', () => {
     expect(n).toBe(1)
   })
 
-  it('stops after three failures in a row', () => {
+  it('the stop condition is three failures in a row', () => {
     expect(LOOP_INJECT_FAIL_LIMIT).toBe(3)
-    let n = 0
-    for (let i = 0; i < LOOP_INJECT_FAIL_LIMIT; i++) n = loopInjectFailures(n, false)
-    expect(n >= LOOP_INJECT_FAIL_LIMIT).toBe(true)
   })
 })

@@ -166,7 +166,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -5028,17 +5028,19 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   }
   const gen = loopGen.get(paneId)
   watcher.continuing = true
-  // The turn this continue wakes can end before injectPane returns; arming at
-  // the return would place armedAt after that turn's own signals and the loop
-  // would wait on a turn that already happened. Stamp the start, arm with it
-  // only once the inject lands (a failed one keeps the old arm, as before).
-  const armAt = Date.now()
   await acquireInjectionSlot()
   let ok = false
+  // The turn this continue wakes can end before injectPane returns; arming at
+  // the return would place armedAt after that turn's own signals and the loop
+  // would wait on a turn that already happened. Stamp once the slot is held,
+  // right before the inject (so time queued for the slot never counts), and arm
+  // with it only once the inject lands (a failed one keeps the old arm).
+  let armAt = 0
   try {
     // Cancelled / restarted while queued on the semaphore? Abort before the
     // inject so no stray "繼續" lands in a CLI whose loop was just turned off.
     if (loopGen.get(paneId) !== gen || !pane.loopActive || held()) return
+    armAt = Date.now()
     ok = await injectPane(
       paneId,
       withLoopDoneInstruction(loopResumeTextFor(paneId)),
@@ -5053,10 +5055,13 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // Loop turned off / restarted while the injection was in flight — don't arm.
   if (loopGen.get(paneId) !== gen || !pane.loopActive) return
   if (!ok) {
-    watcher.injectFailures = loopInjectFailures(watcher.injectFailures, false)
-    if (watcher.injectFailures >= LOOP_INJECT_FAIL_LIMIT) {
-      stopLoopSpinning(paneId, 'inject-failed')
-      return
+    // A quota hold that cancelled the inject is not a failure to count.
+    if (!held()) {
+      watcher.injectFailures = loopInjectFailures(watcher.injectFailures, false)
+      if (watcher.injectFailures >= LOOP_INJECT_FAIL_LIMIT) {
+        stopLoopSpinning(paneId, 'inject-failed')
+        return
+      }
     }
     console.warn(`[loop] pane ${paneId}: continue injection failed — will retry next turn`)
     return
@@ -14287,7 +14292,7 @@ backend.on('agent.activity', (raw) => {
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
-    if (ev.text && turnEndsWithSentinel(ev.text, LOOP_DONE_MARKER)) {
+    if (ev.text && turnEndsWithLoopDone(ev.text, LOOP_DONE_MARKER)) {
       stopLoopOnDoneMarker(ev.pane_id, ev.timestamp ?? '')
     }
     // Unattended loop: judge whether this turn actually moved the task forward.

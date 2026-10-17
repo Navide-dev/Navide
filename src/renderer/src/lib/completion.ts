@@ -588,18 +588,32 @@ export function isReplayedTurnComplete(
  *  Judged on clean assistant text from the CLI's own conversation log (role-
  *  separated at the source: kickoff echo is a user message and can never
  *  appear here). Mid-text mentions or quoted protocol examples never match —
- *  only a deliberate bare-line sentinel ending the turn counts. A line that is
- *  the sentinel wrapped in markdown decoration (backticks, `*`, `_`) counts
- *  too: agents often format the marker as code or bold, and missing it keeps
- *  the loop sending continues after the work is done. The bare comparison runs
- *  first so a sentinel that itself starts or ends with `_` still matches. */
+ *  only a deliberate bare-line sentinel ending the turn counts. */
 export function turnEndsWithSentinel(text: string, sentinel: string): boolean {
   if (!text || !sentinel) return false
   const lines = text.split('\n')
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim()
     if (!line) continue
-    return line === sentinel || line.replace(/^[`*_\s]+|[`*_\s]+$/g, '') === sentinel
+    return line === sentinel
+  }
+  return false
+}
+
+/** turnEndsWithSentinel for the loop's DONE marker only: the final line may
+ *  also be the marker wrapped in markdown decoration (backticks, `*`, `_`).
+ *  Agents often format the marker as code or bold, and missing it keeps the
+ *  loop sending continues after the work is done. Deliberately not used for
+ *  LOOP_WAIT or pipeline stage sentinels, whose gates stay exact. The bare
+ *  comparison runs first; a line with any other text is still rejected. */
+export function turnEndsWithLoopDone(text: string, marker: string): boolean {
+  if (turnEndsWithSentinel(text, marker)) return true
+  if (!text || !marker) return false
+  const lines = text.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (!line) continue
+    return line.replace(/^[`*_\s]+|[`*_\s]+$/g, '') === marker
   }
   return false
 }
