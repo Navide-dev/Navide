@@ -11029,6 +11029,7 @@
     },
     "title": "揭露卡",
     "riskLabel": "風險等級：{level}",
+    "variesByPlatform": "（依平台不同，顯示最高者）",
     "risk": {
       "low": "低",
       "medium": "中",

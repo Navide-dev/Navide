@@ -539,6 +539,8 @@ declare global {
      *  well formed and naming this item; unverified display data. */
     disclosure?: PluginManifestDisclosure | null
     scan?: PluginScanReport | null
+    /** D-f: the highest risk level across the latest version's platforms. */
+    listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
   }
 
   interface PackMemberSummary {

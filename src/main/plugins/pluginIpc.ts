@@ -86,9 +86,10 @@ import {
   diffDisclosure,
   type DisclosureDiff,
   type DisclosureManifestInput,
+  type DisclosureRiskLevel,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
-import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import { cardRiskLevel, type ScanReport } from '../../shared/pluginDisclosureScan'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -222,10 +223,36 @@ export function isPrereleaseVersion(version: string): boolean {
 function listingDisclosure(item: Record<string, unknown>): {
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
+  listRisk: ListRisk | null
 } {
   const id = `${String(item.namespace)}.${String(item.name)}`
   const card = rowCard(item, id, typeof item.latest_version === 'string' ? item.latest_version : '')
-  return { disclosure: card?.manifest ?? null, scan: card?.scan ?? null }
+  return {
+    disclosure: card?.manifest ?? null,
+    scan: card?.scan ?? null,
+    listRisk: card ? listRisk(cardRiskLevel(card.manifest, card.scan), item.risk_by_target) : null,
+  }
+}
+
+const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
+
+/** The level a list card shows (D-f): the highest of this App's own
+ * `cardRiskLevel` and every platform's level the Registry lists, so the card
+ * never reads lower than what some platform installs; `variesByPlatform` when
+ * the platforms differ. The detail page and the consent dialog keep this
+ * platform's own level. A malformed `risk_by_target` is ignored whole. */
+export interface ListRisk {
+  level: DisclosureRiskLevel
+  variesByPlatform: boolean
+}
+
+function listRisk(own: DisclosureRiskLevel, byTarget: unknown): ListRisk {
+  const listed = jsonObjectOrNull(byTarget)
+  const levels = listed ? Object.values(listed) : []
+  const valid = levels.length > 0 && levels.every((level) => RISK_ORDER.includes(level as DisclosureRiskLevel))
+  const platform = valid ? (levels as DisclosureRiskLevel[]) : []
+  const highest = [own, ...platform].reduce((a, b) => (RISK_ORDER.indexOf(b) > RISK_ORDER.indexOf(a) ? b : a))
+  return { level: highest, variesByPlatform: new Set(platform).size > 1 }
 }
 
 /** A Registry-supplied JSON object (disclosure data), or null for anything

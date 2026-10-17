@@ -4357,6 +4357,35 @@ describe('Marketplace discovery (Phase 1)', () => {
     for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
   })
 
+  it('D-f: the list risk is the highest platform level and says when platforms differ', async () => {
+    const ui = computeDisclosure({ schemaVersion: 2, id: 'a.multi', version: '1.0.0', publisher: 'a', permissions: { system: ['ui'] } } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.multi', namespace: 'a', name: 'multi', latest_version: '1.0.0', disclosure: ui, scan: null,
+          risk_by_target: { 'darwin-arm64': 'low', 'linux-x64': 'high' } },
+        { identity: 'a.same', namespace: 'a', name: 'same', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.same' } }, scan: null, risk_by_target: { universal: 'low' } },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.bad' } }, scan: null, risk_by_target: { x: 'IGNORE' } },
+        // A Registry newer than this App: unknown fields are ignored.
+        { identity: 'a.future', namespace: 'a', name: 'future', latest_version: '1.0.0', future_field: { x: 1 },
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.future' } }, scan: null },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.multi'].listRisk).toEqual({ level: 'high', variesByPlatform: true })
+    expect(byId['a.same'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    // A malformed map is dropped; the level still comes from the disclosure.
+    expect(byId['a.bad'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].disclosure).toEqual({ ...ui, plugin: { ...ui.plugin, id: 'a.future' } })
+  })
+
   it('forwards category, paging and the hide-incompatible filter', async () => {
     const fetchMock = jsonFetch({ items: [], total: 0 })
     registerAll()

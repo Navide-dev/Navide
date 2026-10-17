@@ -11029,6 +11029,7 @@
     },
     "title": "Disclosure",
     "riskLabel": "Risk level: {level}",
+    "variesByPlatform": "(varies by platform; the highest is shown)",
     "risk": {
       "low": "Low",
       "medium": "Medium",

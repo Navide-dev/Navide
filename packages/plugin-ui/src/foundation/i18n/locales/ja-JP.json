@@ -11029,6 +11029,7 @@
     },
     "title": "開示",
     "riskLabel": "リスク：{level}",
+    "variesByPlatform": "（プラットフォームにより異なります。最も高いものを表示）",
     "risk": {
       "low": "低",
       "medium": "中",
