@@ -104,17 +104,26 @@ declare agent tools (DB13 is open).
   characters) cannot declare agent tools.
 - Every tool name must start with `<prefix>_`.
 - Two packages that derive the same prefix may both install; when two
-  available tools have the same name, the one installed later is not served
-  (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)) and
-  the Navide Plugins page says why (DB1).
+  available tools have the same name, the one the user allowed later is not
+  served (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)),
+  and the Navide Plugins page says why in both rows (DB1). The order is the
+  consent record's `agentToolsSince`: the time the user first allowed a version
+  of the package that declares tools, made unique across packages so there is
+  never a tie. A version that declares no tools clears it. Only a package whose
+  consent covers its current tool set, and that the user has not disabled,
+  holds names.
 
 ### 2.3 Reserved names
 
 A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 
-`cli_` `credentials_` `evolve_` `marketplace_` `mcp_` `memory_` `navide_`
-`pipeline_` `plan_` `plugins_` `preview_` `prompt_` `role_` `scheduler_`
-`share_` `skills_` `stage_` `ui_` `workspace_`
+`cli_` `credentials_` `evolve_` `git_` `marketplace_` `mcp_` `memory_`
+`miniide_` `navide_` `pipeline_` `plan_` `plans_` `plugins_` `preview_`
+`prompt_` `role_` `scheduler_` `share_` `skills_` `stage_` `ui_` `workspace_`
+
+`git_`, `plans_` and `miniide_` are the prefixes the built-in packages
+(`navide.git`, `navide.plans`, `navide.mini-ide`) derive, so a third-party
+tool cannot read as first-party.
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
 pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 77
@@ -126,9 +135,18 @@ tool means adding it there (or giving it a reserved prefix).
 ### 2.4 Text rules
 
 - `title` and `description`: non-empty strings containing no character in
-  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, and no `<` or `>`
-  (`isValidAgentToolText`). These are what could fake a second tool or a system
-  message in a tool list or a terminal.
+  U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no bidi
+  control or zero-width character (U+061C, U+200B–U+200F, U+202A–U+202E,
+  U+2060–U+2069, U+FEFF) (`isValidAgentToolText`). These are what could fake a
+  second tool or a system message in a tool list or a terminal, or reorder and
+  hide text in a dialog.
+- The same rule applies to every `description` and `title` string anywhere in
+  `inputSchema` (agents read the whole schema in tools/list); a violation is
+  `AGENT_TOOL_TEXT_INVALID` on field `inputSchema`.
+- Consent surfaces show each tool's `method` and its whole `inputSchema`
+  (collapsible), the number of tools and their total size. Nothing limits the
+  number of tools or the size of the whole declaration; DB9 applies per field
+  (2.7).
 - The core server prefixes every description with the source label
   `[third-party Navide plugin <id> v<version> | permissions: ...]` (D4, built by
   B1-c from the sync entry's `permissions`).
@@ -152,7 +170,7 @@ error as `{ index, field, code }`, ordered by entry index and then:
 7. `risk` → `AGENT_TOOL_RISK_INVALID`
 8. `title` → `AGENT_TOOL_TEXT_INVALID`
 9. `description` → `AGENT_TOOL_TEXT_INVALID`, else `AGENT_TOOL_TOO_LARGE`
-10. `inputSchema` → `AGENT_TOOL_SCHEMA_INVALID`, else `AGENT_TOOL_NON_INTEGER_NUMBER`, else `AGENT_TOOL_TOO_LARGE`
+10. `inputSchema` → `AGENT_TOOL_SCHEMA_INVALID`, else `AGENT_TOOL_NON_INTEGER_NUMBER`, else `AGENT_TOOL_TEXT_INVALID` (a nested `description`/`title`), else `AGENT_TOOL_TOO_LARGE`
 11. `timeoutMs` → `AGENT_TOOL_TIMEOUT_INVALID` (booleans, strings and fractions included)
 
 A package with any error is refused at install and publish, exactly like a

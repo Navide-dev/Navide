@@ -1698,12 +1698,16 @@
     "extensions": {
       "devUnpacked": "Unsigned local folder — Developer Mode only",
       "agentTools": {
-        "heading": "Tools agents can call",
-        "read": "Read-only",
-        "write": "Changes data",
+        "heading": "Tools agents can call ({count})",
+        "read": "Declared read-only",
+        "write": "Declared as changing data",
         "timeout": "Times out after {seconds} s",
         "dataFlow": "What these tools return is shown to the agent, which may pass it on elsewhere.",
-        "collision": "Not available to agents: {heldBy}, installed earlier, already uses this name."
+        "collision": "Not available to agents: {heldBy}, allowed earlier, already uses this name.",
+        "method": "Calls {method}",
+        "inputSchema": "Input schema (what the agent sends)",
+        "sharedWith": "{others} also declares this name; that tool stays offline.",
+        "total": "{count} tools; their text and input schemas total {size}."
       },
       "nativeBackends": {
         "title": "Native backends",

@@ -1698,12 +1698,16 @@
     "extensions": {
       "devUnpacked": "未簽章的本機資料夾，僅限開發者模式",
       "agentTools": {
-        "heading": "agent 可呼叫的工具",
-        "read": "唯讀",
-        "write": "會修改資料",
+        "heading": "agent 可呼叫的工具（{count} 個）",
+        "read": "Navide 外掛宣告為唯讀",
+        "write": "Navide 外掛宣告為寫入",
         "timeout": "{seconds} 秒逾時",
         "dataFlow": "這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。",
-        "collision": "agent 無法使用：較早安裝的 {heldBy} 已經用了這個名稱。"
+        "collision": "agent 無法使用：較早允許的 {heldBy} 已經用了這個名稱。",
+        "method": "呼叫 {method}",
+        "inputSchema": "輸入結構（agent 送出的內容）",
+        "sharedWith": "{others} 也宣告了這個名稱，那邊的工具不會上線。",
+        "total": "共 {count} 個工具，文字與輸入結構合計 {size}。"
       },
       "nativeBackends": {
         "title": "原生後端",

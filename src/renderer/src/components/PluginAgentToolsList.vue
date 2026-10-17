@@ -1,22 +1,36 @@
 <script setup lang="ts">
 // The agent tools a Navide plugin declares, as the consent surfaces show them:
-// name, the full plain description, read-only or changes data, and timeout.
-// Presentation only; the Host decides whether any of them is served.
-defineProps<{
+// name, the method it calls, the full plain description, the plugin's own
+// read-only / changes-data claim, the timeout, and the whole input schema the
+// agent will read (collapsed). Presentation only; the Host decides whether any
+// of them is served.
+import { computed } from 'vue'
+
+const props = defineProps<{
   tools: ReadonlyArray<{
     name: string
     title: string
     description: string
     risk: 'read' | 'write'
     timeoutMs: number
+    method?: string
+    inputSchema?: Record<string, unknown>
     collidesWith?: string
+    sharedWith?: string[]
   }>
 }>()
+
+// Disclosed, not limited: how much the agent will read in tools/list.
+const totalSize = computed(() => {
+  const bytes = new TextEncoder().encode(JSON.stringify(props.tools)).length
+  return bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+})
 </script>
 
 <template>
   <div class="agent-tools">
-    <h5 class="agent-tools-heading">{{ $t('settings.extensions.agentTools.heading') }}</h5>
+    <h5 class="agent-tools-heading">{{ $t('settings.extensions.agentTools.heading', { count: tools.length }) }}</h5>
+    <p class="agent-tools-total">{{ $t('settings.extensions.agentTools.total', { count: tools.length, size: totalSize }) }}</p>
     <ul class="agent-tools-list">
       <li v-for="tool in tools" :key="tool.name" class="agent-tool" :data-agent-tool="tool.name">
         <span class="agent-tool-head">
@@ -29,9 +43,19 @@ defineProps<{
           </span>
         </span>
         <span class="agent-tool-title">{{ tool.title }}</span>
+        <span v-if="tool.method" class="agent-tool-method">
+          {{ $t('settings.extensions.agentTools.method', { method: tool.method }) }}
+        </span>
         <span class="agent-tool-description">{{ tool.description }}</span>
+        <details v-if="tool.inputSchema" class="agent-tool-schema">
+          <summary>{{ $t('settings.extensions.agentTools.inputSchema') }}</summary>
+          <pre class="agent-tool-schema-body">{{ JSON.stringify(tool.inputSchema, null, 2) }}</pre>
+        </details>
         <span v-if="tool.collidesWith" class="agent-tool-collision" role="note">
           {{ $t('settings.extensions.agentTools.collision', { heldBy: tool.collidesWith }) }}
+        </span>
+        <span v-if="tool.sharedWith?.length" class="agent-tool-collision" role="note">
+          {{ $t('settings.extensions.agentTools.sharedWith', { others: tool.sharedWith.join(', ') }) }}
         </span>
       </li>
     </ul>
@@ -88,6 +112,7 @@ defineProps<{
   color: var(--text-secondary);
 }
 .agent-tool-timeout,
+.agent-tool-method,
 .agent-tool-title {
   color: var(--text-secondary);
   font-size: var(--font-xs);
@@ -96,8 +121,27 @@ defineProps<{
   font-size: var(--font-xs);
   overflow-wrap: anywhere;
 }
+.agent-tool-schema summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+.agent-tool-schema-body {
+  max-height: 240px;
+  margin: var(--space-1) 0 0;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-2xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .agent-tool-collision {
   color: var(--risk-fg);
+  font-size: var(--font-xs);
+}
+.agent-tools-total {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
   font-size: var(--font-xs);
 }
 .agent-tools-data-flow {

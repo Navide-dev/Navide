@@ -32,10 +32,12 @@ MAX_SAFE_INTEGER = 2**53 - 1
 AGENT_TOOL_REQUIRED_FIELDS = ("name", "method", "risk", "title", "description", "inputSchema")
 _AGENT_TOOL_FIELDS = frozenset((*AGENT_TOOL_REQUIRED_FIELDS, "timeoutMs"))
 
-#: Prefixes no plugin may derive. ``navide_`` is reserved on top of the design list (impersonation).
+#: Prefixes no plugin may derive. ``navide_`` is reserved on top of the design list (impersonation), and so
+#: are the prefixes the built-in packages derive (``git_``, ``plans_``, ``miniide_``).
 RESERVED_TOOL_PREFIXES = (
-    "cli_", "credentials_", "evolve_", "marketplace_", "mcp_", "memory_", "navide_", "pipeline_", "plan_",
-    "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "skills_", "stage_", "ui_", "workspace_",
+    "cli_", "credentials_", "evolve_", "git_", "marketplace_", "mcp_", "memory_", "miniide_", "navide_", "pipeline_",
+    "plan_", "plans_", "plugins_", "preview_", "prompt_", "role_", "scheduler_", "share_", "skills_", "stage_", "ui_",
+    "workspace_",
 )
 
 #: tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned.
@@ -102,8 +104,9 @@ def validate_agent_tool_name(name: Any, plugin_id: Any) -> str | None:
 
 # ── text rules ──────────────────────────────────────────────────────────────
 
-# Cc (C0, DEL, C1) plus the two Unicode line/paragraph separators, and markup.
-_FORBIDDEN_TEXT = re.compile("[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]")
+# Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
+# bidi controls and zero-width characters that reorder or hide text.
+_FORBIDDEN_TEXT = re.compile("[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
 # Cc except tab and line feed.
 _RESULT_CONTROL = re.compile("[\u0000-\u0008\u000b-\u001f\u007f-\u009f]")
 
@@ -144,6 +147,20 @@ def _has_non_integer_number(value: Any) -> bool:
     if isinstance(value, dict):
         return any(_has_non_integer_number(item) for item in value.values())
     return False
+
+
+def _has_invalid_schema_text(value: Any) -> bool:
+    """Every ``description`` / ``title`` string anywhere in a schema follows the text rules too."""
+    if isinstance(value, list):
+        return any(_has_invalid_schema_text(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    return any(
+        (not is_valid_agent_tool_text(item))
+        if key in ("description", "title") and isinstance(item, str)
+        else _has_invalid_schema_text(item)
+        for key, item in value.items()
+    )
 
 
 def _is_valid_timeout(value: Any) -> bool:
@@ -214,6 +231,8 @@ def validate_agent_tools(manifest: dict[str, Any]) -> list[AgentToolValidationEr
                 fail("inputSchema", "AGENT_TOOL_SCHEMA_INVALID")
             elif _has_non_integer_number(schema):
                 fail("inputSchema", "AGENT_TOOL_NON_INTEGER_NUMBER")
+            elif _has_invalid_schema_text(schema):
+                fail("inputSchema", "AGENT_TOOL_TEXT_INVALID")
             elif _schema_bytes(schema) > AGENT_TOOL_STABILITY_CAP_BYTES:
                 fail("inputSchema", "AGENT_TOOL_TOO_LARGE")
         if "timeoutMs" in tool and not _is_valid_timeout(tool["timeoutMs"]):

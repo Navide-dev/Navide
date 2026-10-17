@@ -85,6 +85,19 @@ describe('validateAgentTools', () => {
     expect(validateAgentTools({ ...manifest, backend: { ...manifest.backend, agentTools: [atCap] } })).toEqual([])
   })
 
+  it('limits neither the number of tools nor the size of the whole declaration', () => {
+    const tool = (index: number, size: number) => ({
+      name: `devmap_t${index}`, method: 'devmap.read', risk: 'read', title: 'T',
+      description: 'x'.repeat(size), inputSchema: { type: 'object' },
+    })
+    const manifest = (tools: unknown[]) => ({ id: 'nerdtechnic.devmap', backend: { methods: ['devmap.read'], agentTools: tools } })
+    // Two tools of ~600 KiB: each item is under the per-field cap; the total
+    // over 1 MiB is disclosed (count and size), not refused.
+    const many = Array.from({ length: 2 }, (_, index) => tool(index, 600 * 1024))
+    expect(validateAgentTools(manifest(many))).toEqual([])
+    expect(validateAgentTools(manifest(Array.from({ length: 500 }, (_, index) => tool(index, 100))))).toEqual([])
+  })
+
   it('keeps the timeout bounds of the existing Host backend call', () => {
     expect(AGENT_TOOL_DEFAULT_TIMEOUT_MS).toBe(30_000)
     // Read as text: src/shared is also compiled by the web project, which cannot import src/main.

@@ -565,7 +565,10 @@ declare global {
       description: string
       risk: 'read' | 'write'
       timeoutMs: number
+      method: string
+      inputSchema: Record<string, unknown>
       collidesWith?: string
+      sharedWith?: string[]
     }>
     changedSinceConsent: boolean
     canWriteWorkspace: boolean

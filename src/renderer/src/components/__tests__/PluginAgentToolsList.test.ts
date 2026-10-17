@@ -28,7 +28,7 @@ const TOOLS = [
     title: 'Set block status',
     description: LONG_DESCRIPTION,
     timeoutMs: 5000,
-    inputSchema: { type: 'object' },
+    inputSchema: { type: 'object', required: ['block_id'], properties: { block_id: { type: 'string', description: 'The block.' } } },
   },
 ]
 
@@ -64,13 +64,19 @@ describe('install trust dialog', () => {
     })
     const rows = wrapper.findAll('[data-agent-tool]')
     expect(rows.map((row) => row.attributes('data-agent-tool'))).toEqual(['devmap_read', 'devmap_set_status'])
-    expect(rows[0].text()).toContain('Read-only')
+    expect(rows[0].text()).toContain('Declared read-only')
+    expect(rows[0].text()).toContain('Calls devmap.read')
     expect(rows[0].text()).toContain('Times out after 30 s')
-    expect(rows[1].text()).toContain('Changes data')
+    expect(rows[1].text()).toContain('Declared as changing data')
     expect(rows[1].text()).toContain('Times out after 5 s')
     // The whole description, never truncated.
     expect(rows[1].get('.agent-tool-description').text()).toBe(LONG_DESCRIPTION.trim())
-    expect(wrapper.text()).toContain('Tools agents can call')
+    expect(wrapper.text()).toContain('Tools agents can call (2)')
+    expect(wrapper.get('.agent-tools-total').text()).toMatch(/^2 tools; their text and input schemas total [\d.]+ KB\.$/)
+    // The whole input schema the agent will read, collapsed but present.
+    const schema = rows[1].get('details.agent-tool-schema')
+    expect(schema.get('summary').text()).toContain('Input schema')
+    expect(JSON.parse(schema.get('pre').text())).toEqual(TOOLS[1].inputSchema)
     expect(wrapper.text()).toContain('may pass it on elsewhere')
   })
 
@@ -107,7 +113,10 @@ describe('native backend rows', () => {
       enabled: true,
       plugins: [
         row('acme.devmap', [
-          { name: 'devmap_read', title: 'Read dev map', description: 'Read it.', risk: 'read', timeoutMs: 30000, collidesWith: 'zeta.devmap' },
+          { name: 'devmap_read', title: 'Read dev map', description: 'Read it.', risk: 'read', timeoutMs: 30000, method: 'devmap.read', inputSchema: { type: 'object' }, collidesWith: 'zeta.devmap' },
+        ]),
+        row('zeta.devmap', [
+          { name: 'devmap_read', title: 'Read dev map', description: 'Read it.', risk: 'read', timeoutMs: 30000, method: 'devmap.read', inputSchema: { type: 'object' }, sharedWith: ['acme.devmap'] },
         ]),
         row('acme.plain'),
       ],
@@ -119,7 +128,10 @@ describe('native backend rows', () => {
     await flushPromises()
     const withTools = wrapper.get('[data-native-backend-id="acme.devmap"]')
     expect(withTools.get('[data-agent-tool="devmap_read"]').text()).toContain(
-      'Not available to agents: zeta.devmap, installed earlier, already uses this name.'
+      'Not available to agents: zeta.devmap, allowed earlier, already uses this name.'
+    )
+    expect(wrapper.get('[data-native-backend-id="zeta.devmap"]').get('[data-agent-tool="devmap_read"]').text()).toContain(
+      'acme.devmap also declares this name; that tool stays offline.'
     )
     expect(wrapper.get('[data-native-backend-id="acme.plain"]').find('.agent-tools').exists()).toBe(false)
   })

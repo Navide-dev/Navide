@@ -112,6 +112,19 @@ def test_stability_cap_applies_to_description_and_schema() -> None:
     assert tools.validate_agent_tools(manifest) == []
 
 
+def test_neither_the_tool_count_nor_the_whole_declaration_is_limited() -> None:
+    def tool(index: int, size: int) -> dict[str, Any]:
+        return {"name": f"devmap_t{index}", "method": "devmap.read", "risk": "read", "title": "T",
+                "description": "x" * size, "inputSchema": {"type": "object"}}
+
+    def manifest(items: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"id": "nerdtechnic.devmap", "backend": {"methods": ["devmap.read"], "agentTools": items}}
+
+    many = [tool(i, 600 * 1024) for i in range(2)]
+    assert tools.validate_agent_tools(manifest(many)) == []
+    assert tools.validate_agent_tools(manifest([tool(i, 100) for i in range(500)])) == []
+
+
 def test_schema_fragment_matches_the_validator_constants() -> None:
     fragment = _load("manifest-agent-tools.fragment.schema.json")["$defs"]["agentTool"]
     assert fragment["properties"]["timeoutMs"] == {

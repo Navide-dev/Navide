@@ -1167,15 +1167,19 @@ function nativeBackendDialogParent(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
-/** The declared agent tools, each with its full description, read/write tag
- * and timeout: allowing the backend also allows agents to call these. */
+/** The declared agent tools, each with the method it calls, its full
+ * description, the plugin's own read/write claim, its timeout and its whole
+ * input schema: allowing the backend also allows agents to call these. */
 function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string {
   if (prompt.agentTools.length === 0) return ''
   return [
-    `Agents will be able to call these tools of ${prompt.name}:`,
-    ...prompt.agentTools.map((tool) =>
-      `• ${tool.name} (${tool.risk === 'write' ? 'changes data' : 'read-only'}, times out after ${tool.timeoutMs / 1000} s): ${tool.description}`
-    ),
+    `Agents will be able to call these ${prompt.agentTools.length} tools of ${prompt.name} ` +
+      `(their text and input schemas total ${Buffer.byteLength(JSON.stringify(prompt.agentTools))} bytes):`,
+    ...prompt.agentTools.map((tool) => [
+      `• ${tool.name} → ${tool.method} (declared ${tool.risk === 'write' ? 'as changing data' : 'read-only'}, ` +
+        `times out after ${tool.timeoutMs / 1000} s): ${tool.description}`,
+      `  Input schema: ${JSON.stringify(tool.inputSchema)}`,
+    ].join('\n')),
     'What these tools return is shown to the agent, which may pass it on elsewhere.',
   ].join('\n')
 }

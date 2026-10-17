@@ -48,10 +48,12 @@ export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
 const AGENT_TOOL_FIELDS: ReadonlySet<string> = new Set([...AGENT_TOOL_REQUIRED_FIELDS, 'timeoutMs'])
 
-/** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation). */
+/** Prefixes no plugin may derive. `navide_` is reserved on top of the design list (impersonation), and so
+ *  are the prefixes the built-in packages derive (`git_`, `plans_`, `miniide_`). */
 export const RESERVED_TOOL_PREFIXES = [
-  'cli_', 'credentials_', 'evolve_', 'marketplace_', 'mcp_', 'memory_', 'navide_', 'pipeline_', 'plan_',
-  'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_', 'workspace_',
+  'cli_', 'credentials_', 'evolve_', 'git_', 'marketplace_', 'mcp_', 'memory_', 'miniide_', 'navide_', 'pipeline_',
+  'plan_', 'plans_', 'plugins_', 'preview_', 'prompt_', 'role_', 'scheduler_', 'share_', 'skills_', 'stage_', 'ui_',
+  'workspace_',
 ] as const
 
 /** tools/list of the core navide MCP server on origin/main 72c4c2e33, pinned. */
@@ -125,9 +127,10 @@ export function validateAgentToolName(name: unknown, pluginId: unknown): AgentTo
 
 // ── text rules ──────────────────────────────────────────────────────────────
 
-// Cc (C0, DEL, C1) plus the two Unicode line/paragraph separators, and markup.
+// Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
+// bidi controls and zero-width characters that reorder or hide text.
 // eslint-disable-next-line no-control-regex
-const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]/
+const FORBIDDEN_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]/
 // Cc except tab and line feed.
 // eslint-disable-next-line no-control-regex
 const RESULT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
@@ -171,6 +174,17 @@ function hasNonIntegerNumber(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasNonIntegerNumber)
   if (isPlainObject(value)) return Object.values(value).some(hasNonIntegerNumber)
   return false
+}
+
+/** Every `description` / `title` string anywhere in a schema follows the text rules too:
+ *  agents read the whole schema in tools/list. */
+function hasInvalidSchemaText(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasInvalidSchemaText)
+  if (!isPlainObject(value)) return false
+  return Object.entries(value).some(([key, item]) =>
+    (key === 'description' || key === 'title') && typeof item === 'string'
+      ? !isValidAgentToolText(item)
+      : hasInvalidSchemaText(item))
 }
 
 function isValidTimeout(value: unknown): boolean {
@@ -220,6 +234,7 @@ export function validateAgentTools(manifest: { id?: unknown; backend?: unknown }
       const schema = tool.inputSchema
       if (!isPlainObject(schema) || schema.type !== 'object') fail('inputSchema', 'AGENT_TOOL_SCHEMA_INVALID')
       else if (hasNonIntegerNumber(schema)) fail('inputSchema', 'AGENT_TOOL_NON_INTEGER_NUMBER')
+      else if (hasInvalidSchemaText(schema)) fail('inputSchema', 'AGENT_TOOL_TEXT_INVALID')
       else if (utf8ByteLength(canonicalJson(schema)) > AGENT_TOOL_STABILITY_CAP_BYTES) {
         fail('inputSchema', 'AGENT_TOOL_TOO_LARGE')
       }

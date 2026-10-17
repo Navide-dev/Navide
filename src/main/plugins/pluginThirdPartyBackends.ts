@@ -245,8 +245,13 @@ export interface NativeBackendAgentToolRow {
   description: string
   risk: DisclosureAgentTool['risk']
   timeoutMs: number
+  method: string
+  /** The whole input schema the agent reads in tools/list. */
+  inputSchema: Record<string, unknown>
   /** Set when an earlier package holds this name: the tool stays offline. */
   collidesWith?: string
+  /** On the holder: the later packages that also declare this name. */
+  sharedWith?: string[]
 }
 
 export interface NativeBackendStatusRow {
@@ -428,9 +433,7 @@ export class ThirdPartyBackendController {
     workspacePath?: string,
     options: { prompt?: boolean } = {},
   ): Promise<ThirdPartyAdmission> {
-    // Install-time preflight comes through here, so this is when a package
-    // first declaring agent tools is recorded (the DB1 order).
-    this.noteAgentTools(spec)
+    this.forgetDroppedAgentTools(spec)
     this.assertAdmissible(spec)
     const digest = await this.digestBackend(spec)
     if (!this.consentMatches(spec, digest)) {
@@ -530,18 +533,36 @@ export class ThirdPartyBackendController {
         permissionsKey: backendPermissionsKey(spec),
         packageVersion: spec.packageVersion,
       })
+      this.noteAgentTools(spec)
     }
   }
 
-  /** Record when a package began declaring agent tools. Bookkeeping only: a
-   * failed save never affects admission. */
+  /** Record when the user first allowed a version of this package that
+   * declares agent tools (the DB1 order; unique across packages, so there is
+   * never a tie). Bookkeeping only: a failed save never affects admission. */
   private noteAgentTools(spec: ThirdPartyLaunchSpec): void {
     if (!spec.thirdParty.agentTools?.length) return
     try {
       this.store.noteAgentToolsSince(spec.pluginId, new Date(this.now()))
     } catch {
-      // The order is retried on the next admission or listing.
+      // The package then holds no names until its next consent.
     }
+  }
+
+  /** A version that declares no tools gives up its place in the DB1 order:
+   * declaring tools again later counts from that later consent. */
+  private forgetDroppedAgentTools(spec: ThirdPartyLaunchSpec): void {
+    if (spec.thirdParty.agentTools?.length) return
+    try {
+      this.store.clearAgentToolsSince(spec.pluginId)
+    } catch {
+      // Retried on the next admission or listing.
+    }
+  }
+
+  /** Whether the user's consent covers this exact tool set. */
+  private agentToolsConsented(spec: ThirdPartyLaunchSpec): boolean {
+    return this.store.record(spec.pluginId).consent?.permissionsKey === backendPermissionsKey(spec)
   }
 
   private noteFailure(pluginId: string): number | null {
@@ -649,36 +670,51 @@ export class ThirdPartyBackendController {
               description: tool.description,
               risk: tool.risk,
               timeoutMs: tool.timeoutMs,
+              method: tool.method,
+              inputSchema: tool.inputSchema,
             })),
           }
         : {}),
     }
   }
 
-  /** Rows for every listed package, with DB1 name collisions marked. A
-   * package the user disabled holds no names. */
+  /** Rows for every listed package, with DB1 name collisions marked in both
+   * rows. Only a package whose consent covers its current tool set, that the
+   * user has not disabled and that has its consent time recorded holds names;
+   * a package that declares tools no longer gives its place up. */
   async statuses(specs: readonly ThirdPartyLaunchSpec[]): Promise<NativeBackendStatusRow[]> {
-    for (const spec of specs) this.noteAgentTools(spec)
+    for (const spec of specs) this.forgetDroppedAgentTools(spec)
     const rows = await Promise.all(specs.map((spec) => this.status(spec)))
-    const collisions = agentToolNameCollisions(
-      rows.flatMap((row) =>
-        row.agentTools && !this.store.record(row.pluginId).disabled
-          ? [{
-              pluginId: row.pluginId,
-              since: this.store.record(row.pluginId).agentToolsSince,
-              names: row.agentTools.map((tool) => tool.name),
-            }]
-          : [],
-      ),
-    )
+    const claimants = specs.flatMap((spec, index) => {
+      const row = rows[index]
+      const record = this.store.record(spec.pluginId)
+      return row.agentTools && !record.disabled && record.agentToolsSince !== undefined && this.agentToolsConsented(spec)
+        ? [{ pluginId: row.pluginId, since: record.agentToolsSince, names: row.agentTools.map((tool) => tool.name) }]
+        : []
+    })
+    const collisions = agentToolNameCollisions(claimants)
+    const sharedWith = new Map<string, Map<string, string[]>>()
+    for (const [loser, lost] of collisions) {
+      for (const { name, heldBy } of lost) {
+        const byName = sharedWith.get(heldBy) ?? new Map<string, string[]>()
+        byName.set(name, [...(byName.get(name) ?? []), loser].sort())
+        sharedWith.set(heldBy, byName)
+      }
+    }
     return rows.map((row) => {
       const lost = collisions.get(row.pluginId)
-      if (!lost || !row.agentTools) return row
+      const shared = sharedWith.get(row.pluginId)
+      if ((!lost && !shared) || !row.agentTools) return row
       return {
         ...row,
         agentTools: row.agentTools.map((tool) => {
-          const collision = lost.find((entry) => entry.name === tool.name)
-          return collision ? { ...tool, collidesWith: collision.heldBy } : tool
+          const collision = lost?.find((entry) => entry.name === tool.name)
+          const others = shared?.get(tool.name)
+          return {
+            ...tool,
+            ...(collision ? { collidesWith: collision.heldBy } : {}),
+            ...(others ? { sharedWith: others } : {}),
+          }
         }),
       }
     })
@@ -692,6 +728,7 @@ export class ThirdPartyBackendController {
       permissionsKey: backendPermissionsKey(spec),
       packageVersion: spec.packageVersion,
     })
+    this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
   }
 

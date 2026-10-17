@@ -24,8 +24,9 @@ export interface NativeBackendPluginRecord {
   disabled?: boolean
   /** Canonical workspace paths where workspace writes are allowed. */
   workspaceWrite?: string[]
-  /** When the package began declaring agent tools (ISO 8601): the DB1
-   * name-collision order. Cleared with the rest on uninstall. */
+  /** When the user first allowed a version of the package that declares
+   * agent tools (ISO 8601, unique across packages): the DB1 name-collision
+   * order. Cleared when a version declares no tools, and on uninstall. */
   agentToolsSince?: string
 }
 
@@ -172,11 +173,26 @@ export class NativeBackendStore {
     })
   }
 
-  /** Record the first time a package declares agent tools; later calls keep
-   * the first time (no save). */
+  /** Record the first consent to a tool-declaring version; later calls keep
+   * the first time (no save). The time is made strictly later than every
+   * recorded one, so two packages never tie however fast they are allowed. */
   noteAgentToolsSince(pluginId: string, now = new Date()): void {
     if (this.state.plugins[pluginId]?.agentToolsSince !== undefined) return
-    this.update(pluginId, (record) => ({ ...record, agentToolsSince: now.toISOString() }))
+    let at = now.getTime()
+    for (const record of Object.values(this.state.plugins)) {
+      const since = record.agentToolsSince === undefined ? Number.NaN : Date.parse(record.agentToolsSince)
+      if (since >= at) at = since + 1
+    }
+    this.update(pluginId, (record) => ({ ...record, agentToolsSince: new Date(at).toISOString() }))
+  }
+
+  /** The package declares no tools any more: it gives up its DB1 place. */
+  clearAgentToolsSince(pluginId: string): void {
+    if (this.state.plugins[pluginId]?.agentToolsSince === undefined) return
+    this.update(pluginId, (record) => {
+      delete record.agentToolsSince
+      return record
+    })
   }
 
   /** Uninstall: forget every decision about the plugin. */

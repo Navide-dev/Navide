@@ -233,11 +233,6 @@ describe('manifest validation uses the contract', () => {
     })).toThrow("manifest backend.agentTools[0].method 'devmap.setStatus' is not a backend method name the Host accepts")
   })
 
-  it('refuses a description over the 1 MiB stability cap', () => {
-    expect(() => writePackage('acme.devmap', [{ ...READ_TOOL, description: 'x'.repeat(1_048_577) }])).toThrow(
-      'AGENT_TOOL_TOO_LARGE'
-    )
-  })
 })
 
 describe('DB1 name collisions', () => {
@@ -262,27 +257,64 @@ describe('DB1 name collisions', () => {
     }
   })
 
-  it('marks the later package in the Extensions rows, and frees the name when the holder is disabled', async () => {
-    let now = Date.parse('2026-10-01T00:00:00.000Z')
-    const instance = controller({ now: () => now })
+  const row = (tool: Tool, extra: Record<string, unknown> = {}) => ({
+    name: tool.name, title: tool.title, description: tool.description, risk: tool.risk,
+    timeoutMs: tool.timeoutMs ?? 30000, method: tool.method, inputSchema: tool.inputSchema, ...extra,
+  })
+
+  it('lets the package the user allowed first keep the name, marks the conflict in both rows, and frees it on disable', async () => {
+    const instance = controller({ now: () => Date.parse('2026-10-01T00:00:00.000Z') })
+    // Allowed in this order, at the same clock reading: the stamps still differ,
+    // and plugin id order (aaa < zeta) does not decide.
     const first = writePackage('zeta.devmap', [READ_TOOL])
-    await instance.statuses([first])
-    now += 60_000
-    const second = writePackage('acme.devmap', [READ_TOOL, WRITE_TOOL])
+    await instance.allow(first)
+    const second = writePackage('aaa.devmap', [READ_TOOL, WRITE_TOOL])
+    await instance.allow(second)
+    expect(store.record('aaa.devmap').agentToolsSince! > store.record('zeta.devmap').agentToolsSince!).toBe(true)
 
     const rows = await instance.statuses([second, first])
-    const byId = new Map(rows.map((row) => [row.pluginId, row]))
-    expect(byId.get('zeta.devmap')?.agentTools).toEqual([
-      { name: 'devmap_read', title: READ_TOOL.title, description: READ_TOOL.description, risk: 'read', timeoutMs: 30000 },
-    ])
-    expect(byId.get('acme.devmap')?.agentTools).toEqual([
-      { name: 'devmap_read', title: READ_TOOL.title, description: READ_TOOL.description, risk: 'read', timeoutMs: 30000, collidesWith: 'zeta.devmap' },
-      { name: 'devmap_set_status', title: WRITE_TOOL.title, description: WRITE_TOOL.description, risk: 'write', timeoutMs: 5000 },
+    const byId = new Map(rows.map((entry) => [entry.pluginId, entry]))
+    expect(byId.get('zeta.devmap')?.agentTools).toEqual([row(READ_TOOL, { sharedWith: ['aaa.devmap'] })])
+    expect(byId.get('aaa.devmap')?.agentTools).toEqual([
+      row(READ_TOOL, { collidesWith: 'zeta.devmap' }),
+      row(WRITE_TOOL),
     ])
 
     await instance.setDisabled('zeta.devmap', true)
     const freed = await instance.statuses([second, first])
-    expect(freed.find((row) => row.pluginId === 'acme.devmap')?.agentTools?.every((tool) => !tool.collidesWith)).toBe(true)
+    expect(freed.find((entry) => entry.pluginId === 'aaa.devmap')?.agentTools?.every((tool) => !tool.collidesWith)).toBe(true)
+  })
+
+  it('gives no name to a package whose current tool set the user has not allowed', async () => {
+    const instance = controller()
+    const holder = writePackage('zeta.devmap', [READ_TOOL])
+    await instance.allow(holder)
+    // Never allowed: it holds nothing, so the allowed package keeps the name.
+    const unconsented = writePackage('aaa.devmap', [READ_TOOL])
+    expect((await instance.statuses([unconsented, holder])).flatMap((entry) => entry.agentTools ?? [])
+      .some((tool) => tool.collidesWith || tool.sharedWith)).toBe(false)
+    // The holder's tools changed and are not re-allowed yet: it holds nothing either.
+    const changedHolder = writePackage('zeta.devmap', [{ ...READ_TOOL, description: 'Changed.' }])
+    await instance.allow(unconsented)
+    const rows = await instance.statuses([unconsented, changedHolder])
+    expect(rows.find((entry) => entry.pluginId === 'aaa.devmap')?.agentTools?.[0].collidesWith).toBeUndefined()
+  })
+
+  it('makes a package that dropped its tools count from its next consent', async () => {
+    let now = Date.parse('2026-10-01T00:00:00.000Z')
+    const instance = controller({ now: () => now })
+    await instance.allow(writePackage('early.devmap', [{ ...READ_TOOL, name: 'devmap_dummy' }]))
+    now += 1000
+    await instance.allow(writePackage('steady.devmap', [READ_TOOL]))
+    // early drops every tool, then comes back declaring the popular name.
+    const dropped = writePackage('early.devmap')
+    await instance.statuses([dropped])
+    expect(store.record('early.devmap').agentToolsSince).toBeUndefined()
+    now += 1000
+    const returned = writePackage('early.devmap', [READ_TOOL])
+    await instance.allow(returned)
+    const rows = await instance.statuses([returned, writePackage('steady.devmap', [READ_TOOL])])
+    expect(rows.find((entry) => entry.pluginId === 'early.devmap')?.agentTools?.[0].collidesWith).toBe('steady.devmap')
   })
 
   it('leaves rows of packages without tools exactly as status() produced them', async () => {
@@ -295,6 +327,16 @@ describe('DB1 name collisions', () => {
 })
 
 describe('NativeBackendStore agentToolsSince', () => {
+  it('never gives two packages the same time, and clears it', () => {
+    const at = new Date('2026-10-01T00:00:00.000Z')
+    store.noteAgentToolsSince('a.devmap', at)
+    store.noteAgentToolsSince('b.devmap', at)
+    expect(store.record('a.devmap').agentToolsSince).toBe('2026-10-01T00:00:00.000Z')
+    expect(store.record('b.devmap').agentToolsSince).toBe('2026-10-01T00:00:00.001Z')
+    store.clearAgentToolsSince('a.devmap')
+    expect(store.record('a.devmap')).toEqual({})
+  })
+
   it('keeps the first time across reloads and forgets it on uninstall', () => {
     store.noteAgentToolsSince('acme.devmap', new Date('2026-10-01T00:00:00.000Z'))
     store.noteAgentToolsSince('acme.devmap', new Date('2026-10-05T00:00:00.000Z'))

@@ -416,11 +416,11 @@ the manifest side is:
 
 | Tool field | Required | Rule |
 |---|---|---|
-| `name` | yes | `^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$`, unique in the package, and starting with the prefix derived from the plugin id: its last dot segment with every `-` removed (`nerdtechnic.dev-map` → `devmap_`). A prefix that cannot be derived, a reserved prefix (`cli_`, `plan_`, `navide_`, ... see the contract) and every core tool name are refused |
+| `name` | yes | `^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$`, unique in the package, and starting with the prefix derived from the plugin id: its last dot segment with every `-` removed (`nerdtechnic.dev-map` → `devmap_`). A prefix that cannot be derived, a reserved prefix (`cli_`, `plan_`, `navide_`, the built-in packages' `git_`, `plans_`, `miniide_`, ... see the contract) and every core tool name are refused |
 | `method` | yes | One of `backend.methods`; the Host forwards the call to it |
 | `risk` | yes | `read` or `write`; shown wherever the tool is disclosed, and `write` makes the package high risk |
-| `title`, `description` | yes | Non-empty plain text with no control characters, no U+2028/U+2029 and no `<` or `>`; no length limit apart from the 1 MiB stability cap on `description` |
-| `inputSchema` | yes | JSON Schema whose `type` is `"object"`; every number in it must be a safe integer; its canonical spelling is capped at 1 MiB |
+| `title`, `description` | yes | Non-empty plain text with no control characters, no U+2028/U+2029, no `<` or `>`, and no bidi control or zero-width character; no length limit apart from the 1 MiB stability cap on `description` |
+| `inputSchema` | yes | JSON Schema whose `type` is `"object"`; every number in it must be a safe integer; every nested `description` and `title` string follows the same text rule; its canonical spelling is capped at 1 MiB |
 | `timeoutMs` | no | Integer 1–120000; default 30000 |
 
 A package with any invalid tool is refused at install and at publish, exactly
@@ -428,16 +428,20 @@ like a schema error. `agentTools` needs a native backend, so frontend-only
 packages cannot declare it.
 
 What the user sees and consents to: the install confirmation and the native
-backend consent dialog list every declared tool with its name, its full
-description, read-only or changes data, and its timeout. The tools are part of
+backend consent dialog list every declared tool with its name, the method it
+calls, its full description, its declared read-only or changes-data claim (the
+package's own claim), its timeout and its whole input schema, plus the number
+of tools and their total size. There is no limit on the number of tools. The tools are part of
 the consent: any change to any tool (name, method, risk, text, schema, timeout)
 asks again. A package that declares no tools keeps exactly the consent it had
 before this field existed.
 
 Two packages can derive the same prefix. When both declare the same tool name,
-the package that began declaring tools first keeps the name; the later one's
-tool stays offline, and Settings → Navide Plugins says why in its row. A
-package whose native backend the user disabled holds no names.
+the package the user allowed first keeps the name; the later one's tool stays
+offline, and Settings → Navide Plugins says so in both rows. A package the user
+has not allowed (or not re-allowed since its tools changed), or whose native
+backend the user disabled, holds no names, and a version that declares no
+tools gives up its place.
 
 Serving the tools to agents comes in a later release step, behind a master
 switch that is off by default. Until then declared tools are validated,

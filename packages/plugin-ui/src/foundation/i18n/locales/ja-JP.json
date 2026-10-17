@@ -1698,12 +1698,16 @@
     "extensions": {
       "devUnpacked": "署名なしのローカルフォルダー（開発者モードのみ）",
       "agentTools": {
-        "heading": "エージェントが呼び出せるツール",
-        "read": "読み取り専用",
-        "write": "データを変更",
+        "heading": "エージェントが呼び出せるツール（{count} 個）",
+        "read": "Navide プラグインの申告：読み取り専用",
+        "write": "Navide プラグインの申告：書き込み",
         "timeout": "{seconds} 秒でタイムアウト",
         "dataFlow": "これらのツールの結果はエージェントに渡され、エージェントがそれを別の場所へ送る可能性があります。",
-        "collision": "エージェントからは使えません：先にインストールされた {heldBy} がこの名前を使っています。"
+        "collision": "エージェントからは使えません：先に許可された {heldBy} がこの名前を使っています。",
+        "method": "{method} を呼び出します",
+        "inputSchema": "入力スキーマ（エージェントが送る内容）",
+        "sharedWith": "{others} もこの名前を宣言しています。そちらのツールは使われません。",
+        "total": "ツール {count} 個、テキストと入力スキーマの合計 {size}。"
       },
       "nativeBackends": {
         "title": "ネイティブバックエンド",
