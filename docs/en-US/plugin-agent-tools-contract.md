@@ -1364,6 +1364,16 @@ The backend stores them in `plugin_resource_decisions` (`CREATE TABLE IF NOT
 EXISTS`), kept 90 days like the daily rows, and removes a plugin's rows with
 `plugin.activity.forget`.
 
+Backend side (`PLUGIN_RESOURCE_DECISION_MESSAGE`, `PLUGIN_RESOURCE_ITEMS`,
+`PLUGIN_RESOURCE_DECISIONS` in `agent_tools_contract.py`): a row is accepted
+only with exactly these seven fields and types (`parsePluginResourceDecisionRow`'s
+rules; any other field, such as a path, refuses the row). Accepted rows are
+queued and written by the audit's batched flush, in a transaction of their own
+so a failure there never drops the activity rows. A skipped row is counted in
+the log, never with its content. Columns: `id`, `at`, `plugin_id`,
+`plugin_version`, `item`, `usage` (REAL), `threshold` (REAL), `decision`;
+indexes `(at)` and `(plugin_id, at)`.
+
 ## 6. Approval registry (B2)
 
 The skills `ApprovalRegistry` gains a `kind` field: `skill` |
