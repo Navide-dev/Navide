@@ -132,7 +132,8 @@ describe('text the plugin wrote is never a key', () => {
   it('knows exactly the capabilities the broker routes', () => {
     expect(isKnownCapabilityAddress('fs', 'readFile')).toBe(true)  // public catalog
     expect(isKnownCapabilityAddress('ui', 'open_in_editor')).toBe(true)  // Host action
-    expect(isKnownCapabilityAddress('ping', 'anything')).toBe(true)  // built-in
+    // `ping` answers any method name: each would be a new key (security review of #397).
+    expect(isKnownCapabilityAddress('ping', 'anything')).toBe(false)
     expect(isKnownCapabilityAddress('fs', 'readFile2')).toBe(false)
     expect(isKnownCapabilityAddress('toString', '')).toBe(false)
   })
