@@ -195,6 +195,58 @@ def test_a_file_left_world_readable_by_an_older_version_is_tightened() -> None:
     assert path.stat().st_mode & 0o077 == 0
 
 
+def _count_hardening(monkeypatch) -> list[Any]:
+    calls: list[Any] = []
+    harden = plan_mcp_auth.secret_files.harden_file
+
+    def counting(path: Any) -> None:
+        calls.append(path)
+        harden(path)
+
+    monkeypatch.setattr(plan_mcp_auth.secret_files, "harden_file", counting)
+    return calls
+
+
+def test_the_file_is_hardened_once_however_often_it_is_read(monkeypatch) -> None:
+    """Review MED-1 on #399: every credential check reads this file, and on
+    Windows each hardening is an icacls process."""
+    plan_mcp_auth.internal_token()
+    calls = _count_hardening(monkeypatch)
+    plan_mcp_auth._hardened = None  # noqa: SLF001 - as in a fresh process
+    for _ in range(20):
+        plan_mcp_auth.internal_token()
+        plan_mcp_auth.external_token()
+        plan_mcp_auth.external_enabled()
+    assert len(calls) == 1
+
+
+def test_a_rewritten_file_is_hardened_again(monkeypatch) -> None:
+    plan_mcp_auth.internal_token()
+    calls = _count_hardening(monkeypatch)
+    plan_mcp_auth._hardened = None  # noqa: SLF001
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 1
+    plan_mcp_auth.regenerate_external_token()
+    plan_mcp_auth.internal_token()
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 2
+    plan_mcp_auth.auth_path().unlink()
+    plan_mcp_auth.internal_token()  # recreated
+    plan_mcp_auth.internal_token()
+    assert len(calls) == 3
+
+
+@pytest.mark.skipif(not osplat.paths.enforces_posix_modes(), reason="POSIX mode bits")
+def test_a_file_loosened_after_it_was_hardened_is_tightened_on_the_next_read() -> None:
+    """POSIX as on main: a read after anything widened the mode tightens it."""
+    path = plan_mcp_auth.auth_path()
+    for _ in range(3):
+        plan_mcp_auth.internal_token()
+        path.chmod(0o644)
+        plan_mcp_auth.internal_token()
+        assert path.stat().st_mode & 0o077 == 0
+
+
 def test_no_temp_file_survives_a_failed_write(monkeypatch) -> None:
     plan_mcp_auth.internal_token()
     path = plan_mcp_auth.auth_path()
