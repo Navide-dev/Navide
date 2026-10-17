@@ -171,6 +171,8 @@ import {
 } from './pluginFrameAssetProtocol'
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
+import { MARKETPLACE_QUERY_REQUEST_EVENT, MARKETPLACE_QUERY_RESULT_MESSAGE } from '../../shared/pluginAgentTools'
+import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
   AGENT_TOOL_STABILITY_CAP_BYTES,
@@ -1459,6 +1461,8 @@ export class FrontendPluginManager {
   private hostRegistrationTask: Promise<void> | null = null
   /** Lazily-created shared transport to the backend plugin host. */
   private wsClient: WsClient | null = null
+  /** Answers `marketplace.query.request` (B2-a); set by registerPluginIpc. */
+  private marketplaceQueryHandler: ((query: unknown) => Promise<MarketplaceQueryAnswer>) | null = null
   private readonly editorAiCapability = new EditorAiCapability({
     request: (type, payload, beforeDispatch) => this.sendPublicBackend(type, payload, beforeDispatch),
     createReviewClient: (onDisconnected) => {
@@ -8468,6 +8472,9 @@ export class FrontendPluginManager {
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
       })
+      client.on(MARKETPLACE_QUERY_REQUEST_EVENT, (payload) => {
+        void this.handleMarketplaceQueryRequest(client, payload)
+      })
       client.on(PDF_RENDER_REQUEST, (payload) => {
         // Only the live client answers: a replaced one's backend is gone.
         if (this.wsClient === client) void handlePdfRenderRequest(client, payload)
@@ -8740,6 +8747,53 @@ export class FrontendPluginManager {
       10_000,
     ).catch(() => {
       // The MCP waiter has its own timeout; a closed backend is reported there.
+    })
+  }
+
+  /** Install the function that answers the backend's read-only Marketplace
+   *  queries (plan B, B2-a). It is the Marketplace page's own search, detail
+   *  and inventory; see marketplaceQuery.ts. */
+  setMarketplaceQueryHandler(handler: (query: unknown) => Promise<MarketplaceQueryAnswer>): void {
+    this.marketplaceQueryHandler = handler
+  }
+
+  /** Answer one `marketplace.query.request` on the registered Host session.
+   *  Only the backend this Host authenticated to can ask, over this client;
+   *  the query is read-only and carries no caller identity. */
+  private async handleMarketplaceQueryRequest(client: WsClient, payload: unknown): Promise<void> {
+    const record: Record<string, unknown> =
+      typeof payload === 'object' && payload !== null && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {}
+    const requestId = nonEmptyString(record.request_id) ? record.request_id : null
+    if (requestId === null) {
+      console.warn('[plugin-backend] marketplace query without a request_id was not served')
+      return
+    }
+    let answer: MarketplaceQueryAnswer
+    const handler = this.marketplaceQueryHandler
+    if (this.wsClient !== client || !this.hostSessionRegistered || !handler) {
+      answer = { ok: false, error: 'Navide Host cannot answer Marketplace queries now', error_code: 'HOST_UNAVAILABLE' }
+    } else if (Object.keys(record).length !== 2 || !('query' in record)) {
+      answer = { ok: false, error: 'marketplace query is malformed', error_code: 'BAD_REQUEST' }
+    } else {
+      try {
+        answer = await handler(record.query)
+      } catch (error) {
+        answer = {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+          error_code: 'HOST_UNAVAILABLE',
+        }
+      }
+    }
+    if (this.wsClient !== client) return
+    await client.send(
+      MARKETPLACE_QUERY_RESULT_MESSAGE,
+      { request_id: requestId, ...answer },
+      10_000,
+    ).catch(() => {
+      // The backend's waiter has its own timeout and reports it there.
     })
   }
 
@@ -11038,6 +11092,11 @@ export class FrontendPluginManager {
     }))
   }
 
+  /** Whether an installed package's manifest declares a native backend (B2-a inventory). */
+  installedPackageHasBackend(pluginId: string): boolean {
+    return this.installedPackages.get(pluginId)?.hasBackend === true
+  }
+
   /** Register one Host-selected local unpacked development bundle. The fixed
    * Host call site, not package data, grants the reserved builtin identity.
    * These fixed app bundles are not the explicit local-package acceptance
@@ -11191,6 +11250,7 @@ export class FrontendPluginManager {
         : {}),
       ...(summary.provenance ? { provenance: summary.provenance } : {}),
       ...(summary.warning ? { warning: summary.warning } : {}),
+      ...(summary.hasBackend ? { hasBackend: true as const } : {}),
     })
   }
 

@@ -35,6 +35,9 @@ export const SCAN_LIMITS = {
   timeBudgetMs: 30_000,
 } as const
 
+/** `coverage.skipped` reasons that make a scan incomplete (section 3.8). */
+export const INCOMPLETE_SKIP_REASONS = ['scannerError', 'tooComplex'] as const
+
 export type ShellCategory = 'remoteWrite' | 'remoteRead' | 'localWrite' | 'local' | 'other' | 'unknownSubcommand'
 export type ScanSource = 'frontend' | 'backend'
 
@@ -209,6 +212,11 @@ function incompleteReasons(scan: ScanReport): string[] {
   const reasons: string[] = []
   if (scan.coverage.timedOut) reasons.push('timedOut')
   if (scan.coverage.truncated) reasons.push('truncated')
+  // A scanner failure on a file, or a structural ceiling it hit, means part of
+  // the package was not scanned (DS2).
+  for (const skipped of scan.coverage.skipped) {
+    if ((INCOMPLETE_SKIP_REASONS as readonly string[]).includes(skipped.reason) && skipped.count) reasons.push(skipped.reason)
+  }
   for (const source of ['frontend', 'backend'] as const) {
     if (scan.code[source]?.obfuscationSignals.length) reasons.push('obfuscated')
   }

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { canonicalContractJson, computeDisclosure } from './pluginDisclosure'
 import {
   DISCLOSURE_ENVELOPE_FIELDS,
+  INCOMPLETE_SKIP_REASONS,
   SCAN_LIMITS,
   SCAN_RISK_RULES,
   SCANNER_ID,
@@ -38,6 +39,7 @@ describe('scan contract constants', () => {
     expect(SCAN_RISK_RULES.map((rule) => [...rule])).toEqual(fixture.scanRiskRules)
     expect([...SHELL_CATEGORY_ORDER]).toEqual(fixture.shellCategoryOrder)
     expect(SCANNER_ID).toBe(fixture.scannerId)
+    expect([...INCOMPLETE_SKIP_REASONS]).toEqual(fixture.incompleteSkipReasons)
   })
 })
 
