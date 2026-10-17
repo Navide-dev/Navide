@@ -268,3 +268,22 @@ async def test_the_plans_ws_handlers_refuse_while_plans_is_disabled(
     })
     reply = host_session.websocket.sent[-1]  # type: ignore[attr-defined]
     assert reply["error"]["code"] == "PLUGIN_TOOL_UNAVAILABLE"
+
+
+@pytest.mark.parametrize("disabled", [True, False])
+async def test_plan_history_snapshots_only_while_plans_is_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, disabled: bool,
+) -> None:
+    snapshots: list[str] = []
+    events: list[dict[str, Any]] = []
+
+    async def broadcast(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    monkeypatch.setattr(app.plan_history, "snapshot_plans", snapshots.append)
+    monkeypatch.setattr(app, "broadcast", broadcast)
+    monkeypatch.setattr(app, "host_disabled_plugins", lambda: frozenset({"navide.plans"}) if disabled else frozenset())
+    await app._broadcast_plans_changed(str(tmp_path))  # noqa: SLF001
+    assert snapshots == ([] if disabled else [str(tmp_path)])
+    # The change itself is still announced either way.
+    assert events and events[-1]["type"] == "plans.changed"
