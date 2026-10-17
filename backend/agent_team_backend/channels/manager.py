@@ -1523,7 +1523,9 @@ class ChannelManager:
         if pick is not None:
             await self._quick_pick(msg, pick, mcp=True)
             return
-        scoped = quick_menu.scoped_pick(msg.text, self._identity(msg))
+        # Only where /prompts and /skills answer with numbered lines: elsewhere "/skills 2"
+        # stays text for the pane, as before (the CLI may have a /skills of its own).
+        scoped = quick_menu.scoped_pick(msg.text, self._identity(msg)) if not self._menu_buttons(msg) else None
         if scoped is not None:
             await self._quick_pick(msg, scoped[1], scope=scoped[0])
             return
@@ -2160,6 +2162,11 @@ class ChannelManager:
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: sending the quick menu on %s failed: %s", msg.platform, exc)
             await self._reply(msg, quick_menu.text(lang, "send_failed", error=redact.redact_text(str(exc))))
+
+    def _menu_buttons(self, msg: InboundMessage) -> bool:
+        """Whether this chat's quick menus come as buttons rather than numbered lines."""
+        adapter = self._adapters.get((msg.platform, msg.account))
+        return adapter is not None and adapter.capabilities.buttons and hasattr(adapter, "send_menu")
 
     async def _quick_press(self, msg: InboundMessage) -> None:
         settings = await self._ui_settings()

@@ -56,6 +56,8 @@ async def test_never_saved_prompts_offer_the_builtin(env: Env) -> None:
     await env.inbound("/prompts")
     name = prompt_skills.load_seed()["name"]["zh-TW"]
     assert [label for label, _ in _buttons(env)] == [f"💬 {name}"]
+    await env.inbound("/skills")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "no_skill_syntax")  # vendor unknown
 
 
 async def test_menu_and_a_bare_start_point_to_the_three_commands(env: Env) -> None:
@@ -120,6 +122,7 @@ async def test_a_vendor_without_a_verified_syntax_gets_no_skills(env: Env) -> No
     env.fake.skills["opencode"] = ["deploy"]
     await env.inbound("/skills")
     assert env.tg.menus == []
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "no_skill_syntax")
 
 
 async def test_unbound_chat_is_told_to_connect_first(env: Env) -> None:
@@ -138,7 +141,23 @@ async def test_offline_pane_and_buttonless_platform(env: Env) -> None:
     assert env.tg.menus == [] and qm.text("zh-TW", "pick_hint_p") in env.tg.texts()[-1]
 
 
-async def test_a_buttonless_platform_gets_numbered_lists_and_picks_by_number(env: Env) -> None:
+async def test_a_buttonless_platform_gets_a_numbered_menu_and_picks_by_number(env: Env) -> None:
+    _no_buttons(env)
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/skills")
+    body = env.tg.texts()[-1]
+    assert "1. 🧩 deploy" in body
+    await env.inbound("/menu 1")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "/deploy")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "sent", name="🧩 deploy")
+    await env.inbound("/menu 9")
+    assert env.tg.texts()[-1] == qm.text("zh-TW", "bad_pick")
+    assert len(env.fake.delivered) == 1
+
+
+async def test_a_buttonless_platform_picks_each_list_with_its_own_command(env: Env) -> None:
     _no_buttons(env)
     env.fake.settings = {"prompt-skills": SAVED}
     env.fake.agents["pane-1"] = "claude"
@@ -183,13 +202,44 @@ async def test_menu_n_still_picks_from_the_newest_list(env: Env) -> None:
 async def test_a_pick_without_a_menu_is_expired(env: Env) -> None:
     await env.inbound("/menu 1")
     assert env.tg.texts()[-1] == qm.text("zh-TW", "expired") and env.fake.delivered == []
+    _no_buttons(env)
     for command in ("/prompts 1", "/skills 1"):
         await env.inbound(command)
         assert env.tg.texts()[-1] == qm.text("zh-TW", "expired")
     assert env.fake.delivered == []
 
 
+async def test_with_buttons_prompts_n_and_skills_n_go_to_the_pane_as_typed(env: Env) -> None:
+    """As on main: a platform with buttons has no numbered lists, and the CLI has its own
+    /skills, so "/prompts 2" and "/skills 1" are plain text for the pane."""
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/prompts")
+    await env.inbound("/skills")
+    await env.inbound("/prompts 2")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "/prompts 2")
+    await env.inbound("/skills 1")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "/skills 1")
+    assert qm.text("zh-TW", "sent", name="💬 Docs") not in env.tg.texts()
+
+
+async def test_without_buttons_prompts_n_and_skills_n_pick_from_their_lists(env: Env) -> None:
+    _no_buttons(env)
+    env.fake.settings = {"prompt-skills": SAVED}
+    env.fake.agents["pane-1"] = "claude"
+    env.fake.skills["claude"] = ["deploy"]
+    await env.inbound("/prompts")
+    await env.inbound("/prompts 2")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "update the docs")
+    await env.inbound("/skills")
+    await env.inbound("/skills 1")
+    assert env.fake.delivered[-1][:2] == ("pane-1", "/deploy")
+    assert len(env.fake.delivered) == 2
+
+
 async def test_a_numbered_pick_in_an_unbound_chat(env: Env) -> None:
+    _no_buttons(env)
     await env.inbound("/prompts 1", thread="99")
     assert env.tg.texts()[-1] == qm.text("zh-TW", "not_bound")
 
