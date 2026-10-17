@@ -373,6 +373,9 @@ declare global {
       plugins?: {
         listInstalled: () => Promise<InstalledPluginSummary[]>
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
+        disabledBuiltins?: () => Promise<string[]>
+        disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
+        resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         listContributions: () => Promise<Array<{
           pluginId: string
           packageVersion: string | null
@@ -490,6 +493,10 @@ declare global {
     version: string | null
     active: boolean
     optedOut: boolean
+    /** The user's Disabled switch for this built-in. */
+    disabled?: boolean
+    /** An earlier version removed it and deleted its data; now Disabled. */
+    dataDeletedByEarlierRemoval?: boolean
   }
 
   interface MarketplaceExtension {
@@ -564,6 +571,7 @@ declare global {
     canWriteWorkspace: boolean
     workspaceWrite: string[]
     lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+    shell?: 'allowlist' | 'full'
   }
 
   interface NativeBackendOverview {
