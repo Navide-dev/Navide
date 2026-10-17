@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Plan B D3 / D-f: one installed plugin's activity. Everything here is a
 // record; nothing is blocked or capped from this page. Every string is shown
-// as plain text (no links, no HTML): paths and commands come from the plugin.
+// as plain text (no links, no HTML): paths and commands come from the plugin,
+// so invisible characters in them are shown as \u{...} like on the card.
 //
 // Two sources, kept apart (contract 5.1): the backend's report (the last 7
 // days of recorded calls, the 30-day undeclared list, the daily trend) and the
@@ -17,6 +18,7 @@ import {
   type PluginActivityReport,
   type PluginActivityToolCall,
 } from '../../../shared/pluginActivity'
+import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import { formatBytes } from '../lib/formatBytes'
 import { createQueueTrend, pluginBackendUsage, type PluginBackendUsage } from '../lib/backendQueueTrend'
 
@@ -88,13 +90,13 @@ function size(bytes: number): string {
 
 function outcome(value: string): string {
   const key = `pluginActivity.outcome.${value}`
-  return te(key) ? t(key) : value
+  return te(key) ? t(key) : reveal(value)
 }
 
 /** A source, kind or refusal reason in words; anything unknown stays as given (L5 on #371). */
 function word(group: 'source' | 'kind' | 'reason', value: string): string {
   const key = `pluginActivity.${group}.${value}`
-  return te(key) ? t(key) : value
+  return te(key) ? t(key) : reveal(value)
 }
 
 function resourceAmount(item: (typeof RESOURCE_ITEMS)[number], value: number): string {
@@ -165,7 +167,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <h5>{{ $t('pluginActivity.undeclared.heading') }}</h5>
         <ul>
           <li v-for="entry in report.undeclared" :key="`${entry.source}:${entry.address}:${entry.workspace}`">
-            {{ $t('pluginActivity.undeclared.item', { address: entry.address, source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
+            {{ $t('pluginActivity.undeclared.item', { address: reveal(entry.address), source: word('source', entry.source), workspace: reveal(entry.workspace), count: entry.count, date: date(entry.lastAt) }) }}
             <span class="nv-activity-muted">{{ $t('pluginActivity.undeclared.reasons', { reasons: list(entry.reasons.map((r) => `${word('reason', r.reason)} × ${r.count}`)) }) }}</span>
           </li>
         </ul>
@@ -175,7 +177,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <h5>{{ $t('pluginActivity.anomalies.heading') }}</h5>
         <ul>
           <li v-for="(entry, index) in report.anomalies" :key="index">
-            {{ $t(`pluginActivity.anomaly.${entry.kind}`, { date: date(entry.at), workspace: entry.workspace, tool: entry.tool ?? '', count: entry.count ?? 0, baseline: entry.baseline ?? 0 }) }}
+            {{ $t(`pluginActivity.anomaly.${entry.kind}`, { date: date(entry.at), workspace: reveal(entry.workspace), tool: reveal(entry.tool ?? ''), count: entry.count ?? 0, baseline: entry.baseline ?? 0 }) }}
           </li>
         </ul>
       </div>
@@ -184,7 +186,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <h5>{{ $t('pluginActivity.unused.heading') }}</h5>
         <ul>
           <li v-for="entry in report.declaredUnused" :key="`${entry.kind}:${entry.key}`">
-            {{ word('kind', entry.kind) }}: {{ entry.key }} ·
+            {{ word('kind', entry.kind) }}: {{ reveal(entry.key) }} ·
             {{ entry.lastUsedAt === null ? $t('pluginActivity.unused.never') : $t('pluginActivity.unused.last', { date: date(entry.lastUsedAt) }) }}
           </li>
         </ul>
@@ -194,11 +196,11 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       <ul v-if="report.toolCalls.length" class="nv-activity-tools">
         <li v-for="call in report.toolCalls" :key="call.id">
           {{ $t('pluginActivity.tools.row', {
-            date: date(call.at), caller: caller(call), tool: call.tool, risk: $t(`pluginActivity.risk.${call.risk}`),
-            outcome: call.outcome === 'ok' ? $t('pluginActivity.tools.ok') : $t('pluginActivity.tools.failed', { code: call.errorCode }),
+            date: date(call.at), caller: caller(call), tool: reveal(call.tool), risk: $t(`pluginActivity.risk.${call.risk}`),
+            outcome: call.outcome === 'ok' ? $t('pluginActivity.tools.ok') : $t('pluginActivity.tools.failed', { code: reveal(call.errorCode) }),
             duration: call.durationMs, args: size(call.argsBytes), result: size(call.resultBytes),
           }) }}
-          <span v-if="call.crossWorkspace" class="nv-activity-muted">{{ $t('pluginActivity.tools.crossWorkspace', { from: call.callerWorkspace, to: call.targetWorkspace }) }}</span>
+          <span v-if="call.crossWorkspace" class="nv-activity-muted">{{ $t('pluginActivity.tools.crossWorkspace', { from: reveal(call.callerWorkspace), to: reveal(call.targetWorkspace) }) }}</span>
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
@@ -209,7 +211,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       <h5>{{ $t('pluginActivity.files.heading') }}</h5>
       <ul v-if="report.files.length" class="nv-activity-files">
         <li v-for="entry in report.files" :key="`${entry.address}:${entry.path}`">
-          {{ $t('pluginActivity.files.item', { path: entry.path, address: entry.address, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+          {{ $t('pluginActivity.files.item', { path: reveal(entry.path), address: reveal(entry.address), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
@@ -217,7 +219,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       <h5>{{ $t('pluginActivity.commands.heading') }}</h5>
       <ul v-if="report.commands.length" class="nv-activity-commands">
         <li v-for="entry in report.commands" :key="`${entry.command}:${entry.outcome}`">
-          {{ $t('pluginActivity.commands.item', { command: entry.command, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+          {{ $t('pluginActivity.commands.item', { command: reveal(entry.command), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
@@ -236,7 +238,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       <p v-if="report.agentActions === null" class="nv-activity-muted">{{ $t('pluginActivity.agentActions.notRecorded') }}</p>
       <ul v-else-if="report.agentActions.length" class="nv-activity-actions">
         <li v-for="(entry, index) in report.agentActions" :key="index">
-          {{ $t('pluginActivity.agentActions.item', { date: date(entry.at), caller: entry.paneName || entry.paneId || entry.callerKind, action: entry.action, version: entry.version }) }}
+          {{ $t('pluginActivity.agentActions.item', { date: date(entry.at), caller: entry.paneName || entry.paneId || entry.callerKind, action: reveal(entry.action), version: reveal(entry.version) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
