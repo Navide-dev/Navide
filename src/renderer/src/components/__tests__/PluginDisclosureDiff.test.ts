@@ -72,13 +72,14 @@ describe('PluginTrustDialog on an update (plan B D2)', () => {
     },
   })
 
-  it('shows only the difference, with the full card folded away', () => {
+  it('adds the difference to the dialog as on main, with the full card folded away', () => {
     const wrapper = mount(PluginTrustDialog, {
       props: { pending: pending(widened) as never, step: 'risk' },
       global: { plugins: [i18n] },
     })
     expect(wrapper.find('.nv-diff').exists()).toBe(true)
-    expect(wrapper.find('.ext-cap-list').exists()).toBe(false)
+    // Main's sensitive-capability list stays (D-d option B: nothing is hidden).
+    expect(wrapper.find('.ext-cap-list').exists()).toBe(true)
     expect(wrapper.find('details.ext-trust-full-card .nv-disclosure').exists()).toBe(true)
   })
 

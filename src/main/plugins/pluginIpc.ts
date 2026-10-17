@@ -507,11 +507,6 @@ export function registerPluginIpc(
       return null
     }
   }
-  // D2: an update that adds nothing and keeps the risk level carries the
-  // active version's consent, provided that version holds a grant (the user
-  // consented to it). Returns that grant, or null when the update must ask.
-  const consentCarriedByUpdate = (pkg: PreparedInstall, diff: DisclosureDiff | null): HostCapabilityGrant | null =>
-    diff !== null && !diff.widened ? capabilityGrants.get(pkg.id, diff.from.version) : null
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
   const packs = new PluginPackStore(pluginsRoot)
@@ -1411,8 +1406,9 @@ export function registerPluginIpc(
           result.registryEvidence !== undefined &&
           !result.official &&
           !publisherTrust.isTrusted(result.publisherId, result.id),
-        requiresRiskConfirmation:
-          result.requiresConfirmation && consentCarriedByUpdate(result, disclosureDiff) === null,
+        // Asked exactly as before D-d (user ruling 2026-10-17, option B): the
+        // diff is shown in the dialog, never used to skip the confirmation.
+        requiresRiskConfirmation: result.requiresConfirmation,
         disclosureDiff,
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
@@ -1590,9 +1586,7 @@ export function registerPluginIpc(
       if (publisherRequiresTrust && args.publisherConfirmed !== true) {
         throw new Error(`publisher trust confirmation is required for ${pkg.publisherId}`)
       }
-      // Re-checked here: the active version may have changed since prepare.
-      const carriedGrant = consentCarriedByUpdate(pkg, updateDisclosureDiff(pkg))
-      if (pkg.requiresConfirmation && args.riskConfirmed !== true && carriedGrant === null) {
+      if (pkg.requiresConfirmation && args.riskConfirmed !== true) {
         throw new Error(`capability and backend risk confirmation is required for ${args.id}`)
       }
       // Commit deliberately stages only. It never drains the selected package,
@@ -1647,8 +1641,7 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
-            ...(policy.shell === 'full' &&
-            (args.riskConfirmed === true || carriedGrant?.highRiskShellConfirmed === true)
+            ...(policy.shell === 'full' && args.riskConfirmed === true
               ? { highRiskShellConfirmed: true as const }
               : {}),
             storage: true,

@@ -79,13 +79,14 @@ function capabilityHint(cap: string): string {
             )
           }}
         </p>
-        <!-- Plan B D2: an update shows only what it changes (the Host's diff of
-             the installed and the downloaded manifests); the full card folds. -->
+        <!-- Plan B D2: an update also shows what it changes (the Host's diff of
+             the installed and the downloaded manifests); the full card folds.
+             The confirmation itself is asked exactly as before (option B). -->
         <PluginDisclosureDiff v-if="step === 'risk' && pending.prepared.disclosureDiff" :diff="pending.prepared.disclosureDiff" />
-        <p v-if="step === 'risk' && !pending.prepared.disclosureDiff && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
+        <p v-if="step === 'risk' && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
           {{ $t('settings.extensions.trust.backendRisk', { name: pending.label }) }}
         </p>
-        <template v-if="step === 'risk' && !pending.prepared.disclosureDiff && pending.prepared.sensitive.length">
+        <template v-if="step === 'risk' && pending.prepared.sensitive.length">
           <h5 class="ext-cap-heading">{{ $t('settings.extensions.trust.sensitiveHeading') }}</h5>
           <ul class="ext-cap-list" :aria-label="$t('settings.extensions.trust.sensitiveRisk', { name: pending.label, capabilities: pending.prepared.sensitive.join(', ') })">
             <li v-for="cap in pending.prepared.sensitive" :key="cap">

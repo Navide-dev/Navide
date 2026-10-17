@@ -11012,8 +11012,6 @@
       "badgeMore": "権限が増える",
       "badgeSame": "権限は同じ",
       "badgeTitle": "Navide Registry の情報で、まだ検証されていません。更新前に Navide がダウンロードしたパッケージで改めて比較します。",
-      "updatedNoNew": "{name} {version} は権限を追加しないため、確認なしで更新を準備しました。",
-      "updatedAdded": "{name} {version} で追加：{items}。確認が不要なため、そのまま更新を準備しました。",
       "item": {
         "system": "権限：{key}",
         "shell": "shell モード：{key}",

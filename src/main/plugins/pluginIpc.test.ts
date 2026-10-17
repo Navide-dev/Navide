@@ -1505,7 +1505,9 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
-  it('D-d: an update that adds nothing installs without a new risk confirmation and keeps the full-shell consent', async () => {
+  // User ruling 2026-10-17 (D-d option B): an update asks exactly as on main;
+  // the diff is shown, never used to skip the confirmation.
+  it('D-d: an update that adds nothing still asks for the risk confirmation, as on main, and reports the diff', async () => {
     const first = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.0')
     const second = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.1')
     const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-same-'))
@@ -1527,7 +1529,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       expect(update).toMatchObject({
         requiresPublisherTrust: false,
-        requiresRiskConfirmation: false,
+        requiresRiskConfirmation: true,
         disclosureDiff: {
           from: { id: 'acme.demo', version: '1.0.0' },
           to: { id: 'acme.demo', version: '1.0.1' },
@@ -1536,7 +1538,9 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           widened: false,
         },
       })
-      await expect(commit(null, { id: 'acme.demo' })).resolves.toMatchObject({ restartRequired: true })
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+      await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      await expect(commit(null, { id: 'acme.demo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: true })
       await restart(null, { id: 'acme.demo' })
       expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).toMatchObject({
         packageVersion: '1.0.1',

@@ -11012,8 +11012,6 @@
       "badgeMore": "More permissions",
       "badgeSame": "Same permissions",
       "badgeTitle": "From the Navide Registry's data, not yet verified; before updating, Navide compares again against the downloaded package.",
-      "updatedNoNew": "{name} {version} adds no permissions, so the update was prepared without asking again.",
-      "updatedAdded": "{name} {version} adds: {items}. These need no confirmation, so the update was prepared without asking.",
       "item": {
         "system": "Permission: {key}",
         "shell": "Shell mode: {key}",

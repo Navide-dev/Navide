@@ -968,7 +968,9 @@ describe('ExtensionsPane', () => {
     expect(wrapper.find('[data-id="acme.unknown"] .ext-permission-change').exists()).toBe(false)
   })
 
-  it('D2: an update that adds no permissions commits without the dialog and says so', async () => {
+  // User ruling 2026-10-17 (D-d option B): the update asks as on main; the
+  // dialog shows the diff, here that nothing changed.
+  it('D2: an update that adds no permissions still asks, and the dialog says nothing changed', async () => {
     const commitInstall = vi.fn().mockResolvedValue({ id: 'acme.same', requires: [], restartRequired: true })
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
@@ -980,7 +982,7 @@ describe('ExtensionsPane', () => {
       prepareInstall: vi.fn().mockResolvedValue({
         id: 'acme.same', version: '1.1.0', trustTier: 'signed-verified', sensitive: ['shell'],
         containsBackendExecutable: false, requiresConfirmation: true, publisherId: 'acme',
-        requiresPublisherTrust: false, requiresRiskConfirmation: false,
+        requiresPublisherTrust: false, requiresRiskConfirmation: true,
         disclosureDiff: {
           schemaVersion: 1,
           from: { id: 'acme.same', version: '1.0.0', risk: 'high' },
@@ -995,17 +997,16 @@ describe('ExtensionsPane', () => {
 
     await wrapper.get('[data-id="acme.same"] .ext-update').trigger('click')
     await flushPromises()
-    expect(commitInstall).toHaveBeenCalledWith('acme.same', {})
-    expect(wrapper.find('.ext-trust-dialog').exists()).toBe(false)
-    expect(useNotify().toasts.value).toContainEqual(expect.objectContaining({
-      message: 'acme.same 1.1.0 adds no permissions, so the update was prepared without asking again.',
-      type: 'info',
-    }))
+    expect(commitInstall).not.toHaveBeenCalled()
+    expect(wrapper.get('.ext-trust-dialog .nv-diff').text()).toContain('No permission was added or removed.')
+    await wrapper.get('.ext-confirm-risk').trigger('click')
+    await flushPromises()
+    expect(commitInstall).toHaveBeenCalledWith('acme.same', { publisherConfirmed: false, riskConfirmed: true })
   })
 
-  // Review of #360, F3: an update that adds something needing no confirmation
-  // says what it added, never "adds no permissions".
-  it('D2: an update that adds an unconfirmed item names it in the notice', async () => {
+  // An update that needs no confirmation commits directly with no extra
+  // notice, exactly as on main (D-d option B).
+  it('D2: an update that needs no confirmation commits directly, as on main', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.wider', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
@@ -1031,9 +1032,8 @@ describe('ExtensionsPane', () => {
 
     await wrapper.get('[data-id="acme.wider"] .ext-update').trigger('click')
     await flushPromises()
-    const messages = useNotify().toasts.value.map((toast) => toast.message)
-    expect(messages).toContain('acme.wider 1.1.0 adds: Permission: ui. These need no confirmation, so the update was prepared without asking.')
-    expect(messages.some((message) => message.startsWith('acme.wider') && message.includes('adds no permissions'))).toBe(false)
+    expect(wrapper.find('.ext-trust-dialog').exists()).toBe(false)
+    expect(useNotify().toasts.value.some((toast) => toast.message.startsWith('acme.wider'))).toBe(false)
   })
 
   it('restarts a staged Registry update without offering a second install', async () => {

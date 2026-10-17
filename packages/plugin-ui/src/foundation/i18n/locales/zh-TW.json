@@ -11012,8 +11012,6 @@
       "badgeMore": "權限變多",
       "badgeSame": "權限沒變",
       "badgeTitle": "依 Navide Registry 提供的資料，尚未驗證；更新前 Navide 會用下載的套件重新比對。",
-      "updatedNoNew": "{name} {version} 沒有新增權限，已直接準備好更新，沒有再次詢問。",
-      "updatedAdded": "{name} {version} 新增了：{items}。這些不需要確認，已直接準備好更新。",
       "item": {
         "system": "權限：{key}",
         "shell": "shell 模式：{key}",

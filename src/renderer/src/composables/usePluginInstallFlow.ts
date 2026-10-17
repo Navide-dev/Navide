@@ -4,8 +4,6 @@ import { useNotify } from '@navide/plugin-ui/foundation'
 import { usePluginInventory } from './usePluginInventory'
 import { usePluginUpdates } from './usePluginUpdates'
 import { formatBytes } from '../lib/formatBytes'
-import { disclosureList } from '../lib/disclosureText'
-import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 // The verified install flow shared by the Marketplace (install/update) and the
 // Extensions page (update): prepare → optional publisher/risk confirmation →
@@ -20,7 +18,7 @@ export interface PendingInstall {
 }
 
 export function usePluginInstallFlow() {
-  const { t, te, locale } = useI18n()
+  const { t } = useI18n()
   const notify = useNotify()
   const inventory = usePluginInventory()
   const pluginUpdates = usePluginUpdates()
@@ -72,23 +70,6 @@ export function usePluginInstallFlow() {
         return
       }
       await commit(prepared.id, {})
-      // Plan B D2: an update that did not ask is noted, saying what it added
-      // (items that need no confirmation) or that it added nothing.
-      const diff = prepared.disclosureDiff
-      if (diff) {
-        const values = { name: `${namespace}.${name}`, version: prepared.version }
-        const added = diff.added.map((item) => {
-          const key = `pluginDisclosure.diff.item.${item.kind}`
-          const shown = revealInvisibleText(item.key)
-          return te(key) ? t(key, { key: shown }) : `${item.kind}: ${shown}`
-        })
-        notify.toast(
-          diff.widened
-            ? t('pluginDisclosure.diff.updatedAdded', { ...values, items: disclosureList(locale.value, added) })
-            : t('pluginDisclosure.diff.updatedNoNew', values),
-          { type: 'info' }
-        )
-      }
     } catch (err) {
       fail(err)
     } finally {
