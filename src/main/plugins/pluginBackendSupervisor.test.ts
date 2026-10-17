@@ -1036,7 +1036,7 @@ describe('PluginBackendSupervisor', () => {
     ).resolves.toEqual(1)
   })
 
-  it('bounds active subscription state', async () => {
+  it('accepts a subscription past the old 256 bound and settles every one on dispose', async () => {
     const supervisor = makeSupervisor()
     supervisors.push(supervisor)
     await supervisor.start()
@@ -1047,12 +1047,14 @@ describe('PluginBackendSupervisor', () => {
     )
     await Promise.all(subscriptions.map((subscription) => subscription.acknowledged))
 
-    expect(() => client.subscribe(['fixture.changed'], () => undefined)).toThrowError(
-      new BackendPluginError('RESOURCE_LIMIT')
-    )
+    // User ruling: no cap; the 257th used to throw RESOURCE_LIMIT.
+    const extra = client.subscribe(['fixture.changed'], () => undefined)
+    await extra.acknowledged
+    subscriptions.push(extra)
 
     subscriptions.forEach((subscription) => subscription.dispose())
     await Promise.all(subscriptions.map((subscription) => subscription.settled))
+    expect(supervisor.resourceUsage().subscriptions).toEqual({ current: 0, peak: 257 })
   })
 
   it('delivers progress only to the owning subscription', async () => {
