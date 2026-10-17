@@ -1218,13 +1218,41 @@ deleted, then all but the newest 10,000.
 `plugin_activity` (D-e; one row per broker or shell-broker call, plus one per
 agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
 `plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
-`address` (`namespace.method`), `outcome` (`allowed` | `denied` | `error`),
+`address` (`namespace.method`; never `backend.…`, see below),
+`outcome` (`allowed` | `denied` | `error`),
 `denied_reason` (only for `denied`: a `PLUGIN_TOOL_UNAVAILABLE` reason, a
 call error code, or `undeclared` for a use the manifest did not declare;
 `PLUGIN_ACTIVITY_DENIED_REASONS`, anything else is `other`), `fs_path`
 (workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
 Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
+
+`plugin_backend_call_minutes` (D-e; calls into a third-party plugin's own
+backend, whichever path made them: its frontend, an agent tool, an agent
+capability request). Counted, never one row per call: the Host counts calls
+per `(plugin, version, workspace, address, outcome, minute)` within each batch
+and sends rows `{at, plugin_id, plugin_version, workspace, source: "backend",
+address, outcome, count}` (`at`: start of the minute, Unix ms); the backend
+adds `count` into the row of that minute (`PLUGIN_BACKEND_CALLS_DDL`, its own
+schema component). `address` is `backend.<method>`, so a method named like a
+system namespace (`fs.read`) never counts as a use of it; a `backend` row
+without that prefix, or another source with it, is skipped. A call of a method
+the manifest does not declare is counted under the one address
+`backend.<undeclared>` (`PLUGIN_BACKEND_CALL_UNDECLARED_ADDRESS`), its name
+not kept: the name is the caller's free text with no limit on its length or on
+how many different names there are, so it cannot be a key; the number of keys
+follows the declared methods only. The report shows those calls as "called
+undeclared methods N times". `outcome` is `allowed` | `denied` | `cancelled`
+(the caller cancelled it; not a refusal) | `error` (a call to an undeclared
+method is an error: the backend host answers it as an invalid argument). The same flush also adds
+each count into `plugin_backend_call_days` (per UTC day, with the latest
+minute as `last_at`), which is what the report reads: a few rows per method a
+day however busy the plugin, so a report stays fast at any call rate. The
+minute rows are written and never read by the report: they keep the 7-day
+per-minute detail for inspecting a burst (for example, which minute a spike of
+calls came in). Minute rows are kept 7 days, like detail rows; day rows as long as
+`plugin_activity_daily` (90 days); a removed plugin's rows of both go with
+`forget_plugin`. The bundled `navide.*` packages are not recorded.
 
 `plugin_activity_daily`: `(day, plugin_id, workspace, source, address,
 outcome)` primary key and `count`; filled before detail rows expire and kept
@@ -1310,11 +1338,14 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`agentTool` names) from the installed manifest, since the backend has no
-third-party manifest; without `declared`, `declaredUnused` is `[]`. The Host
-sends no `backendMethod` entries: a frontend's calls to its own backend
-(`plugin:backend:call`) are not recorded in `plugin_activity`, so such an
-entry could only ever read "declared but not used". The Host also sends
+`backendMethod` keys `backend.<method>`, `agentTool` names) from the installed
+manifest, since the backend has no third-party manifest; without `declared`,
+`declaredUnused` is `[]`. Calls into a plugin's own backend, whichever path
+made them, are counted in `plugin_backend_call_days` under address
+`backend.<method>` (section 5), so a `backendMethod` entry reads "declared but
+never called" only when the method was not called at all, whatever the
+outcome. (Before those calls were recorded, the Host sent no `backendMethod`
+entries, since they could only ever read unused.) The Host also sends
 `installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
 then counts only writes since then, so a first-seen row left by an earlier
 install of the same id counts as absent. It is the time of the install since
@@ -1350,6 +1381,7 @@ malformed one whole.
 | `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
 | `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
 | `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
+| `backendCalls` | calls into the plugin's own backend, from `plugin_backend_call_days`: `methods[]` (`address`, `outcome`, `count`, `lastAt`) from the UTC day `window` starts in (so it can reach up to a day before `window.from`; calls of undeclared methods are one entry, `backend.<undeclared>`), and `daily[]` (`day`, `calls`, `denied`, `errors`, `cancelled`) for every day kept. They are **not** part of `totals`, `daily` or `volumeSpike`, which keep their meaning (broker, shell and agent-tool activity) |
 
 `argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
 known: such a value is shown as "unknown", never summed, averaged or counted

@@ -1026,8 +1026,14 @@ not grant access.
   (added only when missing).
 - On a platform without buttons, a reply that would carry them names the
   commands they stand for instead ("可直接輸入：/cancel 撤回排隊中的訊息 · stop
-  中斷 pane"), and `/menu` lists the prompt skills and skills as numbered
-  lines; `/menu <n>` sends item n.
+  中斷 pane"), and `/prompts` and `/skills` list the prompt skills and the
+  skills as numbered lines; `/prompts <n>` or `/skills <n>` sends item n of
+  that list, and `/mcp <n>` shows server n of the `/mcp` list.
+- `/menu` and a bare `/start` no longer open a menu: they answer "use
+  /prompts, /skills or /mcp", with one button for each where buttons exist.
+  `/menu <n>` still sends item n of the newest list the chat was sent. The
+  `/menu` entry Navide registered in Telegram's `/` menu is removed; a `/menu`
+  the user registered with their own wording stays.
 - A busy pane queues the message as usual (holds and the Messages panel are
   unchanged); the chat gets "已收到，等 pane 空檔…" right away. At most 20 chat
   messages may wait per pane.

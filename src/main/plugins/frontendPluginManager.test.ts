@@ -16968,6 +16968,63 @@ describe('plugin activity (D-e)', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(activityOf(socket)).toEqual([])
   })
+  // Every settled backend call reaches the recorder through PluginBackendHost's
+  // onCallSettled (pluginBackendHost.test.ts covers that it fires on every path).
+  function settleBackendCalls(
+    mgr: FrontendPluginManager,
+    calls: Array<{ pluginId: string; method: string; outcome: string; declared?: boolean }>,
+  ): void {
+    const host = (mgr as unknown as { pluginBackendHost: { onCallSettled: (call: unknown) => void } }).pluginBackendHost
+    for (const call of calls) host.onCallSettled({ packageVersion: '1.0.0', workspacePath: '/w', declared: true, ...call })
+  }
+
+  it('counts a third-party plugin\'s backend calls per method and outcome, in one batch', async () => {
+    vi.useFakeTimers()
+    const { mgr, socket } = connect('acme.backend-activity')
+    settleBackendCalls(mgr, [
+      ...Array.from({ length: 500 }, () => ({ pluginId: 'acme.backend-activity', method: 'devmap.block.import', outcome: 'allowed' })),
+      { pluginId: 'acme.backend-activity', method: 'devmap.fail', outcome: 'error' },
+      { pluginId: 'acme.backend-activity', method: 'devmap.slow', outcome: 'cancelled' },
+    ])
+    expect(activityOf(socket)).toEqual([])  // never on the call path: batched
+    await vi.advanceTimersByTimeAsync(1000)
+    const [batch, ...more] = activityOf(socket)
+    expect(more).toEqual([])
+    const base = { plugin_id: 'acme.backend-activity', plugin_version: '1.0.0', workspace: '/w', source: 'backend', at: expect.any(Number) }
+    expect(batch.payload.rows).toEqual([
+      { ...base, address: 'backend.devmap.block.import', outcome: 'allowed', count: 500 },
+      { ...base, address: 'backend.devmap.fail', outcome: 'error', count: 1 },
+      { ...base, address: 'backend.devmap.slow', outcome: 'cancelled', count: 1 },
+    ])
+  })
+
+  it('does not record the bundled navide.* plugins calling their backend', async () => {
+    vi.useFakeTimers()
+    const { mgr, socket } = connect('acme.backend-builtin-check')
+    settleBackendCalls(mgr, [{ pluginId: 'navide.plans', method: 'plans.list', outcome: 'allowed' }])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(activityOf(socket)).toEqual([])
+    // Their calls are not even observed: no wrapper cost on the call path.
+    const host = (mgr as unknown as { pluginBackendHost: { observesCallsOf: (id: string) => boolean } }).pluginBackendHost
+    expect(host.observesCallsOf('navide.plans')).toBe(false)
+    expect(host.observesCallsOf('acme.backend-builtin-check')).toBe(true)
+  })
+
+  // Review of #374 (H2): undeclared names are the caller's free text, so they
+  // are never keys; the number of keys follows the declared methods only.
+  it('counts every call of an undeclared method under one address, whatever the name', async () => {
+    vi.useFakeTimers()
+    const { mgr, socket } = connect('acme.backend-undeclared')
+    settleBackendCalls(mgr, Array.from({ length: 1000 }, (_, i) => ({
+      pluginId: 'acme.backend-undeclared', method: `made.up.${i}.${'x'.repeat(i % 50)}`, outcome: 'error', declared: false,
+    })))
+    await vi.advanceTimersByTimeAsync(1000)
+    const [batch] = activityOf(socket)
+    expect(batch.payload.rows).toEqual([{
+      plugin_id: 'acme.backend-undeclared', plugin_version: '1.0.0', workspace: '/w', source: 'backend',
+      at: expect.any(Number), address: 'backend.<undeclared>', outcome: 'error', count: 1000,
+    }])
+  })
 })
 
 describe('plugin activity forget (D-e L4)', () => {

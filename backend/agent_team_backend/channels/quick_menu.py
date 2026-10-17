@@ -1,5 +1,6 @@
-"""Quick menu: ``/menu`` in a bound chat answers with buttons for the user's prompt skills
-(Settings → Prompts) and the CLI skills the bound pane's vendor can be asked to run.
+"""Quick menu: ``/prompts`` in a bound chat answers with buttons for the user's prompt
+skills (Settings → Prompts), ``/skills`` with the CLI skills the bound pane's vendor can
+be asked to run, and ``/mcp`` with MCP servers, read-only. ``/menu`` only points to them.
 
 A button's callback data is ``nv2:<kind>:<token>``: kind ``p`` (prompt skill), ``s``
 (skill) or ``g`` (go to a page); the token is a short random key into this table, so
@@ -33,6 +34,10 @@ _CALLBACK_RE = re.compile(rf"^nv2:([psgnm]):([{TOKEN_ALPHABET}]{{{TOKEN_LENGTH}}
 _MENTION_RE = re.compile(r"^(?:<[@!][^>]*>\s*)+")
 _PICK_RE = re.compile(r"^/menu(?:@(\S+))?\s+(\d{1,3})$", re.IGNORECASE)
 _MCP_PICK_RE = re.compile(r"^/mcp(?:@(\S+))?\s+(\d{1,3})$", re.IGNORECASE)
+_SCOPED_PICK_RES = {
+    "p": re.compile(r"^/prompts(?:@(\S+))?\s+(\d{1,3})$", re.IGNORECASE),
+    "s": re.compile(r"^/skills(?:@(\S+))?\s+(\d{1,3})$", re.IGNORECASE),
+}
 # Tool names shown for one of Navide's MCP servers; the rest are counted.
 MCP_TOOLS_SHOWN = 30
 # A name typed after the vendor's skill prefix: anything else could split the command.
@@ -106,16 +111,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "no_skill_syntax": "（這個 pane 的 CLI 沒有已查證的 skill 呼叫方式，不列出 Skills）",
         "prev": "◀ 上一頁",
         "next": "下一頁 ▶",
-        "not_bound": "此聊天室尚未連接 pane；在 Navide 的 pane 聊天按鈕連接後再傳 /menu",
+        "not_bound": "此聊天室尚未連接 pane；在 Navide 的 pane 聊天按鈕連接後再傳 /prompts、/skills 或 /mcp",
         "no_buttons": "這個平台不支援按鈕，無法顯示快捷選單",
         "empty": "沒有可用的 prompt 或 skill；到 Navide 設定的 Prompts／Skills 新增",
         "empty_prompts": "沒有可用的 prompt；到 Navide 設定的 Prompts 新增",
         "empty_skills": "這個 pane 的 CLI 沒有可用的 skill；到 Navide 設定的 Skills 新增",
-        "expired": "⚠️ 這個選單已過期，請重新傳 /menu",
-        "gone": "⚠️「{name}」已不存在或已停用，請重新傳 /menu",
+        "expired": "⚠️ 這個選單已過期，請重新傳 /prompts 或 /skills",
+        "gone": "⚠️「{name}」已不存在或已停用，請重新傳 /prompts 或 /skills",
         "sent": "▶ 已送出：{name}",
         "pick_hint": "回覆 /menu <編號> 送出",
-        "bad_pick": "⚠️ 沒有這個編號，請重新傳 /menu",
+        "pick_hint_p": "回覆 /prompts <編號> 送出",
+        "pick_hint_s": "回覆 /skills <編號> 送出",
+        "menu_moved": "⚡ 快捷選單已拆成三個指令，請改用 /prompts、/skills、/mcp",
+        "bad_pick": "⚠️ 沒有這個編號，請重新傳 /prompts 或 /skills",
         "send_failed": "⚠️ 無法顯示快捷選單：{error}",
         "shares_title": "🔗 有效的分享連結（最近 {count} 筆）",
         "shares_line": "{n}. {title} · {kind} · 開啟 {opens} 次 · 到期 {expires} · {short}",
@@ -165,16 +173,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "no_skill_syntax": "(No verified way to run a skill in this pane's CLI, so Skills are not listed)",
         "prev": "◀ Previous",
         "next": "Next ▶",
-        "not_bound": "This chat is not connected to a pane. Connect it from the pane's chat button in Navide, then send /menu",
+        "not_bound": "This chat is not connected to a pane. Connect it from the pane's chat button in Navide, then send /prompts, /skills or /mcp",
         "no_buttons": "This platform has no buttons, so the quick menu cannot be shown",
         "empty": "No prompts or skills to offer. Add them under Prompts / Skills in Navide's settings",
         "empty_prompts": "No prompts to offer. Add them under Prompts in Navide's settings",
         "empty_skills": "This pane's CLI has no skills to offer. Add them under Skills in Navide's settings",
-        "expired": "⚠️ This menu has expired. Send /menu again",
-        "gone": "⚠️ \"{name}\" no longer exists or is turned off. Send /menu again",
+        "expired": "⚠️ This menu has expired. Send /prompts or /skills again",
+        "gone": "⚠️ \"{name}\" no longer exists or is turned off. Send /prompts or /skills again",
         "sent": "▶ Sent: {name}",
         "pick_hint": "Reply /menu <number> to send one",
-        "bad_pick": "⚠️ No such number. Send /menu again",
+        "pick_hint_p": "Reply /prompts <number> to send one",
+        "pick_hint_s": "Reply /skills <number> to send one",
+        "menu_moved": "⚡ The quick menu is now three commands: use /prompts, /skills or /mcp",
+        "bad_pick": "⚠️ No such number. Send /prompts or /skills again",
         "send_failed": "⚠️ The quick menu could not be shown: {error}",
         "shares_title": "🔗 Active share links (newest {count})",
         "shares_line": "{n}. {title} · {kind} · opened {opens}× · expires {expires} · {short}",
@@ -224,16 +235,19 @@ STRINGS: dict[str, dict[str, str]] = {
         "no_skill_syntax": "（この pane の CLI には確認済みの skill 呼び出し方法がないため、Skills は表示しません）",
         "prev": "◀ 前へ",
         "next": "次へ ▶",
-        "not_bound": "このチャットは pane に接続されていません。Navide の pane のチャットボタンで接続してから /menu を送ってください",
+        "not_bound": "このチャットは pane に接続されていません。Navide の pane のチャットボタンで接続してから /prompts、/skills、/mcp のいずれかを送ってください",
         "no_buttons": "このプラットフォームはボタンに対応していないため、クイックメニューを表示できません",
         "empty": "使える prompt も skill もありません。Navide の設定の Prompts／Skills で追加してください",
         "empty_prompts": "使える prompt がありません。Navide の設定の Prompts で追加してください",
         "empty_skills": "この pane の CLI で使える skill がありません。Navide の設定の Skills で追加してください",
-        "expired": "⚠️ このメニューは期限切れです。もう一度 /menu を送ってください",
-        "gone": "⚠️「{name}」は存在しないか無効になっています。もう一度 /menu を送ってください",
+        "expired": "⚠️ このメニューは期限切れです。もう一度 /prompts か /skills を送ってください",
+        "gone": "⚠️「{name}」は存在しないか無効になっています。もう一度 /prompts か /skills を送ってください",
         "sent": "▶ 送信しました：{name}",
         "pick_hint": "送るには /menu <番号> と返信してください",
-        "bad_pick": "⚠️ その番号はありません。もう一度 /menu を送ってください",
+        "pick_hint_p": "送るには /prompts <番号> と返信してください",
+        "pick_hint_s": "送るには /skills <番号> と返信してください",
+        "menu_moved": "⚡ クイックメニューは 3 つのコマンドに分かれました。/prompts、/skills、/mcp を使ってください",
+        "bad_pick": "⚠️ その番号はありません。もう一度 /prompts か /skills を送ってください",
         "send_failed": "⚠️ クイックメニューを表示できませんでした：{error}",
         "shares_title": "🔗 有効な共有リンク（最新 {count} 件）",
         "shares_line": "{n}. {title} · {kind} · 開封 {opens} 回 · 期限 {expires} · {short}",
@@ -301,6 +315,16 @@ def menu_pick(body: str, identity: str = "") -> int | None:
 def mcp_pick(body: str, identity: str = "") -> int | None:
     """The number in ``/mcp <n>``: a server of the text ``/mcp`` list."""
     return _pick(_MCP_PICK_RE, body, identity)
+
+
+def scoped_pick(body: str, identity: str = "") -> tuple[str, int] | None:
+    """``("p", n)`` for ``/prompts <n>``, ``("s", n)`` for ``/skills <n>``: an item of
+    that command's text menu."""
+    for scope, pattern in _SCOPED_PICK_RES.items():
+        n = _pick(pattern, body, identity)
+        if n is not None:
+            return scope, n
+    return None
 
 
 def _pick(pattern: re.Pattern[str], body: str, identity: str) -> int | None:
@@ -534,21 +558,22 @@ class QuickMenus:
             return "\n".join([*_heading(menu, numbered=True), text(menu.lang, "mcp_pick_hint")])
         lines = _heading(menu)
         lines += [f"{n}. {item.label}" for n, item in enumerate(_items(menu), 1)]
-        lines.append(text(menu.lang, "pick_hint"))
+        lines.append(text(menu.lang, {"p": "pick_hint_p", "s": "pick_hint_s"}.get(menu.scope, "pick_hint")))
         return "\n".join(lines)
 
-    def latest(self, location_key: str, mcp: bool = False) -> Menu | None:
+    def latest(self, location_key: str, mcp: bool = False, scope: str | None = None) -> Menu | None:
         """The newest live menu sent to ``location_key``: an /mcp list when ``mcp``, else
-        any other, so ``/menu <n>`` and ``/mcp <n>`` never pick from each other's list."""
+        any other, so ``/menu <n>`` and ``/mcp <n>`` never pick from each other's list;
+        only one of ``scope`` ("p" or "s") when given, for ``/prompts <n>``, ``/skills <n>``."""
         now = self.clock()
         live = [m for m in self._menus.values()
                 if m.location_key == location_key and now - m.created <= MENU_TTL_S
-                and (m.scope == "mcp") == mcp]
+                and (m.scope == "mcp") == mcp and (scope is None or m.scope == scope)]
         return live[-1] if live else None
 
-    def pick(self, location_key: str, number: int, mcp: bool = False) -> Press | None:
+    def pick(self, location_key: str, number: int, mcp: bool = False, scope: str | None = None) -> Press | None:
         """Item ``number`` (1-based) of the newest live menu at ``location_key``."""
-        menu = self.latest(location_key, mcp)
+        menu = self.latest(location_key, mcp, scope)
         items = _items(menu) if menu is not None else []
         if not 0 < number <= len(items):
             return None
