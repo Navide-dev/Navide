@@ -81,6 +81,7 @@ const activation: BackendPluginLaunchSpec = {
     'fixture.hash',
     'fixture.pid',
     'fixture.bigresult',
+    'fixture.bigexit',
     'fixture.nonewline',
     'fixture.bridge',
     'fixture.bridgeburst',
@@ -569,6 +570,19 @@ describe('PluginBackendSupervisor', () => {
         expect(onFailure).not.toHaveBeenCalled()
       }, 240_000)
     }
+
+    it('delivers a large answer from a child that exits right after writing it', async () => {
+      let delivered = 0
+      for (let round = 0; round < 10; round++) {
+        const supervisor = makeSupervisor()
+        supervisors.push(supervisor)
+        await supervisor.start()
+        const client = supervisor.clientFor(authenticatedRuntime)
+        const value = await client.call('fixture.bigexit', { bytes: 2 * 1_048_576 }, { timeoutMs: 60_000 })
+        if (sha(JSON.stringify(value)) === sha(JSON.stringify(big(2 * 1_048_576)))) delivered += 1
+      }
+      expect(delivered).toBe(10)
+    }, 240_000)
 
     it('checks a frame parsed off the main thread as strictly as the main thread does', async () => {
       const supervisor = makeSupervisor()

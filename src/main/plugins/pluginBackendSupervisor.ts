@@ -388,6 +388,8 @@ interface ChildGeneration {
   stdoutPendingBytes: number
   /** Frames that arrived while a larger one is parsed off the main thread, in order. */
   parkedLines: StdoutLine[] | null
+  /** An exit that came while frames were still parsed off the main thread: handled after them. */
+  exitAfterFrames?: { code: number | null; signal: NodeJS.Signals | null }
   /** Time spent on this child's stdout in the current event-loop turn, and the pause it may cause. */
   stdoutTurnMs: number
   stdoutTurnScheduled: boolean
@@ -2095,6 +2097,19 @@ export class PluginBackendSupervisor {
   }
 
   private resumeAfterOffThread(generation: ChildGeneration, parsed: OffThreadFrame | null): void {
+    try {
+      this.handleOffThreadFrame(generation, parsed)
+    } finally {
+      // An exit held back for these frames is handled once none is left.
+      const exit = generation.exitAfterFrames
+      if (exit && generation.parkedLines === null) {
+        generation.exitAfterFrames = undefined
+        this.finishChildExit(generation, exit.code, exit.signal)
+      }
+    }
+  }
+
+  private handleOffThreadFrame(generation: ChildGeneration, parsed: OffThreadFrame | null): void {
     const parked = generation.parkedLines ?? []
     generation.parkedLines = null
     if (
@@ -2175,6 +2190,20 @@ export class PluginBackendSupervisor {
     generation.exited = true
     generation.resolveExit?.()
     generation.resolveExit = undefined
+    // Frames the child wrote before it exited are still parsed off the main
+    // thread: they are answers, so they are handled first.
+    if (generation.parkedLines !== null && this.currentGeneration === generation) {
+      generation.exitAfterFrames = { code, signal }
+      return
+    }
+    this.finishChildExit(generation, code, signal)
+  }
+
+  private finishChildExit(
+    generation: ChildGeneration,
+    code: number | null,
+    signal: NodeJS.Signals | null,
+  ): void {
     this.disposeGeneration(generation)
     if (this.currentGeneration !== generation) return
     this.ignoredRequestIds.clear()

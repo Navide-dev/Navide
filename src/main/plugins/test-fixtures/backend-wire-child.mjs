@@ -437,6 +437,17 @@ function handle(frame) {
     sendResultPieces(frame.id, pieces, bytes)
     return
   }
+  if (name === 'fixture.bigexit') {
+    // {bytes}: answers with one frame of about `bytes`, then exits as soon as
+    // the frame is written.
+    const unit = 'abc中文😀'
+    const value = { data: unit.repeat(Math.ceil((args?.bytes ?? 0) / Buffer.byteLength(unit, 'utf8'))) }
+    process.stdout.write(`${JSON.stringify({
+      jsonrpc: '2.0', id: frame.id,
+      result: { resultType: 'complete', value, _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' } } },
+    })}\n`, () => process.exit(0))
+    return
+  }
   if (name === 'fixture.nonewline') {
     // {bytes}: writes `bytes` of a frame that never ends (no newline), in
     // 64 KiB writes, and never answers.
