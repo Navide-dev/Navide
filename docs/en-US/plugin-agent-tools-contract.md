@@ -866,7 +866,10 @@ string, or a property name (along `properties`, `additionalProperties` and
 that value, so the plugin receives what it declared; a declared value sent as
 is stays. When two declared values are served as the same text, a call that
 sends it is refused with `PLUGIN_TOOL_INVALID_ARGUMENTS` (an "ambiguous"
-message, logged), never guessed. Values under other keywords are not mapped.
+message, logged), never guessed, also when one of them is that text itself
+(`ab` and `a\u200bb` are both served `ab`). Property names served alike merge
+in tools/list; registering such a tool logs a warning. Values under other
+keywords are not mapped.
 
 ### 4.3 Backend → Host: `marketplace.query`
 
@@ -1144,7 +1147,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | Column | Type | Content |
 |---|---|---|
 | `id` | INTEGER PK | autoincrement |
-| `at` | INTEGER | call start |
+| `at` | INTEGER | call **end** (Unix ms): the row is written once the call is over, with its duration and result size; the call ran over `[at − duration_ms, at]` |
 | `caller_kind` | TEXT | `pane` / `external` / `host` |
 | `pane_id`, `pane_name` | TEXT | `''` when not a pane |
 | `caller_workspace`, `target_workspace` | TEXT | |
@@ -1174,12 +1177,33 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
 
+`plugin_activity_denied_daily` (D-e): `(day, plugin_id, workspace, source,
+address, denied_reason)` primary key and `count`; the refusals among the detail rows, by reason, rolled up in the
+same transaction as `plugin_activity_daily` and kept as long (90 days), so the
+reason of a refusal ("used but not declared" above all) outlives the 7 days of
+detail. It was added after the first tables: every open runs the audit DDL (all
+`CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
 
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
+
+The Host's capability broker records the broker and shell-broker rows of
+third-party plugins (the bundled `navide.*` packages are not recorded) and sends
+them in batches, about once a second, as `plugin.activity.record`
+(`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
+plugin_version, workspace, source: "broker" | "shell", address, outcome,
+denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+paths and command lines cross the local Host session only; the backend keeps
+their redacted form. `denied_reason` is `undeclared` when the broker refused a
+namespace or shell use the manifest did not declare. A refused cast is recorded;
+a dispatched cast (terminal input) is not.
+
+The activity page reads it back with `plugins.activity.report`
+(`PLUGIN_ACTIVITY_REPORT_MESSAGE`), section 5.1.
 
 ### 5.1 Reading activity: `plugins.activity.report`
 

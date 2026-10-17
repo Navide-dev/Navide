@@ -16811,3 +16811,77 @@ describe('the Disabled switch for the built-in Plans, Git and Mini-IDE', () => {
     expect(register).toHaveBeenCalledWith(backend)
   })
 })
+
+describe('plugin activity (D-e)', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+
+  function connect(id: string): {
+    mgr: FrontendPluginManager
+    socket: InstanceType<typeof wsMock.FakeNodeWebSocket>
+    call: (ns: string, method: string, args: Record<string, unknown>) => Promise<unknown>
+  } {
+    const mgr = new FrontendPluginManager()
+    const host = new FakeBrowserWindow()
+    mgr.open(
+      asHost(host),
+      { id, requires: ['terminal'], devUrl: '', entryFile: `/plugins/${id}/index.html` },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl(`ws://${id}`)
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const registration = socket.sent.map((raw) => JSON.parse(raw) as SentMessage)
+      .find((message) => message.type === 'host.register')!
+    socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+    const view = host.children[0] as FakeViewLike
+    const call = async (ns: string, method: string, args: Record<string, unknown>): Promise<unknown> =>
+      ipcHandlers.get('plugin:cap:call')!({ sender: { id: view.webContents.id } }, { reqId: 'r1', ns, method, args })
+    return { mgr, socket, call }
+  }
+
+  const activityOf = (socket: InstanceType<typeof wsMock.FakeNodeWebSocket>): SentMessage[] =>
+    socket.sent.map((raw) => JSON.parse(raw) as SentMessage).filter((m) => m.type === 'plugin.activity.record')
+
+  afterEach(() => { vi.useRealTimers() })
+
+  it('records a third-party plugin call refused as undeclared, in one batch over the Host session', async () => {
+    vi.useFakeTimers()
+    const { socket, call } = connect('acme.activity')
+    await expect(call('fs', 'readFile', { path: '/Users/me/project/a.py' })).resolves.toMatchObject({
+      ok: false, error: { code: 'CAP_DENIED' },
+    })
+    await expect(call('net', 'fetch', { url: 'https://example.test' })).resolves.toMatchObject({ ok: false })
+    expect(activityOf(socket)).toEqual([])
+    await vi.advanceTimersByTimeAsync(1000)
+    const [batch, ...more] = activityOf(socket)
+    expect(more).toEqual([])
+    expect(batch.payload.rows).toEqual([
+      {
+        plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
+        address: 'fs.readFile', outcome: 'denied', denied_reason: 'undeclared', fs_path: '/Users/me/project/a.py',
+      },
+      {
+        plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
+        address: 'net.fetch', outcome: 'denied', denied_reason: 'undeclared',
+      },
+    ])
+  })
+
+  it('answers the plugin the same as before when the backend never takes the batch', async () => {
+    vi.useFakeTimers()
+    const { socket, call } = connect('acme.activity-unanswered')
+    const first = await call('fs', 'readFile', { path: 'a.py' })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(activityOf(socket)).toHaveLength(1)  // sent, never answered
+    await expect(call('fs', 'readFile', { path: 'a.py' })).resolves.toEqual(first)
+  })
+
+  it('does not record the bundled navide.* plugins', async () => {
+    vi.useFakeTimers()
+    const { socket, call } = connect('navide.activity-builtin')
+    await call('fs', 'readFile', { path: 'a.py' })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(activityOf(socket)).toEqual([])
+  })
+})

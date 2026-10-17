@@ -12,8 +12,6 @@
  */
 
 export const PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION = 1
-/** The Host → backend request type (contract 5.1). */
-export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
 
 /** `args_bytes` / `result_bytes` of a call whose size is not known. Never
  *  summed, never averaged; the page shows "unknown". */

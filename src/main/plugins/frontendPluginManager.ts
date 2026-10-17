@@ -47,6 +47,7 @@ import {
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
 } from './pluginCapabilityBroker'
+import { activityRowFor, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -108,13 +109,11 @@ import {
   canonicalBackendPackageDir,
   PluginBackendHost,
   type BackendCallConcurrency,
+  type BackendResourceUsage,
   type ThirdPartyAdmitter,
 } from './pluginBackendHost'
 import { currentPluginHostTarget, UNIVERSAL_PLUGIN_TARGET } from './pluginTarget'
-import {
-  isAllowedBackendTimeout,
-  MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
-} from './pluginBackendLimits'
+import { isAllowedBackendTimeout } from './pluginBackendLimits'
 import {
   createHostPlansFilesystemPort,
   createProductionPlansBridgeDispatcher,
@@ -172,7 +171,8 @@ import {
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
 import { MARKETPLACE_QUERY_REQUEST_EVENT, MARKETPLACE_QUERY_RESULT_MESSAGE } from '../../shared/pluginAgentTools'
-import { PLUGIN_ACTIVITY_REPORT_MESSAGE, type PluginActivityReportRequest } from '../../shared/pluginActivity'
+import { PLUGIN_ACTIVITY_REPORT_MESSAGE } from '../../shared/pluginAgentTools'
+import type { PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
@@ -1678,6 +1678,14 @@ export class FrontendPluginManager {
   private readonly pendingDetailTargets = new Map<string, PendingDetailTarget>()
   private readonly pendingEditorTargets = new Map<string, PendingEditorTarget>()
   private capabilityCallHandler: ((plugin: RunningPlugin | undefined, payload: unknown) => Promise<CapabilityResponse>) | null = null
+  /** D-e: broker calls of third-party plugins, sent to the backend in batches
+   *  over the registered Host session; dropped while there is none. */
+  private readonly activityRecorder = new PluginActivityRecorder(() => {
+    const client = this.wsClient
+    return client && this.hostSessionRegistered
+      ? (type, payload) => client.send(type, payload, 10_000)
+      : null
+  })
   private backendCallHandler: ((plugin: RunningPlugin | undefined, payload: unknown) => Promise<CapabilityResponse>) | null = null
   private backendSubscribeHandler: ((plugin: RunningPlugin | undefined, payload: unknown) => Promise<CapabilityResponse>) | null = null
   /** In-window contributions whose `<webview>` guest has not attached yet,
@@ -5088,7 +5096,7 @@ export class FrontendPluginManager {
     if (this.ipcReady) return
     this.ipcReady = true
 
-    this.capabilityCallHandler = async (
+    const handleCapabilityCall = async (
       plugin: RunningPlugin | undefined,
       payload: unknown,
     ): Promise<CapabilityResponse> => {
@@ -5313,6 +5321,14 @@ export class FrontendPluginManager {
       } finally {
         if (pendingOperation) this.pendingTerminalOperations.delete(pendingOperation.operationId)
       }
+    }
+    this.capabilityCallHandler = async (
+      plugin: RunningPlugin | undefined,
+      payload: unknown,
+    ): Promise<CapabilityResponse> => {
+      const response = await handleCapabilityCall(plugin, payload)
+      this.recordCapabilityActivity(plugin, payload, response)
+      return response
     }
     ipcMain.handle(IPC_CALL, (event, payload: unknown): Promise<CapabilityResponse> =>
       this.capabilityCallHandler!(this.instanceForIpc(event.sender.id, event.senderFrame), payload)
@@ -5895,9 +5911,6 @@ export class FrontendPluginManager {
         new Map<string, PendingBackendSubscription>()
       if (subscriptions.has(subscriptionId)) {
         return buildError(subscriptionId, 'BAD_REQUEST', 'backend subscription id is already pending')
-      }
-      if (subscriptions.size >= MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE) {
-        return buildError(subscriptionId, 'RESOURCE_LIMIT', 'backend subscription limit reached')
       }
       this.pendingBackendSubscriptions.set(plugin.instanceId, subscriptions)
       const pending: PendingBackendSubscription = {
@@ -6584,10 +6597,40 @@ export class FrontendPluginManager {
     throw new Error(`unsupported public capability '${plan.address}'`)
   }
 
+  /** D-e: one `plugin_activity` row for a broker call of a third-party plugin.
+   *  The bundled `navide.*` packages are not recorded. Never throws. */
+  private recordCapabilityActivity(
+    plugin: RunningPlugin | undefined,
+    payload: unknown,
+    response: CapabilityResponse,
+  ): void {
+    try {
+      if (!plugin || isReservedPluginId(plugin.id)) return
+      const call = parseCapabilityCall(payload, plugin.id)
+      if (!call) return
+      const context = plugin.capabilityContext
+      this.activityRecorder.record(activityRowFor({
+        pluginId: plugin.id,
+        packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion,
+        workspace: plugin.workspacePath,
+        call,
+        response,
+      }))
+    } catch (error) {
+      console.debug('[plugins] activity not recorded:', error)
+    }
+  }
+
   /** Host entry point for an authenticated MCP request. The request shape is
    * untrusted and contains no initiator; the Host mints the agent identity and
    * keeps it attached to the resulting public or backend operation. */
   async executeAgentCapability(instanceId: string, payload: unknown): Promise<CapabilityResponse> {
+    const response = await this.executeAgentCapabilityCall(instanceId, payload)
+    this.recordCapabilityActivity(this.running.get(instanceId), payload, response)
+    return response
+  }
+
+  private async executeAgentCapabilityCall(instanceId: string, payload: unknown): Promise<CapabilityResponse> {
     const reqId =
       typeof payload === 'object' && payload !== null && !Array.isArray(payload) &&
       typeof (payload as Record<string, unknown>).reqId === 'string'
@@ -9364,6 +9407,8 @@ export class FrontendPluginManager {
     if (plan.kind === 'respond') {
       if (plan.response.error?.code === 'CAP_DENIED') {
         console.debug(`[plugin] cast dropped: ${pluginId} ${call.ns}.${call.method} denied`)
+        // Dispatched casts (terminal input) are not recorded; a refused one is.
+        this.recordCapabilityActivity(plugin, payload, plan.response)
         return 'denied'
       }
       console.debug(`[plugin] cast dropped: ${pluginId} ${call.ns}.${call.method} unmapped`)
@@ -11089,6 +11134,11 @@ export class FrontendPluginManager {
   /** Current and peak in-flight backend calls per plugin (never capped); the activity page (D-f) reads this. */
   backendCallConcurrency(): BackendCallConcurrency[] {
     return this.pluginBackendHost.backendCallConcurrency()
+  }
+
+  /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped); the activity page (D-f) reads this. */
+  backendResourceUsage(): BackendResourceUsage {
+    return this.pluginBackendHost.backendResourceUsage()
   }
 
   /** All validated packages installed from disk, including backend-only packages. */
