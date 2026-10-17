@@ -1271,6 +1271,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
+    installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>

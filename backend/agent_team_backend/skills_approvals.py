@@ -67,6 +67,9 @@ class ApprovalRegistry:
         # approval_id -> page-load id of the main window that approved a plugin
         # request and is carrying it out (B2-c); not part of the record shape.
         self._applying_by: dict[str, str] = {}
+        # approval_id -> that window, once another window settled the request
+        # (recovery): its own late result is still recorded, once.
+        self._settled_from: dict[str, str] = {}
 
     def _expire(self) -> None:
         """Caller holds the lock."""
@@ -224,12 +227,29 @@ class ApprovalRegistry:
         with self._lock:
             return self._applying_by.get(approval_id, "")
 
-    def finish_plugin(self, approval_id: str, status: str, *, error: str | None = None) -> dict[str, Any]:
-        """End an approved plugin request: only applying -> completed | failed."""
+    def finish_plugin(
+        self, approval_id: str, status: str, *, error: str | None = None, window_id: str = ""
+    ) -> dict[str, Any]:
+        """End an approved plugin request: only applying -> completed | failed.
+
+        When another window settled the request (recovery, review-370 R2) and
+        the window that was carrying it out reports afterwards, its result is
+        what actually happened: the record takes it, marked ``finished_late``,
+        and keeps what recovery had said under ``settled``. Once only.
+        """
         with self._lock:
             record = self._records.get(approval_id)
             if record is None or record["kind"] == "skill":
                 raise SkillApprovalError("PLUGIN_APPROVAL_NOT_FOUND", "approval request not found")
+            if (
+                window_id and status in {"completed", "failed"}
+                and record["status"] in {"completed", "failed"}
+                and self._settled_from.get(approval_id) == window_id
+            ):
+                del self._settled_from[approval_id]
+                record["settled"] = {"status": record["status"], "error": record["error"]}
+                record.update(status=status, error=error, finished_late=True)
+                return copy.deepcopy(record)
             if record["status"] != "applying" or status not in {"completed", "failed"}:
                 log.warning("refusing plugin request %s: %s -> %s", approval_id, record["status"], status)
                 raise SkillApprovalError(
@@ -237,13 +257,17 @@ class ApprovalRegistry:
                     f"approval request is {record['status']}; only applying ends as completed or failed",
                 )
             record.update(status=status, error=error)
-            self._applying_by.pop(approval_id, None)
+            holder = self._applying_by.pop(approval_id, None)
+            if holder and window_id != holder:
+                # Settled by another window: the holder may still report what it did.
+                self._settled_from[approval_id] = holder
             return copy.deepcopy(record)
 
     def _reset_for_test(self) -> None:
         with self._lock:
             self._records.clear()
             self._applying_by.clear()
+            self._settled_from.clear()
 
 
 registry = ApprovalRegistry()

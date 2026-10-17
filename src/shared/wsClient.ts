@@ -141,10 +141,23 @@ function uuid(): string {
   return globalThis.crypto.randomUUID()
 }
 
+/** Default reconnect backoff: 1.5 s → 3 s → 6 s → … capped at 30 s. */
+export const WS_RECONNECT_BASE_MS = 1_500
+export const WS_RECONNECT_MAX_MS = 30_000
+
+/** The wait before reconnect attempt `attempt` (0-based). */
+export function reconnectDelayMs(
+  attempt: number,
+  baseMs: number = WS_RECONNECT_BASE_MS,
+  maxMs: number = WS_RECONNECT_MAX_MS,
+): number {
+  return Math.min(baseMs * Math.pow(2, attempt), maxMs)
+}
+
 export function createWsClient(opts: WsClientOptions = {}): WsClient {
   const maxSendQueue = opts.maxSendQueue ?? 200
-  const reconnectBaseMs = opts.reconnectBaseMs ?? 1_500
-  const reconnectMaxMs = opts.reconnectMaxMs ?? 30_000
+  const reconnectBaseMs = opts.reconnectBaseMs ?? WS_RECONNECT_BASE_MS
+  const reconnectMaxMs = opts.reconnectMaxMs ?? WS_RECONNECT_MAX_MS
 
   let url = ''
   let socket: WsLike | null = null
@@ -377,7 +390,7 @@ export function createWsClient(opts: WsClientOptions = {}): WsClient {
       errored = false
       setStatus('disconnected')
       // Exponential backoff: 1.5 s → 3 s → 6 s → … capped at 30 s.
-      const delay = Math.min(reconnectBaseMs * Math.pow(2, reconnectAttempts), reconnectMaxMs)
+      const delay = reconnectDelayMs(reconnectAttempts, reconnectBaseMs, reconnectMaxMs)
       reconnectAttempts++
       reconnectTimer = setTimeout(() => connect(), delay)
       opts.onReconnectScheduled?.(reconnectAttempts)

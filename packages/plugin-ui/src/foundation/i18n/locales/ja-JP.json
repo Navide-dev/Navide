@@ -830,6 +830,10 @@
       "loop-stalled-notify-body": "エージェントが数ターンにわたり同じ内容を繰り返し、進捗がありませんでした（何かを待っている可能性があります）。利用枠の消費を抑えるため、ループを停止しました",
       "loop-capped-notify-title": "ループを停止しました — 続行回数の上限",
       "loop-capped-notify-body": "タスク完了の報告がないまま、続行プロンプトの送信回数が上限に達しました。作業が順調であれば、ループを再開してください",
+      "loop-inject-failed-notify-title": "ループを停止しました — 続行を送信できません",
+      "loop-inject-failed-notify-body": "続行プロンプトが 3 回連続でエージェントに届きませんでした（入力欄が受け付けませんでした）。ループを停止しました。ペインを確認してから再開してください",
+      "loop-interrupted-notify-title": "ループを停止しました — 中断",
+      "loop-interrupted-notify-body": "エージェントを中断したため、続行を送らずにループを停止しました。続ける場合はループを再開してください",
       "login-expired-badge": "⚠ ログイン期限切れ",
       "exit-fault-badge": "⚠ 終了（コード {code}）",
       "exit-fault-tooltip": "CLI が終了コード {code} で終了しました。クラッシュした可能性があります。コードはエラー台帳にも記録されています。",
@@ -9204,6 +9208,41 @@
     "signin-hint": "サインインを実行するペインを開きます。多くの CLI はその後ブラウザーを開くので、そこで手続きを完了してから戻ってください。",
     "dont-ask": "{label} について今後確認しない"
   },
+  "plugin-request": {
+    "kicker": "Navide プラグインのリクエスト",
+    "title": {
+      "install": "Navide プラグイン {plugin} {version} をインストールしますか？",
+      "update": "Navide プラグイン {plugin} を {from} から {version} に更新しますか？",
+      "rollback": "Navide プラグイン {plugin} を {from} から {version} に戻しますか？",
+      "remove": "Navide プラグイン {plugin} を削除しますか？",
+      "enable": "Navide プラグイン {plugin} を再び有効にしますか？"
+    },
+    "desc": "agent がこの変更を求めています。ここで承認するまで何も変わりません。agent が代わりに承認することはできません。",
+    "queue": "{count} 件待ち",
+    "requester": "依頼元",
+    "workspace": "ワークスペース",
+    "expires": "期限",
+    "caller-unknown": "不明な呼び出し元",
+    "disabled-by": "無効にした人",
+    "disabled-by-user": "あなた",
+    "disabled-at": "無効にした日時",
+    "not-recorded": "記録なし",
+    "reason": "理由（agent が書いたもの）",
+    "diff": "インストール済みのバージョンからの変化",
+    "card": "このバージョンの申告内容（Navide Marketplace より。まだ検証されていません）",
+    "no-card": "Navide Marketplace にこのバージョンの開示情報がありません。パッケージ自体は、ダウンロード時、インストールの前に検証されます。",
+    "expired": "このリクエストは期限切れです。",
+    "approve": "承認",
+    "reject": "拒否",
+    "applying": "適用中…",
+    "dismiss": "閉じる",
+    "completed": "完了：{plugin}",
+    "completed-late": "{plugin}：完了しました。このウィンドウの再接続中に別のウィンドウがこのリクエストを中断扱いにしていました。記録は実際の結果に更新されています。",
+    "finished-late": "このウィンドウの再接続中に別のウィンドウがこのリクエストを中断扱いにしていました。記録はこの結果に更新されています。",
+    "failed": "完了しませんでした：{error}",
+    "not-appliable": "このバージョンの Navide ではまだこの種類のリクエストを実行できません。拒否はできます。",
+    "unavailable": "このウィンドウでは Navide プラグインの操作を実行できません。"
+  },
   "skill-approval": {
     "kicker": "スキルのインストール要求",
     "title": "スキル「{name}」をインストールしますか？",
@@ -10329,7 +10368,7 @@
     "unavailable": "このバックエンドにはまだ Navide Guard がありません。更新後に Navide を再起動してください。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "CLI の各操作を危険度と依頼元で判断し、危険なものは止めるか確認を求めます。判断は固定ルールのコードで、AI は使いません。オフにしても、チャットチャンネルからの高リスク操作の承認は引き続き拒否されます。"
+      "desc": "CLI の各操作を危険度と依頼元で判断し、危険なものは止めるか確認を求めます。判断は固定ルールのコードで、AI は使いません。オフにしても、チャットチャンネルからの高リスク操作の承認は引き続き拒否されます。ターミナルコマンド保護と、エージェントが MCP 経由でプロンプトに回答するときのチェックも、このスイッチの影響を受けません。"
     },
     "counts": {
       "critical": "重大 {n}",
@@ -10523,6 +10562,7 @@
       "text-missing": "本文はメッセージログに残っていません",
       "text-none": "本文の記録なし",
       "explain": "「高」と「重大」の操作には、このコンピューターでの確認が必要です。受け取った内容を確認してからマークを解除してください。",
+      "explain-off": "Navide Guard はオフのため、現在は確認を求めません。マークは保持され、Guard をオンに戻すと再び有効になります。",
       "clear": "解除",
       "no-hook-warning": "この CLI は Guard でブロックできず、権限確認なしで動いています。チャットから指示するときは注意してください。"
     },

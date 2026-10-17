@@ -56,6 +56,23 @@ describe('PaneGuardBadge', () => {
     expect(mock.sent.find((s) => s.type === 'guard.taint.clear')?.payload).toEqual({ pane_id: 'p1' })
     expect(w.find('[data-testid="guard-taint-badge"]').exists()).toBe(false)
   })
+
+  it('says confirmation is needed while Guard is on', async () => {
+    const w = await render()
+    await w.get('[data-testid="guard-taint-badge"]').trigger('click')
+    const text = document.querySelector('[data-testid="guard-taint-popover"]')?.textContent ?? ''
+    expect(text).toContain(i18n.global.t('guard.pane.explain'))
+    expect(text).not.toContain(i18n.global.t('guard.pane.explain-off'))
+  })
+
+  it('keeps the badge but says nothing is asked while Guard is off', async () => {
+    mock.setResponse('guard.status', { enabled: false, counts: {}, hook_support: {} })
+    const w = await render()
+    await w.get('[data-testid="guard-taint-badge"]').trigger('click')
+    const text = document.querySelector('[data-testid="guard-taint-popover"]')?.textContent ?? ''
+    expect(text).toContain(i18n.global.t('guard.pane.explain-off'))
+    expect(text).not.toContain(i18n.global.t('guard.pane.explain'))
+  })
 })
 
 describe('PaneGuardBadge console', () => {

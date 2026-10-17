@@ -309,6 +309,29 @@ def test_qwen_and_copilot_search_tools_unchanged_off_credential_paths(tool, tool
     assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
 
 
+@pytest.mark.parametrize("tool, tool_input, level, rule", [
+    ("grep", {"pattern": "x", "path": "src", "paths": "~/.aws"}, "critical", "credential-access"),
+    ("rg", {"pattern": "x", "path": ".", "paths": ["src", "~/.ssh"]}, "critical", "credential-access"),
+    ("grep", {"pattern": "x", "path": "src", "paths": "~", "glob": ".aws/*"}, "critical", "credential-access"),
+    ("glob", {"pattern": "*", "path": "src", "paths": "~/.ssh"}, "high", "credential-path-list"),
+    ("glob", {"pattern": ".ssh/*", "path": "src", "paths": ["~"]}, "high", "credential-path-list"),
+])
+def test_search_with_path_and_paths_checks_every_root(tool, tool_input, level, rule):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert v.level == level, (tool, tool_input, v)
+    assert rule in v.rule_ids
+
+
+@pytest.mark.parametrize("tool, tool_input", [
+    ("grep", {"pattern": "TODO", "path": "src", "paths": "docs"}),
+    ("rg", {"pattern": "TODO", "path": ".", "paths": ["src", "~/.claude"], "glob": "*.md"}),
+    ("glob", {"pattern": "**/*.py", "path": "src", "paths": ["~/Documents", "/tmp/x"]}),
+    ("glob", {"pattern": "**/*.ts", "path": "", "paths": []}),
+])
+def test_search_with_path_and_paths_unchanged_off_credential_paths(tool, tool_input):
+    assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
 @pytest.mark.parametrize("vendor, payload", [
     ("qwen", {"tool_name": "grep_search", "tool_input": {"pattern": "x", "path": "~/.aws"}}),
     ("copilot", {"toolName": "grep", "toolArgs": '{"pattern": "x", "paths": ["~/.aws"]}'}),
