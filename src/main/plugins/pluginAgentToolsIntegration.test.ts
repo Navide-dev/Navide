@@ -413,9 +413,64 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
       expect(agentToolCallsInFlight(f)).toBe(0)
     }, 30_000)
   }
+
+  // A running call the Host cancels for any reason but a stop (the view's
+  // backend is closed: supervisor USER_CANCELLED) is not a plugin failure.
+  it('a running call the Host cancels answers as stopping, not as a plugin failure', async () => {
+    const f = await live([DEVMAP])
+    const host = f.backendHost()
+    const call = host.call.bind(host)
+    vi.spyOn(host, 'call').mockImplementationOnce(async (...args: Parameters<PluginBackendHost['call']>) => {
+      await call(...args).catch(() => undefined)
+      throw new BackendPluginError('USER_CANCELLED')
+    })
+    const response = await f.call('acme.fixture', 'fixture_echo', {})
+    expect(response).toMatchObject({
+      ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-stopping',
+    })
+    expect(response).not.toHaveProperty('plugin_error')
+    expect(agentToolCallsInFlight(f)).toBe(0)
+  }, 30_000)
+
+  // Not a stop of this package: Navide closes every backend (a quit). The
+  // call is drained with the child, which is not a plugin failure either.
+  it('Navide closes all backends while the call runs in the child: the call ends as stopping', async () => {
+    const f = await live([DEVMAP])
+    const pending = f.call('acme.fixture', 'fixture_slow', { milliseconds: 20_000 })
+    await waitUntil(() => agentToolCallsInFlight(f) === 1)
+    await f.mgr.closeBackendPlugins()
+    const response = await pending
+    expect(response).toMatchObject({
+      ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-stopping',
+    })
+    expect(response).not.toHaveProperty('plugin_error')
+    await waitUntil(() => f.pids.every((pid) => !alive(pid)))
+    expect(agentToolCallsInFlight(f)).toBe(0)
+  }, 30_000)
 })
 
 describe('a package stops while its binding is made (the bind-to-dispatch window)', () => {
+
+  // Only a stop replaces a failed bind's error: a real failure that also ran
+  // past the deadline is still reported as the plugin's failure.
+  it('a bind that fails on its own past the deadline keeps its plugin error', async () => {
+    const f = await live([DEVMAP])
+    const mgr = f.mgr as unknown as { bindHeadlessAgentToolBackend: () => Promise<string> }
+    vi.spyOn(mgr, 'bindHeadlessAgentToolBackend').mockImplementationOnce(async () => {
+      const now = Date.now()
+      vi.spyOn(Date, 'now').mockReturnValue(now + 10 * 60_000)
+      throw new BackendPluginError('BACKEND_UNAVAILABLE', 'spawn failed')
+    })
+    try {
+      const response = await f.call('acme.fixture', 'fixture_echo', {})
+      expect(response).toMatchObject({
+        ok: false, error_code: 'PLUGIN_TOOL_FAILED', plugin_error: 'BACKEND_UNAVAILABLE',
+      })
+    } finally {
+      vi.mocked(Date.now).mockRestore()
+    }
+    expect(agentToolCallsInFlight(f)).toBe(0)
+  }, 30_000)
 
   for (const [label, reason, stop] of STOPS) {
     it(`${label} while the backend is being bound for a read call: refused before dispatch`, async () => {
@@ -436,8 +491,9 @@ describe('a package stops while its binding is made (the bind-to-dispatch window
       expect(response.result).toBeUndefined()
       // A bind the stop cancelled is the stop, not a plugin failure.
       expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
-      expect(label === 'revoke consent' ? [reason, 'tool-not-consented', 'plugin-stopping'] : [reason, 'plugin-stopping'])
-        .toContain(response.reason)
+      // The catalog does not ask consent, so a revoked consent is seen only
+      // as the stop cancelling the bind; every other stop names itself.
+      expect(response.reason).toBe(label === 'revoke consent' ? 'plugin-stopping' : reason)
       expect(response).not.toHaveProperty('plugin_error')
       expect(agentToolCallsInFlight(f)).toBe(0)
     }, 30_000)
