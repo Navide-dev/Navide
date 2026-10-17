@@ -55,6 +55,8 @@ interface Live {
   native: { enabled: boolean }
   /** Hold the next backend admission (the bind) until released. */
   holdBind: () => { release: () => void; waiting: () => boolean }
+  /** Register a hold's release, so the cleanup frees it even after a failure. */
+  onCleanup: (release: () => void) => void
   request: (pluginId: string, name: string, args?: Record<string, unknown>, revision?: number) => Record<string, unknown>
   call: (pluginId: string, name: string, args?: Record<string, unknown>, revision?: number) => Promise<Record<string, unknown>>
   backendHost: () => PluginBackendHost
@@ -125,13 +127,22 @@ function writePackage(root: string, pkg: PackageFixture): ThirdPartyLaunchSpec {
 async function live(packages: PackageFixture[], options: { enabled?: boolean } = {}): Promise<Live> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'agent-tools-integration-')))
   const pids: number[] = []
+  const releases: Array<() => void> = []
   let managed: FrontendPluginManager | undefined
   cleanups.push(async () => {
     try {
-      await managed?.closeBackendPlugins()
+      // A test that failed before releasing a hold would leave the close
+      // waiting on it: free every hold, and bound the close.
+      for (const release of releases.splice(0)) release()
+      await Promise.race([
+        managed?.closeBackendPlugins(),
+        new Promise((done) => setTimeout(done, 10_000)),
+      ])
       // Only the PIDs this file started, each waited for until it is gone.
       await waitUntil(() => pids.every((pid) => !alive(pid)))
     } finally {
+      // Last resort, still only this file's own PIDs.
+      for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
       rmSync(root, { recursive: true, force: true })
     }
   })
@@ -231,8 +242,12 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
           done()
         }
       })
+      releases.push(release)
       bindWaiting = false
       return { release, waiting: () => bindWaiting }
+    },
+    onCleanup: (release) => {
+      releases.push(release)
     },
     remove: (pluginId) => {
       specs.delete(pluginId)
@@ -275,6 +290,7 @@ function holdWrites(f: Live): { release: (answer: boolean) => void; waiting: () 
   f.confirmWrite.mockImplementation(() => new Promise<boolean>((done) => {
     resolveAnswer = done
   }))
+  f.onCleanup(() => resolveAnswer?.(false))
   return { release: (answer) => resolveAnswer?.(answer), waiting: () => resolveAnswer !== undefined }
 }
 
