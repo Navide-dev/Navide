@@ -79,8 +79,10 @@ log = logging.getLogger(__name__)
 _COMPONENT = "plugin_audit"
 _DAY_MS = 86_400_000
 #: Rows per prune transaction (an internal batch size, not a retention cap):
-#: at 500k expired rows a batch holds navide.db for ~6 ms median, ~30 ms p95.
-PRUNE_BATCH_ROWS = 200
+#: at 500k expired rows a batch holds navide.db for ~11 ms median. Smaller
+#: batches do not lower the longest hold (that is scheduling on a loaded
+#: machine) and multiply the per-commit cost, which is high on Windows.
+PRUNE_BATCH_ROWS = 500
 FLUSH_INTERVAL_S = 1.0
 PRUNE_INTERVAL_S = 3_600.0
 #: The first prune waits this long after start, off the startup path.
