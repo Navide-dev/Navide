@@ -12,6 +12,7 @@
 // main-side, keyed by id, until commit.
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { backendCallAddress } from './pluginActivity'
 import { readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
@@ -254,7 +255,7 @@ export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable
     if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
       out.push({ kind: item.kind, key: item.key })
     } else if (item.kind === 'backendMethod') {
-      out.push({ kind: 'backendMethod', key: `backend.${item.key}` })
+      out.push({ kind: 'backendMethod', key: backendCallAddress(item.key) })
     }
   }
   return out

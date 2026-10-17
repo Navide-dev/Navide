@@ -16966,55 +16966,37 @@ describe('plugin activity (D-e)', () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(activityOf(socket)).toEqual([])
   })
-  // A third-party plugin's own frontend calling its own backend (plugin:backend:call).
-  function backendCaller(mgr: FrontendPluginManager, hostWindow: FakeBrowserWindow) {
-    const view = hostWindow.children[0] as FakeViewLike
-    return async (name: string, reqId = 'b1'): Promise<unknown> =>
-      ipcHandlers.get('plugin:backend:call')!({ sender: { id: view.webContents.id } }, { reqId, name, args: {} })
+  // Every settled backend call reaches the recorder through PluginBackendHost's
+  // onCallSettled (pluginBackendHost.test.ts covers that it fires on every path).
+  function settleBackendCalls(mgr: FrontendPluginManager, calls: Array<{ pluginId: string; method: string; outcome: string }>): void {
+    const host = (mgr as unknown as { pluginBackendHost: { onCallSettled: (call: unknown) => void } }).pluginBackendHost
+    for (const call of calls) host.onCallSettled({ packageVersion: '1.0.0', workspacePath: '/w', ...call })
   }
 
-  function connectWithBackend(id: string, answer: (name: string) => Promise<unknown>) {
-    const mgr = new FrontendPluginManager()
-    const host = new FakeBrowserWindow()
-    mgr.open(
-      asHost(host),
-      { id, requires: ['terminal'], devUrl: '', entryFile: `/plugins/${id}/index.html` },
-      { x: 0, y: 0, width: 10, height: 10 },
-    )
-    mgr.setBackendHostToken('host-token')
-    mgr.setBackendWsUrl(`ws://${id}`)
-    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
-    socket.open()
-    const registration = socket.sent.map((raw) => JSON.parse(raw) as SentMessage)
-      .find((message) => message.type === 'host.register')!
-    socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
-    const backendHost = (mgr as unknown as { pluginBackendHost: { call: (...args: unknown[]) => Promise<unknown> } }).pluginBackendHost
-    vi.spyOn(backendHost, 'call').mockImplementation(async (_instance, name) => answer(name as string))
-    return { mgr, socket, callBackend: backendCaller(mgr, host) }
-  }
-
-  it('records a third-party plugin calling its own backend as source backend, address backend.<method>', async () => {
+  it('counts a third-party plugin\'s backend calls per method and outcome, in one batch', async () => {
     vi.useFakeTimers()
-    const { socket, callBackend } = connectWithBackend('acme.backend-activity', async (name) => {
-      if (name === 'devmap.fail') throw new BackendPluginError('PLUGIN_ERROR', 'boom')
-      return { ok: true }
-    })
-    await expect(callBackend('devmap.block.import', 'b1')).resolves.toMatchObject({ ok: true })
-    await expect(callBackend('devmap.fail', 'b2')).resolves.toMatchObject({ ok: false })
+    const { mgr, socket } = connect('acme.backend-activity')
+    settleBackendCalls(mgr, [
+      ...Array.from({ length: 500 }, () => ({ pluginId: 'acme.backend-activity', method: 'devmap.block.import', outcome: 'allowed' })),
+      { pluginId: 'acme.backend-activity', method: 'devmap.fail', outcome: 'error' },
+      { pluginId: 'acme.backend-activity', method: 'devmap.slow', outcome: 'cancelled' },
+    ])
     expect(activityOf(socket)).toEqual([])  // never on the call path: batched
     await vi.advanceTimersByTimeAsync(1000)
     const [batch, ...more] = activityOf(socket)
     expect(more).toEqual([])
+    const base = { plugin_id: 'acme.backend-activity', plugin_version: '1.0.0', workspace: '/w', source: 'backend' }
     expect(batch.payload.rows).toEqual([
-      { plugin_id: 'acme.backend-activity', plugin_version: '', workspace: '', source: 'backend', address: 'backend.devmap.block.import', outcome: 'allowed' },
-      { plugin_id: 'acme.backend-activity', plugin_version: '', workspace: '', source: 'backend', address: 'backend.devmap.fail', outcome: 'error' },
+      { ...base, address: 'backend.devmap.block.import', outcome: 'allowed', count: 500 },
+      { ...base, address: 'backend.devmap.fail', outcome: 'error', count: 1 },
+      { ...base, address: 'backend.devmap.slow', outcome: 'cancelled', count: 1 },
     ])
   })
 
   it('does not record the bundled navide.* plugins calling their backend', async () => {
     vi.useFakeTimers()
-    const { socket, callBackend } = connectWithBackend('navide.backend-builtin', async () => ({ ok: true }))
-    await callBackend('plans.list')
+    const { mgr, socket } = connect('acme.backend-builtin-check')
+    settleBackendCalls(mgr, [{ pluginId: 'navide.plans', method: 'plans.list', outcome: 'allowed' }])
     await vi.advanceTimersByTimeAsync(1000)
     expect(activityOf(socket)).toEqual([])
   })

@@ -722,3 +722,32 @@ PLUGIN_AGENT_ACTIONS_DDL = (
     "CREATE INDEX IF NOT EXISTS plugin_agent_actions_at ON plugin_agent_actions (at)",
     "CREATE INDEX IF NOT EXISTS plugin_agent_actions_plugin_at ON plugin_agent_actions (plugin_id, at)",
 )
+
+# ── navide.db: calls into a plugin's own backend (D-e) ──────────────────────
+# Counted per minute, never one row per call: a busy plugin makes 100k calls a
+# minute. Rows arrive from the Host already counted per batch (source
+# "backend", address "backend.<method>", with "count") and are added up here.
+# Its own schema component: created if missing, nothing else touched.
+
+PLUGIN_BACKEND_CALL_SOURCE = "backend"
+PLUGIN_BACKEND_CALL_ADDRESS_PREFIX = "backend."
+#: ``cancelled``: the caller cancelled the call (abort, cancel message); not a refusal.
+PLUGIN_BACKEND_CALL_OUTCOMES = ("allowed", "denied", "cancelled", "error")
+#: Kept as long as the activity day counts.
+PLUGIN_BACKEND_CALL_RETENTION_DAYS = PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS
+
+PLUGIN_BACKEND_CALLS_DDL = (
+    "CREATE TABLE IF NOT EXISTS plugin_backend_call_minutes ("
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " address TEXT NOT NULL,"
+    " outcome TEXT NOT NULL,"
+    " minute INTEGER NOT NULL,"
+    " count INTEGER NOT NULL,"
+    " PRIMARY KEY (plugin_id, plugin_version, workspace, address, outcome, minute))",
+    "CREATE INDEX IF NOT EXISTS plugin_backend_call_minutes_minute ON plugin_backend_call_minutes (minute)",
+    "CREATE INDEX IF NOT EXISTS plugin_backend_call_minutes_plugin_minute"
+    " ON plugin_backend_call_minutes (plugin_id, minute)",
+)
+

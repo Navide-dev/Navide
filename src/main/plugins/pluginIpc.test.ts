@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
-import { backendCallRowFor } from './pluginActivity'
+import { backendCallAddress } from './pluginActivity'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -1756,9 +1756,9 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       backend: { entry: 'backend/bin', methods: ['fs.read', 'index'], events: [] },
     } as never)
     const declared = declaredForActivity(disclosure).filter((item) => item.kind === 'backendMethod').map((item) => item.key)
-    const row = backendCallRowFor({ pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', method: 'index', response: { reqId: 'r', ok: true, result: null } as never })
-    // The backend matches backendMethod by address == key (contract 5.1).
-    expect(declared).toContain(row.address)
+    // The Host records a call under backendCallAddress(method); the backend
+    // matches backendMethod by address == key (contract 5.1).
+    expect(declared).toEqual(['fs.read', 'index'].map(backendCallAddress))
     expect(declared).toEqual(['backend.fs.read', 'backend.index'])
   })
 

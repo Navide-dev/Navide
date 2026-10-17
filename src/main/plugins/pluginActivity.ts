@@ -1,7 +1,9 @@
 /**
- * Plugin activity (plan B, D-e): one row per capability-broker call, and one
- * per call a third-party plugin's own frontend makes to its own backend
- * (`plugin:backend:call`: source `backend`, address `backend.<method>`).
+ * Plugin activity (plan B, D-e): one row per capability-broker call, and the
+ * calls into a third-party plugin's own backend (whichever path made them: its
+ * frontend, an agent tool, an agent capability request) counted per
+ * (plugin, version, workspace, `backend.<method>`, outcome) within each batch
+ * (source `backend`, with `count`).
  *
  * The broker records what a Navide plugin asked for and what came of it: the
  * plugin, the `namespace.method` address, the workspace, an fs path or a shell
@@ -21,6 +23,8 @@ import { isUndeclaredDenial, type CapabilityCall, type CapabilityResponse } from
 
 export type PluginActivitySource = 'broker' | 'shell' | 'backend'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
+/** A backend call can also be cancelled by its caller (not a refusal). */
+export type BackendCallActivityOutcome = PluginActivityOutcome | 'cancelled'
 
 export interface PluginActivityRow {
   plugin_id: string
@@ -32,6 +36,17 @@ export interface PluginActivityRow {
   denied_reason?: 'undeclared'
   fs_path?: string
   shell_command?: string
+}
+
+/** Backend calls counted within one batch (source `backend`). */
+export interface BackendCallActivityRow {
+  plugin_id: string
+  plugin_version: string
+  workspace: string
+  source: 'backend'
+  address: string
+  outcome: BackendCallActivityOutcome
+  count: number
 }
 
 /** Broker refusals: the call never ran. Anything else that is not ok failed. */
@@ -78,34 +93,23 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
   return row
 }
 
-export interface BackendCallActivityInput {
-  pluginId: string
-  packageVersion: string | null | undefined
-  workspace: string | null | undefined
-  /** The backend method the frontend called. */
-  method: string
-  response: CapabilityResponse
+/** The address a backend call is recorded under, and a declared backend
+ *  method is keyed by (contract 5): `backend.<method>`, so a method named like
+ *  a system namespace (`fs.read`) never counts as a use of that namespace. */
+export function backendCallAddress(method: string): string {
+  return `backend.${method}`
 }
 
-/** The activity row of one call a plugin's frontend made to its own backend:
- *  source `backend`, address `backend.<method>` (so a method named like a
- *  system namespace, `fs.read`, never counts as a use of that namespace). */
-export function backendCallRowFor({ pluginId, packageVersion, workspace, method, response }: BackendCallActivityInput): PluginActivityRow {
-  return {
-    plugin_id: pluginId,
-    plugin_version: packageVersion ?? '',
-    workspace: workspace ?? '',
-    source: 'backend',
-    address: `backend.${method}`,
-    outcome: response.ok ? 'allowed' : DENIED_CODES.has(response.error?.code ?? '') ? 'denied' : 'error',
-  }
-}
-
-export type PluginActivitySend = (type: string, payload: { rows: PluginActivityRow[] }) => Promise<unknown> | unknown
+export type PluginActivitySend = (
+  type: string,
+  payload: { rows: Array<PluginActivityRow | BackendCallActivityRow> },
+) => Promise<unknown> | unknown
 
 /** Queues rows and sends them to the backend about once a second. */
 export class PluginActivityRecorder {
   private queue: PluginActivityRow[] = []
+  /** Backend calls of this batch, counted per key (one map lookup per call). */
+  private backendCalls = new Map<string, BackendCallActivityRow>()
   private timer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
@@ -116,6 +120,19 @@ export class PluginActivityRecorder {
   /** Queue one row; never throws. */
   record(row: PluginActivityRow): void {
     this.queue.push(row)
+    this.schedule()
+  }
+
+  /** Count one backend call into this batch's row for its key; never throws. */
+  recordBackendCall(call: Omit<BackendCallActivityRow, 'source' | 'count'>): void {
+    const key = `${call.plugin_id}\u0000${call.plugin_version}\u0000${call.workspace}\u0000${call.address}\u0000${call.outcome}`
+    const row = this.backendCalls.get(key)
+    if (row) row.count += 1
+    else this.backendCalls.set(key, { ...call, source: 'backend', count: 1 })
+    this.schedule()
+  }
+
+  private schedule(): void {
     if (this.timer === null) {
       this.timer = setTimeout(() => { void this.flush() }, this.intervalMs)
       this.timer.unref?.()
@@ -128,8 +145,9 @@ export class PluginActivityRecorder {
       clearTimeout(this.timer)
       this.timer = null
     }
-    const rows = this.queue
+    const rows: Array<PluginActivityRow | BackendCallActivityRow> = [...this.queue, ...this.backendCalls.values()]
     this.queue = []
+    this.backendCalls = new Map()
     if (rows.length === 0) return
     try {
       const send = this.send()
@@ -141,6 +159,6 @@ export class PluginActivityRecorder {
 
   /** Rows waiting to be sent (diagnostics and tests). */
   get pending(): number {
-    return this.queue.length
+    return this.queue.length + this.backendCalls.size
   }
 }

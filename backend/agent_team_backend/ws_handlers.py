@@ -355,9 +355,25 @@ async def plugins_agent_action_result(
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
 _ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command"}
-#: The Host records broker and shell-broker calls and a plugin frontend's
-#: calls to its own backend; agent tool calls are the backend's own rows (B1).
-_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell", "backend"))
+#: The Host records broker and shell-broker calls; agent tool calls are the
+#: backend's own rows (B1).
+_HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
+#: Calls into a plugin's own backend, counted by the Host per batch.
+_BACKEND_CALL_ROW_FIELDS = frozenset(("plugin_id", "plugin_version", "workspace", "source", "address", "outcome", "count"))
+
+
+def _backend_call_row(app: Any, row: dict) -> bool:
+    """One counted backend-call row: exact fields, ``backend.`` address, positive count."""
+    from .plugins import agent_tools_contract as contract
+
+    if set(row) != _BACKEND_CALL_ROW_FIELDS:
+        return False
+    if not all(isinstance(row[key], str) for key in _BACKEND_CALL_ROW_FIELDS - {"count"}):
+        return False
+    return app.plugin_audit_log.record_backend_calls(
+        plugin_id=row["plugin_id"], plugin_version=row["plugin_version"], workspace=row["workspace"],
+        address=row["address"], outcome=row["outcome"], count=row["count"],
+    ) if row["address"].startswith(contract.PLUGIN_BACKEND_CALL_ADDRESS_PREFIX) else False
 
 
 @handler("plugin.activity.record")
@@ -368,6 +384,10 @@ async def plugin_activity_record(
 
     Write-only: each row is redacted and queued by ``record_activity``; a row
     it refuses is skipped, and nothing here can fail the calls it records.
+    Rows with source ``backend`` (calls into a plugin's own backend, counted)
+    go to the per-minute counts instead. The ``backend.`` address prefix and
+    the source must agree: a backend row with another address, or another row
+    with a ``backend.`` address, is skipped.
     """
     from . import app
 
@@ -384,10 +404,15 @@ async def plugin_activity_record(
         return
     accepted = 0
     for row in rows:
+        if isinstance(row, dict) and row.get("source") == "backend":
+            if _backend_call_row(app, row):
+                accepted += 1
+            continue
         if (
             not isinstance(row, dict)
             or not _ACTIVITY_ROW_REQUIRED <= set(row) <= _ACTIVITY_ROW_FIELDS
             or row.get("source") not in _HOST_ACTIVITY_SOURCES
+            or (isinstance(row.get("address"), str) and row["address"].startswith("backend."))
         ):
             continue
         fields = {key: value for key, value in row.items() if isinstance(value, str)}

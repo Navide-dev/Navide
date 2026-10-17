@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
-import { activityRowFor, backendCallRowFor, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
+import { activityRowFor, backendCallAddress, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
 import {
   buildError,
   buildSuccess,
@@ -130,23 +130,25 @@ describe('PluginActivityRecorder', () => {
   })
 })
 
-describe('backendCallRowFor', () => {
-  const base = { pluginId: 'acme.x', packageVersion: '1.0.0', workspace: '/w', method: 'devmap.block.import' }
-
-  it('names the call backend.<method> with its outcome', () => {
-    expect(backendCallRowFor({ ...base, response: { reqId: 'r', ok: true, result: null } as never })).toEqual({
-      plugin_id: 'acme.x', plugin_version: '1.0.0', workspace: '/w', source: 'backend',
-      address: 'backend.devmap.block.import', outcome: 'allowed',
-    })
-    const refused = backendCallRowFor({ ...base, response: { reqId: 'r', ok: false, error: { code: 'CAPABILITY_DENIED', message: 'no' } } as never })
-    expect(refused.outcome).toBe('denied')
-    const failed = backendCallRowFor({ ...base, response: { reqId: 'r', ok: false, error: { code: 'TIMEOUT', message: 'slow' } } as never })
-    expect(failed.outcome).toBe('error')
+describe('backend calls are counted per key within a batch (H1)', () => {
+  it('sends one row per (plugin, version, workspace, address, outcome) with its count', async () => {
+    const sent: unknown[] = []
+    const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
+    const call = { plugin_id: 'acme.x', plugin_version: '1.0.0', workspace: '/w', address: backendCallAddress('devmap.read') }
+    for (let i = 0; i < 1000; i++) recorder.recordBackendCall({ ...call, outcome: 'allowed' })
+    recorder.recordBackendCall({ ...call, outcome: 'cancelled' })
+    recorder.recordBackendCall({ ...call, workspace: '/other', outcome: 'allowed' })
+    expect(recorder.pending).toBe(3)
+    await recorder.flush()
+    expect(sent).toEqual([{ rows: [
+      { ...call, source: 'backend', outcome: 'allowed', count: 1000 },
+      { ...call, source: 'backend', outcome: 'cancelled', count: 1 },
+      { ...call, workspace: '/other', source: 'backend', outcome: 'allowed', count: 1 },
+    ] }])
+    expect(recorder.pending).toBe(0)
   })
 
   it('keeps a method named like a system namespace apart from it', () => {
-    const row = backendCallRowFor({ ...base, method: 'fs.read', response: { reqId: 'r', ok: true, result: null } as never })
-    expect(row.address).toBe('backend.fs.read')
+    expect(backendCallAddress('fs.read')).toBe('backend.fs.read')
   })
 })
-

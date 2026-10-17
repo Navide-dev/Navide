@@ -47,7 +47,7 @@ import {
   type PublicCapabilityExecutionPlan,
   type TerminalOutputBatcher,
 } from './pluginCapabilityBroker'
-import { activityRowFor, backendCallRowFor, PluginActivityRecorder } from './pluginActivity'
+import { activityRowFor, backendCallAddress, PluginActivityRecorder } from './pluginActivity'
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   PluginStorageError,
@@ -1321,6 +1321,20 @@ export class FrontendPluginManager {
   /** Package-local Backend Wire children receive only Host-approved temp paths. */
   private readonly pluginBackendHost = new PluginBackendHost({
     environment: createPluginBackendChildEnvironment(),
+    // D-e: every settled backend call of a third-party plugin, whichever path
+    // made it (its own frontend, an agent tool, an agent capability request),
+    // counted per key and flushed with the other activity rows. The bundled
+    // navide.* packages are not recorded, as for broker calls.
+    onCallSettled: (call) => {
+      if (isReservedPluginId(call.pluginId)) return
+      this.activityRecorder.recordBackendCall({
+        plugin_id: call.pluginId,
+        plugin_version: call.packageVersion,
+        workspace: call.workspacePath ?? '',
+        address: backendCallAddress(call.method),
+        outcome: call.outcome,
+      })
+    },
     onStderr: (chunk) => {
       this.emitHostDiagnosticChunk(chunk)
     },
@@ -5764,7 +5778,7 @@ export class FrontendPluginManager {
       return this.admitPluginFrameDocument(event.senderFrame, event.sender.id, nonce)
     })
 
-    const backendCall = async (
+    this.backendCallHandler = async (
       plugin: RunningPlugin | undefined,
       payload: unknown,
     ): Promise<CapabilityResponse> => {
@@ -5877,11 +5891,6 @@ export class FrontendPluginManager {
           this.pendingBackendCalls.delete(plugin.instanceId)
         }
       }
-    }
-    this.backendCallHandler = async (plugin, payload) => {
-      const response = await backendCall(plugin, payload)
-      this.recordBackendCallActivity(plugin, payload, response)
-      return response
     }
     ipcMain.handle(IPC_BACKEND_CALL, (event, payload: unknown): Promise<CapabilityResponse> =>
       this.backendCallHandler!(this.instanceForIpc(event.sender.id, event.senderFrame), payload)
@@ -6631,34 +6640,6 @@ export class FrontendPluginManager {
       }))
     } catch (error) {
       console.debug('[plugins] activity not recorded:', error)
-    }
-  }
-
-  /** D-e: one `plugin_activity` row for a call a third-party plugin's frontend
-   *  made to its own backend (queued, sent in batches; never on the call path's
-   *  critical work). The bundled `navide.*` packages are not recorded, as for
-   *  broker calls. Never throws. */
-  private recordBackendCallActivity(
-    plugin: RunningPlugin | undefined,
-    payload: unknown,
-    response: CapabilityResponse,
-  ): void {
-    try {
-      if (!plugin || isReservedPluginId(plugin.id)) return
-      const name = typeof payload === 'object' && payload !== null && !Array.isArray(payload)
-        ? (payload as Record<string, unknown>).name
-        : undefined
-      if (!nonEmptyString(name)) return
-      const context = plugin.capabilityContext
-      this.activityRecorder.record(backendCallRowFor({
-        pluginId: plugin.id,
-        packageVersion: context?.runtimeBinding?.packageVersion ?? context?.userGrant?.packageVersion,
-        workspace: plugin.workspacePath,
-        method: name,
-        response,
-      }))
-    } catch (error) {
-      console.debug('[plugins] backend call activity not recorded:', error)
     }
   }
 

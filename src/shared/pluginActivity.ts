@@ -17,7 +17,7 @@ export const PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION = 1
  *  summed, never averaged; the page shows "unknown". */
 export const UNKNOWN_BYTES = -1
 
-export type PluginActivitySource = 'broker' | 'shell' | 'agentTool' | 'backend'
+export type PluginActivitySource = 'broker' | 'shell' | 'agentTool'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
 export type PluginToolCallerKind = 'pane' | 'external' | 'host'
 
@@ -140,6 +140,18 @@ export interface PluginActivityReport {
   anomalies: PluginActivityAnomaly[]
   /** null until B2-c's `plugin_agent_actions` exists. */
   agentActions: PluginAgentAction[] | null
+  /** Calls into the plugin's own backend (any path), counted per minute; not in
+   *  `totals`, `daily` or `volumeSpike`. */
+  backendCalls: PluginActivityBackendCalls
+}
+
+export type PluginBackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
+
+export interface PluginActivityBackendCalls {
+  /** Per `backend.<method>` address and outcome, within `window`. */
+  methods: Array<{ address: string; outcome: PluginBackendCallOutcome; count: number; lastAt: number }>
+  /** Per UTC day still kept. */
+  daily: Array<{ day: string; calls: number; denied: number; errors: number; cancelled: number }>
 }
 
 /** `plugins.activity.report` request: one plugin's report. The Host sends it
@@ -179,7 +191,7 @@ const oneOf = <T extends string>(values: readonly T[], value: unknown): value is
   typeof value === 'string' && (values as readonly string[]).includes(value)
 const nullable = <T>(value: unknown, check: (v: unknown) => v is T): value is T | null => value === null || check(value)
 
-const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool', 'backend']
+const SOURCES: readonly PluginActivitySource[] = ['broker', 'shell', 'agentTool']
 const OUTCOMES: readonly PluginActivityOutcome[] = ['allowed', 'denied', 'error']
 const CALLER_KINDS: readonly PluginToolCallerKind[] = ['pane', 'external', 'host']
 const UNUSED_KINDS: readonly PluginActivityDeclaredUnused['kind'][] = ['system', 'shell', 'backendMethod', 'agentTool']
@@ -274,8 +286,9 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
   const undeclaredUses = list(value.undeclared, undeclared)
   const anomalies = list(value.anomalies, anomaly)
   const agentActions = value.agentActions === null ? null : list(value.agentActions, agentAction)
+  const backendCalls = backendCallsOf(value.backendCalls)
   if (!toolCalls || !files || !commands || !daily || !declaredUnused || !undeclaredUses || !anomalies ||
-    (value.agentActions !== null && agentActions === null)) return null
+    (value.agentActions !== null && agentActions === null) || !backendCalls) return null
   return {
     schemaVersion: PLUGIN_ACTIVITY_REPORT_SCHEMA_VERSION,
     pluginId: value.pluginId,
@@ -285,5 +298,22 @@ export function parsePluginActivityReport(value: unknown): PluginActivityReport 
     historicalPeakConcurrency: value.historicalPeakConcurrency,
     undeclaredSince: value.undeclaredSince,
     toolCalls, files, commands, daily, declaredUnused, undeclared: undeclaredUses, anomalies, agentActions,
+    backendCalls,
   }
+}
+
+const BACKEND_CALL_OUTCOMES: readonly PluginBackendCallOutcome[] = ['allowed', 'denied', 'cancelled', 'error']
+
+function backendCallsOf(value: unknown): PluginActivityBackendCalls | null {
+  if (!isRec(value)) return null
+  const methods = list(value.methods, (e) =>
+    isText(e.address) && e.address.startsWith('backend.') && oneOf(BACKEND_CALL_OUTCOMES, e.outcome) &&
+    isCount(e.count) && isTime(e.lastAt)
+      ? { address: e.address, outcome: e.outcome, count: e.count, lastAt: e.lastAt }
+      : null)
+  const daily = list(value.daily, (e) =>
+    isText(e.day) && isCount(e.calls) && isCount(e.denied) && isCount(e.errors) && isCount(e.cancelled)
+      ? { day: e.day, calls: e.calls, denied: e.denied, errors: e.errors, cancelled: e.cancelled }
+      : null)
+  return methods && daily ? { methods, daily } : null
 }

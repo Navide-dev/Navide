@@ -40,6 +40,28 @@ export interface PlanRootResolverInput {
 
 export type PlanRootResolver = (input: PlanRootResolverInput) => Promise<string>
 
+/** How one backend call ended, for the activity record (D-e). */
+export type BackendCallOutcome = 'allowed' | 'denied' | 'cancelled' | 'error'
+
+/** One settled backend call: which plugin's backend ran which method, and how it ended. */
+export interface BackendCallSettled {
+  pluginId: string
+  packageVersion: string
+  workspacePath: string | undefined
+  method: string
+  outcome: BackendCallOutcome
+}
+
+const DENIED_BACKEND_CODES: ReadonlySet<string> = new Set(['CAPABILITY_DENIED', 'WORKSPACE_SCOPE_VIOLATION'])
+
+/** A call the Host refused is denied; one the caller cancelled (abort, cancel
+ *  message) is cancelled, not a refusal; anything else that failed is an error. */
+export function backendCallOutcome(error: unknown): BackendCallOutcome {
+  const code = error instanceof BackendPluginError ? error.code : ''
+  if (code === 'USER_CANCELLED') return 'cancelled'
+  return DENIED_BACKEND_CODES.has(code) ? 'denied' : 'error'
+}
+
 export interface PluginBackendHostOptions {
   environment?: Readonly<Record<string, string>>
   createSupervisor?: (
@@ -71,6 +93,10 @@ export interface PluginBackendHostOptions {
   admitThirdParty?: ThirdPartyAdmitter
   /** Idle stop delay for third-party children (default THIRD_PARTY_BACKEND_IDLE_MS). */
   thirdPartyIdleMs?: number
+  /** Observe every settled call, whichever path made it (a plugin's own
+   *  frontend, an agent tool, an agent capability request). Called once per
+   *  call after it settles; it must be cheap and never throw into the call. */
+  onCallSettled?: (call: BackendCallSettled) => void
 }
 
 export type ThirdPartyAdmitter = (
@@ -257,6 +283,7 @@ export class PluginBackendHost {
   private readonly onStderr?: PluginBackendHostOptions['onStderr']
   private reverifyBeforeSpawn?: PluginBackendHostOptions['reverifyBeforeSpawn']
   private admitThirdParty?: ThirdPartyAdmitter
+  private readonly onCallSettled?: (call: BackendCallSettled) => void
   private readonly thirdPartyIdleMs: number
   private readonly backends = new Map<string, RegisteredBackend>()
   private readonly views = new Map<string, BoundView>()
@@ -292,6 +319,7 @@ export class PluginBackendHost {
     this.reverifyBeforeSpawn = options.reverifyBeforeSpawn
     this.admitThirdParty = options.admitThirdParty
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
+    this.onCallSettled = options.onCallSettled
     this.createSupervisor = options.createSupervisor ?? defaultSupervisor
   }
 
@@ -868,6 +896,37 @@ export class PluginBackendHost {
   }
 
   async call<Result extends JsonValue>(
+    instanceId: string,
+    name: string,
+    args: JsonValue,
+    options?: BackendPluginCallOptions,
+  ): Promise<Result> {
+    const view = this.views.get(instanceId)
+    if (!this.onCallSettled || !view) return this.callWithIdle<Result>(instanceId, name, args, options)
+    const settled = (outcome: BackendCallOutcome): void => {
+      try {
+        this.onCallSettled?.({
+          pluginId: view.activation.pluginId,
+          packageVersion: view.activation.packageVersion,
+          workspacePath: view.workspacePath,
+          method: name,
+          outcome,
+        })
+      } catch {
+        // The activity record never fails the call it records.
+      }
+    }
+    try {
+      const result = await this.callWithIdle<Result>(instanceId, name, args, options)
+      settled('allowed')
+      return result
+    } catch (error) {
+      settled(backendCallOutcome(error))
+      throw error
+    }
+  }
+
+  private async callWithIdle<Result extends JsonValue>(
     instanceId: string,
     name: string,
     args: JsonValue,
