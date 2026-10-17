@@ -4988,7 +4988,7 @@ async def request_host_agent_workspace_backend(
     ``agent_tool`` (third-party Navide plugin tools only, see
     plugin_agent_tools) turns the request into the contract's
     ``operation: "agentTool"``: it carries ``tool``, the ``caller`` object
-    built from the resolved caller, ``caller_identity`` and the tool's
+    built from the resolved caller (with ``verifiedTo``) and the tool's
     ``timeout_ms`` (used for the wait, not sent). Without it the request is
     exactly the ``backend`` operation it always was.
     """
@@ -5012,7 +5012,6 @@ async def request_host_agent_workspace_backend(
         request["operation"] = "agentTool"
         request["tool"] = agent_tool["tool"]
         request["caller"] = agent_tool["caller"]
-        request["caller_identity"] = agent_tool["caller_identity"]
         wait_payload = {"timeoutMs": agent_tool["timeout_ms"]}
     request_id = request["request_id"]
     future = _agent_capability_pending.register(request_id)

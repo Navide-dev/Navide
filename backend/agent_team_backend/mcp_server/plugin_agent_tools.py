@@ -14,24 +14,39 @@ What it guarantees on this side of the boundary:
   this module.
 - Third-party tools are listed after every core tool, sorted by name, so the
   list order does not depend on when snapshots or built-in tools arrived.
-- Each description starts with the D4 source label; each result is control
-  characters stripped, capped (DB9) and wrapped as external content labelled
-  with the plugin id, version and permissions; the caller pane is marked
-  tainted like any other external content.
+- Each description starts with the D4 source label, and a schema whose
+  nested text breaks the text rules or that uses ``$ref`` is not served.
+  Each result, and a plugin's own error text, has control and invisible
+  characters stripped and is wrapped as external content labelled with the
+  plugin id, version and permissions; a result is capped (DB9); the caller
+  pane is marked tainted like any other external content.
+- Arguments are checked against the consented inputSchema in a worker thread,
+  never on the event loop, and plugin-supplied regular expressions
+  (``pattern``, ``patternProperties``) are never run in the core: the plugin
+  backend enforces those (a documented known limit).
 - A tool the catalog names but does not serve, or a tool an earlier snapshot
   served, is refused with ``PLUGIN_TOOL_UNAVAILABLE`` and the reason. The Host
   checks everything again on every call: this module is never the gate.
 
 The caller object comes from ``_resolve_caller`` only, never from arguments.
 Its pane identity is verified to the pane's credential, not to the process
-that presented it (B0 decision c), and every request and log line says so.
+that presented it (B0 decision c): ``caller.verifiedTo`` says so on every
+request (``pane`` or ``caller-kind``, as the Host's initiator spells it), and
+every log line carries the full note.
+
+A caller without a pane (external or host, only while the DB4 switch is on)
+names its target with a ``workspace_path`` argument that must be a workspace
+open in a Navide window; it is taken out before the plugin's schema check and
+never forwarded as a plugin argument.
 """
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import logging
+import re
 import weakref
 from dataclasses import dataclass, field
 from typing import Any
@@ -42,6 +57,7 @@ from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_STABILITY_CAP_BYTES,
+    AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
     sanitize_agent_tool_result_text,
@@ -140,14 +156,24 @@ def source_label(entry: dict[str, Any]) -> str:
     )
 
 
+# Bidi controls and zero-width characters: they reorder or hide text.
+_INVISIBLE = re.compile("[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+# A boundary or label spelled loosely: any case, fullwidth brackets, with
+# invisible characters already removed.
+_BOUNDARY_RE = re.compile(r"[\[［]\s*外部\s*訊息\s*(開始|結束)")
+_LABEL_RE = re.compile(r"[\[［]\s*third-party\s+navide\s+plugin", re.IGNORECASE)
+
+
+def _clean(text: str) -> str:
+    """Control characters (contract 2.4) and invisible characters removed."""
+    return _INVISIBLE.sub("", sanitize_agent_tool_result_text(text))
+
+
 def _neutralize(text: str) -> str:
-    """Break any boundary or label line a result spells itself, so it cannot
+    """Break any boundary or label line plugin text spells itself, so it cannot
     close the external block early or pose as another plugin's label."""
-    return (
-        text.replace("[外部訊息開始", "[外部​訊息開始")
-        .replace("[外部訊息結束", "[外部​訊息結束")
-        .replace(_LABEL_HEAD, "[third-party​ Navide plugin")
-    )
+    text = _BOUNDARY_RE.sub(lambda match: f"[外部 訊息{match.group(1)}", text)
+    return _LABEL_RE.sub("[third party plugin", text)
 
 
 def _result_text(result: Any) -> str:
@@ -156,20 +182,50 @@ def _result_text(result: Any) -> str:
     return json.dumps(result, ensure_ascii=False, sort_keys=True)
 
 
-def wrap_result(entry: dict[str, Any], result: Any) -> str | None:
-    """The agent-facing text of one result, or None when it is over the DB9 cap."""
-    text = sanitize_agent_tool_result_text(_result_text(result))
-    if utf8_byte_length(text) > AGENT_TOOL_STABILITY_CAP_BYTES:
-        return None
+def _fence(entry: dict[str, Any], what: str, text: str) -> str:
     return "\n".join([
         EXTERNAL_CONTENT_START,
-        f"{source_label(entry)} result of {entry['name']}:",
-        _neutralize(text),
+        f"{source_label(entry)} {what} of {entry['name']}:",
+        _neutralize(_clean(text)),
         EXTERNAL_CONTENT_END,
     ])
 
 
+def wrap_result(entry: dict[str, Any], result: Any) -> str | None:
+    """The agent-facing text of one result, or None when it is over the DB9 cap."""
+    text = _result_text(result)
+    if utf8_byte_length(sanitize_agent_tool_result_text(text)) > AGENT_TOOL_STABILITY_CAP_BYTES:
+        return None
+    return _fence(entry, "result", text)
+
+
 # ── snapshot validation and registration ────────────────────────────────────
+
+
+def _schema_text_ok(value: Any) -> bool:
+    """Every ``description`` / ``title`` string anywhere in a schema follows the
+    title/description text rule: agents read the whole schema in tools/list."""
+    if isinstance(value, list):
+        return all(_schema_text_ok(item) for item in value)
+    if not isinstance(value, dict):
+        return True
+    return all(
+        (is_valid_agent_tool_text(item) and _INVISIBLE.search(item) is None)
+        if key in ("description", "title") and isinstance(item, str)
+        else _schema_text_ok(item)
+        for key, item in value.items()
+    )
+
+
+_REF_KEYS = frozenset({"$ref", "$dynamicRef", "$recursiveRef"})
+
+
+def _has_ref(value: Any) -> bool:
+    if isinstance(value, list):
+        return any(_has_ref(item) for item in value)
+    if isinstance(value, dict):
+        return any(key in _REF_KEYS or _has_ref(item) for key, item in value.items())
+    return False
 
 
 def _valid_entry(entry: Any) -> bool:
@@ -182,28 +238,83 @@ def _valid_entry(entry: Any) -> bool:
         return False
     if validate_agent_tool_name(name, plugin_id) is not None:
         return False
-    if not is_valid_agent_tool_text(entry["title"]) or not is_valid_agent_tool_text(entry["description"]):
-        return False
+    for text in (entry["title"], entry["description"]):
+        if not is_valid_agent_tool_text(text) or _INVISIBLE.search(text):
+            return False
     timeout = entry["timeoutMs"]
+    schema = entry["inputSchema"]
     return (
         entry["state"] in _STATES
         and entry["risk"] in ("read", "write")
         and isinstance(entry["method"], str)
         and isinstance(timeout, int) and not isinstance(timeout, bool) and 1 <= timeout <= 120_000
-        and isinstance(entry["inputSchema"], dict) and entry["inputSchema"].get("type") == "object"
-        and _schema_validator(entry["inputSchema"]) is not None
+        and isinstance(schema, dict) and schema.get("type") == "object"
+        and _schema_text_ok(schema)
+        # No references: a recursive one crashes validation, a remote one
+        # names a URL; the contract's schemas are self-contained.
+        and not _has_ref(schema)
+        and _schema_validator(schema) is not None
         and isinstance(entry["permissions"], dict)
     )
 
 
+def _without_regexes(value: Any) -> Any:
+    """The schema with every plugin-supplied regular expression taken out, so
+    the core never runs one (a backtracking pattern could stall the event loop
+    for everyone). ``pattern`` is dropped; an object with ``patternProperties``
+    loses it and its ``additionalProperties`` (which would otherwise match
+    property names against those patterns). The plugin backend enforces them;
+    the Host still checks the rest (contract 4.2, known limit)."""
+    if isinstance(value, list):
+        return [_without_regexes(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out = {key: _without_regexes(item) for key, item in value.items() if not (key == "pattern" and isinstance(item, str))}
+    if "patternProperties" in out:
+        out.pop("patternProperties")
+        out.pop("additionalProperties", None)
+    return out
+
+
 def _schema_validator(schema: dict[str, Any]) -> Any | None:
-    """A validator for a tool's inputSchema, or None when the schema itself is invalid."""
+    """A validator for a tool's inputSchema (regexes taken out), or None when
+    the schema itself is invalid."""
     cls = jsonschema_validators.validator_for(schema, default=jsonschema_validators.Draft202012Validator)
     try:
         cls.check_schema(schema)
     except jsonschema_exceptions.SchemaError:
         return None
-    return cls(schema)
+    except Exception:  # noqa: BLE001 - a hostile schema must not escape as an exception
+        return None
+    return cls(_without_regexes(schema))
+
+
+_ERROR_ECHO_MAX = 200
+
+
+def _argument_error(name: str, schema: dict[str, Any], arguments: dict[str, Any]) -> str | None:
+    """The first schema violation of ``arguments`` as plain text, or None.
+    Runs in a worker thread: it must never block the event loop."""
+    validator = _schema_validator(schema)
+    if validator is None:
+        return f"the input schema of {name} cannot be checked"
+    try:
+        errors = sorted(validator.iter_errors(arguments), key=lambda error: list(error.absolute_path))
+    except Exception:  # noqa: BLE001 - never echo what a hostile schema raised
+        return f"the arguments could not be checked against the input schema of {name}"
+    if not errors:
+        return None
+    first = errors[0]
+    where = "/".join(str(part) for part in first.absolute_path) or "(arguments)"
+    if len(where) > _ERROR_ECHO_MAX:
+        where = where[:_ERROR_ECHO_MAX] + "…"
+    # The keyword and the value's size, never the value itself: an argument
+    # can be anything the agent read, and the schema's text is the plugin's.
+    size = utf8_byte_length(json.dumps(first.instance, ensure_ascii=False, default=str))
+    return _clean(
+        f"arguments do not match the input schema of {name} at {where}: "
+        f"the value ({size} bytes) fails the '{first.validator}' keyword"
+    )
 
 
 def _valid_payload(payload: Any) -> bool:
@@ -312,6 +423,9 @@ def _reset_for_test() -> None:
 # ── calls ───────────────────────────────────────────────────────────────────
 
 
+_ERROR_CODE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,63}")
+
+
 def _refusal(error: str, error_code: str, reason: str | None = None) -> CallToolResult:
     body: dict[str, Any] = {"ok": False, "error": error, "error_code": error_code}
     if reason is not None:
@@ -330,10 +444,33 @@ def _unavailable_reason(name: str) -> str | None:
 
 
 def _caller_object(caller: Any) -> dict[str, Any]:
+    """The contract's caller, with ``verifiedTo`` as the Host's initiator
+    spells it: a pane is proven only to its pane token (B0 decision c)."""
     core = _server()
     if caller.kind == "pane":
-        return {"kind": "pane", "paneId": caller.pane_id, "workspace": core._caller_workspace(caller)}  # noqa: SLF001
-    return {"kind": caller.kind, "paneId": None, "workspace": None}
+        return {
+            "kind": "pane",
+            "paneId": caller.pane_id,
+            "workspace": core._caller_workspace(caller) or None,  # noqa: SLF001
+            "verifiedTo": "pane",
+        }
+    return {"kind": caller.kind, "paneId": None, "workspace": None, "verifiedTo": "caller-kind"}
+
+
+_WORKSPACE_PATH_REQUIRED = (
+    "a caller without a pane must pass workspace_path: the absolute path of a workspace open in a "
+    "Navide window (see workspace_list); it is not forwarded to the plugin"
+)
+
+
+def _open_workspace(requested: Any) -> str | None:
+    """``requested`` as a workspace a Navide window has open, or None."""
+    from agent_team_backend import agent_messaging
+
+    if not isinstance(requested, str) or not requested.startswith("/"):
+        return None
+    wanted = agent_messaging._normalize_workspace(requested)  # noqa: SLF001
+    return wanted if wanted in agent_messaging.workspaces() else None
 
 
 async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult | list[TextContent]:
@@ -348,32 +485,29 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
     entry = _catalog.entries[name]
     caller_object = _caller_object(caller)
-    if caller.kind != "pane" and not _catalog.external_callers:
-        reason = "external-callers-off"
-        return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
-    validator = _schema_validator(entry["inputSchema"])
-    errors = sorted(validator.iter_errors(arguments), key=lambda error: list(error.absolute_path)) if validator else []
-    if errors:
-        # The whole inputSchema the user consented to, before anything leaves
-        # this process; the Host checks again.
-        first = errors[0]
-        where = "/".join(str(part) for part in first.absolute_path) or "(arguments)"
-        return _refusal(
-            sanitize_agent_tool_result_text(f"arguments do not match the input schema of {name} at {where}: {first.message}"),
-            "PLUGIN_TOOL_INVALID_ARGUMENTS",
-        )
     workspace = caller_object["workspace"] or ""
-    if not workspace:
-        # A caller without a pane has no workspace to target, and the contract
-        # gives such a caller no way to name one yet.
-        return _refusal("a caller without a pane has no target workspace for a Navide plugin tool", "BAD_REQUEST")
-    # The target is the caller pane's own workspace, so a call made here is
-    # never cross-workspace; recorded so the audit line says it explicitly.
-    cross_workspace = workspace != (caller_object["workspace"] or "")
+    if caller.kind != "pane":
+        if not _catalog.external_callers:
+            reason = "external-callers-off"
+            return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+        # Taken out before the plugin's schema check and never forwarded.
+        arguments = dict(arguments)
+        workspace = _open_workspace(arguments.pop("workspace_path", None)) or ""
+        if not workspace:
+            return _refusal(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")
+    elif not workspace:
+        return _refusal("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
+    # The whole consented inputSchema (regexes excepted), off the event loop;
+    # the Host checks again.
+    invalid = await asyncio.to_thread(_argument_error, name, entry["inputSchema"], arguments)
+    if invalid is not None:
+        return _refusal(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
+    # A pane targets its own workspace; a caller without a pane has none to compare.
+    cross_workspace: bool | None = workspace != caller_object["workspace"] if caller.kind == "pane" else None
     _log.info(
-        "plugin tool call %s (%s v%s) by %s %s; cross_workspace=%s; %s",
+        "plugin tool call %s (%s v%s) by %s %s; target=%s cross_workspace=%s; %s",
         name, entry["pluginId"], entry["pluginVersion"], caller.kind, caller.pane_id or "-",
-        cross_workspace, CALLER_IDENTITY_NOTE,
+        workspace, "n/a" if cross_workspace is None else cross_workspace, CALLER_IDENTITY_NOTE,
     )
     response = await core.request_host_agent_workspace_backend(
         entry["pluginId"],
@@ -383,7 +517,6 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         agent_tool={
             "tool": {"name": name, "plugin_version": entry["pluginVersion"], "sync_revision": _catalog.revision},
             "caller": caller_object,
-            "caller_identity": CALLER_IDENTITY_NOTE,
             "timeout_ms": entry["timeoutMs"],
         },
     )
@@ -395,17 +528,16 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         if text is None:
             return _refusal(f"{name} returned more than the 1 MiB limit", "PLUGIN_TOOL_RESULT_TOO_LARGE")
         return [TextContent(type="text", text=text)]
-    error_code = str(response.get("error_code") or "PLUGIN_TOOL_FAILED")
+    raw_code = response.get("error_code")
+    error_code = raw_code if isinstance(raw_code, str) and _ERROR_CODE_RE.fullmatch(raw_code) else "PLUGIN_TOOL_FAILED"
+    raw_reason = response.get("reason")
+    reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS else None
+    error = str(response.get("error") or "the call failed")
     if error_code == "PLUGIN_TOOL_FAILED":
-        # The message is the plugin's own text.
+        # The message is the plugin's own text: fenced like a result.
         _taint(caller, entry)
-    error = sanitize_agent_tool_result_text(str(response.get("error") or "the call failed"))
-    reason_value = response.get("reason")
-    return _refusal(
-        _neutralize(error),
-        error_code,
-        reason_value if isinstance(reason_value, str) else None,
-    )
+        return _refusal(_fence(entry, "error", error), error_code, reason_value)
+    return _refusal(_neutralize(_clean(error)), error_code, reason_value)
 
 
 def _taint(caller: Any, entry: dict[str, Any]) -> None:
