@@ -669,6 +669,27 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('discloses current and peak in-flight backend calls to an authorized renderer only', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-backend-concurrency-'))
+    const manager = new FrontendPluginManager()
+    const concurrency = [{ pluginId: 'navide.plans', current: 3, peak: 512 }]
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        backendCallConcurrency: () => concurrency,
+      })
+      const handler = handlers.get('plugins:backendCallConcurrency')
+      if (!handler) throw new Error('concurrency handler not registered')
+      expect(handler(null)).toEqual(concurrency)
+
+      registerPluginIpc(manager, root, () => false, TRUST_CONFIG, undefined, {
+        backendCallConcurrency: () => concurrency,
+      })
+      expect(() => handlers.get('plugins:backendCallConcurrency')?.(null)).toThrow()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('refuses uninstall when storage cleanup is unavailable', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-no-storage-cleanup-'))
     const installedDir = join(root, 'acme.demo')

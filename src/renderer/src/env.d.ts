@@ -370,6 +370,8 @@ declare global {
       plugins?: {
         listInstalled: () => Promise<InstalledPluginSummary[]>
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
+        /** Current and peak in-flight backend calls per plugin (never capped). */
+        backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number }>>
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>

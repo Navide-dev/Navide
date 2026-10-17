@@ -17,7 +17,6 @@ import type {
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { createProductionPlansBridgeDispatcher, createTestPlansFilesystemPort } from './plansBridge'
 import {
-  MAX_BACKEND_CALLS_PER_INSTANCE,
   MAX_BACKEND_CHILDREN,
   MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
   MAX_BACKEND_TIMEOUT_MS,
@@ -552,7 +551,7 @@ describe('PluginBackendHost', () => {
     })).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
   })
 
-  it('enforces per-view call and subscription limits', async () => {
+  it('never caps in-flight calls and keeps the per-view subscription limit', async () => {
     const settledSubscriptions: Array<() => void> = []
     const controlledSupervisor = {
       start: vi.fn(async () => ({
@@ -584,24 +583,60 @@ describe('PluginBackendHost', () => {
     host.register(activation)
     host.bindView(runtime, activation.packageDir, process.cwd())
 
-    const calls = Array.from({ length: MAX_BACKEND_CALLS_PER_INSTANCE }, () =>
+    // User ruling L3: no concurrency cap; the 65th call used to get RESOURCE_LIMIT.
+    const calls = Array.from({ length: 100 }, () =>
       host.call('view-1', 'fixture.delay', { milliseconds: 10_000 })
     )
-    await expect(host.call('view-1', 'fixture.delay', { milliseconds: 10_000 }))
-      .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
+    const subscriptions: Array<{ dispose: () => void }> = []
+    try {
+      const settledCalls = Promise.allSettled(calls)
+      subscriptions.push(...await Promise.all(
+        Array.from({ length: MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE }, () =>
+          host.subscribe('view-1', 'fixture.changed', () => undefined)
+        )
+      ))
+      await expect(host.subscribe('view-1', 'fixture.changed', () => undefined))
+        .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
 
-    const subscriptions = await Promise.all(
-      Array.from({ length: MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE }, () =>
-        host.subscribe('view-1', 'fixture.changed', () => undefined)
-      )
-    )
-    await expect(host.subscribe('view-1', 'fixture.changed', () => undefined))
-      .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
-
-    for (const subscription of subscriptions) subscription.dispose()
-    await Promise.all(calls)
-    for (const settle of settledSubscriptions) settle()
+      const outcomes = await settledCalls
+      expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toEqual([])
+    } finally {
+      for (const subscription of subscriptions) subscription.dispose()
+      for (const settle of settledSubscriptions) settle()
+    }
   })
+
+  it('runs 200 concurrent calls on one real child over stdio', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 200 }, () => host.call('view-1', 'fixture.delay', { milliseconds: 50 })),
+    )
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toEqual([])
+    expect(outcomes.every((outcome) =>
+      outcome.status === 'fulfilled' && (outcome.value as { delayed?: boolean }).delayed === true
+    )).toBe(true)
+  }, 60_000)
+
+  it('discloses current and peak in-flight calls per plugin', async () => {
+    const host = makeHost()
+    hosts.push(host)
+    host.register(activation)
+    host.bindView(runtime, activation.packageDir, process.cwd())
+    expect(host.backendCallConcurrency()).toEqual([])
+
+    const calls = Array.from({ length: 70 }, () =>
+      host.call('view-1', 'fixture.delay', { milliseconds: 50 })
+    )
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 70, peak: 70 }])
+    await Promise.all(calls)
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 70 }])
+    await host.call('view-1', 'fixture.echo', null)
+    expect(host.backendCallConcurrency()).toEqual([{ pluginId: 'navide.plans', current: 0, peak: 70 }])
+  }, 60_000)
 
   it('cancels an in-flight call when the view is destroyed', async () => {
     const host = makeHost()

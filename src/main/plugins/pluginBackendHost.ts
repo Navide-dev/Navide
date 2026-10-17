@@ -19,7 +19,6 @@ import {
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   isAllowedBackendTimeout,
-  MAX_BACKEND_CALLS_PER_INSTANCE,
   MAX_BACKEND_CHILDREN,
   MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
 } from './pluginBackendLimits'
@@ -203,6 +202,17 @@ export const BACKEND_RESTART_BUDGET_SPENT_MESSAGE =
   'Backend plugin failed repeatedly and will not be restarted.'
 
 /**
+ * In-flight backend calls of one plugin across all its bound views: how many
+ * run now and the most that ran at once since the Host started. Calls are
+ * never capped (user ruling L3); this is what discloses the load instead.
+ */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+}
+
+/**
  * Host-owned router for one package's Backend Wire child processes.
  *
  * A registered package is only metadata. Each bound view gets its own
@@ -239,6 +249,8 @@ export class PluginBackendHost {
   private reservedChildSlots = 0
   /** Slots consumed by children whose close failed; never reclaimed. */
   private retainedChildSlots = 0
+  /** In-flight calls per plugin id; see {@link backendCallConcurrency}. */
+  private readonly callConcurrency = new Map<string, { current: number; peak: number }>()
 
   constructor(options: PluginBackendHostOptions = {}) {
     this.environment = Object.freeze({ ...(options.environment ?? {}) })
@@ -253,6 +265,13 @@ export class PluginBackendHost {
     this.admitThirdParty = options.admitThirdParty
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
     this.createSupervisor = options.createSupervisor ?? defaultSupervisor
+  }
+
+  /** Current and peak in-flight calls of every plugin that has made one, by plugin id. */
+  backendCallConcurrency(): BackendCallConcurrency[] {
+    return [...this.callConcurrency]
+      .map(([pluginId, { current, peak }]) => ({ pluginId, current, peak }))
+      .sort((a, b) => a.pluginId.localeCompare(b.pluginId))
   }
 
   /** Install the third-party admission gate before views are bound. */
@@ -785,14 +804,15 @@ export class PluginBackendHost {
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
-    if (view.calls.size >= MAX_BACKEND_CALLS_PER_INSTANCE) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
-    }
     const controller = new AbortController()
     const abort = (): void => controller.abort()
     if (options?.signal?.aborted) controller.abort()
     else options?.signal?.addEventListener('abort', abort, { once: true })
     view.calls.add(controller)
+    const concurrency = this.callConcurrency.get(view.runtime.pluginId) ?? { current: 0, peak: 0 }
+    this.callConcurrency.set(view.runtime.pluginId, concurrency)
+    concurrency.current++
+    concurrency.peak = Math.max(concurrency.peak, concurrency.current)
     try {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginCallOptions = { ...options }
@@ -832,6 +852,7 @@ export class PluginBackendHost {
     } finally {
       options?.signal?.removeEventListener('abort', abort)
       view.calls.delete(controller)
+      concurrency.current--
     }
   }
 
