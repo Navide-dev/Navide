@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import codecs
 import json
 import math
 import os
@@ -306,6 +307,24 @@ class ResultWorker:
             if size:
                 return await asyncio.wait_for(stream.readexactly(size), window)
 
+    @staticmethod
+    async def _text_frame(stream: asyncio.StreamReader) -> str:
+        """The next non-empty frame as text, read and decoded a slice at a
+        time: the bytes are never held whole, only the text at the end."""
+        size = 0
+        while not size:
+            size = int.from_bytes(await asyncio.wait_for(stream.readexactly(8), IDLE_S), "big")
+        decoder = codecs.getincrementaldecoder("utf-8")("surrogatepass")
+        parts: list[str] = []
+        left = size
+        while left:
+            chunk = await asyncio.wait_for(stream.read(min(left, _SLICE)), IDLE_S)
+            if not chunk:
+                raise asyncio.IncompleteReadError(b"", left)
+            left -= len(chunk)
+            parts.append(decoder.decode(chunk, final=not left))
+        return "".join(parts)
+
     def stop(self) -> None:
         """End the helper; the next request starts a new one.
 
@@ -359,7 +378,7 @@ class ResultWorker:
                     if answer.get("reason") == "json":
                         raise InvalidResult
                     raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
-                data = await self._frame(process.stdout)
+                text = await self._text_frame(process.stdout)
             except (InvalidResult, ResultWorkerUnavailable):
                 raise
             except BaseException as error:
@@ -377,17 +396,7 @@ class ResultWorker:
                 # request starts a new helper at once.
                 self.stop()
                 raise failure from error
-        parts: list[str] = []
-        start = 0
-        while len(data) - start > _SLICE:
-            end = start + _SLICE
-            while data[end] & 0xC0 == 0x80:
-                end -= 1
-            parts.append(data[start:end].decode("utf-8", "surrogatepass"))
-            start = end
-            await asyncio.sleep(0)
-        parts.append(data[start:].decode("utf-8", "surrogatepass"))
-        return "".join(parts)
+        return text
 
 
 #: Helpers stopped whose grace has not run out yet.
