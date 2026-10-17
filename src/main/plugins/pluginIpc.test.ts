@@ -30,6 +30,7 @@ import { projectBackendPluginActivationCatalog } from './pluginBackendActivation
 import { makeZip } from './zipFixture'
 import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
 import { readZipEntries } from './pluginPackage'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
@@ -1834,6 +1835,30 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  // Review LOW1 on #380: a fresh install's time is recorded when the
+  // candidate becomes active, not when it is staged.
+  it('records installedAt only once a fresh install is activated', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-activate-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      vi.setSystemTime(1_000_000)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
+      vi.setSystemTime(2_000_000)
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(2_000_000)
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('D-f: the activity IPC refuses an unauthorized sender', async () => {
     registerPluginIpc(new FrontendPluginManager(), '/plugins', () => false, TRUST_CONFIG)
     await expect(Promise.resolve().then(() => handlers.get('plugins:activityReport')!(null, { id: 'acme.demo' }))).rejects.toThrow()
@@ -1956,6 +1981,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      // Review MED-1 on #380: an update over a legacy layout is not a fresh install.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         candidate: { packageVersion: '1.0.1' },
@@ -1969,6 +1996,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         active: { packageVersion: '1.0.1' },
         previous: { packageVersion: '1.0.0', artifactDigest: first.digest },
@@ -2069,10 +2097,13 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      // Review MED-1 on #380: an update over a backend-only legacy install is not fresh.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
 
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.hasBackendActivation('acme.demo', '1.0.0')).toBe(false)
       expect(manager.hasBackendActivation('acme.demo', '1.0.1')).toBe(true)
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
@@ -2122,6 +2153,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       const discard = handlers.get('plugins:discardCandidate')
       expect(discard).toBeTypeOf('function')
       await expect(discard!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      // Review LOW1 on #380: a staged, then discarded, candidate records nothing.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')).toMatchObject({ packageVersion: '1.0.0', packageDir: legacyDir })
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).rejects.toThrow(/no staged candidate/)

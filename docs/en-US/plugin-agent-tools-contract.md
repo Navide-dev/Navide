@@ -1294,10 +1294,15 @@ entry could only ever read "declared but not used". The Host also sends
 then counts only writes since then, so a first-seen row left by an earlier
 install of the same id counts as absent. It is the time of the install since
 the id was last removed: the Host records it in its own
-`.navide-install-scans.json` (owner-only, `0600`) when a commit finds nothing
-of that id active, keeps it through updates and rollbacks, and drops it when
-the plugin is removed. An id installed before this was recorded has none, and
-the request then carries no `installedAt`. Answer `PluginActivityReport`
+`.navide-install-scans.json` (owner-only, `0600`) when a fresh install becomes
+active (the activation finds no version of the id in place: no registered
+package, no active selection, no legacy backend-only install), keeps it
+through updates (over any layout, legacy included) and rollbacks, records
+nothing for a candidate that is staged and then discarded or fails to
+activate, and drops it when the plugin is removed. An id installed before
+this was recorded has none, and Manifest v1 packages (installed in place,
+without the staged activation) never have one; the request then carries no
+`installedAt` and the backend keeps its earlier behaviour. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the

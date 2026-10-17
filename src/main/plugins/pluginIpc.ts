@@ -584,6 +584,18 @@ export function registerPluginIpc(
   // notice only. Its failures never fail an install or a removal.
   const installScans = new PluginInstallScanStore(pluginsRoot)
   let rescanNotices: PluginRescanNotice[] = []
+  // #373 follow-up: installedAt is recorded when a fresh install becomes
+  // active: the restart found no version of the id in place (no registered
+  // descriptor, no selector active, no legacy backend-only install), so an
+  // update over any layout, a rollback, or a staged-then-discarded candidate
+  // never records one (review MED-1, LOW1 on #380). Record only.
+  const recordFreshInstall = (id: string): void => {
+    try {
+      installScans.markInstalled(id, Date.now())
+    } catch (error) {
+      console.warn(`[plugins] installedAt for ${id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   const packs = new PluginPackStore(pluginsRoot)
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
@@ -1745,9 +1757,6 @@ export function registerPluginIpc(
         if (!isManifestV2(pkg.manifest)) {
           return await commitLegacyInstall(pkg, publisherRequiresTrust, commitTrust)
         }
-        // A fresh install: nothing of this id is active (never installed, or
-        // removed since). Only then is installedAt recorded (#373, N2).
-        const freshInstall = !lifecycleSelector.read(pkg.id)?.active
         const staged = stageInstallCandidate(pkg, pluginsRoot)
         const scanned = loadPluginDir(staged.candidateDir)
         if (scanned.error) throw new Error(`staged candidate is invalid: ${scanned.error}`)
@@ -1802,7 +1811,6 @@ export function registerPluginIpc(
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
         try {
-          if (freshInstall) installScans.markInstalled(pkg.id, Date.now())
           if (pkg.scan) installScans.record(pkg.id, pkg.version, pkg.scan)
           const kept = lifecycleSelector.read(pkg.id)
           installScans.keepVersions(pkg.id, [kept?.active, kept?.previous, kept?.candidate]
@@ -1990,6 +1998,7 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
           id,
@@ -1999,6 +2008,7 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
