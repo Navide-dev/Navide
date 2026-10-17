@@ -843,7 +843,7 @@ async def test_property_names_served_alike_are_logged_and_refused(host: FakeHost
     schema = {"type": "object", "properties": {"kx": {"type": "integer"}, "k\u202ex": {"type": "integer"}}}
     with caplog.at_level(logging.WARNING, logger=proxy.__name__):
         _apply(_snapshot(1, [_entry("devmap_read", inputSchema=schema)]))
-    assert any("devmap_read" in record.getMessage() and "property names" in record.getMessage()
+    assert any("devmap_read" in record.getMessage() and "schema member names" in record.getMessage()
                for record in caplog.records)
     [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
     assert list(tool.inputSchema["properties"]) == ["kx"]

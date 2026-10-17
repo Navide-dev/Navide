@@ -44,6 +44,7 @@ never forwarded as a plugin argument.
 from __future__ import annotations
 
 import asyncio
+import functools
 import itertools
 import json
 import logging
@@ -322,17 +323,31 @@ class _AmbiguousArgument(Exception):
     """An argument names a served value two declared values share."""
 
 
-def _restored_string(value: str, declared: list[str]) -> str:
+@functools.lru_cache(maxsize=None)
+def _served_index(declared: tuple[str, ...]) -> dict[str, frozenset[str]]:
+    """Served spelling -> the declared values served as it, for one schema
+    node's declared values (only schema text ever reaches here, so the cache
+    holds what the registered schemas declare). Built once per node, so a call
+    looks each argument up instead of neutralizing every declared value."""
+    index: dict[str, set[str]] = {}
+    for original in declared:
+        index.setdefault(_served_string(original), set()).add(original)
+    return {served: frozenset(originals) for served, originals in index.items()}
+
+
+def _restored_string(value: str, index: dict[str, frozenset[str]]) -> str:
     """``value`` as the plugin declared it: the served spelling of exactly one
     declared value becomes that value. When more than one declared value is
     served as ``value`` (``ab`` and ``a\u200bb`` are both served ``ab``) the
     argument is ambiguous, even if one of them is ``value`` itself: never
     guessed. A declared value sent as written that no other value is served
     as is kept."""
-    matches = {original for original in declared if _served_string(original) == value}
+    matches = index.get(value)
+    if not matches:
+        return value
     if len(matches) > 1:
         raise _AmbiguousArgument
-    return matches.pop() if matches else value
+    return next(iter(matches))
 
 
 def _restored_arguments(schema: Any, value: Any) -> Any:
@@ -346,13 +361,16 @@ def _restored_arguments(schema: Any, value: Any) -> Any:
         declared = [schema["const"]] if "const" in schema else []
         if isinstance(schema.get("enum"), list):
             declared += schema["enum"]
-        return _restored_string(value, [item for item in declared if isinstance(item, str)])
+        if not declared:
+            return value
+        return _restored_string(value, _served_index(tuple(item for item in declared if isinstance(item, str))))
     if isinstance(value, dict):
         properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
         extra = schema.get("additionalProperties")
+        names = _served_index(tuple(properties)) if properties else {}
         out: dict[str, Any] = {}
         for key, item in value.items():
-            original = _restored_string(key, list(properties))
+            original = _restored_string(key, names)
             out[original] = _restored_arguments(properties.get(original, extra), item)
         return out
     if isinstance(value, list):
@@ -557,7 +575,7 @@ def _register(entry: dict[str, Any]) -> None:
     merged = _merged_names(entry["inputSchema"])
     if merged:
         _log.warning(
-            "agent tool %s: %d property names are served as the same text as another; "
+            "agent tool %s: %d schema member names are served as the same text as another; "
             "a call naming one is refused as ambiguous", entry["name"], merged,
         )
 
