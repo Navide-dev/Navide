@@ -197,9 +197,10 @@ function hasNonIntegerNumber(value: unknown): boolean {
  *  text (the core neutralizes every schema string in tools/list instead). */
 const SCHEMA_DATA_KEYWORDS: ReadonlySet<string> = new Set(['const', 'default', 'enum', 'examples'])
 /** Keywords whose value maps names (property names, definition names) to
- *  subschemas: a name such as `enum` there is a name, not a keyword. */
+ *  subschemas (draft-07 `dependencies` also to name lists): a name such as
+ *  `enum` there is a name, not a keyword. */
 const SCHEMA_MAP_KEYWORDS: ReadonlySet<string> = new Set([
-  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas',
+  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies',
 ])
 
 /** Every `description` / `title` string anywhere in a schema follows the text rules too:

@@ -160,8 +160,11 @@ def _has_non_integer_number(value: Any) -> bool:
 #: text (the core neutralizes every schema string in tools/list instead).
 _SCHEMA_DATA_KEYWORDS = frozenset(("const", "default", "enum", "examples"))
 #: Keywords whose value maps names (property names, definition names) to
-#: subschemas: a name such as ``enum`` there is a name, not a keyword.
-_SCHEMA_MAP_KEYWORDS = frozenset(("properties", "patternProperties", "$defs", "definitions", "dependentSchemas"))
+#: subschemas (draft-07 ``dependencies`` also to name lists): a name such as
+#: ``enum`` there is a name, not a keyword.
+_SCHEMA_MAP_KEYWORDS = frozenset(
+    ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas", "dependencies")
+)
 
 
 def _has_invalid_schema_text(value: Any) -> bool:
