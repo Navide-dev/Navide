@@ -11274,5 +11274,24 @@
       "secretFindings": "機密掃描：{count} 筆疑似機密，審核者已確認",
       "similar": "名稱和其他 Navide 外掛相近"
     }
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller}停用了 Navide 外掛 {plugin}",
+      "enabled": "{caller}啟用了 Navide 外掛 {plugin}",
+      "version": "版本 {version}。檔案、授權和資料都保留。",
+      "undo-failed": "無法還原：{error}",
+      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。"
+    },
+    "caller": {
+      "pane": "Agent pane「{pane}」",
+      "pane-unknown": "某個 agent pane",
+      "external": "外部 MCP 用戶端",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "重新啟用",
+      "disable": "再次停用"
+    }
   }
 }

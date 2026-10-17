@@ -104,6 +104,29 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
   )
 }
 
+/** An agent disabled or enabled a Navide plugin (B2-c), as the Host reports it. */
+export interface PluginAgentActionNotice {
+  action: 'disable' | 'enable'
+  pluginId: string
+  pluginVersion: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActionNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const requester = record.requester as Record<string, unknown> | null
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return (
+    (record.action === 'disable' || record.action === 'enable') &&
+    typeof record.pluginId === 'string' &&
+    typeof record.pluginVersion === 'string' &&
+    typeof requester === 'object' && requester !== null &&
+    ['pane', 'external', 'host'].includes(String(requester.callerKind)) &&
+    nullableString(requester.paneId) && nullableString(requester.paneName) && nullableString(requester.workspace)
+  )
+}
+
 function isPlansRecoveryChanged(payload: unknown): payload is PlansRecoveryChanged {
   return (
     typeof payload === 'object' &&
@@ -495,6 +518,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plans:backendStopped', listener)
     return () => ipcRenderer.removeListener('plans:backendStopped', listener)
+  },
+  // An agent disabled or enabled a Navide plugin (B2-c): who, and the undo.
+  onPluginAgentAction: (cb: (notice: PluginAgentActionNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginAgentActionNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:agentAction', listener)
+    return () => ipcRenderer.removeListener('plugins:agentAction', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))

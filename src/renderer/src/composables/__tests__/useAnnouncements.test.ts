@@ -499,3 +499,58 @@ describe('useAnnouncements — release tours', () => {
     expect(r029?.actions).toBeUndefined()
   })
 })
+
+describe('agent plugin notices (B2-c)', () => {
+  beforeEach(() => {
+    store.clear()
+    ;(window as unknown as { agentTeam?: unknown }).agentTeam = { version: '0.1.77' }
+  })
+
+  afterEach(() => {
+    delete (window as unknown as { agentTeam?: unknown }).agentTeam
+  })
+
+  const base = { pluginId: 'nerdtechnic.devmap', pluginVersion: '0.2.0' }
+
+  it('names the caller and offers the undo of what the agent did', async () => {
+    const { useAnnouncements, i18n } = await load()
+    i18n.global.locale.value = 'en-US'
+    const a = useAnnouncements()
+    a.notePluginAgentNotice({ ...base, action: 'disable', requester: { paneId: 'p-41', paneName: 'dev', workspace: '/w', callerKind: 'pane' } }, 2)
+    a.notePluginAgentNotice({ ...base, action: 'enable', requester: { paneId: null, paneName: null, workspace: null, callerKind: 'external' } }, 3)
+    a.notePluginAgentNotice({ ...base, action: 'disable', requester: { paneId: null, paneName: null, workspace: null, callerKind: 'host' } }, 4)
+    const rows = a.items.value.filter((item) => item.kind === 'plugin-agent')
+    expect(rows.map((row) => row.title)).toEqual([
+      'Navide Host disabled the Navide plugin nerdtechnic.devmap',
+      'An external MCP client enabled the Navide plugin nerdtechnic.devmap',
+      'Agent pane “dev” disabled the Navide plugin nerdtechnic.devmap',
+    ])
+    expect(rows.map((row) => row.actions)).toEqual([
+      [{ kind: 'plugin-agent-undo', pluginId: 'nerdtechnic.devmap', disable: false }],
+      [{ kind: 'plugin-agent-undo', pluginId: 'nerdtechnic.devmap', disable: true }],
+      [{ kind: 'plugin-agent-undo', pluginId: 'nerdtechnic.devmap', disable: false }],
+    ])
+    expect(rows[0].highlights).toEqual(['Version 0.2.0. Its files, grants and data are kept.'])
+  })
+
+  it('says the caller in each language', async () => {
+    const { pluginAgentNoticeTitle, i18n } = await load()
+    const notice = { ...base, action: 'disable' as const, requester: { paneId: 'p', paneName: 'dev', workspace: null, callerKind: 'pane' as const } }
+    i18n.global.locale.value = 'zh-TW'
+    expect(pluginAgentNoticeTitle(notice)).toBe('Agent pane「dev」停用了 Navide 外掛 nerdtechnic.devmap')
+    i18n.global.locale.value = 'ja-JP'
+    expect(pluginAgentNoticeTitle(notice)).toContain('nerdtechnic.devmap')
+    i18n.global.locale.value = 'en-US'
+  })
+
+  it('undoes only what the agent did: not after the user changed the plugin since', async () => {
+    const { pluginAgentUndoApplies } = await load()
+    const reEnable = { kind: 'plugin-agent-undo' as const, pluginId: 'nerdtechnic.devmap', disable: false }
+    const reDisable = { kind: 'plugin-agent-undo' as const, pluginId: 'nerdtechnic.devmap', disable: true }
+    expect(pluginAgentUndoApplies(reEnable, [{ id: 'nerdtechnic.devmap', disabled: true }])).toBe(true)
+    expect(pluginAgentUndoApplies(reEnable, [{ id: 'nerdtechnic.devmap', disabled: false }])).toBe(false)
+    expect(pluginAgentUndoApplies(reDisable, [{ id: 'nerdtechnic.devmap', disabled: false }])).toBe(true)
+    expect(pluginAgentUndoApplies(reDisable, [{ id: 'nerdtechnic.devmap', disabled: true }])).toBe(false)
+    expect(pluginAgentUndoApplies(reEnable, [])).toBe(false)
+  })
+})

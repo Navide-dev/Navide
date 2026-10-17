@@ -11274,5 +11274,24 @@
       "secretFindings": "機密スキャン：機密の可能性 {count} 件（審査担当者が確認済み）",
       "similar": "名前がほかの Navide プラグインと似ています"
     }
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller}が Navide プラグイン {plugin} を無効にしました",
+      "enabled": "{caller}が Navide プラグイン {plugin} を有効にしました",
+      "version": "バージョン {version}。ファイル、許可、データは保持されます。",
+      "undo-failed": "元に戻せませんでした：{error}",
+      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。"
+    },
+    "caller": {
+      "pane": "エージェント pane「{pane}」",
+      "pane-unknown": "エージェント pane",
+      "external": "外部 MCP クライアント",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "再度有効にする",
+      "disable": "再度無効にする"
+    }
   }
 }

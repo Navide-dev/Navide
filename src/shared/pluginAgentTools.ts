@@ -67,11 +67,13 @@ export const CORE_TOOL_NAMES = [
   'cli_message_log', 'cli_open_agent', 'cli_pending_incoming', 'cli_permission_settings', 'cli_place_pane',
   'cli_read_incoming', 'cli_read_log', 'cli_reclaim_agent', 'cli_send', 'cli_send_and_wait', 'cli_token_stats',
   'cli_usage', 'cli_wait_idle', 'cli_whoami', 'credentials_findings', 'credentials_list', 'evolve_report',
-  'marketplace_detail', 'marketplace_search', 'mcp_list', 'memory_list', 'pipeline_abort',
-  'pipeline_define', 'pipeline_gate', 'pipeline_graph',
+  'marketplace_detail', 'marketplace_request_install', 'marketplace_request_rollback',
+  'marketplace_request_status', 'marketplace_request_update', 'marketplace_search', 'mcp_list', 'memory_list',
+  'pipeline_abort', 'pipeline_define', 'pipeline_gate', 'pipeline_graph',
   'pipeline_list', 'pipeline_next', 'pipeline_reset', 'pipeline_restart', 'pipeline_restart_from',
   'pipeline_resume', 'pipeline_start', 'pipeline_status', 'plan_add_note', 'plan_add_todo', 'plan_create',
-  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_list_installed',
+  'plan_list', 'plan_read', 'plan_update_stage', 'plan_update_todo', 'plugins_disable', 'plugins_enable',
+  'plugins_list_installed', 'plugins_request_remove',
   'preview_clear', 'preview_list',
   'preview_record', 'preview_show', 'prompt_list', 'role_define', 'scheduler_list', 'scheduler_remove',
   'scheduler_run_now', 'scheduler_runs', 'scheduler_set_enabled', 'scheduler_upsert', 'share_create',
@@ -635,4 +637,31 @@ export interface PluginApprovalDecision {
 }
 
 export const PLUGIN_APPROVAL_DECIDE_ACTION = 'plugins.agent_request.decide'
+/** Window -> backend: end an approved request (`applying` -> completed | failed); confirmation subject approval_id. */
+export const PLUGIN_APPROVAL_FINISH_ACTION = 'plugins.agent_request.finish'
+/** Window -> backend: the plugin requests the registry holds (pending and applying). */
+export const PLUGIN_APPROVAL_LIST_MESSAGE = 'plugins.agent_requests.list'
+/** Backend -> windows: a plugin request was filed, or a pending one was asked for again. */
+export const PLUGIN_APPROVAL_REQUEST_EVENT = 'plugins.agent_request'
+/** Backend -> windows: a plugin request was decided, finished or expired. */
+export const PLUGIN_APPROVAL_RESOLVED_EVENT = 'plugins.agent_request_resolved'
+
+// ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
+
+export const PLUGIN_AGENT_ACTION_REQUEST_EVENT = 'plugins.agent_action.request'
+export const PLUGIN_AGENT_ACTION_RESULT_MESSAGE = 'plugins.agent_action.result'
+export type PluginAgentActionKind = 'disable' | 'enable'
+export type PluginAgentActionErrorCode =
+  | 'BAD_REQUEST' | 'NOT_INSTALLED' | 'BUILTIN_PLUGIN' | 'ACTION_FAILED' | 'HOST_UNAVAILABLE'
+
+export interface PluginAgentActionRequest {
+  request_id: string
+  action: PluginAgentActionKind
+  plugin_id: string
+  requester: PluginApprovalRequest['requester']
+}
+
+export type PluginAgentActionAnswer =
+  | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean }
+  | { ok: false; error: string; error_code: PluginAgentActionErrorCode }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000

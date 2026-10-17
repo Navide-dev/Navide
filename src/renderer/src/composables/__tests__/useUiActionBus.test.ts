@@ -604,7 +604,7 @@ describe('useUiActionBus — announcing the bus to the backend', () => {
     await flush()
 
     const ready = sent.filter((s) => s.type === 'ui.invoke.ready')
-    expect(ready.at(-1)?.payload).toEqual({ focused: true })
+    expect(ready.at(-1)?.payload).toEqual({ focused: true, window_id: expect.any(String) })
 
     off()
     focusTarget.dispatchEvent(new Event('focus'))

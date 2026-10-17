@@ -93,6 +93,12 @@ declare global {
       onGitRecoveryChanged: (cb: (change: GitRecoveryChanged) => void) => () => void
       onPlansRecoveryChanged: (cb: (change: PlansRecoveryChanged) => void) => () => void
       onPlansBackendStopped: (cb: (stopped: { workspacePath: string }) => void) => () => void
+      onPluginAgentAction?: (cb: (notice: {
+        action: 'disable' | 'enable'
+        pluginId: string
+        pluginVersion: string
+        requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+      }) => void) => () => void
       onMenuAction: (cb: (action: string) => void) => void
       onSystemResumed: (cb: () => void) => () => void
       setRecentWorkspaces: (list: { path: string; name: string; exists: boolean }[]) => void

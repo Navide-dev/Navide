@@ -17,33 +17,27 @@ import copy
 import logging
 import threading
 import time
-import unicodedata
 import uuid
 from typing import Any
 
-from .plugins.agent_tools_contract import (
-    APPROVAL_KINDS,
-    PLUGIN_APPROVAL_TTL_S,
-    sanitize_agent_tool_result_text,
-)
+from .plugins.agent_tools_contract import APPROVAL_KINDS, PLUGIN_APPROVAL_TTL_S
+from .plugins.external_content import neutralize_external_text
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
 PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"}
 _REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
-# Cf (bidi controls, zero-width), Zl and Zp (U+2028 / U+2029).
-_INVISIBLE_CATEGORIES = frozenset({"Cf", "Zl", "Zp"})
 
 log = logging.getLogger(__name__)
 
 
 def _agent_text(value: str) -> str:
-    """Text an agent wrote, as the approval card shows it (contract 2.4): every
-    Cc character except tab and LF, and every bidi, zero-width and line or
-    paragraph separator character, removed. No length limit."""
-    text = sanitize_agent_tool_result_text(value)
-    return "".join(ch for ch in text if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
+    """Text an agent wrote, as the approval card shows it: the external-content
+    treatment (``neutralize_external_text``: Cc except tab and LF, bidi,
+    zero-width and line or paragraph separators removed, NFKC, boundary lines
+    and markers broken). No length limit."""
+    return neutralize_external_text(value)
 
 
 def _plugin_requester(requester: Any) -> dict[str, Any]:
@@ -70,6 +64,9 @@ class ApprovalRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._records: dict[str, dict[str, Any]] = {}
+        # approval_id -> page-load id of the main window that approved a plugin
+        # request and is carrying it out (B2-c); not part of the record shape.
+        self._applying_by: dict[str, str] = {}
 
     def _expire(self) -> None:
         """Caller holds the lock."""
@@ -183,6 +180,13 @@ class ApprovalRegistry:
             return [copy.deepcopy(r) for r in self._records.values()
                     if r["status"] == "pending" and (r["kind"] != "skill") == plugin]
 
+    def plugin_requests(self) -> list[dict[str, Any]]:
+        """Plugin requests still open: pending, and applying (approved, being carried out)."""
+        with self._lock:
+            self._expire()
+            return [copy.deepcopy(r) for r in self._records.values()
+                    if r["kind"] != "skill" and r["status"] in {"pending", "applying"}]
+
     def claim(self, approval_id: str, status: str, *, plugin: bool = False) -> dict[str, Any]:
         """Move a pending request to `status`; any other state is refused.
 
@@ -210,6 +214,16 @@ class ApprovalRegistry:
             if record is not None:
                 record.update(status=status, result=copy.deepcopy(result), error=error)
 
+    def set_applying_by(self, approval_id: str, window_id: str) -> None:
+        with self._lock:
+            if window_id:
+                self._applying_by[approval_id] = window_id
+
+    def applying_by(self, approval_id: str) -> str:
+        """The page-load id of the main window carrying out an approved request, or ""."""
+        with self._lock:
+            return self._applying_by.get(approval_id, "")
+
     def finish_plugin(self, approval_id: str, status: str, *, error: str | None = None) -> dict[str, Any]:
         """End an approved plugin request: only applying -> completed | failed."""
         with self._lock:
@@ -223,11 +237,13 @@ class ApprovalRegistry:
                     f"approval request is {record['status']}; only applying ends as completed or failed",
                 )
             record.update(status=status, error=error)
+            self._applying_by.pop(approval_id, None)
             return copy.deepcopy(record)
 
     def _reset_for_test(self) -> None:
         with self._lock:
             self._records.clear()
+            self._applying_by.clear()
 
 
 registry = ApprovalRegistry()
@@ -275,7 +291,7 @@ async def decide(approval_id: str, approve: bool, installer: Any) -> dict[str, A
     return public(final)
 
 
-async def decide_plugin(approval_id: str, approve: bool) -> dict[str, Any]:
+async def decide_plugin(approval_id: str, approve: bool, *, window_id: str = "") -> dict[str, Any]:
     """Apply the user's decision on an agent's plugin request.
 
     Approval moves it to `applying`. The main window then runs prepareInstall ->
@@ -288,6 +304,9 @@ async def decide_plugin(approval_id: str, approve: bool) -> dict[str, Any]:
     from .ipc import make_event
 
     final = registry.claim(approval_id, "applying" if approve else "rejected", plugin=True)
+    if approve:
+        # Recovery after a reload leaves alone what a still-open window is applying.
+        registry.set_applying_by(approval_id, window_id)
     await app.broadcast(make_event(
         "plugins.agent_request_resolved",
         {"approval_id": approval_id, "status": final["status"], "error": final["error"]},

@@ -11274,5 +11274,24 @@
       "secretFindings": "Secret scan: {count} possible secret(s), confirmed by the reviewer",
       "similar": "Name is similar to another Navide plugin"
     }
+  },
+  "plugin-agent": {
+    "notice": {
+      "disabled": "{caller} disabled the Navide plugin {plugin}",
+      "enabled": "{caller} enabled the Navide plugin {plugin}",
+      "version": "Version {version}. Its files, grants and data are kept.",
+      "undo-failed": "Could not undo: {error}",
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
+    },
+    "caller": {
+      "pane": "Agent pane “{pane}”",
+      "pane-unknown": "An agent pane",
+      "external": "An external MCP client",
+      "host": "Navide Host"
+    },
+    "button": {
+      "enable": "Enable again",
+      "disable": "Disable again"
+    }
   }
 }
