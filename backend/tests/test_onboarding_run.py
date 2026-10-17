@@ -8,7 +8,9 @@ output, input, kill and exit code.
 from __future__ import annotations
 
 import asyncio
+import subprocess
 import sys
+import time
 from typing import Any
 
 import pytest
@@ -254,6 +256,81 @@ async def test_the_commands_exit_code_reaches_the_window(monkeypatch: pytest.Mon
     output = b"".join(bytes(e) for e in events if isinstance(e, (bytes, bytearray)))
     assert b"brewing" in output
     app_mod._PTY_OWNERS.pop(run_id, None)
+
+
+class _ReapedLate:
+    """A child whose PTY reports EOF before it can be reaped: poll() says it
+    is alive for ``delay`` after its first call (which is _close's, on EOF),
+    whatever the real process is doing (seen under CI load as exit_code=None)."""
+
+    def __init__(self, proc: Any, delay: float) -> None:
+        self._proc = proc
+        self._delay = delay
+        self.held_from: float | None = None
+
+    def poll(self) -> int | None:
+        now = time.monotonic()
+        if self.held_from is None:
+            self.held_from = now
+        return None if now < self.held_from + self._delay else self._proc.poll()
+
+    def wait(self, timeout: float | None = None) -> int:
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while (code := self.poll()) is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired("child", timeout)
+            time.sleep(0.01)
+        return code
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._proc, name)
+
+
+@posix_only
+@pytest.mark.asyncio
+async def test_an_exit_code_reaped_just_after_eof_still_reaches_the_window(tmp_path: Any) -> None:
+    events: list[Any] = []
+
+    async def emit(event: Any) -> None:
+        events.append(event)
+
+    svc = TerminalService(emit)
+    session = svc.create(pane_id="p1", agent_key=None, command=["/bin/sh", "-c", "exit 3"], cwd=str(tmp_path))
+    # Nothing is read before the first await, so EOF always meets the wrapper.
+    session.proc = _ReapedLate(session.proc, delay=0.3)
+    exit_event = await _wait_for_exit(events)
+    assert exit_event["reason"] == "exit"
+    assert exit_event["exit_code"] == 3
+
+
+@posix_only
+@pytest.mark.asyncio
+async def test_waiting_for_the_reap_does_not_block_the_loop(tmp_path: Any) -> None:
+    # The backend's loop serves every pane: while one exit waits for its
+    # reap, other coroutines must keep running on time.
+    events: list[Any] = []
+
+    async def emit(event: Any) -> None:
+        events.append(event)
+
+    svc = TerminalService(emit)
+    session = svc.create(pane_id="p1", agent_key=None, command=["/bin/sh", "-c", "exit 3"], cwd=str(tmp_path))
+    session.proc = late = _ReapedLate(session.proc, delay=0.6)
+    ticks: list[float] = []
+
+    async def ticker() -> None:
+        while not _exits(events):
+            await asyncio.sleep(0.05)
+            ticks.append(time.monotonic())
+
+    tick = asyncio.create_task(ticker())
+    exit_event = await _wait_for_exit(events)
+    await tick
+    assert exit_event["exit_code"] == 3
+    assert late.held_from is not None
+    # A wait that blocked the loop would let no tick finish inside the hold.
+    held = [t for t in ticks if late.held_from < t < late.held_from + 0.6]
+    assert len(held) >= 3, (late.held_from, ticks)
 
 
 @posix_only
