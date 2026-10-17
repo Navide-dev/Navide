@@ -164,8 +164,9 @@ tool means adding it there (or giving it a reserved prefix).
   U+0000–U+001F, U+007F–U+009F, U+2028, U+2029, no `<` or `>`, and no
   character that reorders or hides text: bidi controls and zero-width or other
   invisible characters (U+00AD, U+034F, U+061C, U+180E, U+200B–U+200F,
-  U+202A–U+202E, U+2060–U+2069, U+FEFF), variation selectors (U+FE00–U+FE0F)
-  and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
+  U+202A–U+202E, U+2060–U+2069, U+FEFF), fillers that render as nothing
+  (U+115F, U+1160, U+3164, U+FFA0, U+2800), variation selectors
+  (U+FE00–U+FE0F) and tag characters (U+E0000–U+E007F) (`isValidAgentToolText`). These are
   what could fake a second tool or a system message in a tool list or a
   terminal, reorder and hide text in a dialog, or smuggle text an agent reads
   but the user does not see.
