@@ -11000,6 +11000,92 @@
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   },
+  "pluginActivity": {
+    "title": "Activity",
+    "tab": "Activity",
+    "loading": "Loading activity…",
+    "notSupported": "this Navide cannot read activity yet",
+    "unavailable": "Activity is not available right now: {error}",
+    "window": "Records of the last 7 days, kept on this device.",
+    "totals": "{calls} calls, {denied} refused, {errors} errors",
+    "unknownSize": "unknown",
+    "empty": "Nothing recorded.",
+    "live": {
+      "heading": "Now (live)",
+      "inFlight": "Calls in progress: {current} (at most {peak} at once since Navide started)",
+      "historicalPeak": "Most calls at once in the records: {count} (last 7 days)",
+      "boundViews": "Views bound to a backend: {count} (not the number of running processes)",
+      "queue": "Waiting to be sent to the backend: {requestFrames} requests ({requestBytes}), {eventFrames} events ({eventBytes})",
+      "queueGrowing": "This Navide plugin's backend is not reading; Navide's memory keeps growing.",
+      "dropped": "Event notifications dropped: {count}"
+    },
+    "undeclared": {
+      "heading": "Used but not declared (refused by Navide)",
+      "item": "{address} ({source}) in {workspace}: {count} times, last {date}",
+      "reasons": "Reasons: {reasons}"
+    },
+    "unused": {
+      "heading": "Declared but not used in 30 days",
+      "never": "never used",
+      "last": "last used {date}"
+    },
+    "anomalies": {
+      "heading": "Unusual (marked only, nothing is blocked)"
+    },
+    "anomaly": {
+      "volumeSpike": "{date}: {count} calls, more than 10 times the 7-day average ({baseline})",
+      "writeToolNewWorkspace": "The writing tool {tool} was used in {workspace} for the first time ({date})",
+      "undeclaredDenied": "{count} undeclared uses refused in {workspace} (last {date})"
+    },
+    "tools": {
+      "heading": "Which agent called which tools",
+      "row": "{date} {caller} → {tool} ({risk}): {outcome}, {duration} ms, arguments {args}, result {result}",
+      "ok": "succeeded",
+      "failed": "failed ({code})",
+      "crossWorkspace": "Across workspaces: {from} → {to}",
+      "totalSize": "Arguments {args} and results {result} in total; {unknown} sizes are unknown and not counted"
+    },
+    "caller": {
+      "pane": "pane “{name}”",
+      "external": "an external client",
+      "host": "Navide"
+    },
+    "risk": {
+      "read": "read-only",
+      "write": "writing"
+    },
+    "outcome": {
+      "allowed": "allowed",
+      "denied": "refused",
+      "error": "error"
+    },
+    "files": {
+      "heading": "Files read and written",
+      "item": "{path} · {address} · {count} times · {outcome} · {date}"
+    },
+    "commands": {
+      "heading": "Commands run",
+      "item": "{command} · {count} times · {outcome} · {date}"
+    },
+    "trend": {
+      "heading": "Calls per day"
+    },
+    "agentActions": {
+      "heading": "Changes agents made to this Navide plugin",
+      "item": "{date} {caller}: {action} ({version})",
+      "notRecorded": "This version of Navide does not record this yet."
+    },
+    "overview": {
+      "title": "Disclosure overview",
+      "intro": "Every installed Navide plugin from the Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a plugin may do.",
+      "empty": "No Navide plugin from the Marketplace is installed.",
+      "installedScan": "Scan verified at install",
+      "noScanRecord": "No scan was recorded at install.",
+      "activity": "Recent activity",
+      "undeclaredCount": "{count} undeclared uses refused",
+      "anomalyCount": "{count} unusual items"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "What this update changes",

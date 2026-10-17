@@ -171,6 +171,7 @@ import {
 import { validatePluginDetailTarget } from './pluginDetailTargetSchema'
 import { canonicalTrustJson } from './pluginRegistryTrust'
 import { MARKETPLACE_QUERY_REQUEST_EVENT, MARKETPLACE_QUERY_RESULT_MESSAGE } from '../../shared/pluginAgentTools'
+import { PLUGIN_ACTIVITY_REPORT_MESSAGE, type PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 
@@ -8353,6 +8354,18 @@ export class FrontendPluginManager {
    *  and inventory; see marketplaceQuery.ts. */
   setMarketplaceQueryHandler(handler: (query: unknown) => Promise<MarketplaceQueryAnswer>): void {
     this.marketplaceQueryHandler = handler
+  }
+
+  /** Plan B D-f: one plugin's activity report from the backend, asked over
+   *  this Host's authenticated session (contract 5.1; the backend accepts it
+   *  from that session only). Throws when the session is not ready or the
+   *  backend refuses; the caller shows that instead of a report. */
+  async requestPluginActivityReport(request: PluginActivityReportRequest): Promise<unknown> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) throw new Error('Navide Host session is not ready')
+    const response = await client.send(PLUGIN_ACTIVITY_REPORT_MESSAGE, { ...request }, 15_000)
+    if (!response.ok) throw new Error(response.error?.message ?? 'the backend did not answer the activity report')
+    return response.payload
   }
 
   /** Answer one `marketplace.query.request` on the registered Host session.

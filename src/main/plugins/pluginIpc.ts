@@ -82,8 +82,14 @@ import {
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
 import {
+  parsePluginActivityReport,
+  type PluginActivityReport,
+  type PluginActivityReportRequest,
+} from '../../shared/pluginActivity'
+import {
   computeDisclosure,
   diffDisclosure,
+  disclosureItems,
   type DisclosureDiff,
   type DisclosureManifestInput,
   type DisclosureRiskLevel,
@@ -237,6 +243,17 @@ function listingDisclosure(item: Record<string, unknown>): {
 }
 
 const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
+
+/** What the installed manifest declares, for `declaredUnused` (contract 5.1). */
+function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
+  const out: NonNullable<PluginActivityReportRequest['declared']> = []
+  for (const item of disclosureItems(disclosure)) {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'backendMethod' || item.kind === 'agentTool') {
+      out.push({ kind: item.kind, key: item.key })
+    }
+  }
+  return out
+}
 
 /** The level a list card shows (D-f): the highest of this App's own
  * `cardRiskLevel` and every platform's level the Registry lists, so the card
@@ -752,6 +769,47 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
     assertAuthorized(event)
     return options.backendCallConcurrency?.() ?? []
+  })
+
+  // Plan B D-f: one installed plugin's activity report. The Host fills
+  // `declared` from the installed manifest (the backend has none) and asks the
+  // backend over its authenticated session; the answer is rebuilt from
+  // validated fields before it reaches the page. Read only.
+  ipcMain.handle('plugins:activityReport', async (event, args: { id?: unknown } | null): Promise<
+    { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+  > => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    if (!manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      return { ok: false, error: `${id || '(none)'} is not an installed Navide plugin` }
+    }
+    const disclosure = activeDisclosure(id)
+    const declared = disclosure ? declaredForActivity(disclosure) : []
+    try {
+      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({ plugin_id: id, declared }))
+      return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  // D-f disclosure overview: each installed Registry package's disclosure,
+  // computed from its installed manifest, and the scan verified at install.
+  ipcMain.handle('plugins:installedDisclosures', (event): Array<{
+    id: string
+    version: string
+    disclosure: ManifestDisclosure | null
+    scan: ScanReport | null
+  }> => {
+    assertAuthorized(event)
+    return manager.listInstalledPackages()
+      .filter((pkg) => pkg.provenance === 'official-registry' && pkg.packageVersion)
+      .map((pkg) => ({
+        id: pkg.id,
+        version: pkg.packageVersion!,
+        disclosure: activeDisclosure(pkg.id),
+        scan: installScans.get(pkg.id, pkg.packageVersion!),
+      }))
   })
 
   ipcMain.handle(

@@ -11000,6 +11000,92 @@
     "pin-default-refused": "組み込みの既定アカウントには専用フォルダーがないため、固定できません。先に別のアカウントに切り替えてください。",
     "pin-needs-dir-login": "このペインを {account} に固定するには、そのアカウントの専用フォルダーで一度サインインしてください。サインインを開きました。"
   },
+  "pluginActivity": {
+    "title": "アクティビティ",
+    "tab": "アクティビティ",
+    "loading": "アクティビティを読み込んでいます…",
+    "notSupported": "この Navide はまだアクティビティを読み取れません",
+    "unavailable": "アクティビティを取得できません：{error}",
+    "window": "このデバイスに保存された過去 7 日間の記録です。",
+    "totals": "呼び出し {calls} 回、拒否 {denied} 回、エラー {errors} 回",
+    "unknownSize": "不明",
+    "empty": "記録はありません。",
+    "live": {
+      "heading": "現在（リアルタイム）",
+      "inFlight": "実行中の呼び出し：{current} 件（Navide 起動以降の同時実行の最大は {peak} 件）",
+      "historicalPeak": "記録上の同時実行の最大：{count} 件（過去 7 日間）",
+      "boundViews": "backend に結び付いた view の数：{count}（実行中のプロセス数ではありません）",
+      "queue": "backend への送信待ち：リクエスト {requestFrames} 件（{requestBytes}）、イベント {eventFrames} 件（{eventBytes}）",
+      "queueGrowing": "この Navide プラグインの backend が読み取っていないため、Navide のメモリが増え続けます。",
+      "dropped": "破棄されたイベント通知：{count} 件"
+    },
+    "undeclared": {
+      "heading": "宣言せずに使用（Navide が拒否）",
+      "item": "{workspace} での {address}（{source}）：{count} 回、最後は {date}",
+      "reasons": "理由：{reasons}"
+    },
+    "unused": {
+      "heading": "宣言したが 30 日間使われていない",
+      "never": "一度も使われていない",
+      "last": "最後の使用：{date}"
+    },
+    "anomalies": {
+      "heading": "異常（表示のみ、ブロックはしません）"
+    },
+    "anomaly": {
+      "volumeSpike": "{date}：呼び出し {count} 回、7 日間の平均（{baseline}）の 10 倍超",
+      "writeToolNewWorkspace": "書き込みツール {tool} が {workspace} で初めて使われました（{date}）",
+      "undeclaredDenied": "{workspace} で宣言されていない使用が {count} 回拒否されました（最後は {date}）"
+    },
+    "tools": {
+      "heading": "どの agent がどのツールを呼び出したか",
+      "row": "{date} {caller} → {tool}（{risk}）：{outcome}、{duration} ms、引数 {args}、結果 {result}",
+      "ok": "成功",
+      "failed": "失敗（{code}）",
+      "crossWorkspace": "ワークスペースをまたぐ呼び出し：{from} → {to}",
+      "totalSize": "引数の合計 {args}、結果の合計 {result}。サイズ不明の {unknown} 件は含めていません"
+    },
+    "caller": {
+      "pane": "pane「{name}」",
+      "external": "外部クライアント",
+      "host": "Navide"
+    },
+    "risk": {
+      "read": "読み取り専用",
+      "write": "書き込み"
+    },
+    "outcome": {
+      "allowed": "許可",
+      "denied": "拒否",
+      "error": "エラー"
+    },
+    "files": {
+      "heading": "読み書きしたファイル",
+      "item": "{path} · {address} · {count} 回 · {outcome} · {date}"
+    },
+    "commands": {
+      "heading": "実行したコマンド",
+      "item": "{command} · {count} 回 · {outcome} · {date}"
+    },
+    "trend": {
+      "heading": "1 日あたりの呼び出し数"
+    },
+    "agentActions": {
+      "heading": "agent がこの Navide プラグインに加えた変更",
+      "item": "{date} {caller}：{action}（{version}）",
+      "notRecorded": "この版の Navide はまだこれを記録しません。"
+    },
+    "overview": {
+      "title": "開示の一覧",
+      "intro": "マーケットプレイスからインストールしたすべての Navide プラグインの宣言内容、リスク、最近のアクティビティ、異常をこのページにまとめて表示します。記録のみで、プラグインができることは変わりません。",
+      "empty": "マーケットプレイスからインストールした Navide プラグインはありません。",
+      "installedScan": "インストール時に検証したスキャン",
+      "noScanRecord": "インストール時のスキャンは記録されていません。",
+      "activity": "最近のアクティビティ",
+      "undeclaredCount": "宣言されていない使用の拒否 {count} 回",
+      "anomalyCount": "異常 {count} 件"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "この更新での権限の変化",

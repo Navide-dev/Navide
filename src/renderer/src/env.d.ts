@@ -14,6 +14,8 @@ type PluginManifestDisclosure = import('../../shared/pluginDisclosure').Manifest
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
+type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
+type BackendResourceUsageView = import('./lib/backendQueueTrend').BackendResourceUsageView
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -376,6 +378,17 @@ declare global {
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
         /** Current and peak in-flight backend calls per plugin (never capped) and dropped Host event notifications. */
         backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>>
+        /** D-f: one installed plugin's activity report (read only). */
+        activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** D-f: installed Registry packages' disclosures and install-time scans. */
+        installedDisclosures?: () => Promise<Array<{
+          id: string
+          version: string
+          disclosure: PluginManifestDisclosure | null
+          scan: PluginScanReport | null
+        }>>
+        /** #367 (not merged yet): backend children, subscriptions and Host→child queue backlog. */
+        backendResourceUsage?: () => Promise<BackendResourceUsageView>
         disabledBuiltins?: () => Promise<string[]>
         disabledStoreStatus?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>
         resetDisabledStore?: () => Promise<{ status: 'ok' | 'restored' | 'unreadable' }>

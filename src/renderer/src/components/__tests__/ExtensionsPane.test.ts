@@ -1073,6 +1073,31 @@ describe('ExtensionsPane', () => {
     expect(useNotify().toasts.value.some((toast) => toast.message.startsWith('acme.wider'))).toBe(false)
   })
 
+  // D-f / RULE ZERO: opening the page reads no activity; a row's activity is
+  // read only when the user opens it.
+  it('D-f: loads a plugin activity only when its section is opened', async () => {
+    const activityReport = vi.fn().mockResolvedValue({ ok: false, error: 'Navide Host session is not ready' })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.demo', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+        { id: 'local.dev', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
+      ]),
+      activityReport,
+      backendCallConcurrency: vi.fn().mockResolvedValue([]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    expect(activityReport).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-id="local.dev"] .ext-activity-details').exists()).toBe(false)
+    const details = wrapper.get('[data-id="acme.demo"] .ext-activity-details')
+    ;(details.element as HTMLDetailsElement).open = true
+    await details.trigger('toggle')
+    await flushPromises()
+    expect(activityReport).toHaveBeenCalledWith('acme.demo')
+    expect(details.text()).toContain('Activity is not available right now: Navide Host session is not ready')
+  })
+
   it('restarts a staged Registry update without offering a second install', async () => {
     const listInstalled = vi.fn()
       .mockResolvedValueOnce([{ id: 'navide.mini-ide', packageVersion: '1.0.0', pendingCandidateVersion: '2.0.0', requires: [], sensitive: [] }])

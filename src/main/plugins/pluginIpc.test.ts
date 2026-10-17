@@ -1668,6 +1668,48 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('D-f: asks the backend for the activity report with the declared items, and checks the answer', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-activity-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const fixture = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(fixture)
+      const report = handlers.get('plugins:activityReport')!
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true, report: fixture })
+      expect(ask).toHaveBeenCalledWith({
+        plugin_id: 'acme.demo',
+        declared: expect.arrayContaining([{ kind: 'shell', key: 'allowlist' }]),
+      })
+
+      ask.mockResolvedValue({ ...fixture, schemaVersion: 2 })
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'the activity report was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+      await expect(report(null, { id: 'acme.other' })).resolves.toMatchObject({ ok: false })
+      expect(ask).toHaveBeenCalledTimes(3)
+
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', version: '1.0.0', disclosure: expect.objectContaining({ network: 'via-shell' }), scan: null }),
+      ])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-f: the activity IPC refuses an unauthorized sender', async () => {
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => false, TRUST_CONFIG)
+    await expect(Promise.resolve().then(() => handlers.get('plugins:activityReport')!(null, { id: 'acme.demo' }))).rejects.toThrow()
+    expect(() => handlers.get('plugins:installedDisclosures')!(null)).toThrow()
+  })
+
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)

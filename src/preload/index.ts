@@ -18,6 +18,7 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
+import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -1078,6 +1079,17 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** D-f: one installed plugin's activity report (read only). */
+    activityReport: (id: string): Promise<
+      { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** D-f: installed Registry packages' disclosures and install-time scans. */
+    installedDisclosures: (): Promise<Array<{
+      id: string
+      version: string
+      disclosure: PluginManifestDisclosure | null
+      scan: PluginScanReport | null
+    }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
     disabledStoreStatus: (): Promise<{ status: 'ok' | 'restored' | 'unreadable' }> =>
       ipcRenderer.invoke('plugins:disabledStoreStatus'),

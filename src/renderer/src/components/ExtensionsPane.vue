@@ -18,6 +18,7 @@ import { usePluginUpdates } from '../composables/usePluginUpdates'
 import { askUninstall, ipcErrorMessage, removeWithAnswer, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
 import { useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 import PluginTrustDialog from './PluginTrustDialog.vue'
+import PluginActivityPanel from './PluginActivityPanel.vue'
 import PackUninstallDialog from './PackUninstallDialog.vue'
 import NativeBackendPanel from './NativeBackendPanel.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
@@ -59,6 +60,14 @@ const updatesById = computed(
 )
 const updateFlow = usePluginInstallFlow()
 const notify = useNotify()
+// D-f: rows whose activity section is open; the panel (and its reads) exists only then.
+const activityOpen = ref(new Set<string>())
+function onActivityToggle(id: string, event: Event): void {
+  const next = new Set(activityOpen.value)
+  if ((event.target as HTMLDetailsElement).open) next.add(id)
+  else next.delete(id)
+  activityOpen.value = next
+}
 
 /** The reserved first-party namespace: such a package can be disabled, not removed. */
 function isFirstPartyId(id: string): boolean {
@@ -551,6 +560,15 @@ watch(installed, () => void refreshPacks())
               >
                 {{ $t('settings.extensionsPolicy.labeledValue', { label: $t('settings.extensionsPolicy.packageVersionGrant'), value: formatPackageGrant(p.packageVersionGrant) }) }}
               </span>
+            </details>
+            <!-- Plan B D-f: the plugin's activity, read only when opened. -->
+            <details
+              v-if="p.provenance === 'official-registry'"
+              class="ext-permission-details ext-activity-details"
+              @toggle="onActivityToggle(p.id, $event)"
+            >
+              <summary>{{ $t('pluginActivity.tab') }}</summary>
+              <PluginActivityPanel v-if="activityOpen.has(p.id)" :plugin-id="p.id" />
             </details>
             <label v-if="p.getsPrereleases !== undefined" class="ext-prerelease-toggle">
               <input
