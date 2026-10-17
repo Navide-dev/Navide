@@ -21,8 +21,9 @@ const call = (overrides: Partial<CapabilityCall> = {}): CapabilityCall => ({
   ...overrides,
 })
 
+const AT = 1_792_108_800_123
 const row = (c: CapabilityCall, response: CapabilityResponse): PluginActivityRow =>
-  activityRowFor({ pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/Users/me/project', call: c, response })
+  activityRowFor({ pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/Users/me/project', call: c, response, at: AT })
 
 const respond = (plan: ReturnType<typeof planCapabilityCall>): CapabilityResponse => {
   if (plan.kind !== 'respond') throw new Error(`expected a refusal, got ${plan.kind}`)
@@ -40,7 +41,17 @@ describe('activityRowFor', () => {
       address: 'fs.writeFile',
       outcome: 'allowed',
       fs_path: 'src/a.py',
+      at: AT,
     })
+  })
+
+  it('dates a row when the call completed, not when its batch is sent (#368 follow-up L3)', () => {
+    const before = Date.now()
+    const dated = activityRowFor({
+      pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '', call: call(), response: buildSuccess('r', {}),
+    })
+    expect(dated.at).toBeGreaterThanOrEqual(before)
+    expect(dated.at).toBeLessThanOrEqual(Date.now())
   })
 
   it('records a shell call as the shell source with its command line', () => {
