@@ -538,6 +538,22 @@ CLI が既に何を渡されているのか、このプロジェクトが既に�
 アプリ自身の固定のエラー文言（すべての `BAD_REQUEST` と、`HOST_UNAVAILABLE` の「Navide Host cannot answer Marketplace queries now」）と、予約済みの `navide.` 名前空間のインストール済みプラグイン（ファーストパーティの Plans、Git、mini-IDE）は、そのまま返され、マークもされません。エラーは
 `{ok: false, error, error_code}` で、コードは `BAD_REQUEST`、`NOT_FOUND`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。
 
+### Navide マーケットプレイスへの依頼、無効化と有効化
+
+Navide プラグインの変更を依頼する、またはプラグインを無効化・有効化するツールです。読み取り専用のツールと同じく、すべての呼び出し元で使えます。どのツールにも同意の引数はありません。インストール、更新、ロールバック、削除は、ユーザーが Navide のウィンドウで依頼を承認してから実行され、一緒に送られた同意フラグは無視されます。同梱の Navide プラグイン（Plans、Git、Mini-IDE、`navide.*` 名前空間）は拒否され（`BUILTIN_PLUGIN`）、ユーザーが拡張機能ページで管理します。
+
+| ツール | パラメーター | 内容 |
+|---|---|---|
+| `marketplace_request_install` | `namespace`、`name`、`version`、`reason=""` | `<namespace>.<name>` を `version` でインストールする依頼を出します。マーケットプレイスに掲載されたバージョン（ない場合は `NOT_FOUND`）で、まだインストールされていないことが条件です。ユーザーは依頼者、`reason`（エージェントが書いたものとして表示）、開示カードを見て判断します。`{ok, approval_id, status: "pending", expires_at, note}` を返します。依頼は 15 分で期限切れになり、同じパッケージとバージョンの依頼をもう一度出すと保留中の依頼が返ります |
+| `marketplace_request_update` | `namespace`、`name`、`version`、`reason=""` | インストール済みパッケージの新しいバージョンへの依頼（未インストールなら `NOT_INSTALLED`） |
+| `marketplace_request_rollback` | `namespace`、`name`、`version`、`reason=""` | インストール済みパッケージの古いバージョンへの依頼 |
+| `plugins_request_remove` | `namespace`、`name`、`reason=""` | インストール済みパッケージを削除する依頼 |
+| `marketplace_request_status` | `approval_id`、`wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`。`status` は `pending`、`applying`（承認済み、実行中）、`completed`、`failed`、`rejected`、`expired` のいずれかです。`wait_s`（0〜60）でその秒数だけ変化を待ちます |
+| `plugins_disable` | `namespace`、`name` | インストール済みのマーケットプレイスのパッケージを、拡張機能ページのスイッチと同じようにすぐ無効にします。ビュー、バックエンド、エージェントツールは止まり、ファイル、許可、データは残ります。ユーザーにはどの呼び出し元が行ったかが通知され、ワンクリックで元に戻せます。変更は記録されます。`{ok, pluginId, pluginVersion, disabled: true}` を返します |
+| `plugins_enable` | `namespace`、`name` | ユーザーがすでに与えた同意のまま、再び有効にします。`{ok, pluginId, pluginVersion, disabled: false}` を返します |
+
+エラーは `{ok: false, error, error_code}` で、`BAD_REQUEST`、`BUILTIN_PLUGIN`、`NOT_INSTALLED`、`NOT_FOUND`、`ACTION_FAILED`、`REGISTRY_UNAVAILABLE`、`HOST_UNAVAILABLE` のいずれかです。依頼、判断、結果、無効化、有効化はすべて、呼び出し元（pane 名、外部クライアント、Navide Host）とともに navide.db の `plugin_agent_actions` テーブルに記録されます。
+
 ### Pipeline
 
 Pipeline は保存された多段階の実行です: 順序付けられた Stage の集合で、各 Stage は

@@ -131,3 +131,7 @@ Skills sync が有効なら、条件を満たす内容と配信設定を既存�
 ### MCP による Navide マーケットプレイスの照会
 
 `marketplace_search` と `marketplace_detail` は、Navide マーケットプレイスのページと同じリクエスト（検索テキスト、カテゴリ、ページ、またはパッケージ名）を Navide アプリから設定済みの Registry に送らせます。`plugins_list_installed` は外部に何も送らず、ローカルの一覧を読むだけです。3 つとも結果（公開されている掲載データと、インストール済み Navide プラグインの id・バージョン・状態）を要求元の coding agent に返し、その CLI のデータポリシーに従って、設定されたモデルプロバイダーがそれを受け取る場合があります。
+
+### MCP による Navide マーケットプレイスへの依頼
+
+`marketplace_request_install`、`_update`、`_rollback` を使うと、Navide アプリは `marketplace_detail` と同じ方法でパッケージを照会します。依頼ツールはすべてローカルのインベントリを読みます。依頼は、依頼した pane の名前とワークスペース、エージェントの理由とともに、判断されるか期限切れになるまでバックエンドのメモリに保持され、Navide のウィンドウでユーザーに表示されます。`plugins_disable` と `plugins_enable` は外部に何も送りません。依頼、判断、無効化、有効化はすべて navide.db にローカルで記録され（`plugin_agent_actions`：プラグイン、操作、呼び出し元の種類、pane ID、pane 名、ワークスペース、結果）、30 日間保持され、その後は最新の 10,000 行が残ります。

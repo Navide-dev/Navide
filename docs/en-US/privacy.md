@@ -174,3 +174,7 @@ Skills sync, when enabled, can carry eligible installed content and delivery set
 ### Navide Marketplace queries through MCP
 
 `marketplace_search` and `marketplace_detail` make the Navide app send the same request the Navide Marketplace page sends to the configured Registry: the search text, category and page, or the package name. `plugins_list_installed` sends nothing out; it reads the local inventory. All three return their answer (public listing data, and the ids, versions and states of the installed Navide plugins) to the requesting coding agent, and its configured model provider may receive it under the CLI's own data policy.
+
+### Navide Marketplace requests through MCP
+
+`marketplace_request_install`, `_update` and `_rollback` make the Navide app look the package up the same way `marketplace_detail` does, and all request tools read the local inventory. The request, with the requesting pane's name and workspace and the agent's reason, stays in backend memory until it is decided or expires, and is shown to the user in a Navide window. `plugins_disable` and `plugins_enable` send nothing out. Every request, decision, disable and enable is recorded locally in navide.db (`plugin_agent_actions`: the plugin, the action, the caller's kind, pane id, pane name and workspace, the outcome) and kept 30 days, then the newest 10,000 rows.
