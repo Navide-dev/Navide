@@ -15,6 +15,7 @@
 import { canonicalJson } from './canonicalJson'
 import { AGENT_TOOL_DEFAULT_TIMEOUT_MS } from './pluginAgentTools'
 import type { AgentToolRisk } from './pluginAgentTools'
+import type { ScanReport } from './pluginDisclosureScan'
 
 export const DISCLOSURE_SCHEMA_VERSION = 1
 export const DISCLOSURE_SUMMARY_TEMPLATE = 'plugin-disclosure.summary.v1'
@@ -119,6 +120,8 @@ export interface RegistryDisclosureFacts {
 /** What every disclosure surface (list card, detail, consent, B2 approval card) renders. */
 export interface DisclosureCard {
   manifest: ManifestDisclosure
+  /** The version's scan report (contract 3.4, 3.8), or null when it has none. */
+  scan: ScanReport | null
   registry: RegistryDisclosureFacts | null
 }
 

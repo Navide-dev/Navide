@@ -8932,6 +8932,13 @@ _MQ_KNOWN_KEYS = frozenset({
     "patterns", "domainVerifiedAt", "signature", "keyId", "review", "status", "reviewedAt",
     "nativeCodeInspected", "scan", "secretScan", "secretFindings", "similarityWarning", "similarTo",
     "scannedAt", "enabled", "quarantined", "hasBackend", "state",
+    # The card's scan report (contract 3.4, 3.8); its strings are fenced like any other.
+    "scanner", "artifactDigest", "target", "coverage", "filesTotal", "filesScanned", "bytesScanned",
+    "skipped", "reason", "count", "truncated", "timedOut", "calls", "executable", "subcommand", "category",
+    "source", "evidence", "files", "dynamic", "hosts", "host", "readPaths", "writePaths", "dynamicPaths",
+    "capabilities", "address", "code", "frontend", "backend", "eval", "newFunction", "dynamicImport",
+    "stringTimers", "obfuscationSignals", "native", "path", "format", "arch", "libraries", "notableImports",
+    "importCount", "packer", "embeddedRuntime",
 })
 
 
