@@ -248,7 +248,8 @@ export class PluginActivationSelector {
     const directory = join(this.root, PLUGIN_ACTIVATION_DIR)
     let names: string[]
     try {
-      names = readdirSync(directory)
+      // Sorted: readdir order differs between filesystems and runtimes.
+      names = readdirSync(directory).sort()
     } catch {
       return []
     }

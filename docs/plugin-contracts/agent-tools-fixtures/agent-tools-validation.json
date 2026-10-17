@@ -23,7 +23,7 @@
             },
             {
               "name": "devmap_set_status",
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Read dev map",
               "description": "Read this workspace's dev map.",
@@ -36,7 +36,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -74,7 +74,7 @@
           },
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -99,7 +99,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -136,7 +136,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -174,7 +174,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -214,7 +214,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -260,7 +260,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -295,7 +295,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -361,7 +361,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -396,7 +396,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -435,7 +435,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -469,7 +469,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -509,7 +509,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -549,7 +549,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -579,7 +579,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -615,7 +615,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -651,7 +651,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -687,7 +687,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -723,7 +723,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },
@@ -759,7 +759,7 @@
           ],
           "methods": [
             "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status"
           ]
         }
       },

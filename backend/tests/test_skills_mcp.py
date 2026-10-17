@@ -21,7 +21,7 @@ from agent_team_backend.skills_store import SkillsStore
 
 def _ctx(pane_id: str = "pa", *, token: str | None = None, client: str = "") -> Any:
     params = {"client": client, "t": token or ""} if client else {
-        "pane": pane_id, "t": wiring.caller_token() if token is None else token,
+        "pane": pane_id, "t": wiring.caller_token(pane_id) if token is None else token,
     }
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 

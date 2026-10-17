@@ -59,7 +59,7 @@ def session_on_disk(monkeypatch: pytest.MonkeyPatch) -> set[tuple[str, str]]:
 
 
 def _ctx(pane_id: str = "pa") -> Any:
-    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+    params = {"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
     return SimpleNamespace(
         request_context=SimpleNamespace(request=SimpleNamespace(query_params=params))
     )

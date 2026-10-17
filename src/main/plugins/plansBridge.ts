@@ -55,6 +55,7 @@ export const PLANS_BRIDGE_PORTS = [
   'routes',
   'streams',
   'spawn',
+  'shell',
 ] as const
 
 export type PlansBridgePort = (typeof PLANS_BRIDGE_PORTS)[number]
@@ -230,6 +231,9 @@ const PORT_OPERATIONS: PortOperation = {
   routes: ['invoke'],
   streams: ['open', 'write', 'end', 'cancel'],
   spawn: ['transform'],
+  // Third-party package backends only (pluginThirdPartyBackends.ts): the Host
+  // shell broker, under the same allowlist as a view's shell.run.
+  shell: ['run'],
 }
 
 export function isPlansBridgePort(value: unknown): value is PlansBridgePort {
@@ -901,6 +905,9 @@ export function createPlansBridgeDispatcher(ports: PlansCorePorts): BackendBridg
         }
         case 'spawn':
           return ports.spawn.transform.call(ports.spawn, request.arguments, context)
+        case 'shell':
+          // Plans never declares shell; only third-party package bridges serve it.
+          throw new PlansBridgeError('CAPABILITY_DENIED', 'Plans has no shell port.')
       }
     },
   })
@@ -1125,7 +1132,7 @@ export function createTestPlansFilesystemPort(): PlansFilesystemPort {
     async listDir(arguments_, context) {
       const directory = exactPathArguments(arguments_, 'rel_path', context)
       try {
-        return { entries: readdirSync(directory) }
+        return { entries: readdirSync(directory).sort() }
       } catch {
         throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Workspace directory is unavailable.')
       }
@@ -1134,7 +1141,7 @@ export function createTestPlansFilesystemPort(): PlansFilesystemPort {
       const directory = exactPathArguments(arguments_, 'rel_path', context)
       try {
         return {
-          entries: readdirSync(directory).filter((entry) => extname(entry) !== ''),
+          entries: readdirSync(directory).sort().filter((entry) => extname(entry) !== ''),
         }
       } catch {
         throw new PlansBridgeError('BACKEND_UNAVAILABLE', 'Workspace directory is unavailable.')

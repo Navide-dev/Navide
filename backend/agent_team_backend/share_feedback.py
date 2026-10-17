@@ -150,6 +150,11 @@ async def _handle(client: share_links.LinksClient, item: dict[str, Any]) -> dict
             raise _Refused("content-changed")
         path = str(meta.get("path") or "")
         _plan_location(path)  # before reading a byte of it
+        from . import app
+
+        if app.plans_plugin_disabled():
+            # The user turned Plans off; a phone cannot write to its plans.
+            raise _Refused("plugin-disabled")
         try:
             # Off the event loop: masking a large file takes a while (B7-4).
             prepared = await asyncio.to_thread(share_links.prepare, path, str(row.get("kind") or "plan"))

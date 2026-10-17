@@ -1,8 +1,16 @@
 import { generateKeyPairSync, sign } from 'node:crypto'
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   REGISTRY_ARTIFACT_NAME,
   REGISTRY_RECEIPT_NAME,
@@ -21,6 +29,24 @@ import {
 } from './pluginRegistryTrust'
 import { sha256Hex } from './pluginVerify'
 import { makeZip } from './zipFixture'
+
+// readdir order is filesystem- and runtime-dependent. Pin a deliberately
+// reversed order for one directory so the verifier's own ordering is observed.
+const readdirOrder = vi.hoisted(() => ({ reverseFor: undefined as string | undefined }))
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    readdirSync: ((path: Parameters<typeof actual.readdirSync>[0], ...rest: unknown[]) => {
+      const entries = (actual.readdirSync as (...args: unknown[]) => unknown[])(path, ...rest)
+      if (path !== readdirOrder.reverseFor) return entries
+      const name = (entry: unknown): string =>
+        typeof entry === 'string' ? entry : (entry as { name: string }).name
+      return [...entries].sort((a, b) => (name(a) < name(b) ? -1 : 1)).reverse()
+    }) as typeof actual.readdirSync,
+  }
+})
 
 const rootKey = generateKeyPairSync('ed25519')
 const signerKey = generateKeyPairSync('ed25519')
@@ -117,7 +143,10 @@ describe('verifyInstalledRegistryPackage', () => {
     )
   })
 
-  afterEach(() => rmSync(root, { recursive: true, force: true }))
+  afterEach(() => {
+    readdirOrder.reverseFor = undefined
+    rmSync(root, { recursive: true, force: true })
+  })
 
   function context(current = metadata): InstalledRegistryTrustContext {
     return {
@@ -202,6 +231,16 @@ describe('verifyInstalledRegistryPackage', () => {
     expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', context())).toMatchObject({
       action: 'quarantine',
       reason: expect.stringMatching(/modified/),
+    })
+  })
+
+  it('names the first invalid entry by name regardless of readdir order', () => {
+    symlinkSync('manifest.json', join(pluginDir, 'z-link'))
+    symlinkSync('manifest.json', join(pluginDir, 'a-link'))
+    readdirOrder.reverseFor = pluginDir
+    expect(verifyInstalledRegistryPackage(pluginDir, 'acme.demo', context())).toEqual({
+      action: 'quarantine',
+      reason: 'installed package contains symlink: a-link',
     })
   })
 

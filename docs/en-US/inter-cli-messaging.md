@@ -797,6 +797,13 @@ The pair budget is what stops two agents from talking each other into a loop. A
 retry from the panel spends it like any other send. Delivery-failure notices
 carry their own separate budget, so feedback can never consume a sender's quota.
 
+Who the sender is, for an MCP caller, is the pane its Navide MCP connection was
+wired for: each pane's connection carries a token minted for that pane alone,
+so one pane's wiring does not let a caller send as another pane. It does not
+stop a process running as the same user that reads another pane's token from
+its environment or its config file; see the trust boundaries in
+[architecture.md](architecture.md#trust-boundaries).
+
 ---
 
 ## The Messages panel

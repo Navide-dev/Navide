@@ -373,6 +373,10 @@
               }
             },
             {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
               "key": "ui",
               "params": {}
             }
@@ -421,7 +425,7 @@
           }
         },
         "nativeBackend": null,
-        "network": "none",
+        "network": "via-shell",
         "agentTools": [],
         "dataLocations": {
           "hostStorage": true,
@@ -484,6 +488,10 @@
               }
             },
             {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
               "key": "aiCli",
               "params": {}
             }
@@ -513,7 +521,7 @@
           "scopes": null
         },
         "nativeBackend": null,
-        "network": "none",
+        "network": "via-shell",
         "agentTools": [],
         "dataLocations": {
           "hostStorage": true,
@@ -743,7 +751,7 @@
           "protocolVersion": 1,
           "activation": "startup",
           "methods": [
-            "devmap.setStatus",
+            "devmap.block.status",
             "devmap.read"
           ],
           "events": [
@@ -752,7 +760,7 @@
           "agentTools": [
             {
               "name": "devmap_set_status",
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
               "timeoutMs": 30000,
@@ -823,6 +831,10 @@
               }
             },
             {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
               "key": "ui",
               "params": {}
             },
@@ -888,14 +900,14 @@
         },
         "nativeBackend": {
           "methods": [
-            "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status",
+            "devmap.read"
           ],
           "events": [
             "devmap.changed"
           ]
         },
-        "network": "none",
+        "network": "via-shell",
         "agentTools": [
           {
             "name": "devmap_read",
@@ -903,19 +915,19 @@
             "risk": "read",
             "title": "Read dev map",
             "description": "Read this workspace's dev map.",
+            "timeoutMs": 30000,
             "inputSchema": {
               "type": "object",
               "properties": {}
-            },
-            "timeoutMs": 30000
+            }
           },
           {
             "name": "devmap_set_status",
-            "method": "devmap.setStatus",
+            "method": "devmap.block.status",
             "risk": "write",
             "title": "Set block status",
-            "timeoutMs": 30000,
             "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+            "timeoutMs": 30000,
             "inputSchema": {
               "type": "object",
               "required": [
@@ -997,7 +1009,7 @@
           "protocolVersion": 1,
           "activation": "startup",
           "methods": [
-            "devmap.setStatus",
+            "devmap.block.status",
             "devmap.read"
           ],
           "events": [
@@ -1006,7 +1018,7 @@
           "agentTools": [
             {
               "name": "devmap_set_status",
-              "method": "devmap.setStatus",
+              "method": "devmap.block.status",
               "risk": "write",
               "title": "Set block status",
               "timeoutMs": 30000,
@@ -1077,6 +1089,10 @@
               }
             },
             {
+              "key": "networkViaShell",
+              "params": {}
+            },
+            {
               "key": "ui",
               "params": {}
             },
@@ -1142,14 +1158,14 @@
         },
         "nativeBackend": {
           "methods": [
-            "devmap.read",
-            "devmap.setStatus"
+            "devmap.block.status",
+            "devmap.read"
           ],
           "events": [
             "devmap.changed"
           ]
         },
-        "network": "none",
+        "network": "via-shell",
         "agentTools": [
           {
             "name": "devmap_read",
@@ -1157,19 +1173,19 @@
             "risk": "read",
             "title": "Read dev map",
             "description": "Read this workspace's dev map.",
+            "timeoutMs": 30000,
             "inputSchema": {
               "type": "object",
               "properties": {}
-            },
-            "timeoutMs": 30000
+            }
           },
           {
             "name": "devmap_set_status",
-            "method": "devmap.setStatus",
+            "method": "devmap.block.status",
             "risk": "write",
             "title": "Set block status",
-            "timeoutMs": 30000,
             "description": "Set one block's status (done|wip|plan|blocked) in this workspace's dev map.",
+            "timeoutMs": 30000,
             "inputSchema": {
               "type": "object",
               "required": [
@@ -1200,6 +1216,98 @@
               "**/.navide/devmap.json"
             ]
           }
+        }
+      }
+    },
+    {
+      "name": "fs-scopes-root-null",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.reader",
+        "name": "Example",
+        "version": "1.2.3",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "scopes": {
+            "fs": {
+              "read": [
+                "docs/**",
+                "README.md"
+              ],
+              "root": null
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.reader",
+          "version": "1.2.3",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "README.md",
+                "docs/**"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
         }
       }
     }
