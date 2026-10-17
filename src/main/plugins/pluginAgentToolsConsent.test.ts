@@ -317,6 +317,27 @@ describe('DB1 name collisions', () => {
     expect(rows.find((entry) => entry.pluginId === 'early.devmap')?.agentTools?.[0].collidesWith).toBe('steady.devmap')
   })
 
+  it('ranks a name an update adds from that update, so it cannot take over a held name', async () => {
+    let now = Date.parse('2026-10-01T00:00:00.000Z')
+    const instance = controller({ now: () => now })
+    const dummy = { ...READ_TOOL, name: 'devmap_dummy' }
+    await instance.allow(writePackage('early.devmap', [dummy]))
+    now += 1000
+    const holder = writePackage('steady.devmap', [READ_TOOL])
+    await instance.allow(holder)
+    // early keeps its first consent time, then an update adds the held name.
+    now += 1000
+    const updated = writePackage('early.devmap', [dummy, READ_TOOL])
+    await instance.allow(updated)
+    const rows = await instance.statuses([updated, holder])
+    const byId = new Map(rows.map((entry) => [entry.pluginId, entry]))
+    expect(byId.get('early.devmap')?.agentTools?.find((tool) => tool.name === READ_TOOL.name)?.collidesWith)
+      .toBe('steady.devmap')
+    expect(byId.get('early.devmap')?.agentTools?.find((tool) => tool.name === 'devmap_dummy')?.collidesWith)
+      .toBeUndefined()
+    expect(byId.get('steady.devmap')?.agentTools?.[0].sharedWith).toEqual(['early.devmap'])
+  })
+
   it('leaves rows of packages without tools exactly as status() produced them', async () => {
     const instance = controller()
     const spec = writePackage('acme.devmap')
@@ -345,6 +366,20 @@ describe('NativeBackendStore agentToolsSince', () => {
     reloaded.grantConsent('acme.devmap', { binarySha256: 'a'.repeat(64), permissionsKey: 'k', packageVersion: '1.0.0' })
     expect(reloaded.record('acme.devmap').agentToolsSince).toBe('2026-10-01T00:00:00.000Z')
     reloaded.forget('acme.devmap')
+    expect(reloaded.record('acme.devmap')).toEqual({})
+  })
+
+  it('keeps each name its first time, stamps added names later and drops removed ones', () => {
+    store.noteAgentToolsSince('acme.devmap', new Date('2026-10-01T00:00:00.000Z'), ['devmap_a'])
+    store.noteAgentToolsSince('acme.devmap', new Date('2026-10-05T00:00:00.000Z'), ['devmap_a', 'devmap_b'])
+    const reloaded = new NativeBackendStore(join(root, 'store'))
+    expect(reloaded.record('acme.devmap')).toEqual({
+      agentToolsSince: '2026-10-01T00:00:00.000Z',
+      agentToolNamesSince: { devmap_a: '2026-10-01T00:00:00.000Z', devmap_b: '2026-10-05T00:00:00.000Z' },
+    })
+    reloaded.noteAgentToolsSince('acme.devmap', new Date('2026-10-06T00:00:00.000Z'), ['devmap_b'])
+    expect(reloaded.record('acme.devmap').agentToolNamesSince).toEqual({ devmap_b: '2026-10-05T00:00:00.000Z' })
+    reloaded.clearAgentToolsSince('acme.devmap')
     expect(reloaded.record('acme.devmap')).toEqual({})
   })
 })

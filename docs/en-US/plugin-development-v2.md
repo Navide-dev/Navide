@@ -437,7 +437,8 @@ asks again. A package that declares no tools keeps exactly the consent it had
 before this field existed.
 
 Two packages can derive the same prefix. When both declare the same tool name,
-the package the user allowed first keeps the name; the later one's tool stays
+the package the user first allowed with that name keeps it (a name an update
+adds counts from that update); the later one's tool stays
 offline, and Settings → Navide Plugins says so in both rows. A package the user
 has not allowed (or not re-allowed since its tools changed), or whose native
 backend the user disabled, holds no names, and a version that declares no

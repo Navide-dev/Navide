@@ -137,35 +137,42 @@ export interface AgentToolNameClaimant {
   pluginId: string
   /** When the package began declaring agent tools (ISO 8601); unknown sorts last. */
   since?: string
+  /** Per name, when a consented version first declared it; overrides `since`. */
+  sinceByName?: Readonly<Record<string, string>>
   names: readonly string[]
 }
 
 /**
- * DB1: when two packages declare the same tool name, the one that began
- * declaring tools first holds it and the later one's tool stays offline
- * (sync state `name-collision`). Ties fall back to plugin id order, so the
- * answer never depends on the order the packages are listed in.
+ * DB1: when two packages declare the same tool name, the one whose consent
+ * first covered that name holds it and the later one's tool stays offline
+ * (sync state `name-collision`). The order is per name, so a name an update
+ * adds ranks from that update and cannot take over one another package
+ * already holds. Ties fall back to plugin id order, so the answer never
+ * depends on the order the packages are listed in.
  */
 export function agentToolNameCollisions(
   claimants: readonly AgentToolNameClaimant[],
 ): Map<string, AgentToolNameCollision[]> {
-  const ordered = [...claimants].sort((left, right) => {
-    if (left.since !== right.since) {
-      if (left.since === undefined) return 1
-      if (right.since === undefined) return -1
-      return left.since < right.since ? -1 : 1
-    }
-    return left.pluginId < right.pluginId ? -1 : left.pluginId > right.pluginId ? 1 : 0
-  })
-  const holders = new Map<string, string>()
-  const collisions = new Map<string, AgentToolNameCollision[]>()
-  for (const claimant of ordered) {
+  const byName = new Map<string, Array<{ pluginId: string; since?: string }>>()
+  for (const claimant of claimants) {
     for (const name of claimant.names) {
-      const heldBy = holders.get(name)
-      if (heldBy === undefined) {
-        holders.set(name, claimant.pluginId)
-      } else if (heldBy !== claimant.pluginId) {
-        collisions.set(claimant.pluginId, [...(collisions.get(claimant.pluginId) ?? []), { name, heldBy }])
+      const since = claimant.sinceByName?.[name] ?? claimant.since
+      byName.set(name, [...(byName.get(name) ?? []), { pluginId: claimant.pluginId, since }])
+    }
+  }
+  const collisions = new Map<string, AgentToolNameCollision[]>()
+  for (const claimant of claimants) {
+    for (const name of claimant.names) {
+      const [holder] = [...(byName.get(name) ?? [])].sort((left, right) => {
+        if (left.since !== right.since) {
+          if (left.since === undefined) return 1
+          if (right.since === undefined) return -1
+          return left.since < right.since ? -1 : 1
+        }
+        return left.pluginId < right.pluginId ? -1 : left.pluginId > right.pluginId ? 1 : 0
+      })
+      if (holder && holder.pluginId !== claimant.pluginId) {
+        collisions.set(claimant.pluginId, [...(collisions.get(claimant.pluginId) ?? []), { name, heldBy: holder.pluginId }])
       }
     }
   }
@@ -543,7 +550,11 @@ export class ThirdPartyBackendController {
   private noteAgentTools(spec: ThirdPartyLaunchSpec): void {
     if (!spec.thirdParty.agentTools?.length) return
     try {
-      this.store.noteAgentToolsSince(spec.pluginId, new Date(this.now()))
+      this.store.noteAgentToolsSince(
+        spec.pluginId,
+        new Date(this.now()),
+        spec.thirdParty.agentTools.map((tool) => tool.name),
+      )
     } catch {
       // The package then holds no names until its next consent.
     }
@@ -689,7 +700,12 @@ export class ThirdPartyBackendController {
       const row = rows[index]
       const record = this.store.record(spec.pluginId)
       return row.agentTools && !record.disabled && record.agentToolsSince !== undefined && this.agentToolsConsented(spec)
-        ? [{ pluginId: row.pluginId, since: record.agentToolsSince, names: row.agentTools.map((tool) => tool.name) }]
+        ? [{
+            pluginId: row.pluginId,
+            since: record.agentToolsSince,
+            sinceByName: record.agentToolNamesSince,
+            names: row.agentTools.map((tool) => tool.name),
+          }]
         : []
     })
     const collisions = agentToolNameCollisions(claimants)

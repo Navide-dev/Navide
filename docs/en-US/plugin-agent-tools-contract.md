@@ -106,12 +106,14 @@ declare agent tools (DB13 is open).
 - Two packages that derive the same prefix may both install; when two
   available tools have the same name, the one the user allowed later is not
   served (state `name-collision`, [4.1](#41-host--backend-pluginsagenttoolssync)),
-  and the Navide Plugins page says why in both rows (DB1). The order is the
-  consent record's `agentToolsSince`: the time the user first allowed a version
-  of the package that declares tools, made unique across packages so there is
-  never a tie. A version that declares no tools clears it. Only a package whose
-  consent covers its current tool set, and that the user has not disabled,
-  holds names.
+  and the Navide Plugins page says why in both rows (DB1). The order is per
+  name: the consent record's `agentToolNamesSince[name]`, the time the user
+  first allowed a version of the package that declares that name, made unique
+  across packages so there is never a tie. A name an update adds ranks from
+  that update's consent, so it cannot take over a name another package already
+  holds; a name the package stops declaring loses its place, and a version that
+  declares no tools clears them all. Only a package whose consent covers its
+  current tool set, and that the user has not disabled, holds names.
 
 ### 2.3 Reserved names
 
