@@ -136,7 +136,7 @@ A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 `share_` `skills_` `stage_` `ui_` `workspace_`
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
-pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 77
+pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 80
 names: `mcp_server/server.py` plus the plan and skills tools the built-in
 packages install). `test_every_live_core_tool_is_reserved` fails when a core
 tool exists that is neither listed nor under a reserved prefix; adding a core
@@ -571,7 +571,7 @@ The report holds facts only:
 |---|---|
 | `scanner` | `id` is `navide-static-scan`; `version` changes whenever a rule changes. Shown on the card |
 | `artifactDigest`, `target` | equal the package envelope of the artifact scanned |
-| `coverage` | `skipped[].reason` is one of `binaryAsset`, `tooLarge`, `redacted`, `unsupported`; `truncated` when any bound below was hit; `timedOut` when the time budget ran out. Neither fails a publish |
+| `coverage` | `skipped[].reason` is one of `binaryAsset`, `tooLarge`, `redacted`, `unsupported`, `scannerError` (the scanner failed on that file and went on with the others), `tooComplex` (the file hit a structural ceiling: template nesting, section, import or symbol counts); `truncated` when any bound below was hit; `timedOut` when the time budget ran out. None of them fails a publish; `scannerError` and `tooComplex` (`INCOMPLETE_SKIP_REASONS`) make the scan incomplete, as `truncated` and `timedOut` do |
 | `shell.calls` | one entry per distinct `(executable, subcommand, source, evidence)`; `category` from `classifyShellCommand`; `evidence` is `callSite` (the `command` value of a `shell.run` call is a string literal) or `commandLikeString` (a literal that reads as a command); `files` counts the files it occurs in |
 | `shell.dynamic` | `shell.run` calls whose command is built at run time (a template with `${}`, an identifier, an expression): count and files only |
 | `network.hosts` | host names from URLs (`http(s)`, `ws(s)`, `ssh`, `git@host:`); never a path, query or credential (DS5) |
@@ -617,7 +617,7 @@ strings). Publishers cannot write them.
 | `code.obfuscated` | any obfuscation signal | `{signals}` | 程式碼有混淆跡象，掃描結果可能不完整。 |
 | `native.summary` | each native executable | `{path, format, arch, libraries}` | 原生 backend（mach-o arm64）連結了 libSystem。 |
 | `native.unscannable` | packer or embedded runtime | `{path, reason, detail}` | 原生 backend 內嵌 Python 執行環境，裡面的程式碼無法掃描。 |
-| `coverage.incomplete` | timed out, truncated, obfuscated, packed or embedded runtime | `{reasons}` | 掃描不完整：有部分內容沒有掃到。 |
+| `coverage.incomplete` | timed out, truncated, obfuscated, packed, embedded runtime, or a `scannerError` / `tooComplex` skip | `{reasons}` | 掃描不完整：有部分內容沒有掃到。 |
 | `notFound.shell`, `notFound.network`, `notFound.files`, `notFound.dynamicCode` | nothing of that kind was found | `{}` | 靜態掃描未發現 shell 指令。 |
 | `coverage` | always, last | `{scannerVersion, scannedAt, filesScanned, filesTotal}` | 上架時由 Navide Registry 掃描（掃描器 1.0.0，2026-10-17，11／12 個檔案）。靜態掃描看不到執行時才決定的行為，以下不代表完整清單。 |
 | `noScan` | the version has no scan report (not produced by `scanSentences`) | `{}` | 這個版本上架時尚未有系統掃描，以下只有外掛自己的宣告。 |
@@ -1107,6 +1107,7 @@ by editing the fixture.
 | DS6 Embedded runtimes and packed executables | disclosed as "無法掃描", not unpacked | unpacking is deferred work |
 | DS7 Rescan | manual admin rescan; old reports are kept | a scanner upgrade is a deliberate operation |
 | DS8 Envelope | the 9-field disclosure envelope ships first, `scanDigest` may be `null` | D-a, D-b and D-c can merge before the scanner without another envelope change |
+| DS2 for scanner failures and ceilings | new `coverage.skipped` reasons `scannerError` and `tooComplex`, both incomplete (at least high, "掃描不完整"); added in the scanner PR, existing values unchanged | a scanner crash or a hostile structure must never leave a version without a report or with a report that looks complete (review of #355) |
 | DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
 | Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |

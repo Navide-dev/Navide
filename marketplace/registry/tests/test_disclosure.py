@@ -187,10 +187,12 @@ def test_publish_signs_a_disclosure_envelope_beside_the_unchanged_package_envelo
         assert attestation[field] == envelope[field], field
     assert attestation["disclosureDigest"] == _digest(disclosure)
     assert re.fullmatch(r"[0-9a-f]{64}", attestation["disclosureDigest"])
-    # No scanner yet (DS8): the 9-field envelope ships with a null scanDigest.
+    # The frontend scan report is signed through scanDigest (contract 3.8).
     assert len(DISCLOSURE_ENVELOPE_FIELDS) == 9
-    assert attestation["scanDigest"] is None
-    assert version["scan"] is None
+    assert version["scan"]["artifactDigest"] == envelope["artifactDigest"]
+    assert attestation["scanDigest"] == hashlib.sha256(
+        disclosure_contract.canonical_contract_json(version["scan"]).encode("ascii")
+    ).hexdigest()
     _verify(signed_env.registry_signer_public_pem, attestation, version["disclosure_signature"])
 
 
@@ -226,6 +228,9 @@ def test_auto_published_native_backend_is_not_inspected(signed_env: SignedEnv) -
     }
     assert version["disclosure"]["nativeBackend"] is not None
     assert version["disclosure_envelope"]["target"] == "darwin-arm64"
+    # The native executable is scanned and the report signed (contract 3.8).
+    assert version["scan"]["native"][0]["format"] == "mach-o"
+    assert version["disclosure_envelope"]["scanDigest"] is not None
 
 
 def test_a_legacy_v1_package_has_no_disclosure(signed_env: SignedEnv) -> None:
@@ -355,6 +360,12 @@ def test_scan_summary_has_counts_only_never_values_or_paths(cloud) -> None:
     assert scan["secretScan"] == "findings"
     assert scan["secretFindings"] == 1
     assert version["registry"]["review"]["nativeCodeInspected"] is None
+    # Approval rescans the stored package and signs that report.
+    assert version["scan"] is not None
+    assert version["disclosure_envelope"]["scanDigest"] == hashlib.sha256(
+        disclosure_contract.canonical_contract_json(version["scan"]).encode("ascii")
+    ).hexdigest()
+    assert "AKIA" not in json.dumps(version["scan"])
     wire = json.dumps(version["registry"])
     assert "AKIA" not in wire
     assert "leak.txt" not in wire
