@@ -447,6 +447,27 @@ export function splitAgentToolPayloadText(text: string, maxBytes: number = AGENT
   return pieces
 }
 
+/** What a receiver learns from one piece as it arrives (section 4.4). */
+export type AgentToolChunkArrival =
+  | { ok: true; short: boolean }
+  | { ok: false; code: 'PLUGIN_TOOL_CHUNKS_INVALID'; reason: 'seq' | 'short' }
+
+/**
+ * Checks one piece on arrival. Senders send pieces in `seq` order and only the
+ * last may be short (under `chunkBytes - 3` UTF-8 bytes), so any piece after a
+ * short one is `short`. A short piece does not restart the idle timer
+ * (`short: true`); a full one does. A format rule, not a limit.
+ */
+export function agentToolChunkArrival(
+  shortSeen: boolean,
+  data: unknown,
+  chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
+): AgentToolChunkArrival {
+  if (typeof data !== 'string') return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
+  if (shortSeen) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'short' }
+  return { ok: true, short: utf8ByteLength(data) < chunkBytes - 3 }
+}
+
 function isCount(value: unknown, min: number): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= min
 }

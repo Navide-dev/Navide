@@ -502,5 +502,106 @@
       "bytes": 24,
       "sha256": "53a2c0da9090ae631e638bbf7eb5c3182ffdf7dee96b5307a7df79c2ccce7760"
     }
+  ],
+  "arrival": [
+    {
+      "name": "full pieces then a short last one",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcde",
+        "ab"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
+        }
+      ]
+    },
+    {
+      "name": "any piece after a short one fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "a",
+        "bcdefghi",
+        "x"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": true
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "short"
+        }
+      ]
+    },
+    {
+      "name": "a one-byte drip fails on the second byte",
+      "chunkBytes": 131072,
+      "pieces": [
+        "{",
+        "\""
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": true
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "short"
+        }
+      ]
+    },
+    {
+      "name": "a full piece may end early by up to 3 bytes for a code point",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcde",
+        "😀"
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
+        }
+      ]
+    },
+    {
+      "name": "a piece that is not a string",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        null
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    }
   ]
 }

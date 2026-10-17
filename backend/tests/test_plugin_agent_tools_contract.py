@@ -253,6 +253,19 @@ def test_reassemble_payload_text(case: dict[str, Any]) -> None:
     assert tools.reassemble_agent_tool_payload_text(case["chunks"], case["summary"], case["chunkBytes"]) == case["expected"]
 
 
+@pytest.mark.parametrize("case", _CHUNKING["arrival"], ids=lambda c: c["name"])
+def test_each_piece_is_checked_on_arrival(case: dict[str, Any]) -> None:
+    seen: list[dict[str, Any]] = []
+    short_seen = False
+    for data in case["pieces"]:
+        result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+        seen.append(result)
+        if not result["ok"]:
+            break
+        short_seen = result["short"]
+    assert seen == case["expected"]
+
+
 @pytest.mark.parametrize("case", _CHUNKING["arguments"], ids=lambda c: c["name"])
 def test_arguments_are_cut_from_the_shared_compact_spelling(case: dict[str, Any]) -> None:
     text = tools.agent_tool_payload_text(case["arguments"])

@@ -393,6 +393,23 @@ def split_agent_tool_payload_text(text: str, max_bytes: int = AGENT_TOOL_CHUNK_B
     return pieces
 
 
+def agent_tool_chunk_arrival(short_seen: bool, data: Any, chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> dict[str, Any]:
+    """Check one piece on arrival (section 4.4).
+
+    Senders send pieces in ``seq`` order and only the last may be short (under
+    ``chunk_bytes - 3`` UTF-8 bytes), so any piece after a short one is
+    ``short``. A short piece does not restart the idle timer (``short: True``);
+    a full one does. A format rule, not a limit. Returns ``{"ok": True,
+    "short": bool}`` or ``{"ok": False, "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+    "reason": "seq" | "short"}``.
+    """
+    if not isinstance(data, str):
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "seq"}
+    if short_seen:
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "short"}
+    return {"ok": True, "short": utf8_byte_length(data) < chunk_bytes - 3}
+
+
 def _is_count(value: Any, minimum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= MAX_SAFE_INTEGER
 

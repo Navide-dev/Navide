@@ -18,6 +18,7 @@ import {
   CORE_TOOL_NAMES,
   PLUGIN_APPROVAL_DECIDE_ACTION,
   RESERVED_TOOL_PREFIXES,
+  agentToolChunkArrival,
   agentToolResultBytes,
   deriveAgentToolPrefix,
   isValidAgentToolText,
@@ -28,7 +29,7 @@ import {
   validateAgentToolName,
   validateAgentTools,
 } from './pluginAgentTools'
-import type { AgentToolProgressMessage, AgentToolTimeoutReason } from './pluginAgentTools'
+import type { AgentToolChunkArrival, AgentToolProgressMessage, AgentToolTimeoutReason } from './pluginAgentTools'
 import { canonicalContractJson } from './pluginDisclosure'
 
 // The Python implementation (backend/agent_team_backend/plugins/agent_tools_contract.py)
@@ -135,6 +136,7 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     constants: Record<string, string | number>
     splits: Case<{ name: string; text: string; maxBytes: number; expected: string[] }>
     reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; chunkBytes: number; expected: unknown }>
+    arrival: Case<{ name: string; chunkBytes: number; pieces: unknown[]; expected: unknown[] }>
     arguments: Case<{ name: string; arguments: unknown; text: string; maxBytes: number; expected: string[] }>
     argumentsDigest: Case<{ name: string; arguments: unknown; canonical: boolean; bytes: number; sha256: string }>
   }
@@ -182,6 +184,18 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
 
   it.each(chunking.reassembly)('reassembles: $name', ({ chunks, summary, chunkBytes, expected }) => {
     expect(reassembleAgentToolPayloadText(chunks, summary, chunkBytes)).toEqual(expected)
+  })
+
+  it.each(chunking.arrival)('checks each piece on arrival: $name', ({ chunkBytes, pieces, expected }) => {
+    const seen: AgentToolChunkArrival[] = []
+    let shortSeen = false
+    for (const data of pieces) {
+      const result = agentToolChunkArrival(shortSeen, data, chunkBytes)
+      seen.push(result)
+      if (!result.ok) break
+      shortSeen = result.short
+    }
+    expect(seen).toEqual(expected)
   })
 
   it.each(chunking.arguments)('cuts arguments from the shared compact spelling: $name', ({ arguments: args, text, maxBytes, expected }) => {

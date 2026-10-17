@@ -826,8 +826,15 @@ that `seq` runs `0..chunks-1` exactly once each and that the joined text has
 produces (a piece ends early only when the next code point, up to 4 bytes,
 does not fit). This is a format rule, not a limit: it stops a sender from
 dripping a value one byte at a time to keep the idle timer alive and so stretch
-a call past `timeoutMs` (R1 is the only hop whose sender is not Navide). The
-summary `{chunks, bytes}` travels in the message that completes the transfer.
+a call past `timeoutMs` (R1 is the only hop whose sender is not Navide).
+Senders send pieces in `seq` order, so a valid transfer has at most one short
+piece and it comes last. Receivers therefore check every piece as it arrives
+with `agentToolChunkArrival`: a piece that is not a string is `seq`, any piece
+after a short one fails the call at once as `short` (without waiting for the
+final message, which a dripping sender would never send), and a short piece
+does not restart the idle timer (see Timing). The joined pieces are checked
+again by `reassembleAgentToolPayloadText`. The summary `{chunks, bytes}`
+travels in the message that completes the transfer.
 A mismatch is `PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` |
 `count` | `short` | `bytes`; joined text that does not parse as JSON is the same code with
 `reason` `json`. It fails that one call and nothing else. A value whose text
@@ -999,7 +1006,9 @@ Time never acts as a size limit. Two clocks, and nothing else:
 - **Transfer**: every transfer of pieces runs on an idle timer of
   `AGENT_TOOL_CHUNK_IDLE_MS` = 30,000 ms that every piece restarts. It tells a
   stalled peer from a slow one: a value of any size passes as long as pieces
-  keep moving, and the timer only fires after 30 s without one. On expiry the
+  keep moving, and the timer only fires after 30 s without one. Only a full
+  piece restarts it; a short piece (the last one, 4.4 Pieces) does not, so a
+  sender cannot hold a call open by trickling bytes. On expiry the
   call fails with `PLUGIN_TOOL_TIMEOUT`, `reason: "transfer-idle"`, the pieces
   held so far are dropped, and the Host sends `notifications/cancelled` to the
   child. Where each hop restarts it: A2 — the Host, on each
