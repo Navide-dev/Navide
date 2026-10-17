@@ -52,12 +52,14 @@ function plainText(value: string): string {
   return MARKERS.has(value) ? `./${value}` : value
 }
 
-/** Read-only calls (PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES): a failed one changed
- *  nothing, so its path is ACTIVITY_FAILED_TARGET. Any other failed call keeps
- *  its path and command: it may have done something before it failed. */
-export const READ_ONLY_ADDRESSES: ReadonlySet<string> = new Set([
-  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath',
+/** Calls that change something (PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES): one
+ *  that failed after it was dispatched may have done so, so it keeps its path
+ *  and command. Any other failed call changed nothing: ACTIVITY_FAILED_TARGET. */
+export const STATE_CHANGING_ADDRESSES: ReadonlySet<string> = new Set([
+  'fs.writeFile', 'fs.write_file', 'fs.create_file', 'fs.delete', 'fs.mkdir', 'fs.rename', 'shell.run',
 ])
+/** Refusals of the request itself: the call never ran. */
+const NOT_DISPATCHED_CODES: ReadonlySet<string> = new Set(['UNKNOWN', 'BAD_REQUEST', 'METHOD_NOT_FOUND', 'INVALID_ARGUMENT'])
 
 /** Read-only calls that answer a missing path inside a successful call. */
 const READS_ANSWERING_MISSING: ReadonlySet<string> = new Set([
@@ -152,7 +154,10 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
     count: 1,
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
-  const kept = outcome === 'allowed' || (outcome === 'error' && !READ_ONLY_ADDRESSES.has(`${call.ns}.${call.method}`))
+  const kept = outcome === 'allowed' || (
+    outcome === 'error' && STATE_CHANGING_ADDRESSES.has(`${call.ns}.${call.method}`)
+    && !NOT_DISPATCHED_CODES.has(response.error?.code ?? '')
+  )
   const target = (value: string): string =>
     kept ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined

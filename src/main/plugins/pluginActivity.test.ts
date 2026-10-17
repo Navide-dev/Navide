@@ -129,6 +129,9 @@ describe('text the plugin wrote is never a key', () => {
     expect(row(write, buildError('req-1', 'TIMEOUT', 'x')).fs_path).toBe('src/new.ts')
     const run = call({ ns: 'shell', method: 'run', args: { command: 'git push origin' } })
     expect(row(run, buildError('req-1', 'INTERNAL_ERROR', 'x')).shell_command).toBe('git push origin')
+    // Only those: an unknown address, or a write refused before it ran, changed nothing.
+    expect(row(call({ method: 'readFile2' }), buildError('req-1', 'METHOD_NOT_FOUND', 'x')).fs_path).toBe(ACTIVITY_FAILED_TARGET)
+    expect(row(write, buildError('req-1', 'INVALID_ARGUMENT', 'x')).fs_path).toBe(ACTIVITY_FAILED_TARGET)
     const shell = call({ ns: 'shell', method: 'run', args: { command: 'curl -u me:secret https://x' } })
     expect(row(shell, buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ shell_command: ACTIVITY_DENIED_TARGET })
     // An allowed call keeps them: that IO happened.
