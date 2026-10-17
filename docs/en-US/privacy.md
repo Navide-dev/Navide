@@ -14,6 +14,14 @@ Depending on enabled features, Navide stores:
   these are keyed by authenticated plugin/package and, for workspace scope, by
   authenticated workspace, and are not sent to Navide or plugin registries
 - Token-attribution and deduplication metadata derived from local CLI logs
+- An activity log of what third-party Navide plugins asked the Host for, in the
+  local `navide.db` (`plugin_activity`): the plugin, the `namespace.method`, the
+  time, the workspace, whether it was allowed, refused or failed, a
+  workspace-relative file path (a path outside the workspace is only
+  `<outside-workspace>`; file contents are never stored) and, for shell calls,
+  the executable and subcommand only. Detail rows are kept 7 days, then only
+  per-day counts for 90 days. The bundled Plans, Git and Mini-IDE are not
+  logged. It never leaves this machine
 - Optional AI provider API keys in a local settings file protected with restrictive file permissions (`0600` on supported systems)
 
 Navide does not operate a project telemetry service and does not require a Navide account.

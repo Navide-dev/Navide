@@ -1124,6 +1124,25 @@ page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
 
+The Host's capability broker records the broker and shell-broker rows of
+third-party plugins (the bundled `navide.*` packages are not recorded) and sends
+them in batches, about once a second, as `plugin.activity.record`
+(`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
+plugin_version, workspace, source: "broker" | "shell", address, outcome,
+denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+paths and command lines cross the local Host session only; the backend keeps
+their redacted form. `denied_reason` is `undeclared` when the broker refused a
+namespace or shell use the manifest did not declare. A refused cast is recorded;
+a dispatched cast (terminal input) is not.
+
+`plugin.activity.summary` (`PLUGIN_ACTIVITY_SUMMARY_MESSAGE`, Host-authenticated,
+`{plugin_id, declared?}`) answers the activity page with
+`PluginAuditLog.activity_summary`: 30-day call counts by `address`, `source` and
+`outcome`, `denied30d`, `deniedUndeclared {count7d, lastAt}` (the daily rollup
+keeps no reason, so 7 days of detail), `declaredUnused`, and the anomaly flags
+`volume-spike`, `write-tool-new-workspace` and `undeclared-denied`. The flags
+refuse nothing.
+
 ## 6. Approval registry (B2)
 
 The skills `ApprovalRegistry` gains a `kind` field: `skill` |
