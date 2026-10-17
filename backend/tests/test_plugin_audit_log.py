@@ -1061,3 +1061,37 @@ def test_the_peak_is_zero_without_calls_in_the_window(audit: PluginAuditLog, clo
     assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=NOW - DAY_MS, until_ms=NOW) == {
         "historicalPeak": 0, "at": None,
     }
+
+
+def test_at_is_the_end_of_the_call_and_the_peak_uses_known_starts_and_ends(audit: PluginAuditLog, clock: Clock) -> None:
+    """#368 review M1: ``at`` is when the call ended (contract section 5)."""
+    base = NOW - DAY_MS
+    # (start, end) known: A 1000-3000, B 2500-4000, C 3500-5000 -> A+B overlap, B+C overlap, never all three.
+    for start, end in ((1000, 3000), (2500, 4000), (3500, 5000)):
+        _timed_call(audit, clock, base + end, end - start)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW) == {
+        "historicalPeak": 2, "at": base + 2500,
+    }
+    calls = audit.activity_report(_PLUGIN, now_ms=NOW)["toolCalls"]
+    assert sorted((c["at"] - c["durationMs"], c["at"]) for c in calls) == [
+        (base + 1000, base + 3000), (base + 2500, base + 4000), (base + 3500, base + 5000),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("calls", "peak"),
+    [
+        ([(1000, 0), (1000, 0)], 2),      # two 0 ms calls at the same instant
+        ([(1000, 500), (900, 0)], 2),     # a 0 ms call inside another
+    ],
+)
+def test_a_zero_ms_call_counts_toward_the_peak(
+    audit: PluginAuditLog, clock: Clock, calls: list[tuple[int, int]], peak: int
+) -> None:
+    """#368 review M2: (end, duration_ms) pairs; a 0 ms call lasts at least 1 ms."""
+    base = NOW - DAY_MS
+    for end, duration in calls:
+        _timed_call(audit, clock, base + end, duration)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == peak

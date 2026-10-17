@@ -1095,7 +1095,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | Column | Type | Content |
 |---|---|---|
 | `id` | INTEGER PK | autoincrement |
-| `at` | INTEGER | call start |
+| `at` | INTEGER | call **end** (Unix ms): the row is written once the call is over, with its duration and result size; the call ran over `[at − duration_ms, at]` |
 | `caller_kind` | TEXT | `pane` / `external` / `host` |
 | `pane_id`, `pane_name` | TEXT | `''` when not a pane |
 | `caller_workspace`, `target_workspace` | TEXT | |

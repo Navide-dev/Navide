@@ -843,9 +843,9 @@ class PluginAuditLog:
     def historical_peak_concurrent_calls(self, plugin_id: str, *, since_ms: int, until_ms: int) -> dict[str, Any]:
         """The most agent tool calls of ``plugin_id`` that ran at once in the window.
 
-        Each written call ran over ``[at - duration_ms, at]`` (``at`` is when
-        it was recorded, at its end); a call that ends as another starts does
-        not overlap it. Historical only: calls still running are not in the
+        Each written call ran over ``[at - duration_ms, at]``: ``at`` is when
+        the call ended (contract section 5), and a 0 ms call counts as 1 ms. A
+        call that ends as another starts does not overlap it. Historical only: calls still running are not in the
         table yet, so the current count is the Host's
         (``plugins:backendCallConcurrency``), never derived from here.
         Returns ``{historicalPeak, at}`` (``at`` is when the peak began, None
@@ -859,7 +859,9 @@ class PluginAuditLog:
                 "SELECT at - duration_ms, at FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ? AND at - duration_ms <= ?",
                 (plugin_id, int(since_ms), int(until_ms)),
             ).fetchall()
-        # Ends sort before starts at the same instant, so touching spans do not overlap.
+        # A 0 ms call still ran: it lasts at least 1 ms (#368 review M2). Ends
+        # sort before starts at the same instant, so touching spans do not overlap.
+        spans = [(start, max(end, start + 1)) for start, end in spans]
         edges = sorted([(start, 1) for start, _ in spans] + [(end, -1) for _, end in spans], key=lambda e: (e[0], e[1]))
         peak, peak_at, running = 0, None, 0
         for at, step in edges:
