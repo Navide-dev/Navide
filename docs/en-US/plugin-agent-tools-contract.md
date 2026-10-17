@@ -829,7 +829,10 @@ The transport failures that exist today stay as they are (`host_unavailable`,
 
 `meta.resultBytes` is `agentToolResultBytes(result)`: the UTF-8 byte length of
 the compact `JSON.stringify` spelling of the result value the Host received
-(`null` when the plugin returned nothing), measured once, by the Host. It is
+(`null` when the plugin returned nothing), measured once, by the Host. For a
+result longer than one piece, which the Host forwards without parsing (4.4,
+R1), it is the byte count of that text: the summary's `bytes` of the pieces as
+the plugin sent them, or of the compact spelling of a one-frame value. It is
 `0` in the `meta` of an error response that carries no result. The backend
 does not measure again; it forwards the Host's number to the audit row. When
 the Host sends no valid `meta.resultBytes` the size is unknown and the audit
@@ -1011,12 +1014,15 @@ and then the `agent.capability.request` event of 4.2 with
 
 Each piece is its own WebSocket message and each send is awaited before the
 next, so other sessions' and other panes' messages interleave with the pieces.
-The backend sends the pieces and the request as one sequence that the MCP
-call's cancellation does not interrupt. The Host keeps the pieces by
-`request_id` and accepts them only on the authenticated Host session; it joins
-them when the request arrives, then runs the checks of 4.2 on the joined
-arguments exactly as on inline ones. It drops the pieces it holds when the
-request arrives or the session closes. A join failure answers the request with
+The backend spells and cuts the arguments in a worker thread, then sends the
+pieces and the request in order. Cancelling the MCP call stops that sequence:
+a cancelled call's request is never sent, so the plugin does not run it (the
+audit row records `cancelled`). The Host keeps the pieces by `request_id` and
+accepts them only on the authenticated Host session; it joins them when the
+request arrives, then runs the checks of 4.2 on the joined arguments exactly
+as on inline ones. It drops the pieces it holds when the request arrives, the
+session closes, or no piece or request has come for `AGENT_TOOL_CHUNK_IDLE_MS`
+(the pieces of a cancelled call). A join failure answers the request with
 `{ok: false, error_code: "PLUGIN_TOOL_CHUNKS_INVALID", reason}`. The Host's
 client for this session sets the `ws` option `maxPayload: 0` (no message limit;
 the library default is 100 MiB).
@@ -1095,6 +1101,16 @@ one large frame therefore still delivers its result and keeps running; it only
 holds its other calls behind that frame. A frame that is not valid JSON-RPC
 stays a protocol error, whatever its size.
 
+The Host's main thread never parses a large result. A frame over 1 MiB, and a
+result piece frame over 16 KiB, is joined, decoded, checked (the same checks as
+any frame) and parsed in a worker thread; the frames after it wait their turn,
+so the order is kept. For an agent tool the Host keeps the result as text: the
+pieces as they came (their data as UTF-8 bytes), or the worker's compact
+spelling of a one-frame value cut into pieces. It never joins or parses a
+result longer than one piece; it forwards that text to the core (R2), which
+parses it once. Reading a child's stdout yields to other work after about 8 ms
+in one event-loop turn (pacing, not a limit: every byte is read).
+
 **R2: Host → backend (WebSocket session).** When the Host's response
 `result` spells longer than one piece, the Host sends the request message
 `agent.capability.result_chunk` once per piece,
@@ -1118,7 +1134,9 @@ send gives flow control without a credit scheme. The backend accepts pieces
 only from the authenticated Host session and only for a pending request id,
 keeps them with that request's waiter, joins them when the final message
 arrives, and delivers `{ok: true, result: <parsed>, meta}` to the waiter as if
-it had arrived whole. The backend's wait is the one described under Timing:
+it had arrived whole. The pieces are the plugin's own text, which the Host
+does not parse: text that does not parse as JSON answers the call with
+`PLUGIN_TOOL_CHUNKS_INVALID`, reason `json`. The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.
@@ -1194,7 +1212,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
-| `error_code` | TEXT | `''` on success |
+| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it), anything else `other` |
 | `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); `0` when the call has no result; `-1` when the Host sent no valid size (unknown) |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
@@ -1244,6 +1262,17 @@ table: `children.current` counts the **bound views** (each owns at most one
 child process; a view whose child has not started yet, or has stopped while
 idle, still counts), not live processes; `children.retained` counts children
 whose close failed and that may still be running.
+
+`views[].child.stdoutPending` (`{bytes, peakBytes}`) is the size of a stdout
+frame the child has started but not ended (no newline yet), held in Host
+memory. Frames have no size limit (4.4, R1), so a child that never ends a
+frame (a bug, or binary data written to stdout) grows it without bound; before
+DB9 such a child was restarted at 1 MiB. It is disclosed, never cut off.
+Proposed notification for the resource watchdog (line 5, watchdog C), handled
+like its other resource items: when `stdoutPending.bytes` passes
+**256 MiB, or 1/8 of the machine's memory if that is lower**, notify the user,
+who chooses to stop the plugin or let it continue; nothing is terminated
+automatically.
 
 `plugin_agent_actions` (B2-c; one row per attempt to request, decide, finish,
 disable or enable a change to a Navide plugin). Its DDL is

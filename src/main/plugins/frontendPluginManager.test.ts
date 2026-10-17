@@ -358,6 +358,7 @@ import {
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
 import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
+import { splitAgentToolPayloadText, utf8ByteLength } from '../../shared/pluginAgentTools'
 import { setMainLedgerDataDir } from '../error-ledger'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
@@ -542,6 +543,20 @@ function asHost(win: FakeBrowserWindow): BrowserWindow {
 function descriptor(id: string): PluginLaunchDescriptor {
   return { id, requires: [], devUrl: '', entryFile: `/plugins/${id}/index.html` }
 }
+
+// The agent-tool path takes a result as text (contract 4.4). Here that text is
+// spelled from whatever `call` returns (often a spy), as the supervisor spells
+// a value; the supervisor's own tests cover how it keeps text.
+beforeEach(() => {
+  vi.spyOn(PluginBackendHost.prototype, 'callForResultText').mockImplementation(
+    async function (this: PluginBackendHost, instanceId, name, args, options) {
+      const value = await this.call(instanceId, name, args, options)
+      const text = JSON.stringify(value === undefined ? null : value)
+      const pieces = splitAgentToolPayloadText(text)
+      return { bytes: utf8ByteLength(text), chunks: pieces.length, piece: (index: number) => pieces[index] }
+    },
+  )
+})
 
 describe('backend Host session registration', () => {
   it('re-registers on the new socket when the previous registration is pending', () => {

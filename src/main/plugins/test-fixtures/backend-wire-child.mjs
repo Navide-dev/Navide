@@ -401,7 +401,8 @@ function handle(frame) {
     // {bytes, mode}: a result of about `bytes` UTF-8 bytes (ASCII, CJK and emoji).
     // mode 'pieces' (default) sends pieces when the Host advertises them;
     // 'single' always sends one frame; 'drip' sends a short piece then another;
-    // 'repeat' sends the same full piece twice.
+    // 'repeat' sends the same full piece twice; 'duplicate-key' sends one frame
+    // whose value repeats a key.
     const unit = 'abc中文😀'
     const data = unit.repeat(Math.ceil((args?.bytes ?? 0) / Buffer.byteLength(unit, 'utf8')))
     const value = { data }
@@ -420,11 +421,36 @@ function handle(frame) {
       writeFrame({ jsonrpc: '2.0', method: RESULT_CHUNK_METHOD, params: { requestId: frame.id, seq: 0, data: pieces[0] } })
       return
     }
+    if (mode === 'duplicate-key') {
+      // One frame over the off-thread threshold whose value repeats a key.
+      const frameText = JSON.stringify({
+        jsonrpc: '2.0', id: frame.id,
+        result: { resultType: 'complete', value, _meta: { [SERVER_INFO_KEY]: { name: 'fixture.backend', version: '1.0.0' } } },
+      }).replace('{"data":', '{"a":1,"a":2,"data":')
+      process.stdout.write(`${frameText}\n`)
+      return
+    }
     if (mode === 'single' || !advertised || pieces.length === 1) {
       response(frame.id, value)
       return
     }
     sendResultPieces(frame.id, pieces, bytes)
+    return
+  }
+  if (name === 'fixture.nonewline') {
+    // {bytes}: writes `bytes` of a frame that never ends (no newline), in
+    // 64 KiB writes, and never answers.
+    const block = Buffer.alloc(65_536, 0x61)
+    let left = args?.bytes ?? 0
+    process.stdout.write('{"jsonrpc":"2.0","method":"notifications/navide/never","params":{"data":"')
+    const next = () => {
+      if (left <= 0) return
+      const size = Math.min(left, block.length)
+      left -= size
+      if (process.stdout.write(block.subarray(0, size))) setImmediate(next)
+      else process.stdout.once('drain', next)
+    }
+    next()
     return
   }
   if (name === 'plans.resolve_root') {

@@ -395,6 +395,7 @@ declare global {
               outputQueue: Record<'requests' | 'notifications', { frames: number; bytes: number; peakFrames: number; peakBytes: number }>
               droppedNotifications: number
               droppedResultPieces: number
+              stdoutPending: { bytes: number; peakBytes: number }
             } | null
           }>
           plugins: Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>

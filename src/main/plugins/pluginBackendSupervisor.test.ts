@@ -17,9 +17,11 @@ import {
   type AuthenticatedBackendRuntime,
   type BackendPluginEvent,
   type BackendPluginLaunchSpec,
+  type BackendResultText,
   type PluginBackendSupervisorOptions,
   type BackendRuntimeContext,
 } from './pluginBackendSupervisor'
+import { AGENT_TOOL_CHUNK_BYTES, utf8ByteLength } from '../../shared/pluginAgentTools'
 import {
   PLANS_BRIDGE_PORTS,
   createInMemoryPlansBridgeDispatcher,
@@ -79,6 +81,7 @@ const activation: BackendPluginLaunchSpec = {
     'fixture.hash',
     'fixture.pid',
     'fixture.bigresult',
+    'fixture.nonewline',
     'fixture.bridge',
     'fixture.bridgeburst',
     'fixture.emit',
@@ -507,6 +510,88 @@ describe('PluginBackendSupervisor', () => {
       expect(sha(JSON.stringify(result))).toBe(sha(JSON.stringify(big(3 * 1_048_576))))
       await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
       expect(onFailure).not.toHaveBeenCalled()
+    }, 120_000)
+
+    it('discloses a frame the child never ends as it grows, without cutting the child off', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      expect(supervisor.resourceUsage().stdoutPending).toEqual({ bytes: 0, peakBytes: 0 })
+      const call = client.call('fixture.nonewline', { bytes: 8 * 1_048_576 }, { timeoutMs: 60_000 }).catch((error) => error)
+      // The number is visible while the bytes still arrive, long before memory runs out.
+      await vi.waitFor(() => expect(supervisor.resourceUsage().stdoutPending.bytes).toBeGreaterThan(1_048_576), { timeout: 30_000 })
+      await vi.waitFor(() => expect(supervisor.resourceUsage().stdoutPending.bytes).toBeGreaterThanOrEqual(8 * 1_048_576), { timeout: 30_000 })
+      const usage = supervisor.resourceUsage().stdoutPending
+      expect(usage.peakBytes).toBeGreaterThanOrEqual(usage.bytes)
+      // Past the old 1 MiB frame bound the child is neither failed nor restarted.
+      expect(onFailure).not.toHaveBeenCalled()
+      await supervisor.close()
+      await call
+    }, 120_000)
+
+    const loopLag = (): { stop: () => number } => {
+      let worst = 0
+      let last = performance.now()
+      const timer = setInterval(() => {
+        const now = performance.now()
+        worst = Math.max(worst, now - last - 1)
+        last = now
+      }, 1)
+      return { stop: () => { clearInterval(timer); return worst } }
+    }
+
+    for (const mode of ['pieces', 'single'] as const) {
+      it(`takes a 40 MiB result as text (${mode}) without stalling the Host thread`, async () => {
+        const onFailure = vi.fn()
+        const supervisor = makeSupervisor({ onFailure })
+        supervisors.push(supervisor)
+        await supervisor.start()
+        const client = supervisor.clientFor(authenticatedRuntime)
+        const pid = await client.call('fixture.pid', null)
+        // This machine's idle lag right now; the transfer may add less than 50 ms to it.
+        const idleLag = loopLag()
+        await new Promise((resolve) => setTimeout(resolve, 300))
+        const idle = idleLag.stop()
+        const lag = loopLag()
+        const text = await client.call('fixture.bigresult', { bytes: 40 * 1_048_576, mode }, {
+          timeoutMs: 120_000,
+          resultText: true,
+        }) as unknown as BackendResultText
+        const worst = lag.stop()
+        const joined = Array.from({ length: text.chunks }, (_, index) => text.piece(index))
+        expect(joined.every((piece) => utf8ByteLength(piece) <= AGENT_TOOL_CHUNK_BYTES)).toBe(true)
+        expect(sha(joined.join(''))).toBe(sha(JSON.stringify(big(40 * 1_048_576))))
+        expect(text.bytes).toBe(utf8ByteLength(joined.join('')))
+        expect(worst - idle).toBeLessThan(50)
+        await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+        expect(onFailure).not.toHaveBeenCalled()
+      }, 240_000)
+    }
+
+    it('checks a frame parsed off the main thread as strictly as the main thread does', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      // A repeated key is a protocol error at any size, on either thread.
+      await expect(client.call('fixture.bigresult', { bytes: 2 * 1_048_576, mode: 'duplicate-key' }, { timeoutMs: 60_000 }))
+        .rejects.toMatchObject({ code: 'PROTOCOL_ERROR' })
+    }, 120_000)
+
+    it('handles the frames that follow a large one after it, in order', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const order: string[] = []
+      const large = client.call('fixture.bigresult', { bytes: 8 * 1_048_576, mode: 'single' }, { timeoutMs: 60_000 })
+        .then((value) => { order.push('large'); return value })
+      const small = client.call('fixture.pid', null).then((value) => { order.push('small'); return value })
+      await Promise.all([large, small])
+      expect(order).toEqual(['large', 'small'])
+      expect(sha(JSON.stringify(await large))).toBe(sha(JSON.stringify(big(8 * 1_048_576))))
     }, 120_000)
 
     it('fails a dripping child at its second piece as short, and the child keeps serving', async () => {

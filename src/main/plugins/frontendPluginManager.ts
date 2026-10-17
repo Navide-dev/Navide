@@ -127,6 +127,7 @@ import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
   type BackendPluginSubscription,
+  type BackendResultText,
   type JsonValue,
 } from './pluginBackendSupervisor'
 import {
@@ -187,7 +188,6 @@ import {
   AGENT_TOOL_CHUNK_IDLE_MS,
   AGENT_TOOLS_SYNC_EVENT,
   agentToolChunkArrival,
-  agentToolResultBytes,
   reassembleAgentToolPayloadText,
   splitAgentToolPayloadText,
   utf8ByteLength,
@@ -197,6 +197,12 @@ import {
   type AgentToolsSyncPayload,
 } from '../../shared/pluginAgentTools'
 import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+
+/** An agent tool answer as the Host sends it: a result longer than one piece
+ *  stays the plugin's text in pieces, never parsed here (contract 4.4, R1 to R2). */
+type HostAgentToolResponse =
+  | AgentToolCallResponse
+  | { ok: true; resultText: BackendResultText; meta: { durationMs: number; resultBytes: number; crossWorkspace: boolean } }
 
 /** The Host's backend session takes messages of any size (agent-tools contract
  *  4.4, A2); the `ws` default would close it at 100 MiB. Pieces keep every
@@ -7046,7 +7052,7 @@ export class FrontendPluginManager {
   async executeAgentToolCall(
     request: Record<string, unknown>,
     onTransferProgress?: (phase: 'arguments' | 'execution' | 'result') => void,
-  ): Promise<AgentToolCallResponse> {
+  ): Promise<HostAgentToolResponse> {
     const received = Date.now()
     const parsed = parseAgentToolCallRequest(request)
     if (!parsed) return agentToolError('BAD_REQUEST', 'malformed agent tool request')
@@ -7151,15 +7157,27 @@ export class FrontendPluginManager {
     // The bridge lets this call write only when it came through a write tool.
     this.agentToolCalls.set(initiator.id, { pluginId: spec.pluginId, risk, workspaceRoot: root!, caller: parsed.caller, spec })
     try {
-      const result = await this.pluginBackendHost.call(instanceId, tool.method, parsed.arguments, {
+      const text = await this.pluginBackendHost.callForResultText(instanceId, tool.method, parsed.arguments, {
         initiator,
         timeoutMs: Math.max(1, Math.min(tool.timeoutMs, Math.ceil(deadline - Date.now()))),
         ...(onTransferProgress ? { onTransferProgress } : {}),
       })
       // DB9: no result cap. The tool already ran, so the result goes back
-      // whole and carries its size.
-      const resultBytes = agentToolResultBytes(result)
-      return { ok: true, result, meta: meta(resultBytes) }
+      // whole and carries its size. Longer than one piece, it is forwarded as
+      // the text it came in (the core parses it); within one piece it is
+      // parsed here and sent inline as before.
+      if (text.chunks > 1) return { ok: true, resultText: text, meta: meta(text.bytes) }
+      let result: unknown
+      try {
+        result = JSON.parse(text.piece(0))
+      } catch {
+        return {
+          ...agentToolError('PLUGIN_TOOL_CHUNKS_INVALID', 'The Navide plugin result did not arrive whole.'),
+          reason: 'json',
+          meta: meta(0),
+        }
+      }
+      return { ok: true, result, meta: meta(text.bytes) }
     } catch (error) {
       return this.agentToolBackendError(error, meta(0))
     } finally {
@@ -7170,7 +7188,26 @@ export class FrontendPluginManager {
   /** Send an agent tool answer to the core: a result longer than one piece
    *  goes as `agent.capability.result_chunk` requests, each awaited, then the
    *  summary in place of `result` (contract 4.4, R2). */
-  private async sendAgentToolResponse(client: WsClient, requestId: string, response: AgentToolCallResponse): Promise<void> {
+  private async sendAgentToolResponse(client: WsClient, requestId: string, response: HostAgentToolResponse): Promise<void> {
+    if (response.ok && 'resultText' in response) {
+      // Each piece is decoded just before it goes, as the plugin spelled it.
+      const { resultText, ...rest } = response
+      for (let seq = 0; seq < resultText.chunks; seq++) {
+        const answer = await client.send<{ accepted?: boolean }>(
+          AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+          { request_id: requestId, seq, data: resultText.piece(seq) },
+          AGENT_TOOL_CHUNK_IDLE_MS,
+        ).catch(() => null)
+        // The core no longer waits for this request (timeout, client gone): stop.
+        if (!answer?.ok || answer.payload?.accepted !== true) return
+      }
+      await client.send(
+        'agent.capability.result',
+        { request_id: requestId, response: { ...rest, resultChunks: { chunks: resultText.chunks, bytes: resultText.bytes } } },
+        AGENT_TOOL_CHUNK_IDLE_MS,
+      ).catch(() => undefined)
+      return
+    }
     if (response.ok) {
       const text = JSON.stringify(response.result ?? null)
       const bytes = utf8ByteLength(text)
@@ -8875,7 +8912,7 @@ export class FrontendPluginManager {
       nonEmptyString((record.target as Record<string, unknown>).workspace_path)
     if (record.operation === 'agentTool' && nonEmptyString(record.request_id)) {
       const requestId = record.request_id
-      let toolResponse: AgentToolCallResponse
+      let toolResponse: HostAgentToolResponse
       // Arguments sent in pieces (contract 4.4, A2) are joined before anything else.
       const chunked = exactRecord(record.payload, ['argumentChunks'])
       const joined = chunked ? this.joinAgentRequestArguments(requestId, chunked.argumentChunks) : null

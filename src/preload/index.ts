@@ -205,6 +205,7 @@ export interface BackendResourceUsage {
       outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
       droppedNotifications: number
       droppedResultPieces: number
+      stdoutPending: { bytes: number; peakBytes: number }
     } | null
   }>
   plugins: BackendCallConcurrency[]
