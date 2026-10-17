@@ -227,7 +227,9 @@ def _fake_output(monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str) -> N
     ("é" * 8001, "", {"truncated": True, "stdoutBytes": 16002}),
     ("o" * 10, "è" * 9000, {"truncated": True, "stdoutBytes": 10, "stderrBytes": 18000}),
     ("o" * 9000, "e" * 9000, {"truncated": True, "stdoutBytes": 9000, "stderrBytes": 9000}),
-])
+# Short ids: a parameter's text in the test id goes into PYTEST_CURRENT_TEST,
+# which Windows refuses above 32767 characters.
+], ids=["stdout-multibyte", "stderr-only-multibyte", "both"])
 async def test_allowlist_discloses_what_the_8000_character_cut_removed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str, disclosed: dict[str, Any],
 ) -> None:
@@ -246,7 +248,8 @@ async def test_allowlist_discloses_what_the_8000_character_cut_removed(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("stdout", "stderr"), [("", ""), ("o" * 8000, "e" * 8000), ("ü" * 8000, "")])
+@pytest.mark.parametrize(("stdout", "stderr"), [("", ""), ("o" * 8000, "e" * 8000), ("ü" * 8000, "")],
+                         ids=["empty", "exactly-8000", "multibyte-8000"])
 async def test_allowlist_output_within_8000_characters_is_unchanged_and_not_truncated(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stdout: str, stderr: str,
 ) -> None:
