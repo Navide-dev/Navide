@@ -140,9 +140,13 @@ describe('Host Mini-IDE locale authority', () => {
       'openCatalogContributionWindow',
       'MINI_IDE_CONTRIBUTION',
       'resolveExternalOpenTarget',
+      'refuseDisabledBuiltin',
+      'MINI_IDE_PLUGIN_ID',
       `${extractFunction('openMiniIdeEditor')}\nreturn openMiniIdeEditor`,
     )
-    const openEditor = createSender(false, openCatalogContributionWindow, 'navide.mini-ide.window', () => null)
+    const openEditor = createSender(
+      false, openCatalogContributionWindow, 'navide.mini-ide.window', () => null, () => false, 'navide.mini-ide',
+    )
     await expect(openEditor(null, { workspace_path: '/ws', filepath: 'a.ts', locale: 'en-US' })).resolves.toBe(true)
     expect(openCatalogContributionWindow).toHaveBeenLastCalledWith(
       'navide.mini-ide.window',
@@ -151,6 +155,27 @@ describe('Host Mini-IDE locale authority', () => {
       undefined,
       expect.any(Function),
     )
+  })
+
+  it('refuses every editor open, with its reason, while the Mini-IDE is disabled', async () => {
+    const openCatalogContributionWindow = vi.fn(async () => ({ ok: true }))
+    const refuse = vi.fn((pluginId: string) => pluginId === 'navide.mini-ide')
+    const createSender = new Function(
+      'miniIdeRecoveryEnabled',
+      'openCatalogContributionWindow',
+      'MINI_IDE_CONTRIBUTION',
+      'resolveExternalOpenTarget',
+      'refuseDisabledBuiltin',
+      'MINI_IDE_PLUGIN_ID',
+      `${extractFunction('openMiniIdeEditor')}\nreturn openMiniIdeEditor`,
+    )
+    // Recovery on: not even the legacy copy may open.
+    const openEditor = createSender(
+      true, openCatalogContributionWindow, 'navide.mini-ide.window', () => null, refuse, 'navide.mini-ide',
+    )
+    await expect(openEditor(null, { workspace_path: '/ws', filepath: 'a.ts' })).resolves.toBe(false)
+    expect(refuse).toHaveBeenCalledWith('navide.mini-ide', null)
+    expect(openCatalogContributionWindow).not.toHaveBeenCalled()
   })
 
   it('keeps the current Host locale authoritative over the caller locale in the entry query', () => {

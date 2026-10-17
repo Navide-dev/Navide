@@ -388,6 +388,7 @@ import { plaintextTokenStoreMessage, tLogin } from './composables/useCliProfiles
 import { useStatusBarPopover } from './composables/useStatusBarPopover'
 import { notifySoundOn, setNotifySoundOn, setSystemNotifyOn, systemNotifyOn } from './composables/useNotifyPrefs'
 import { usePermissions } from './composables/usePermissions'
+import { useDisabledBuiltins } from './composables/useDisabledBuiltins'
 import { plansBackendStoppedNotice } from './composables/plansBackendStoppedNotice'
 import navideMark from './assets/navide-mark.png'
 
@@ -9761,24 +9762,43 @@ registerCommand('workbench.action.closeModal', () => {
 registerCommand('workbench.action.openKeyboardShortcuts', () => {
   openSettingsAt('keybindings')
 })
-registerCommand('workbench.action.findInFiles', async () => {
+// Commands of a built-in Navide plugin the user disabled decline: the key
+// passes through, and an agent's ui_invoke is told why.
+const disabledBuiltins = useDisabledBuiltins()
+function disabledBuiltinError(pluginId: string, name: string): Error | null {
+  return disabledBuiltins.isDisabled(pluginId)
+    ? new Error(`Navide plugin ${name} is disabled. Enable it in Settings → Extensions.`)
+    : null
+}
+registerCommand('workbench.action.findInFiles', () => {
+  if (disabledBuiltins.isDisabled('navide.mini-ide')) return false
+  return findInFiles()
+})
+async function findInFiles(): Promise<void> {
   const api = (window as Window & { agentTeam?: { openEditorWindow?: (args: { workspace_path: string; sidebar: 'search' }) => Promise<{ ok: boolean }> } }).agentTeam
   if (currentWorkspace.value && api?.openEditorWindow) {
     await api.openEditorWindow({ workspace_path: currentWorkspace.value, sidebar: 'search' })
   }
+}
+registerCommand('workbench.action.openMiniIDE', () => {
+  if (disabledBuiltins.isDisabled('navide.mini-ide')) return false
+  return (async () => {
+    if (currentWorkspace.value) {
+      await window.agentTeam?.openEditorWindow({ workspace_path: currentWorkspace.value })
+    }
+  })()
 })
-registerCommand('workbench.action.openMiniIDE', async () => {
-  if (currentWorkspace.value) {
-    await window.agentTeam?.openEditorWindow({ workspace_path: currentWorkspace.value })
-  }
+registerCommand('workbench.action.openGitWindow', () => {
+  if (disabledBuiltins.isDisabled('navide.git')) return false
+  return (async () => {
+    if (currentWorkspace.value) {
+      await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
+    }
+  })()
 })
-registerCommand('workbench.action.openGitWindow', async () => {
-  if (currentWorkspace.value) {
-    await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
-  }
-})
-registerCommand('workbench.action.openPlans', async (args) => {
-  await openPlansTarget(args)
+registerCommand('workbench.action.openPlans', (args) => {
+  if (disabledBuiltins.isDisabled('navide.plans')) return false
+  return openPlansTarget(args)
 })
 registerCommand('workbench.action.rebuildFocusedPane', async () => {
   if (effectiveFocusPaneId.value) await rebuildPaneViaResume(effectiveFocusPaneId.value)
@@ -10273,10 +10293,15 @@ registerCommand('ui.preview.show', (args) => {
 registerCommand('workbench.action.focusPreview', () => {
   preview.focus()
 })
-registerCommand('ui.window.openPlans', (args) => openPlansTarget(args))
+registerCommand('ui.window.openPlans', (args) => {
+  const disabled = disabledBuiltinError('navide.plans', 'Plans')
+  return disabled ? Promise.reject(disabled) : openPlansTarget(args)
+})
 registerCommand('ui.window.openResourceManager', () => { openResourceManager() })
 registerCommand('ui.window.openTurnStats', () => { openTurnStats() })
 registerCommand('ui.window.openGit', async () => {
+  const disabled = disabledBuiltinError('navide.git', 'Git')
+  if (disabled) throw disabled
   if (!currentWorkspace.value) return
   await window.agentTeam?.openGitWindow?.({ workspace_path: currentWorkspace.value })
 })

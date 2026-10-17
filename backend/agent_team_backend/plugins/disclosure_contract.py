@@ -52,7 +52,7 @@ class ManifestDisclosure(TypedDict):
     risk: dict[str, Any]
     permissions: dict[str, Any]
     nativeBackend: dict[str, list[str]] | None
-    network: Literal["none"]
+    network: Literal["none", "via-shell"]
     agentTools: list[dict[str, Any]]
     dataLocations: dict[str, Any]
 
@@ -116,7 +116,8 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
     scopes = None
     if fs_scope:
         scopes = {"fs": {
-            "root": fs_scope.get("root", "workspace"),
+            # An explicit null means the default, as `?? "workspace"` does in TypeScript.
+            "root": fs_scope.get("root") or "workspace",
             "read": sorted(fs_scope.get("read") or []),
             "write": sorted(fs_scope.get("write") or []),
         }}
@@ -168,6 +169,9 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         clauses.append({"key": "files", "params": {"access": "read" if read_only else "readWrite"}})
     if shell:
         clauses.append({"key": "shell", "params": dict(shell)})
+        # A declared shell runs git/gh/glab (or anything, in full mode), which
+        # reach remote hosts even though the sandboxes have no network.
+        clauses.append({"key": "networkViaShell", "params": {}})
     if "aiCli" in system:
         clauses.append({"key": "aiCli", "params": {}})
     if "ui" in system:
@@ -193,7 +197,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         "risk": {"level": risk_level_for_reasons(reasons), "reasons": reasons},
         "permissions": {"system": system, "shell": shell, "scopes": scopes},
         "nativeBackend": native,
-        "network": "none",
+        "network": "via-shell" if shell else "none",
         "agentTools": tools,
         "dataLocations": {"hostStorage": True, "backendDataDirectory": native is not None,
                           "projectWrites": project_writes},

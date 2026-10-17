@@ -161,6 +161,19 @@ def lookup(msg_type: str) -> Handler | None:
 
 
 # ── Editor AI (editor.*) ────────────────────────────────────────────────────
+#: The Navide plugins whose Disabled switch the Host reports (sent only while
+#: one is disabled).
+_DISABLEABLE_BUILTIN_PLUGINS = frozenset({"navide.plans", "navide.git", "navide.mini-ide"})
+
+
+def _valid_disabled_plugins(value: object) -> bool:
+    return (
+        isinstance(value, list)
+        and len(value) <= len(_DISABLEABLE_BUILTIN_PLUGINS)
+        and all(isinstance(item, str) and item in _DISABLEABLE_BUILTIN_PLUGINS for item in value)
+    )
+
+
 @handler("host.register")
 async def host_register(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """Authenticate Electron's private Host WebSocket session."""
@@ -174,13 +187,15 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
             "features" in payload
             and (
                 not isinstance(payload["features"], dict)
-                or set(payload["features"]) - {"plans_backend_v2"}
+                or set(payload["features"]) - {"plans_backend_v2", "disabled_plugins"}
                 or not isinstance(payload["features"].get("plans_backend_v2", False), bool)
+                or not _valid_disabled_plugins(payload["features"].get("disabled_plugins", []))
             )
         )
     ):
         session.host_authenticated = False
         session.plans_backend_v2 = False
+        session.disabled_plugins = frozenset()
         await session.send_json(
             make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session authentication failed")
         )
@@ -188,6 +203,8 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.host_authenticated = True
     features = payload.get("features", {})
     session.plans_backend_v2 = isinstance(features, dict) and features.get("plans_backend_v2") is True
+    session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
+    app.note_host_disabled_plugins(session.disabled_plugins)
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
 
 
@@ -262,6 +279,29 @@ async def agent_capability_result(
         )
         return
     delivered = plan_mcp.resolve_agent_capability(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+@handler("marketplace.query.result")
+async def marketplace_query_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``marketplace.query.request`` (plan B, B2-a)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "marketplace.query.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_marketplace_query(request_id, response)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
@@ -603,6 +643,13 @@ async def plans_ensure_assets(session: "Session", msg_id: str, msg_type: str, pa
             make_error(msg_id, msg_type, "BAD_REQUEST", "Plans asset request is malformed")
         )
         return
+    from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
     workspace_path = payload["workspace_path"]
     root = await asyncio.to_thread(resolve_plan_root, workspace_path)
     await asyncio.to_thread(ensure_plan_assets, workspace_path)
@@ -621,6 +668,12 @@ async def plans_ensure_assets(session: "Session", msg_id: str, msg_type: str, pa
 @handler("plans.list_docs")
 async def plans_list_docs(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
 
     # Plans live in the project root (plan_provisioning writes the spec there,
     # and every writer resolves to it), so a workspace opened on a
@@ -655,6 +708,12 @@ async def plans_resolve_root(session: "Session", msg_id: str, msg_type: str, pay
 @handler("plans.cache_put")
 async def plans_cache_put(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
+
+    if app.plans_plugin_disabled():
+        await session.send_json(
+            make_error(msg_id, msg_type, "PLUGIN_TOOL_UNAVAILABLE", "Navide plugin Plans is disabled")
+        )
+        return
 
     # Same root as the scan that produced these entries, or the cache keys
     # would never match on the next list.

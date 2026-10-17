@@ -11,6 +11,7 @@ import { isWindows } from '../../shared/osplat'
 import {
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
+  nativeBackendConsentText,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
   type NativeBackendConsentPrompt,
@@ -121,6 +122,25 @@ describe('thirdPartyBackendLaunchSpec', () => {
       thirdParty: { name: 'Indexer', system: ['fs'] },
     })
     expect(writePackage({}).approvedBridgePorts).toEqual([])
+  })
+
+  it('projects the Host shell broker port for shell: allowlist only (DB5)', () => {
+    expect(writePackage({ system: ['fs'], shell: 'allowlist' })).toMatchObject({
+      approvedBridgePorts: ['filesystem', 'shell'],
+      agentMethods: [],
+      thirdParty: { system: ['fs'], shell: 'allowlist' },
+    })
+    expect(writePackage({ shell: 'allowlist' }).approvedBridgePorts).toEqual(['shell'])
+    expect(writePackage({ shell: 'full' }).approvedBridgePorts).toEqual([])
+  })
+
+  it('keeps the projection and consent key of a package without shell exactly as before', () => {
+    const spec = writePackage({ system: ['fs'] })
+    expect(spec.approvedBridgePorts).toEqual(['filesystem'])
+    expect(spec.thirdParty).not.toHaveProperty('shell')
+    expect(backendPermissionsKey(spec)).toBe(
+      '{"system":["fs"],"shell":null,"methods":["files.search"],"events":["files.indexProgress"]}',
+    )
   })
 
   it('never projects a backend that declares no methods', () => {
@@ -312,11 +332,38 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('admission', () => {
     expect((await instance.status(spec)).status).toBe('disabled-globally')
   })
 
-  it('refuses a backend that also declares shell access', async () => {
-    const spec = writePackage({ shell: 'allowlist' })
+  it('refuses a backend that declares full shell access', async () => {
+    const spec = writePackage({ shell: 'full' })
     const { instance } = controller({ promptConsent: allow })
-    expect((await refusal(instance.admit(spec))).message).toContain('shell')
+    expect((await refusal(instance.admit(spec))).message).toContain('full shell')
     expect(allow).not.toHaveBeenCalled()
+    expect((await instance.status(spec)).status).toBe('shell-not-allowed')
+  })
+
+  it('admits a backend with shell: allowlist once the user consents, naming shell in the prompt', async () => {
+    const spec = writePackage({ system: ['fs'], shell: 'allowlist' })
+    const { instance, spawnImpl } = controller({ promptConsent: allow })
+    const admission = await instance.admit(spec, root)
+    expect(allow).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'acme.indexer', system: ['fs'], shell: 'allowlist', update: false,
+    }))
+    expect(admission.workspaceRoot).toBe(root)
+    admission.spawnProcess(spec.entryFile, {})
+    expect(spawnImpl).toHaveBeenCalledTimes(1)
+    expect(await instance.status(spec)).toMatchObject({ status: 'ready', shell: 'allowlist' })
+    expect(await instance.status(writePackage({ system: ['fs'] }))).not.toHaveProperty('shell')
+  })
+
+  it('asks again when an update adds shell, and the prompt marks it as an update', async () => {
+    const { instance } = controller({ promptConsent: allow })
+    await instance.admit(writePackage({ system: ['fs'] }))
+    expect(allow).toHaveBeenLastCalledWith(expect.not.objectContaining({ shell: expect.anything() }))
+    const withShell = writePackage({ system: ['fs'], shell: 'allowlist' })
+    expect((await instance.status(withShell))).toMatchObject({ status: 'needs-consent', changedSinceConsent: true })
+    await instance.admit(withShell)
+    expect(allow).toHaveBeenCalledTimes(2)
+    expect(allow).toHaveBeenLastCalledWith(expect.objectContaining({ shell: 'allowlist', update: true }))
+    await refusal(instance.admit(writePackage({ system: ['fs'] }), undefined, { prompt: false }))
   })
 })
 
@@ -538,6 +585,63 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('package bridge', () => {
     await expect(admission.bridgeDispatcher.dispatch(request('filesystem', 'write_file'), context(other))).resolves.toEqual({ ok: true })
     expect(promptWorkspaceWrite).toHaveBeenCalledTimes(3)
   })
+
+  const shellRequest = (args: unknown) => ({
+    id: 'bridge:1', origin: { kind: 'call' as const, requestId: 'r' }, port: 'shell' as never, operation: 'run', arguments: args as never,
+  })
+  function shellPort(result: unknown = { exitCode: 0, stdout: 'main\n', stderr: '' }) {
+    const run = vi.fn(async (_command: string, _context: PlansBridgeContext) => result as never)
+    return { port: { run }, run }
+  }
+
+  it('refuses the shell port to a backend that did not declare shell', async () => {
+    const { port, run } = shellPort()
+    const { instance } = controller({ promptConsent: allow, filesystemPort: fsPort, shellPort: () => port })
+    for (const options of [{}, { system: ['fs'] }]) {
+      const admission = await instance.admit(writePackage(options), root)
+      await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command: 'git status' }), context(root)))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    }
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('runs Host-allowlisted commands through the shell broker and refuses everything else', async () => {
+    const { port, run } = shellPort()
+    const { instance } = controller({ promptConsent: allow, shellPort: () => port })
+    const admission = await instance.admit(writePackage({ shell: 'allowlist' }), root)
+    expect(admission.workspaceRoot).toBe(root)
+
+    for (const command of ['git rev-parse HEAD', 'gh pr list --state merged', 'glab mr list']) {
+      await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command }), context(root)))
+        .resolves.toEqual({ exitCode: 0, stdout: 'main\n', stderr: '' })
+    }
+    expect(run.mock.calls.map(([command]) => command)).toEqual(['git rev-parse HEAD', 'gh pr list --state merged', 'glab mr list'])
+    expect(run.mock.calls[0][1].authorizedPlanRoot).toBe(root)
+
+    run.mockClear()
+    for (const command of ['rm -rf /', 'sh -c "git status"', 'git status; rm -rf /', 'curl https://example.com', '/usr/bin/git status', '']) {
+      await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command }), context(root)))
+        .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    }
+    for (const args of [null, 'git status', { command: 1 }, { command: 'git status', cwd: '/' }, { command: 'git status', env: {} }]) {
+      await expect(admission.bridgeDispatcher.dispatch(shellRequest(args), context(root)))
+        .rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    }
+    await expect(admission.bridgeDispatcher.dispatch({ ...shellRequest({ command: 'git status' }), operation: 'spawn' }, context(root)))
+      .rejects.toMatchObject({ code: 'METHOD_NOT_FOUND' })
+    await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command: 'git status' }), { ...context(root), authorizedPlanRoot: undefined }))
+      .rejects.toMatchObject({ code: 'WORKSPACE_SCOPE_VIOLATION' })
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('reports an unavailable shell broker and keeps the filesystem closed to a shell-only package', async () => {
+    const { instance } = controller({ promptConsent: allow, filesystemPort: fsPort })
+    const admission = await instance.admit(writePackage({ shell: 'allowlist' }), root)
+    await expect(admission.bridgeDispatcher.dispatch(shellRequest({ command: 'git status' }), context(root)))
+      .rejects.toMatchObject({ code: 'BACKEND_UNAVAILABLE' })
+    await expect(admission.bridgeDispatcher.dispatch(request('filesystem', 'read_file'), context(root)))
+      .rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+  })
 })
 
 describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
@@ -602,5 +706,42 @@ describe('NativeBackendStore', () => {
     writeFileSync(file, JSON.stringify({ schemaVersion: 1, enabled: true, plugins: { x: { consent: { binarySha256: 'short' } } } }))
     expect(new NativeBackendStore(join(root, 'store')).record('x').consent).toBeUndefined()
     expect(readFileSync(file, 'utf8')).toContain('short')
+  })
+})
+
+describe('native backend consent text', () => {
+  const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
+
+  it('says "no network access" only for a package without shell', () => {
+    for (const system of [[], ['fs']] as const) {
+      const { message, detail } = nativeBackendConsentText({ ...base, system: [...system] })
+      expect(message).toBe('Indexer contains native code that runs on your computer. Allow it to run?')
+      expect(detail).toContain('it has no network access')
+      expect(detail).not.toMatch(/git|gh|glab|high risk/i)
+    }
+  })
+
+  it('discloses shell as high risk that can contact network hosts and send workspace data, and never claims no network', () => {
+    const { detail } = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' })
+    expect(detail).not.toMatch(/no network/i)
+    expect(detail).toContain('High risk')
+    expect(detail).toContain('git, gh and glab')
+    expect(detail).toContain('can contact network hosts')
+    expect(detail).toContain('send data from this workspace')
+    expect(detail).toContain('cannot open network connections itself')
+    // Through git a shell package reads and changes workspace files without
+    // the file-change grant: the text must not claim otherwise (review M1).
+    for (const system of [[], ['fs']] as const) {
+      const text = nativeBackendConsentText({ ...base, system: [...system], shell: 'allowlist' }).detail
+      expect(text).not.toContain('no access to your files')
+      expect(text).not.toContain('Changing files needs your separate permission')
+      expect(text).toContain('Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission.')
+      expect(text).toContain('Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).')
+    }
+    expect(nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' }).detail).toContain('It asks to read files in the workspace you open it in.')
+    expect(nativeBackendConsentText({ ...base, system: ['fs'] }).detail).not.toContain('run to completion')
+    const update = nativeBackendConsentText({ ...base, system: [], shell: 'allowlist', update: true })
+    expect(update.message).toBe('Indexer 1.0.0 changed its native code or permissions. Allow it to run?')
+    expect(update.detail).not.toMatch(/no network/i)
   })
 })

@@ -41,8 +41,10 @@ import { PLUGIN_QUARANTINE_MARKER } from './pluginInstallPaths'
 import { isManifestV2, parseInstalledManifest } from './pluginManifest'
 import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
+import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
 import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } from '../../shared/pluginDisclosure'
+import type { JsonValue } from './pluginBackendSupervisor'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -53,10 +55,13 @@ import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } fr
  * plugin, the user consented to this exact binary and permission set, the
  * platform sandbox is available, and the crash breaker is closed. The child
  * then runs under the OS sandbox and the resource watchdog, and reaches the
- * Host only through a filesystem bridge limited to its bound workspace.
- * MCP agents never reach third-party methods (no `agentMethods`). Declared
- * agent tools are part of what the user consents to (backendPermissionsKey)
- * and are listed in the consent dialog; serving them is not wired here.
+ * Host only through a filesystem bridge limited to its bound workspace and,
+ * when it declares `shell: "allowlist"`, the Host shell broker (DB5). The
+ * backend never executes anything itself: the broker runs git/gh/glab under the
+ * same rules as a view's shell.run. MCP agents never reach third-party methods
+ * (no `agentMethods`). Declared agent tools are part of what the user consents
+ * to (backendPermissionsKey) and are listed in the consent dialog; serving
+ * them is not wired here.
  */
 
 export type ThirdPartyBackendInfo = NonNullable<BackendPluginLaunchSpec['thirdParty']>
@@ -75,9 +80,10 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
 }
 
 /** Project one installed package's backend into a sandboxed launch spec. The
- * method/event allowlists come from the manifest; the only bridge port is the
- * workspace filesystem, and only when the package declares `fs`. A backend
- * that declares no methods can never be called, so it is never started. */
+ * method/event allowlists come from the manifest; the bridge ports are the
+ * workspace filesystem when the package declares `fs`, and the Host shell
+ * broker when it declares `shell: "allowlist"`. A backend that declares no
+ * methods can never be called, so it is never started. */
 export function thirdPartyBackendLaunchSpec(
   activation: PluginActivationCatalogEntry,
   manifest: PluginManifestV2 = readInstalledManifestV2(activation.packageDir),
@@ -96,7 +102,10 @@ export function thirdPartyBackendLaunchSpec(
     approvedMethods: [...(manifest.backend.methods ?? [])],
     agentMethods: [],
     approvedEvents: [...(manifest.backend.events ?? [])],
-    approvedBridgePorts: system.includes('fs') ? ['filesystem'] : [],
+    approvedBridgePorts: [
+      ...(system.includes('fs') ? ['filesystem' as const] : []),
+      ...(manifest.permissions.shell === 'allowlist' ? ['shell' as const] : []),
+    ],
     thirdParty: {
       name: manifest.name,
       system,
@@ -274,6 +283,8 @@ export interface NativeBackendStatusRow {
   canWriteWorkspace: boolean
   workspaceWrite: string[]
   lastViolation?: ResourceViolation
+  /** Declared shell mode, so the panel keeps the high-risk grant visible. */
+  shell?: 'allowlist' | 'full'
 }
 
 export interface NativeBackendConsentPrompt {
@@ -281,11 +292,67 @@ export interface NativeBackendConsentPrompt {
   name: string
   packageVersion: string
   system: PluginSystemNamespace[]
+  /** Declared shell mode; `allowlist` is disclosed as high risk (DB5). */
+  shell?: 'allowlist' | 'full'
   methods: string[]
   /** Declared agent tools, listed in the dialog; empty when there are none. */
   agentTools: DisclosureAgentTool[]
   /** A consent existed for a different binary or permission set. */
   update: boolean
+}
+
+/** The declared agent tools, each with the method it calls, its full
+ * description, the plugin's own read/write claim, its timeout and its whole
+ * input schema: allowing the backend also allows agents to call these. */
+function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string {
+  if (prompt.agentTools.length === 0) return ''
+  return [
+    `Agents will be able to call these ${prompt.agentTools.length} tools of ${prompt.name} ` +
+      `(their text and input schemas total ${Buffer.byteLength(JSON.stringify(prompt.agentTools))} bytes):`,
+    ...prompt.agentTools.map((tool) => [
+      `• ${tool.name} → ${tool.method} (declared ${tool.risk === 'write' ? 'as changing data' : 'read-only'}, ` +
+        `times out after ${tool.timeoutMs / 1000} s): ${tool.description}`,
+      `  Input schema: ${JSON.stringify(tool.inputSchema)}`,
+    ].join('\n')),
+    'What these tools return is shown to the agent, which may pass it on elsewhere.',
+  ].join('\n')
+}
+
+/** The native-backend consent dialog's text. A package that declares shell
+ * reaches the network through git/gh/glab (push, fetch, `gh api`), so the
+ * "no network access" sentence is only true without shell: saying it there
+ * would deceive the user (anti-deception, not a restriction). */
+export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { message: string; detail: string } {
+  // With shell, git reads and changes workspace files without the separate
+  // file-change grant, so neither "no access" nor "separate permission" holds.
+  const access = prompt.shell
+    ? prompt.system.includes('fs') ? 'It asks to read files in the workspace you open it in.' : ''
+    : prompt.system.includes('fs')
+      ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
+      : 'It asks for no access to your files.'
+  const sandbox = prompt.shell
+    ? 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.'
+    : 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.'
+  // DB5: shell is allowed for a backend and disclosed as high risk.
+  const shell = prompt.shell
+    ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
+      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
+      + 'this workspace to them, and it can change the repository. '
+      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
+      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).'
+    : ''
+  return {
+    message: prompt.update
+      ? `${prompt.name} ${prompt.packageVersion} changed its native code or permissions. Allow it to run?`
+      : `${prompt.name} contains native code that runs on your computer. Allow it to run?`,
+    detail: [
+      sandbox,
+      access,
+      shell,
+      nativeBackendAgentToolsText(prompt),
+      'You can disable it at any time in Settings → Extensions.',
+    ].filter(Boolean).join('\n\n'),
+  }
 }
 
 export interface NativeBackendWritePrompt {
@@ -316,6 +383,8 @@ export interface ThirdPartyBackendControllerOptions {
   promptWorkspaceWrite?: (prompt: NativeBackendWritePrompt) => Promise<boolean>
   /** Host filesystem service port (the same service Plans uses). */
   filesystemPort?: () => PlansFilesystemPort | undefined
+  /** Host shell broker port (the same broker a view's shell.run uses). */
+  shellPort?: () => PackageShellPort | undefined
   /** Stop running children: one plugin, or every third-party plugin (null). */
   stopBackends?: (pluginId: string | null) => Promise<void>
   watchResources?: (
@@ -347,6 +416,25 @@ export function noteBackendFailure(failures: Map<string, number[]>, key: string,
   failures.set(key, recent)
   if (recent.length > BACKEND_RESTART_DELAYS_MS.length) return null
   return BACKEND_RESTART_DELAYS_MS[recent.length - 1]
+}
+
+/** The Host shell broker as a third-party backend reaches it. `run` is given
+ * a command already checked against the Host executable allowlist; the broker
+ * re-checks it (argv rules, auth subcommands, -c/-C overrides) and answers
+ * `{exitCode, stdout, stderr}`, or throws a PlansBridgeError. */
+export interface PackageShellPort {
+  run(command: string, context: PlansBridgeContext): Promise<JsonValue>
+}
+
+/** Shell syntax the Host broker refuses (host_shell.py `_SHELL_SYNTAX`). */
+const SHELL_SYNTAX = /[;&|<>`\n\r]/u
+
+/** Lexical pre-check before the broker: one plain command whose first token
+ * is a Host-allowlisted executable, with no shell syntax. */
+function isAllowlistedShellCommand(command: string): boolean {
+  if (SHELL_SYNTAX.test(command)) return false
+  const executable = command.trim().split(/\s+/u)[0] ?? ''
+  return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable)
 }
 
 const PACKAGE_FS_READ_OPERATIONS = new Set(['read_file', 'read_range', 'list_dir', 'stat_path'])
@@ -406,8 +494,8 @@ export class ThirdPartyBackendController {
 
   /** Static gates (no prompt, no hashing). */
   private staticRefusal(spec: ThirdPartyLaunchSpec): { status: NativeBackendStatus; reason: string } | null {
-    if (spec.thirdParty.shell) {
-      return { status: 'shell-not-allowed', reason: 'third-party backends cannot also declare shell access' }
+    if (spec.thirdParty.shell === 'full') {
+      return { status: 'shell-not-allowed', reason: 'third-party backends cannot declare full shell access' }
     }
     if (this.store.record(spec.pluginId).disabled) {
       return { status: 'disabled', reason: 'the native backend is disabled for this plugin' }
@@ -464,7 +552,7 @@ export class ThirdPartyBackendController {
       killSandboxProcessesSync(rootPid, id)
     })
 
-    const workspaceRoot = spec.thirdParty.system.includes('fs') && workspacePath
+    const workspaceRoot = (spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist') && workspacePath
       ? canonicalExistingDirectory(workspacePath) ?? undefined
       : undefined
 
@@ -522,6 +610,7 @@ export class ThirdPartyBackendController {
         name: spec.thirdParty.name,
         packageVersion: spec.packageVersion,
         system: [...spec.thirdParty.system],
+        ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
         methods: [...spec.approvedMethods],
         agentTools: [...(spec.thirdParty.agentTools ?? [])],
         update: consent !== undefined,
@@ -583,11 +672,13 @@ export class ThirdPartyBackendController {
   }
 
   /** Workspace filesystem bridge for one third-party backend: reads inside the
-   * bound workspace; writes only after a per-workspace user grant. */
+   * bound workspace; writes only after a per-workspace user grant. With
+   * `shell: "allowlist"`, also the Host shell broker at the bound workspace. */
   private packageBridgeDispatcher(spec: ThirdPartyLaunchSpec): BackendBridgeDispatcher {
     return Object.freeze({
       dispatch: async (request: PlansBridgeRequest, context: PlansBridgeContext) => {
         if (context.signal.aborted) throw new PlansBridgeError('USER_CANCELLED')
+        if (request.port === 'shell') return this.dispatchShell(spec, request, context)
         if (request.port !== 'filesystem' || !spec.thirdParty.system.includes('fs')) {
           throw new PlansBridgeError('CAPABILITY_DENIED')
         }
@@ -615,6 +706,29 @@ export class ThirdPartyBackendController {
         throw new PlansBridgeError('METHOD_NOT_FOUND')
       },
     })
+  }
+
+  private async dispatchShell(
+    spec: ThirdPartyLaunchSpec,
+    request: PlansBridgeRequest,
+    context: PlansBridgeContext,
+  ): Promise<JsonValue> {
+    if (spec.thirdParty.shell !== 'allowlist') throw new PlansBridgeError('CAPABILITY_DENIED')
+    if (request.operation !== 'run') throw new PlansBridgeError('METHOD_NOT_FOUND')
+    const args = request.arguments
+    if (
+      args === null || typeof args !== 'object' || Array.isArray(args) ||
+      Object.keys(args).length !== 1 || typeof args.command !== 'string'
+    ) {
+      throw new PlansBridgeError('INVALID_ARGUMENT', 'shell.run takes exactly { command }')
+    }
+    if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
+    if (!isAllowlistedShellCommand(args.command)) {
+      throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    }
+    const port = this.options.shellPort?.()
+    if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
+    return port.run(args.command, context)
   }
 
   private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {
@@ -686,6 +800,7 @@ export class ThirdPartyBackendController {
             })),
           }
         : {}),
+      ...(spec.thirdParty.shell ? { shell: spec.thirdParty.shell } : {}),
     }
   }
 

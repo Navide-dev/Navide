@@ -7,7 +7,7 @@
 // material remains `unsigned` only on the legacy v1 compatibility path.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { generateKeyPairSync, sign as edSign } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -28,6 +28,7 @@ import { defaultInstallerDeps, type InstallerTrustConfig } from './pluginInstall
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { projectBackendPluginActivationCatalog } from './pluginBackendActivationCatalog'
 import { makeZip } from './zipFixture'
+import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
 import { readZipEntries } from './pluginPackage'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
@@ -627,17 +628,18 @@ describe('plugins:remove boundary validation', () => {
       .mockImplementation(() => undefined)
     const onFactoryPackageRemoved = vi.fn()
     try {
+      // The generic factory path; the built-ins themselves are never removed.
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         cleanupPluginStorage: vi.fn(async () => undefined),
-        factoryPackageIds: ['navide.git'],
+        factoryPackageIds: ['acme.factory'],
         onFactoryPackageRemoved,
       })
       const removeHandler = handlers.get('plugins:remove')
       if (!removeHandler) throw new Error('remove handler not registered')
 
-      await expect(removeHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('navide.git')
-      expect(removeInstalledPlugin).toHaveBeenCalledWith('navide.git', {
+      await expect(removeHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('acme.factory')
+      expect(removeInstalledPlugin).toHaveBeenCalledWith('acme.factory', {
         restoreBuiltin: false,
       })
     } finally {
@@ -653,7 +655,7 @@ describe('plugins:remove boundary validation', () => {
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         restoreFactoryPackage,
         listFactoryPackages: () => [
-          { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+          { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
         ],
       })
       const listHandler = handlers.get('plugins:listFactoryPackages')
@@ -661,10 +663,10 @@ describe('plugins:remove boundary validation', () => {
       if (!listHandler || !restoreHandler) throw new Error('factory handlers not registered')
 
       expect(listHandler(null)).toEqual([
-        { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+        { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
       ])
-      await expect(restoreHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(restoreFactoryPackage).toHaveBeenCalledWith('navide.git')
+      await expect(restoreHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(restoreFactoryPackage).toHaveBeenCalledWith('acme.factory')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -902,6 +904,83 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  /** Sign the contract 3.5 disclosure envelope onto every version row. */
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>): WireDetail {
+    const disclosure = computeDisclosure(manifest as never)
+    const rows = detail.versions.map((row) => {
+      const envelope = {
+        schemaVersion: 1,
+        artifactDigest: row.registry_envelope.artifactDigest,
+        packageId: row.registry_envelope.packageId,
+        version: row.registry_envelope.version,
+        target: row.registry_envelope.target,
+        keyId: row.registry_envelope.keyId,
+        signedAt: row.registry_envelope.signedAt,
+        disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
+        scanDigest: null,
+      }
+      return {
+        ...row,
+        disclosure,
+        disclosure_envelope: envelope,
+        disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
+        scan: null,
+        registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
+      }
+    })
+    return { ...detail, versions: rows }
+  }
+
+  async function prepareFromApprovedRegistry(detail: WireDetail, bytes: Uint8Array, digest: string): Promise<unknown> {
+    installFetch(detail, bytes, digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-disclosure-registry-'))
+    const approvalFile = join(root, 'root-approval.json')
+    writeFileSync(approvalFile, JSON.stringify({
+      schemaVersion: 1,
+      registryUrl: 'https://registry.acme.test',
+      rootPublicKeyPem: registryRoot.pubPem,
+      confirmedFingerprint: registryRootFingerprint(registryRoot.pubPem),
+    }))
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://registry.acme.test'
+    process.env['AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'] = approvalFile
+    try {
+      registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG)
+      const handler = handlers.get('plugins:prepareInstall')
+      if (!handler) throw new Error('prepareInstall handler not registered')
+      return await handler(null, { namespace: 'acme', name: 'demo' })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  const DISCLOSED_PERMISSIONS = { system: ['fs'], scopes: { fs: { root: 'workspace', read: ['README.md'] } } }
+  const disclosedManifest = {
+    schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: DISCLOSED_PERMISSIONS,
+  }
+
+  it('carries the signed disclosure, scan and registry facts through prepareInstall', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), disclosedManifest), bytes, digest))
+      .resolves.toMatchObject({
+        disclosure: computeDisclosure(disclosedManifest as never),
+        scan: null,
+        registry: { review: { status: 'not-required' } },
+      })
+  })
+
+  it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const narrower = { ...disclosedManifest, permissions: {} }
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), narrower), bytes, digest))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_MISMATCH' })
+  })
+
+  it('installs a version without disclosure fields as before', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(signedDetail(digest), bytes, digest))
+      .resolves.toMatchObject({ trustTier: 'signed-verified', disclosure: null, scan: null, registry: null })
   })
 
   it('uses an approved self-hosted root for the default local Registry profile', () => {
@@ -3864,6 +3943,11 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
               registry_envelope: { a: 1 },
               registry_signature: 'x',
               package_digest: 'd',
+              disclosure: { schemaVersion: 1, plugin: { id: 'acme.demo' } },
+              disclosure_envelope: { a: 2 },
+              disclosure_signature: 'y',
+              scan: { schemaVersion: 1 },
+              registry: { publisher: { verifiedDomain: 'acme.example' } },
             },
           ],
         },
@@ -3881,6 +3965,12 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     expect(detail).not.toHaveProperty('trust_metadata_signature')
     expect(detail.versions[0]).not.toHaveProperty('registry_envelope')
     expect(detail.versions[0]).not.toHaveProperty('registry_signature')
+    // Contract 3.5: display data is carried; the signed envelopes stay main-side.
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_envelope')
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_signature')
+    expect(detail.versions[0].disclosure).toEqual({ schemaVersion: 1, plugin: { id: 'acme.demo' } })
+    expect(detail.versions[0].scan).toEqual({ schemaVersion: 1 })
+    expect(detail.versions[0].registry).toEqual({ publisher: { verifiedDomain: 'acme.example' } })
     expect(detail.versions[0].capabilities).toEqual(['fs'])
     expect(detail.versions[0].installable).toBe(true)
     expect(detail.latest_installable_version).toBe('1.1.0')
@@ -4735,6 +4825,83 @@ describe('plugins:listInstalled scope disclosure', () => {
   })
 })
 
+// B2-a: the backend's read-only Marketplace tools are answered by the same
+// functions the Marketplace page's IPC handlers run.
+describe('marketplace.query answered from the Marketplace page functions', () => {
+  const savedFetch = global.fetch
+  const savedMarketplaceUrl = process.env['AGENT_TEAM_MARKETPLACE_URL']
+  beforeEach(() => {
+    handlers.clear()
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://server.navide.dev/registry'
+  })
+  afterEach(() => {
+    global.fetch = savedFetch
+    if (savedMarketplaceUrl === undefined) delete process.env['AGENT_TEAM_MARKETPLACE_URL']
+    else process.env['AGENT_TEAM_MARKETPLACE_URL'] = savedMarketplaceUrl
+    vi.restoreAllMocks()
+  })
+
+  function registerWithQuery(manager: FrontendPluginManager): (query: unknown) => Promise<unknown> {
+    const install = vi.spyOn(manager, 'setMarketplaceQueryHandler')
+    registerPluginIpc(manager, '/plugins', () => true, TRUST_CONFIG, undefined, { appVersion: () => '0.2.13' })
+    const handler = install.mock.calls[0]?.[0]
+    if (!handler) throw new Error('marketplace query handler not installed')
+    return handler
+  }
+
+  it('searches through the same Registry request the Marketplace page sends', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      status: 200,
+      async json() {
+        return { items: [{ namespace: 'acme', name: 'demo', latest_version: '1.0.0', trust_tier: 'signed-verified' }], total: 1 }
+      },
+    }))
+    global.fetch = fetchMock as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    const page = handlers.get('plugins:marketplaceSearch')!
+
+    await page(null, 'git', undefined, { limit: 20 })
+    const answer = await query({ kind: 'search', text: 'git', limit: 20 })
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+    expect(urls).toEqual([
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+      'https://server.navide.dev/registry/api/extensions?q=git&limit=20',
+    ])
+    expect(answer).toEqual({
+      ok: true,
+      result: { kind: 'search', nextCursor: null, items: [expect.objectContaining({ id: 'acme.demo', signed: true, risk: null })] },
+    })
+  })
+
+  it('reports a Registry 404 on detail as NOT_FOUND, while the page still gets the same error text', async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 404, async json() { return {} } })) as unknown as typeof fetch
+    const query = registerWithQuery(new FrontendPluginManager())
+    await expect(handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name: 'none' }))
+      .rejects.toThrow('marketplace detail failed: HTTP 404')
+    expect(await query({ kind: 'detail', id: 'acme.none' })).toEqual({
+      ok: false, error: 'marketplace detail failed: HTTP 404', error_code: 'NOT_FOUND',
+    })
+  })
+
+  it('lists the same inventory as the Extensions page, with the native backend flag', async () => {
+    const manager = new FrontendPluginManager()
+    const query = registerWithQuery(manager)
+    manager.registerInstalledPackage({ id: 'acme.notes', requires: ['fs'], packageVersion: '1.0.0', hasBackend: true })
+    manager.registerInstalledPackage({ id: 'acme.plain', requires: [], packageVersion: '2.0.0' })
+
+    const page = (handlers.get('plugins:listInstalled')!(null) as Array<{ id: string }>).map((row) => row.id)
+    const answer = await query({ kind: 'installed' }) as { ok: true; result: { items: Array<Record<string, unknown>> } }
+
+    expect(answer.result.items.map((item) => item.id)).toEqual(page)
+    expect(answer.result.items).toEqual(expect.arrayContaining([
+      { id: 'acme.notes', version: '1.0.0', enabled: true, quarantined: false, hasBackend: true, agentTools: [] },
+      { id: 'acme.plain', version: '2.0.0', enabled: true, quarantined: false, hasBackend: false, agentTools: [] },
+    ]))
+  })
+})
+
 describe('plugins:setDisabled', () => {
   const coldStartSource = (root: string) => ({
     provenance: 'official-registry' as const,
@@ -4891,7 +5058,10 @@ describe('plugins:setDisabled', () => {
   it('refuses first-party ids, packages that are not installed and malformed requests', async () => {
     const { root, manager, setDisabled } = setup('navide-plugin-disable-refuse-')
     try {
-      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/first-party/)
+      // A `navide.` id that is not one of the three built-ins stays refused.
+      await expect(setDisabled(null, { id: 'navide.other', disabled: true })).rejects.toThrow(/first-party/)
+      // A built-in needs the Host side of the switch, which this setup lacks.
+      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/unavailable/)
       await expect(setDisabled(null, { id: 'acme.missing', disabled: true })).rejects.toThrow(/not an installed/)
       await expect(setDisabled(null, { id: 'acme.demo', disabled: 'yes' })).rejects.toThrow(/invalid/)
       await expect(setDisabled(null, { id: '../escape', disabled: true })).rejects.toThrow(/invalid plugin id/)
@@ -5011,6 +5181,125 @@ describe('plugins:remove native backend data choice', () => {
       expect(new PluginPrereleaseStore(root).has('acme.demo')).toBe(true)
     } finally {
       rmSync(base, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
+  const BUILTINS = ['navide.plans', 'navide.git', 'navide.mini-ide'] as const
+
+  function setup(prefix: string, hostSwitch?: (id: string, disabled: boolean) => Promise<void> | void) {
+    const root = mkdtempSync(join(tmpdir(), prefix))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    const cleanupPluginStorage = vi.fn(async () => undefined)
+    const onFactoryPackageRemoved = vi.fn()
+    const restoreFactoryPackage = vi.fn(async () => undefined)
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage,
+      factoryPackageIds: ['navide.git', 'navide.mini-ide'],
+      onFactoryPackageRemoved,
+      restoreFactoryPackage,
+      ...(hostSwitch ? { setBuiltinDisabled: hostSwitch } : {}),
+    })
+    return { root, manager, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage }
+  }
+
+  it('refuses to remove or restore any built-in, keeping its files, storage and grant', async () => {
+    const { root, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage } = setup('navide-builtin-remove-')
+    try {
+      for (const id of BUILTINS) {
+        mkdirSync(join(root, id), { recursive: true })
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:remove')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:remove')!(null, { id, nativeBackendData: 'delete' }))
+          .rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:restoreFactoryPackage')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        expect(existsSync(join(root, id))).toBe(true)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(onFactoryPackageRemoved).not.toHaveBeenCalled()
+      expect(restoreFactoryPackage).not.toHaveBeenCalled()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('disables and enables each built-in through the Host, durably, without touching storage or grants', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager, cleanupPluginStorage } = setup('navide-builtin-disable-', (id, disabled) => {
+      calls.push([id, disabled])
+    })
+    try {
+      for (const id of BUILTINS) {
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: true }))
+          .resolves.toEqual({ id, disabled: true })
+        // As a restart sees it: a fresh store over the same root.
+        expect(new PluginDisabledStore(root).has(id)).toBe(true)
+        expect(manager.isBuiltinPluginDisabled(id)).toBe(true)
+        // A second Disable is a no-op.
+        await handlers.get('plugins:setDisabled')!(null, { id, disabled: true })
+      }
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      for (const id of BUILTINS) {
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: false }))
+          .resolves.toEqual({ id, disabled: false })
+        expect(new PluginDisabledStore(root).has(id)).toBe(false)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(calls).toEqual([...BUILTINS.map((id) => [id, true]), ...BUILTINS.map((id) => [id, false])])
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fails closed for the built-ins when the store and its backup are unreadable, until a one-click reset', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager } = setup('navide-builtin-unreadable-', (id, disabled) => { calls.push([id, disabled]) })
+    const reset = vi.fn()
+    // Re-register with the reset hook (setup registers without it).
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { calls.push([id, disabled]) },
+      onBuiltinSwitchReset: reset,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      expect(handlers.get('plugins:disabledStoreStatus')!(null)).toEqual({ status: 'unreadable' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      expect(manager.isBuiltinPluginDisabled('navide.plans')).toBe(true)
+      // Enabling cannot silently rewrite the damaged store.
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/unreadable/)
+      expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
+
+      expect(handlers.get('plugins:resetDisabledStore')!(null)).toEqual({ status: 'ok' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('stays disabled when the Host cannot enable it', async () => {
+    const { root } = setup('navide-builtin-enable-fail-', (_id, disabled) => {
+      if (!disabled) throw new Error('bundled package missing')
+    })
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: true })
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/bundled package missing/)
+      expect(new PluginDisabledStore(root).has('navide.git')).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })
