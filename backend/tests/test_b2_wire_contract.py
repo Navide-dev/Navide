@@ -252,6 +252,8 @@ def test_the_fixture_accepts_null_only_where_an_entry_lists_it() -> None:
     assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "at": None}}) == []
     assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "by": None}})
     assert wire_problems("plugins.agent_action.result", {**message, "pluginVersion": None})
+    # Nullable is null or the example's type, never another type.
+    assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "at": "x"}})
 
 
 async def test_the_fixture_approval_required_files_a_plugin_enable_request(host, audit, pane) -> None:
