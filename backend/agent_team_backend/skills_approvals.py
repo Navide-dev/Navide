@@ -17,33 +17,27 @@ import copy
 import logging
 import threading
 import time
-import unicodedata
 import uuid
 from typing import Any
 
-from .plugins.agent_tools_contract import (
-    APPROVAL_KINDS,
-    PLUGIN_APPROVAL_TTL_S,
-    sanitize_agent_tool_result_text,
-)
+from .plugins.agent_tools_contract import APPROVAL_KINDS, PLUGIN_APPROVAL_TTL_S
+from .plugins.external_content import neutralize_external_text
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
 PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"}
 _REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
-# Cf (bidi controls, zero-width), Zl and Zp (U+2028 / U+2029).
-_INVISIBLE_CATEGORIES = frozenset({"Cf", "Zl", "Zp"})
 
 log = logging.getLogger(__name__)
 
 
 def _agent_text(value: str) -> str:
-    """Text an agent wrote, as the approval card shows it (contract 2.4): every
-    Cc character except tab and LF, and every bidi, zero-width and line or
-    paragraph separator character, removed. No length limit."""
-    text = sanitize_agent_tool_result_text(value)
-    return "".join(ch for ch in text if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
+    """Text an agent wrote, as the approval card shows it: the external-content
+    treatment (``neutralize_external_text``: Cc except tab and LF, bidi,
+    zero-width and line or paragraph separators removed, NFKC, boundary lines
+    and markers broken). No length limit."""
+    return neutralize_external_text(value)
 
 
 def _plugin_requester(requester: Any) -> dict[str, Any]:
@@ -182,6 +176,13 @@ class ApprovalRegistry:
             self._expire()
             return [copy.deepcopy(r) for r in self._records.values()
                     if r["status"] == "pending" and (r["kind"] != "skill") == plugin]
+
+    def plugin_requests(self) -> list[dict[str, Any]]:
+        """Plugin requests still open: pending, and applying (approved, being carried out)."""
+        with self._lock:
+            self._expire()
+            return [copy.deepcopy(r) for r in self._records.values()
+                    if r["kind"] != "skill" and r["status"] in {"pending", "applying"}]
 
     def claim(self, approval_id: str, status: str, *, plugin: bool = False) -> dict[str, Any]:
         """Move a pending request to `status`; any other state is refused.

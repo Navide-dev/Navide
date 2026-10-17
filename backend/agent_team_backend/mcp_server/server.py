@@ -9196,6 +9196,380 @@ async def plugins_list_installed(ctx: Context) -> dict[str, Any]:
     return out
 
 
+
+# ── Marketplace requests, disable and enable (plan B, B2-c) ─────────────────
+# marketplace_request_install / _update / _rollback and plugins_request_remove
+# only file a request in the approval registry (contract section 6): the user
+# decides it in a Navide window, which then installs, updates, rolls back or
+# removes the package itself. No tool has a consent argument. The target is
+# what the Host reports for the requested id and version (the Registry's
+# versions, the installed inventory), never the agent's own spelling.
+# plugins_disable / plugins_enable act at once (DB6): the Host switches the
+# installed Marketplace package, tells the user who did it with a one-click
+# undo, and both are written to the plugin_agent_actions audit. The bundled
+# Navide plugins (the reserved navide.* namespace) are the user's alone.
+
+_AGENT_ACTION_TIMEOUT_S = 60.0
+_agent_action_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
+_MQ_NAME_PART = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+
+def resolve_plugin_agent_action(request_id: str, response: dict[str, Any]) -> bool:
+    """Resolve one ``plugins.agent_action.request`` with the Host's answer."""
+    return _agent_action_pending.resolve(request_id, response)
+
+
+def _approval_requester(caller: _Caller) -> dict[str, Any]:
+    """Who asked, as the approval card and the audit name it."""
+    from agent_team_backend import agent_messaging
+
+    if caller.kind != "pane":
+        return {"paneId": None, "paneName": None, "workspace": None, "callerKind": caller.kind}
+    pane = agent_messaging.get(caller.pane_id)
+    return {
+        "paneId": caller.pane_id,
+        "paneName": pane.name if pane else None,
+        "workspace": (pane.workspace_path if pane else "") or None,
+        "callerKind": "pane",
+    }
+
+
+def _audit_agent_action(
+    caller: _Caller,
+    requester: dict[str, Any],
+    *,
+    plugin_id: str,
+    action: str,
+    outcome: str,
+    plugin_version: str = "",
+    approval_id: str = "",
+    error_code: str = "",
+) -> None:
+    """Queue one plugin_agent_actions row; never fails the call it records."""
+    try:
+        from agent_team_backend import app
+
+        app.plugin_audit_log.record_agent_action(
+            plugin_id=plugin_id, plugin_version=plugin_version, action=action, caller_kind=caller.kind,
+            pane_id=str(requester.get("paneId") or ""), pane_name=str(requester.get("paneName") or ""),
+            caller_workspace=str(requester.get("workspace") or ""), approval_id=approval_id,
+            outcome=outcome, error_code=error_code,
+        )
+    except Exception as err:  # noqa: BLE001 - the audit never fails the action
+        _log.warning("plugin agent action not audited: %s", err)
+
+
+def _package_id(namespace: Any, name: Any) -> str | None:
+    """``<namespace>.<name>`` when both parts have the package-id grammar, else None."""
+    if not isinstance(namespace, str) or not isinstance(name, str):
+        return None
+    if not _MQ_NAME_PART.fullmatch(namespace) or not _MQ_PACKAGE_ID.fullmatch(f"{namespace}.{name}"):
+        return None
+    return f"{namespace}.{name}"
+
+
+def _is_builtin_id(plugin_id: str) -> bool:
+    """The reserved navide.* namespace: the bundled Navide plugins, the user's alone."""
+    return plugin_id.startswith("navide.")
+
+
+def _semver_key(version: str) -> tuple[Any, ...]:
+    """Order of two SemVer strings (precedence, build metadata ignored)."""
+    core, _, pre = version.split("+", 1)[0].partition("-")
+    major, minor, patch = (int(part) for part in core.split("."))
+    if not pre:
+        return (major, minor, patch, 1, ())
+    ids = tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre.split("."))
+    return (major, minor, patch, 0, ids)
+
+
+async def _installed_item(caller: _Caller, plugin_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """(installed item or None, error answer or None) from the Host's inventory."""
+    answer = await request_host_marketplace_query({"kind": "installed"}, caller=caller)
+    if answer.get("ok") is not True:
+        return None, _host_marketplace_error(caller, answer, "installed")
+    result = answer.get("result")
+    items = result.get("items") if isinstance(result, dict) and result.get("kind") == "installed" else None
+    if not isinstance(items, list):
+        return None, _marketplace_error("HOST_UNAVAILABLE", "Navide Host answered the Marketplace query malformed")
+    for item in items:
+        if isinstance(item, dict) and item.get("id") == plugin_id:
+            version = item.get("version")
+            if isinstance(version, str) and _MQ_SEMVER.fullmatch(version):
+                return item, None
+    return None, None
+
+
+async def _registry_card(
+    caller: _Caller, plugin_id: str, version: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """(card or None, error answer or None): the Registry must list ``version``."""
+    answer = await request_host_marketplace_query({"kind": "detail", "id": plugin_id, "version": version}, caller=caller)
+    if answer.get("ok") is not True:
+        return None, _host_marketplace_error(caller, answer, "detail")
+    result = answer.get("result")
+    if not isinstance(result, dict) or result.get("kind") != "detail":
+        return None, _marketplace_error("HOST_UNAVAILABLE", "Navide Host answered the Marketplace query malformed")
+    versions = result.get("versions") if isinstance(result.get("versions"), list) else []
+    if version not in versions:
+        return None, _marketplace_error("NOT_FOUND", f"the Navide Marketplace does not list {plugin_id} {version}")
+    card = result.get("card")
+    # Listing data, not verified: prepareInstall verifies the package when the user approves.
+    return (card if isinstance(card, dict) else None), None
+
+
+async def _file_plugin_request(
+    ctx: Context, kind: str, namespace: Any, name: Any, version: Any, reason: Any,
+) -> dict[str, Any]:
+    """Resolve the target from the Host, file the request, tell the windows."""
+    from agent_team_backend import app, skills_approvals
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    requester = _approval_requester(caller)
+    action = "request-" + kind.removeprefix("plugin-")
+    plugin_id = _package_id(namespace, name)
+
+    def refuse(code: str, error: str, audited_id: str = "") -> dict[str, Any]:
+        _audit_agent_action(caller, requester, plugin_id=audited_id or plugin_id or "", action=action,
+                            outcome="error" if code in {"HOST_UNAVAILABLE", "REGISTRY_UNAVAILABLE"} else "denied",
+                            error_code=code)
+        return _marketplace_error(code, error)
+
+    if plugin_id is None:
+        return refuse("BAD_REQUEST", "namespace and name must be a Navide plugin id <namespace>.<name>")
+    if kind != "plugin-remove" and not (isinstance(version, str) and _MQ_SEMVER.fullmatch(version)):
+        return refuse("BAD_REQUEST", "version must be a SemVer version such as 1.2.0")
+    if not isinstance(reason, str):
+        return refuse("BAD_REQUEST", "reason must be a string")
+    if _is_builtin_id(plugin_id):
+        return refuse("BUILTIN_PLUGIN", "the bundled Navide plugins are managed by the user in Extensions")
+    installed, error = await _installed_item(caller, plugin_id)
+    if error is not None:
+        return refuse(str(error.get("error_code") or "HOST_UNAVAILABLE"), str(error.get("error")))
+    from_version = installed["version"] if installed else None
+    if kind == "plugin-install" and installed is not None:
+        return refuse("BAD_REQUEST", f"{plugin_id} is already installed; ask for an update or a rollback")
+    if kind != "plugin-install" and installed is None:
+        return refuse("NOT_INSTALLED", f"{plugin_id} is not installed")
+    if kind == "plugin-update" and _semver_key(version) <= _semver_key(from_version):
+        return refuse("BAD_REQUEST", f"{version} is not newer than the installed {from_version}")
+    if kind == "plugin-rollback" and _semver_key(version) >= _semver_key(from_version):
+        return refuse("BAD_REQUEST", f"{version} is not older than the installed {from_version}")
+    card = None
+    if kind != "plugin-remove":
+        card, error = await _registry_card(caller, plugin_id, version)
+        if error is not None:
+            return refuse(str(error.get("error_code") or "HOST_UNAVAILABLE"), str(error.get("error")))
+    target = {
+        "id": plugin_id, "namespace": namespace, "name": name,
+        "version": version if kind != "plugin-remove" else None, "fromVersion": from_version,
+    }
+    try:
+        record = skills_approvals.registry.request_plugin(
+            kind=kind, requester=requester, reason=reason, target=target, card=card, diff=None,
+        )
+    except skills_approvals.SkillApprovalError as err:
+        return refuse(err.code, str(err))
+    _audit_agent_action(caller, requester, plugin_id=plugin_id, plugin_version=target["version"] or "",
+                        action=action, outcome="allowed", approval_id=record["approval_id"])
+    await app.broadcast(make_event(contract.PLUGIN_APPROVAL_REQUEST_EVENT, record))
+    # Only what this caller needs: a coalesced record names its first requester.
+    return {
+        "ok": True,
+        "approval_id": record["approval_id"],
+        "status": record["status"],
+        "expires_at": record["expires_at"],
+        "note": "Filed for the user's decision in Navide; poll marketplace_request_status.",
+    }
+
+
+@server.tool()
+async def marketplace_request_install(
+    ctx: Context, namespace: str, name: str, version: str, reason: str = "",
+) -> dict[str, Any]:
+    """Ask the user to install a Navide plugin from the Navide Marketplace.
+
+    This only files a request: the user sees who asked, your `reason`
+    (shown as written by an agent) and the package's disclosure card in a
+    Navide window, and decides. Nothing is installed until they approve it in
+    Navide. `namespace` and `name` form the package id `<namespace>.<name>`;
+    `version` must be a version the Marketplace lists. A second request for
+    the same package and version returns the pending one.
+
+    Returns {ok, approval_id, status: "pending", expires_at, note}; requests
+    expire after 15 minutes. Follow it with marketplace_request_status.
+    """
+    return await _file_plugin_request(ctx, "plugin-install", namespace, name, version, reason)
+
+
+@server.tool()
+async def marketplace_request_update(
+    ctx: Context, namespace: str, name: str, version: str, reason: str = "",
+) -> dict[str, Any]:
+    """Ask the user to update an installed Navide plugin to a newer version.
+
+    Like marketplace_request_install: files a request for the user's
+    decision in Navide and changes nothing by itself. `version` must be newer
+    than the installed one and listed in the Navide Marketplace.
+
+    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    """
+    return await _file_plugin_request(ctx, "plugin-update", namespace, name, version, reason)
+
+
+@server.tool()
+async def marketplace_request_rollback(
+    ctx: Context, namespace: str, name: str, version: str, reason: str = "",
+) -> dict[str, Any]:
+    """Ask the user to roll an installed Navide plugin back to an older version.
+
+    Like marketplace_request_install: files a request for the user's
+    decision in Navide and changes nothing by itself. `version` must be older
+    than the installed one and listed in the Navide Marketplace.
+
+    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    """
+    return await _file_plugin_request(ctx, "plugin-rollback", namespace, name, version, reason)
+
+
+@server.tool()
+async def plugins_request_remove(ctx: Context, namespace: str, name: str, reason: str = "") -> dict[str, Any]:
+    """Ask the user to remove an installed Navide plugin.
+
+    Files a request for the user's decision in Navide and removes nothing by
+    itself. The bundled Navide plugins (Plans, Git, Mini-IDE) cannot be
+    removed.
+
+    Returns {ok, approval_id, status: "pending", expires_at, note}.
+    """
+    return await _file_plugin_request(ctx, "plugin-remove", namespace, name, None, reason)
+
+
+@server.tool()
+async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int = 0) -> dict[str, Any]:
+    """The state of a Navide plugin request filed by marketplace_request_* or plugins_request_remove.
+
+    `wait_s` (0-60) waits that long for the user's decision or the change to
+    finish. Returns {ok, approval_id, kind, target: {id, version}, status,
+    error, expires_at}; status is pending, applying (approved, being carried
+    out), completed, failed, rejected or expired.
+    """
+    from agent_team_backend import skills_approvals
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    try:
+        _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    if isinstance(wait_s, bool) or not isinstance(wait_s, int) or not 0 <= wait_s <= contract.PLUGIN_APPROVAL_STATUS_MAX_WAIT_S:
+        return _marketplace_error("BAD_REQUEST", "wait_s must be an integer from 0 to 60")
+    record = skills_approvals.registry.get(approval_id) if isinstance(approval_id, str) else None
+    if record is None or record["kind"] == "skill":
+        return _marketplace_error("PLUGIN_APPROVAL_NOT_FOUND", "no Navide plugin request with this approval_id")
+    deadline = time.monotonic() + wait_s
+    while record["status"] in {"pending", "applying"} and time.monotonic() < deadline:
+        await asyncio.sleep(0.2)
+        record = skills_approvals.registry.get(approval_id) or record
+    return {
+        "ok": True,
+        "approval_id": record["approval_id"],
+        "kind": record["kind"],
+        "target": {"id": record["target"]["id"], "version": record["target"]["version"]},
+        "status": record["status"],
+        "error": record["error"],
+        "expires_at": record["expires_at"],
+    }
+
+
+async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: Any) -> dict[str, Any]:
+    """Ask the Host to disable or enable one installed Marketplace package."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+    from agent_team_backend.plugins import agent_tools_contract as contract
+
+    try:
+        caller = _resolve_caller(ctx)
+    except CallerUnknown as err:
+        return {"ok": False, "error": str(err)}
+    requester = _approval_requester(caller)
+    plugin_id = _package_id(namespace, name)
+
+    def finish(answer: dict[str, Any], *, version: str = "") -> dict[str, Any]:
+        code = str(answer.get("error_code") or "")
+        if answer.get("ok") is True:
+            outcome = "allowed"
+        else:
+            outcome = "error" if code in {"HOST_UNAVAILABLE", "ACTION_FAILED"} else "denied"
+        _audit_agent_action(caller, requester, plugin_id=plugin_id or "", plugin_version=version,
+                            action=action, outcome=outcome, error_code=code)
+        return answer
+
+    if plugin_id is None:
+        return finish(_marketplace_error("BAD_REQUEST", "namespace and name must be a Navide plugin id <namespace>.<name>"))
+    if _is_builtin_id(plugin_id):
+        return finish(_marketplace_error(
+            "BUILTIN_PLUGIN", "the bundled Navide plugins are disabled and enabled by the user in Extensions",
+        ))
+    request_id = f"pa:{secrets.token_hex(16)}"
+    future = _agent_action_pending.register(request_id)
+    try:
+        sent = await app.unicast_host(make_event(contract.PLUGIN_AGENT_ACTION_REQUEST_EVENT, {
+            "request_id": request_id, "action": action, "plugin_id": plugin_id, "requester": requester,
+        }))
+        if not sent:
+            return finish(_marketplace_error("HOST_UNAVAILABLE", "Navide Host is not connected"))
+        result = await _agent_action_pending.wait(request_id, future, timeout=_AGENT_ACTION_TIMEOUT_S)
+    finally:
+        _agent_action_pending.discard(request_id)
+    if result is TIMEOUT:
+        return finish(_marketplace_error("HOST_UNAVAILABLE", f"Navide Host did not answer the {action} request"))
+    if result.get("ok") is True and isinstance(result.get("pluginVersion"), str):
+        version = result["pluginVersion"]
+        return finish({"ok": True, "pluginId": plugin_id, "pluginVersion": version,
+                       "disabled": action == "disable"}, version=version)
+    code = result.get("error_code")
+    code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
+    # The Host's refusals are its own fixed words; a failure may quote a package.
+    error = result.get("error") if code != "ACTION_FAILED" and isinstance(result.get("error"), str) else (
+        f"Navide could not {action} {plugin_id}"
+    )
+    return finish(_marketplace_error(code, error))
+
+
+@server.tool()
+async def plugins_disable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
+    """Disable an installed Navide plugin from the Navide Marketplace.
+
+    Takes effect at once: the plugin stops and its views, backend and agent
+    tools go away; its files, grants and data stay. The user is told which
+    agent did it, with a one-click undo, and the change is recorded. The
+    bundled Navide plugins (Plans, Git, Mini-IDE) cannot be disabled here.
+
+    Returns {ok, pluginId, pluginVersion, disabled: true} or {ok: false,
+    error, error_code} (NOT_INSTALLED, BUILTIN_PLUGIN, BAD_REQUEST,
+    ACTION_FAILED, HOST_UNAVAILABLE).
+    """
+    return await _plugin_agent_action(ctx, "disable", namespace, name)
+
+
+@server.tool()
+async def plugins_enable(ctx: Context, namespace: str, name: str) -> dict[str, Any]:
+    """Enable a disabled Navide plugin from the Navide Marketplace again.
+
+    It comes back under the consent the user already gave; nothing new is
+    granted. The change is recorded. The bundled Navide plugins cannot be
+    enabled here.
+
+    Returns {ok, pluginId, pluginVersion, disabled: false} or {ok: false,
+    error, error_code}.
+    """
+    return await _plugin_agent_action(ctx, "enable", namespace, name)
+
 # ── ASGI mount + lifecycle ──────────────────────────────────────────────────
 
 _session_manager: StreamableHTTPSessionManager | None = None

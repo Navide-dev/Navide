@@ -305,6 +305,29 @@ async def marketplace_query_result(
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
 
 
+@handler("plugins.agent_action.result")
+async def plugins_agent_action_result(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """Return the Host's answer to a ``plugins.agent_action.request`` (plan B, B2-c)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    request_id = payload.get("request_id") if isinstance(payload, dict) else None
+    if not isinstance(request_id, str) or not request_id or not isinstance(payload.get("ok"), bool):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugins.agent_action.result is malformed")
+        )
+        return
+    response = {key: value for key, value in payload.items() if key != "request_id"}
+    delivered = plan_mcp.resolve_plugin_agent_action(request_id, response)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
 @handler("editor.rewrite")
 async def editor_rewrite(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     from . import app
@@ -3697,6 +3720,65 @@ async def plugins_agent_request_decide(session: "Session", msg_id: str, msg_type
     except SkillApprovalError as err:
         await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
         return
+    _audit_user_decision(approval, "decide-approve" if approve else "decide-reject")
+    await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
+
+
+def _audit_user_decision(approval: dict, action: str, error_code: str = "") -> None:
+    """A person's decision or result on a plugin request, in plugin_agent_actions (B2-c)."""
+    from . import app
+
+    target = approval.get("target") if isinstance(approval.get("target"), dict) else {}
+    app.plugin_audit_log.record_agent_action(
+        plugin_id=str(target.get("id") or ""), plugin_version=str(target.get("version") or ""),
+        action=action, caller_kind="user", approval_id=str(approval.get("approval_id") or ""),
+        outcome="allowed" if not error_code else "error", error_code=error_code,
+    )
+
+
+@handler("plugins.agent_requests.list")
+async def plugins_agent_requests_list(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The plugin requests still open (pending and applying), e.g. to recover after a window restart."""
+    from .skills_approvals import registry
+
+    await session.send_json(make_response(msg_id, msg_type, {"requests": registry.plugin_requests()}))
+
+
+@handler("plugins.agent_request.finish")
+async def plugins_agent_request_finish(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The window carried out an approved plugin request: applying -> completed | failed.
+
+    Only a window can mint the confirmation (subject: the approval_id), so an
+    agent cannot report a change that never happened.
+    """
+    from . import app
+    from .ipc import make_event
+    from .plugins import agent_tools_contract as contract
+    from .skills_approvals import SkillApprovalError, registry
+
+    approval_id = str(payload.get("approval_id") or "")
+    if not await _confirmed(
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=approval_id
+    ):
+        return
+    status = payload.get("status")
+    error = payload.get("error")
+    if status not in {"completed", "failed"} or (error is not None and not isinstance(error, str)):
+        await session.send_json(make_error(msg_id, msg_type, "BAD_REQUEST", "status must be completed or failed"))
+        return
+    try:
+        approval = registry.finish_plugin(approval_id, status, error=error if status == "failed" else None)
+    except SkillApprovalError as err:
+        await session.send_json(make_error(msg_id, msg_type, err.code, str(err), {"approval_id": approval_id}))
+        return
+    _audit_user_decision(
+        approval, f"finish-{status}",
+        "" if status == "completed" else ("INTERRUPTED" if error == "interrupted" else "ACTION_FAILED"),
+    )
+    await app.broadcast(make_event(
+        contract.PLUGIN_APPROVAL_RESOLVED_EVENT,
+        {"approval_id": approval_id, "status": approval["status"], "error": approval["error"]},
+    ))
     await session.send_json(make_response(msg_id, msg_type, {"approval": approval}))
 
 
