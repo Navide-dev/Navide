@@ -5,6 +5,7 @@ import { usePluginInventory } from './usePluginInventory'
 import { usePluginUpdates } from './usePluginUpdates'
 import { formatBytes } from '../lib/formatBytes'
 import { disclosureList } from '../lib/disclosureText'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 // The verified install flow shared by the Marketplace (install/update) and the
 // Extensions page (update): prepare → optional publisher/risk confirmation →
@@ -78,7 +79,8 @@ export function usePluginInstallFlow() {
         const values = { name: `${namespace}.${name}`, version: prepared.version }
         const added = diff.added.map((item) => {
           const key = `pluginDisclosure.diff.item.${item.kind}`
-          return te(key) ? t(key, { key: item.key }) : `${item.kind}: ${item.key}`
+          const shown = revealInvisibleText(item.key)
+          return te(key) ? t(key, { key: shown }) : `${item.kind}: ${shown}`
         })
         notify.toast(
           diff.widened

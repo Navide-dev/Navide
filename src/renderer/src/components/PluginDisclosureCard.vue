@@ -26,6 +26,7 @@ import {
   type ScanSentence,
 } from '../../../shared/pluginDisclosureScan'
 import { disclosureClauses, disclosureList } from '../lib/disclosureText'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
 
 const props = defineProps<{
@@ -55,8 +56,15 @@ function scanKey(key: string): string {
   return key === 'coverage' ? 'pluginDisclosure.scan.coverage.base' : `pluginDisclosure.scan.${key}`
 }
 
+/** Third-party text with every invisible character spelled out, so a scanned
+ *  string or a Registry fact cannot reorder or hide the card (L3 on #360). */
+function reveal(value: unknown): unknown {
+  if (typeof value === 'string') return revealInvisibleText(value)
+  return Array.isArray(value) ? value.map(reveal) : value
+}
+
 function scanText(sentence: ScanSentence): string {
-  const p = sentence.params
+  const p = Object.fromEntries(Object.entries(sentence.params).map(([name, value]) => [name, reveal(value)]))
   const params: Record<string, unknown> = { ...p }
   for (const field of ['commands', 'paths', 'hosts', 'libraries', 'signals']) {
     if (field in p) params[field] = list(p[field])
@@ -86,7 +94,8 @@ const provenance = computed(() =>
 
 function itemText(prefix: 'undeclared' | 'notSeen', item: { kind: string; key: string }): string {
   const key = `pluginDisclosure.${prefix}.${item.kind}`
-  return te(key) ? t(key, { key: item.key }) : `${item.kind}: ${item.key}`
+  const shown = revealInvisibleText(item.key)
+  return te(key) ? t(key, { key: shown }) : `${item.kind}: ${shown}`
 }
 
 function date(value: string | null | undefined): string {
@@ -102,13 +111,13 @@ const facts = computed(() => {
   const out: string[] = []
   out.push(
     r.publisher.verifiedDomain
-      ? t('pluginDisclosure.registry.domainVerified', { domain: r.publisher.verifiedDomain, date: date(r.publisher.domainVerifiedAt) })
+      ? t('pluginDisclosure.registry.domainVerified', { domain: revealInvisibleText(r.publisher.verifiedDomain), date: date(r.publisher.domainVerifiedAt) })
       : t('pluginDisclosure.registry.domainNotVerified')
   )
   // A record of the Registry's, whatever prepareInstall verified (F2 on #360).
   out.push(
     r.signature.signed
-      ? t('pluginDisclosure.registry.signedClaim', { keyId: r.signature.keyId ?? '' })
+      ? t('pluginDisclosure.registry.signedClaim', { keyId: revealInvisibleText(r.signature.keyId ?? '') })
       : t('pluginDisclosure.registry.unsigned')
   )
   const review = r.review.status

@@ -6,13 +6,16 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { DisclosureDiff, DisclosureItem } from '../../../shared/pluginDisclosure'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 const props = defineProps<{ diff: DisclosureDiff }>()
 const { t, te } = useI18n()
 
 function itemText(item: DisclosureItem): string {
   const key = `pluginDisclosure.diff.item.${item.kind}`
-  return te(key) ? t(key, { key: item.key }) : `${item.kind}: ${item.key}`
+  // Keys come from the package: invisible characters are spelled out (L3 on #360).
+  const shown = revealInvisibleText(item.key)
+  return te(key) ? t(key, { key: shown }) : `${item.kind}: ${shown}`
 }
 
 const riskChanged = computed(() => props.diff.from.risk !== props.diff.to.risk)

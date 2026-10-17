@@ -163,3 +163,21 @@ describe('PluginDisclosureCard layout', () => {
     expect(new Set(shown.map((entry) => entry.icon)).size).toBe(4)
   })
 })
+
+// Review of #360, L3: third-party strings cannot reorder or hide card text.
+describe('PluginDisclosureCard invisible characters', () => {
+  it('spells out bidi and zero-width characters in scan strings and Registry facts', () => {
+    const base = scanOf('devmap-push-and-reads')
+    const scan = { ...base, network: { hosts: [{ ...base.network.hosts[0], host: 'evil‮moc.example' }] } }
+    const registry = {
+      ...REGISTRY,
+      publisher: { name: 'Acme', verifiedDomain: 'acme​.example', domainVerifiedAt: '2026-10-01T00:00:00Z' },
+      signature: { signed: true, keyId: 'key⁦x' },
+    }
+    const text = render({ disclosure: disclosureOf('devmap-0.2.0'), scan, registry, verified: false }).text()
+    expect(text).not.toMatch(/[​‮⁦]/)
+    expect(text).toContain('evil\\u{202e}moc.example')
+    expect(text).toContain('acme\\u{200b}.example')
+    expect(text).toContain('key\\u{2066}x')
+  })
+})

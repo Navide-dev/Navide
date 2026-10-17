@@ -93,3 +93,12 @@ describe('PluginTrustDialog on an update (plan B D2)', () => {
     expect(wrapper.find('.nv-disclosure').exists()).toBe(true)
   })
 })
+
+describe('PluginDisclosureDiff invisible characters (review L3 on #360)', () => {
+  it('spells out invisible characters in item keys', () => {
+    const diff = { ...widened, added: [{ kind: 'fsScopeRead' as const, key: 'a‮b.md', detail: null }] }
+    const text = mount(PluginDisclosureDiff, { props: { diff }, global: { plugins: [i18n] } }).text()
+    expect(text).not.toMatch(/‮/)
+    expect(text).toContain('a\\u{202e}b.md')
+  })
+})
