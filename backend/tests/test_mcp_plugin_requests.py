@@ -449,3 +449,78 @@ async def test_ui_invoke_ready_records_a_well_formed_window_id() -> None:
     await ws_request(other, "ui.invoke.ready", {"window_id": "../../etc"})
     assert other.window_id == ""
 
+
+# ── plugins_enable by who disabled it (B2-c option B) ───────────────────────
+
+
+def _approval_required(by: str, at_ms: int | None, agent: dict[str, Any] | None = None) -> dict[str, Any]:
+    return {
+        "ok": False, "error": "the user disabled nerdtechnic.devmap; enabling it needs the user's approval in Navide",
+        "error_code": "APPROVAL_REQUIRED", "pluginId": "nerdtechnic.devmap", "pluginVersion": "0.2.0",
+        "disabled": {"by": by, "at": at_ms, "agent": agent},
+    }
+
+
+async def test_enable_of_a_plugin_the_user_disabled_files_a_request_instead(host, broadcasts, audit, caller) -> None:
+    host.action_answer = _approval_required("user", 1_792_108_800_000)
+    out = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert out["ok"] is False and out["error_code"] == "APPROVAL_REQUIRED" and out["status"] == "pending"
+    assert set(out) == {"ok", "error_code", "error", "approval_id", "status", "expires_at"}
+    record = skills_approvals.registry.get(out["approval_id"])
+    assert record["kind"] == "plugin-enable" and record["owner"] == "plugin-enable:nerdtechnic.devmap@0.2.0"
+    assert record["target"] == {"id": "nerdtechnic.devmap", "namespace": "nerdtechnic", "name": "devmap",
+                                "version": "0.2.0", "fromVersion": None}
+    assert record["disabled"] == {"by": "user", "at": 1_792_108_800.0, "agent": None}
+    assert record["card"] == CARD
+    assert [(e["type"], e.get("to")) for e in broadcasts] == [(contract.PLUGIN_APPROVAL_REQUEST_EVENT, "main-windows")]
+    assert [(r["action"], r["outcome"], r["approval_id"]) for r in _actions(audit)] == [
+        ("request-enable", "allowed", out["approval_id"]),
+    ]
+    # Asking again returns the same pending request.
+    again = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert again["approval_id"] == out["approval_id"]
+
+
+async def test_a_plugin_disabled_before_sources_were_recorded_also_needs_the_users_approval(
+    host, broadcasts, audit, caller,
+) -> None:
+    host.action_answer = _approval_required("user", None)
+    out = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert out["error_code"] == "APPROVAL_REQUIRED"
+    assert skills_approvals.registry.get(out["approval_id"])["disabled"] == {"by": "user", "at": None, "agent": None}
+
+
+async def test_the_enable_request_is_approved_or_rejected_like_any_other(host, broadcasts, audit, caller) -> None:
+    host.action_answer = _approval_required("user", 1)
+    approved = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert (await skills_approvals.decide_plugin(approved["approval_id"], True))["status"] == "applying"
+    skills_approvals.registry.finish_plugin(approved["approval_id"], "completed")
+    host.installed = []
+    rejected_request = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert rejected_request["approval_id"] != approved["approval_id"]
+    assert (await skills_approvals.decide_plugin(rejected_request["approval_id"], False))["status"] == "rejected"
+
+
+def test_only_a_plugin_enable_record_carries_who_disabled_it() -> None:
+    skills_approvals.registry._reset_for_test()
+    target = {"id": "a.b", "namespace": "a", "name": "b", "version": "1.0.0", "fromVersion": None}
+    requester = {"paneId": None, "paneName": None, "workspace": None, "callerKind": "host"}
+    install = skills_approvals.registry.request_plugin(
+        kind="plugin-install", requester=requester, reason="", target=target, card=None, diff=None,
+        disabled={"by": "agent", "at": 1, "agent": None},
+    )
+    assert install["disabled"] is None
+    agent = {"callerKind": "pane", "paneId": "p-1", "paneName": "d\u202eev"}
+    enable = skills_approvals.registry.request_plugin(
+        kind="plugin-enable", requester=requester, reason="", target=target, card=None, diff=None,
+        disabled={"by": "agent", "at": 5, "agent": agent},
+    )
+    assert enable["disabled"] == {"by": "agent", "at": 5.0, "agent": {"callerKind": "pane", "paneId": "p-1", "paneName": "dev"}}
+    malformed = skills_approvals.registry.request_plugin(
+        kind="plugin-enable", requester=requester, reason="", target={**target, "version": "2.0.0"}, card=None,
+        diff=None, disabled={"by": "agent", "at": "x", "agent": "nobody"},
+    )
+    # An agent source it cannot name reads as the user (the conservative side).
+    assert malformed["disabled"] == {"by": "user", "at": None, "agent": None}
+    skills_approvals.registry._reset_for_test()
+

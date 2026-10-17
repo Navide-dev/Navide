@@ -3,6 +3,7 @@ import type {
   PluginAgentActionKind,
   PluginApprovalRequest,
 } from '../../shared/pluginAgentTools'
+import type { DisableSource } from './pluginDisableSource'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 
 /** Who asked, as the backend resolved it from the MCP credential. */
@@ -22,9 +23,14 @@ export interface PluginAgentActionDeps {
   /** Installed version of a Marketplace (official-registry) package, else null. */
   installedVersion(pluginId: string): string | null
   /** The Extensions Disabled switch for an installed Marketplace package;
-   *  `changed` is false when the package was already in that state. */
-  setDisabled(pluginId: string, disabled: boolean): Promise<{ changed: boolean }>
+   *  `changed` is false when the package was already in that state. `source`
+   *  is recorded with a disable that changed something. */
+  setDisabled(pluginId: string, disabled: boolean, source?: DisableSource): Promise<{ changed: boolean }>
   notify(notice: PluginAgentActionNotice): void
+  /** Whether the package is disabled now, and who disabled it (B2-c option B). */
+  isDisabled(pluginId: string): boolean
+  disableSource(pluginId: string): DisableSource
+  now(): number
 }
 
 const REQUESTER_KEYS = ['paneId', 'paneName', 'workspace', 'callerKind']
@@ -86,9 +92,29 @@ export async function answerPluginAgentAction(
     return { ok: false, error: `${pluginId} is not an installed Marketplace package`, error_code: 'NOT_INSTALLED' }
   }
   const disabled = action === 'disable'
+  // Option B: an agent re-enables only what an agent disabled. A package the
+  // user disabled (or with no recorded source) needs the user's approval.
+  if (!disabled && deps.isDisabled(pluginId)) {
+    const source = deps.disableSource(pluginId)
+    if (source.by !== 'agent') {
+      return {
+        ok: false,
+        error: `the user disabled ${pluginId}; enabling it needs the user's approval in Navide`,
+        error_code: 'APPROVAL_REQUIRED',
+        pluginId,
+        pluginVersion: version,
+        disabled: source,
+      }
+    }
+  }
+  const agentSource: DisableSource = {
+    by: 'agent',
+    at: deps.now(),
+    agent: { callerKind: requester.callerKind, paneId: requester.paneId, paneName: requester.paneName },
+  }
   let changed: boolean
   try {
-    ({ changed } = await deps.setDisabled(pluginId, disabled))
+    ({ changed } = await deps.setDisabled(pluginId, disabled, disabled ? agentSource : undefined))
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error), error_code: 'ACTION_FAILED' }
   }

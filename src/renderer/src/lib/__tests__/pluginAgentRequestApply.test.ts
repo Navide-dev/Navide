@@ -24,6 +24,7 @@ function deps(installed: InstalledPackage[]): PluginRequestApplyDeps & {
     install: vi.fn(async () => undefined),
     rollback: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
+    enable: vi.fn(async () => undefined),
     listInstalled: vi.fn(async () => installed),
     finish: vi.fn(async () => undefined),
   }
@@ -118,6 +119,22 @@ describe('recovery leaves alone what another open window is applying', () => {
     )
     expect(settled).toEqual([{ approvalId: 'a-plugin-remove', status: 'completed', error: null }])
     expect(d.finish).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a plugin-enable request (B2-c option B)', () => {
+  it('enables only when approved and applied, and checks the package really is enabled', async () => {
+    const enabled = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.2.0', disabled: false }])
+    await expect(applyApprovedRequest(record('plugin-enable', '0.2.0'), enabled)).resolves.toEqual({ status: 'completed', error: null })
+    expect(enabled.enable).toHaveBeenCalledWith('nerdtechnic.devmap')
+    const still = deps([{ id: 'nerdtechnic.devmap', packageVersion: '0.2.0', disabled: true }])
+    await expect(applyApprovedRequest(record('plugin-enable', '0.2.0'), still)).resolves.toEqual({ status: 'failed', error: 'not-applied' })
+  })
+
+  it('recovers as completed only when the package is enabled', () => {
+    expect(recoveryResult(record('plugin-enable', '0.2.0'), [{ id: 'nerdtechnic.devmap', disabled: false }])).toEqual({ status: 'completed', error: null })
+    expect(recoveryResult(record('plugin-enable', '0.2.0'), [{ id: 'nerdtechnic.devmap', disabled: true }])).toEqual({ status: 'failed', error: 'interrupted' })
+    expect(recoveryResult(record('plugin-enable', '0.2.0'), [])).toEqual({ status: 'failed', error: 'interrupted' })
   })
 })
 

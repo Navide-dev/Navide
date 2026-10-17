@@ -604,9 +604,9 @@ export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
-export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove'
+export type ApprovalKind = 'skill' | 'plugin-install' | 'plugin-update' | 'plugin-rollback' | 'plugin-remove' | 'plugin-enable'
 export const APPROVAL_KINDS: readonly ApprovalKind[] = [
-  'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove',
+  'skill', 'plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove', 'plugin-enable',
 ]
 
 export type PluginApprovalStatus = 'pending' | 'applying' | 'completed' | 'rejected' | 'failed' | 'expired'
@@ -622,6 +622,8 @@ export interface PluginApprovalRequest {
   target: { id: string; namespace: string; name: string; version: string | null; fromVersion: string | null }
   card: DisclosureCard | null
   diff: DisclosureDiff | null
+  /** plugin-enable: who disabled the package (`at` in Unix seconds, null when not recorded); null for every other kind. */
+  disabled: { by: 'user' | 'agent'; at: number | null; agent: PluginDisabledBy['agent'] } | null
   status: PluginApprovalStatus
   error: string | null
   created_at: number
@@ -652,7 +654,14 @@ export const PLUGIN_AGENT_ACTION_REQUEST_EVENT = 'plugins.agent_action.request'
 export const PLUGIN_AGENT_ACTION_RESULT_MESSAGE = 'plugins.agent_action.result'
 export type PluginAgentActionKind = 'disable' | 'enable'
 export type PluginAgentActionErrorCode =
-  | 'BAD_REQUEST' | 'NOT_INSTALLED' | 'BUILTIN_PLUGIN' | 'ACTION_FAILED' | 'HOST_UNAVAILABLE'
+  | 'BAD_REQUEST' | 'NOT_INSTALLED' | 'BUILTIN_PLUGIN' | 'ACTION_FAILED' | 'HOST_UNAVAILABLE' | 'APPROVAL_REQUIRED'
+
+/** Who disabled an installed package (B2-c option B); `at` is Unix ms here, Unix seconds in an approval record. */
+export interface PluginDisabledBy {
+  by: 'user' | 'agent'
+  at: number | null
+  agent: { callerKind: 'pane' | 'external' | 'host'; paneId: string | null; paneName: string | null } | null
+}
 
 export interface PluginAgentActionRequest {
   request_id: string
@@ -663,5 +672,7 @@ export interface PluginAgentActionRequest {
 
 export type PluginAgentActionAnswer =
   | { ok: true; pluginId: string; pluginVersion: string; disabled: boolean; changed: boolean }
-  | { ok: false; error: string; error_code: PluginAgentActionErrorCode }
+  | { ok: false; error: string; error_code: Exclude<PluginAgentActionErrorCode, 'APPROVAL_REQUIRED'> }
+  /** enable of a package the user disabled (or with no recorded source): the backend files a plugin-enable request. */
+  | { ok: false; error: string; error_code: 'APPROVAL_REQUIRED'; pluginId: string; pluginVersion: string; disabled: PluginDisabledBy }
 export const PLUGIN_APPROVAL_TTL_MS = 15 * 60_000
