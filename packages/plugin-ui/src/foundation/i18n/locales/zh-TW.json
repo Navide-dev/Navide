@@ -11030,6 +11030,7 @@
     "title": "揭露卡",
     "riskLabel": "風險等級：{level}",
     "variesByPlatform": "（依平台不同，顯示最高者）",
+    "rescanNotice": "Navide Registry 重新掃描 {name} {version}，發現 {count} 個新項目（尚未驗證）。詳見「設定 → Navide 外掛 → 揭露總覽」。",
     "risk": {
       "low": "低",
       "medium": "中",

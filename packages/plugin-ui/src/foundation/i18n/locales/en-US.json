@@ -11030,6 +11030,7 @@
     "title": "Disclosure",
     "riskLabel": "Risk level: {level}",
     "variesByPlatform": "(varies by platform; the highest is shown)",
+    "rescanNotice": "A Navide Registry rescan of {name} {version} found {count} new items (not yet verified). See Settings → Navide Plugins → Disclosure overview.",
     "risk": {
       "low": "Low",
       "medium": "Medium",

@@ -89,7 +89,9 @@ import {
   type DisclosureRiskLevel,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
-import { cardRiskLevel, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
+import { rescanFinding } from './pluginRescanNotice'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -364,6 +366,16 @@ export interface PluginTrustRefreshController {
    *  Rejects when the Registry did not answer for some package, after
    *  remembering the merged answer (those packages keep their last update). */
   checkUpdates(): Promise<PluginUpdateInfo[]>
+  /** D-f: rescans of installed versions that found new items since the last
+   *  call, each reported once. Notice only. */
+  takeRescanNotices(): PluginRescanNotice[]
+}
+
+/** A rescan of an installed version found these new scan items (D-f). */
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: ScanItem[]
 }
 
 export interface PluginIpcOptions {
@@ -540,6 +552,10 @@ export function registerPluginIpc(
   }
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
+  // D-f: the scan verified at install, per version; a record for the rescan
+  // notice only. Its failures never fail an install or a removal.
+  const installScans = new PluginInstallScanStore(pluginsRoot)
+  let rescanNotices: PluginRescanNotice[] = []
   const packs = new PluginPackStore(pluginsRoot)
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
@@ -1060,7 +1076,20 @@ export function registerPluginIpc(
               yanked?: unknown
               engines_navide?: unknown
               disclosure?: unknown
+              scan?: unknown
             }>
+          }
+          // D-f: a rescan of the installed version that found new items is
+          // noticed once, from this same answer (no request of its own).
+          try {
+            const finding = rescanFinding(
+              installScans.get(pkg.id, pkg.packageVersion!), detail.versions ?? [], pkg.packageVersion!, hostTarget
+            )
+            if (finding && installScans.noticeOnce(pkg.id, pkg.packageVersion!, finding.digest)) {
+              rescanNotices.push({ id: pkg.id, version: pkg.packageVersion!, added: finding.added })
+            }
+          } catch (error) {
+            console.warn(`[plugins] rescan check for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
           }
           // A stable user is never offered a pre-release. Switching the opt-in
           // off again never downgrades: a newer stable release is offered
@@ -1688,6 +1717,15 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(pkg.id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
+        try {
+          if (pkg.scan) installScans.record(pkg.id, pkg.version, pkg.scan)
+          const kept = lifecycleSelector.read(pkg.id)
+          installScans.keepVersions(pkg.id, [kept?.active, kept?.previous, kept?.candidate]
+            .filter((selection) => selection !== undefined && selection !== null)
+            .map((selection) => selection!.packageVersion))
+        } catch (error) {
+          console.warn(`[plugins] install scan record for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
         if (publisherRequiresTrust) {
           publisherTrust.trust(pkg.publisherId, pkg.id)
         }
@@ -2333,6 +2371,11 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      try {
+        installScans.removePlugin(id)
+      } catch (error) {
+        console.warn(`[plugins] install scan record for ${id} not removed: ${error instanceof Error ? error.message : String(error)}`)
+      }
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')
@@ -2515,6 +2558,11 @@ export function registerPluginIpc(
 
   return {
     checkUpdates: checkInstalledUpdates,
+    takeRescanNotices() {
+      const taken = rescanNotices
+      rescanNotices = []
+      return taken
+    },
     async refreshRegistryTrust() {
       const packageIds = discoverInstalledRegistryPackageIds(pluginsRoot)
       const activeRegistryPackages = new Set(

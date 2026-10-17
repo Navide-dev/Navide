@@ -332,6 +332,12 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   readme: string | null
 }
 
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: Array<{ kind: string; key: string }>
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
@@ -1134,6 +1140,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       const listener = (_event: unknown, updates: PluginUpdateInfo[]): void => handler(updates)
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
+    },
+    /** D-f: rescans of installed versions that found new items (notice only). */
+    onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
+      const listener = (_event: unknown, notices: PluginRescanNotice[]): void => handler(notices)
+      ipcRenderer.on('plugins:rescanNotices', listener)
+      return () => ipcRenderer.removeListener('plugins:rescanNotices', listener)
     },
     prepareInstall: (args: {
       namespace: string

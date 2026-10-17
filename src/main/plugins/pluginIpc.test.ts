@@ -928,9 +928,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
   })
 
   /** Sign the contract 3.5 disclosure envelope onto every version row. */
-  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>): WireDetail {
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>, scanBody?: Record<string, unknown>): WireDetail {
     const disclosure = computeDisclosure(manifest as never)
     const rows = detail.versions.map((row) => {
+      const scan = scanBody
+        ? { ...scanBody, artifactDigest: row.registry_envelope.artifactDigest, target: row.registry_envelope.target }
+        : null
       const envelope = {
         schemaVersion: 1,
         artifactDigest: row.registry_envelope.artifactDigest,
@@ -940,14 +943,14 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         keyId: row.registry_envelope.keyId,
         signedAt: row.registry_envelope.signedAt,
         disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
-        scanDigest: null,
+        scanDigest: scan ? createHash('sha256').update(canonicalContractJson(scan), 'utf8').digest('hex') : null,
       }
       return {
         ...row,
         disclosure,
         disclosure_envelope: envelope,
         disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
-        scan: null,
+        scan,
         registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
       }
     })
@@ -989,6 +992,50 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         scan: null,
         registry: { review: { status: 'not-required' } },
       })
+  })
+
+  it('D-f: records the install-time scan, notes a rescan that found new items once, and forgets it on remove', async () => {
+    const scanCases = (JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8')) as {
+      cases: Array<{ name: string; scan: Record<string, unknown> }>
+    }).cases
+    const scanNamed = (name: string) => scanCases.find((entry) => entry.name === name)!.scan
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-rescan-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('nothing-found')), bytes, digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const file = join(root, '.navide-install-scans.json')
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']['1.0.0'].scan.scanner.id).toBe('navide-static-scan')
+
+      // The same answer the update check already fetches; nothing new yet.
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('ui-only-runs-git-push-undeclared')), bytes, digest)
+      const fetchCount = () => vi.mocked(global.fetch).mock.calls.length
+      await controller.checkUpdates()
+      const requests = fetchCount()
+      const [notice] = controller.takeRescanNotices()
+      expect(notice).toMatchObject({ id: 'acme.demo', version: '1.0.0' })
+      expect(notice.added.length).toBeGreaterThan(0)
+      // No request of its own: one detail fetch per check, as before.
+      expect(requests).toBe(1)
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']).toBeUndefined()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {

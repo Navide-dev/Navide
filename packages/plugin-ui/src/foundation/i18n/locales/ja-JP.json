@@ -11030,6 +11030,7 @@
     "title": "開示",
     "riskLabel": "リスク：{level}",
     "variesByPlatform": "（プラットフォームにより異なります。最も高いものを表示）",
+    "rescanNotice": "Navide Registry による {name} {version} の再スキャンで新しい項目が {count} 件見つかりました（未検証）。「設定 → Navide プラグイン → 開示の一覧」を参照してください。",
     "risk": {
       "low": "低",
       "medium": "中",

@@ -427,6 +427,7 @@ declare global {
         checkUpdates: () => Promise<PluginUpdateInfo[]>
         pendingUpdates: () => Promise<PluginUpdateInfo[]>
         onUpdatesChanged: (handler: (updates: PluginUpdateInfo[]) => void) => () => void
+        onRescanNotices?: (handler: (notices: PluginRescanNotice[]) => void) => () => void
         prepareInstall: (args: {
           namespace: string
           name: string
@@ -658,6 +659,12 @@ declare global {
     versions: MarketplaceVersionInfo[]
     /** Raw README markdown; rendered as text nodes, never as HTML. */
     readme: string | null
+  }
+
+  interface PluginRescanNotice {
+    id: string
+    version: string
+    added: Array<{ kind: string; key: string }>
   }
 
   interface PluginUpdateInfo {

@@ -1986,9 +1986,12 @@ const refreshInstalledPluginTrustAndUpdates = (): void => {
     refreshTrust: refreshInstalledPluginTrust,
     checkUpdates: () => pluginTrustRefresh.checkUpdates(),
     publish: (updates) => {
+      // D-f: rescans that found new items, from the same check; notice only.
+      const rescans = pluginTrustRefresh.takeRescanNotices()
       for (const hostWindow of mainWindows) {
         if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
         hostWindow.webContents.send('plugins:updatesChanged', updates)
+        if (rescans.length > 0) hostWindow.webContents.send('plugins:rescanNotices', rescans)
       }
     },
     warn: (message) => console.warn(message),
