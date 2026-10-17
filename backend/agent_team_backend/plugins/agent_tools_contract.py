@@ -344,6 +344,15 @@ BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = "io.navide/argumentChunks"
 AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = "agent.capability.result_chunk"
 #: WebSocket event, backend -> Host, one per argument piece, sent before ``agent.capability.request``.
 AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = "agent.capability.request_chunk"
+#: WebSocket request, Host -> backend: the call is alive (keeps the backend's wait running).
+AGENT_CAPABILITY_PROGRESS_MESSAGE = "agent.capability.progress"
+#: Idle timer of a transfer of pieces, restarted by every piece. It detects a
+#: stalled peer; it is not a size limit (section 4.4, Timing).
+AGENT_TOOL_CHUNK_IDLE_MS = 30_000
+#: ``reason`` of PLUGIN_TOOL_TIMEOUT: the plugin's own work, or a stalled transfer.
+AGENT_TOOL_TIMEOUT_REASONS = ("execution", "transfer-idle")
+#: ``phase`` of ``agent.capability.progress``.
+AGENT_TOOL_PROGRESS_PHASES = ("arguments", "execution", "result")
 AGENT_TOOL_CHUNKS_INVALID = "PLUGIN_TOOL_CHUNKS_INVALID"
 
 
@@ -422,10 +431,13 @@ def reassemble_agent_tool_payload_text(chunks: list[dict[str, Any]], summary: An
 def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
     """``args_sha256`` and ``args_bytes`` of the audit row (section 5): the only arguments-size field.
 
-    SHA-256 and UTF-8 byte length of the canonical spelling. Arguments with a
-    fraction cannot be spelled canonically (safe integers only); they are
-    digested in the same sorted, compact, ASCII spelling with the numbers as
-    JSON writes them. Anything that is not JSON raises.
+    ``args_bytes`` is measured like ``resultBytes``: the UTF-8 byte length of
+    the compact spelling the arguments travel in (``agent_tool_payload_text``).
+    ``args_sha256`` hashes the canonical spelling, so equal arguments hash
+    equally whatever their key order. Arguments with a fraction cannot be
+    spelled canonically (safe integers only); they are hashed in the same
+    sorted, compact, ASCII spelling with the numbers as JSON writes them.
+    Anything that is not JSON raises.
     """
     # Imported here: disclosure_contract imports this module.
     from .disclosure_contract import CanonicalJsonError, canonical_contract_json
@@ -434,8 +446,7 @@ def agent_tool_arguments_digest(arguments: Any) -> tuple[str, int]:
         spelled = canonical_contract_json(arguments)
     except CanonicalJsonError:
         spelled = json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-    data = spelled.encode("utf-8")
-    return hashlib.sha256(data).hexdigest(), len(data)
+    return hashlib.sha256(spelled.encode("utf-8")).hexdigest(), utf8_byte_length(agent_tool_payload_text(arguments))
 
 
 # ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────

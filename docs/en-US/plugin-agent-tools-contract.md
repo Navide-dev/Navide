@@ -203,7 +203,7 @@ refusing a call. The sizes are disclosed instead, one field each:
 | Size | Measured by | Wire | Audit column |
 |---|---|---|---|
 | result | the Host, once (`agentToolResultBytes`, 4.2) | `meta.resultBytes` | `plugin_tool_calls.result_bytes` |
-| arguments | the backend, once (`agent_tool_arguments_digest`, 5) | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
+| arguments | the backend, once (`agent_tool_arguments_digest`, 5): UTF-8 bytes of the compact spelling, the same measure as `resultBytes` | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
 
 The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
 the error-code list for older readers but is no longer produced.
@@ -761,7 +761,7 @@ headless binding → `callBound`.
 | `WORKSPACE_WRITE_DECLINED` | the user declined the first-write confirmation |
 | `EXECUTION_POLICY_DENIED` | the user's agent execution policy refused it |
 | `PLUGIN_TOOL_INVALID_ARGUMENTS` | arguments do not match `inputSchema` |
-| `PLUGIN_TOOL_TIMEOUT` | the backend did not answer within `timeoutMs` |
+| `PLUGIN_TOOL_TIMEOUT` | `reason` `execution`: the plugin did not answer within `timeoutMs`; `reason` `transfer-idle`: a transfer of pieces stalled for `AGENT_TOOL_CHUNK_IDLE_MS` (4.4, Timing) |
 | `PLUGIN_TOOL_FAILED` | the backend answered with an error; its own code is in `plugin_error` |
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `bytes` or `json` |
@@ -894,11 +894,14 @@ and the summary in its `_meta`:
 
 The Host writes each piece as its own frame once its output queue is empty, so
 frames of other calls interleave and the queue's existing backlog bound is
-never exceeded. The call's `timeoutMs` starts before the first piece and covers
-the whole call. On timeout or cancellation the Host stops writing pieces and
-sends the existing `notifications/cancelled` for that id; the child drops the
-pieces it holds for that id (a cancellation of an id it never saw a request for
-is ignored, as today). A child that cannot join its pieces answers the call
+never exceeded. A control frame (a request, a response, a cancellation) that
+does not fit the backlog waits for the queue to drain; an overflow never fails
+the child (today `writeFrame` fails it with `BACKEND_UNAVAILABLE`). The
+argument transfer runs on the idle timer, and `timeoutMs` starts only when the
+`navide/call` itself is written (see Timing). On timeout or cancellation the
+Host stops writing pieces and sends the existing `notifications/cancelled` for
+that id; the child drops the pieces it holds for that id (a cancellation of an
+id it never saw a request for is ignored, as today). A child that cannot join its pieces answers the call
 with the error `{"code": 1000, "message": "...", "data": {"code":
 "PLUGIN_TOOL_CHUNKS_INVALID", "details": {"reason": "bytes"}}}`.
 
@@ -933,8 +936,9 @@ requests (responses, progress, events) between them, so other calls to the same
 child are never held behind a large result. The Host keeps the pieces of each
 pending call in that call's entry; pieces for an id that is not pending (the
 call was cancelled, timed out or already settled) are dropped and counted, not
-a protocol error. The call's `timeoutMs` covers the whole transfer up to the
-final response. On timeout or cancellation the Host sends the existing
+a protocol error. The first piece ends the call's `timeoutMs`; from there the
+transfer runs on the idle timer (see Timing). On timeout or cancellation the
+Host sends the existing
 `notifications/cancelled`, drops the pieces held so far, and the child should
 stop sending pieces for that id. The child is not restarted for any of this.
 
@@ -968,15 +972,50 @@ send gives flow control without a credit scheme. The backend accepts pieces
 only from the authenticated Host session and only for a pending request id,
 keeps them with that request's waiter, joins them when the final message
 arrives, and delivers `{ok: true, result: <parsed>, meta}` to the waiter as if
-it had arrived whole. The existing wait (`timeoutMs` + 5 s) covers the whole
-transfer; when it ends (timeout, MCP client gone) the pieces are dropped and
-later ones answer `accepted: false`. Results that fit one piece keep the
-current single message.
+it had arrived whole. The backend's wait is the one described under Timing:
+every piece restarts it. When it ends (idle, MCP client gone) the pieces are
+dropped and later ones answer `accepted: false`. Results that fit one piece
+keep the current single message.
 
 **R3: backend → agent (MCP HTTP).** The MCP server returns the joined
 result in one `tools/call` response. FastMCP's streamable HTTP transport has no
 response-size limit, so nothing is cut here; how much of a large result an
 agent CLI shows is that CLI's own behaviour and outside Navide.
+
+#### Timing
+
+Time never acts as a size limit. Two clocks, and nothing else:
+
+- **Execution**: `timeoutMs` measures only the plugin's own work. The Host
+  starts it when the `navide/call` frame is written (after the last argument
+  piece, A3) and stops it at the child's first result frame (its first
+  `notifications/navide/resultChunk` or its final response). On expiry the call
+  fails as today with `PLUGIN_TOOL_TIMEOUT`, `reason: "execution"`.
+- **Transfer**: every transfer of pieces runs on an idle timer of
+  `AGENT_TOOL_CHUNK_IDLE_MS` = 30,000 ms that every piece restarts. It tells a
+  stalled peer from a slow one: a value of any size passes as long as pieces
+  keep moving, and the timer only fires after 30 s without one. On expiry the
+  call fails with `PLUGIN_TOOL_TIMEOUT`, `reason: "transfer-idle"`, the pieces
+  held so far are dropped, and the Host sends `notifications/cancelled` to the
+  child. Where each hop restarts it: A2 — the Host, on each
+  `agent.capability.request_chunk` of a request id it holds pieces for, until
+  the request arrives; A3 — the Host, each time a piece leaves its output queue;
+  R1 — the Host, on each `notifications/navide/resultChunk`; R2 — the Host, on
+  each `agent.capability.result_chunk` response, and the backend, on each piece
+  it receives.
+
+The backend cannot see A3, the plugin's work or R1, so the Host tells it the
+call is alive: it sends the request `agent.capability.progress`
+`{"request_id": "...", "phase": "arguments" | "execution" | "result"}` after
+each argument piece it writes to the child (`arguments`), when it writes the
+`navide/call` (`execution`) and after each result piece it receives from the
+child (`result`). The backend answers `{"ok": true, "accepted": true}`, or
+`accepted: false` for a request id that is no longer pending. The backend's
+wait for a request restarts on every Host message about it (progress, result
+piece, result) and lasts `max(timeoutMs, AGENT_TOOL_CHUNK_IDLE_MS)` + 5 s, so
+neither a long execution nor a long transfer ends it while data still moves.
+A call whose arguments and result fit one piece sends `execution` progress only
+and otherwise behaves as today.
 
 #### Wire schema
 
@@ -1003,7 +1042,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `caller_workspace`, `target_workspace` | TEXT | |
 | `cross_workspace` | INTEGER | 0/1 |
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
-| `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`: SHA-256 and UTF-8 byte length of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them). The arguments are **not** stored. This is the only arguments-size field (2.7) |
+| `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
 | `error_code` | TEXT | `''` on success |
 | `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); 0 when the call has no result |
@@ -1111,8 +1150,9 @@ by editing the fixture.
 | DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
 | Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
+| Transfer time | `timeoutMs` covers the plugin's execution only; transfers run on a 30 s idle timer restarted by every piece, and `agent.capability.progress` keeps the backend's wait alive | time must not turn into a size limit (review of #358, M2); the idle timer detects a dead peer, it does not bound a size |
 | Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child (user decision 2026-10-17); pieces stay the normal path for interleaving |
 | Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under 1 MiB, the frame size child readers use (the built-in Plans backend's `MAX_FRAME_BYTES`); small enough that other calls interleave |
-| Arguments-size field | `args_bytes` only, measured by the backend over the same spelling as `args_sha256`; no `meta.argsBytes` | one number for one fact; the backend sees the arguments first and writes the audit row |
+| Arguments-size field | `args_bytes` only, measured by the backend as UTF-8 bytes of the compact spelling (the `resultBytes` measure); `args_sha256` stays canonical; no `meta.argsBytes` | one number for one fact, in the same unit as the result size; the backend sees the arguments first and writes the audit row |
 | Who measures the size | the Host, once, compact JSON (`agentToolResultBytes`) | one number from the hop that sees the plugin's value; the backend's spelling differs |
 | Example backend method names | lowercase dotted (`devmap.block.status`) | the Host supervisor refuses upper-case method names (2.1) |

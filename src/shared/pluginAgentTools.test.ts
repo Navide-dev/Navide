@@ -1,8 +1,11 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_CAPABILITY_PROGRESS_MESSAGE,
   AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+  AGENT_TOOL_CHUNK_IDLE_MS,
   AGENT_TOOL_DEFAULT_TIMEOUT_MS,
   AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
   AGENT_TOOL_CHUNK_BYTES,
@@ -25,6 +28,7 @@ import {
   validateAgentToolName,
   validateAgentTools,
 } from './pluginAgentTools'
+import type { AgentToolProgressMessage, AgentToolTimeoutReason } from './pluginAgentTools'
 import { canonicalContractJson } from './pluginDisclosure'
 
 // The Python implementation (backend/agent_team_backend/plugins/agent_tools_contract.py)
@@ -145,6 +149,10 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
       wsResultChunkMessage: AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
       wsRequestChunkEvent: AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
       invalidCode: 'PLUGIN_TOOL_CHUNKS_INVALID',
+      wsProgressMessage: AGENT_CAPABILITY_PROGRESS_MESSAGE,
+      chunkIdleMs: AGENT_TOOL_CHUNK_IDLE_MS,
+      timeoutReasons: ['execution', 'transfer-idle'] satisfies AgentToolTimeoutReason[],
+      progressPhases: ['arguments', 'execution', 'result'] satisfies AgentToolProgressMessage['phase'][],
     }).toEqual(chunking.constants)
   })
 
@@ -184,8 +192,13 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     expect(JSON.parse((joined as { text: string }).text)).toEqual(args)
   })
 
-  it.each(chunking.argumentsDigest.filter((c) => c.canonical))('spells args_bytes canonically: $name', ({ arguments: args, bytes }) => {
-    expect(utf8ByteLength(canonicalContractJson(args))).toBe(bytes)
+  it.each(chunking.argumentsDigest)('counts args_bytes like resultBytes: $name', ({ arguments: args, bytes }) => {
+    expect(utf8ByteLength(JSON.stringify(args))).toBe(bytes)
+  })
+
+  it.each(chunking.argumentsDigest.filter((c) => c.canonical))('hashes args_sha256 over the canonical spelling: $name', ({ arguments: args, sha256 }) => {
+    // src/shared has no hash function; node:crypto is fine in this test file only.
+    expect(createHash('sha256').update(canonicalContractJson(args), 'utf8').digest('hex')).toBe(sha256)
   })
 
   // Both directions cut and join with the same two functions, so one run covers results and arguments.

@@ -335,8 +335,8 @@ export type AgentToolCallResponse =
       ok: false
       error: string
       error_code: AgentToolCallErrorCode
-      /** For PLUGIN_TOOL_UNAVAILABLE an unavailable reason; for PLUGIN_TOOL_CHUNKS_INVALID a join reason. */
-      reason?: AgentToolUnavailableReason | AgentToolChunksInvalidReason
+      /** For PLUGIN_TOOL_UNAVAILABLE an unavailable reason; for PLUGIN_TOOL_CHUNKS_INVALID a join reason; for PLUGIN_TOOL_TIMEOUT which clock ran out. */
+      reason?: AgentToolUnavailableReason | AgentToolChunksInvalidReason | AgentToolTimeoutReason
       /** The plugin's own error code, for PLUGIN_TOOL_FAILED. */
       plugin_error?: string
       meta?: AgentToolCallMeta
@@ -369,6 +369,22 @@ export const BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
 export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
 /** WebSocket event, backend → Host, one per argument piece, sent before `agent.capability.request`. */
 export const AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = 'agent.capability.request_chunk'
+/** WebSocket request, Host → backend: the call is alive (keeps the backend's wait running). */
+export const AGENT_CAPABILITY_PROGRESS_MESSAGE = 'agent.capability.progress'
+/**
+ * Idle timer of a transfer of pieces, restarted by every piece. It detects a
+ * stalled peer; it is not a size limit (section 4.4, Timing).
+ */
+export const AGENT_TOOL_CHUNK_IDLE_MS = 30_000
+
+/** Payload of {@link AGENT_CAPABILITY_PROGRESS_MESSAGE}. */
+export interface AgentToolProgressMessage {
+  request_id: string
+  phase: 'arguments' | 'execution' | 'result'
+}
+
+/** `reason` of PLUGIN_TOOL_TIMEOUT: the plugin's own work, or a stalled transfer. */
+export type AgentToolTimeoutReason = 'execution' | 'transfer-idle'
 
 /** Backend Wire `params` of both chunk notifications; `requestId` is the `navide/call` id. */
 export interface BackendWireChunkParams {

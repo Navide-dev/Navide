@@ -216,6 +216,10 @@ def test_chunking_constants_match_the_shared_fixture() -> None:
         "wsResultChunkMessage": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
         "wsRequestChunkEvent": tools.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
         "invalidCode": tools.AGENT_TOOL_CHUNKS_INVALID,
+        "wsProgressMessage": tools.AGENT_CAPABILITY_PROGRESS_MESSAGE,
+        "chunkIdleMs": tools.AGENT_TOOL_CHUNK_IDLE_MS,
+        "timeoutReasons": list(tools.AGENT_TOOL_TIMEOUT_REASONS),
+        "progressPhases": list(tools.AGENT_TOOL_PROGRESS_PHASES),
     } == _CHUNKING["constants"]
     assert tools.AGENT_TOOL_CHUNKS_INVALID in tools.AGENT_TOOL_CALL_ERROR_CODES
 
