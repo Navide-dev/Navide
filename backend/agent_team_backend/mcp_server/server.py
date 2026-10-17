@@ -5024,16 +5024,27 @@ async def _wait_for_host_answer(request_id: str, future: "asyncio.Future[dict[st
     a long plugin run nor a long transfer ends the wait while data still moves.
     """
     loop = asyncio.get_running_loop()
+
+    # A timer, not a timeout around the await: the answer is awaited directly,
+    # costing no more loop turns than a plain wait, and the window restarts
+    # without cancelling the future.
+    def window_ended(deadline: float) -> None:
+        nonlocal timer
+        if future.done():
+            return
+        transfer = _agent_transfers.get(request_id)
+        restarted = (transfer["activity"] + window) if transfer else deadline
+        if restarted <= loop.time():
+            future.set_result(TIMEOUT)
+        else:
+            timer = loop.call_at(restarted, window_ended, restarted)
+
     deadline = loop.time() + window
-    while True:
-        try:
-            return await asyncio.wait_for(asyncio.shield(future), timeout=max(0.0, deadline - loop.time()))
-        except asyncio.TimeoutError:
-            transfer = _agent_transfers.get(request_id)
-            restarted = (transfer["activity"] + window) if transfer else deadline
-            if restarted <= loop.time():
-                return TIMEOUT
-            deadline = restarted
+    timer = loop.call_at(deadline, window_ended, deadline)
+    try:
+        return await future
+    finally:
+        timer.cancel()
 
 
 async def request_host_agent_capability(
@@ -5143,8 +5154,10 @@ async def request_host_agent_workspace_backend(
     future = _agent_capability_pending.register(request_id)
     _agent_transfer_start(request_id)
     try:
-        if agent_tool is not None:
-            sent = await asyncio.shield(_send_agent_tool_request(app, make_event, request))
+        chunked = _agent_tool_argument_pieces(request) if agent_tool is not None else None
+        if chunked is not None:
+            # Shielded: a cancelled MCP call never leaves the Host half a request.
+            sent = await asyncio.shield(_send_agent_tool_pieces(app, make_event, request, *chunked))
         else:
             sent = await app.unicast_host(make_event("agent.capability.request", request))
         if not sent:
@@ -5176,14 +5189,10 @@ async def request_host_agent_workspace_backend(
         _agent_transfers.pop(request_id, None)
 
 
-async def _send_agent_tool_request(app: Any, make_event: Any, request: dict[str, Any]) -> bool:
-    """Send an agent tool request to the Host: arguments longer than one piece
-    first go as ``agent.capability.request_chunk`` events, each awaited, then
-    the request with ``payload.argumentChunks`` (contract 4.4, A2). The caller
-    shields this, so a cancelled MCP call never leaves the Host half a request.
-    """
+def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int] | None:
+    """The pieces and byte size of an agent tool request's arguments when they
+    are longer than one piece (contract 4.4, A2), else None: sent inline."""
     from agent_team_backend.plugins.agent_tools_contract import (
-        AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
         AGENT_TOOL_CHUNK_BYTES,
         agent_tool_payload_text,
         split_agent_tool_payload_text,
@@ -5191,17 +5200,27 @@ async def _send_agent_tool_request(app: Any, make_event: Any, request: dict[str,
     )
 
     payload = request.get("payload")
-    arguments = payload.get("arguments") if isinstance(payload, dict) else None
-    if isinstance(payload, dict) and set(payload) == {"arguments"}:
-        text = agent_tool_payload_text(arguments)
-        size = utf8_byte_length(text)
-        if size > AGENT_TOOL_CHUNK_BYTES:
-            pieces = split_agent_tool_payload_text(text)
-            for seq, data in enumerate(pieces):
-                event = {"request_id": request["request_id"], "seq": seq, "data": data}
-                if not await app.unicast_host(make_event(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, event)):
-                    return False
-            request = request | {"payload": {"argumentChunks": {"chunks": len(pieces), "bytes": size}}}
+    if not isinstance(payload, dict) or set(payload) != {"arguments"}:
+        return None
+    text = agent_tool_payload_text(payload["arguments"])
+    size = utf8_byte_length(text)
+    if size <= AGENT_TOOL_CHUNK_BYTES:
+        return None
+    return split_agent_tool_payload_text(text), size
+
+
+async def _send_agent_tool_pieces(
+    app: Any, make_event: Any, request: dict[str, Any], pieces: list[str], size: int
+) -> bool:
+    """Send the argument pieces as ``agent.capability.request_chunk`` events,
+    each awaited, then the request with ``payload.argumentChunks`` (contract 4.4, A2)."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_CAPABILITY_REQUEST_CHUNK_EVENT
+
+    for seq, data in enumerate(pieces):
+        event = {"request_id": request["request_id"], "seq": seq, "data": data}
+        if not await app.unicast_host(make_event(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, event)):
+            return False
+    request = request | {"payload": {"argumentChunks": {"chunks": len(pieces), "bytes": size}}}
     return await app.unicast_host(make_event("agent.capability.request", request))
 
 
