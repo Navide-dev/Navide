@@ -11168,7 +11168,7 @@
       "enabled": "{caller}が Navide プラグイン {plugin} を有効にしました",
       "version": "バージョン {version}。ファイル、許可、データは保持されます。",
       "undo-failed": "元に戻せませんでした：{error}",
-      "undo-stale": "元に戻していません：その後プラグインが変更されています。"
+      "undo-stale": "元に戻していません：その後 Navide プラグインが変更されています。"
     },
     "caller": {
       "pane": "エージェント pane「{pane}」",

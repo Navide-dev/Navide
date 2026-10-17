@@ -11168,7 +11168,7 @@
       "enabled": "{caller}啟用了 Navide 外掛 {plugin}",
       "version": "版本 {version}。檔案、授權和資料都保留。",
       "undo-failed": "無法還原：{error}",
-      "undo-stale": "沒有還原：這個外掛之後已經被改過。"
+      "undo-stale": "沒有還原：這個 Navide 外掛之後已經被改過。"
     },
     "caller": {
       "pane": "Agent pane「{pane}」",

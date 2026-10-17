@@ -11168,7 +11168,7 @@
       "enabled": "{caller} enabled the Navide plugin {plugin}",
       "version": "Version {version}. Its files, grants and data are kept.",
       "undo-failed": "Could not undo: {error}",
-      "undo-stale": "Nothing was undone: the plugin was changed since."
+      "undo-stale": "Nothing was undone: the Navide plugin was changed since."
     },
     "caller": {
       "pane": "Agent pane “{pane}”",
