@@ -9250,6 +9250,27 @@ _agent_action_pending: PendingRegistry[dict[str, Any]] = PendingRegistry()
 _MQ_NAME_PART = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
+#: Failure words this Navide writes itself for a plugin request (the window's
+#: applyApprovedRequest / recovery): anything else may quote a package or the
+#: Registry and reaches the agent fenced.
+_REQUEST_OWN_ERRORS = frozenset({"interrupted", "not-applied"})
+#: The Host's fixed refusals of plugins_disable / plugins_enable
+#: (pluginAgentAction.ts, handlePluginAgentActionRequest).
+_AGENT_ACTION_OWN_ERRORS = frozenset({
+    "plugin agent action is malformed",
+    "the bundled Navide plugins are disabled and enabled by the user in Extensions",
+    "Navide Host cannot change plugins now",
+})
+
+
+def _fenced_request_error(caller: _Caller, error: str, *, tool: str) -> str:
+    """Error text a package or the Registry may have written, fenced, with the reader tainted."""
+    from agent_team_backend.plugins.external_content import wrap_external_text
+
+    _taint_marketplace_reader(caller, f"{tool} error")
+    return wrap_external_text(error, label="[Navide plugin request error, may quote a package or the Registry]")
+
+
 def resolve_plugin_agent_action(request_id: str, response: dict[str, Any]) -> bool:
     """Resolve one ``plugins.agent_action.request`` with the Host's answer."""
     return _agent_action_pending.resolve(request_id, response)
@@ -9500,7 +9521,7 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
     from agent_team_backend.plugins import agent_tools_contract as contract
 
     try:
-        _resolve_caller(ctx)
+        caller = _resolve_caller(ctx)
     except CallerUnknown as err:
         return {"ok": False, "error": str(err)}
     if isinstance(wait_s, bool) or not isinstance(wait_s, int) or not 0 <= wait_s <= contract.PLUGIN_APPROVAL_STATUS_MAX_WAIT_S:
@@ -9518,7 +9539,10 @@ async def marketplace_request_status(ctx: Context, approval_id: str, wait_s: int
         "kind": record["kind"],
         "target": {"id": record["target"]["id"], "version": record["target"]["version"]},
         "status": record["status"],
-        "error": record["error"],
+        "error": (
+            record["error"] if record["error"] is None or record["error"] in _REQUEST_OWN_ERRORS
+            else _fenced_request_error(caller, str(record["error"]), tool="marketplace_request_status")
+        ),
         "expires_at": record["expires_at"],
     }
 
@@ -9571,10 +9595,16 @@ async def _plugin_agent_action(ctx: Context, action: str, namespace: Any, name: 
                        "disabled": action == "disable", "changed": result.get("changed") is True}, version=version)
     code = result.get("error_code")
     code = code if code in contract.PLUGIN_AGENT_ACTION_ERROR_CODES else "ACTION_FAILED"
-    # The Host's refusals are its own fixed words; a failure may quote a package.
-    error = result.get("error") if code != "ACTION_FAILED" and isinstance(result.get("error"), str) else (
-        f"Navide could not {action} {plugin_id}"
-    )
+    # A failure may quote a package: it gets Navide's own words. A refusal is
+    # passed on only when it is one of the Host's fixed sentences; any other
+    # text reaches the agent fenced, and the reader is tainted.
+    host_error = result.get("error")
+    if code == "ACTION_FAILED" or not isinstance(host_error, str):
+        error = f"Navide could not {action} {plugin_id}"
+    elif host_error in _AGENT_ACTION_OWN_ERRORS or host_error == f"{plugin_id} is not an installed Marketplace package":
+        error = host_error
+    else:
+        error = _fenced_request_error(caller, host_error, tool=f"plugins_{action}")
     return finish(_marketplace_error(code, error))
 
 
