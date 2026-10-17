@@ -9,6 +9,7 @@ import { NativeBackendStore } from './pluginNativeBackendStore'
 import { OwnerOnlyJsonPersistence } from './ownerOnlyJsonPersistence'
 import { isWindows } from '../../shared/osplat'
 import {
+  stdoutPendingOf,
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
   agentToolsDigest,
@@ -21,6 +22,14 @@ import {
   type ThirdPartyLaunchSpec,
 } from './pluginThirdPartyBackends'
 import type { PluginActivationCatalogEntry } from './installedPlugins'
+import {
+  DEFAULT_BACKEND_RESOURCE_LIMITS,
+  defaultStdoutPendingThreshold,
+  watchBackendResources,
+  type BackendResourceWatch,
+  type ResourceNotifyMode,
+  type ResourceViolation,
+} from './pluginBackendResourceWatchdog'
 
 const DARWIN: BackendSandboxProbe = { platform: 'darwin', sandboxExec: () => SANDBOX_EXEC_PATH, bubblewrap: () => null }
 
@@ -77,7 +86,7 @@ function controller(options: Partial<ConstructorParameters<typeof ThirdPartyBack
     dataRoot: join(root, 'data'),
     probe: DARWIN,
     spawnImpl: spawnImpl as never,
-    watchResources: () => ({ dispose: vi.fn(), sample: async () => null }),
+    watchResources: () => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     killSandbox: vi.fn(),
     sweepEscapees: vi.fn(async () => []),
     ...options,
@@ -506,6 +515,228 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
     }
   })
 
+  // Plan B watchdog option C (contract 5.2).
+  describe('resource notices', () => {
+    function realWatch(rss: () => number) {
+      const killed: number[] = []
+      const deps = {
+        listProcesses: async () => [{ pid: 42, ppid: 1, rssBytes: rss(), cpuMs: 0 }],
+        dataDirBytes: async () => 0,
+        kill: (pid: number) => killed.push(pid),
+        now: () => 0,
+        setInterval: () => 'handle',
+        clearInterval: vi.fn(),
+      }
+      let watch: BackendResourceWatch | undefined
+      const watchResources = (pid: number, dir: string, onViolation: (v: ResourceViolation) => void, notify?: ResourceNotifyMode) => {
+        watch = watchBackendResources(pid, dir, onViolation, { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, deps, undefined, notify)
+        return watch
+      }
+      return { killed, watchResources, sample: () => watch!.sample() }
+    }
+
+    async function running(options: Partial<ConstructorParameters<typeof ThirdPartyBackendController>[0]>) {
+      const { instance } = controller({ promptConsent: allow, spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never, ...options })
+      const spec = writePackage()
+      const admission = await instance.admit(spec)
+      admission.spawnProcess(spec.entryFile, {})
+      return { instance, spec }
+    }
+
+    it('over a threshold: tells the user and records it, but does not stop the backend', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const decisions: unknown[] = []
+      const changed = vi.fn()
+      const { instance, spec } = await running({
+        watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row), onResourceNoticesChanged: changed,
+      })
+      await w.sample()
+      await w.sample()
+      expect(w.killed).toEqual([])
+      expect(instance.resourceNotices()).toEqual([expect.objectContaining({
+        pluginId: 'acme.indexer', name: expect.any(String), packageVersion: '1.0.0', item: 'memory', usage: 600 * 1024 * 1024, threshold: 512 * 1024 * 1024,
+      })])
+      expect(changed).toHaveBeenCalled()
+      expect(decisions).toEqual([expect.objectContaining({ plugin_id: 'acme.indexer', item: 'memory', decision: 'notified' })])
+      expect((await instance.status(spec)).lastViolation).toBeUndefined()
+    })
+
+    it('Stop ends it exactly like the automatic stop did (whole tree killed, lastViolation)', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const decisions: Array<Record<string, unknown>> = []
+      const { instance, spec } = await running({ watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row as never) })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'terminate')).toBe(true)
+      expect(w.killed).toEqual([42])
+      expect((await instance.status(spec)).lastViolation).toBe('memory')
+      expect(instance.resourceNotices()).toEqual([])
+      expect(decisions.map((row) => row.decision)).toEqual(['notified', 'terminate'])
+    })
+
+    it('Keep running records the choice, keeps the backend and tells again only at twice the level', async () => {
+      let rss = 600 * 1024 * 1024
+      const w = realWatch(() => rss)
+      const decisions: Array<Record<string, unknown>> = []
+      const { instance } = await running({ watchResources: w.watchResources, recordResourceDecision: (row) => decisions.push(row as never) })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'continue')).toBe(true)
+      expect(instance.resourceNotices()).toEqual([])
+      rss = 1100 * 1024 * 1024
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceNotices()).toEqual([])
+      rss = 1300 * 1024 * 1024
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceNotices()).toEqual([expect.objectContaining({ item: 'memory', threshold: 1200 * 1024 * 1024 })])
+      expect(w.killed).toEqual([])
+      expect(decisions.map((row) => row.decision)).toEqual(['notified', 'continue', 'notified'])
+      expect(decisions[1]).toMatchObject({ item: 'memory', usage: 600 * 1024 * 1024, threshold: 512 * 1024 * 1024 })
+    })
+
+    it('a failed record never holds up the choice', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      const { instance } = await running({ watchResources: w.watchResources, recordResourceDecision: () => { throw new Error('backend down') } })
+      await w.sample()
+      await w.sample()
+      const [notice] = instance.resourceNotices()
+      expect(await instance.answerResourceNotice(notice.id, 'terminate')).toBe(true)
+      expect(w.killed).toEqual([42])
+    })
+
+    it('lists each running backend\'s usage against its thresholds, and forgets it when it exits', async () => {
+      const w = realWatch(() => 600 * 1024 * 1024)
+      let exit: (() => void) | undefined
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: 42, once: (_event: string, listener: () => void) => { exit = listener } })) as never,
+        watchResources: w.watchResources,
+      })
+      const spec = writePackage()
+      const admission = await instance.admit(spec)
+      admission.spawnProcess(spec.entryFile, {})
+      await w.sample()
+      await w.sample()
+      expect(instance.resourceStatus()).toEqual([expect.objectContaining({
+        pluginId: 'acme.indexer', name: expect.any(String), packageVersion: '1.0.0',
+        usage: expect.objectContaining({ memory: 600 * 1024 * 1024 }), waiting: ['memory'],
+      })])
+      exit!()
+      expect(instance.resourceStatus()).toEqual([])
+    })
+
+    it('passes this view\'s pending stdout to the watch, with the default threshold (review M2 on #375)', async () => {
+      const seen: Array<ResourceNotifyMode | undefined> = []
+      const stdoutPendingBytes = vi.fn(() => 42)
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never,
+        stdoutPendingBytes,
+        watchResources: (_pid, _dir, _onViolation, notify) => {
+          seen.push(notify)
+          return { dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }
+        },
+      })
+      const spec = writePackage()
+      const admission = await instance.admit(spec, undefined, { instanceId: 'view-1' })
+      admission.spawnProcess(spec.entryFile, {})
+      expect(seen[0]?.stdoutPending?.bytes()).toBe(42)
+      expect(stdoutPendingBytes).toHaveBeenCalledWith('acme.indexer', 'view-1')
+      expect(seen[0]?.stdoutPending?.threshold).toBe(defaultStdoutPendingThreshold())
+      // Without a view (the install-time preflight) there is nothing to read.
+      const preflight = await instance.admit(spec)
+      preflight.spawnProcess(spec.entryFile, {})
+      expect(seen[1]?.stdoutPending).toBeUndefined()
+    })
+
+    // Review MED-1 on #386: each child's watch reads only its own view.
+    it('two views: only the one whose child piles up stdout is noticed, and Stop stops only that one', async () => {
+      const MiB = 1024 * 1024
+      const killed: number[] = []
+      const watches: BackendResourceWatch[] = []
+      const pending: Record<string, number> = { 'view-1': 0, 'view-2': 300 * MiB }
+      let nextPid = 100
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: nextPid++, once: vi.fn() })) as never,
+        stdoutPendingBytes: (_pluginId, instanceId) => pending[instanceId] ?? 0,
+        watchResources: (pid, dir, onViolation, notify) => {
+          const deps = {
+            listProcesses: async () => [{ pid, ppid: 1, rssBytes: MiB, cpuMs: 0 }],
+            dataDirBytes: async () => 0,
+            kill: (victim: number) => killed.push(victim),
+            now: () => 0,
+            setInterval: () => 'handle',
+            clearInterval: vi.fn(),
+          }
+          const watch = watchBackendResources(pid, dir, onViolation, { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, deps, undefined, notify)
+          watches.push(watch)
+          return watch
+        },
+      })
+      const spec = writePackage()
+      for (const instanceId of ['view-1', 'view-2']) {
+        const admission = await instance.admit(spec, undefined, { instanceId })
+        admission.spawnProcess(spec.entryFile, {})
+      }
+      for (const watch of watches) await watch.sample()
+      const notices = instance.resourceNotices()
+      expect(notices).toEqual([expect.objectContaining({ item: 'stdoutPending', usage: 300 * MiB })])
+      expect(await instance.answerResourceNotice(notices[0].id, 'terminate')).toBe(true)
+      expect(killed).toEqual([101])
+    })
+
+    // Review LOW3 on #386: a failing change hook never loses the item.
+    it('a throwing change hook is logged; the answer still applies and the item is noticed again later', async () => {
+      let rss = 600 * 1024 * 1024
+      const w = realWatch(() => rss)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        const { instance } = await running({
+          watchResources: w.watchResources,
+          onResourceNoticesChanged: () => { throw new Error('window gone') },
+        })
+        await w.sample()
+        await w.sample()
+        const [notice] = instance.resourceNotices()
+        expect(await instance.answerResourceNotice(notice.id, 'continue')).toBe(true)
+        rss = 1300 * 1024 * 1024
+        await w.sample()
+        await w.sample()
+        expect(instance.resourceNotices()).toEqual([expect.objectContaining({ item: 'memory', threshold: 1200 * 1024 * 1024 })])
+        expect(warn).toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+      }
+    })
+
+    it('reads pending stdout from the backend usage, and 0 before #375 adds it', () => {
+      const usage = (child: Record<string, unknown> | null) => ({
+        children: { current: 1, peak: 1, retained: 0 },
+        views: [
+          { pluginId: 'acme.indexer', instanceId: 'v1', subscriptions: { current: 0, peak: 0 }, child },
+          { pluginId: 'acme.indexer', instanceId: 'v2', subscriptions: { current: 0, peak: 0 }, child },
+          { pluginId: 'acme.other', instanceId: 'v3', subscriptions: { current: 0, peak: 0 }, child },
+        ],
+        plugins: [],
+      })
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer', 'v2')).toBe(5)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer', 'v3')).toBe(0)
+      expect(stdoutPendingOf(usage({}) as never, 'acme.indexer', 'v1')).toBe(0)
+      expect(stdoutPendingOf(usage(null) as never, 'acme.indexer', 'v1')).toBe(0)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 'x' } }) as never, 'acme.indexer', 'v1')).toBe(0)
+    })
+
+    it('an unknown or answered notice is refused', async () => {
+      const { instance } = await running({})
+      expect(await instance.answerResourceNotice('nope', 'terminate')).toBe(false)
+    })
+  })
+
   it('reports the resource limit that stopped the child', async () => {
     let report: ((violation: 'memory') => void) | undefined
     const { instance } = controller({
@@ -513,7 +744,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
       spawnImpl: (() => ({ pid: 42, once: vi.fn() })) as never,
       watchResources: (_pid, _dir, onViolation) => {
         report = onViolation as never
-        return { dispose: vi.fn(), sample: async () => null }
+        return { dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }
       },
     })
     const spec = writePackage()
@@ -674,7 +905,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('package bridge', () => {
 
 describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
   it('needs the full admission for this exact content, never prompts, and runs under the watchdog', async () => {
-    const watchResources = vi.fn(() => ({ dispose: vi.fn(), sample: async () => null }))
+    const watchResources = vi.fn(() => ({ dispose: vi.fn(), sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }))
     const spawnImpl = vi.fn(() => ({ pid: 7, once: vi.fn() }))
     const { instance } = controller({ promptConsent: allow, watchResources, spawnImpl: spawnImpl as never })
     const spec = writePackage({}, 'binary-v1')
@@ -688,7 +919,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('install-time preflight', () => {
     expect(admission).not.toBeNull()
     admission!.spawnProcess(spec.entryFile, {})
     expect(spawnImpl).toHaveBeenCalledWith(SANDBOX_EXEC_PATH, expect.any(Array), expect.any(Object))
-    expect(watchResources).toHaveBeenCalledWith(7, expect.any(String), expect.any(Function))
+    expect(watchResources).toHaveBeenCalledWith(7, expect.any(String), expect.any(Function), expect.objectContaining({ onExceeded: expect.any(Function) }))
 
     // A changed binary, a disabled plugin, the switch off, a tripped breaker
     // or no sandbox: never executed.

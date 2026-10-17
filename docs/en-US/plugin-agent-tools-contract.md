@@ -1374,7 +1374,7 @@ user's choice. Fixture:
 
 | Field | Content |
 |---|---|
-| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds (#367's counts have no threshold); `stdoutPending`: reserved for the stdout a child has sent without a newline yet (review M2 on #375), measured by the backend supervisor once DB9 (#375) lands, threshold set by DB9 |
+| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds (#367's counts have no threshold); `stdoutPending`: the stdout a plugin's children have sent without a newline yet (review M2 on #375), read from #375's `views[].child.stdoutPending.bytes` summed over the plugin's children (0 until #375 lands); threshold the smaller of 256 MiB and an eighth of the machine's memory; noticed like the others (Keep running doubles it, never lowered) |
 | `usage`, `threshold` | non-negative finite numbers; `memory`, `disk` and `stdoutPending` in bytes, `processes` a count, `cpu` in cores (fractional). `threshold` is the level this notice was raised at |
 | `decision` | `notified` (raised, no answer yet), `continue`, `terminate` |
 | `at` | Host Unix ms (the backend clamps a future time to now) |
