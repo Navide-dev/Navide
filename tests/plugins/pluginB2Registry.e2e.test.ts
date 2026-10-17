@@ -319,6 +319,10 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
       remove: async (pluginId) => {
         await call('plugins:remove', { id: pluginId })
       },
+      // As the approval card does: the user's own Disabled switch, off.
+      enable: async (pluginId) => {
+        await call('plugins:setDisabled', { id: pluginId, disabled: false })
+      },
       listInstalled: async () => call('plugins:listInstalled'),
       // As the approval card passes it: the stored record is not needed here.
       finish: async (approvalId, result) => {
