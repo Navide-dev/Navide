@@ -1095,3 +1095,27 @@ def test_a_zero_ms_call_counts_toward_the_peak(
         _timed_call(audit, clock, base + end, duration)
     clock.now_ms = NOW
     assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == peak
+
+
+# ── B2: agentActions from plugin_agent_actions ──────────────────────────────
+
+
+def test_agent_actions_list_what_agents_did_newest_first_without_user_decisions(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 40 * DAY_MS
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="disable", caller_kind="pane", outcome="allowed")
+    clock.now_ms = NOW - 2 * DAY_MS
+    assert audit.record_agent_action(
+        plugin_id=_PLUGIN, plugin_version="0.2.0", action="request-update", caller_kind="pane", outcome="allowed",
+        pane_id="p-41", pane_name="dev", caller_workspace="/Users/me/project",
+    )
+    clock.now_ms = NOW - DAY_MS
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="decide-approve", caller_kind="user", outcome="allowed")
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="enable", caller_kind="external", outcome="allowed")
+    assert audit.record_agent_action(plugin_id="other.plugin", action="enable", caller_kind="host", outcome="allowed")
+    audit.flush()
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["agentActions"] == [
+        {"at": NOW - DAY_MS, "action": "enable", "callerKind": "external", "paneId": "", "paneName": "",
+         "workspace": "", "version": ""},
+        {"at": NOW - 2 * DAY_MS, "action": "request-update", "callerKind": "pane", "paneId": "p-41",
+         "paneName": "dev", "workspace": "/Users/me/project", "version": "0.2.0"},
+    ]
