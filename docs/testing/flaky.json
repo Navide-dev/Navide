@@ -128,7 +128,7 @@
         }
       ],
       "status": "fixed",
-      "fixedBy": "this PR"
+      "fixedBy": "#357"
     },
     {
       "test": "backend/tests/channels/test_question_flow.py::test_an_answer_to_a_stale_screen_brings_the_current_prompt",
