@@ -431,5 +431,34 @@ describe('Stop equals the automatic stop', () => {
     await watch.terminate('memory')
     expect(killed).toEqual([12, 11, 10])
   })
+
+  // Review N1 on #386: a backend that is already gone leaves pids that may be reused.
+  it('kills nothing when the fresh listing no longer has the tree', async () => {
+    let listing = tree
+    const { deps, killed } = fakeDeps(() => listing)
+    const onViolation = vi.fn()
+    const watch = watchBackendResources(10, '/data', onViolation, limits, deps, undefined, { onExceeded: vi.fn() })
+    await watch.sample()
+    await watch.sample()
+    listing = []
+    await watch.terminate('memory')
+    expect(killed).toEqual([])
+    expect(onViolation).not.toHaveBeenCalled()
+    expect(deps.clearInterval).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the last sample only when listing fails', async () => {
+    let fail = false
+    const { deps, killed } = fakeDeps(() => {
+      if (fail) throw new Error('ps failed')
+      return tree
+    })
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: vi.fn() })
+    await watch.sample()
+    await watch.sample()
+    fail = true
+    await watch.terminate('memory')
+    expect(killed).toEqual([12, 11, 10])
+  })
 })
 

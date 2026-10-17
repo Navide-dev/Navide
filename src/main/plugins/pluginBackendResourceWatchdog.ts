@@ -507,7 +507,9 @@ export function watchBackendResources(
     async terminate(item) {
       if (disposed) return item
       // List the tree again so a process started since the last sample is
-      // stopped too (review LOW1 on #386); the last sample if that fails.
+      // stopped too (review LOW1 on #386); the last sample only if listing
+      // fails. A listing without the tree means the backend is gone: like
+      // main, nothing is killed, since its pids may belong to others now (N1).
       let tree = lastTree
       try {
         const listing = await deps.listProcesses()
@@ -515,12 +517,15 @@ export function watchBackendResources(
         const escaped = identity && candidates.length > 0 && deps.confirmImages
           ? await deps.confirmImages(candidates, identity)
           : new Set<number>()
-        const fresh = sandboxProcessTree(listing, rootPid, escaped)
-        if (fresh.length > 0) tree = fresh
+        tree = sandboxProcessTree(listing, rootPid, escaped)
       } catch {
         // Keep the last sampled tree.
       }
       if (disposed) return item
+      if (tree.length === 0) {
+        watch.dispose()
+        return item
+      }
       return violate(item, tree)
     },
     status() {
