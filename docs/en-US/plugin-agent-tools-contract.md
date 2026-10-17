@@ -1265,9 +1265,11 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`backendMethod` methods, `agentTool` names) from the installed manifest, since
-the backend has no third-party manifest; without `declared`, `declaredUnused`
-is `[]`. Answer `PluginActivityReport`
+`agentTool` names) from the installed manifest, since the backend has no
+third-party manifest; without `declared`, `declaredUnused` is `[]`. The Host
+sends no `backendMethod` entries: a frontend's calls to its own backend
+(`plugin:backend:call`) are not recorded in `plugin_activity`, so such an
+entry could only ever read "declared but not used". Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the
