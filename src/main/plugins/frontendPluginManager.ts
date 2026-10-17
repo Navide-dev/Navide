@@ -7083,9 +7083,8 @@ export class FrontendPluginManager {
         (!spec.thirdParty.system.includes('fs') || grant.system.includes('fs')),
       )
     }
-    // Everything that can change while the call waits, checked again after
-    // every wait: catalog state, served methods, workspace and Grant, deadline.
-    const recheck = (): AgentToolCallResponse | null => {
+    // The package stopped being callable: catalog state or served methods.
+    const stoppedReason = (): AgentToolCallResponse | null => {
       const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
       if (!current.ok) return agentToolUnavailable(current.reason)
       const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
@@ -7093,6 +7092,13 @@ export class FrontendPluginManager {
         !activation ||
         !this.pluginBackendHost.agentToolMethodsFor(spec.pluginId, spec.packageVersion).includes(tool.method)
       ) return agentToolUnavailable('tool-not-consented')
+      return null
+    }
+    // Everything that can change while the call waits, checked again after
+    // every wait: catalog state, served methods, workspace and Grant, deadline.
+    const recheck = (): AgentToolCallResponse | null => {
+      const stopped = stoppedReason()
+      if (stopped) return stopped
       if (!workspaceGranted()) {
         return agentToolError(
           'WORKSPACE_NOT_AUTHORIZED',
@@ -7132,6 +7138,11 @@ export class FrontendPluginManager {
     try {
       instanceId = await this.bindHeadlessAgentToolBackend(spec, root!, workspaceId!)
     } catch (error) {
+      // A bind refused or cancelled because the package stopped being
+      // callable meanwhile answers with that reason, not as a plugin failure.
+      // Any other bind failure keeps its own error, even past the deadline.
+      const stopped = stoppedReason()
+      if (stopped) return stopped
       return this.agentToolBackendError(error, meta(0))
     }
     const beforeCall = recheck()
@@ -7174,7 +7185,11 @@ export class FrontendPluginManager {
     meta: { durationMs: number; resultBytes: number; crossWorkspace: boolean },
   ): AgentToolCallResponse {
     if (error instanceof BackendPluginError) {
-      if (error.code === 'PLUGIN_STOPPING') return { ...agentToolUnavailable('plugin-stopping'), meta }
+      // USER_CANCELLED: a stop (disable, removal, revoked consent) cancelled
+      // the bind or the call; the plugin did not fail.
+      if (error.code === 'PLUGIN_STOPPING' || error.code === 'USER_CANCELLED') {
+        return { ...agentToolUnavailable('plugin-stopping'), meta }
+      }
       if (error.code === 'TIMEOUT') {
         return { ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin did not answer in time.'), meta }
       }

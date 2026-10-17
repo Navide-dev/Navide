@@ -85,3 +85,31 @@ describe('PluginInstallScanStore (D-f, record only)', () => {
     expect(store.get('acme.demo', '1.0.0')).toEqual(scan('a'))
   })
 })
+
+// #373 follow-up: installedAt is when this id was installed since its last
+// removal; recorded once, cleared on removal.
+describe('PluginInstallScanStore installedAt', () => {
+  it('records the first time only, and forgets it on removal', () => {
+    const dir = root()
+    const store = new PluginInstallScanStore(dir)
+    expect(store.installedAt('acme.demo')).toBeNull()
+    store.markInstalled('acme.demo', 1000)
+    store.markInstalled('acme.demo', 2000)
+    expect(new PluginInstallScanStore(dir).installedAt('acme.demo')).toBe(1000)
+    store.record('acme.demo', '1.0.0', scan('a'))
+    store.keepVersions('acme.demo', [])
+    expect(store.installedAt('acme.demo')).toBe(1000)
+    store.removePlugin('acme.demo')
+    expect(store.installedAt('acme.demo')).toBeNull()
+    store.markInstalled('acme.demo', 3000)
+    expect(store.installedAt('acme.demo')).toBe(3000)
+  })
+
+  it('reads a malformed time as no record', () => {
+    const dir = root()
+    writeFileSync(join(dir, '.navide-install-scans.json'), JSON.stringify({ schemaVersion: 1, plugins: {}, installedAt: { 'acme.demo': 'soon', 'acme.ok': 5 } }))
+    const store = new PluginInstallScanStore(dir)
+    expect(store.installedAt('acme.demo')).toBeNull()
+    expect(store.installedAt('acme.ok')).toBe(5)
+  })
+})
