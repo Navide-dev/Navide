@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","id":"req-1","result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"acme.demo","version":"1.0.0"},"io.navide/resultChunks":{"chunks":81,"bytes":10612345}}}}

@@ -213,7 +213,7 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     const seen: AgentToolChunkArrival[] = []
     let shortSeen = false
     for (const [index, data] of pieces.entries()) {
-      const result = seqs === undefined
+      const result: AgentToolChunkArrival = seqs === undefined
         ? agentToolChunkArrival(shortSeen, data, chunkBytes)
         : agentToolChunkArrival(shortSeen, data, chunkBytes, seqs[index], index)
       seen.push(result)

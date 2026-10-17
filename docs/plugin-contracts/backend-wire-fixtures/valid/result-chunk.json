@@ -1,0 +1,1 @@
+{"jsonrpc":"2.0","method":"notifications/navide/resultChunk","params":{"requestId":"req-1","seq":0,"data":"{\"rows\":[\"a\""}}
