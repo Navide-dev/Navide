@@ -233,6 +233,18 @@ def test_auto_published_native_backend_is_not_inspected(signed_env: SignedEnv) -
     assert version["disclosure_envelope"]["scanDigest"] is not None
 
 
+def test_the_listing_carries_the_latest_versions_disclosure_and_scan(signed_env: SignedEnv) -> None:
+    # Plan B D1 (review L4 on #360): the list card shows the summary and the
+    # risk level, which needs the manifest disclosure and the scan report.
+    assert _publish_signed(signed_env, build_v2_package(_v2_manifest())).status_code == 201
+    version = signed_env.client.get("/api/extensions/acme/scoped").json()["versions"][0]
+    [item] = signed_env.client.get("/api/extensions").json()["items"]
+    assert item["disclosure"] == version["disclosure"] is not None
+    assert item["scan"] == version["scan"] is not None
+    # Display data only: no envelope or signature travels in the listing.
+    assert "disclosure_envelope" not in item and "disclosure_signature" not in item
+
+
 def test_a_legacy_v1_package_has_no_disclosure(signed_env: SignedEnv) -> None:
     assert _publish_signed(signed_env, build_package()).status_code == 201
     version = signed_env.client.get("/api/extensions/acme/hello").json()["versions"][0]
@@ -259,6 +271,7 @@ def test_a_version_published_before_disclosure_still_lists_with_null_fields(
 
     listing = signed_env.client.get("/api/extensions").json()
     assert [item["identity"] for item in listing["items"]] == ["acme.scoped"]
+    assert listing["items"][0]["disclosure"] is None
     version = signed_env.client.get("/api/extensions/acme/scoped").json()["versions"][0]
     assert version["registry_envelope"] == envelope
     assert version["registry_signature"] == signature

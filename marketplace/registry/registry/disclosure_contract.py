@@ -68,6 +68,7 @@ class RegistryDisclosureFacts(TypedDict):
 
 class DisclosureCard(TypedDict):
     manifest: ManifestDisclosure
+    scan: dict[str, Any] | None  # ScanReport (contract 3.8), or None when the version has none
     registry: RegistryDisclosureFacts | None
 
 

@@ -241,6 +241,75 @@ async def test_detail_fences_the_disclosure_card_texts_and_keeps_the_rest(
     assert out["card"]["manifest"]["risk"]["level"] == "high"
 
 
+async def test_detail_keeps_the_cards_scan_report_and_fences_its_texts(
+    monkeypatch: pytest.MonkeyPatch, pane_caller: None, tainted: list[Any]
+) -> None:
+    # Re-review of #345, L2: the card carries the version's scan report
+    # (contract 3.4); its keys pass, its strings are fenced, numbers stay.
+    scan = {
+        "schemaVersion": 1,
+        "scanner": {"id": "navide-static-scan", "version": "1.0.0"},
+        "artifactDigest": "a" * 64,
+        "target": "universal",
+        "scannedAt": "2026-10-16T08:55:00Z",
+        "coverage": {
+            "filesTotal": 3, "filesScanned": 3, "bytesScanned": 900,
+            "skipped": [{"reason": "binary", "count": 1}], "truncated": False, "timedOut": False,
+        },
+        "shell": {
+            "calls": [{
+                "executable": "git", "subcommand": "push", "category": "remoteWrite",
+                "source": "frontend", "evidence": "callSite", "files": 1,
+            }],
+            "dynamic": {"count": 0, "files": 0},
+        },
+        "network": {"hosts": [{"host": "github.com", "source": "frontend", "count": 2}]},
+        "files": {"readPaths": ["docs/devmap.md"], "writePaths": [], "dynamicPaths": 0},
+        "capabilities": [{"address": "shell.run", "source": "frontend"}],
+        "code": {
+            "frontend": {"eval": 0, "newFunction": 0, "dynamicImport": 0, "stringTimers": 0, "obfuscationSignals": []},
+            "backend": None,
+        },
+        "native": [{
+            "path": "backend/bin", "format": "mach-o", "arch": "arm64", "libraries": ["libSystem.B.dylib"],
+            "notableImports": [], "importCount": 4, "packer": None, "embeddedRuntime": None,
+        }],
+    }
+    card = {
+        "manifest": {
+            "schemaVersion": 1,
+            "plugin": {"id": "nerdtechnic.devmap", "version": "0.2.0", "publisher": "nerdtechnic"},
+            "risk": {"level": "high", "reasons": []},
+        },
+        "scan": scan,
+        "registry": None,
+    }
+    _host(monkeypatch, {
+        "ok": True,
+        "result": {"kind": "detail", "item": _listing(risk="highest"), "versions": ["0.2.0"], "card": card},
+    })
+
+    out = await mcp.marketplace_detail(None, id="nerdtechnic.devmap", version="0.2.0")  # type: ignore[arg-type]
+
+    got = out["card"]["scan"]
+    assert set(got) == set(scan)
+    assert got["schemaVersion"] == 1
+    assert got["coverage"]["filesTotal"] == 3 and got["coverage"]["truncated"] is False
+    call = got["shell"]["calls"][0]
+    assert set(call) == set(scan["shell"]["calls"][0]) and call["files"] == 1
+    assert _fenced(call["executable"], "nerdtechnic.devmap", "0.2.0")
+    assert _fenced(call["subcommand"], "nerdtechnic.devmap", "0.2.0")
+    assert _fenced(got["network"]["hosts"][0]["host"], "nerdtechnic.devmap", "0.2.0")
+    assert _fenced(got["files"]["readPaths"][0], "nerdtechnic.devmap", "0.2.0")
+    assert got["files"]["dynamicPaths"] == 0
+    assert _fenced(got["capabilities"][0]["address"], "nerdtechnic.devmap", "0.2.0")
+    assert got["code"]["frontend"]["eval"] == 0 and got["code"]["backend"] is None
+    native = got["native"][0]
+    assert set(native) == set(scan["native"][0]) and native["importCount"] == 4
+    assert _fenced(native["libraries"][0], "nerdtechnic.devmap", "0.2.0")
+    assert out["item"]["risk"] == "highest"
+
+
 async def test_detail_passes_the_hosts_error_through(
     monkeypatch: pytest.MonkeyPatch, pane_caller: None, tainted: list[Any]
 ) -> None:

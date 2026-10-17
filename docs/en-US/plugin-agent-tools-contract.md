@@ -402,6 +402,13 @@ sentences, its scan risk reasons and the declared-vs-scanned comparison
 the older submission check (secret scan and name similarity) and is unrelated
 to the static scan report.
 
+The list card reads `disclosure` and `scan` from the Registry's listing
+(`GET /api/extensions`), which carries them for `latest_version` (one
+artifact's scan). Like every listing and detail field they are display data
+that nothing has verified; the Host keeps them only when they are well formed
+and the disclosure names that item's package and `latest_version`, and the
+card says they are unverified.
+
 `nativeCodeInspected` is derived, never entered by hand:
 
 | Value | When |
