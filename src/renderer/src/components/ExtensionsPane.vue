@@ -9,6 +9,7 @@
 // package bytes.
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools'
 import type {
   ManifestPermissionsSummary,
   PackageVersionGrantSummary,
@@ -482,13 +483,13 @@ watch(installed, () => void refreshPacks())
           <MarketplaceIcon v-bind="idParts(pack.id)" :label="pack.displayName || idParts(pack.id).name" :size="36" />
           <div class="ext-card-main">
             <div class="ext-card-title">
-              <span class="ext-id" v-truncate>{{ pack.displayName || pack.id }}</span>
+              <span class="ext-id" v-truncate>{{ reveal(pack.displayName || pack.id) }}</span>
               <span class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: pack.version }) }}</span>
               <span class="ext-badge ext-pack-badge">{{ $t('settings.extensions.pack.membersBadge', { count: pack.members.length }) }}</span>
             </div>
             <div class="ext-card-sub">
-              <span v-if="pack.displayName" class="ext-requires ext-pack-id">{{ pack.id }}</span>
-              <span class="ext-pack-includes">{{ $t('settings.extensions.pack.includes', { members: pack.members.join(' · ') }) }}</span>
+              <span v-if="pack.displayName" class="ext-requires ext-pack-id">{{ reveal(pack.id) }}</span>
+              <span class="ext-pack-includes">{{ $t('settings.extensions.pack.includes', { members: reveal(pack.members.join(' · ')) }) }}</span>
             </div>
           </div>
           <div class="ext-actions">
@@ -505,7 +506,7 @@ watch(installed, () => void refreshPacks())
           <MarketplaceIcon v-bind="idParts(p.id)" :label="idParts(p.id).name" :size="36" />
           <div class="ext-card-main">
             <div class="ext-card-title">
-              <span class="ext-id" v-truncate>{{ p.id }}</span>
+              <span class="ext-id" v-truncate>{{ reveal(p.id) }}</span>
               <span v-if="p.packageVersion" class="ext-requires">{{ $t('settings.extensions.marketplace.versionLabel', { version: p.packageVersion }) }}</span>
               <span v-if="p.pendingCandidateVersion" class="ext-badge ext-candidate">
                 {{ $t('settings.extensions.candidateReady', { version: p.pendingCandidateVersion }) }}

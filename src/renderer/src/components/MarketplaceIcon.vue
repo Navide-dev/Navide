@@ -4,6 +4,7 @@
 // (plugins:marketplaceIcon); anything else, or no icon at all, shows a
 // letter tile coloured from the extension id.
 import { computed, ref, watch } from 'vue'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 
 const props = defineProps<{
   namespace: string
@@ -35,7 +36,8 @@ watch(
   { immediate: true }
 )
 
-const letter = computed(() => (props.label.trim()[0] ?? '?').toUpperCase())
+// A label that opens with an invisible character shows its spelled-out form's first letter.
+const letter = computed(() => (revealInvisibleText(props.label).trim()[0] ?? '?').toUpperCase())
 // 24 hues, 15 degrees apart, from a hash of the id. The Marketplace website
 // computes the same bucket (registry/web.py tile_hue), so an extension wears
 // one colour in the app and on the web.
