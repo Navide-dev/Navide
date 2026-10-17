@@ -4,14 +4,20 @@
 // for each of the four levels. Used by the full card and the listing card.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
+import type { DisclosureRiskLevel, ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import { cardRiskLevel, type ScanReport } from '../../../shared/pluginDisclosureScan'
 import { disclosureSummaryLine } from '../lib/disclosureText'
 
-const props = defineProps<{ disclosure: ManifestDisclosure; scan: ScanReport | null }>()
+const props = defineProps<{
+  disclosure: ManifestDisclosure
+  scan: ScanReport | null
+  /** The list card's level (D-f): the highest across platforms, from the main process. */
+  level?: DisclosureRiskLevel
+  variesByPlatform?: boolean
+}>()
 const { t, locale } = useI18n()
 
-const level = computed(() => cardRiskLevel(props.disclosure, props.scan))
+const level = computed(() => props.level ?? cardRiskLevel(props.disclosure, props.scan))
 const summary = computed(() => disclosureSummaryLine(t, locale.value, props.disclosure))
 </script>
 
@@ -28,6 +34,7 @@ const summary = computed(() => disclosureSummaryLine(t, locale.value, props.disc
       </svg>
     </span>
     <span class="nv-disclosure-level-text">{{ $t('pluginDisclosure.riskLabel', { level: $t(`pluginDisclosure.risk.${level}`) }) }}</span>
+    <span v-if="variesByPlatform" class="nv-disclosure-level-varies">{{ $t('pluginDisclosure.variesByPlatform') }}</span>
   </p>
 </template>
 

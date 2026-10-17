@@ -2084,3 +2084,34 @@ describe('MarketplacePane list card disclosure', () => {
     expect(wrapper.find('[data-id="acme.plain"] .mkt-card-disclosure').exists()).toBe(false)
   })
 })
+
+// D-f: the list card never reads lower than what some platform installs.
+describe('MarketplacePane list card risk across platforms', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the highest platform level and says it varies by platform', async () => {
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [{
+          namespace: 'acme', name: 'multi', identity: 'acme.multi', display_name: 'multi', description: null, categories: [],
+          latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false,
+          disclosure: computeDisclosure({ schemaVersion: 2, id: 'acme.multi', version: '1.0.0', publisher: 'acme', permissions: { system: ['ui'] } } as never),
+          scan: null,
+          listRisk: { level: 'high', variesByPlatform: true },
+        }],
+        total: 1, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+
+    const level = wrapper.get('[data-id="acme.multi"] .nv-disclosure-level')
+    expect(level.classes()).toContain('nv-disclosure-level--high')
+    expect(level.text()).toContain('High')
+    expect(level.text()).toContain('varies by platform')
+  })
+})

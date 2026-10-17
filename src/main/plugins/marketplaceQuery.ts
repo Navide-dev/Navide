@@ -328,7 +328,7 @@ function codeSignals(value: unknown): CodeSignals | null | undefined {
 }
 
 /** The Registry's scan report (contract 3.8) rebuilt from validated fields, or null when malformed. */
-function scanReport(value: unknown): ScanReport | null {
+export function scanReport(value: unknown): ScanReport | null {
   if (!isRecord(value) || value.schemaVersion !== SCAN_SCHEMA_VERSION) return null
   const { scanner, coverage, shell, network, files, code } = value
   if (
