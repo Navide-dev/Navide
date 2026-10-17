@@ -10367,7 +10367,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off."
+      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -10561,6 +10561,7 @@
       "text-missing": "text no longer in the message log",
       "text-none": "no message text recorded",
       "explain": "Its High and Critical actions need your confirmation on this computer. Clear the mark only if you have checked what it was sent.",
+      "explain-off": "Navide Guard is off, so nothing is asked for confirmation now. The mark is kept and applies again when you turn Guard back on.",
       "clear": "Clear",
       "no-hook-warning": "Navide Guard cannot block this CLI, and it runs without permission prompts. Be careful giving it commands from a chat room."
     },

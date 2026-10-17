@@ -21,6 +21,8 @@ const t = i18n.global.t
 const store = props.store ?? inject(guardKey, null)
 
 const entry = computed(() => (store?.available.value ? store.taintFor(props.paneId) : null))
+// With the Guard switch off the mark is kept, but nothing is asked for.
+const explain = computed(() => t(store?.enabled.value === false ? 'guard.pane.explain-off' : 'guard.pane.explain'))
 const open = ref(false)
 const busy = ref(false)
 const error = ref('')
@@ -182,7 +184,7 @@ async function clear(): Promise<void> {
       >
         <div class="pgd-pop-head">{{ t('guard.pane.badge') }}</div>
         <p class="pgd-text">{{ why }}</p>
-        <p class="pgd-text">{{ t('guard.pane.explain') }}</p>
+        <p class="pgd-text">{{ explain }}</p>
         <details class="pgd-console" data-testid="guard-taint-console">
           <summary>{{ t('guard.pane.console') }}</summary>
           <ol>
