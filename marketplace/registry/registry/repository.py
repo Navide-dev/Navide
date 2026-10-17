@@ -291,6 +291,7 @@ class RegistryRepository:
         disclosure: dict | None = None,
         disclosure_envelope: dict | None = None,
         disclosure_signature: str | None = None,
+        scan: dict | None = None,
     ) -> ExtensionVersion:
         record = ExtensionVersion(
             extension_id=extension.id,
@@ -308,6 +309,7 @@ class RegistryRepository:
             disclosure=disclosure,
             disclosure_envelope=disclosure_envelope,
             disclosure_signature=disclosure_signature,
+            scan=scan,
         )
         self.session.add(record)
         self.session.commit()

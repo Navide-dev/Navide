@@ -27,6 +27,7 @@ def test_constants_match_the_shared_fixture() -> None:
     assert [list(rule) for rule in scan.SCAN_RISK_RULES] == _FIXTURE["scanRiskRules"]
     assert list(scan.SHELL_CATEGORY_ORDER) == _FIXTURE["shellCategoryOrder"]
     assert scan.SCANNER_ID == _FIXTURE["scannerId"]
+    assert list(scan.INCOMPLETE_SKIP_REASONS) == _FIXTURE["incompleteSkipReasons"]
 
 
 @pytest.mark.parametrize("case", _FIXTURE["classify"], ids=lambda c: f"{c['executable']} {c['args']}")

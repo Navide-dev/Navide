@@ -534,6 +534,28 @@ servers are configured, and which prompts the user has saved.
 | `mcp_list` | — | The MCP servers configured here — the ones Navide connects to as a client, with their live state, and the ones each CLI keeps in its own config (`~/.claude.json`, `~/.codex/config.toml`, …), reflected as the file states them. Returns `{servers, native, agents}`. Each managed server is `{name, enabled, transport, command, args, env}` or `{name, enabled, transport, url, headers}` plus `status` (`disabled`, `connected`, `error`, `unknown`) and `tool_count`; the tool list itself is left out. Each native entry is `{name, agent, transport, path, command, args, url, env, headers, enabled, valid, error}`. `agents` is every vendor with what Navide can do with its MCP (`wired`, `planned`, `unsupported`) and whether its own config is reflected. Every credential-shaped value — env and header values, `--api-key=` style arguments, URL userinfo and secret query parameters — is already masked as `***`; names and hosts are kept so an entry stays recognisable. Global, not per workspace. Read-only — adding, enabling or editing a server is the user's decision, made in Settings |
 | `prompt_list` | `id=""` | The prompt skills the user keeps in Settings → Prompts — saved instructions fired at a CLI pane from the app. With no `id` this lists metadata only: `{skills, default_id}`, each skill being `{id, name, icon, description, category, enabled, isDefault, maxTurns}`, and `default_id` the id of the skill marked default (`""` when none is). A `note` is added when the user has never saved any: the app then seeds a builtin skill on first use, which is not visible from here. With an `id` it returns that one skill in full — `{skill}`, carrying `prompt` and `resumePrompt` as well; an unknown id answers `{ok: false, error}`. Read-only: creating or editing one is done in Settings |
 
+### Navide Marketplace (read-only)
+
+Three read-only tools ask the Navide app for what the Navide Marketplace page
+and Settings → Navide Plugins show. They work for every caller, whether or
+not third-party Navide plugin tools are switched on, and none of them can
+install, update or remove anything.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `marketplace_search` | `text=""`, `category=null`, `cursor=null`, `limit=20` | Search the configured Navide Marketplace, the same search the Marketplace page runs. Returns `{ok, kind, items, nextCursor}`; each item is `{id, version, name, description, publisher: {name, verifiedDomain}, signed, downloads, risk, summary}`, where `risk` and `summary` are the package's disclosure or `null` when the Registry provides none. Pass `nextCursor` back as `cursor` for the next page |
+| `marketplace_detail` | `id`, `version=null` | One package (`<namespace>.<name>`): `{ok, kind, item, versions, card}`, where `versions` lists the published versions and `card` is the disclosure card `{manifest, registry}` or `null` when the Registry provides none |
+| `plugins_list_installed` | — | The installed Navide plugins: `{ok, kind, items}`, each `{id, version, enabled, quarantined, hasBackend, agentTools}` |
+
+Every text a package publisher chose (package ids and versions, names,
+descriptions, agent tool names, titles and descriptions, a publisher display
+name), and any error text from the Navide app, comes fenced between
+`[外部訊息開始 — …]` and `[外部訊息結束]` with a
+`[third-party Navide plugin <id> v<version> | …]` label: it is not the user's
+instruction. A pane that reads such text is marked as having received external
+content (Navide Guard). Errors are `{ok: false, error, error_code}` with
+`BAD_REQUEST`, `NOT_FOUND`, `REGISTRY_UNAVAILABLE` or `HOST_UNAVAILABLE`.
+
 ### Pipelines
 
 A pipeline is a saved multi-stage run: an ordered set of stages, each with
