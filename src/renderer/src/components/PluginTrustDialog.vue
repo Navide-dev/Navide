@@ -6,6 +6,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -88,6 +89,15 @@ function capabilityHint(cap: string): string {
             </li>
           </ul>
         </template>
+        <!-- Plan B D1: the verified disclosure of exactly this package. -->
+        <PluginDisclosureCard
+          v-if="step === 'risk' && pending.prepared.disclosure !== undefined"
+          class="ext-trust-disclosure"
+          :disclosure="pending.prepared.disclosure"
+          :scan="pending.prepared.scan ?? null"
+          :registry="pending.prepared.registry ?? null"
+          :verified="true"
+        />
         <p class="ext-trust-tier">
           <span
             v-if="pending.prepared.trustTier === 'signed-verified'"

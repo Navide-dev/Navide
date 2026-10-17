@@ -12,6 +12,11 @@ import type {
   PackageVersionGrantSummary,
 } from '../shared/executionPolicy'
 import type { LegacyPlansPreferenceProjection } from '../shared/plansPreferences'
+import type {
+  ManifestDisclosure as PluginManifestDisclosure,
+  RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
+} from '../shared/pluginDisclosure'
+import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -269,6 +274,11 @@ export interface MarketplaceVersionInfo {
   compatible?: boolean | null
   min_navide_version?: string | null
   channel?: 'stable' | 'pre-release'
+  /** Contract 3.4/3.8, as the Registry sent them: display data that nothing
+   *  has verified yet (prepareInstall verifies the signed disclosure). */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 export interface MarketplaceExtensionDetail extends MarketplaceExtension {
@@ -316,6 +326,13 @@ export interface PreparedInstallSummary {
   publisherId: string
   requiresPublisherTrust: boolean
   requiresRiskConfirmation: boolean
+  /** Verified against the package and the Registry signature; null when the
+   *  version carries no disclosure. */
+  disclosure?: PluginManifestDisclosure | null
+  /** Registry-signed scan report (digest verified); null when none. */
+  scan?: PluginScanReport | null
+  /** Unsigned Registry facts, never verified. */
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []

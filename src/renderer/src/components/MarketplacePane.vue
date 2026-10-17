@@ -18,6 +18,7 @@ import { usePluginInventory } from '../composables/usePluginInventory'
 import { usePluginUpdates } from '../composables/usePluginUpdates'
 import { ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginInstallFlow'
 import PluginTrustDialog from './PluginTrustDialog.vue'
+import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
@@ -893,6 +894,18 @@ watch(
                     : $t('settings.extensions.marketplace.noPermissions')
                 }}
               </p>
+            </section>
+
+            <!-- Plan B D1: the disclosure card of the version install would pick.
+                 Raw Registry data here; prepareInstall verifies it. -->
+            <section v-if="latestVersionInfo && !isPack(detail)" class="mkt-side-card mkt-disclosure">
+              <h4>{{ $t('pluginDisclosure.title') }}</h4>
+              <PluginDisclosureCard
+                :disclosure="latestVersionInfo.disclosure"
+                :scan="latestVersionInfo.scan"
+                :registry="latestVersionInfo.registry"
+                :verified="false"
+              />
             </section>
 
             <section
