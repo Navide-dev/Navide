@@ -118,7 +118,7 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(files[0].text()).toContain('<denied>')
     expect(files[0].text()).not.toContain('the call was refused')
     expect(files[3].text()).toContain('./<missing>')
-    expect(files[5].text()).toContain('nothing there: the path does not exist')
+    expect(files[5].text()).toContain('path not kept: nothing usable was there')
     expect(panel.get('.nv-activity-commands li').classes()).not.toContain('nv-activity-marker')
   })
 

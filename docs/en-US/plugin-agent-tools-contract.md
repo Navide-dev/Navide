@@ -1320,10 +1320,11 @@ the counts stay exact:
   the call failed (`outcome` `error`; with `fs` granted, a path that does not
   exist costs one stat), so the path or command it named is not kept.
 - `<missing>` (`PLUGIN_ACTIVITY_MISSING_TARGET`), in `fs_path`: the call was
-  allowed but found nothing there (its result says `exists: false`, as
-  `fs.stat` / `fs.statPath` answer for a path that does not exist), so the path
-  is not kept. The other `fs` calls (`readFile`, `listDirectory`, `delete`, …)
-  answer a missing path with an error, which is `<failed>`.
+  allowed but its result found nothing usable there: `exists: false` (as
+  `fs.stat` / `fs.statPath` answer for a path that does not exist) or
+  `ok: false` (as `fs.readFile`, `fs.readImage`, `fs.listDirectory` and
+  `fs.writeFile` answer a missing or unusable path, inside a successful call).
+  Its `outcome` stays `allowed`, as before; only the path is not kept.
 
 A fixed value means this only with its own outcome (`<denied>` with `denied`,
 `<failed>` with `error`, `<missing>` with `allowed`, `<unknown>` with anything

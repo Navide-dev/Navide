@@ -139,6 +139,12 @@ describe('text the plugin wrote is never a key', () => {
         .toBe(ACTIVITY_MISSING_TARGET)
     }
     expect(row(stat('src/a.py'), buildSuccess('req-1', { exists: true, size: 3 })).fs_path).toBe('src/a.py')
+    // readFile / listDirectory answer a missing path with ok: false inside a successful call.
+    const read = call({ method: 'readFile', args: { path: '/tmp/nothing' } })
+    expect(row(read, buildSuccess('req-1', { ok: false, error: 'not a file', content: '' }))).toMatchObject({
+      outcome: 'allowed', fs_path: ACTIVITY_MISSING_TARGET,
+    })
+    expect(row(read, buildSuccess('req-1', { ok: true, content: 'x' })).fs_path).toBe('/tmp/nothing')
     for (const value of ['<denied>', '<failed>', '<unknown>', '<missing>']) {
       expect(row(stat(value), buildSuccess('req-1', { exists: true })).fs_path).toBe(`./${value}`)
     }

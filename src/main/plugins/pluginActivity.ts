@@ -36,8 +36,10 @@ export const ACTIVITY_UNKNOWN_ADDRESS = '<unknown>'
  *  wrote it, the call cost it nothing, so it is never a key (contract 5). */
 export const ACTIVITY_DENIED_TARGET = '<denied>'
 export const ACTIVITY_FAILED_TARGET = '<failed>'
-/** The path of an allowed call that found nothing there (`exists: false`, as
- *  `fs.stat` answers for a missing path): it cost a stat, so it is no key. */
+/** The path of an allowed call whose result found nothing there or failed
+ *  (`exists: false`, as `fs.stat` answers for a missing path, or `ok: false`,
+ *  as `fs.readFile` / `fs.listDirectory` answer for one): it cost a stat, so
+ *  it is no key. */
 export const ACTIVITY_MISSING_TARGET = '<missing>'
 const MARKERS: ReadonlySet<string> = new Set([
   ACTIVITY_UNKNOWN_ADDRESS, ACTIVITY_DENIED_TARGET, ACTIVITY_FAILED_TARGET, ACTIVITY_MISSING_TARGET,
@@ -51,7 +53,9 @@ function plainText(value: string): string {
 
 function foundNothing(response: CapabilityResponse): boolean {
   const result = response.result
-  return typeof result === 'object' && result !== null && (result as Record<string, unknown>).exists === false
+  if (typeof result !== 'object' || result === null) return false
+  const fields = result as Record<string, unknown>
+  return fields.exists === false || fields.ok === false
 }
 
 export type PluginActivitySource = 'broker' | 'shell' | 'backend'
