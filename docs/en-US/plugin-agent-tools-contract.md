@@ -833,6 +833,13 @@ cancelled the same way and also answers `plugin-stopping`. Any other bind
 failure keeps its own error, even when the deadline passes or the workspace
 closes meanwhile.
 
+An agent tool call cannot use `shell.run` (0.2.25): the backend's bridge
+request is refused with `CAPABILITY_DENIED` ("Shell capability is denied."),
+for a read tool and a write tool alike, whatever the package declares. The
+Host shell port serves only a user-initiated call from a live view.
+Opening it to agent calls widens what agents can do, so it is the user's
+decision, disclosed in the consent dialog first.
+
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself); the backend also
 produces `result_helper_failed` for a result in pieces its helper process

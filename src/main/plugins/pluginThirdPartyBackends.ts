@@ -1069,6 +1069,15 @@ export class ThirdPartyBackendController {
       // Agent calls: only inside an admitted agent-tool call; a read tool
       // runs read-only VCS commands only, anything else needs a write tool
       // with the user's DB3 answer.
+      //
+      // Not in effect in 0.2.25: the real port below
+      // (FrontendPluginManager.thirdPartyShellGrantAllows) serves only a
+      // user-initiated call from a live view, so every agent call that gets
+      // past these checks is still refused there (CAPABILITY_DENIED). Opening
+      // it widens what agents can do, so it needs decisions first: whether
+      // agents get shell at all, what a read tool may run, whether DB3
+      // covers shell writes, and how the consent dialog discloses it.
+      // Contract: plugin-agent-tools-contract.md, after the call checks.
       const call = this.options.agentToolCall?.(context.runtime.initiator.id)
       if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
         throw new PlansBridgeError('CAPABILITY_DENIED')
