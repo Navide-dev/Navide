@@ -1212,7 +1212,8 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   // nudge so every main window reads the unanswered notices again.
   recordResourceDecision: (row) => frontendPluginManager.recordResourceDecision(row),
   // Review M2 on #375: stdout waiting for a newline is noticed like the rest.
-  stdoutPendingBytes: (pluginId) => stdoutPendingOf(frontendPluginManager.backendResourceUsage(), pluginId),
+  stdoutPendingBytes: (pluginId, instanceId) =>
+    stdoutPendingOf(frontendPluginManager.backendResourceUsage(), pluginId, instanceId),
   onResourceNoticesChanged: () => {
     for (const hostWindow of mainWindows) {
       if (hostWindow.isDestroyed()) continue
@@ -1220,9 +1221,9 @@ const thirdPartyBackends = new ThirdPartyBackendController({
     }
   },
 })
-frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath) =>
+frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath, instanceId) =>
   isThirdPartyLaunchSpec(activation)
-    ? thirdPartyBackends.admit(activation, workspacePath)
+    ? thirdPartyBackends.admit(activation, workspacePath, { instanceId })
     : Promise.reject(new BackendPluginError('BACKEND_UNAVAILABLE', 'not a third-party backend')),
 )
 

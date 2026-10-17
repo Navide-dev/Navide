@@ -336,21 +336,20 @@ export interface NativeBackendStatusRow {
   shell?: 'allowlist' | 'full'
 }
 
-/** One plugin's stdout waiting for a newline, summed over its children, from
- *  the backend usage (#375 adds `views[].child.stdoutPending`); 0 where the
- *  field is absent or malformed, so it reads nothing before #375 lands. */
+/** One view's child stdout waiting for a newline, from the backend usage
+ *  (#375 adds `views[].child.stdoutPending`); 0 where the field is absent or
+ *  malformed, so it reads nothing before #375 lands. Each child has its own
+ *  watch, so only that view's child is read (review MED-1 on #386). */
 export function stdoutPendingOf(
-  usage: { views: ReadonlyArray<{ pluginId: string; child: unknown }> },
+  usage: { views: ReadonlyArray<{ pluginId: string; instanceId: string; child: unknown }> },
   pluginId: string,
+  instanceId: string,
 ): number {
-  let total = 0
-  for (const view of usage.views) {
-    if (view.pluginId !== pluginId || typeof view.child !== 'object' || view.child === null) continue
-    const pending = (view.child as { stdoutPending?: unknown }).stdoutPending
-    const bytes = typeof pending === 'object' && pending !== null ? (pending as { bytes?: unknown }).bytes : undefined
-    if (typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0) total += bytes
-  }
-  return total
+  const view = usage.views.find((entry) => entry.pluginId === pluginId && entry.instanceId === instanceId)
+  if (!view || typeof view.child !== 'object' || view.child === null) return 0
+  const pending = (view.child as { stdoutPending?: unknown }).stdoutPending
+  const bytes = typeof pending === 'object' && pending !== null ? (pending as { bytes?: unknown }).bytes : undefined
+  return typeof bytes === 'number' && Number.isFinite(bytes) && bytes > 0 ? bytes : 0
 }
 
 /** A third-party backend went over a resource threshold and waits for the
@@ -593,9 +592,9 @@ export interface ThirdPartyBackendControllerOptions {
   recordResourceDecision?: (row: PluginResourceDecisionRow) => void
   /** The list of unanswered resource notices changed (show it to the user). */
   onResourceNoticesChanged?: () => void
-  /** One plugin's stdout waiting for a newline across its children (#375's
+  /** One view's child stdout waiting for a newline (#375's
    *  `stdoutPending.bytes`, see `stdoutPendingOf`); absent = not watched. */
-  stdoutPendingBytes?: (pluginId: string) => number
+  stdoutPendingBytes?: (pluginId: string, instanceId: string) => number
   /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
   onConsentGranted?: (pluginId: string) => void
   /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
@@ -832,7 +831,7 @@ export class ThirdPartyBackendController {
   async admit(
     spec: ThirdPartyLaunchSpec,
     workspacePath?: string,
-    options: { prompt?: boolean } = {},
+    options: { prompt?: boolean; instanceId?: string } = {},
   ): Promise<ThirdPartyAdmission> {
     this.forgetDroppedAgentTools(spec)
     this.assertAdmissible(spec)
@@ -861,6 +860,7 @@ export class ThirdPartyBackendController {
     const workspaceRoot = (spec.thirdParty.system.includes('fs') || spec.thirdParty.shell === 'allowlist') && workspacePath
       ? canonicalExistingDirectory(workspacePath) ?? undefined
       : undefined
+    const instanceId = options.instanceId
 
     return {
       spawnProcess: (entryFile, options) => {
@@ -872,12 +872,13 @@ export class ThirdPartyBackendController {
             console.warn(`[plugin-backend] ${spec.pluginId} exceeded its ${violation} limit and was stopped`)
           }
           // Option C: over a threshold the user is told and decides; the
-          // backend keeps running meanwhile (contract 5.2).
+          // backend keeps running meanwhile (contract 5.2). Pending stdout is
+          // read for this view's child only; a preflight has no view.
           const stdoutPendingBytes = this.options.stdoutPendingBytes
           const notify: ResourceNotifyMode = {
             onExceeded: (exceeded) => this.raiseResourceNotice(spec, watch, exceeded),
-            ...(stdoutPendingBytes
-              ? { stdoutPending: { bytes: () => stdoutPendingBytes(spec.pluginId), threshold: defaultStdoutPendingThreshold() } }
+            ...(stdoutPendingBytes && instanceId !== undefined
+              ? { stdoutPending: { bytes: () => stdoutPendingBytes(spec.pluginId, instanceId), threshold: defaultStdoutPendingThreshold() } }
               : {}),
           }
           const watch: BackendResourceWatch = this.options.watchResources
@@ -1239,7 +1240,7 @@ export class ThirdPartyBackendController {
     const entry = this.resourceNoticeMap.get(id)
     if (!entry) return false
     this.resourceNoticeMap.delete(id)
-    this.options.onResourceNoticesChanged?.()
+    this.noticesChanged()
     this.recordResourceDecision(entry.notice, choice)
     if (choice === 'terminate') await entry.watch.terminate(entry.notice.item)
     else entry.watch.keepRunning(entry.notice.item)
@@ -1259,7 +1260,17 @@ export class ThirdPartyBackendController {
     }
     this.resourceNoticeMap.set(notice.id, { notice, watch })
     this.recordResourceDecision(notice, 'notified')
-    this.options.onResourceNoticesChanged?.()
+    this.noticesChanged()
+  }
+
+  /** Tell the window the list changed; a failing hook is logged and never
+   *  holds up an answer or a later notice (review LOW3 on #386). */
+  private noticesChanged(): void {
+    try {
+      this.options.onResourceNoticesChanged?.()
+    } catch (error) {
+      console.warn('[plugin-backend] resource notice change hook failed', error)
+    }
   }
 
   /** A backend that exited has nothing left to decide about. */
@@ -1270,7 +1281,7 @@ export class ThirdPartyBackendController {
       this.resourceNoticeMap.delete(id)
       dropped = true
     }
-    if (dropped) this.options.onResourceNoticesChanged?.()
+    if (dropped) this.noticesChanged()
   }
 
   private recordResourceDecision(notice: BackendResourceNotice, decision: PluginResourceDecision): void {

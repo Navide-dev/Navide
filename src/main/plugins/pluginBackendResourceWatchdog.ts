@@ -506,7 +506,22 @@ export function watchBackendResources(
     },
     async terminate(item) {
       if (disposed) return item
-      return violate(item, lastTree)
+      // List the tree again so a process started since the last sample is
+      // stopped too (review LOW1 on #386); the last sample if that fails.
+      let tree = lastTree
+      try {
+        const listing = await deps.listProcesses()
+        const candidates = identity ? escapeCandidates(listing, identity) : []
+        const escaped = identity && candidates.length > 0 && deps.confirmImages
+          ? await deps.confirmImages(candidates, identity)
+          : new Set<number>()
+        const fresh = sandboxProcessTree(listing, rootPid, escaped)
+        if (fresh.length > 0) tree = fresh
+      } catch {
+        // Keep the last sampled tree.
+      }
+      if (disposed) return item
+      return violate(item, tree)
     },
     status() {
       return {

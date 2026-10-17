@@ -629,7 +629,7 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
       expect(instance.resourceStatus()).toEqual([])
     })
 
-    it('passes the plugin\'s pending stdout to the watch, with the default threshold (review M2 on #375)', async () => {
+    it('passes this view\'s pending stdout to the watch, with the default threshold (review M2 on #375)', async () => {
       const seen: Array<ResourceNotifyMode | undefined> = []
       const stdoutPendingBytes = vi.fn(() => 42)
       const { instance } = controller({
@@ -642,11 +642,76 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
         },
       })
       const spec = writePackage()
-      const admission = await instance.admit(spec)
+      const admission = await instance.admit(spec, undefined, { instanceId: 'view-1' })
       admission.spawnProcess(spec.entryFile, {})
       expect(seen[0]?.stdoutPending?.bytes()).toBe(42)
-      expect(stdoutPendingBytes).toHaveBeenCalledWith('acme.indexer')
+      expect(stdoutPendingBytes).toHaveBeenCalledWith('acme.indexer', 'view-1')
       expect(seen[0]?.stdoutPending?.threshold).toBe(defaultStdoutPendingThreshold())
+      // Without a view (the install-time preflight) there is nothing to read.
+      const preflight = await instance.admit(spec)
+      preflight.spawnProcess(spec.entryFile, {})
+      expect(seen[1]?.stdoutPending).toBeUndefined()
+    })
+
+    // Review MED-1 on #386: each child's watch reads only its own view.
+    it('two views: only the one whose child piles up stdout is noticed, and Stop stops only that one', async () => {
+      const MiB = 1024 * 1024
+      const killed: number[] = []
+      const watches: BackendResourceWatch[] = []
+      const pending: Record<string, number> = { 'view-1': 0, 'view-2': 300 * MiB }
+      let nextPid = 100
+      const { instance } = controller({
+        promptConsent: allow,
+        spawnImpl: (() => ({ pid: nextPid++, once: vi.fn() })) as never,
+        stdoutPendingBytes: (_pluginId, instanceId) => pending[instanceId] ?? 0,
+        watchResources: (pid, dir, onViolation, notify) => {
+          const deps = {
+            listProcesses: async () => [{ pid, ppid: 1, rssBytes: MiB, cpuMs: 0 }],
+            dataDirBytes: async () => 0,
+            kill: (victim: number) => killed.push(victim),
+            now: () => 0,
+            setInterval: () => 'handle',
+            clearInterval: vi.fn(),
+          }
+          const watch = watchBackendResources(pid, dir, onViolation, { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, deps, undefined, notify)
+          watches.push(watch)
+          return watch
+        },
+      })
+      const spec = writePackage()
+      for (const instanceId of ['view-1', 'view-2']) {
+        const admission = await instance.admit(spec, undefined, { instanceId })
+        admission.spawnProcess(spec.entryFile, {})
+      }
+      for (const watch of watches) await watch.sample()
+      const notices = instance.resourceNotices()
+      expect(notices).toEqual([expect.objectContaining({ item: 'stdoutPending', usage: 300 * MiB })])
+      expect(await instance.answerResourceNotice(notices[0].id, 'terminate')).toBe(true)
+      expect(killed).toEqual([101])
+    })
+
+    // Review LOW3 on #386: a failing change hook never loses the item.
+    it('a throwing change hook is logged; the answer still applies and the item is noticed again later', async () => {
+      let rss = 600 * 1024 * 1024
+      const w = realWatch(() => rss)
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      try {
+        const { instance } = await running({
+          watchResources: w.watchResources,
+          onResourceNoticesChanged: () => { throw new Error('window gone') },
+        })
+        await w.sample()
+        await w.sample()
+        const [notice] = instance.resourceNotices()
+        expect(await instance.answerResourceNotice(notice.id, 'continue')).toBe(true)
+        rss = 1300 * 1024 * 1024
+        await w.sample()
+        await w.sample()
+        expect(instance.resourceNotices()).toEqual([expect.objectContaining({ item: 'memory', threshold: 1200 * 1024 * 1024 })])
+        expect(warn).toHaveBeenCalled()
+      } finally {
+        warn.mockRestore()
+      }
     })
 
     it('reads pending stdout from the backend usage, and 0 before #375 adds it', () => {
@@ -659,10 +724,11 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('crash breaker and resource violations', 
         ],
         plugins: [],
       })
-      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer')).toBe(10)
-      expect(stdoutPendingOf(usage({}) as never, 'acme.indexer')).toBe(0)
-      expect(stdoutPendingOf(usage(null) as never, 'acme.indexer')).toBe(0)
-      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 'x' } }) as never, 'acme.indexer')).toBe(0)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer', 'v2')).toBe(5)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 5, peakBytes: 9 } }) as never, 'acme.indexer', 'v3')).toBe(0)
+      expect(stdoutPendingOf(usage({}) as never, 'acme.indexer', 'v1')).toBe(0)
+      expect(stdoutPendingOf(usage(null) as never, 'acme.indexer', 'v1')).toBe(0)
+      expect(stdoutPendingOf(usage({ stdoutPending: { bytes: 'x' } }) as never, 'acme.indexer', 'v1')).toBe(0)
     })
 
     it('an unknown or answered notice is refused', async () => {

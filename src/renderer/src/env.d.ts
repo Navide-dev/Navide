@@ -653,7 +653,7 @@ declare global {
     changedSinceConsent: boolean
     canWriteWorkspace: boolean
     workspaceWrite: string[]
-    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk'
+    lastViolation?: 'memory' | 'cpu' | 'processes' | 'disk' | 'stdoutPending'
     shell?: 'allowlist' | 'full'
   }
 

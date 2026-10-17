@@ -390,3 +390,46 @@ describe('stdoutPending in notify mode', () => {
     expect(watch.status!().usage.stdoutPending).toBe(0)
   })
 })
+
+// Review LOW1/LOW2 on #386: Stop in notify mode is the same stop as the
+// automatic one, on a freshly listed tree.
+describe('Stop equals the automatic stop', () => {
+  const tree = [
+    { pid: 10, ppid: 1, rssBytes: 400 * MiB, cpuMs: 0 },
+    { pid: 11, ppid: 10, rssBytes: 200 * MiB, cpuMs: 0 },
+    { pid: 12, ppid: 11, rssBytes: MiB, cpuMs: 0 },
+  ]
+
+  it('kills the same tree in the same order, with the same onViolation and the same end of watching', async () => {
+    const main = fakeDeps(() => tree)
+    const mainViolation = vi.fn()
+    const automatic = watchBackendResources(10, '/data', mainViolation, limits, main.deps)
+    await automatic.sample()
+    await automatic.sample()
+
+    const optionC = fakeDeps(() => tree)
+    const cViolation = vi.fn()
+    const notified = watchBackendResources(10, '/data', cViolation, limits, optionC.deps, undefined, { onExceeded: vi.fn() })
+    await notified.sample()
+    await notified.sample()
+    await notified.terminate('memory')
+
+    expect(main.killed).toEqual([12, 11, 10])
+    expect(optionC.killed).toEqual(main.killed)
+    expect(cViolation.mock.calls).toEqual(mainViolation.mock.calls)
+    expect(optionC.deps.clearInterval).toHaveBeenCalledTimes(1)
+    expect(main.deps.clearInterval).toHaveBeenCalledTimes(1)
+  })
+
+  it('lists the tree again at Stop, so a process started since the last sample is stopped too', async () => {
+    let listing = tree.slice(0, 2)
+    const { deps, killed } = fakeDeps(() => listing)
+    const watch = watchBackendResources(10, '/data', vi.fn(), limits, deps, undefined, { onExceeded: vi.fn() })
+    await watch.sample()
+    await watch.sample()
+    listing = tree
+    await watch.terminate('memory')
+    expect(killed).toEqual([12, 11, 10])
+  })
+})
+
