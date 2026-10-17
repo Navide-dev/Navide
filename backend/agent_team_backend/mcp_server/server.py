@@ -78,7 +78,26 @@ DELEGATION_RULE = (
     "is a paragraph."
 )
 
-server = FastMCP(
+class NavideMCP(FastMCP):
+    """FastMCP plus the third-party Navide plugin agent tools that
+    ``plugin_agent_tools`` registers from the Host's catalog snapshots. With no
+    snapshot applied (the master switch is off by default) both methods are
+    exactly FastMCP's."""
+
+    async def list_tools(self) -> Any:
+        from agent_team_backend.mcp_server import plugin_agent_tools
+
+        return plugin_agent_tools.order_tools(await super().list_tools())
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        from agent_team_backend.mcp_server import plugin_agent_tools
+
+        if plugin_agent_tools.handles(name):
+            return await plugin_agent_tools.call(name, arguments, self.get_context())
+        return await super().call_tool(name, arguments)
+
+
+server = NavideMCP(
     name="navide",
     instructions=(
         "Navide plan documents: HTML files under "
@@ -4982,6 +5001,7 @@ async def request_host_agent_workspace_backend(
     payload: dict[str, Any],
     *,
     caller: "_Caller",
+    agent_tool: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Route one agent backend call to a Host-owned workspace binding.
 
@@ -4989,6 +5009,13 @@ async def request_host_agent_workspace_backend(
     The Electron Host authenticates the backend session, resolves/reuses its
     own headless package runtime, and mints the agent Initiator at that final
     boundary.
+
+    ``agent_tool`` (third-party Navide plugin tools only, see
+    plugin_agent_tools) turns the request into the contract's
+    ``operation: "agentTool"``: it carries ``tool``, the ``caller`` object
+    built from the resolved caller (with ``verifiedTo``) and the tool's
+    ``timeout_ms`` (used for the wait, not sent). Without it the request is
+    exactly the ``backend`` operation it always was.
     """
     from agent_team_backend import app
     from agent_team_backend.ipc import make_event
@@ -4999,20 +5026,22 @@ async def request_host_agent_workspace_backend(
         return {"ok": False, "error": "workspace path is required", "error_code": "bad_request"}
     if not isinstance(payload, dict) or caller.kind not in {"pane", "host", "external"}:
         return {"ok": False, "error": "agent backend request is malformed", "error_code": "bad_request"}
-    request_id = f"mcp:{secrets.token_hex(16)}"
+    request: dict[str, Any] = {
+        "request_id": f"mcp:{secrets.token_hex(16)}",
+        "target": {"plugin_id": plugin_id, "workspace_path": workspace_path},
+        "operation": "backend",
+        "payload": payload,
+    }
+    wait_payload = payload
+    if agent_tool is not None:
+        request["operation"] = "agentTool"
+        request["tool"] = agent_tool["tool"]
+        request["caller"] = agent_tool["caller"]
+        wait_payload = {"timeoutMs": agent_tool["timeout_ms"]}
+    request_id = request["request_id"]
     future = _agent_capability_pending.register(request_id)
     try:
-        sent = await app.unicast_host(
-            make_event(
-                "agent.capability.request",
-                {
-                    "request_id": request_id,
-                    "target": {"plugin_id": plugin_id, "workspace_path": workspace_path},
-                    "operation": "backend",
-                    "payload": payload,
-                },
-            )
-        )
+        sent = await app.unicast_host(make_event("agent.capability.request", request))
         if not sent:
             return {
                 "ok": False,
@@ -5022,7 +5051,7 @@ async def request_host_agent_workspace_backend(
         result = await _agent_capability_pending.wait(
             request_id,
             future,
-            timeout=_host_answer_timeout_s(payload),
+            timeout=_host_answer_timeout_s(wait_payload),
         )
         if result is TIMEOUT:
             return {

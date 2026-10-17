@@ -16,6 +16,7 @@ import { composePluginFrameQuery } from './pluginContributionQuery'
 import { systemFrameUnlessMac } from '../window-controls'
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync, lstatSync, realpathSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { isMac } from '../../shared/osplat'
 import { URL, pathToFileURL } from 'node:url'
@@ -179,6 +180,15 @@ import {
 } from '../../shared/pluginAgentTools'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
+import {
+  AGENT_TOOLS_SYNC_EVENT,
+  agentToolResultBytes,
+  type AgentToolCaller,
+  type AgentToolCallResponse,
+  type AgentToolsSyncPayload,
+} from '../../shared/pluginAgentTools'
+import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
 /** Everything the manager needs to launch one plugin view. */
 export interface PluginLaunchDescriptor {
@@ -1402,6 +1412,24 @@ export class FrontendPluginManager {
    *  callers never receive the generated instance id. */
   private readonly headlessBackendInstances = new Map<string, string>()
   private readonly pendingHeadlessBackendBinds = new Map<string, Promise<string>>()
+  /** Third-party agent-tool catalog (plan B1-b); null = never wired, every call refused. */
+  private agentToolsHost: PluginAgentToolsHost | null = null
+  /** True when a canonical directory is a workspace open in a Navide window
+   * (plan B1-b target rule); unset = no workspace qualifies. */
+  private agentToolWorkspaceResolver: ((root: string) => boolean) | null = null
+  /** Headless third-party bindings created for agent-tool calls, by package/version/workspace. */
+  private readonly headlessAgentToolInstances = new Map<string, string>()
+  private readonly pendingHeadlessAgentToolBinds = new Map<string, Promise<string>>()
+  /** instanceId -> canonical workspace root of a headless agent-tool binding. */
+  private readonly headlessAgentToolRoots = new Map<string, string>()
+  /** Agent-tool calls in flight, by their initiator id (read by the fs bridge). */
+  private readonly agentToolCalls = new Map<string, {
+    pluginId: string
+    risk: 'read' | 'write'
+    workspaceRoot: string
+    caller: AgentToolCaller
+    spec: ThirdPartyLaunchSpec
+  }>()
   /** Headless Plans instance id → its workspace, to tell the user which
    *  workspace's backend stopped. */
   private readonly headlessPlansWorkspacePaths = new Map<string, string>()
@@ -2397,6 +2425,59 @@ export class FrontendPluginManager {
     this.pluginBackendHost.setThirdPartyAdmitter(admitter ?? undefined)
   }
 
+  /** Wire the third-party agent-tool catalog (plan B1-b). */
+  setAgentToolsHost(host: PluginAgentToolsHost | null): void {
+    this.agentToolsHost = host
+  }
+
+  /** Which canonical directories are Navide workspaces an agent tool may target. */
+  setAgentToolWorkspaceResolver(resolver: ((root: string) => boolean) | null): void {
+    this.agentToolWorkspaceResolver = resolver
+  }
+
+  /** A target an agent tool may use: an open Navide workspace, never the home
+   * folder or a filesystem root, whatever the resolver says. */
+  private isAgentToolWorkspace(root: string): boolean {
+    const home = canonicalExistingDirectory(homedir()) ?? resolve(homedir())
+    if (root === home || root === resolve(root, '..')) return false
+    try {
+      return this.agentToolWorkspaceResolver?.(root) === true
+    } catch {
+      return false
+    }
+  }
+
+  /** Set the agent-callable methods of one registered third-party backend. */
+  setThirdPartyAgentMethods(pluginId: string, packageVersion: string, methods: string[]): void {
+    this.pluginBackendHost.setAgentMethods(pluginId, packageVersion, methods)
+    if (methods.length > 0) return
+    // Nothing is served any more: stop and forget its agent-tool bindings.
+    for (const [key, instanceId] of [...this.headlessAgentToolInstances]) {
+      if (!key.startsWith(`${pluginId}\u0000${packageVersion}\u0000`)) continue
+      this.headlessAgentToolInstances.delete(key)
+      this.headlessAgentToolRoots.delete(instanceId)
+      if (this.pluginBackendHost.isBound(instanceId)) {
+        void this.pluginBackendHost.unbindView(instanceId, 'plugin-stopping').catch(() => undefined)
+      }
+    }
+  }
+
+  /** Push one `plugins.agentTools.sync` snapshot to the core backend. False
+   * when there is no registered Host session (the snapshot is then re-sent
+   * from scratch once the session registers). */
+  async sendAgentToolsSync(payload: AgentToolsSyncPayload): Promise<'delivered' | 'failed' | 'no-session'> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return 'no-session'
+    try {
+      const response = await client.send(AGENT_TOOLS_SYNC_EVENT, payload as unknown as Record<string, unknown>, 10_000)
+      if (response.ok) return 'delivered'
+      console.warn('[plugin-backend] agent tool catalog was not accepted by the backend')
+      return 'failed'
+    } catch {
+      return 'failed'
+    }
+  }
+
   /** Kill switch: stop running third-party backend children. */
   stopThirdPartyBackends(pluginId: string | null): Promise<void> {
     return this.pluginBackendHost.stopThirdPartyBackends(pluginId)
@@ -2421,6 +2502,11 @@ export class FrontendPluginManager {
     context: PlansBridgeContext,
   ): boolean {
     const runtime = context.runtime
+    if (
+      runtime.initiator.kind === 'agent' &&
+      nonEmptyString(runtime.instanceId) &&
+      this.headlessAgentToolRoots.has(runtime.instanceId)
+    ) return this.agentToolFilesystemGrantAllows(payload, context)
     if (
       context.signal.aborted ||
       runtime.pluginId === PLANS_PLUGIN_ID ||
@@ -2447,6 +2533,56 @@ export class FrontendPluginManager {
     if (!grant || grant.packageVersion !== runtime.packageVersion || !grant.system.includes('fs')) return false
     const root = canonicalExistingDirectory(context.workspacePath)
     return root !== null && root === context.authorizedPlanRoot && payload.workspace_path === root
+  }
+
+  /** The agent-tool counterpart of the rule above: the request comes from a
+   * headless binding the Host made for an agent-tool call, at the canonical
+   * workspace root it bound, while the package's user Grant still includes
+   * `fs` and the agent-tool catalog still serves the package. The execution
+   * policy and the per-workspace write grant are enforced by the supervisor
+   * and the package bridge, as for every other request. */
+  private agentToolFilesystemGrantAllows(
+    payload: Record<string, JsonValue>,
+    context: PlansBridgeContext,
+  ): boolean {
+    const runtime = context.runtime
+    const boundRoot = nonEmptyString(runtime.instanceId) ? this.headlessAgentToolRoots.get(runtime.instanceId) : undefined
+    // Only inside an admitted agent-tool call of this package at this root,
+    // and only while the catalog still serves it for that caller (switches,
+    // DB4, marks, disabled, stopping, update).
+    const call = runtime.initiator.kind === 'agent' ? this.agentToolCalls.get(runtime.initiator.id) : undefined
+    const stillServed = call !== undefined && this.agentToolsHost !== null && this.agentToolsHost.recheck(
+      call.pluginId,
+      call.caller,
+      (pluginId, packageVersion) => this.isPackageVersionStopping(pluginId, packageVersion),
+      call.spec,
+    ).ok
+    if (
+      context.signal.aborted ||
+      !boundRoot ||
+      !call ||
+      !stillServed ||
+      call.pluginId !== runtime.pluginId ||
+      call.workspaceRoot !== boundRoot ||
+      runtime.pluginId === PLANS_PLUGIN_ID ||
+      runtime.initiator.kind !== 'agent' ||
+      !nonEmptyString(runtime.packageVersion) ||
+      !nonEmptyString(context.workspacePath) ||
+      !nonEmptyString(context.authorizedPlanRoot) ||
+      !this.pluginBackendHost.isBound(runtime.instanceId!)
+    ) return false
+    const activation = this.pluginBackendHost.activationForPlugin(runtime.pluginId)
+    if (
+      !activation?.thirdParty?.system.includes('fs') ||
+      activation.packageVersion !== runtime.packageVersion ||
+      this.isPackageVersionStopping(runtime.pluginId, runtime.packageVersion) ||
+      runtime.workspaceId !== this.workspaceIdForPath(boundRoot) ||
+      !this.isAgentToolWorkspace(boundRoot)
+    ) return false
+    const grant = this.capabilityGrantResolver?.(runtime.pluginId, runtime.packageVersion) ?? null
+    if (!grant || grant.packageVersion !== runtime.packageVersion || !grant.system.includes('fs')) return false
+    const root = canonicalExistingDirectory(context.workspacePath)
+    return root !== null && root === boundRoot && root === context.authorizedPlanRoot && payload.workspace_path === root
   }
 
   private async sendThirdPartyFilesystemService(
@@ -6830,6 +6966,238 @@ export class FrontendPluginManager {
     }
   }
 
+  /**
+   * Host entry point for a third-party agent tool call (plan B1-b; contract
+   * section 4.2, `operation: "agentTool"`). Checks run on every call, in this
+   * order, whatever the CLI or backend has cached: master switch -> caller kind
+   * -> package installed, enabled, not quarantined/revoked/stopping -> consent
+   * -> tool in the consented list -> name collision -> target workspace grant
+   * -> first-write confirmation (DB3) -> execution policy -> headless binding
+   * -> call. Plans never comes here: its route above is unchanged.
+   */
+  async executeAgentToolCall(request: Record<string, unknown>): Promise<AgentToolCallResponse> {
+    const received = Date.now()
+    const parsed = parseAgentToolCallRequest(request)
+    if (!parsed) return agentToolError('BAD_REQUEST', 'malformed agent tool request')
+    const host = this.agentToolsHost
+    if (!host) return agentToolUnavailable('master-switch-off')
+    this.pruneAgentToolBindings()
+    const isStopping = (pluginId: string, packageVersion: string): boolean =>
+      this.isPackageVersionStopping(pluginId, packageVersion)
+    const admission = await host.admit({
+      pluginId: parsed.pluginId,
+      toolName: parsed.toolName,
+      pluginVersion: parsed.pluginVersion,
+      caller: parsed.caller,
+    }, isStopping)
+    if (!admission.ok) return agentToolUnavailable(admission.reason)
+    const { spec, tool } = admission
+    // The core waits the tool's timeout plus a transport margin. The Host
+    // never dispatches once its own deadline (the tool's timeout, counted from
+    // receipt) has passed: an answer nobody waits for must not have side
+    // effects, and the agent's retry must not write twice.
+    const deadline = received + tool.timeoutMs
+    const late = (): AgentToolCallResponse | null => Date.now() >= deadline
+      ? agentToolError('PLUGIN_TOOL_TIMEOUT', 'The call was not started before its deadline.')
+      : null
+    // A method shared with a write-risk tool is a write, whichever tool names it.
+    const risk: 'read' | 'write' = (spec.thirdParty.agentTools ?? [])
+      .some((candidate) => candidate.method === tool.method && candidate.risk === 'write') ? 'write' : tool.risk
+    const required = tool.inputSchema.required
+    if (
+      Array.isArray(required) &&
+      required.some((key) => typeof key !== 'string' || !Object.prototype.hasOwnProperty.call(parsed.arguments, key))
+    ) return agentToolError('PLUGIN_TOOL_INVALID_ARGUMENTS', 'A required tool argument is missing.')
+
+    // Target workspace grant: a Navide workspace open in a window (never the
+    // home folder, a filesystem root or any other directory), and the user
+    // Grant for this exact version, which includes `fs` when the package
+    // declares it. Another open workspace than the caller's is allowed and
+    // flagged as cross-workspace.
+    const root = canonicalExistingDirectory(parsed.workspacePath)
+    const workspaceId = root ? this.workspaceIdForPath(root) : null
+    const workspaceGranted = (): boolean => {
+      const grant = this.capabilityGrantResolver?.(spec.pluginId, spec.packageVersion) ?? null
+      return Boolean(
+        root && workspaceId && this.isAgentToolWorkspace(root) &&
+        grant && grant.packageVersion === spec.packageVersion &&
+        (!spec.thirdParty.system.includes('fs') || grant.system.includes('fs')),
+      )
+    }
+    // Everything that can change while the call waits, checked again after
+    // every wait: catalog state, served methods, workspace and Grant, deadline.
+    const recheck = (): AgentToolCallResponse | null => {
+      const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
+      if (!current.ok) return agentToolUnavailable(current.reason)
+      const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
+      if (
+        !activation ||
+        !this.pluginBackendHost.agentToolMethodsFor(spec.pluginId, spec.packageVersion).includes(tool.method)
+      ) return agentToolUnavailable('tool-not-consented')
+      if (!workspaceGranted()) {
+        return agentToolError(
+          'WORKSPACE_NOT_AUTHORIZED',
+          parsed.caller.kind === 'pane'
+            ? 'The Navide plugin has no grant for this workspace.'
+            : 'An external or Host caller must name an open Navide workspace in workspace_path.',
+        )
+      }
+      return late()
+    }
+    const early = recheck()
+    if (early) return early
+    if (risk === 'write' && !(await host.confirmWrite(spec, tool, root!))) {
+      return agentToolError('WORKSPACE_WRITE_DECLINED', 'The user did not allow changes in this workspace.')
+    }
+    const afterConfirm = recheck()
+    if (afterConfirm) return afterConfirm
+    const initiator: AuthenticatedInitiator = Object.freeze({
+      kind: 'agent',
+      source: 'mcp',
+      id: randomUUID(),
+      caller: Object.freeze({
+        kind: parsed.caller.kind,
+        paneId: parsed.caller.paneId,
+        workspace: parsed.caller.workspace,
+        verifiedTo: parsed.caller.kind === 'pane' ? 'pane' : 'caller-kind',
+      }),
+    })
+    if (!this.agentToolPolicyAllows(root!, initiator, spec)) {
+      return agentToolError('EXECUTION_POLICY_DENIED', 'The agent execution policy denied the operation.')
+    }
+    const crossWorkspace = parsed.caller.workspace !== null &&
+      (canonicalExistingDirectory(parsed.caller.workspace) ?? resolve(parsed.caller.workspace)) !== root
+    const started = Date.now()
+    const meta = (resultBytes: number) => ({ durationMs: Date.now() - started, resultBytes, crossWorkspace })
+    let instanceId: string
+    try {
+      instanceId = await this.bindHeadlessAgentToolBackend(spec, root!, workspaceId!)
+    } catch (error) {
+      return this.agentToolBackendError(error, meta(0))
+    }
+    const beforeCall = recheck()
+    if (beforeCall) return beforeCall
+    // The bridge lets this call write only when it came through a write tool.
+    this.agentToolCalls.set(initiator.id, { pluginId: spec.pluginId, risk, workspaceRoot: root!, caller: parsed.caller, spec })
+    try {
+      const result = await this.pluginBackendHost.call(instanceId, tool.method, parsed.arguments, {
+        initiator,
+        timeoutMs: Math.max(1, Math.min(tool.timeoutMs, Math.ceil(deadline - Date.now()))),
+      })
+      // DB9: no result cap. The tool already ran, so the result goes back
+      // whole and carries its size.
+      const resultBytes = agentToolResultBytes(result)
+      return { ok: true, result, meta: meta(resultBytes) }
+    } catch (error) {
+      return this.agentToolBackendError(error, meta(0))
+    } finally {
+      this.agentToolCalls.delete(initiator.id)
+    }
+  }
+
+  /** The agent-tool call an initiator id belongs to, while it runs. */
+  agentToolCallFor(initiatorId: string): { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined {
+    const call = this.agentToolCalls.get(initiatorId)
+    return call ? { pluginId: call.pluginId, risk: call.risk, workspaceRoot: call.workspaceRoot } : undefined
+  }
+
+  /** Forget headless agent-tool bindings the Host has since unbound. */
+  private pruneAgentToolBindings(): void {
+    for (const [key, instanceId] of [...this.headlessAgentToolInstances]) {
+      if (this.pluginBackendHost.isBound(instanceId)) continue
+      this.headlessAgentToolInstances.delete(key)
+      this.headlessAgentToolRoots.delete(instanceId)
+    }
+  }
+
+  private agentToolBackendError(
+    error: unknown,
+    meta: { durationMs: number; resultBytes: number; crossWorkspace: boolean },
+  ): AgentToolCallResponse {
+    if (error instanceof BackendPluginError) {
+      if (error.code === 'PLUGIN_STOPPING') return { ...agentToolUnavailable('plugin-stopping'), meta }
+      if (error.code === 'TIMEOUT') {
+        return { ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin did not answer in time.'), meta }
+      }
+      if (error.code === 'INVALID_ARGUMENT' || error.pluginCode === 'INVALID_ARGUMENT') {
+        return { ...agentToolError('PLUGIN_TOOL_INVALID_ARGUMENTS', 'The tool arguments are invalid.'), meta }
+      }
+      return {
+        ...agentToolError('PLUGIN_TOOL_FAILED', 'The Navide plugin tool failed.'),
+        plugin_error: error.code === 'PLUGIN_ERROR' && error.pluginCode ? error.pluginCode : error.code,
+        meta,
+      }
+    }
+    return { ...agentToolError('PLUGIN_TOOL_FAILED', 'The Navide plugin tool failed.'), meta }
+  }
+
+  /** The agent execution policy must allow every system namespace the package
+   * can reach headlessly (`ui` needs a view and is not one of them); a corrupt
+   * policy refuses. The supervisor re-checks each bridge request again. */
+  private agentToolPolicyAllows(
+    workspacePath: string,
+    initiator: AuthenticatedInitiator,
+    spec: ThirdPartyLaunchSpec,
+  ): boolean {
+    let snapshot: ExecutionPolicySnapshot | undefined
+    try {
+      snapshot = this.executionPolicyResolver?.(workspacePath)
+    } catch (error) {
+      this.noteExecutionPolicyFailure(error)
+      return false
+    }
+    if (!snapshot || snapshot.state === 'corrupt') return false
+    const namespaces = spec.thirdParty.system.filter((namespace) => namespace !== 'ui')
+    // A package that declares no headless namespace is still governed by the
+    // policy: it is evaluated as the narrowest one a backend reaches, `fs`.
+    return (namespaces.length > 0 ? namespaces : ['fs' as const])
+      .every((namespace) => executionPolicyAllows(initiator, snapshot, namespace))
+  }
+
+  /** One headless binding per package version and workspace, made for agent
+   * tool calls only. A binding the Host has since stopped is replaced. */
+  private bindHeadlessAgentToolBackend(
+    spec: ThirdPartyLaunchSpec,
+    root: string,
+    workspaceId: string,
+  ): Promise<string> {
+    const key = `${spec.pluginId}\u0000${spec.packageVersion}\u0000${workspaceId}`
+    const existing = this.headlessAgentToolInstances.get(key)
+    if (existing && this.pluginBackendHost.isBound(existing)) return Promise.resolve(existing)
+    if (existing) {
+      this.headlessAgentToolInstances.delete(key)
+      this.headlessAgentToolRoots.delete(existing)
+    }
+    const pending = this.pendingHeadlessAgentToolBinds.get(key)
+    if (pending) return pending
+    let task!: Promise<string>
+    task = this.pluginBackendHost.bindAgentToolWorkspace(
+      {
+        pluginId: spec.pluginId,
+        packageVersion: spec.packageVersion,
+        workspaceId,
+        instanceId: null,
+        contributionKey: `${spec.pluginId}.agent-tools`,
+        hostWindowId: null,
+        initiator: HOST_USER_INITIATOR,
+      },
+      spec.packageDir,
+      root,
+    ).then((instanceId) => {
+      if (this.isPackageVersionStopping(spec.pluginId, spec.packageVersion)) {
+        void this.pluginBackendHost.unbindView(instanceId, 'plugin-stopping')
+        throw new BackendPluginError('PLUGIN_STOPPING')
+      }
+      this.headlessAgentToolInstances.set(key, instanceId)
+      this.headlessAgentToolRoots.set(instanceId, root)
+      return instanceId
+    }).finally(() => {
+      if (this.pendingHeadlessAgentToolBinds.get(key) === task) this.pendingHeadlessAgentToolBinds.delete(key)
+    })
+    this.pendingHeadlessAgentToolBinds.set(key, task)
+    return task
+  }
+
   /** Host entry point for a package-local backend call originating at MCP.
    * The child sees only the Host-minted runtime initiator; its arguments cannot
    * add, remove, or replace that identity. */
@@ -6844,6 +7212,11 @@ export class FrontendPluginManager {
     if (!plugin) return buildError(reqId, 'BAD_REQUEST', 'unknown plugin instance')
     if (this.isPluginStopping(plugin)) {
       return buildError(reqId, 'PLUGIN_STOPPING', 'plugin runtime is stopping')
+    }
+    // Agents reach third-party package code only through consented agent
+    // tools (executeAgentToolCall), never through a view's instance id.
+    if (this.pluginBackendHost.activationForPlugin(plugin.id)?.thirdParty !== undefined) {
+      return buildError(reqId, 'CAPABILITY_DENIED', 'third-party backend methods are reachable only through agent tools')
     }
     if (
       !record ||
@@ -8247,6 +8620,9 @@ export class FrontendPluginManager {
           this.hostSessionDisabledPlugins = disabledPlugins.join('\n')
           if (!this.hostSessionRegistered) {
             console.warn('[plugin-backend] Host session registration was rejected')
+          } else {
+            // A (re)connected backend starts with no third-party tools.
+            void this.agentToolsHost?.onBackendConnected().catch(() => undefined)
           }
         }
       } catch (error) {
@@ -8329,6 +8705,27 @@ export class FrontendPluginManager {
       Object.keys(record.target).length === 2 &&
       nonEmptyString((record.target as Record<string, unknown>).plugin_id) &&
       nonEmptyString((record.target as Record<string, unknown>).workspace_path)
+    if (record.operation === 'agentTool' && nonEmptyString(record.request_id)) {
+      let toolResponse: AgentToolCallResponse
+      try {
+        toolResponse = await this.executeAgentToolCall(record)
+      } catch (error) {
+        // Never forward an internal message (it can carry local paths).
+        console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)
+        toolResponse = agentToolError('PLUGIN_TOOL_FAILED', 'The Navide plugin tool failed.')
+      }
+      if (this.wsClient !== client || !this.hostSessionRegistered) {
+        return refuse('BACKEND_UNAVAILABLE', 'Host backend session lapsed while the request ran')
+      }
+      await client.send(
+        'agent.capability.result',
+        { request_id: record.request_id, response: toolResponse },
+        10_000,
+      ).catch(() => {
+        // The MCP waiter has its own timeout; a closed backend is reported there.
+      })
+      return
+    }
     if (!legacyRequest && !workspaceRequest) {
       return refuse('BAD_REQUEST', 'agent capability request is malformed')
     }
@@ -10533,6 +10930,7 @@ export class FrontendPluginManager {
       this.pendingBackendCalls.size > 0 ||
       this.pendingBackendSubscriptions.size > 0 ||
       this.pendingHeadlessBackendBinds.size > 0 ||
+      this.pendingHeadlessAgentToolBinds.size > 0 ||
       this.pluginBackendHost.hasLiveBackendChildren()
     )
   }
@@ -10561,6 +10959,9 @@ export class FrontendPluginManager {
     this.pendingBackendSubscriptions.clear()
     this.headlessBackendInstances.clear()
     this.pendingHeadlessBackendBinds.clear()
+    this.headlessAgentToolInstances.clear()
+    this.pendingHeadlessAgentToolBinds.clear()
+    this.headlessAgentToolRoots.clear()
     this.plansBackendHealth = 'unknown'
     this.plansBackendHealthIdentity = null
     this.plansDeadBackendInstances.clear()
@@ -13509,4 +13910,70 @@ export function closeGitLeftPluginView(hostWindow: BrowserWindow): { ok: boolean
   cleanup?.()
   gitLeftViewHostCleanup.delete(hostWindow.id)
   return { ok: true }
+}
+
+function agentToolError(
+  code: Exclude<AgentToolCallErrorCode, 'PLUGIN_TOOL_UNAVAILABLE'>,
+  error: string,
+): Extract<AgentToolCallResponse, { ok: false }> {
+  return { ok: false, error, error_code: code }
+}
+
+function agentToolUnavailable(reason: AgentToolUnavailableReason): Extract<AgentToolCallResponse, { ok: false }> {
+  return { ok: false, error: agentToolUnavailableMessage(reason), error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason }
+}
+
+export interface ParsedAgentToolCall {
+  pluginId: string
+  workspacePath: string
+  toolName: string
+  pluginVersion: string
+  caller: AgentToolCaller
+  arguments: JsonValue
+}
+
+function exactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const present = Object.keys(record)
+  return present.length === keys.length && present.every((key) => keys.includes(key)) ? record : null
+}
+
+/** Contract section 4.2. `caller` comes from the core server's credential
+ * check, never from tool arguments; a pane caller names its pane. */
+export function parseAgentToolCallRequest(value: Record<string, unknown>): ParsedAgentToolCall | null {
+  const record = exactRecord(value, ['request_id', 'operation', 'target', 'tool', 'caller', 'payload'])
+  const target = exactRecord(record?.target, ['plugin_id', 'workspace_path'])
+  const tool = exactRecord(record?.tool, ['name', 'plugin_version', 'sync_revision'])
+  // `verifiedTo` is optional on the wire (the core may send its own label);
+  // it must agree with the caller kind, and the Host derives its own anyway.
+  const caller = exactRecord(record?.caller, ['kind', 'paneId', 'workspace'])
+    ?? exactRecord(record?.caller, ['kind', 'paneId', 'workspace', 'verifiedTo'])
+  const payload = exactRecord(record?.payload, ['arguments'])
+  if (!record || !target || !tool || !caller || !payload || record.operation !== 'agentTool') return null
+  if (
+    !nonEmptyString(record.request_id) ||
+    !nonEmptyString(target.plugin_id) || !nonEmptyString(target.workspace_path) || !isAbsolute(target.workspace_path) ||
+    !nonEmptyString(tool.name) || !nonEmptyString(tool.plugin_version) ||
+    typeof tool.sync_revision !== 'number' || !Number.isSafeInteger(tool.sync_revision)
+  ) return null
+  const expectedLabel = caller.kind === 'pane' ? 'pane' : 'caller-kind'
+  const callerOk = (caller.verifiedTo === undefined || caller.verifiedTo === expectedLabel) && (caller.kind === 'pane'
+    ? nonEmptyString(caller.paneId) &&
+      (caller.workspace === null || (nonEmptyString(caller.workspace) && isAbsolute(caller.workspace)))
+    : (caller.kind === 'external' || caller.kind === 'host') && caller.paneId === null && caller.workspace === null)
+  const args = payload.arguments
+  if (!callerOk || typeof args !== 'object' || args === null || Array.isArray(args) || !isJsonValue(args)) return null
+  return {
+    pluginId: target.plugin_id,
+    workspacePath: target.workspace_path,
+    toolName: tool.name,
+    pluginVersion: tool.plugin_version,
+    caller: {
+      kind: caller.kind as AgentToolCaller['kind'],
+      paneId: caller.kind === 'pane' ? caller.paneId as string : null,
+      workspace: caller.kind === 'pane' ? caller.workspace as string | null : null,
+    },
+    arguments: args,
+  }
 }

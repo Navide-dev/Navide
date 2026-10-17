@@ -43,8 +43,13 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } from '../../shared/pluginDisclosure'
-import { revealInvisibleText } from '../../shared/pluginAgentTools'
+import { revealInvisibleText, validateAgentTools } from '../../shared/pluginAgentTools'
+import {
+  canonicalContractJson,
+  computeDisclosure,
+  type DisclosureAgentTool,
+  type DisclosureManifestInput,
+} from '../../shared/pluginDisclosure'
 import type { JsonValue } from './pluginBackendSupervisor'
 import type { SupportedLocale } from '../hostLocale'
 
@@ -60,10 +65,13 @@ import type { SupportedLocale } from '../hostLocale'
  * Host only through a filesystem bridge limited to its bound workspace and,
  * when it declares `shell: "allowlist"`, the Host shell broker (DB5). The
  * backend never executes anything itself: the broker runs git/gh/glab under the
- * same rules as a view's shell.run. MCP agents never reach third-party methods
- * (no `agentMethods`). Declared agent tools are part of what the user consents
- * to (backendPermissionsKey) and are listed in the consent dialog; serving
- * them is not wired here.
+ * same rules as a view's shell.run. Declared agent tools are part of what the
+ * user consents to (backendPermissionsKey) and are listed in the consent
+ * dialog. MCP agents reach a third-party method only through a consented agent
+ * tool, and only while the "let agents call tools from third-party Navide
+ * plugins" switch is on: `agentMethods` stays empty here and agent-tool
+ * bindings get their methods from the Host's agent-tool catalog
+ * (pluginAgentToolsHost.ts).
  */
 
 export type ThirdPartyBackendInfo = NonNullable<BackendPluginLaunchSpec['thirdParty']>
@@ -81,6 +89,26 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
   return manifest
 }
 
+/**
+ * The agent tools a manifest declares, with their disclosure `permissions`,
+ * or null when it declares none. `backend.agentTools` is read defensively
+ * from the parsed manifest: a package whose declaration fails any contract
+ * rule (validateAgentTools) contributes no tools at all.
+ */
+export function declaredAgentTools(manifest: PluginManifestV2): Pick<ThirdPartyBackendInfo, 'agentTools' | 'permissions'> | null {
+  const declared = (manifest.backend as { agentTools?: unknown } | undefined)?.agentTools
+  if (declared === undefined) return null
+  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend })
+  if (errors.length > 0 || !Array.isArray(declared) || declared.length === 0) {
+    if (errors.length > 0) {
+      console.warn(`[plugin-backend] ${manifest.id} declares invalid agent tools: ${errors.map((error) => error.code).join(', ')}`)
+    }
+    return null
+  }
+  const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
+  return { agentTools: disclosure.agentTools, permissions: disclosure.permissions }
+}
+
 /** Project one installed package's backend into a sandboxed launch spec. The
  * method/event allowlists come from the manifest; the bridge ports are the
  * workspace filesystem when the package declares `fs`, and the Host shell
@@ -93,7 +121,7 @@ export function thirdPartyBackendLaunchSpec(
   if (!activation.backend || !manifest.backend || manifest.id !== activation.pluginId) return null
   if (!manifest.backend.methods?.length) return null
   const system = [...(manifest.permissions.system ?? [])]
-  const agentTools = computeDisclosure(manifest).agentTools
+  const agentTools = declaredAgentTools(manifest)
   return {
     pluginId: activation.pluginId,
     packageVersion: activation.packageVersion,
@@ -112,9 +140,23 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
-      ...(agentTools.length > 0 ? { agentTools } : {}),
+      ...(agentTools ?? {}),
     },
   }
+}
+
+/**
+ * The methods an MCP agent may reach on one third-party backend: the methods
+ * of its declared agent tools, and only while the master switch is on and the
+ * user's consent matches this exact package. Anything else yields `[]`, which
+ * is what every third-party backend has on main.
+ */
+export function consentedAgentMethods(
+  spec: ThirdPartyLaunchSpec,
+  gates: { masterSwitch: boolean; consentMatches: boolean },
+): string[] {
+  if (!gates.masterSwitch || !gates.consentMatches) return []
+  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
 }
 
 /** SHA-256 of the canonical spelling of the disclosure's `agentTools` array.
@@ -468,6 +510,15 @@ export interface NativeBackendWritePrompt {
   workspacePath: string
 }
 
+/** DB3: an agent called a write-risk tool of this package in this workspace. */
+export interface AgentToolWritePrompt {
+  pluginId: string
+  name: string
+  packageVersion: string
+  workspacePath: string
+  tool: { name: string; title: string }
+}
+
 export interface ThirdPartyAdmission {
   spawnProcess: (entryFile: string, options: SpawnOptions) => ChildProcessWithoutNullStreams
   bridgeDispatcher: BackendBridgeDispatcher
@@ -499,6 +550,13 @@ export interface ThirdPartyBackendControllerOptions {
     dataDir: string,
     onViolation: (violation: ResourceViolation) => void,
   ) => BackendResourceWatch
+  /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
+  onConsentGranted?: (pluginId: string) => void
+  /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
+  promptAgentToolWrite?: (prompt: AgentToolWritePrompt) => Promise<boolean>
+  /** The agent-tool call an agent initiator id belongs to, while it runs; the
+   * bridge lets an agent write only inside a call made through a write tool. */
+  agentToolCall?: (initiatorId: string) => { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
   /** Digest the consent binds to (default: packageContentDigest). */
   digestBackend?: (spec: ThirdPartyLaunchSpec) => Promise<string>
   /** Kill what is left of one sandbox after its child exits (default: killSandboxProcessesSync). */
@@ -542,6 +600,42 @@ function isAllowlistedShellCommand(command: string): boolean {
   if (SHELL_SYNTAX.test(command)) return false
   const executable = command.trim().split(/\s+/u)[0] ?? ''
   return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable)
+}
+
+/** Read-only VCS commands an agent call made through a `read` tool may run
+ * (plan B1-b, risk enforcement). Deliberately small and fail-closed: one
+ * simple command, the subcommand right after the executable (no global
+ * options), and no option that writes a file. Anything else needs a
+ * write-risk tool and the user's DB3 answer. */
+const READ_ONLY_VCS_SUBCOMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[] | null>>>> = {
+  // null: any arguments (still subject to the forbidden options below).
+  git: {
+    status: null, log: null, diff: null, show: null, 'rev-parse': null, 'ls-files': null, 'merge-base': null,
+    describe: null, blame: null,
+    branch: ['--list', '-a', '--all', '-r', '--remotes', '-v', '-vv', '--show-current', '--no-color'],
+    remote: ['-v', '--verbose', 'get-url'],
+  },
+  gh: { pr: ['view', 'list', 'status', 'checks', 'diff'], issue: ['view', 'list', 'status'], repo: ['view'], run: ['view', 'list'] },
+  glab: { mr: ['view', 'list', 'diff'], issue: ['view', 'list'], repo: ['view'] },
+}
+
+export function isReadOnlyVcsCommand(command: string): boolean {
+  if (SHELL_SYNTAX.test(command) || /[$()]/u.test(command)) return false
+  const tokens = command.trim().split(/\s+/u)
+  const rules = READ_ONLY_VCS_SUBCOMMANDS[tokens[0] ?? '']
+  const allowed = rules?.[tokens[1] ?? '']
+  if (!rules || allowed === undefined) return false
+  if (tokens.some((token) => /^--(output|ext-diff|exec|upload-pack|receive-pack)/u.test(token) || /^-[A-Za-z]*o$/u.test(token))) {
+    return false
+  }
+  if (allowed === null) return true
+  if (tokens[0] === 'git') {
+    // branch/remote: listing flags only, and `remote get-url <name>`.
+    if (tokens[1] === 'remote' && tokens[2] === 'get-url') return tokens.length === 4
+    return tokens.slice(2).every((token) => allowed.includes(token))
+  }
+  // gh/glab: the sub-subcommand must be a read verb.
+  return tokens.length >= 3 && allowed.includes(tokens[2])
 }
 
 const PACKAGE_FS_READ_OPERATIONS = new Set(['read_file', 'read_range', 'list_dir', 'stat_path'])
@@ -626,6 +720,62 @@ export class ThirdPartyBackendController {
   private consentMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
     const consent = this.store.record(spec.pluginId).consent
     return consent?.binarySha256 === digest && consent.permissionsKey === backendPermissionsKey(spec)
+  }
+
+  /** True when the user's consent covers this exact package content and
+   * permission set (never prompts). Unreadable content reads as "no". */
+  async hasConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    try {
+      return this.consentMatches(spec, await this.digestBackend(spec))
+    } catch {
+      return false
+    }
+  }
+
+  /** True when the consent covers this exact package and its current tool set
+   * (B1-a binds the tools' digest into the permissions key) and the DB1 time
+   * is recorded: like the listing, a package without it holds no names. */
+  async hasAgentToolsConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    if (!spec.thirdParty.agentTools?.length || !this.agentToolsConsented(spec)) return false
+    if (this.store.record(spec.pluginId).agentToolsSince === undefined) return false
+    return this.hasConsent(spec)
+  }
+
+  /** DB3: ask once per (package, version, consent, workspace) before an agent's
+   * first write-risk tool call there. This is its own record, separate from
+   * the view's "allow file changes" grant, and the dialog says an agent asked.
+   * A "no" is kept for the session. */
+  async confirmAgentToolWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+  ): Promise<boolean> {
+    const consent = this.store.record(spec.pluginId).consent
+    if (!consent) return false
+    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)) return true
+    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${consent.grantedAt}\n${workspacePath}`
+    if (this.declinedWrite.has(identity) || !this.options.promptAgentToolWrite) return false
+    let pending = this.pendingPrompts.get(identity)
+    if (!pending) {
+      pending = this.options.promptAgentToolWrite({
+        pluginId: spec.pluginId,
+        name: spec.thirdParty.name,
+        packageVersion: spec.packageVersion,
+        workspacePath,
+        tool: { name: tool.name, title: tool.title },
+      }).catch(() => false)
+      this.pendingPrompts.set(identity, pending)
+      void pending.finally(() => this.pendingPrompts.delete(identity))
+    }
+    if (!(await pending)) {
+      this.declinedWrite.add(identity)
+      return false
+    }
+    const current = this.store.record(spec.pluginId).consent
+    // The consent may have changed while the dialog was open.
+    if (current?.grantedAt !== consent.grantedAt) return false
+    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)
+    return true
   }
 
   /** Decide whether the child may start; asks for consent when `prompt`
@@ -737,6 +887,7 @@ export class ThirdPartyBackendController {
         packageVersion: spec.packageVersion,
       })
       this.noteAgentTools(spec)
+      this.options.onConsentGranted?.(spec.pluginId)
     }
   }
 
@@ -794,7 +945,13 @@ export class ThirdPartyBackendController {
         const root = context.authorizedPlanRoot
         if (!root) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
         if (PACKAGE_FS_WRITE_OPERATIONS.has(request.operation)) {
-          if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
+          if (context.runtime.initiator.kind === 'agent') {
+            // An agent writes only inside a call made through a write-risk
+            // tool, where the user answered the DB3 question; never prompts.
+            if (!this.agentToolWriteAllowed(spec, context.runtime.initiator.id, root)) {
+              throw new PlansBridgeError('CAPABILITY_DENIED')
+            }
+          } else if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
         } else if (!PACKAGE_FS_READ_OPERATIONS.has(request.operation)) {
           throw new PlansBridgeError('METHOD_NOT_FOUND')
         }
@@ -815,6 +972,19 @@ export class ThirdPartyBackendController {
     })
   }
 
+  private agentToolWriteAllowed(spec: ThirdPartyLaunchSpec, initiatorId: string, root: string): boolean {
+    const call = this.options.agentToolCall?.(initiatorId)
+    const consent = this.store.record(spec.pluginId).consent
+    return Boolean(
+      call &&
+      call.pluginId === spec.pluginId &&
+      call.risk === 'write' &&
+      call.workspaceRoot === root &&
+      consent &&
+      this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, root),
+    )
+  }
+
   private async dispatchShell(
     spec: ThirdPartyLaunchSpec,
     request: PlansBridgeRequest,
@@ -832,6 +1002,19 @@ export class ThirdPartyBackendController {
     if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
     if (!isAllowlistedShellCommand(args.command)) {
       throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    }
+    if (context.runtime.initiator.kind === 'agent') {
+      // Agent calls: only inside an admitted agent-tool call; a read tool
+      // runs read-only VCS commands only, anything else needs a write tool
+      // with the user's DB3 answer.
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+      if (
+        !isReadOnlyVcsCommand(args.command) &&
+        !this.agentToolWriteAllowed(spec, context.runtime.initiator.id, context.authorizedPlanRoot)
+      ) throw new PlansBridgeError('CAPABILITY_DENIED', 'a read tool may run only read-only commands')
     }
     const port = this.options.shellPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
@@ -968,6 +1151,7 @@ export class ThirdPartyBackendController {
     })
     this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
+    this.options.onConsentGranted?.(spec.pluginId)
   }
 
   resetFailures(pluginId: string): void {

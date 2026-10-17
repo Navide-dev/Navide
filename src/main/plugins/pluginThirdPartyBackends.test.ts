@@ -11,6 +11,9 @@ import { isWindows } from '../../shared/osplat'
 import {
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
+  agentToolsDigest,
+  consentedAgentMethods,
+  readInstalledManifestV2,
   nativeBackendConsentText,
   ThirdPartyBackendController,
   thirdPartyBackendLaunchSpec,
@@ -594,6 +597,31 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('package bridge', () => {
     return { port: { run }, run }
   }
 
+  it('lets a read-tool agent call run only read-only VCS commands, and a write-tool call more only with DB3', async () => {
+    const { port, run } = shellPort()
+    let call: { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
+    const { instance } = controller({ promptConsent: allow, shellPort: () => port, agentToolCall: () => call })
+    const spec = writePackage({ shell: 'allowlist' })
+    const admission = await instance.admit(spec, root)
+    const agentContext = { ...context(root), runtime: { ...context(root).runtime, initiator: { kind: 'agent', source: 'mcp', id: 'a-1' } as never } }
+    const runAs = (command: string) => admission.bridgeDispatcher.dispatch(shellRequest({ command }), agentContext)
+    // Outside an admitted call: refused.
+    await expect(runAs('git status')).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: root }
+    for (const command of ['git status', 'git log --oneline -5', 'git branch --show-current', 'gh pr view 12', 'glab mr list']) {
+      await expect(runAs(command)).resolves.toEqual({ exitCode: 0, stdout: 'main\n', stderr: '' })
+    }
+    for (const command of ['git commit -m x', 'git push', 'git branch new-branch', 'git diff --output=/tmp/x', 'gh pr merge 12', 'gh api repos/x -X POST', 'git -c core.pager=sh log', 'git log $(id)']) {
+      await expect(runAs(command)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    }
+    // A write tool runs a writing command only with the DB3 answer.
+    call = { pluginId: 'acme.indexer', risk: 'write', workspaceRoot: root }
+    await expect(runAs('git commit -m x')).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, root)
+    await expect(runAs('git commit -m x')).resolves.toEqual({ exitCode: 0, stdout: 'main\n', stderr: '' })
+    expect(run).toHaveBeenCalledTimes(6)
+  })
+
   it('refuses the shell port to a backend that did not declare shell', async () => {
     const { port, run } = shellPort()
     const { instance } = controller({ promptConsent: allow, filesystemPort: fsPort, shellPort: () => port })
@@ -706,6 +734,221 @@ describe('NativeBackendStore', () => {
     writeFileSync(file, JSON.stringify({ schemaVersion: 1, enabled: true, plugins: { x: { consent: { binarySha256: 'short' } } } }))
     expect(new NativeBackendStore(join(root, 'store')).record('x').consent).toBeUndefined()
     expect(readFileSync(file, 'utf8')).toContain('short')
+  })
+})
+
+describe('agent tools on the launch spec (plan B1-b)', () => {
+  const devmapTools = [
+    {
+      name: 'indexer_search', method: 'files.search', risk: 'read', title: 'Search', description: 'Search indexed files.',
+      inputSchema: { type: 'object', required: ['q'], properties: { q: { type: 'string' } } },
+    },
+  ]
+  // B1-a teaches the manifest parser `backend.agentTools`; until then the
+  // field is read defensively from the parsed manifest, as here.
+  function withTools(agentTools: unknown, id = 'acme.indexer') {
+    writePackage({ system: ['fs'] })
+    const parsed = readInstalledManifestV2(packageDir)
+    return thirdPartyBackendLaunchSpec(
+      {
+        pluginId: id, packageVersion: '1.0.0', packageDir, views: [],
+        backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' },
+      },
+      { ...parsed, id, backend: { ...parsed.backend!, agentTools } as never },
+    )!
+  }
+
+  it('is unchanged for a package without agent tools (golden: same spec as main)', () => {
+    const spec = writePackage({ system: ['fs'] })
+    expect(spec.agentMethods).toEqual([])
+    expect(Object.keys(spec.thirdParty).sort()).toEqual(['name', 'system'])
+    expect(backendPermissionsKey(spec)).toBe(JSON.stringify({
+      system: ['fs'], shell: null, methods: ['files.search'], events: ['files.indexProgress'],
+    }))
+  })
+
+  it('projects valid declarations with defaults and the disclosure permissions, but no agent methods', () => {
+    const spec = withTools(devmapTools)
+    expect(spec.agentMethods).toEqual([])
+    expect(spec.thirdParty.agentTools).toEqual([{ ...devmapTools[0], timeoutMs: 30_000 }])
+    expect(spec.thirdParty.permissions).toEqual({ system: ['fs'], shell: null, scopes: null })
+  })
+
+  it('drops every tool of a package whose declaration breaks a contract rule', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      // A bad name, an undeclared method, a reserved prefix, or nothing at all.
+      expect(withTools([{ ...devmapTools[0], name: 'indexer_search\n' }]).thirdParty.agentTools).toBeUndefined()
+      expect(withTools([{ ...devmapTools[0], method: 'files.delete' }]).thirdParty.agentTools).toBeUndefined()
+      expect(withTools(devmapTools, 'acme.cli').thirdParty.agentTools).toBeUndefined()
+      expect(withTools([]).thirdParty.agentTools).toBeUndefined()
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('opens agent methods only with the master switch on and a matching consent', () => {
+    const spec = withTools(devmapTools)
+    expect(consentedAgentMethods(spec, { masterSwitch: false, consentMatches: true })).toEqual([])
+    expect(consentedAgentMethods(spec, { masterSwitch: true, consentMatches: false })).toEqual([])
+    expect(consentedAgentMethods(spec, { masterSwitch: true, consentMatches: true })).toEqual(['files.search'])
+    expect(consentedAgentMethods(writePackage({ system: ['fs'] }), { masterSwitch: true, consentMatches: true })).toEqual([])
+  })
+})
+
+describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confirmation', () => {
+  it('reports consent for this exact package without prompting', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const { instance } = controller({ promptConsent: allow })
+    await expect(instance.hasConsent(spec)).resolves.toBe(false)
+    await instance.allow(spec)
+    await expect(instance.hasConsent(spec)).resolves.toBe(true)
+    expect(allow).not.toHaveBeenCalled()
+    writePackage({ system: ['fs'] }, 'binary-v2')
+    await expect(instance.hasConsent(spec)).resolves.toBe(false)
+  })
+
+  it('asks its own DB3 question naming the agent tool, apart from the view grant, once per version and consent', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const promptAgentToolWrite = vi.fn(async () => true)
+    const promptWorkspaceWrite = vi.fn(async () => true)
+    const { instance } = controller({ promptAgentToolWrite, promptWorkspaceWrite })
+    const tool = { name: 'indexer_search', title: 'Search' }
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(false)
+    await instance.allow(spec)
+    // The view's "allow file changes" grant is not an answer to the agent question.
+    store.setWorkspaceWrite('acme.indexer', '/w1', true)
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(1)
+    expect(promptAgentToolWrite).toHaveBeenCalledWith({
+      pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', workspacePath: '/w1', tool,
+    })
+    expect(promptWorkspaceWrite).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').agentToolWrite).toMatchObject({ packageVersion: '1.0.0', workspaces: ['/w1'] })
+
+    // An update asks again; so does a new consent; so does a disable.
+    await expect(instance.confirmAgentToolWrite({ ...spec, packageVersion: '1.0.1' }, '/w1', tool)).resolves.toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(2)
+    await instance.allow(spec)
+    expect(store.record('acme.indexer').agentToolWrite).toBeUndefined()
+    store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, '/w1')
+    store.setDisabled('acme.indexer', true)
+    expect(store.record('acme.indexer').agentToolWrite).toBeUndefined()
+    store.setDisabled('acme.indexer', false)
+
+    promptAgentToolWrite.mockResolvedValue(false)
+    await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
+    await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(3)
+  })
+
+  it('counts agent tools as consented only when the consent covers their current set and their DB1 time is recorded', async () => {
+    const parsed = (() => {
+      writePackage({ system: ['fs'] })
+      return readInstalledManifestV2(packageDir)
+    })()
+    const tools = [{ name: 'indexer_search', method: 'files.search', risk: 'read', title: 'Search', description: 'Search.', inputSchema: { type: 'object', properties: {} } }]
+    const make = (agentTools: unknown) => thirdPartyBackendLaunchSpec(
+      { pluginId: 'acme.indexer', packageVersion: '1.0.0', packageDir, views: [], backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' } },
+      { ...parsed, backend: { ...parsed.backend!, agentTools } as never },
+    )!
+    const spec = make(tools)
+    const { instance } = controller()
+    // A consent from before the package declared tools covers the backend, not the tools.
+    const plain = make(undefined)
+    await instance.allow(plain)
+    await expect(instance.hasConsent(plain)).resolves.toBe(true)
+    await expect(instance.hasAgentToolsConsent(plain)).resolves.toBe(false)
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(false)
+    // B1-a: the tools' digest is part of the permissions key, and the consent records the DB1 time.
+    await instance.allow(spec)
+    expect(store.record('acme.indexer').consent!.permissionsKey).toContain(agentToolsDigest(spec.thirdParty.agentTools!))
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(true)
+    await expect(instance.hasAgentToolsConsent(make([{ ...tools[0], description: 'Search better.' }]))).resolves.toBe(false)
+    // Without its DB1 time the package holds no names, as in the listing.
+    store.clearAgentToolsSince('acme.indexer')
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(false)
+  })
+
+  it('lets an agent write through the bridge only inside a write-tool call with the DB3 answer, never prompting', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const port = { writeFile: vi.fn(async () => ({ ok: true })) } as unknown as PlansFilesystemPort
+    const promptWorkspaceWrite = vi.fn(async () => true)
+    let call: { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
+    const { instance } = controller({ promptWorkspaceWrite, filesystemPort: () => port, agentToolCall: () => call })
+    await instance.allow(spec)
+    const admission = await instance.admit(spec, undefined)
+    const context = {
+      runtime: { pluginId: 'acme.indexer', packageVersion: '1.0.0', workspaceId: 'w', instanceId: 'i', contributionKey: 'k', hostWindowId: null, initiator: { kind: 'agent', source: 'mcp', id: 'agent-1' } },
+      workspacePath: '/w1', authorizedPlanRoot: '/w1', requestId: 'b', signal: new AbortController().signal, emit: () => undefined,
+    } as unknown as PlansBridgeContext
+    const request = { id: 'b', origin: { kind: 'call' as const, requestId: 'r' }, port: 'filesystem' as const, operation: 'write_file', arguments: { rel_path: 'a', content: 'x' } as never }
+    // Outside a call, inside a read-tool call, or without the DB3 answer: refused.
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: '/w1' }
+    store.setWorkspaceWrite('acme.indexer', '/w1', true)
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'write', workspaceRoot: '/w1' }
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, '/w1')
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).resolves.toEqual({ ok: true })
+    expect(promptWorkspaceWrite).not.toHaveBeenCalled()
+  })
+
+  it('tells the agent-tool catalog when the first-use dialog grants consent', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const onConsentGranted = vi.fn()
+    const { instance } = controller({ promptConsent: allow, onConsentGranted })
+    await instance.admit(spec, undefined)
+    expect(onConsentGranted).toHaveBeenCalledWith('acme.indexer')
+  })
+})
+
+describe('NativeBackendStore agent-tool switches', () => {
+  it('are off by default and leave the file as on main until changed', () => {
+    const fresh = new NativeBackendStore(join(root, 'switch-store'))
+    expect(fresh.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    fresh.setEnabled(true)
+    const file = JSON.parse(readFileSync(join(root, 'switch-store', 'native-backends.json'), 'utf8'))
+    expect(file).toEqual({ schemaVersion: 1, enabled: true, plugins: {} })
+  })
+
+  it('persist each switch and read a malformed value as off', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    switches.setAgentToolSwitches({ externalCallers: true })
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: true, externalCallers: true })
+    writeFileSync(join(root, 'switch-store', 'native-backends.json'), JSON.stringify({
+      schemaVersion: 1, enabled: false, plugins: {}, agentTools: { enabled: 'yes', externalCallers: 1 },
+    }))
+    expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+  })
+
+  it('turns external clients off with the agent switch, so turning it on never re-enables them silently', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    switches.setAgentToolSwitches({ externalCallers: true })
+    switches.setAgentToolSwitches({ enabled: false })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    switches.setAgentToolSwitches({ enabled: true })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: true, externalCallers: false })
+  })
+
+  it('turns a switch off in memory even when the save fails', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    const write = vi.spyOn(OwnerOnlyJsonPersistence.prototype, 'write').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+    try {
+      expect(() => switches.setAgentToolSwitches({ enabled: false })).toThrow('disk full')
+      expect(switches.agentToolSwitches().enabled).toBe(false)
+      expect(() => switches.setAgentToolSwitches({ enabled: true })).toThrow('disk full')
+      expect(switches.agentToolSwitches().enabled).toBe(false)
+    } finally {
+      write.mockRestore()
+    }
   })
 })
 

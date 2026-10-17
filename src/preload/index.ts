@@ -285,6 +285,7 @@ export interface NativeBackendStatusRow {
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
+  agentTools?: { enabled: boolean; externalCallers: boolean }
 }
 
 export interface InstalledPackRecord {
@@ -1215,6 +1216,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+        ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
     },
   },
 })
