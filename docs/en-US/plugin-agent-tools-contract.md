@@ -1213,6 +1213,24 @@ reason of a refusal ("used but not declared" above all) outlives the 7 days of
 detail. It was added after the first tables: every open runs the audit DDL (all
 `CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
 
+`plugin_tool_first_seen` (D-e): `(plugin_id, tool, workspace)` primary key and
+`first_at`; the earliest call of each `risk: write` agent tool in each target
+workspace, written with the call rows. It is not pruned with them, so
+`writeToolNewWorkspace` flags a workspace once, not again each time its old
+calls expire, and no count limits it. When a plugin is removed the Host sends
+`plugin.activity.forget` (`PLUGIN_ACTIVITY_FORGET_MESSAGE`, Host-authenticated,
+`{plugin_id}`) and that plugin's rows go: a reinstalled plugin's first writes
+are new again. The forget is best effort: with no registered Host session, or
+when the send fails, it is not sent again, and the rows stay. The report does
+not depend on it: given the report request's `installedAt`, a first-seen row
+older than the install counts as absent, and the first write since the install
+is read from `plugin_tool_calls` (section 5.1). Like every other audit table it
+is created by the open-time DDL.
+
+A `plugin.activity.record` row the backend skips (malformed, a bad `at`, or
+refused by the redaction) is counted, and the counts by reason are logged;
+never the row's content.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
@@ -1248,7 +1266,9 @@ third-party plugins (the bundled `navide.*` packages are not recorded) and sends
 them in batches, about once a second, as `plugin.activity.record`
 (`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
 plugin_version, workspace, source: "broker" | "shell", address, outcome,
-denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+denied_reason?, fs_path?, shell_command?, at?}]}`; answered `{ok, accepted}`).
+`at` is when the call completed on the Host (Unix ms); the backend clamps it to
+its own now, and dates a row without one when it arrives. Raw
 paths and command lines cross the local Host session only; the backend keeps
 their redacted form. `denied_reason` is `undeclared` when the broker refused a
 namespace or shell use the manifest did not declare. A refused cast is recorded;
@@ -1269,7 +1289,10 @@ the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
 third-party manifest; without `declared`, `declaredUnused` is `[]`. The Host
 sends no `backendMethod` entries: a frontend's calls to its own backend
 (`plugin:backend:call`) are not recorded in `plugin_activity`, so such an
-entry could only ever read "declared but not used". Answer `PluginActivityReport`
+entry could only ever read "declared but not used". The Host also sends
+`installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
+then counts only writes since then, so a first-seen row left by an earlier
+install of the same id counts as absent. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the

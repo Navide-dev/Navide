@@ -30,6 +30,8 @@ export interface PluginActivityRow {
   denied_reason?: 'undeclared'
   fs_path?: string
   shell_command?: string
+  /** When the call completed (Unix ms). The backend clamps it to its own now. */
+  at: number
 }
 
 /** Broker refusals: the call never ran. Anything else that is not ok failed. */
@@ -46,6 +48,8 @@ export interface PluginActivityInput {
   workspace: string | null | undefined
   call: CapabilityCall
   response: CapabilityResponse
+  /** When the call completed; now when omitted. */
+  at?: number
 }
 
 function stringArg(args: unknown, key: string): string | undefined {
@@ -56,7 +60,7 @@ function stringArg(args: unknown, key: string): string | undefined {
 
 /** The activity row of one broker call. Raw path and command text go to the
  *  backend, which keeps only their redacted form. */
-export function activityRowFor({ pluginId, packageVersion, workspace, call, response }: PluginActivityInput): PluginActivityRow {
+export function activityRowFor({ pluginId, packageVersion, workspace, call, response, at }: PluginActivityInput): PluginActivityRow {
   const outcome: PluginActivityOutcome = response.ok
     ? 'allowed'
     : DENIED_CODES.has(response.error?.code ?? '') ? 'denied' : 'error'
@@ -67,6 +71,9 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
     source: call.ns === 'shell' ? 'shell' : 'broker',
     address: `${call.ns}.${call.method}`,
     outcome,
+    // Dated here, not when the batch is sent: a call just before midnight
+    // stays on its own day.
+    at: at ?? Date.now(),
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined

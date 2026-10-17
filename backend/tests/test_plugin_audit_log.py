@@ -1124,3 +1124,104 @@ def test_agent_actions_list_what_agents_did_newest_first_without_user_decisions(
         {"at": NOW - 2 * DAY_MS, "action": "request-update", "callerKind": "pane", "paneId": "p-41",
          "paneName": "dev", "workspace": "/Users/me/project", "version": "0.2.0"},
     ]
+
+
+# ── #368 follow-up L4: first write of a tool in a workspace (plugin_tool_first_seen) ──
+
+
+def _new_workspace_flags(audit: PluginAuditLog, now: int) -> list[dict[str, Any]]:
+    return [a for a in audit.activity_report(_PLUGIN, now_ms=now)["anomalies"] if a["kind"] == "writeToolNewWorkspace"]
+
+
+def test_a_workspace_is_not_new_again_once_its_old_calls_are_pruned(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 40 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    audit.prune(NOW)  # the 40-day-old call row is gone
+    assert _rows(audit, "plugin_tool_calls") == []
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    assert _new_workspace_flags(audit, NOW) == []
+
+
+def test_only_write_tools_are_remembered(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 3600_000
+    _call(audit, tool="devmap_read", risk="read")
+    _call(audit, tool="devmap_set_status", risk="write")
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute("SELECT plugin_id, tool, workspace FROM plugin_tool_first_seen")]
+    assert rows == []  # queued, not flushed yet
+    audit.flush()
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute(
+            "SELECT plugin_id, tool, workspace, first_at FROM plugin_tool_first_seen"
+        )]
+    assert rows == [(_PLUGIN, "devmap_set_status", "/Users/me/project", NOW - 3600_000)]
+
+
+def test_removing_a_plugin_forgets_it_so_a_reinstall_is_new_again(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 10 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    _call(audit, plugin_id="other.plugin", target_workspace="/w/a", caller_workspace="/w/a")
+    audit.flush()
+    audit.forget_plugin(_PLUGIN)
+    with audit.db.transaction() as cur:
+        left = [r[0] for r in cur.execute("SELECT plugin_id FROM plugin_tool_first_seen")]
+    assert left == ["other.plugin"]
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    assert [a["workspace"] for a in _new_workspace_flags(audit, NOW)] == ["/w/a"]
+
+
+def test_an_old_database_gains_the_first_seen_table_and_keeps_its_rows(tmp_path: Path, clock: Clock) -> None:
+    path = tmp_path / "navide.db"
+    old = PluginAuditLog(Database(path), clock=clock)
+    assert _call(old) is not None
+    old.flush()
+    with old.db.transaction() as cur:
+        cur.execute("DROP TABLE plugin_tool_first_seen")  # as a database from before this table
+    old.db.close()
+    again = PluginAuditLog(Database(path), clock=clock)
+    with again.db.transaction() as cur:
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_tool_first_seen)")]
+    assert cols == ["plugin_id", "tool", "workspace", "first_at"]
+    assert len(_rows(again, "plugin_tool_calls")) == 1
+
+
+def test_a_reinstall_is_new_again_even_when_the_forget_was_lost(audit: PluginAuditLog, clock: Clock) -> None:
+    """#373 review F1: the report request's installedAt, not the forget message, decides."""
+    clock.now_ms = NOW - 10 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")  # the earlier install
+    audit.flush()
+    # Removed while the backend was away: no forget. Reinstalled 2 hours ago.
+    installed_at = NOW - 2 * 3600_000
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    flags = [a for a in audit.activity_report(_PLUGIN, installed_at=installed_at, now_ms=NOW)["anomalies"]
+             if a["kind"] == "writeToolNewWorkspace"]
+    assert flags == [{"kind": "writeToolNewWorkspace", "at": NOW - 3600_000, "workspace": "/w/a",
+                      "tool": "devmap_set_status", "count": None, "baseline": None}]
+
+
+def test_installed_at_hides_nothing_written_since_and_flags_nothing_twice(audit: PluginAuditLog, clock: Clock) -> None:
+    installed_at = NOW - 3 * DAY_MS
+    clock.now_ms = NOW - 2 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")  # first write since install, 2 days ago
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")  # not new
+    _call(audit, target_workspace="/w/b", caller_workspace="/w/b")  # new
+    flags = [a["workspace"] for a in audit.activity_report(_PLUGIN, installed_at=installed_at, now_ms=NOW)["anomalies"]
+             if a["kind"] == "writeToolNewWorkspace"]
+    assert flags == ["/w/b"]
+
+
+def test_a_future_installed_at_counts_as_now(audit: PluginAuditLog, clock: Clock) -> None:
+    """#373 review N4: an install time later than now is clamped to now."""
+    clock.now_ms = NOW - 10 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/b", caller_workspace="/w/b")  # before "now": not since the install
+    clock.now_ms = NOW
+    _call(audit, target_workspace="/w/c", caller_workspace="/w/c")  # at now: since an install clamped to now
+    flags = [a["workspace"] for a in audit.activity_report(_PLUGIN, installed_at=NOW + DAY_MS, now_ms=NOW)["anomalies"]
+             if a["kind"] == "writeToolNewWorkspace"]
+    assert flags == ["/w/c"]

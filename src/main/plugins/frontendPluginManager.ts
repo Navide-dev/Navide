@@ -173,6 +173,7 @@ import { canonicalTrustJson } from './pluginRegistryTrust'
 import {
   MARKETPLACE_QUERY_REQUEST_EVENT,
   MARKETPLACE_QUERY_RESULT_MESSAGE,
+  PLUGIN_ACTIVITY_FORGET_MESSAGE,
   PLUGIN_ACTIVITY_REPORT_MESSAGE,
   PLUGIN_AGENT_ACTION_REQUEST_EVENT,
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
@@ -6603,6 +6604,19 @@ export class FrontendPluginManager {
     }
 
     throw new Error(`unsupported public capability '${plan.address}'`)
+  }
+
+  /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
+   *  so a reinstall's first writes in a workspace are flagged again. Best effort:
+   *  with no Host session it is skipped, and removal never waits for it. */
+  forgetPluginActivity(pluginId: string): void {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return
+    void Promise.resolve()
+      .then(() => client.send(PLUGIN_ACTIVITY_FORGET_MESSAGE, { plugin_id: pluginId }, 10_000))
+      .catch((error: unknown) => {
+        console.debug(`[plugins] activity of ${pluginId} not forgotten:`, error)
+      })
   }
 
   /** D-e: one `plugin_activity` row for a broker call of a third-party plugin.
