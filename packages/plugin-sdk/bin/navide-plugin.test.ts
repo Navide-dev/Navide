@@ -263,17 +263,27 @@ async function loginThroughBrowser(
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString('utf8')
   })
-  const authorize = await new Promise<URL>((resolve) => {
+  // A CLI that exits before printing the URL fails the test now, not at its timeout.
+  const authorize = await new Promise<URL>((resolve, reject) => {
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
       const match = /Opening (\S+)/.exec(stdout)
       if (match) resolve(new URL(match[1]))
     })
+    void closed.then((code) => reject(new Error(`login exited (${code}) before printing the authorize URL: ${stderr}`)))
   })
   registry.setChallenge(authorize.searchParams.get('code_challenge') ?? '')
   const port = authorize.searchParams.get('port')
   if (beforeCallback) await beforeCallback(port, new URLSearchParams(callback(authorize)))
-  await fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`)
+  // The CLI may exit as soon as it has answered, so its exit also ends this wait;
+  // a failed request while it is still running fails the test with its stderr.
+  await new Promise<void>((resolve, reject) => {
+    fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`).then(
+      () => resolve(),
+      (error: unknown) => reject(new Error(`login callback request failed (${String(error)}): ${stderr}`)),
+    )
+    void closed.then(() => resolve())
+  })
   const status = await closed
   return { status, stdout, stderr }
 }
