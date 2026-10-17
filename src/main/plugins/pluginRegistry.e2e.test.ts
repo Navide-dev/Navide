@@ -548,7 +548,7 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     })
   }
 
-  it('(11) the new Registry keeps the v0.2.24 package envelope and signs a 9-field disclosure envelope', async () => {
+  it('(11) the new Registry keeps the v0.2.24 package envelope and signs a 9-field disclosure envelope with its scan', async () => {
     const detail = (await (await fetch(`${registryUrl}/api/extensions/${PUBLISHER}/${NAME}`)).json()) as {
       versions: Array<Record<string, any>>
     }
@@ -556,8 +556,10 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     for (const row of detail.versions) {
       expect(() => v0224AssertRegistryPackageEnvelopeShape(row.registry_envelope)).not.toThrow()
       expect(Object.keys(row.disclosure_envelope).sort()).toEqual([...DISCLOSURE_ENVELOPE_FIELDS].sort())
-      expect(row.disclosure_envelope.scanDigest).toBeNull()
-      expect(row.scan).toBeNull()
+      // The publish-time scan report is signed through scanDigest (contract 3.8).
+      expect(row.scan.artifactDigest).toBe(row.package_digest)
+      expect(row.disclosure_envelope.scanDigest)
+        .toBe(createHash('sha256').update(canonicalContractJson(row.scan), 'utf8').digest('hex'))
       expect(row.disclosure).toEqual(computeDisclosure(disclosedManifest(row.version) as never))
     }
 
@@ -572,7 +574,7 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     const prepared = await h.call('plugins:prepareInstall', { namespace: PUBLISHER, name: NAME, version: '0.1.1' })
     expect(prepared.disclosure).toEqual(computeDisclosure(disclosedManifest('0.1.1') as never))
     expect(prepared.disclosure.network).toBe('via-shell')
-    expect(prepared.scan).toBeNull()
+    expect(prepared.scan).toMatchObject({ scanner: { id: 'navide-static-scan' }, native: [] })
     expect(tree(h.root)).toEqual(before)
   })
 

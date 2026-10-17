@@ -21,6 +21,7 @@ from .blocklist import db_blocklists
 from .db import create_db_engine
 from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure
+from .static_scan import run_scan
 from .plugin_contract.disclosure_contract import CanonicalJsonError
 from .discovery import (
     CATEGORIES,
@@ -558,6 +559,11 @@ def _register_routes(app: FastAPI) -> None:
         if conflict is not None:
             raise HTTPException(status_code=409, detail=conflict)
 
+        # Contract 3.8 / DS4: scan synchronously, within the time budget, before
+        # anything is signed. A pending submission keeps its (unsigned) report
+        # for the reviewer; approval scans again and signs that report.
+        scan = run_scan(data, artifact_digest=loaded.digest, target=target,
+                        manifest=manifest.model_dump(exclude_none=True))
         if publisher.review_required:
             # Review before publish (D3): a self-claimed namespace's upload
             # waits unsigned and invisible until an admin approves it, which
@@ -593,6 +599,7 @@ def _register_routes(app: FastAPI) -> None:
                     state.trust_signer,
                     manifest.model_dump(exclude_none=True),
                     registry_envelope,
+                    scan,
                 )
             except CanonicalJsonError as exc:
                 raise HTTPException(status_code=400, detail=f"manifest cannot be disclosed: {exc}") from exc
@@ -621,6 +628,7 @@ def _register_routes(app: FastAPI) -> None:
             disclosure=disclosure,
             disclosure_envelope=disclosure_envelope,
             disclosure_signature=disclosure_signature,
+            scan=scan,
         )
         return PublishResponse(
             namespace=namespace,

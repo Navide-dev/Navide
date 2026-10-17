@@ -48,6 +48,7 @@ from .self_service import (
 )
 from .signing import public_key_fingerprint
 from .similarity import ClaimVerdict
+from .static_scan import scan_stored_version
 from .storage import StorageError
 from .web import _base_path_context, tile_hue
 
@@ -718,6 +719,7 @@ def create_publisher_router() -> APIRouter:
                         artifacts=artifacts,
                         acknowledge_secret_findings=acknowledge,
                         inspected_native_backend=inspected_native_backend,
+                        rescan=lambda row: scan_stored_version(state.storage, row),
                     )
                 else:
                     review.reject(
