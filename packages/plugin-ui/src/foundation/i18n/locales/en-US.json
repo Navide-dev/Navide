@@ -11103,6 +11103,12 @@
     "window": "Records of the last 7 days, kept on this device.",
     "totals": "{calls} calls, {denied} refused, {errors} errors",
     "unknownSize": "unknown",
+    "marker": {
+      "denied": "path or command not kept: the call was refused",
+      "failed": "path or command not kept: the call failed",
+      "missing": "path not kept: nothing usable was there",
+      "unknown": "not a Navide capability"
+    },
     "empty": "Nothing recorded.",
     "live": {
       "heading": "Now (live)",

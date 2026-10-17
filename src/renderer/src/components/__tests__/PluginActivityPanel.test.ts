@@ -73,6 +73,55 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(panel.html()).not.toMatch(/href=/)
   })
 
+  // #397: a refused or failed call keeps no path, and an unknown capability no
+  // name; what is shown says so and is styled apart from a real path.
+  it('shows the fixed values in words, apart from real paths and commands', async () => {
+    const report = {
+      ...fixture,
+      files: [
+        { path: '<denied>', address: 'fs.readFile', workspace: '/w', outcome: 'denied', count: 7, lastAt: 1 },
+        { path: '<failed>', address: 'fs.readFile', workspace: '/w', outcome: 'error', count: 3, lastAt: 1 },
+        { path: 'src/a.py', address: 'fs.readFile', workspace: '/w', outcome: 'allowed', count: 1, lastAt: 1 },
+      ],
+      commands: [{ command: '<denied>', workspace: '/w', outcome: 'denied', count: 2, lastAt: 1 }],
+      undeclared: [{ source: 'broker', address: '<unknown>', workspace: '/w', count: 4, lastAt: 1, reasons: [{ reason: 'undeclared', count: 4 }] }],
+    }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const panel = await render()
+    const files = panel.findAll('.nv-activity-files li')
+    expect(files[0].text()).toContain('path or command not kept: the call was refused')
+    expect(files[1].text()).toContain('path or command not kept: the call failed')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([true, true, false])
+    expect(files[2].text()).toContain('src/a.py')
+    expect(panel.get('.nv-activity-commands li').classes()).toContain('nv-activity-marker')
+    expect(panel.text()).toContain('not a Navide capability')
+    expect(panel.text()).not.toContain('<denied>')
+  })
+
+  // Review of #397 (MED-1): a fixed value counts only with the outcome it is
+  // recorded for; an allowed path spelled like one is the plugin's own text.
+  it('shows an allowed path spelled like a fixed value as a plain path', async () => {
+    const file = (path: string, outcome = 'allowed') =>
+      ({ path, address: 'fs.stat', workspace: '/w', outcome, count: 1, lastAt: 1 })
+    const report = {
+      ...fixture,
+      files: [
+        file('<denied>'), file('<failed>'), file('<unknown>'), file('./<missing>'), file('./<denied>'),
+        file('<missing>'), file('<missing>', 'denied'),
+      ],
+      commands: [{ command: '<failed>', workspace: '/w', outcome: 'allowed', count: 1, lastAt: 1 }],
+    }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const panel = await render()
+    const files = panel.findAll('.nv-activity-files li')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([false, false, false, false, false, true, false])
+    expect(files[0].text()).toContain('<denied>')
+    expect(files[0].text()).not.toContain('the call was refused')
+    expect(files[3].text()).toContain('./<missing>')
+    expect(files[5].text()).toContain('path not kept: nothing usable was there')
+    expect(panel.get('.nv-activity-commands li').classes()).not.toContain('nv-activity-marker')
+  })
+
   it('marks undeclared uses in red with their reasons, and anomalies as marks only', async () => {
     mockPlugins()
     const panel = await render()
@@ -143,6 +192,22 @@ describe('PluginActivityPanel (D-f)', () => {
     i18n.global.locale.value = locale
     mockPlugins({ backendResourceUsage: vi.fn().mockResolvedValue(usage(100)) })
     expect((await render()).text()).not.toMatch(/pluginActivity\./)
+  })
+
+  // #397 merged with #396: a fixed value is words only with its outcome; any
+  // other text, a marker spelling with an invisible character included, is
+  // the plugin's and shows its invisible characters.
+  it('words a fixed value only with its outcome and spells out invisible characters in anything else', async () => {
+    const ZW = '\u200b'
+    const file = (path: string, outcome: string) => ({ path, address: 'fs.stat', workspace: '/w', outcome, count: 1, lastAt: 1 })
+    const report = { ...fixture, files: [file('<denied>', 'denied'), file(`<denied>${ZW}`, 'denied'), file('<denied>', 'allowed')] }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const files = (await render()).findAll('.nv-activity-files li')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([true, false, false])
+    expect(files[0].text()).toContain('path or command not kept: the call was refused')
+    expect(files[1].text()).not.toContain(ZW)
+    expect(files[1].text()).toContain('<denied>')
+    expect(files[2].text()).toContain('<denied>')
   })
 
   // Final review part 2 MED-1: text from the plugin shows its invisible characters.

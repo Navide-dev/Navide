@@ -57,7 +57,8 @@ def _row(**overrides: Any) -> dict[str, Any]:
 def _stored(audit: PluginAuditLog) -> list[dict[str, Any]]:
     audit.flush()
     with audit.db.transaction() as cur:
-        return [dict(r) for r in cur.execute("SELECT * FROM plugin_activity ORDER BY id")]
+        # Broker and shell calls are counted per key and minute.
+        return [dict(r) for r in cur.execute("SELECT * FROM plugin_activity_counts ORDER BY rowid")]
 
 
 def test_the_wire_names_are_the_contracts() -> None:
@@ -82,7 +83,8 @@ async def test_the_host_records_a_batch_redacted(audit: PluginAuditLog) -> None:
     await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": rows})
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
     stored = _stored(audit)
-    assert [r["fs_path"] for r in stored] == ["src/a.py", "", "<outside-workspace>"]
+    # A refused call keeps no path: the plugin wrote it (final review part 2, H1).
+    assert [r["fs_path"] for r in stored] == ["src/a.py", "", "<denied>"]
     assert stored[1]["shell_command"] == "git push"
     assert stored[2]["denied_reason"] == "undeclared"
 
@@ -105,7 +107,8 @@ async def test_a_bad_row_is_skipped_and_the_rest_are_kept(audit: PluginAuditLog,
         host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row(), broken, "x", _row()]}
     )
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
-    assert len(_stored(audit)) == 2
+    # The two good rows share a key and minute: one row, counted twice.
+    assert [r["count"] for r in _stored(audit)] == [2]
 
 
 async def test_a_row_missing_a_required_field_is_skipped(audit: PluginAuditLog) -> None:
@@ -294,10 +297,15 @@ async def test_a_row_keeps_the_hosts_time_and_a_future_one_is_clamped_to_now(aud
     ]})
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
     after = int(time.time() * 1000)
-    stored = [r["at"] for r in _stored(audit)]
-    assert stored[0] == before_midnight
-    assert now <= stored[1] <= after  # never later than now
-    assert now <= stored[2] <= after  # no time sent: when it arrived
+    stored = _stored(audit)
+    # Yesterday's last ms stays in yesterday's last minute.
+    assert (stored[0]["last_at"], stored[0]["minute"], stored[0]["count"]) == (
+        before_midnight, before_midnight - before_midnight % 60_000, 1,
+    )
+    # A future time is clamped to now, and a row with no time is dated when it
+    # arrives: both are now, counted together (unless a minute turned between).
+    assert sum(r["count"] for r in stored[1:]) == 2
+    assert all(now <= r["last_at"] <= after for r in stored[1:])  # never later than now
 
 
 @pytest.mark.parametrize("at", ["1792108800000", True, -1, 1.5, None])
