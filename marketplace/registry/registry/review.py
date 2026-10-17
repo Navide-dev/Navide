@@ -234,6 +234,15 @@ def approve(
             )
         ).all()
     ]
+    # Rescan before anything is claimed: a stored package that no longer
+    # matches its digest is refused here, not halfway through signing.
+    scans = {}
+    if rescan is not None:
+        for row in rows:
+            scans[row.id] = rescan(row)
+            report = scans[row.id]
+            if report is not None and report.get("artifactDigest") != row.package_digest:
+                raise ReviewError("stored package does not match its digest; it cannot be approved")
     now = _now()
     # Claim first: only rows this decision moved out of pending get signed.
     _claim(session, rows, APPROVED, reviewed_at=now, reviewed_by=reviewer)
@@ -248,7 +257,7 @@ def approve(
         row.registry_envelope = envelope
         row.registry_signature = signature
         if rescan is not None:
-            row.scan = rescan(row)
+            row.scan = scans[row.id]
         row.disclosure, row.disclosure_envelope, row.disclosure_signature = (
             sign_disclosure(signer, row.manifest or {}, envelope, row.scan)
         )

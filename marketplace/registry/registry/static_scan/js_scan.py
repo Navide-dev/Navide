@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from ..plugin_contract.disclosure_scan_contract import classify_shell_command
 from .js_tokens import Token, iter_tokens
+from .limits import NO_DEADLINE, Deadline
 
 #: Capability namespaces whose addresses the comparison of contract 3.9 uses.
 CAPABILITY_NAMESPACES = frozenset({"aiCli", "fs", "shell", "storage", "ui", "workspace"})
@@ -29,7 +30,10 @@ COMMAND_EXECUTABLES = frozenset({
     "pip", "pip3", "docker", "kubectl", "aws", "gcloud", "az", "osascript", "powershell", "pwsh", "cmd",
     "open", "xdg-open", "rm", "chmod", "sudo",
 })
-_EXECUTABLE_RE = re.compile(r"^[a-z0-9][a-z0-9._+-]{0,39}$")
+#: The contract's command charset (3.8): no dots, pluses or upper case.
+_EXECUTABLE_RE = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
+#: Longer literals are not parsed as commands (shlex is linear but slow).
+MAX_COMMAND_LENGTH = 4096
 _URL_RE = re.compile(r"(?:https?|wss?|ssh|git|ftp)://(?:[^/\s'\"?#@]*@)?([A-Za-z0-9.-]+)")
 _SCP_RE = re.compile(r"\bgit@([A-Za-z0-9.-]+):")
 #: XML namespace names, which are identifiers that look like URLs and are in
@@ -75,6 +79,8 @@ def _static_value(token: Token) -> str | None:
 def parse_command(command: str) -> tuple[str, str | None, str] | None:
     """(executable, subcommand, category) of a literal command string, or None
     when it is not one Host-style invocation (empty, unbalanced quotes)."""
+    if len(command) > MAX_COMMAND_LENGTH:
+        return None
     try:
         words = shlex.split(command, posix=True)
     except ValueError:
@@ -160,8 +166,10 @@ class _Window:
 _SHELL_RUN_LITERAL = re.compile(r"""['"`]shell\.run['"`]""")
 
 
-def scan_script(text: str, *, max_path_length: int) -> ScriptFacts:
-    window = _Window(iter_tokens(text))
+def scan_script(text: str, *, max_path_length: int, deadline: Deadline = NO_DEADLINE) -> ScriptFacts:
+    """Facts of one script. Raises ``ScanTimeout`` or ``TooComplex`` (from
+    the tokenizer) when the file cannot be scanned within the bounds."""
+    window = _Window(iter_tokens(text, deadline))
     at = window.at
     facts = ScriptFacts()
     has_shell_run = _SHELL_RUN_LITERAL.search(text) is not None

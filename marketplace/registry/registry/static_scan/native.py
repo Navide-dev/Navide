@@ -12,11 +12,13 @@ what could be read and never raises.
 
 from __future__ import annotations
 
+import bisect
 import re
 import struct
 from dataclasses import dataclass, field
 
 from .js_scan import CAPABILITY_ADDRESS_RE, command_like, hosts_in
+from .limits import NO_DEADLINE, Deadline
 
 #: Imports worth naming on the card: process creation, networking, dynamic loading.
 NOTABLE_IMPORTS = frozenset({
@@ -53,6 +55,8 @@ class NativeFacts:
     """(executable, subcommand, category) of strings that read as commands."""
     hosts: dict[str, int] = field(default_factory=dict)
     capabilities: set[str] = field(default_factory=set)
+    too_complex: bool = False
+    """A structural ceiling was reached; the report marks the file tooComplex."""
 
     def summary(self, limit: int) -> dict:
         return {
@@ -86,14 +90,29 @@ def _cstring(data: bytes, offset: int, maximum: int = 1024) -> str | None:
         return None
 
 
-def _macho(data: bytes, facts: NativeFacts) -> None:
+#: Structural ceilings (review of #355). Real executables stay far below
+#: them; reaching one marks the file `tooComplex` and stops that loop.
+MAX_LOAD_COMMANDS = 4096
+MAX_SECTIONS = 1024
+MAX_DYNAMIC_ENTRIES = 65536
+MAX_SYMBOLS = 200_000
+MAX_IMPORT_DESCRIPTORS = 1024
+MAX_IMPORT_THUNKS = 200_000
+_ELF64_SECTION_HEADER_SIZE = 64
+
+
+def _macho(data: bytes, facts: NativeFacts, deadline: Deadline) -> None:
     header = _u("<IiiIIII", data, 0)
     if header is None:
         return
     _magic, _cpu, _sub, _filetype, ncmds, _sizeofcmds, _flags = header
+    if ncmds > MAX_LOAD_COMMANDS:
+        facts.too_complex = True
+        ncmds = MAX_LOAD_COMMANDS
     offset = 32
     symtab = None
-    for _ in range(min(ncmds, 4096)):
+    for _ in range(ncmds):
+        deadline.tick()
         command = _u("<II", data, offset)
         if command is None or command[1] < 8:
             return
@@ -114,7 +133,9 @@ def _macho(data: bytes, facts: NativeFacts) -> None:
     if symtab is None:
         return
     symoff, nsyms, stroff, _strsize = symtab
-    for index in range(min(nsyms, 1_000_000)):
+    count = _bounded_count(nsyms, len(data) - symoff, 16, MAX_SYMBOLS, facts)
+    for index in range(count):
+        deadline.tick()
         entry = _u("<IBBHQ", data, symoff + index * 16)
         if entry is None:
             break
@@ -127,15 +148,32 @@ def _macho(data: bytes, facts: NativeFacts) -> None:
                 facts.imports.add(name[1:] if name.startswith("_") else name)
 
 
-def _elf(data: bytes, facts: NativeFacts) -> None:
+def _bounded_count(declared: int, available_bytes: int, entry_size: int, ceiling: int, facts: NativeFacts) -> int:
+    """How many entries to read: what the header declares, what the file can
+    hold, and at most ``ceiling`` (reaching it marks the file too complex)."""
+    count = min(max(declared, 0), max(available_bytes, 0) // entry_size)
+    if count > ceiling:
+        facts.too_complex = True
+        count = ceiling
+    return count
+
+
+def _elf(data: bytes, facts: NativeFacts, deadline: Deadline) -> None:
     endian = "<" if data[5] == 1 else ">"
     header = _u(endian + "HHIQQQIHHHHHH", data, 16)
     if header is None:
         return
     _type, _machine, _version, _entry, _phoff, shoff, _flags, _ehsize, _phentsize, _phnum, shentsize, shnum, _shstrndx = header
+    if shnum == 0:
+        return
+    if shentsize != _ELF64_SECTION_HEADER_SIZE:
+        facts.too_complex = True
+        return
+    shnum = _bounded_count(shnum, len(data) - shoff, _ELF64_SECTION_HEADER_SIZE, MAX_SECTIONS, facts)
     sections = []
-    for index in range(min(shnum, 65535)):
-        section = _u(endian + "IIQQQQIIQQ", data, shoff + index * shentsize)
+    for index in range(shnum):
+        deadline.tick()
+        section = _u(endian + "IIQQQQIIQQ", data, shoff + index * _ELF64_SECTION_HEADER_SIZE)
         if section is None:
             break
         sections.append(section)
@@ -143,8 +181,9 @@ def _elf(data: bytes, facts: NativeFacts) -> None:
         _name, sh_type, _flags, _addr, offset, size, link, _info, _align, entsize = section
         if sh_type == 6 and 0 <= link < len(sections):  # SHT_DYNAMIC
             strtab = sections[link][4]
-            for position in range(offset, offset + size, 16):
-                entry = _u(endian + "qQ", data, position)
+            for index in range(_bounded_count(size // 16, len(data) - offset, 16, MAX_DYNAMIC_ENTRIES, facts)):
+                deadline.tick()
+                entry = _u(endian + "qQ", data, offset + index * 16)
                 if entry is None or entry[0] == 0:
                     break
                 if entry[0] == 1:  # DT_NEEDED
@@ -153,8 +192,9 @@ def _elf(data: bytes, facts: NativeFacts) -> None:
                         facts.libraries.add(name)
         elif sh_type == 11 and entsize == 24 and 0 <= link < len(sections):  # SHT_DYNSYM
             strtab = sections[link][4]
-            for position in range(offset + 24, offset + size, 24):
-                symbol = _u(endian + "IBBHQQ", data, position)
+            for index in range(1, _bounded_count(size // 24, len(data) - offset, 24, MAX_SYMBOLS, facts)):
+                deadline.tick()
+                symbol = _u(endian + "IBBHQQ", data, offset + index * 24)
                 if symbol is None:
                     break
                 st_name, _info, _other, shndx, _value, _size = symbol
@@ -166,7 +206,7 @@ def _elf(data: bytes, facts: NativeFacts) -> None:
         facts.packer = "upx"
 
 
-def _pe(data: bytes, facts: NativeFacts, pe_offset: int) -> None:
+def _pe(data: bytes, facts: NativeFacts, pe_offset: int, deadline: Deadline) -> None:
     file_header = _u("<HHIIIHH", data, pe_offset + 4)
     if file_header is None:
         return
@@ -177,25 +217,33 @@ def _pe(data: bytes, facts: NativeFacts, pe_offset: int) -> None:
         return
     import_rva = _u("<II", data, optional + 112 + 8)  # data directory 1: imports
     section_table = optional + optional_size
-    sections = []
+    # (start rva, end rva, raw pointer), sorted for a binary search; the PE
+    # format allows at most 96 sections.
+    ranges: list[tuple[int, int, int]] = []
     for index in range(min(nsections, 96)):
         section = _u("<8sIIIIIIHHI", data, section_table + index * 40)
         if section is None:
             break
-        sections.append(section)
-        if section[0].rstrip(b"\0").startswith(b"UPX"):
+        name, vsize, vaddr, rawsize, rawptr = section[:5]
+        ranges.append((vaddr, vaddr + max(vsize, rawsize), rawptr))
+        if name.rstrip(b"\0").startswith(b"UPX"):
             facts.packer = "upx"
+    ranges.sort()
+    starts = [start for start, _end, _raw in ranges]
 
     def offset_of(rva: int) -> int | None:
-        for name, vsize, vaddr, rawsize, rawptr, *_rest in sections:
-            if vaddr <= rva < vaddr + max(vsize, rawsize):
-                return rawptr + (rva - vaddr)
-        return None
+        position = bisect.bisect_right(starts, rva) - 1
+        if position < 0:
+            return None
+        start, end, raw = ranges[position]
+        return raw + (rva - start) if rva < end else None
 
     if import_rva is None or import_rva[0] == 0:
         return
     descriptor = offset_of(import_rva[0])
-    for _ in range(4096):
+    thunks_left = MAX_IMPORT_THUNKS
+    for _ in range(MAX_IMPORT_DESCRIPTORS):
+        deadline.tick()
         if descriptor is None:
             return
         entry = _u("<IIIII", data, descriptor)
@@ -207,9 +255,12 @@ def _pe(data: bytes, facts: NativeFacts, pe_offset: int) -> None:
         if library:
             facts.libraries.add(library)
         thunk = offset_of(original_thunk or first_thunk)
-        for _index in range(65536):
-            if thunk is None:
-                break
+        while thunk is not None:
+            deadline.tick()
+            if thunks_left == 0:
+                facts.too_complex = True
+                return
+            thunks_left -= 1
             value = _u("<Q", data, thunk)
             if value is None or value[0] == 0:
                 break
@@ -220,24 +271,25 @@ def _pe(data: bytes, facts: NativeFacts, pe_offset: int) -> None:
                     facts.imports.add(name)
             thunk += 8
         descriptor += 20
+    facts.too_complex = True  # more descriptors than MAX_IMPORT_DESCRIPTORS
 
 
-def summarize_executable(path: str, data: bytes) -> NativeFacts:
+def summarize_executable(path: str, data: bytes, deadline: Deadline = NO_DEADLINE) -> NativeFacts:
     if data[:4] == b"\xcf\xfa\xed\xfe":
         cpu = _u("<i", data, 4)
         facts = NativeFacts(path, "mach-o", _MACHO_ARCH.get(cpu[0] & 0xFFFFFFFF if cpu else 0, "unknown"))
-        _macho(data, facts)
+        _macho(data, facts, deadline)
     elif data[:4] == b"\x7fELF" and len(data) > 20 and data[4] == 2:
         machine = _u(("<" if data[5] == 1 else ">") + "H", data, 18)
         facts = NativeFacts(path, "elf", _ELF_ARCH.get(machine[0] if machine else 0, "unknown"))
-        _elf(data, facts)
+        _elf(data, facts, deadline)
     elif data[:2] == b"MZ":
         pe = _u("<I", data, 0x3C)
         pe_offset = pe[0] if pe else 0
         machine = _u("<H", data, pe_offset + 4) if data[pe_offset:pe_offset + 4] == b"PE\0\0" else None
         facts = NativeFacts(path, "pe", _PE_ARCH.get(machine[0] if machine else 0, "unknown"))
         if machine is not None:
-            _pe(data, facts, pe_offset)
+            _pe(data, facts, pe_offset, deadline)
     else:
         facts = NativeFacts(path, "unknown", "unknown")
     for runtime, markers in EMBEDDED_RUNTIME_MARKERS:
@@ -247,6 +299,7 @@ def summarize_executable(path: str, data: bytes) -> NativeFacts:
     # Strings are classified as they are found and never kept.
     for pattern, encoding in ((_ASCII_STRINGS, "ascii"), (_UTF16_STRINGS, "utf-16-le")):
         for match in pattern.finditer(data):
+            deadline.tick()
             _classify(match.group().decode(encoding), facts)
     return facts
 

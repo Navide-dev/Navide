@@ -11,6 +11,7 @@ commands, hosts and capability addresses are reported with
 
 from __future__ import annotations
 
+import logging
 import time
 import zipfile
 from collections.abc import Callable
@@ -27,6 +28,7 @@ from ..plugin_contract.disclosure_scan_contract import (
 from ..secret_scan import RULES as SECRET_RULES
 from ..package import backend_entry_for_target
 from .js_scan import ScriptFacts, scan_script
+from .limits import Deadline, ScanTimeout, TooComplex
 from .native import NativeFacts, summarize_executable
 
 SCANNER_VERSION = "1.0.0"
@@ -35,6 +37,30 @@ SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs")
 
 def _timestamp(value: datetime) -> str:
     return value.astimezone(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+_log = logging.getLogger(__name__)
+
+
+def failed_report(*, artifact_digest: str, target: str, now: datetime | None = None) -> ScanReport:
+    """The report of a scan that failed as a whole (M1): it exists, says
+    nothing was found, and is incomplete (``scannerError``), so the card
+    never shows such a version as unscanned or as fully scanned."""
+    return {  # type: ignore[return-value]
+        "schemaVersion": SCAN_SCHEMA_VERSION,
+        "scanner": {"id": SCANNER_ID, "version": SCANNER_VERSION},
+        "artifactDigest": artifact_digest,
+        "target": target,
+        "scannedAt": _timestamp(now or datetime.now(timezone.utc)),
+        "coverage": {"filesTotal": 0, "filesScanned": 0, "bytesScanned": 0,
+                     "skipped": [{"reason": "scannerError", "count": 1}], "truncated": False, "timedOut": False},
+        "shell": {"calls": [], "dynamic": {"count": 0, "files": 0}},
+        "network": {"hosts": []},
+        "files": {"readPaths": [], "writePaths": [], "dynamicPaths": 0},
+        "capabilities": [],
+        "code": {"frontend": None, "backend": None},
+        "native": [],
+    }
 
 
 def _redacted(value: str) -> bool:
@@ -57,6 +83,8 @@ def scan_package(
     backend_path = backend_entry_for_target(backend["entry"], target) if backend else None
     started = clock()
     budget = SCAN_LIMITS["timeBudgetMs"] / 1000
+    # Polled inside every scanning loop, not only between files (H1).
+    deadline = Deadline(started + budget, clock)
     limit = SCAN_LIMITS["maxItemsPerKind"]
     skipped: dict[str, int] = {}
     truncated = False
@@ -91,7 +119,17 @@ def scan_package(
                 if len(binary) > SCAN_LIMITS["maxNativeBytes"]:
                     binary = binary[:SCAN_LIMITS["maxNativeBytes"]]
                     truncated = True
-                native = summarize_executable(info.filename, binary)
+                try:
+                    native = summarize_executable(info.filename, binary, deadline)
+                except ScanTimeout:
+                    timed_out = True
+                    continue
+                except Exception:  # noqa: BLE001 - M1: one file's failure never drops the report
+                    _log.exception("native scan failed for %s", info.filename)
+                    skip("scannerError")
+                    continue
+                if native.too_complex:
+                    skip("tooComplex")
                 natives.append(native)
                 files_scanned += 1
                 bytes_scanned += len(binary)
@@ -114,7 +152,22 @@ def scan_package(
             if len(content) > SCAN_LIMITS["maxScriptBytes"]:
                 content = content[:SCAN_LIMITS["maxScriptBytes"]]
                 truncated = True
-            facts = scan_script(content.decode("utf-8", "replace"), max_path_length=SCAN_LIMITS["maxPathLength"])
+            try:
+                facts = scan_script(
+                    content.decode("utf-8", "replace"),
+                    max_path_length=SCAN_LIMITS["maxPathLength"],
+                    deadline=deadline,
+                )
+            except ScanTimeout:
+                timed_out = True
+                continue
+            except TooComplex:
+                skip("tooComplex")
+                continue
+            except Exception:  # noqa: BLE001 - M1: one file's failure never drops the report
+                _log.exception("script scan failed for %s", info.filename)
+                skip("scannerError")
+                continue
             any_script = True
             files_scanned += 1
             bytes_scanned += len(content)
