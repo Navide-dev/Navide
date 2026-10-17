@@ -368,6 +368,8 @@ def _summary(
             if latest_row is not None
             else None
         ),
+        disclosure=latest_row.disclosure if latest_row is not None else None,
+        scan=latest_row.scan if latest_row is not None else None,
     )
 
 

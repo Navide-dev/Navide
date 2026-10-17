@@ -43,9 +43,15 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
-import { canonicalContractJson, computeDisclosure, type DisclosureAgentTool } from '../../shared/pluginDisclosure'
-import { revealInvisibleText } from '../../shared/pluginAgentTools'
+import { revealInvisibleText, validateAgentTools } from '../../shared/pluginAgentTools'
+import {
+  canonicalContractJson,
+  computeDisclosure,
+  type DisclosureAgentTool,
+  type DisclosureManifestInput,
+} from '../../shared/pluginDisclosure'
 import type { JsonValue } from './pluginBackendSupervisor'
+import type { SupportedLocale } from '../hostLocale'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -59,10 +65,13 @@ import type { JsonValue } from './pluginBackendSupervisor'
  * Host only through a filesystem bridge limited to its bound workspace and,
  * when it declares `shell: "allowlist"`, the Host shell broker (DB5). The
  * backend never executes anything itself: the broker runs git/gh/glab under the
- * same rules as a view's shell.run. MCP agents never reach third-party methods
- * (no `agentMethods`). Declared agent tools are part of what the user consents
- * to (backendPermissionsKey) and are listed in the consent dialog; serving
- * them is not wired here.
+ * same rules as a view's shell.run. Declared agent tools are part of what the
+ * user consents to (backendPermissionsKey) and are listed in the consent
+ * dialog. MCP agents reach a third-party method only through a consented agent
+ * tool, and only while the "let agents call tools from third-party Navide
+ * plugins" switch is on: `agentMethods` stays empty here and agent-tool
+ * bindings get their methods from the Host's agent-tool catalog
+ * (pluginAgentToolsHost.ts).
  */
 
 export type ThirdPartyBackendInfo = NonNullable<BackendPluginLaunchSpec['thirdParty']>
@@ -80,6 +89,26 @@ export function readInstalledManifestV2(packageDir: string): PluginManifestV2 {
   return manifest
 }
 
+/**
+ * The agent tools a manifest declares, with their disclosure `permissions`,
+ * or null when it declares none. `backend.agentTools` is read defensively
+ * from the parsed manifest: a package whose declaration fails any contract
+ * rule (validateAgentTools) contributes no tools at all.
+ */
+export function declaredAgentTools(manifest: PluginManifestV2): Pick<ThirdPartyBackendInfo, 'agentTools' | 'permissions'> | null {
+  const declared = (manifest.backend as { agentTools?: unknown } | undefined)?.agentTools
+  if (declared === undefined) return null
+  const errors = validateAgentTools({ id: manifest.id, backend: manifest.backend })
+  if (errors.length > 0 || !Array.isArray(declared) || declared.length === 0) {
+    if (errors.length > 0) {
+      console.warn(`[plugin-backend] ${manifest.id} declares invalid agent tools: ${errors.map((error) => error.code).join(', ')}`)
+    }
+    return null
+  }
+  const disclosure = computeDisclosure(manifest as unknown as DisclosureManifestInput)
+  return { agentTools: disclosure.agentTools, permissions: disclosure.permissions }
+}
+
 /** Project one installed package's backend into a sandboxed launch spec. The
  * method/event allowlists come from the manifest; the bridge ports are the
  * workspace filesystem when the package declares `fs`, and the Host shell
@@ -92,7 +121,7 @@ export function thirdPartyBackendLaunchSpec(
   if (!activation.backend || !manifest.backend || manifest.id !== activation.pluginId) return null
   if (!manifest.backend.methods?.length) return null
   const system = [...(manifest.permissions.system ?? [])]
-  const agentTools = computeDisclosure(manifest).agentTools
+  const agentTools = declaredAgentTools(manifest)
   return {
     pluginId: activation.pluginId,
     packageVersion: activation.packageVersion,
@@ -111,9 +140,23 @@ export function thirdPartyBackendLaunchSpec(
       name: manifest.name,
       system,
       ...(manifest.permissions.shell ? { shell: manifest.permissions.shell } : {}),
-      ...(agentTools.length > 0 ? { agentTools } : {}),
+      ...(agentTools ?? {}),
     },
   }
+}
+
+/**
+ * The methods an MCP agent may reach on one third-party backend: the methods
+ * of its declared agent tools, and only while the master switch is on and the
+ * user's consent matches this exact package. Anything else yields `[]`, which
+ * is what every third-party backend has on main.
+ */
+export function consentedAgentMethods(
+  spec: ThirdPartyLaunchSpec,
+  gates: { masterSwitch: boolean; consentMatches: boolean },
+): string[] {
+  if (!gates.masterSwitch || !gates.consentMatches) return []
+  return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
 }
 
 /** SHA-256 of the canonical spelling of the disclosure's `agentTools` array.
@@ -302,22 +345,127 @@ export interface NativeBackendConsentPrompt {
   update: boolean
 }
 
+interface NativeBackendConsentStrings {
+  title: string
+  messageNew: (name: string) => string
+  messageUpdate: (name: string, version: string) => string
+  sandbox: string
+  sandboxWithShell: string
+  readFiles: string
+  readFilesSeparateWrite: string
+  noFiles: string
+  shell: string
+  methods: (list: string) => string
+  noMethods: string
+  disable: string
+  notNow: string
+  allow: string
+  separator: string
+  agentToolsIntro: (count: number, name: string, bytes: number) => string
+  agentTool: (tool: string, method: string, write: boolean, seconds: number, description: string) => string
+  agentToolSchema: string
+  agentToolsOutro: string
+}
+
+/** Plan B D-g: the dialog in the user's language (main has no i18n of its
+ * own; see menuStrings.ts), now also listing the methods the backend serves.
+ * The en-US wording is unchanged except the Settings page name. */
+const NATIVE_BACKEND_CONSENT_STRINGS: Record<SupportedLocale, NativeBackendConsentStrings> = {
+  'en-US': {
+    title: 'Native code',
+    messageNew: (name) => `${name} contains native code that runs on your computer. Allow it to run?`,
+    messageUpdate: (name, version) => `${name} ${version} changed its native code or permissions. Allow it to run?`,
+    sandbox: 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.',
+    sandboxWithShell: 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.',
+    readFiles: 'It asks to read files in the workspace you open it in.',
+    readFilesSeparateWrite: 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.',
+    noFiles: 'It asks for no access to your files.',
+    shell: 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
+      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
+      + 'this workspace to them, and it can change the repository. '
+      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
+      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).',
+    methods: (list) => `Methods it serves: ${list}.`,
+    noMethods: 'It declares no methods.',
+    disable: 'You can disable it at any time in Settings → Navide Plugins.',
+    agentToolsIntro: (count, name, bytes) =>
+      `Agents will be able to call these ${count} tools of ${name} (their text and input schemas total ${bytes} bytes):`,
+    agentTool: (tool, method, write, seconds, description) =>
+      `• ${tool} → ${method} (declared ${write ? 'as changing data' : 'read-only'}, times out after ${seconds} s): ${description}`,
+    agentToolSchema: 'Input schema: ',
+    agentToolsOutro: 'What these tools return is shown to the agent, which may pass it on elsewhere.',
+    notNow: 'Not now',
+    allow: 'Allow',
+    separator: ', ',
+  },
+  'zh-TW': {
+    title: '原生程式',
+    messageNew: (name) => `${name} 含有會在你電腦上執行的原生程式。要允許它執行嗎？`,
+    messageUpdate: (name, version) => `${name} ${version} 的原生程式或權限有變更。要允許它執行嗎？`,
+    sandbox: 'Navide 會在沙盒裡執行它：它不能連網，也不能讀取你的家目錄。',
+    sandboxWithShell: 'Navide 會在沙盒裡執行它：它自己不能建立網路連線，也不能讀取你的家目錄。',
+    readFiles: '它要求讀取你開啟它的工作區裡的檔案。',
+    readFilesSeparateWrite: '它要求讀取你開啟它的工作區裡的檔案。修改檔案需要你另外允許。',
+    noFiles: '它沒有要求存取你的檔案。',
+    shell: '高風險：它也要求透過 Navide 的指令仲介，在這個工作區執行 git、gh、glab 指令。'
+      + '透過這些指令，它可以連到網路主機（例如 git push 或 fetch 到任何網址，或 gh api），把這個工作區的資料送過去，也可以修改儲存庫。'
+      + '透過 git，它不需要另外的修改檔案權限，就能讀取、修改這個工作區裡受版本控制的檔案，並刪除未受版本控制的檔案。'
+      + '你停用它或撤銷權限時，已經開始執行的指令會執行完畢（最多約 30 秒）。',
+    methods: (list) => `它提供的方法：${list}。`,
+    noMethods: '它沒有宣告任何方法。',
+    disable: '你隨時可以在「設定 → Navide 外掛」停用它。',
+    agentToolsIntro: (count, name, bytes) =>
+      `agent 將可以呼叫 ${name} 的這 ${count} 個工具（文字和輸入結構描述共 ${bytes} 位元組）：`,
+    agentTool: (tool, method, write, seconds, description) =>
+      `• ${tool} → ${method}（外掛宣告為${write ? '寫入' : '唯讀'}，${seconds} 秒後逾時）：${description}`,
+    agentToolSchema: '輸入結構描述：',
+    agentToolsOutro: '這些工具回傳的內容會交給 agent，agent 可能再把它傳到別處。',
+    notNow: '暫不',
+    allow: '允許',
+    separator: '、',
+  },
+  'ja-JP': {
+    title: 'ネイティブコード',
+    messageNew: (name) => `${name} にはこのコンピューターで実行されるネイティブコードが含まれています。実行を許可しますか？`,
+    messageUpdate: (name, version) => `${name} ${version} のネイティブコードまたは権限が変更されました。実行を許可しますか？`,
+    sandbox: 'Navide はこれをサンドボックスで実行します。ネットワークには接続できず、ホームフォルダも読み取れません。',
+    sandboxWithShell: 'Navide はこれをサンドボックスで実行します。自分ではネットワーク接続を開けず、ホームフォルダも読み取れません。',
+    readFiles: '開いたワークスペース内のファイルの読み取りを求めています。',
+    readFilesSeparateWrite: '開いたワークスペース内のファイルの読み取りを求めています。ファイルの変更には別途あなたの許可が必要です。',
+    noFiles: 'ファイルへのアクセスは求めていません。',
+    shell: '高リスク：Navide のコマンド仲介を通じて、このワークスペースで git・gh・glab コマンドを実行することも求めています。'
+      + 'これらを通じてネットワーク上のホストに接続し（例：任意の URL への git push や fetch、gh api）、このワークスペースのデータを送ったり、リポジトリを変更したりできます。'
+      + 'git を通じて、別途のファイル変更の許可なしに、このワークスペースで追跡されているファイルを読み取り・変更し、追跡されていないファイルを削除できます。'
+      + '無効化や権限の取り消しの時点ですでに開始したコマンドは、最後まで実行されます（最大約 30 秒）。',
+    methods: (list) => `提供するメソッド：${list}。`,
+    noMethods: 'メソッドを宣言していません。',
+    disable: '「設定 → Navide プラグイン」でいつでも無効にできます。',
+    agentToolsIntro: (count, name, bytes) =>
+      `agent は ${name} のこれら ${count} 個のツールを呼び出せるようになります（テキストと入力スキーマの合計 ${bytes} バイト）：`,
+    agentTool: (tool, method, write, seconds, description) =>
+      `• ${tool} → ${method}（プラグインの宣言：${write ? '書き込み' : '読み取り専用'}、${seconds} 秒でタイムアウト）：${description}`,
+    agentToolSchema: '入力スキーマ：',
+    agentToolsOutro: 'これらのツールが返す内容は agent に渡され、agent がそれを別の場所に渡すことがあります。',
+    notNow: '今はしない',
+    allow: '許可',
+    separator: '、',
+  },
+}
+
 /** The declared agent tools, each with the method it calls, its full
  * description, the plugin's own read/write claim, its timeout and its whole
  * input schema: allowing the backend also allows agents to call these. */
-function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string {
+function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt, s: NativeBackendConsentStrings): string {
   if (prompt.agentTools.length === 0) return ''
   return [
-    `Agents will be able to call these ${prompt.agentTools.length} tools of ${prompt.name} ` +
-      `(their text and input schemas total ${Buffer.byteLength(JSON.stringify(prompt.agentTools))} bytes):`,
+    s.agentToolsIntro(prompt.agentTools.length, prompt.name, Buffer.byteLength(JSON.stringify(prompt.agentTools))),
     ...prompt.agentTools.map((tool) => [
-      `• ${tool.name} → ${tool.method} (declared ${tool.risk === 'write' ? 'as changing data' : 'read-only'}, ` +
-        `times out after ${tool.timeoutMs / 1000} s): ${tool.description}`,
+      s.agentTool(tool.name, tool.method, tool.risk === 'write', tool.timeoutMs / 1000, tool.description),
       // Keys and enum values may hold invisible characters (never refused):
       // spelled out so they cannot reorder or hide the dialog's text.
-      `  Input schema: ${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
+      `  ${s.agentToolSchema}${revealInvisibleText(JSON.stringify(tool.inputSchema))}`,
     ].join('\n')),
-    'What these tools return is shown to the agent, which may pass it on elsewhere.',
+    s.agentToolsOutro,
   ].join('\n')
 }
 
@@ -325,36 +473,34 @@ function nativeBackendAgentToolsText(prompt: NativeBackendConsentPrompt): string
  * reaches the network through git/gh/glab (push, fetch, `gh api`), so the
  * "no network access" sentence is only true without shell: saying it there
  * would deceive the user (anti-deception, not a restriction). */
-export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { message: string; detail: string } {
+export function nativeBackendConsentText(
+  prompt: NativeBackendConsentPrompt,
+  locale: SupportedLocale = 'en-US'
+): { title: string; message: string; detail: string; buttons: [string, string] } {
+  const s = NATIVE_BACKEND_CONSENT_STRINGS[locale] ?? NATIVE_BACKEND_CONSENT_STRINGS['en-US']
   // With shell, git reads and changes workspace files without the separate
   // file-change grant, so neither "no access" nor "separate permission" holds.
   const access = prompt.shell
-    ? prompt.system.includes('fs') ? 'It asks to read files in the workspace you open it in.' : ''
+    ? prompt.system.includes('fs') ? s.readFiles : ''
     : prompt.system.includes('fs')
-      ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
-      : 'It asks for no access to your files.'
-  const sandbox = prompt.shell
-    ? 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.'
-    : 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.'
+      ? s.readFilesSeparateWrite
+      : s.noFiles
+  const sandbox = prompt.shell ? s.sandboxWithShell : s.sandbox
   // DB5: shell is allowed for a backend and disclosed as high risk.
-  const shell = prompt.shell
-    ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
-      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
-      + 'this workspace to them, and it can change the repository. '
-      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
-      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).'
-    : ''
+  const shell = prompt.shell ? s.shell : ''
+  const methods = [...prompt.methods].sort()
   return {
-    message: prompt.update
-      ? `${prompt.name} ${prompt.packageVersion} changed its native code or permissions. Allow it to run?`
-      : `${prompt.name} contains native code that runs on your computer. Allow it to run?`,
+    title: s.title,
+    message: prompt.update ? s.messageUpdate(prompt.name, prompt.packageVersion) : s.messageNew(prompt.name),
     detail: [
       sandbox,
       access,
       shell,
-      nativeBackendAgentToolsText(prompt),
-      'You can disable it at any time in Settings → Extensions.',
+      methods.length ? s.methods(methods.join(s.separator)) : s.noMethods,
+      nativeBackendAgentToolsText(prompt, s),
+      s.disable,
     ].filter(Boolean).join('\n\n'),
+    buttons: [s.notNow, s.allow],
   }
 }
 
@@ -362,6 +508,15 @@ export interface NativeBackendWritePrompt {
   pluginId: string
   name: string
   workspacePath: string
+}
+
+/** DB3: an agent called a write-risk tool of this package in this workspace. */
+export interface AgentToolWritePrompt {
+  pluginId: string
+  name: string
+  packageVersion: string
+  workspacePath: string
+  tool: { name: string; title: string }
 }
 
 export interface ThirdPartyAdmission {
@@ -395,6 +550,13 @@ export interface ThirdPartyBackendControllerOptions {
     dataDir: string,
     onViolation: (violation: ResourceViolation) => void,
   ) => BackendResourceWatch
+  /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
+  onConsentGranted?: (pluginId: string) => void
+  /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
+  promptAgentToolWrite?: (prompt: AgentToolWritePrompt) => Promise<boolean>
+  /** The agent-tool call an agent initiator id belongs to, while it runs; the
+   * bridge lets an agent write only inside a call made through a write tool. */
+  agentToolCall?: (initiatorId: string) => { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
   /** Digest the consent binds to (default: packageContentDigest). */
   digestBackend?: (spec: ThirdPartyLaunchSpec) => Promise<string>
   /** Kill what is left of one sandbox after its child exits (default: killSandboxProcessesSync). */
@@ -438,6 +600,42 @@ function isAllowlistedShellCommand(command: string): boolean {
   if (SHELL_SYNTAX.test(command)) return false
   const executable = command.trim().split(/\s+/u)[0] ?? ''
   return HOST_SHELL_EXECUTABLE_ALLOWLIST.includes(executable)
+}
+
+/** Read-only VCS commands an agent call made through a `read` tool may run
+ * (plan B1-b, risk enforcement). Deliberately small and fail-closed: one
+ * simple command, the subcommand right after the executable (no global
+ * options), and no option that writes a file. Anything else needs a
+ * write-risk tool and the user's DB3 answer. */
+const READ_ONLY_VCS_SUBCOMMANDS: Readonly<Record<string, Readonly<Record<string, readonly string[] | null>>>> = {
+  // null: any arguments (still subject to the forbidden options below).
+  git: {
+    status: null, log: null, diff: null, show: null, 'rev-parse': null, 'ls-files': null, 'merge-base': null,
+    describe: null, blame: null,
+    branch: ['--list', '-a', '--all', '-r', '--remotes', '-v', '-vv', '--show-current', '--no-color'],
+    remote: ['-v', '--verbose', 'get-url'],
+  },
+  gh: { pr: ['view', 'list', 'status', 'checks', 'diff'], issue: ['view', 'list', 'status'], repo: ['view'], run: ['view', 'list'] },
+  glab: { mr: ['view', 'list', 'diff'], issue: ['view', 'list'], repo: ['view'] },
+}
+
+export function isReadOnlyVcsCommand(command: string): boolean {
+  if (SHELL_SYNTAX.test(command) || /[$()]/u.test(command)) return false
+  const tokens = command.trim().split(/\s+/u)
+  const rules = READ_ONLY_VCS_SUBCOMMANDS[tokens[0] ?? '']
+  const allowed = rules?.[tokens[1] ?? '']
+  if (!rules || allowed === undefined) return false
+  if (tokens.some((token) => /^--(output|ext-diff|exec|upload-pack|receive-pack)/u.test(token) || /^-[A-Za-z]*o$/u.test(token))) {
+    return false
+  }
+  if (allowed === null) return true
+  if (tokens[0] === 'git') {
+    // branch/remote: listing flags only, and `remote get-url <name>`.
+    if (tokens[1] === 'remote' && tokens[2] === 'get-url') return tokens.length === 4
+    return tokens.slice(2).every((token) => allowed.includes(token))
+  }
+  // gh/glab: the sub-subcommand must be a read verb.
+  return tokens.length >= 3 && allowed.includes(tokens[2])
 }
 
 const PACKAGE_FS_READ_OPERATIONS = new Set(['read_file', 'read_range', 'list_dir', 'stat_path'])
@@ -522,6 +720,62 @@ export class ThirdPartyBackendController {
   private consentMatches(spec: ThirdPartyLaunchSpec, digest: string): boolean {
     const consent = this.store.record(spec.pluginId).consent
     return consent?.binarySha256 === digest && consent.permissionsKey === backendPermissionsKey(spec)
+  }
+
+  /** True when the user's consent covers this exact package content and
+   * permission set (never prompts). Unreadable content reads as "no". */
+  async hasConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    try {
+      return this.consentMatches(spec, await this.digestBackend(spec))
+    } catch {
+      return false
+    }
+  }
+
+  /** True when the consent covers this exact package and its current tool set
+   * (B1-a binds the tools' digest into the permissions key) and the DB1 time
+   * is recorded: like the listing, a package without it holds no names. */
+  async hasAgentToolsConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    if (!spec.thirdParty.agentTools?.length || !this.agentToolsConsented(spec)) return false
+    if (this.store.record(spec.pluginId).agentToolsSince === undefined) return false
+    return this.hasConsent(spec)
+  }
+
+  /** DB3: ask once per (package, version, consent, workspace) before an agent's
+   * first write-risk tool call there. This is its own record, separate from
+   * the view's "allow file changes" grant, and the dialog says an agent asked.
+   * A "no" is kept for the session. */
+  async confirmAgentToolWrite(
+    spec: ThirdPartyLaunchSpec,
+    workspacePath: string,
+    tool: { name: string; title: string },
+  ): Promise<boolean> {
+    const consent = this.store.record(spec.pluginId).consent
+    if (!consent) return false
+    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)) return true
+    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${consent.grantedAt}\n${workspacePath}`
+    if (this.declinedWrite.has(identity) || !this.options.promptAgentToolWrite) return false
+    let pending = this.pendingPrompts.get(identity)
+    if (!pending) {
+      pending = this.options.promptAgentToolWrite({
+        pluginId: spec.pluginId,
+        name: spec.thirdParty.name,
+        packageVersion: spec.packageVersion,
+        workspacePath,
+        tool: { name: tool.name, title: tool.title },
+      }).catch(() => false)
+      this.pendingPrompts.set(identity, pending)
+      void pending.finally(() => this.pendingPrompts.delete(identity))
+    }
+    if (!(await pending)) {
+      this.declinedWrite.add(identity)
+      return false
+    }
+    const current = this.store.record(spec.pluginId).consent
+    // The consent may have changed while the dialog was open.
+    if (current?.grantedAt !== consent.grantedAt) return false
+    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)
+    return true
   }
 
   /** Decide whether the child may start; asks for consent when `prompt`
@@ -633,6 +887,7 @@ export class ThirdPartyBackendController {
         packageVersion: spec.packageVersion,
       })
       this.noteAgentTools(spec)
+      this.options.onConsentGranted?.(spec.pluginId)
     }
   }
 
@@ -690,7 +945,13 @@ export class ThirdPartyBackendController {
         const root = context.authorizedPlanRoot
         if (!root) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
         if (PACKAGE_FS_WRITE_OPERATIONS.has(request.operation)) {
-          if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
+          if (context.runtime.initiator.kind === 'agent') {
+            // An agent writes only inside a call made through a write-risk
+            // tool, where the user answered the DB3 question; never prompts.
+            if (!this.agentToolWriteAllowed(spec, context.runtime.initiator.id, root)) {
+              throw new PlansBridgeError('CAPABILITY_DENIED')
+            }
+          } else if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
         } else if (!PACKAGE_FS_READ_OPERATIONS.has(request.operation)) {
           throw new PlansBridgeError('METHOD_NOT_FOUND')
         }
@@ -711,6 +972,19 @@ export class ThirdPartyBackendController {
     })
   }
 
+  private agentToolWriteAllowed(spec: ThirdPartyLaunchSpec, initiatorId: string, root: string): boolean {
+    const call = this.options.agentToolCall?.(initiatorId)
+    const consent = this.store.record(spec.pluginId).consent
+    return Boolean(
+      call &&
+      call.pluginId === spec.pluginId &&
+      call.risk === 'write' &&
+      call.workspaceRoot === root &&
+      consent &&
+      this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, root),
+    )
+  }
+
   private async dispatchShell(
     spec: ThirdPartyLaunchSpec,
     request: PlansBridgeRequest,
@@ -728,6 +1002,19 @@ export class ThirdPartyBackendController {
     if (!context.authorizedPlanRoot) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
     if (!isAllowlistedShellCommand(args.command)) {
       throw new PlansBridgeError('CAPABILITY_DENIED', 'shell executable is not Host-allowlisted')
+    }
+    if (context.runtime.initiator.kind === 'agent') {
+      // Agent calls: only inside an admitted agent-tool call; a read tool
+      // runs read-only VCS commands only, anything else needs a write tool
+      // with the user's DB3 answer.
+      const call = this.options.agentToolCall?.(context.runtime.initiator.id)
+      if (!call || call.pluginId !== spec.pluginId || call.workspaceRoot !== context.authorizedPlanRoot) {
+        throw new PlansBridgeError('CAPABILITY_DENIED')
+      }
+      if (
+        !isReadOnlyVcsCommand(args.command) &&
+        !this.agentToolWriteAllowed(spec, context.runtime.initiator.id, context.authorizedPlanRoot)
+      ) throw new PlansBridgeError('CAPABILITY_DENIED', 'a read tool may run only read-only commands')
     }
     const port = this.options.shellPort?.()
     if (!port) throw new PlansBridgeError('BACKEND_UNAVAILABLE')
@@ -864,6 +1151,7 @@ export class ThirdPartyBackendController {
     })
     this.noteAgentTools(spec)
     this.resetFailures(spec.pluginId)
+    this.options.onConsentGranted?.(spec.pluginId)
   }
 
   resetFailures(pluginId: string): void {

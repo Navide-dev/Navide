@@ -242,6 +242,12 @@ refusing a call. The sizes are disclosed instead, one field each:
 | result | the Host, once (`agentToolResultBytes`, 4.2) | `meta.resultBytes` | `plugin_tool_calls.result_bytes` |
 | arguments | the backend, once (`agent_tool_arguments_digest`, 5): UTF-8 bytes of the compact spelling, the same measure as `resultBytes` | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
 
+When the Host sends no valid `meta.resultBytes` (absent, not a non-negative
+integer), the backend never measures the result itself: the size is unknown,
+the agent's result carries no `meta.resultBytes`, the audit `result_bytes` is
+-1, a warning is logged, and the call still succeeds. In the audit, -1 means
+the Host sent no valid size and 0 means the call has no result.
+
 The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
 the error-code list for older readers but is no longer produced.
 
@@ -401,6 +407,13 @@ sentences, its scan risk reasons and the declared-vs-scanned comparison
 ([3.9](#39-declared-vs-scanned)) from it. The `registry.scan` object above is
 the older submission check (secret scan and name similarity) and is unrelated
 to the static scan report.
+
+The list card reads `disclosure` and `scan` from the Registry's listing
+(`GET /api/extensions`), which carries them for `latest_version` (one
+artifact's scan). Like every listing and detail field they are display data
+that nothing has verified; the Host keeps them only when they are well formed
+and the disclosure names that item's package and `latest_version`, and the
+card says they are unverified.
 
 `nativeCodeInspected` is derived, never entered by hand:
 
@@ -773,6 +786,14 @@ The generic proxy tool sends the existing `agent.capability.request` event
 `host` (both with `paneId: null`, `workspace: null`). `external` and `host`
 callers need the DB4 switch.
 
+`caller` may also carry `verifiedTo` (`pane` for a pane caller, `caller-kind`
+for `external` and `host`), the label the core attaches from its credential
+check. It is optional; a value that does not match the caller kind, or any
+other extra key, makes the Host refuse the request. The Host never keeps the
+sent label: it derives its own from `kind` for the initiator it passes on.
+Both sides test against the same wire fixture,
+`docs/plugin-contracts/agent-tools-fixtures/agent-tool-call-requests.json`.
+
 The Host answers through the existing `resolve_agent_capability(request_id,
 result)` path:
 
@@ -811,6 +832,41 @@ the compact `JSON.stringify` spelling of the result value the Host received
 (`null` when the plugin returned nothing), measured once, by the Host. It is
 `0` in the `meta` of an error response that carries no result. The backend
 does not measure again; it forwards the Host's number to the audit row.
+
+Before sending, the core server checks the arguments against the consented
+`inputSchema` in a worker thread, never on its event loop, and the Host checks
+them again. Known limits of the core check, by design (no size or count limit
+replaces them):
+
+- It never runs a plugin-supplied regular expression: `pattern` values and
+  `patternProperties` (with the `additionalProperties` beside it) are left to
+  the plugin backend. A backtracking pattern could otherwise hold a thread for
+  every caller.
+- `uniqueItems` is checked in linear time (items compared by canonical JSON,
+  `1` equal to `1.0`, `true` not equal to `1`); jsonschema's pairwise check is
+  quadratic. The other keywords cost at most the size of the arguments times
+  the size of the schema.
+- Values of `const`, `default`, `enum` and `examples` are data: never checked
+  as schema text, never rewritten for the check (tools/list serves dangerous
+  ones neutralized, below).
+- An invalid-arguments message names the failing keyword and the value's size,
+  never the value, and only property names the schema declares (any other key
+  shows as `*`).
+- A Host `error_code` outside the table above is reported as
+  `PLUGIN_TOOL_FAILED`, its text fenced like a result.
+
+tools/list serves the schema with only dangerous strings rewritten: a string
+that `neutralize_external_text` changes beyond NFKC (control, Cf and tag
+characters, a boundary line, a `---MARKER---` token) or that poses as a source
+label is served neutralized; every other string, property names included, is
+served exactly as declared (NFKC detects, it never rewrites). Before the
+check, arguments are mapped back to the declared values: an `enum` or `const`
+string, or a property name (along `properties`, `additionalProperties` and
+`items`), that is the served spelling of exactly one declared value becomes
+that value, so the plugin receives what it declared; a declared value sent as
+is stays. When two declared values are served as the same text, a call that
+sends it is refused with `PLUGIN_TOOL_INVALID_ARGUMENTS` (an "ambiguous"
+message, logged), never guessed. Values under other keywords are not mapped.
 
 ### 4.3 Backend → Host: `marketplace.query`
 

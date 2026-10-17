@@ -1,6 +1,7 @@
 import type { IpcMainInvokeEvent } from 'electron'
 import { resolve } from 'node:path'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
+import type { AgentToolSwitches } from './pluginNativeBackendStore'
 import type {
   NativeBackendStatusRow,
   ThirdPartyBackendController,
@@ -11,6 +12,17 @@ export interface NativeBackendOverview {
   /** Global "allow third-party native backends" switch (off by default). */
   enabled: boolean
   plugins: NativeBackendStatusRow[]
+  /** Plan B switches: agents may call third-party agent tools (DB8), and so
+   * may external MCP clients (DB4). Both off by default. Absent when unwired. */
+  agentTools?: AgentToolSwitches
+}
+
+/** The agent-tool switches and the catalog refresh behind them. */
+export interface NativeBackendAgentToolsControls {
+  switches: () => AgentToolSwitches
+  setSwitches: (change: Partial<AgentToolSwitches>) => Promise<unknown>
+  /** A consent, disable or global-switch decision changed. */
+  refresh: () => Promise<unknown>
 }
 
 type Handle = (
@@ -36,6 +48,7 @@ export function registerNativeBackendIpc(
   controller: ThirdPartyBackendController,
   listSpecs: () => ThirdPartyLaunchSpec[],
   isEnabled: () => boolean,
+  agentTools?: NativeBackendAgentToolsControls,
 ): void {
   const assertAuthorized = (event: IpcMainInvokeEvent): void => {
     if (!authorize(event)) throw new Error('unauthorized plugin management sender')
@@ -49,7 +62,11 @@ export function registerNativeBackendIpc(
   const overview = async (): Promise<NativeBackendOverview> => ({
     enabled: isEnabled(),
     plugins: await controller.statuses(listSpecs()),
+    ...(agentTools ? { agentTools: agentTools.switches() } : {}),
   })
+  const changed = async (): Promise<void> => {
+    await agentTools?.refresh().catch(() => undefined)
+  }
 
   handle('plugins:nativeBackends:list', async (event) => {
     assertAuthorized(event)
@@ -59,19 +76,45 @@ export function registerNativeBackendIpc(
     assertAuthorized(event)
     const { enabled } = record(args)
     if (typeof enabled !== 'boolean') throw new Error('invalid native backend setting')
-    await controller.setEnabled(enabled)
+    try {
+      await controller.setEnabled(enabled)
+    } finally {
+      await changed()
+    }
     return overview()
   })
   handle('plugins:nativeBackends:allow', async (event, args) => {
     assertAuthorized(event)
     await controller.allow(specFor(record(args).id))
+    await changed()
     return overview()
   })
   handle('plugins:nativeBackends:setDisabled', async (event, args) => {
     assertAuthorized(event)
     const { id, disabled } = record(args)
     if (typeof disabled !== 'boolean') throw new Error('invalid native backend setting')
-    await controller.setDisabled(specFor(id).pluginId, disabled)
+    try {
+      await controller.setDisabled(specFor(id).pluginId, disabled)
+    } finally {
+      await changed()
+    }
+    return overview()
+  })
+  handle('plugins:nativeBackends:setAgentTools', async (event, args) => {
+    assertAuthorized(event)
+    if (!agentTools) throw new Error('agent tools are unavailable')
+    const { enabled, externalCallers } = record(args)
+    const change: Partial<AgentToolSwitches> = {}
+    if (enabled !== undefined) {
+      if (typeof enabled !== 'boolean') throw new Error('invalid agent tool setting')
+      change.enabled = enabled
+    }
+    if (externalCallers !== undefined) {
+      if (typeof externalCallers !== 'boolean') throw new Error('invalid agent tool setting')
+      change.externalCallers = externalCallers
+    }
+    if (Object.keys(change).length !== 1) throw new Error('invalid agent tool setting')
+    await agentTools.setSwitches(change)
     return overview()
   })
   handle('plugins:nativeBackends:revokeWorkspaceWrite', async (event, args) => {

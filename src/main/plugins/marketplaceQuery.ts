@@ -8,10 +8,12 @@
  * and maps those answers onto the contract shapes. It decides nothing about
  * trust: install still goes through prepareInstall and the user's consent.
  *
- * The detail card is built from the selected version's `disclosure` and
- * `registry` (D-b brings both through `plugins:marketplaceDetail`); a search
- * row has a disclosure only when the Registry sends one under `disclosure`.
- * When either is missing or malformed, risk, summary and card are null:
+ * A card is built from a row's `disclosure` (the manifest disclosure), `scan`
+ * and `registry`, read the same way from a search row and from the selected
+ * detail version row (D-b brings them through `plugins:marketplaceDetail`),
+ * and only when the disclosure names that row's package and version. Its
+ * risk is cardRiskLevel(manifest, scan) (contract 3.3). When the disclosure
+ * is missing or anything is malformed, risk, summary and card are null:
  * nothing here invents one.
  */
 import type {
@@ -34,6 +36,16 @@ import {
   type ManifestDisclosure,
   type RegistryDisclosureFacts,
 } from '../../shared/pluginDisclosure'
+import {
+  cardRiskLevel,
+  SCAN_SCHEMA_VERSION,
+  type CodeSignals,
+  type NativeSummary,
+  type ScanReport,
+  type ScanSource,
+  type ShellCall,
+  type ShellCategory,
+} from '../../shared/pluginDisclosureScan'
 import { compareSemver, isValidManifestV2PluginId } from './pluginManifestV2'
 
 /** A ListingItem whose disclosure may be missing (null) until the Registry provides one. */
@@ -279,14 +291,140 @@ function registryFacts(value: unknown): RegistryDisclosureFacts | null {
   }
 }
 
+const SCAN_SOURCES: readonly ScanSource[] = ['frontend', 'backend']
+const SHELL_CATEGORIES: readonly ShellCategory[] = [
+  'remoteWrite', 'remoteRead', 'localWrite', 'local', 'other', 'unknownSubcommand',
+]
+const isOneOf = <T extends string>(values: readonly T[], value: unknown): value is T =>
+  typeof value === 'string' && (values as readonly string[]).includes(value)
+
+/** Each entry rebuilt by `build`, or null when the value is not an array or any entry is malformed. */
+function entries<T>(value: unknown, build: (entry: Record<string, unknown>) => T | null): T[] | null {
+  if (!Array.isArray(value)) return null
+  const out: T[] = []
+  for (const entry of value) {
+    const built = isRecord(entry) ? build(entry) : null
+    if (built === null) return null
+    out.push(built)
+  }
+  return out
+}
+
+function codeSignals(value: unknown): CodeSignals | null | undefined {
+  if (value === null) return null
+  if (!isRecord(value)) return undefined
+  const obfuscationSignals = strings(value.obfuscationSignals)
+  if (
+    !isSafeCount(value.eval) || !isSafeCount(value.newFunction) || !isSafeCount(value.dynamicImport) ||
+    !isSafeCount(value.stringTimers) || !obfuscationSignals
+  ) return undefined
+  return {
+    eval: value.eval,
+    newFunction: value.newFunction,
+    dynamicImport: value.dynamicImport,
+    stringTimers: value.stringTimers,
+    obfuscationSignals,
+  }
+}
+
+/** The Registry's scan report (contract 3.8) rebuilt from validated fields, or null when malformed. */
+function scanReport(value: unknown): ScanReport | null {
+  if (!isRecord(value) || value.schemaVersion !== SCAN_SCHEMA_VERSION) return null
+  const { scanner, coverage, shell, network, files, code } = value
+  if (
+    !isRecord(scanner) || typeof scanner.id !== 'string' || typeof scanner.version !== 'string' ||
+    typeof value.artifactDigest !== 'string' || typeof value.target !== 'string' ||
+    typeof value.scannedAt !== 'string' || !isRecord(coverage) || !isRecord(shell) ||
+    !isRecord(shell.dynamic) || !isRecord(network) || !isRecord(files) || !isRecord(code)
+  ) return null
+  const skipped = entries(coverage.skipped, (entry) =>
+    typeof entry.reason === 'string' && isSafeCount(entry.count) ? { reason: entry.reason, count: entry.count } : null)
+  const calls = entries(shell.calls, (entry): ShellCall | null =>
+    typeof entry.executable === 'string' && nullableString(entry.subcommand) !== undefined &&
+    isOneOf(SHELL_CATEGORIES, entry.category) && isOneOf(SCAN_SOURCES, entry.source) &&
+    isOneOf(['callSite', 'commandLikeString'] as const, entry.evidence) && isSafeCount(entry.files)
+      ? {
+          executable: entry.executable,
+          subcommand: entry.subcommand as string | null,
+          category: entry.category,
+          source: entry.source,
+          evidence: entry.evidence,
+          files: entry.files,
+        }
+      : null)
+  const hosts = entries(network.hosts, (entry) =>
+    typeof entry.host === 'string' && isOneOf(SCAN_SOURCES, entry.source) && isSafeCount(entry.count)
+      ? { host: entry.host, source: entry.source, count: entry.count }
+      : null)
+  const capabilities = entries(value.capabilities, (entry) =>
+    typeof entry.address === 'string' && isOneOf(SCAN_SOURCES, entry.source)
+      ? { address: entry.address, source: entry.source }
+      : null)
+  const native = entries(value.native, (entry): NativeSummary | null => {
+    const libraries = strings(entry.libraries)
+    const notableImports = strings(entry.notableImports)
+    const packer = nullableString(entry.packer)
+    const embeddedRuntime = nullableString(entry.embeddedRuntime)
+    return typeof entry.path === 'string' && isOneOf(['mach-o', 'elf', 'pe'] as const, entry.format) &&
+      typeof entry.arch === 'string' && libraries && notableImports && isSafeCount(entry.importCount) &&
+      packer !== undefined && embeddedRuntime !== undefined
+      ? { path: entry.path, format: entry.format, arch: entry.arch, libraries, notableImports, importCount: entry.importCount, packer, embeddedRuntime }
+      : null
+  })
+  const readPaths = strings(files.readPaths)
+  const writePaths = strings(files.writePaths)
+  const frontend = codeSignals(code.frontend)
+  const backend = codeSignals(code.backend)
+  if (
+    !isSafeCount(coverage.filesTotal) || !isSafeCount(coverage.filesScanned) || !isSafeCount(coverage.bytesScanned) ||
+    !skipped || typeof coverage.truncated !== 'boolean' || typeof coverage.timedOut !== 'boolean' ||
+    !calls || !isSafeCount(shell.dynamic.count) || !isSafeCount(shell.dynamic.files) || !hosts ||
+    !readPaths || !writePaths || !isSafeCount(files.dynamicPaths) || !capabilities ||
+    frontend === undefined || backend === undefined || !native
+  ) return null
+  return {
+    schemaVersion: SCAN_SCHEMA_VERSION,
+    scanner: { id: scanner.id, version: scanner.version },
+    artifactDigest: value.artifactDigest,
+    target: value.target,
+    scannedAt: value.scannedAt,
+    coverage: {
+      filesTotal: coverage.filesTotal,
+      filesScanned: coverage.filesScanned,
+      bytesScanned: coverage.bytesScanned,
+      skipped,
+      truncated: coverage.truncated,
+      timedOut: coverage.timedOut,
+    },
+    shell: { calls, dynamic: { count: shell.dynamic.count, files: shell.dynamic.files } },
+    network: { hosts },
+    files: { readPaths, writePaths, dynamicPaths: files.dynamicPaths },
+    capabilities,
+    code: { frontend, backend },
+    native,
+  }
+}
+
 /** The Registry's DisclosureCard rebuilt from validated fields, or null when it is absent or malformed. */
 function disclosureCard(value: unknown): DisclosureCard | null {
   if (!isRecord(value)) return null
   const manifest = manifestDisclosure(value.manifest)
   if (!manifest) return null
+  const scan = value.scan === null || value.scan === undefined ? null : scanReport(value.scan)
+  if (scan === null && value.scan !== null && value.scan !== undefined) return null
   const registry = value.registry === null || value.registry === undefined ? null : registryFacts(value.registry)
   if (registry === null && value.registry !== null && value.registry !== undefined) return null
-  return { manifest, registry }
+  return { manifest, scan, registry }
+}
+
+/** A version row's DisclosureCard rebuilt from validated fields: `disclosure`
+ *  (the manifest disclosure), `scan` and `registry`, the same for a search row
+ *  and a detail version row (review L1 on #345). Null when the disclosure is
+ *  absent, anything is malformed, or the disclosure names another package or
+ *  version than the row it came with. */
+export function rowCard(row: Record<string, unknown>, id: string, version: string): DisclosureCard | null {
+  const card = disclosureCard({ manifest: row.disclosure, scan: row.scan, registry: row.registry })
+  return card && card.manifest.plugin.id === id && card.manifest.plugin.version === version ? card : null
 }
 
 function listingItem(
@@ -308,7 +446,8 @@ function listingItem(
     publisher: { name: publisher, verifiedDomain: card?.registry?.publisher.verifiedDomain ?? null },
     signed,
     downloads: typeof raw.download_count === 'number' ? raw.download_count : 0,
-    risk: card ? card.manifest.risk.level : null,
+    // Contract 3.3: every surface shows the level with the scan's reasons.
+    risk: card ? cardRiskLevel(card.manifest, card.scan) : null,
     summary: card ? card.manifest.summary : null,
   }
 }
@@ -376,7 +515,8 @@ export async function answerMarketplaceQuery(
       .map((row) =>
         listingItem(
           row, text(row.latest_version), row.trust_tier === 'signed-verified',
-          text(row.publisher) || text(row.namespace), disclosureCard(row.disclosure),
+          text(row.publisher) || text(row.namespace),
+          rowCard(row, `${text(row.namespace)}.${text(row.name)}`, text(row.latest_version)),
         ))
       .filter((item): item is MarketplaceQueryListingItem => item !== null)
     const next = offset + rows.length
@@ -405,13 +545,12 @@ export async function answerMarketplaceQuery(
       return { ok: false, error: `${id} has no published version ${wanted}`, error_code: 'NOT_FOUND' }
     }
     const signed = published.some((row) => row.version === wanted && row.trust_tier === 'signed-verified')
-    // D-b: each version row carries its manifest disclosure and the Registry
-    // facts. A card that names another package or version is not this one's.
-    const cards = published
+    // D-b: each version row carries its manifest disclosure, scan report and
+    // the Registry facts. A card that names another package or version is not this one's.
+    const card = published
       .filter((row) => row.version === wanted)
-      .map((row) => disclosureCard({ manifest: row.disclosure, registry: row.registry ?? null }))
-    const found = cards.find((entry) => entry !== null) ?? null
-    const card = found && found.manifest.plugin.id === id && found.manifest.plugin.version === wanted ? found : null
+      .map((row) => rowCard(row, id, wanted))
+      .find((entry) => entry !== null) ?? null
     const item = listingItem(detail, wanted, signed, text(detail.publisher) || text(detail.namespace), card)
     if (!item) return { ok: false, error: `${id} is not a valid Navide plugin id`, error_code: 'NOT_FOUND' }
     return { ok: true, result: { kind: 'detail', item, versions, card } }

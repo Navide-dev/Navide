@@ -12,6 +12,12 @@ import type {
   PackageVersionGrantSummary,
 } from '../shared/executionPolicy'
 import type { LegacyPlansPreferenceProjection } from '../shared/plansPreferences'
+import type {
+  DisclosureDiff as PluginDisclosureDiff,
+  ManifestDisclosure as PluginManifestDisclosure,
+  RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
+} from '../shared/pluginDisclosure'
+import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -221,6 +227,11 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Plan B D1 list card: the latest version's manifest disclosure and scan
+   *  report as the Registry listed them, kept by the main process only when
+   *  well formed and naming this item; unverified display data. */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
 }
 
 export interface PackMemberSummary {
@@ -280,6 +291,7 @@ export interface NativeBackendStatusRow {
 export interface NativeBackendOverview {
   enabled: boolean
   plugins: NativeBackendStatusRow[]
+  agentTools?: { enabled: boolean; externalCallers: boolean }
 }
 
 export interface InstalledPackRecord {
@@ -321,6 +333,11 @@ export interface MarketplaceVersionInfo {
   compatible?: boolean | null
   min_navide_version?: string | null
   channel?: 'stable' | 'pre-release'
+  /** Contract 3.4/3.8, as the Registry sent them: display data that nothing
+   *  has verified yet (prepareInstall verifies the signed disclosure). */
+  disclosure?: PluginManifestDisclosure | null
+  scan?: PluginScanReport | null
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 export interface MarketplaceExtensionDetail extends MarketplaceExtension {
@@ -349,6 +366,8 @@ export interface PluginUpdateInfo {
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge, from the Registry's unverified listing. */
+  permissionChange?: 'more' | 'same'
 }
 
 export interface MarketplaceListResponse {
@@ -378,6 +397,16 @@ export interface PreparedInstallSummary {
   publisherId: string
   requiresPublisherTrust: boolean
   requiresRiskConfirmation: boolean
+  /** Plan B D2: what this update changes, computed by the Host from the
+   *  installed and the downloaded manifests; null for a first install. */
+  disclosureDiff?: PluginDisclosureDiff | null
+  /** Verified against the package and the Registry signature; null when the
+   *  version carries no disclosure. */
+  disclosure?: PluginManifestDisclosure | null
+  /** Registry-signed scan report (digest verified); null when none. */
+  scan?: PluginScanReport | null
+  /** Unsigned Registry facts, never verified. */
+  registry?: PluginRegistryDisclosureFacts | null
 }
 
 const pendingEditorOpenFiles: Record<string, string>[] = []
@@ -1187,6 +1216,8 @@ contextBridge.exposeInMainWorld('agentTeam', {
         ipcRenderer.invoke('plugins:nativeBackends:setDisabled', { id, disabled }),
       revokeWorkspaceWrite: (id: string, workspacePath: string): Promise<NativeBackendOverview> =>
         ipcRenderer.invoke('plugins:nativeBackends:revokeWorkspaceWrite', { id, workspacePath }),
+      setAgentTools: (change: { enabled: boolean } | { externalCallers: boolean }): Promise<NativeBackendOverview> =>
+        ipcRenderer.invoke('plugins:nativeBackends:setAgentTools', change),
     },
   },
 })

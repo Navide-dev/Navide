@@ -1713,6 +1713,12 @@
         "title": "Native backends",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. Nothing native runs until you turn the switch below on.",
         "enable": "Allow third-party Navide plugins to run native backends",
+        "agentTools": {
+          "enable": "Let agents call tools from third-party Navide plugins",
+          "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
+          "externalCallers": "Let external MCP clients call them too",
+          "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
+        },
         "empty": "No installed Navide plugin has a native backend.",
         "allow": "Allow",
         "disable": "Disable",
@@ -10347,7 +10353,8 @@
       "local": "Local",
       "relay": "Chat app",
       "remote": "Remote",
-      "agent": "Other agent"
+      "agent": "Other agent",
+      "plugin": "Navide plugin tool"
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
@@ -10999,5 +11006,160 @@
     "unpin-body": "Making a pane follow reopens it on the current login and picks up its conversation. Wait for these to finish, or skip them this time. Idle panes switch now.",
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
+  },
+  "pluginDisclosure": {
+    "diff": {
+      "heading": "What this update changes",
+      "versions": "Installed {from} → update to {to}; only the differences are listed.",
+      "risk": "Risk level: {from} → {to}",
+      "none": "No permission was added or removed.",
+      "added": "New",
+      "removed": "Removed",
+      "unchanged": "Unchanged ({count})",
+      "fullCard": "Full disclosure card",
+      "badgeMore": "More permissions",
+      "badgeSame": "Same permissions",
+      "badgeTitle": "From the Navide Registry's data, not yet verified; before updating, Navide compares again against the downloaded package.",
+      "item": {
+        "system": "Permission: {key}",
+        "shell": "Shell mode: {key}",
+        "shellExecutable": "Can run: {key}",
+        "fsScopeRoot": "File scope: {key}",
+        "fsScopeRead": "Can read: {key}",
+        "fsScopeWrite": "Can write: {key}",
+        "nativeBackend": "Ships native code",
+        "backendMethod": "Native code method: {key}",
+        "backendEvent": "Native code event: {key}",
+        "network": "Can reach remote hosts through commands",
+        "agentTool": "Agent tool: {key}"
+      }
+    },
+    "title": "Disclosure",
+    "riskLabel": "Risk level: {level}",
+    "risk": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "highest": "Highest"
+    },
+    "undeclaredHeading": "Found by the scan but not declared",
+    "undeclaredIntro": "The code does things this Navide plugin does not declare. Navide refuses these calls when it runs, but the declaration and the code disagree.",
+    "undeclared": {
+      "shell": "Runs {key}, but declares no shell permission",
+      "shellDynamic": "Builds commands at run time, but declares no shell permission",
+      "shellExecutable": "Runs {key}, but its declared shell scope is only git, gh and glab",
+      "system": "Uses {key}, but does not declare that permission",
+      "fsScopeWrite": "Writes {key}, outside its declared write scope",
+      "fsScopeRead": "Reads {key}, outside its declared read scope"
+    },
+    "notSeenHeading": "Declared, not found by the static scan",
+    "notSeen": {
+      "shell": "shell ({key})",
+      "system": "{key}"
+    },
+    "scanHeading": "What the publish-time scan found",
+    "declaredHeading": "What this Navide plugin declares",
+    "registryHeading": "Navide Registry records (unsigned)",
+    "provenance": {
+      "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
+      "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
+      "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."
+    },
+    "noDisclosure": "This version was published without disclosure data.",
+    "signedByRegistry": "The scan was run and signed by the Navide Registry.",
+    "scannedByRegistry": "The scan was run by the Navide Registry.",
+    "limitsWithoutScan": "This version has no system scan; the above is only this Navide plugin's own declaration.",
+    "summary": {
+      "nativeBackend": "Ships native code (runs in a sandbox)",
+      "files": {
+        "read": "Reads files in your project",
+        "readWrite": "Reads and writes files in your project"
+      },
+      "shell": {
+        "allowlist": "Runs commands: {executables}",
+        "full": "Runs any command"
+      },
+      "networkViaShell": "Can reach remote hosts through those commands",
+      "aiCli": "Controls AI CLI sessions",
+      "ui": "Shows its own views",
+      "agentTools": "Offers tools agents can call ({read} read-only, {write} writing)",
+      "network": "Can use the network",
+      "noPermissions": "Declares no permissions"
+    },
+    "scan": {
+      "shell": {
+        "remoteWrite": "This Navide plugin runs {commands}, which can send project data to a remote.",
+        "other": "This Navide plugin runs {commands}, which can send data anywhere.",
+        "unknownSubcommand": "This Navide plugin runs {commands}; Navide's table does not know this subcommand, so treat it as possibly reaching a remote.",
+        "remoteRead": "This Navide plugin runs {commands}, which connects to a remote with your sign-in to read data.",
+        "localWrite": "This Navide plugin runs {commands}, which changes your local repository.",
+        "local": "This Navide plugin runs {commands}, which reads your local repository's state.",
+        "dynamic": "{count} command(s) are built at run time; a static scan cannot fully tell what they run."
+      },
+      "files": {
+        "write": "This Navide plugin writes {paths} ({dynamic} more path(s) are decided at run time).",
+        "read": "This Navide plugin reads {paths}."
+      },
+      "network": {
+        "hosts": "These addresses appear in the code: {hosts}. Neither the Navide plugin frame nor native code can reach the network directly; the addresses may be opened in a browser or passed to commands such as git or gh."
+      },
+      "code": {
+        "eval": {
+          "frontend": "The view code builds and runs code at run time ({count} place(s)); the Navide plugin frame's security policy blocks such calls.",
+          "backend": "The native code shows signs of building and running code at run time ({count} place(s))."
+        },
+        "obfuscated": "The code shows signs of obfuscation ({signals}); the scan may be incomplete."
+      },
+      "native": {
+        "summary": "Native code {path} ({format}, {arch}) links: {libraries}.",
+        "unscannable": "Native code {path} {reason}; the code inside could not be scanned this time."
+      },
+      "coverage": {
+        "base": "Scanned by the Navide Registry at publish (scanner {scannerVersion}, {scannedAt}, {filesScanned} of {filesTotal} files). A static scan cannot see behaviour decided at run time; this is not a complete list.",
+        "incomplete": "Scan incomplete: {reasons}."
+      },
+      "notFound": {
+        "shell": "The static scan found no commands.",
+        "network": "The static scan found no addresses.",
+        "files": "The static scan found no file paths.",
+        "dynamicCode": "The static scan found no code built at run time."
+      },
+      "noScan": "This version was published before system scans; below is only this Navide plugin's own declaration."
+    },
+    "incompleteReason": {
+      "timedOut": "the scan ran out of time",
+      "truncated": "content exceeded the scan limits",
+      "obfuscated": "the code is obfuscated",
+      "packed": "native code is packed",
+      "embeddedRuntime": "native code embeds a runtime",
+      "scannerError": "the scanner failed on part of the package",
+      "tooComplex": "part of the package is too complex to scan"
+    },
+    "unscannableReason": {
+      "packed": "is packed ({detail})",
+      "embeddedRuntime": "embeds a {detail} runtime"
+    },
+    "registry": {
+      "domainVerified": "The Navide Registry records that the publisher controls {domain} (checked {date})",
+      "domainNotVerified": "Publisher domain not verified",
+      "signedClaim": "The Navide Registry records that this version is signed (key {keyId})",
+      "unsigned": "The Navide Registry records no signature for this version",
+      "reviewApproved": "Reviewed and approved by a person ({date})",
+      "review": {
+        "not-required": "Published automatically, not reviewed by a person",
+        "pending": "Waiting for review",
+        "rejected": "Rejected in review",
+        "approved": "Reviewed and approved by a person"
+      },
+      "nativeInspected": "Native code inspected by the reviewer",
+      "nativeNotInspected": "Native code not inspected by a person",
+      "secret": {
+        "clean": "Secret scan: nothing found",
+        "not-run": "Secret scan: not run",
+        "findings": "Secret scan: findings"
+      },
+      "secretFindings": "Secret scan: {count} possible secret(s), confirmed by the reviewer",
+      "similar": "Name is similar to another Navide plugin"
+    }
   }
 }
