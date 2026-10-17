@@ -230,7 +230,9 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
     switches: () => ({ ...switches }),
     setSwitches: (change) => Object.assign(switches, change),
     listPackages: () => [...specs.keys()].map(current).filter((spec): spec is ThirdPartyLaunchSpec => Boolean(spec)),
-    isDisabled: (pluginId) => disabled.has(pluginId),
+    // As the main process wires it: native backends turned off globally count
+    // as disabled for every package.
+    isDisabled: (pluginId) => !native.enabled || disabled.has(pluginId),
     hasConsent: async (candidate) => consented.has(candidate.pluginId),
     agentToolSince: (pluginId, name) => nameSince.get(`${pluginId} ${name}`) ?? since.get(pluginId) ?? null,
     setAgentMethods: (pluginId, version, methods) => mgr.setThirdPartyAgentMethods(pluginId, version, methods),
@@ -349,10 +351,12 @@ const STOPS: Array<[string, string, (f: Live) => Promise<void>]> = [
   }],
 ]
 
-/** The global third-party kill switch, in ThirdPartyBackendController.setEnabled(false)'s order. */
+/** The global third-party kill switch, in ThirdPartyBackendController.setEnabled(false)'s
+ *  order, then the catalog refresh plugins:nativeBackends:setEnabled runs after it. */
 async function nativeBackendsOff(f: Live): Promise<void> {
   f.native.enabled = false
   await f.mgr.stopThirdPartyBackends(null)
+  await f.gate.refresh()
 }
 
 function agentToolCallsInFlight(f: Live): number {
@@ -387,9 +391,9 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
     }, 30_000)
   }
 
-  // These stops also stop the child; quarantine and the agent-tools master
-  // switch leave it to its idle shutdown (THIRD_PARTY_BACKEND_IDLE_MS).
-  const STOPS_THE_CHILD = new Set(['disable', 'remove', 'revoke consent', 'revoke trust'])
+  // Every stop also ends the child: the drains stop it, and the others close
+  // the agent-tool binding it serves (setAgentMethods with no methods).
+  const STOPS_THE_CHILD = new Set(['disable', 'quarantine', 'remove', 'revoke consent', 'turn the master switch off', 'revoke trust'])
 
   for (const [label, , stop] of STOPS) {
     it(`${label} while the call runs in the child: the call ends as stopping, nothing is left behind`, async () => {
@@ -412,8 +416,6 @@ describe('a package stops being callable while a call waits (B1-4 races)', () =>
 })
 
 describe('a package stops while its binding is made (the bind-to-dispatch window)', () => {
-  // These stops drain the backend, which cancels the bind in progress.
-  const CANCELS_THE_BIND = new Set(['disable', 'remove', 'revoke consent'])
 
   for (const [label, reason, stop] of STOPS) {
     it(`${label} while the backend is being bound for a read call: refused before dispatch`, async () => {
@@ -432,58 +434,92 @@ describe('a package stops while its binding is made (the bind-to-dispatch window
       // Never dispatched, whichever stop.
       expect(response).toMatchObject({ ok: false })
       expect(response.result).toBeUndefined()
-      if (CANCELS_THE_BIND.has(label)) {
-        // Reported with the native switch case: a bind cancelled by the stop
-        // (USER_CANCELLED) is answered PLUGIN_TOOL_FAILED, not unavailable.
-        expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_FAILED', plugin_error: 'USER_CANCELLED' })
-      } else {
-        // Quarantine and the master switch leave the bind alone: only the
-        // check after the bind (beforeCall) stops these.
-        expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
-        expect([reason, 'plugin-stopping']).toContain(response.reason)
-      }
+      // A bind the stop cancelled is the stop, not a plugin failure.
+      expect(response).toMatchObject({ error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
+      expect(label === 'revoke consent' ? [reason, 'tool-not-consented', 'plugin-stopping'] : [reason, 'plugin-stopping'])
+        .toContain(response.reason)
+      expect(response).not.toHaveProperty('plugin_error')
       expect(agentToolCallsInFlight(f)).toBe(0)
     }, 30_000)
   }
 })
 
-// Reported to the coordinator (2026-10-17): with the global third-party native
-// backend switch off, the Host answers PLUGIN_TOOL_FAILED (plugin_error
-// BACKEND_UNAVAILABLE) and the catalog still lists the tools as available.
-// These tests pin only what holds today, which is the safety property: no
-// call succeeds and none reaches a child. The expected answer is a todo.
 describe('the global native backend switch turns off around a call', () => {
-  it('while the call is admitted but not dispatched: it does not succeed and no child starts', async () => {
+  it('while the call is admitted but not dispatched: unavailable, no child starts', async () => {
     const f = await live([DEVMAP])
     const hold = holdWrites(f)
     const pending = f.call('acme.fixture', 'fixture_write', { block: 'b1' })
     await waitUntil(hold.waiting)
     await nativeBackendsOff(f)
     hold.release(true)
-    await expect(pending).resolves.toMatchObject({ ok: false })
+    await expect(pending).resolves.toMatchObject({
+      ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-disabled',
+    })
     expect(f.pids).toEqual([])
     expect(agentToolCallsInFlight(f)).toBe(0)
   }, 30_000)
 
-  it('before a call: it does not succeed and no child starts', async () => {
+  it('before a call: the catalog says so and the call is unavailable, no child starts', async () => {
     const f = await live([DEVMAP])
     await nativeBackendsOff(f)
-    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({ ok: false })
+    expect(f.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual([
+      'plugin-disabled', 'plugin-disabled', 'plugin-disabled',
+    ])
+    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({
+      ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-disabled',
+    })
     expect(f.pids).toEqual([])
   }, 30_000)
 
-  it('while the call runs in the child: the call ends, the child stops, nothing is left behind', async () => {
+  it('while the call runs in the child: the call ends as stopping, the child stops, nothing is left behind', async () => {
     const f = await live([DEVMAP])
     const pending = f.call('acme.fixture', 'fixture_slow', { milliseconds: 20_000 })
     await waitUntil(() => agentToolCallsInFlight(f) === 1)
     await nativeBackendsOff(f)
-    await expect(pending).resolves.toMatchObject({ ok: false })
+    await expect(pending).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE' })
     await waitUntil(() => f.pids.every((pid) => !alive(pid)))
     expect(agentToolCallsInFlight(f)).toBe(0)
   }, 30_000)
 
-  it.todo('answers PLUGIN_TOOL_UNAVAILABLE with a reason and takes the tools out of the catalog (reported, pending a decision)')
-  it.todo('a bind cancelled by disable, remove or a revoked consent answers PLUGIN_TOOL_UNAVAILABLE (reported, pending a decision)')
+  it('while the backend is being bound for a read call: unavailable, never dispatched', async () => {
+    const f = await live([DEVMAP])
+    const hold = f.holdBind()
+    const pending = f.call('acme.fixture', 'fixture_echo', {})
+    await waitUntil(hold.waiting)
+    const stopping = nativeBackendsOff(f)
+    hold.release()
+    await stopping
+    const response = await pending
+    expect(response).toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-disabled' })
+    expect(response).not.toHaveProperty('plugin_error')
+    expect(f.pids).toEqual([])
+  }, 30_000)
+
+  it('turning it back on serves the tools again', async () => {
+    const f = await live([DEVMAP])
+    await nativeBackendsOff(f)
+    f.native.enabled = true
+    await f.gate.refresh()
+    expect(f.sent.at(-1)!.tools.every((entry) => entry.state === 'available')).toBe(true)
+    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({ ok: true })
+  }, 30_000)
+})
+
+// Guard: quarantined code must not keep running in the background (it ends
+// within milliseconds today, when the quarantine closes its binding).
+describe('quarantine stops the headless agent-tool child at once', () => {
+  it('a running child ends right after the quarantine, and the tools stay unavailable', async () => {
+    const f = await live([DEVMAP])
+    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({ ok: true })
+    expect(f.pids.filter(alive)).toHaveLength(1)
+    f.gate.mark('acme.fixture', 'quarantined')
+    await f.gate.refresh()
+    await waitUntil(() => f.pids.every((pid) => !alive(pid)), 5_000)
+    await expect(f.call('acme.fixture', 'fixture_echo', {})).resolves.toMatchObject({
+      ok: false, error_code: 'PLUGIN_TOOL_UNAVAILABLE', reason: 'plugin-quarantined',
+    })
+    expect(f.pids.filter(alive)).toEqual([])
+  }, 30_000)
 })
 
 describe('two packages claim the same name (DB1)', () => {
