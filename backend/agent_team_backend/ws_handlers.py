@@ -3678,15 +3678,18 @@ async def skills_install_approval_decide(session: "Session", msg_id: str, msg_ty
 async def plugins_agent_request_decide(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The user's decision on an agent's plugin request (contract section 6).
 
-    Only the main window can mint the confirmation, bound to this approval_id,
-    so an agent cannot approve its own request; no other field grants anything.
+    Only the main window can mint the confirmation, bound to this approval_id
+    and to the decision, so an agent cannot approve its own request and a
+    reject confirmation cannot be spent as an approval; no other field grants
+    anything.
     """
     from .skills_approvals import SkillApprovalError, decide_plugin
 
     approval_id = str(payload.get("approval_id") or "")
     approve = payload.get("approve") is True
+    subject = f"{approval_id}:{'approve' if approve else 'reject'}"
     if not await _confirmed(
-        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=approval_id
+        session, msg_id, msg_type, {"confirm": payload.get("confirmation")}, subject=subject
     ):
         return
     try:

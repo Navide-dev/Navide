@@ -115,7 +115,7 @@ async def test_decide_moves_to_applying_or_rejected_once(clean) -> None:
     assert result["status"] == "applying"
     with pytest.raises(skills_approvals.SkillApprovalError):
         await skills_approvals.decide_plugin(approved["approval_id"], False)
-    skills_approvals.registry.finish(approved["approval_id"], "completed")
+    skills_approvals.registry.finish_plugin(approved["approval_id"], "completed")
     assert skills_approvals.registry.get(approved["approval_id"])["status"] == "completed"
     rejected = _file("plugin-remove")
     assert (await skills_approvals.decide_plugin(rejected["approval_id"], False))["status"] == "rejected"
@@ -133,6 +133,62 @@ async def test_the_two_paths_never_decide_each_other(monkeypatch: pytest.MonkeyP
     assert [r["approval_id"] for r in skills_approvals.registry.pending(plugin=True)] == [plugin["approval_id"]]
 
 
+def test_finish_only_moves_applying_to_completed_or_failed() -> None:
+    registry = skills_approvals.registry
+    pending = _file("plugin-install", target=_target("4.0.0", None))
+    rejected = _file("plugin-install", target=_target("4.0.1", None))
+    registry.claim(rejected["approval_id"], "rejected", plugin=True)
+    for approval_id, status in ((pending["approval_id"], "completed"), (rejected["approval_id"], "completed"),
+                                (rejected["approval_id"], "failed")):
+        with pytest.raises(skills_approvals.SkillApprovalError) as refused:
+            registry.finish_plugin(approval_id, status)
+        assert refused.value.code == "PLUGIN_APPROVAL_NOT_APPLYING"
+    # The generic finish (the skill path) never touches a plugin record.
+    registry.finish(pending["approval_id"], "completed")
+    registry.finish(rejected["approval_id"], "completed")
+    assert registry.get(pending["approval_id"])["status"] == "pending"
+    assert registry.get(rejected["approval_id"])["status"] == "rejected"
+    for status in ("completed", "failed"):
+        record = _file("plugin-install", target=_target(f"5.0.{status}", None))
+        registry.claim(record["approval_id"], "applying", plugin=True)
+        with pytest.raises(skills_approvals.SkillApprovalError):
+            registry.finish_plugin(record["approval_id"], "rejected")
+        registry.finish_plugin(record["approval_id"], status, error="boom" if status == "failed" else None)
+        assert registry.get(record["approval_id"])["status"] == status
+        with pytest.raises(skills_approvals.SkillApprovalError):
+            registry.finish_plugin(record["approval_id"], status)
+
+
+def test_agent_text_must_be_strings_and_is_cleaned() -> None:
+    record = _file(reason="ok\x07\x1b[31m \u202eevil\u200b\u2028next\r\n\tline",
+                   requester={**REQUESTER, "paneName": "d\u200bev\x00", "workspace": "/w\u202e"})
+    assert record["reason"] == "ok[31m evilnext\n\tline"
+    assert record["requester"]["paneName"] == "dev"
+    assert record["requester"]["workspace"] == "/w"
+    long = "x" * 200_000
+    assert _file("plugin-install", target=_target("6.0.0", None), reason=long)["reason"] == long
+    for bad in (
+        {"reason": None}, {"reason": 42}, {"reason": ["a"]},
+        {"requester": "pane"}, {"requester": {**REQUESTER, "paneName": 3}},
+        {"requester": {**REQUESTER, "callerKind": "user"}}, {"requester": {**REQUESTER, "extra": "x"}},
+        {"requester": {k: v for k, v in REQUESTER.items() if k != "workspace"}},
+    ):
+        with pytest.raises(skills_approvals.SkillApprovalError) as refused:
+            _file("plugin-install", target=_target("7.0.0", None), **bad)
+        assert refused.value.code == "BAD_REQUEST", bad
+
+
+def test_target_id_must_be_namespace_dot_name() -> None:
+    for target in (
+        {**_target(), "id": "other.devmap"},
+        {**_target(), "name": "other"},
+        {**_target(), "id": "nerdtechnicdevmap"},
+    ):
+        with pytest.raises(skills_approvals.SkillApprovalError) as refused:
+            _file(target=target)
+        assert refused.value.code == "BAD_REQUEST", target
+
+
 def test_request_and_decide_take_no_consent_argument() -> None:
     for function in (skills_approvals.registry.request_plugin, skills_approvals.decide_plugin):
         names = set(inspect.signature(function).parameters)
@@ -141,12 +197,14 @@ def test_request_and_decide_take_no_consent_argument() -> None:
 
 # ── WebSocket decide: only a window's confirmation counts ───────────────────
 
-def _confirm(subject: str, action: str = contract.PLUGIN_APPROVAL_DECIDE_ACTION) -> dict[str, str]:
+def _confirm(subject: str, action: str = contract.PLUGIN_APPROVAL_DECIDE_ACTION,
+             expires: float | None = None) -> dict[str, str]:
     """What the main process mints for the window, as test_skills_approvals does."""
-    nonce, expires = uuid.uuid4().hex, str(time.time() + 30)
-    payload = "\x00".join(("navide/trust-confirm/v2", nonce, expires, action, "", subject))
+    nonce = uuid.uuid4().hex
+    expiry = str(time.time() + 30 if expires is None else expires)
+    payload = "\x00".join(("navide/trust-confirm/v2", nonce, expiry, action, "", subject))
     mac = hmac.new(b"test-confirmation-key", payload.encode(), hashlib.sha256).hexdigest()
-    return {"nonce": nonce, "expires": expires, "mac": mac}
+    return {"nonce": nonce, "expires": expiry, "mac": mac}
 
 
 @pytest.fixture
@@ -169,24 +227,42 @@ async def test_ws_decide_needs_the_window_confirmation_for_this_request(confirma
         # Consent flags on the protocol mean nothing.
         {"approval_id": approval_id, "approve": True, "consent": True, "confirmed": True, "trusted": True},
         # The skills field name is not this message's.
-        {"approval_id": approval_id, "approve": True, "confirm": _confirm(approval_id)},
+        {"approval_id": approval_id, "approve": True, "confirm": _confirm(f"{approval_id}:approve")},
         # Bound to another request.
-        {"approval_id": approval_id, "approve": True, "confirmation": _confirm(other["approval_id"])},
+        {"approval_id": approval_id, "approve": True, "confirmation": _confirm(f"{other['approval_id']}:approve")},
         # Minted for another action.
         {"approval_id": approval_id, "approve": True,
-         "confirmation": _confirm(approval_id, "skills.install_approval.decide")},
+         "confirmation": _confirm(f"{approval_id}:approve", "skills.install_approval.decide")},
+        # A reject confirmation spent as an approval, and the other way round.
+        {"approval_id": approval_id, "approve": True, "confirmation": _confirm(f"{approval_id}:reject")},
+        {"approval_id": approval_id, "approve": False, "confirmation": _confirm(f"{approval_id}:approve")},
+        # Bound to the bare approval_id, without the decision.
+        {"approval_id": approval_id, "approve": True, "confirmation": _confirm(approval_id)},
+        # Expired.
+        {"approval_id": approval_id, "approve": True,
+         "confirmation": _confirm(f"{approval_id}:approve", expires=time.time() - 1)},
     ]
     for attempt in attempts:
         refused = await ws_request(session, contract.PLUGIN_APPROVAL_DECIDE_ACTION, attempt)
         assert refused["error"]["code"] == "CONFIRMATION_REQUIRED", attempt
     assert skills_approvals.registry.get(approval_id)["status"] == "pending"
 
+    token = _confirm(f"{approval_id}:approve")
     decided = await ws_request(session, contract.PLUGIN_APPROVAL_DECIDE_ACTION,
-                               {"approval_id": approval_id, "approve": True, "confirmation": _confirm(approval_id)})
+                               {"approval_id": approval_id, "approve": True, "confirmation": token})
     assert decided["payload"]["approval"]["status"] == "applying"
+    # A used confirmation is refused before the registry is asked.
+    replayed = await ws_request(session, contract.PLUGIN_APPROVAL_DECIDE_ACTION,
+                                {"approval_id": approval_id, "approve": True, "confirmation": token})
+    assert replayed["error"]["code"] == "CONFIRMATION_REQUIRED"
     again = await ws_request(session, contract.PLUGIN_APPROVAL_DECIDE_ACTION,
-                             {"approval_id": approval_id, "approve": False, "confirmation": _confirm(approval_id)})
+                             {"approval_id": approval_id, "approve": False,
+                              "confirmation": _confirm(f"{approval_id}:reject")})
     assert again["error"]["code"] == "PLUGIN_APPROVAL_NOT_PENDING"
+    rejected = await ws_request(session, contract.PLUGIN_APPROVAL_DECIDE_ACTION,
+                                {"approval_id": other["approval_id"], "approve": False,
+                                 "confirmation": _confirm(f"{other['approval_id']}:reject")})
+    assert rejected["payload"]["approval"]["status"] == "rejected"
 
 
 async def test_skills_decide_cannot_reach_a_plugin_request(confirmable) -> None:

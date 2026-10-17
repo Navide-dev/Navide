@@ -14,17 +14,50 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
 import threading
 import time
+import unicodedata
 import uuid
 from typing import Any
 
-from .plugins.agent_tools_contract import APPROVAL_KINDS, PLUGIN_APPROVAL_TTL_S
+from .plugins.agent_tools_contract import (
+    APPROVAL_KINDS,
+    PLUGIN_APPROVAL_TTL_S,
+    sanitize_agent_tool_result_text,
+)
 from .skills_store import SkillsStoreError, SkillValidationError
 
 MAX_FINISHED = 32
 TERMINAL = frozenset({"installed", "rejected", "failed", "expired"})
 PLUGIN_KINDS = frozenset(APPROVAL_KINDS) - {"skill"}
+_REQUESTER_KEYS = frozenset({"paneId", "paneName", "workspace", "callerKind"})
+# Cf (bidi controls, zero-width), Zl and Zp (U+2028 / U+2029).
+_INVISIBLE_CATEGORIES = frozenset({"Cf", "Zl", "Zp"})
+
+log = logging.getLogger(__name__)
+
+
+def _agent_text(value: str) -> str:
+    """Text an agent wrote, as the approval card shows it (contract 2.4): every
+    Cc character except tab and LF, and every bidi, zero-width and line or
+    paragraph separator character, removed. No length limit."""
+    text = sanitize_agent_tool_result_text(value)
+    return "".join(ch for ch in text if unicodedata.category(ch) not in _INVISIBLE_CATEGORIES)
+
+
+def _plugin_requester(requester: Any) -> dict[str, Any]:
+    if not isinstance(requester, dict) or set(requester) != _REQUESTER_KEYS:
+        raise SkillApprovalError("BAD_REQUEST", "the requester must name paneId, paneName, workspace and callerKind")
+    if requester["callerKind"] not in {"pane", "external", "host"}:
+        raise SkillApprovalError("BAD_REQUEST", "unknown requester callerKind")
+    cleaned: dict[str, Any] = {"callerKind": requester["callerKind"]}
+    for key in ("paneId", "paneName", "workspace"):
+        value = requester[key]
+        if value is not None and not isinstance(value, str):
+            raise SkillApprovalError("BAD_REQUEST", f"requester {key} must be a string or null")
+        cleaned[key] = None if value is None else _agent_text(value)
+    return cleaned
 
 
 class SkillApprovalError(SkillsStoreError):
@@ -107,6 +140,11 @@ class ApprovalRegistry:
                 or not all(isinstance(target.get(key), str) and target[key] for key in ("id", "namespace", "name"))
                 or (kind != "plugin-remove" and not (isinstance(version, str) and version))):
             raise SkillApprovalError("BAD_REQUEST", "a plugin request needs a target id, namespace, name and version")
+        if target["id"] != f"{target['namespace']}.{target['name']}":
+            raise SkillApprovalError("BAD_REQUEST", "the target id must be <namespace>.<name>")
+        if not isinstance(reason, str):
+            raise SkillApprovalError("BAD_REQUEST", "the reason must be a string")
+        requester = _plugin_requester(requester)
         owner = f"{kind}:{target['id']}@{version if kind != 'plugin-remove' else ''}"
         with self._lock:
             self._expire()
@@ -119,9 +157,9 @@ class ApprovalRegistry:
                 "approval_id": approval_id,
                 "kind": kind,
                 "owner": owner,
-                "requester": copy.deepcopy(requester),
+                "requester": requester,
                 # Written by the agent; the approval card labels it as such.
-                "reason": reason,
+                "reason": _agent_text(reason),
                 "target": copy.deepcopy(target),
                 "card": copy.deepcopy(card),
                 "diff": copy.deepcopy(diff),
@@ -166,8 +204,26 @@ class ApprovalRegistry:
     def finish(self, approval_id: str, status: str, *, result: Any = None, error: str | None = None) -> None:
         with self._lock:
             record = self._records.get(approval_id)
+            if record is not None and record["kind"] != "skill":
+                log.warning("refusing to finish plugin request %s through the skill path", approval_id)
+                return
             if record is not None:
                 record.update(status=status, result=copy.deepcopy(result), error=error)
+
+    def finish_plugin(self, approval_id: str, status: str, *, error: str | None = None) -> dict[str, Any]:
+        """End an approved plugin request: only applying -> completed | failed."""
+        with self._lock:
+            record = self._records.get(approval_id)
+            if record is None or record["kind"] == "skill":
+                raise SkillApprovalError("PLUGIN_APPROVAL_NOT_FOUND", "approval request not found")
+            if record["status"] != "applying" or status not in {"completed", "failed"}:
+                log.warning("refusing plugin request %s: %s -> %s", approval_id, record["status"], status)
+                raise SkillApprovalError(
+                    "PLUGIN_APPROVAL_NOT_APPLYING",
+                    f"approval request is {record['status']}; only applying ends as completed or failed",
+                )
+            record.update(status=status, error=error)
+            return copy.deepcopy(record)
 
     def _reset_for_test(self) -> None:
         with self._lock:
@@ -224,7 +280,9 @@ async def decide_plugin(approval_id: str, approve: bool) -> dict[str, Any]:
 
     Approval moves it to `applying`. The main window then runs prepareInstall ->
     trust dialog -> commitInstall itself and reports `completed` or `failed`
-    through `registry.finish`; that wiring comes with the request tools (B2-c).
+    through `registry.finish_plugin`; that wiring comes with the request tools
+    (B2-c). An `applying` record does not expire; B2-c recovers the ones left
+    when the app restarts.
     """
     from . import app
     from .ipc import make_event
