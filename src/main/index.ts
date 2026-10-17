@@ -391,6 +391,16 @@ const mainWindowWorkspaces = new Map<BrowserWindow, string>()
 const detachedGroups = new Map<string, BrowserWindow>()          // groupId → child window
 const detachedGroupWorkspace = new Map<string, string>()         // groupId → workspace_path
 const detachedWindowIds = new Set<number>()                      // child window ids
+
+// The core backend's agent tool result helper (agent-tools contract 4.4, R2):
+// resource usage shows its state; every change goes to the main windows, where
+// the first `unavailable` raises a notice.
+frontendPluginManager.onResultHelperState = (state) => {
+  for (const hostWindow of mainWindows) {
+    if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+    hostWindow.webContents.send('plugins:resultHelperState', state)
+  }
+}
 // Navide windows main created that are not main windows (Plans, Token
 // Monitor): they get the full backend:info, but never a window proof.
 const navideAuxWindows = new Set<BrowserWindow>()

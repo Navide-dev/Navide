@@ -362,6 +362,7 @@ import type {
 import { useEvolve } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
 import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
+import { usePluginResultHelperNotice } from './composables/usePluginResultHelperNotice'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
@@ -14739,6 +14740,7 @@ const evolve = useEvolve(backend)
 useShareNotices(backend)
 // Plan B D-f: a Registry rescan of an installed plugin found new items (notice only).
 usePluginRescanNotices()
+usePluginResultHelperNotice()
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId

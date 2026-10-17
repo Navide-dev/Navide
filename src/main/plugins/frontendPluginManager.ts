@@ -190,6 +190,9 @@ import {
   AGENT_TOOL_CHUNK_BYTES,
   AGENT_TOOL_CHUNK_IDLE_MS,
   AGENT_TOOLS_SYNC_EVENT,
+  AGENT_TOOLS_RESULT_HELPER_EVENT,
+  parseAgentToolsResultHelperState,
+  type AgentToolsResultHelperState,
   agentToolChunkArrival,
   reassembleAgentToolPayloadText,
   splitAgentToolPayloadText,
@@ -1451,6 +1454,10 @@ export class FrontendPluginManager {
   private readonly headlessAgentToolRoots = new Map<string, string>()
   /** Agent-tool calls in flight, by their initiator id (read by the fs bridge). */
   /** Argument pieces of agent tool requests whose request has not arrived yet (contract 4.4, A2). */
+  /** The core backend's agent tool result helper, as it last reported it (contract 4.4, R2). */
+  private resultHelperState: AgentToolsResultHelperState = { state: 'idle', lastError: '', since: 0 }
+  /** Told each time the backend reports a new result helper state. */
+  onResultHelperState?: (state: AgentToolsResultHelperState) => void
   private readonly agentRequestPieces = new Map<string, {
     pieces: string[]
     shortSeen: boolean
@@ -8666,6 +8673,12 @@ export class FrontendPluginManager {
       client.on(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, (payload) => {
         this.holdAgentRequestPiece(client, payload)
       })
+      client.on(AGENT_TOOLS_RESULT_HELPER_EVENT, (payload) => {
+        const state = parseAgentToolsResultHelperState(payload)
+        if (!state || this.wsClient !== client) return
+        this.resultHelperState = state
+        this.onResultHelperState?.(state)
+      })
       client.on(MARKETPLACE_QUERY_REQUEST_EVENT, (payload) => {
         void this.handleMarketplaceQueryRequest(client, payload)
       })
@@ -11395,7 +11408,7 @@ export class FrontendPluginManager {
 
   /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped); the activity page (D-f) reads this. */
   backendResourceUsage(): BackendResourceUsage {
-    return this.pluginBackendHost.backendResourceUsage()
+    return { ...this.pluginBackendHost.backendResourceUsage(), backend: { resultHelper: { ...this.resultHelperState } } }
   }
 
   /** All validated packages installed from disk, including backend-only packages. */

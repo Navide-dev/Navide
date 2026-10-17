@@ -16248,6 +16248,27 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       return answered
     }
 
+    it("discloses the backend's result helper state in resource usage and tells the windows of each change", async () => {
+      const f = await fixture()
+      try {
+        const heard: unknown[] = []
+        f.mgr.onResultHelperState = (state) => heard.push(state)
+        expect(f.mgr.backendResourceUsage().backend).toEqual({ resultHelper: { state: 'idle', lastError: '', since: 0 } })
+        const unavailable = { state: 'unavailable', lastError: 'it exited before it was ready', since: 1_700_000_000_000 }
+        f.socket.receive({ type: 'agent.tools.result_helper', payload: unavailable })
+        await settle()
+        expect(f.mgr.backendResourceUsage().backend).toEqual({ resultHelper: unavailable })
+        expect(heard).toEqual([unavailable])
+        // A malformed report changes nothing.
+        f.socket.receive({ type: 'agent.tools.result_helper', payload: { state: 'broken', lastError: 1, since: 'x' } })
+        await settle()
+        expect(heard).toHaveLength(1)
+        expect(f.mgr.backendResourceUsage().backend?.resultHelper.state).toBe('unavailable')
+      } finally {
+        await f.cleanup()
+      }
+    })
+
     it('joins argument pieces sent before the request and calls the plugin with the whole arguments', async () => {
       const f = await fixture()
       try {

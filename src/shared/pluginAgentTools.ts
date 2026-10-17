@@ -417,6 +417,25 @@ export const BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
 export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
 /** WebSocket event, backend → Host, one per argument piece, sent before `agent.capability.request`. */
 export const AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = 'agent.capability.request_chunk'
+/** backend → Host event: the state of the helper process that handles results in pieces (4.4, R2), sent on every change. */
+export const AGENT_TOOLS_RESULT_HELPER_EVENT = 'agent.tools.result_helper'
+
+/** The result helper's state, as the backend reports it and resource usage discloses it. */
+export interface AgentToolsResultHelperState {
+  state: 'idle' | 'ready' | 'unavailable'
+  lastError: string
+  /** When the state last changed (ms since the epoch). */
+  since: number
+}
+
+/** A backend report of the result helper's state, or null when it is not one. */
+export function parseAgentToolsResultHelperState(value: unknown): AgentToolsResultHelperState | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const { state, lastError, since } = value as Record<string, unknown>
+  if (state !== 'idle' && state !== 'ready' && state !== 'unavailable') return null
+  if (typeof lastError !== 'string' || typeof since !== 'number' || !Number.isFinite(since)) return null
+  return { state, lastError, since }
+}
 /** WebSocket request, Host → backend: the call is alive (keeps the backend's wait running). */
 export const AGENT_CAPABILITY_PROGRESS_MESSAGE = 'agent.capability.progress'
 /**

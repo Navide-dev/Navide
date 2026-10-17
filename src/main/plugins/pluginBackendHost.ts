@@ -14,6 +14,7 @@ import {
   type JsonValue,
   type PluginBackendSupervisorOptions,
 } from './pluginBackendSupervisor'
+import type { AgentToolsResultHelperState } from '../../shared/pluginAgentTools'
 import {
   isAuthenticatedInitiator,
   type AuthenticatedInitiator,
@@ -226,6 +227,8 @@ export interface BackendCallConcurrency {
  * page (D-f) through plugins:backendResourceUsage.
  */
 export interface BackendResourceUsage {
+  /** The core backend's own resources: its agent tool result helper process (agent-tools contract 4.4, R2). */
+  backend?: { resultHelper: AgentToolsResultHelperState }
   children: { current: number; peak: number; retained: number }
   views: Array<{
     pluginId: string

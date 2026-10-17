@@ -1166,13 +1166,23 @@ hangs is stopped and that call answers `result_helper_failed` (lower-case,
 produced by the backend), `reason` `crashed` or `timeout`, with the result's
 size in `error`; the work is not redone in the backend, where a result that
 hung the helper would hang the event loop, and the next call starts the
-helper again. A helper that cannot be started leaves a result up to 1 MiB
-(what the backend handled before DB9) to be handled in the backend as then; a
-larger one answers `result_helper_failed`, `reason` `unavailable`, and the
-backend logs it and records `AGENT_TOOL_RESULT_HELPER_UNAVAILABLE` in its
-error ledger (a start is retried after 60 s). The helper runs in its own
-session; stopping it closes its stdin, then after 2 s kills its whole process
-tree (a onefile build runs Python under a bootloader). The backend's wait is the one described under Timing:
+helper again. A new helper must first write `{"ready": true}` within 10 s. A
+helper that cannot be used (it does not start, does not say it is ready, or
+fails before it has answered once: a broken build, not a result that broke
+it) leaves a result up to 1 MiB (what the backend handled before DB9) to be
+handled in the backend as then; a larger one answers `result_helper_failed`,
+`reason` `unavailable`. Each failed start is logged and recorded as
+`AGENT_TOOL_RESULT_HELPER_UNAVAILABLE` in the error ledger, and the next start
+is tried after 60 s. The helper's state (`idle`, `ready` or `unavailable`,
+with `lastError` and `since`) goes to the Host on every change (the
+`agent.tools.result_helper` event); `plugins:backendResourceUsage` discloses
+it as `backend.resultHelper`, Resource Manager shows it, and the first
+`unavailable` in a session raises a notice. The helper runs in a tree of its
+own (its own session on POSIX, a kill-on-close job on Windows); stopping it
+closes its stdin, then after 2 s kills the whole tree, the helper alive or
+not (a onefile build runs Python under a bootloader, and what the helper
+started may still run). A helper whose backend is gone (killed outright, so
+its stdin may not close while the helper is busy) kills its own tree. The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.

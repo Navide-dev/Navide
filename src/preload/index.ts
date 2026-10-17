@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
+import type { AgentToolsResultHelperState } from '../shared/pluginAgentTools'
 import { normalizePlatformId } from '../shared/osplat'
 import type {
   UpdateActionResult,
@@ -195,6 +196,8 @@ interface BackendQueueUsage {
 
 /** Backend resources the Host holds now and at the most (none capped): children, per-view subscriptions and child usage, per-plugin calls. */
 export interface BackendResourceUsage {
+  /** The core backend's agent tool result helper process. */
+  backend?: { resultHelper: AgentToolsResultHelperState }
   children: BackendUsageCount & { retained: number }
   views: Array<{
     pluginId: string
@@ -1217,6 +1220,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       const listener = (_event: unknown, updates: PluginUpdateInfo[]): void => handler(updates)
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
+    },
+    /** The core backend's agent tool result helper changed state. */
+    onResultHelperState: (handler: (state: AgentToolsResultHelperState) => void): (() => void) => {
+      const listener = (_event: unknown, state: AgentToolsResultHelperState): void => handler(state)
+      ipcRenderer.on('plugins:resultHelperState', listener)
+      return () => ipcRenderer.removeListener('plugins:resultHelperState', listener)
     },
     /** D-f: rescans of installed versions that found new items (notice only). */
     onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
