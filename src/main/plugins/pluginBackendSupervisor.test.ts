@@ -544,28 +544,47 @@ describe('PluginBackendSupervisor', () => {
     }
 
     for (const mode of ['pieces', 'single'] as const) {
-      it(`takes a 40 MiB result as text (${mode}) without stalling the Host thread`, async () => {
+      it(`takes a 40 MiB result as text (${mode}); this thread never decodes or parses more than one piece at a time`, async () => {
         const onFailure = vi.fn()
         const supervisor = makeSupervisor({ onFailure })
         supervisors.push(supervisor)
         await supervisor.start()
         const client = supervisor.clientFor(authenticatedRuntime)
         const pid = await client.call('fixture.pid', null)
-        // This machine's idle lag right now; the transfer may add less than 50 ms to it.
-        const idleLag = loopLag()
-        await new Promise((resolve) => setTimeout(resolve, 300))
-        const idle = idleLag.stop()
+        // What this (the Host's main) thread decodes and parses during the call.
+        let largestParse = 0
+        let largestDecode = 0
+        const parse = JSON.parse
+        const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation((text: string, reviver?: Parameters<typeof JSON.parse>[1]) => {
+          largestParse = Math.max(largestParse, Buffer.byteLength(text))
+          return parse(text, reviver)
+        })
+        type Decoder = InstanceType<typeof TextDecoder>
+        const decode = TextDecoder.prototype.decode
+        const decodeSpy = vi.spyOn(TextDecoder.prototype, 'decode').mockImplementation(function (this: Decoder, input?: Parameters<Decoder['decode']>[0], options?: Parameters<Decoder['decode']>[1]) {
+          largestDecode = Math.max(largestDecode, input?.byteLength ?? 0)
+          return decode.call(this, input, options)
+        })
         const lag = loopLag()
-        const text = await client.call('fixture.bigresult', { bytes: 40 * 1_048_576, mode }, {
-          timeoutMs: 120_000,
-          resultText: true,
-        }) as unknown as BackendResultText
+        let text: BackendResultText
+        try {
+          text = await client.call('fixture.bigresult', { bytes: 40 * 1_048_576, mode }, {
+            timeoutMs: 120_000,
+            resultText: true,
+          }) as unknown as BackendResultText
+        } finally {
+          parseSpy.mockRestore()
+          decodeSpy.mockRestore()
+        }
         const worst = lag.stop()
+        expect(largestParse).toBeLessThanOrEqual(AGENT_TOOL_CHUNK_BYTES)
+        expect(largestDecode).toBeLessThanOrEqual(AGENT_TOOL_CHUNK_BYTES)
         const joined = Array.from({ length: text.chunks }, (_, index) => text.piece(index))
         expect(joined.every((piece) => utf8ByteLength(piece) <= AGENT_TOOL_CHUNK_BYTES)).toBe(true)
         expect(sha(joined.join(''))).toBe(sha(JSON.stringify(big(40 * 1_048_576))))
         expect(text.bytes).toBe(utf8ByteLength(joined.join('')))
-        expect(worst - idle).toBeLessThan(50)
+        // A loose smoke check only; the bounds above are what this test guards.
+        expect(worst).toBeLessThan(250)
         await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
         expect(onFailure).not.toHaveBeenCalled()
       }, 240_000)

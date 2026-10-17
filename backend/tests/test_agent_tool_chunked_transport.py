@@ -204,33 +204,34 @@ async def test_pieces_and_progress_need_an_authenticated_host_and_a_pending_requ
     assert malformed["error"]["code"] == "BAD_REQUEST"
 
 
-async def _worst_loop_lag_of(work: Any) -> tuple[Any, float]:
-    """``work``'s result and the longest the event loop went without a turn meanwhile."""
-    loop = asyncio.get_running_loop()
-    worst = 0.0
-    done = False
+async def _longest_loop_slice(monkeypatch: pytest.MonkeyPatch, work: Any) -> tuple[Any, float]:
+    """``work``'s result and the most CPU time (``time.thread_time``) the
+    loop's thread spent between two hand-backs (``asyncio.sleep``) meanwhile.
+    CPU time leaves out the OS pausing the process, so a busy machine does
+    not change it; garbage is collected first, so a collection of the test's
+    own garbage is not counted."""
+    import gc
+    import time
 
-    async def tick() -> None:
-        nonlocal worst
-        last = loop.time()
-        while not done:
-            await asyncio.sleep(0.001)
-            now = loop.time()
-            worst = max(worst, now - last - 0.001)
-            last = now
+    gc.collect()
+    slices: list[float] = []
+    mark = time.thread_time()
+    real_sleep = asyncio.sleep
 
-    ticker = asyncio.create_task(tick())
-    await asyncio.sleep(0.01)
+    async def sleep(delay: float, result: Any = None) -> Any:
+        nonlocal mark
+        slices.append(time.thread_time() - mark)
+        value = await real_sleep(delay, result)
+        mark = time.thread_time()
+        return value
+
+    monkeypatch.setattr(asyncio, "sleep", sleep)
     try:
         result = await work
     finally:
-        done = True
-        await ticker
-    return result, worst
-
-
-async def _worst_loop_lag(work: Any) -> float:
-    return (await _worst_loop_lag_of(work))[1]
+        slices.append(time.thread_time() - mark)
+        monkeypatch.setattr(asyncio, "sleep", real_sleep)
+    return result, max(slices)
 
 
 @pytest.mark.asyncio
@@ -255,27 +256,14 @@ async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pyte
         return True
 
     monkeypatch.setattr(app, "unicast_host", host)
-    # The lag during the call, then the lag of plain busy work handing the
-    # loop back just as often, for as long: on a busy machine the OS pauses
-    # a working process now and then, and that is not the call's doing. The
-    # call may add less than 50 ms to it.
-    loop = asyncio.get_running_loop()
-    started = loop.time()
-    response, worst = await _worst_loop_lag_of(request_host_agent_workspace_backend(
+    response, longest = await _longest_loop_slice(monkeypatch, request_host_agent_workspace_backend(
         "acme.devmap", "/workspace", {"arguments": arguments}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
     ))
-
-    async def busy(seconds: float) -> None:
-        turn = plan_mcp._Turn()  # noqa: SLF001
-        until = loop.time() + seconds
-        while loop.time() < until:
-            sum(range(200))
-            await turn.maybe_yield()
-
-    idle = await _worst_loop_lag(busy(loop.time() - started))
     assert response == {"ok": True, "result": True}
     assert len(received) >= 80
-    assert worst - idle < 0.05, f"event loop stalled {worst * 1000:.0f} ms (busy baseline {idle * 1000:.0f} ms)"
+    # CPU time the loop's thread spent between two hand-backs: what a slow
+    # step costs every other pane, whatever the machine's load.
+    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     # Checked after the measurement: the pieces join to the arguments' spelling.
     joined = contract.reassemble_agent_tool_payload_text(
         [{"seq": seq, "data": data} for seq, data in enumerate(received)], summaries[0]
