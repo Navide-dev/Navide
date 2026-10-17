@@ -353,7 +353,8 @@ interface ChildGeneration {
   readonly id: number
   readonly child: ChildProcessWithoutNullStreams
   exited: boolean
-  stdoutBuffer: Buffer
+  /** Bytes of the unterminated frame so far, joined once its newline arrives. */
+  stdoutPending: Buffer[]
   stderrBuffer: Buffer
   stderrTruncated: boolean
   diagnosticEmittedBytes: number
@@ -1890,7 +1891,7 @@ export class PluginBackendSupervisor {
       id: ++this.nextGenerationId,
       child,
       exited: false,
-      stdoutBuffer: Buffer.alloc(0),
+      stdoutPending: [],
       stderrBuffer: Buffer.alloc(0),
       stderrTruncated: false,
       diagnosticEmittedBytes: 0,
@@ -1943,15 +1944,21 @@ export class PluginBackendSupervisor {
       this.state === 'failed' ||
       this.state === 'restarting'
     ) return
-    const bytes = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
-    generation.stdoutBuffer = Buffer.concat([generation.stdoutBuffer, bytes])
+    let rest = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
     // Frames of any size are read (contract 4.4, R1): a frame's size never
     // fails or restarts the child. Only a malformed frame is a protocol error.
+    // Only the new bytes are scanned, and a frame's bytes are joined once, when
+    // its newline arrives, so a large frame costs linear time.
     while (true) {
-      const newline = generation.stdoutBuffer.indexOf(0x0a)
-      if (newline < 0) return
-      const line = generation.stdoutBuffer.subarray(0, newline)
-      generation.stdoutBuffer = generation.stdoutBuffer.subarray(newline + 1)
+      const newline = rest.indexOf(0x0a)
+      if (newline < 0) {
+        if (rest.length > 0) generation.stdoutPending.push(rest)
+        return
+      }
+      const head = rest.subarray(0, newline)
+      const line = generation.stdoutPending.length === 0 ? head : Buffer.concat([...generation.stdoutPending, head])
+      generation.stdoutPending = []
+      rest = rest.subarray(newline + 1)
       if (line.includes(0x0d)) {
         this.failProcess(generation, 'PROTOCOL_ERROR')
         return
@@ -2032,7 +2039,7 @@ export class PluginBackendSupervisor {
       return
     }
     if (this.state !== 'closed' && this.state !== 'failed' && this.state !== 'restarting') {
-      const isProtocolError = generation.stdoutBuffer.length > 0
+      const isProtocolError = generation.stdoutPending.length > 0
       const isEarlyExit = this.state === 'starting' || this.state === 'idle'
       let exitCause: Error | undefined
       const stderrText = generation.stderrBuffer.length > 0 ? generation.stderrBuffer.toString('utf8') : ''
