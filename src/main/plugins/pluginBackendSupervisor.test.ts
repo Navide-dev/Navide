@@ -520,6 +520,7 @@ describe('PluginBackendSupervisor', () => {
       await expect(call).rejects.toMatchObject({ code: 'USER_CANCELLED' })
       await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
       expect(onFailure).not.toHaveBeenCalled()
+      await vi.waitFor(() => expect(supervisor.resourceUsage().droppedResultPieces).toBeGreaterThan(0))
     }, 120_000)
 
     it('sends 10 MiB of arguments in pieces to a child that reads them', async () => {

@@ -181,6 +181,7 @@ export interface BackendResourceUsage {
       bridgeRequests: BackendUsageCount
       outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
       droppedNotifications: number
+      droppedResultPieces: number
     } | null
   }>
   plugins: BackendCallConcurrency[]

@@ -278,6 +278,8 @@ export interface BackendChildResourceUsage {
   outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
   /** Always 0 now that notifications are never dropped; kept for older readers. */
   droppedNotifications: number
+  /** Result pieces that arrived for a call no longer pending and were dropped (contract 4.4, R1). */
+  droppedResultPieces: number
 }
 
 export interface PluginBackendSupervisorOptions {
@@ -1253,6 +1255,7 @@ export class PluginBackendSupervisor {
         },
       },
       droppedNotifications: generation?.droppedNotifications ?? 0,
+      droppedResultPieces: this.droppedResultPieces,
     }
   }
 
