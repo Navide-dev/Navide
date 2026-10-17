@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
+import { backendCallRowFor } from './pluginActivity'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -1729,11 +1730,11 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
-  // Review M2 on #371: calls a frontend makes to its own backend
-  // (plugin:backend:call) are not recorded in plugin_activity, so a declared
-  // backend method could only ever read "declared but not used". The Host
-  // does not offer what it cannot measure.
-  it('D-f: never declares backend methods for declaredUnused, since their calls are not recorded', () => {
+  // A frontend's calls to its own backend (plugin:backend:call) are recorded
+  // in plugin_activity as source "backend", address "backend.<method>" (#374),
+  // so each declared method is offered under that address. (Before, #371 left
+  // them out: unrecorded, they could only ever read "declared but not used".)
+  it('D-f: declares backend methods as backend.<method>, the address their calls are recorded under', () => {
     const disclosure = computeDisclosure({
       schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
       permissions: { system: ['fs'], shell: 'allowlist' },
@@ -1741,8 +1742,24 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     } as never)
     expect(disclosure.nativeBackend?.methods).toEqual(['index', 'search'])
     const declared = declaredForActivity(disclosure)
-    expect(declared.some((item) => item.kind === 'backendMethod')).toBe(false)
+    expect(declared.filter((item) => item.kind === 'backendMethod')).toEqual([
+      { kind: 'backendMethod', key: 'backend.index' },
+      { kind: 'backendMethod', key: 'backend.search' },
+    ])
     expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
+  })
+
+  it('D-f: a recorded backend call has exactly the address its declared method is keyed by', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'] },
+      backend: { entry: 'backend/bin', methods: ['fs.read', 'index'], events: [] },
+    } as never)
+    const declared = declaredForActivity(disclosure).filter((item) => item.kind === 'backendMethod').map((item) => item.key)
+    const row = backendCallRowFor({ pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', method: 'index', response: { reqId: 'r', ok: true, result: null } as never })
+    // The backend matches backendMethod by address == key (contract 5.1).
+    expect(declared).toContain(row.address)
+    expect(declared).toEqual(['backend.fs.read', 'backend.index'])
   })
 
   it('D-f: the activity IPC refuses an unauthorized sender', async () => {
