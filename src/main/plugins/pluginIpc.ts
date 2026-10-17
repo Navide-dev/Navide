@@ -338,7 +338,7 @@ export interface PluginIpcOptions {
    *  views are drained. */
   factoryRollbackRefusal?: (pluginId: string) => string | undefined
   listFactoryPackages?: () => FactoryPackageSummary[]
-  /** Current and peak in-flight backend calls per plugin; calls are never capped. */
+  /** Current and peak in-flight backend calls and dropped Host event notifications per plugin; calls are never capped. */
   backendCallConcurrency?: () => BackendCallConcurrency[]
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
   /** Host side of the Disabled switch for the built-in Plans, Git and

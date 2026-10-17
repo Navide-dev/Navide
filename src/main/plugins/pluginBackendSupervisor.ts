@@ -261,6 +261,8 @@ export interface PluginBackendSupervisorOptions {
   ) => ExecutionPolicySnapshot | undefined
   /** Notify the Host when this child generation becomes unusable. */
   onFailure?: (error: BackendPluginError) => void
+  /** Called for every Host event notification dropped because the event backlog was full. */
+  onNotificationDropped?: () => void
 }
 
 export interface AuthorizedPlanRootBinding {
@@ -306,6 +308,10 @@ interface ChildGeneration {
   readonly exitPromise: Promise<void>
   outputQueue: Buffer[]
   outputQueueBytes: number
+  /** The queued frames that are Host event notifications, and their bytes:
+   *  only these count against the notification backlog bound. */
+  outputNotificationFrames: Set<Buffer>
+  outputNotificationBytes: number
   outputWriting: boolean
   droppedNotifications: number
   resolveExit?: () => void
@@ -1033,6 +1039,7 @@ export class PluginBackendSupervisor {
     workspacePath?: string,
   ) => ExecutionPolicySnapshot | undefined
   private readonly onFailure?: (error: BackendPluginError) => void
+  private readonly onNotificationDropped?: () => void
   private rootRefreshController?: AbortController
   private state: SupervisorState = 'idle'
   private currentGeneration?: ChildGeneration
@@ -1114,6 +1121,7 @@ export class PluginBackendSupervisor {
     this.beforeSpawn = options.beforeSpawn
     this.resolveExecutionPolicy = options.resolveExecutionPolicy
     this.onFailure = options.onFailure
+    this.onNotificationDropped = options.onNotificationDropped
     if (
       !isRecord(this.clientCapabilities) ||
       !isJsonValue(this.clientCapabilities) ||
@@ -1756,6 +1764,8 @@ export class PluginBackendSupervisor {
       diagnosticTruncated: false,
       outputQueue: [],
       outputQueueBytes: 0,
+      outputNotificationFrames: new Set(),
+      outputNotificationBytes: 0,
       outputWriting: false,
       droppedNotifications: 0,
       exitPromise: new Promise<void>((resolve) => {
@@ -2617,6 +2627,8 @@ export class PluginBackendSupervisor {
       if (force) {
         generation.outputQueue = []
         generation.outputQueueBytes = 0
+        generation.outputNotificationFrames.clear()
+        generation.outputNotificationBytes = 0
         try {
           child.stdin.destroy()
         } catch {
@@ -2676,6 +2688,8 @@ export class PluginBackendSupervisor {
     if (!drained) {
       generation.outputQueue = []
       generation.outputQueueBytes = 0
+      generation.outputNotificationFrames.clear()
+      generation.outputNotificationBytes = 0
     }
   }
 
@@ -2687,7 +2701,9 @@ export class PluginBackendSupervisor {
    * of requests is load, not a dead child (with no cap on in-flight calls, 500
    * concurrent calls used to overflow the queue and kill the child). A
    * 'notification' frame carries a Host event nobody is waiting on; once the
-   * backlog passes the queue bound it is dropped and counted instead.
+   * queued notifications alone pass the queue bound it is dropped, counted and
+   * reported through onNotificationDropped. Requests waiting in the same queue
+   * never count against that bound, so a request backlog cannot drop events.
    */
   private writeFrame(
     generation: ChildGeneration,
@@ -2700,8 +2716,13 @@ export class PluginBackendSupervisor {
       generation.child.stdin.destroyed ||
       generation.child.stdin.writableEnded
     ) throw new Error('closed')
-    if (kind === 'notification' && generation.outputQueueBytes + frame.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
+    if (kind === 'notification' && generation.outputNotificationBytes + frame.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
       generation.droppedNotifications += 1
+      try {
+        this.onNotificationDropped?.()
+      } catch {
+        // An observer must not change the drop.
+      }
       if (generation.droppedNotifications === 1) {
         this.emitDiagnostic(
           new Error(
@@ -2714,6 +2735,10 @@ export class PluginBackendSupervisor {
     }
     generation.outputQueue.push(frame)
     generation.outputQueueBytes += frame.length
+    if (kind === 'notification') {
+      generation.outputNotificationFrames.add(frame)
+      generation.outputNotificationBytes += frame.length
+    }
     this.flushOutput(generation)
   }
 
@@ -2726,6 +2751,7 @@ export class PluginBackendSupervisor {
     const frame = generation.outputQueue.shift()
     if (!frame) return
     generation.outputQueueBytes -= frame.length
+    if (generation.outputNotificationFrames.delete(frame)) generation.outputNotificationBytes -= frame.length
     generation.outputWriting = true
     try {
       generation.child.stdin.write(frame, (error?: Error | null) => {

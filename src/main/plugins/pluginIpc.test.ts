@@ -672,7 +672,7 @@ describe('plugins:remove boundary validation', () => {
   it('discloses current and peak in-flight backend calls to an authorized renderer only', () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-backend-concurrency-'))
     const manager = new FrontendPluginManager()
-    const concurrency = [{ pluginId: 'navide.plans', current: 3, peak: 512 }]
+    const concurrency = [{ pluginId: 'navide.plans', current: 3, peak: 512, droppedNotifications: 7 }]
     try {
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         backendCallConcurrency: () => concurrency,

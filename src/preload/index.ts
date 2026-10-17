@@ -151,11 +151,13 @@ export interface FactoryPluginSummary {
   optedOut: boolean
 }
 
-/** In-flight backend calls of one plugin: now, and the most at once since the Host started. */
+/** In-flight backend calls of one plugin: now, and the most at once since the Host started;
+ *  plus the Host event notifications its children dropped because their event backlog was full. */
 export interface BackendCallConcurrency {
   pluginId: string
   current: number
   peak: number
+  droppedNotifications: number
 }
 
 export interface MarketplaceExtension {
