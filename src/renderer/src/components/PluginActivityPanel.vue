@@ -86,6 +86,12 @@ function outcome(value: string): string {
   return te(key) ? t(key) : value
 }
 
+/** A source, kind or refusal reason in words; anything unknown stays as given (L5 on #371). */
+function word(group: 'source' | 'kind' | 'reason', value: string): string {
+  const key = `pluginActivity.${group}.${value}`
+  return te(key) ? t(key) : value
+}
+
 function caller(call: PluginActivityToolCall): string {
   return call.callerKind === 'pane'
     ? t('pluginActivity.caller.pane', { name: call.paneName || call.paneId })
@@ -137,8 +143,8 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <h5>{{ $t('pluginActivity.undeclared.heading') }}</h5>
         <ul>
           <li v-for="entry in report.undeclared" :key="`${entry.source}:${entry.address}:${entry.workspace}`">
-            {{ $t('pluginActivity.undeclared.item', { address: entry.address, source: entry.source, workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
-            <span class="nv-activity-muted">{{ $t('pluginActivity.undeclared.reasons', { reasons: list(entry.reasons.map((r) => `${r.reason} × ${r.count}`)) }) }}</span>
+            {{ $t('pluginActivity.undeclared.item', { address: entry.address, source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
+            <span class="nv-activity-muted">{{ $t('pluginActivity.undeclared.reasons', { reasons: list(entry.reasons.map((r) => `${word('reason', r.reason)} × ${r.count}`)) }) }}</span>
           </li>
         </ul>
       </div>
@@ -156,7 +162,7 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
         <h5>{{ $t('pluginActivity.unused.heading') }}</h5>
         <ul>
           <li v-for="entry in report.declaredUnused" :key="`${entry.kind}:${entry.key}`">
-            {{ entry.kind }}: {{ entry.key }} ·
+            {{ word('kind', entry.kind) }}: {{ entry.key }} ·
             {{ entry.lastUsedAt === null ? $t('pluginActivity.unused.never') : $t('pluginActivity.unused.last', { date: date(entry.lastUsedAt) }) }}
           </li>
         </ul>

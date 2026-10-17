@@ -57,6 +57,6 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
     ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: { installedDisclosures: vi.fn().mockResolvedValue([]) } }
     wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
     await flushPromises()
-    expect(wrapper.text()).toContain('No Navide plugin from the Marketplace is installed.')
+    expect(wrapper.text()).toContain('No Navide plugin from the Navide Marketplace is installed.')
   })
 })

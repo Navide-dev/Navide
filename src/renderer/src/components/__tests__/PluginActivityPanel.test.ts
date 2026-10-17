@@ -77,10 +77,14 @@ describe('PluginActivityPanel (D-f)', () => {
     mockPlugins()
     const panel = await render()
     const undeclared = panel.get('.nv-activity-undeclared').text()
-    expect(undeclared).toContain('shell.run (shell)')
-    expect(undeclared).toContain('undeclared × 2')
+    // Review L5 on #371: sources, kinds and reasons are worded, not codes.
+    expect(undeclared).toContain('shell.run (shell command)')
+    expect(undeclared).toContain('not declared × 2')
+    expect(undeclared).toContain('EXECUTION_POLICY_DENIED × 1')
     expect(panel.get('.nv-activity-anomalies').text()).toContain('more than 10 times the 7-day average (2.1)')
-    expect(panel.get('.nv-activity-unused').text()).toContain('never used')
+    const unused = panel.get('.nv-activity-unused').text()
+    expect(unused).toContain('Permission: aiCli · never used')
+    expect(unused).toContain('Agent tool: devmap_reset')
   })
 
   it('keeps the live numbers apart from the historical one, and says what children count', async () => {

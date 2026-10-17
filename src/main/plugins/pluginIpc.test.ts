@@ -75,6 +75,7 @@ import { app as electronApp } from 'electron'
 import {
   MARKETPLACE_ICON_MAX_BYTES,
   OFFICIAL_MARKETPLACE_URL,
+  declaredForActivity,
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
@@ -1050,6 +1051,9 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       expect(requests).toBe(1)
       await controller.checkUpdates()
       expect(controller.takeRescanNotices()).toEqual([])
+      // A notice no window received is put back for the next publish.
+      controller.restoreRescanNotices([notice])
+      expect(controller.takeRescanNotices()).toEqual([notice])
 
       await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
       expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']).toBeUndefined()
@@ -1723,6 +1727,22 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  // Review M2 on #371: calls a frontend makes to its own backend
+  // (plugin:backend:call) are not recorded in plugin_activity, so a declared
+  // backend method could only ever read "declared but not used". The Host
+  // does not offer what it cannot measure.
+  it('D-f: never declares backend methods for declaredUnused, since their calls are not recorded', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'], shell: 'allowlist' },
+      backend: { entry: 'backend/bin', methods: ['index', 'search'], events: [] },
+    } as never)
+    expect(disclosure.nativeBackend?.methods).toEqual(['index', 'search'])
+    const declared = declaredForActivity(disclosure)
+    expect(declared.some((item) => item.kind === 'backendMethod')).toBe(false)
+    expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
   })
 
   it('D-f: the activity IPC refuses an unauthorized sender', async () => {

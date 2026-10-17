@@ -2442,8 +2442,8 @@
               "more": "本頁第 4 章"
             },
             "disclosureOverview": {
-              "what": "所有從市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
-              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個外掛完整的活動也可以在「Navide 外掛」頁該外掛的那一列打開。"
+              "what": "所有從 Navide 市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
+              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個 Navide 外掛完整的活動，也可以在「Navide 外掛」頁該 Navide 外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",
@@ -11019,6 +11019,20 @@
   },
   "pluginActivity": {
     "title": "活動",
+    "source": {
+      "broker": "Navide 功能",
+      "shell": "shell 指令",
+      "agentTool": "agent 工具"
+    },
+    "kind": {
+      "system": "權限",
+      "shell": "Shell",
+      "backendMethod": "原生 backend 方法",
+      "agentTool": "agent 工具"
+    },
+    "reason": {
+      "undeclared": "沒有宣告"
+    },
     "tab": "活動",
     "openOverview": "在揭露總覽查看",
     "loading": "正在讀取活動紀錄…",
@@ -11095,8 +11109,8 @@
     },
     "overview": {
       "title": "揭露總覽",
-      "intro": "所有從市集安裝的 Navide 外掛：宣告了什麼、風險等級、最近活動和異常，集中在這一頁。只是紀錄，這裡的內容不會改變外掛能做的事。",
-      "empty": "沒有安裝任何來自市集的 Navide 外掛。",
+      "intro": "所有從 Navide 市集安裝的 Navide 外掛：宣告了什麼、風險等級、最近活動和異常，集中在這一頁。只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。",
+      "empty": "沒有安裝任何來自 Navide 市集的 Navide 外掛。",
       "installedScan": "安裝時驗證過的掃描",
       "noScanRecord": "安裝時沒有記錄掃描。",
       "activity": "最近活動",

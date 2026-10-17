@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fsyncFileSync, syncDirectorySync } from './fsSync'
 import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import { scanReport } from './marketplaceQuery'
 
 // Plan B D-f: the scan report prepareInstall verified, kept per installed
 // version so the periodic update check can tell the user when a rescan of
@@ -37,9 +38,13 @@ function readState(path: string): PersistedState {
     for (const [id, versions] of Object.entries(parsed.plugins)) {
       if (!isRecord(versions)) continue
       for (const [version, record] of Object.entries(versions)) {
-        if (!isRecord(record) || !isRecord(record.scan) || !Array.isArray(record.noticed)) continue
+        if (!isRecord(record) || !Array.isArray(record.noticed)) continue
+        // Rebuilt from validated fields; a record whose scan is not a valid
+        // report reads as no record (review L2 on #371).
+        const scan = scanReport(record.scan)
+        if (!scan) continue
         const noticed = record.noticed.filter((digest): digest is string => typeof digest === 'string')
-        ;(plugins[id] ??= {})[version] = { scan: record.scan as unknown as ScanReport, noticed }
+        ;(plugins[id] ??= {})[version] = { scan, noticed }
       }
     }
     return { schemaVersion: 1, plugins }

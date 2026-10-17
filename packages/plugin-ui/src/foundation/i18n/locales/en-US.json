@@ -2442,8 +2442,8 @@
               "more": "section 4 of this page"
             },
             "disclosureOverview": {
-              "what": "Each installed Marketplace Navide plugin's disclosure card, risk level, recent activity and unusual items on one page.",
-              "more": "Records only: nothing here changes what a Navide plugin may do. Each plugin's full activity is also under its row on the Navide Plugins page."
+              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
+              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -11019,6 +11019,20 @@
   },
   "pluginActivity": {
     "title": "Activity",
+    "source": {
+      "broker": "Navide capability",
+      "shell": "shell command",
+      "agentTool": "agent tool"
+    },
+    "kind": {
+      "system": "Permission",
+      "shell": "Shell",
+      "backendMethod": "Native backend method",
+      "agentTool": "Agent tool"
+    },
+    "reason": {
+      "undeclared": "not declared"
+    },
     "tab": "Activity",
     "openOverview": "View in Disclosure overview",
     "loading": "Loading activity…",
@@ -11095,8 +11109,8 @@
     },
     "overview": {
       "title": "Disclosure overview",
-      "intro": "Every installed Navide plugin from the Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a plugin may do.",
-      "empty": "No Navide plugin from the Marketplace is installed.",
+      "intro": "Every Navide plugin installed from the Navide Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a Navide plugin may do.",
+      "empty": "No Navide plugin from the Navide Marketplace is installed.",
       "installedScan": "Scan verified at install",
       "noScanRecord": "No scan was recorded at install.",
       "activity": "Recent activity",

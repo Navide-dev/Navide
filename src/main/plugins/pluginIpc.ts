@@ -244,11 +244,14 @@ function listingDisclosure(item: Record<string, unknown>): {
 
 const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
 
-/** What the installed manifest declares, for `declaredUnused` (contract 5.1). */
-function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
+/** What the installed manifest declares, for `declaredUnused` (contract 5.1).
+ *  Backend methods are left out: a frontend's calls to its own backend
+ *  (plugin:backend:call) are not recorded in plugin_activity, so they could
+ *  only ever read "declared but not used" (review M2 on #371). */
+export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
   const out: NonNullable<PluginActivityReportRequest['declared']> = []
   for (const item of disclosureItems(disclosure)) {
-    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'backendMethod' || item.kind === 'agentTool') {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
       out.push({ kind: item.kind, key: item.key })
     }
   }
@@ -386,6 +389,8 @@ export interface PluginTrustRefreshController {
   /** D-f: rescans of installed versions that found new items since the last
    *  call, each reported once. Notice only. */
   takeRescanNotices(): PluginRescanNotice[]
+  /** Put back notices no window received, to be sent after the next check. */
+  restoreRescanNotices(notices: PluginRescanNotice[]): void
 }
 
 /** A rescan of an installed version found these new scan items (D-f). */
@@ -2627,6 +2632,9 @@ export function registerPluginIpc(
       const taken = rescanNotices
       rescanNotices = []
       return taken
+    },
+    restoreRescanNotices(notices) {
+      rescanNotices = [...notices, ...rescanNotices]
     },
     async refreshRegistryTrust() {
       const packageIds = discoverInstalledRegistryPackageIds(pluginsRoot)

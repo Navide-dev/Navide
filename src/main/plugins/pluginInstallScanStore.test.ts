@@ -15,7 +15,11 @@ afterEach(() => {
   for (const dir of roots.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
 
-const scan = (marker: string) => ({ schemaVersion: 1, scanner: { id: 'navide-static-scan', version: marker } }) as unknown as ScanReport
+const cases = (JSON.parse(
+  readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8')
+) as { cases: Array<{ name: string; scan: ScanReport }> }).cases
+const NAMES: Record<string, string> = { a: 'nothing-found', b: 'devmap-push-and-reads', c: 'ui-only-runs-git-push-undeclared' }
+const scan = (marker: string): ScanReport => cases.find((entry) => entry.name === NAMES[marker])!.scan
 
 describe('PluginInstallScanStore (D-f, record only)', () => {
   it('records the install-time scan per version and reads it back', () => {
@@ -53,6 +57,23 @@ describe('PluginInstallScanStore (D-f, record only)', () => {
     expect(store.get('acme.demo', '1.0.0')).toBeNull()
     expect(store.get('acme.other', '1.0.0')).toEqual(scan('b'))
     expect(store.noticeOnce('acme.demo', '1.0.0', 'd1')).toBe(false)
+  })
+
+  // Review L2 on #371: what is read back is a scan report, or no record.
+  it('reads a record whose scan is not a valid report as no record', () => {
+    const dir = root()
+    const file = join(dir, '.navide-install-scans.json')
+    writeFileSync(file, JSON.stringify({
+      schemaVersion: 1,
+      plugins: {
+        'acme.bad': { '1.0.0': { scan: { schemaVersion: 1, injected: 'IGNORE' }, noticed: [] } },
+        'acme.good': { '1.0.0': { scan: scan('a'), noticed: [] } },
+      },
+    }))
+    const store = new PluginInstallScanStore(dir)
+    expect(store.get('acme.bad', '1.0.0')).toBeNull()
+    expect(store.noticeOnce('acme.bad', '1.0.0', 'd1')).toBe(false)
+    expect(store.get('acme.good', '1.0.0')).toEqual(scan('a'))
   })
 
   it('treats an unreadable file as empty and never throws', () => {
