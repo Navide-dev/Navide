@@ -70,6 +70,7 @@ import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManage
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
+import { answerMarketplaceQuery, MarketplaceHttpError } from './marketplaceQuery'
 import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
@@ -523,8 +524,9 @@ export function registerPluginIpc(
     return { kind: 'previous', version: selected.previous.packageVersion }
   }
 
-  ipcMain.handle('plugins:listInstalled', (event): InstalledSummary[] => {
-    assertAuthorized(event)
+  // The installed inventory, shared by the Extensions page and the agent's
+  // read-only `plugins_list_installed` (marketplace.query, B2-a).
+  const listInstalledSummaries = (): InstalledSummary[] => {
     const summaries = new Map<
       string,
       {
@@ -620,6 +622,11 @@ export function registerPluginIpc(
       })(),
     }
     })
+  }
+
+  ipcMain.handle('plugins:listInstalled', (event): InstalledSummary[] => {
+    assertAuthorized(event)
+    return listInstalledSummaries()
   })
 
   ipcMain.handle('plugins:listContributions', (event) => {
@@ -654,15 +661,13 @@ export function registerPluginIpc(
     }
   )
 
-  ipcMain.handle(
-    'plugins:marketplaceSearch',
-    async (
-      event,
+  // The Marketplace search, shared by the Marketplace page and the agent's
+  // read-only `marketplace_search` (marketplace.query, B2-a).
+  const marketplaceSearch = async (
       query?: string,
       sort?: string,
       options?: { category?: unknown; offset?: unknown; limit?: unknown; hideIncompatible?: unknown } | null
     ) => {
-      assertAuthorized(event)
       const marketplace = resolveConfiguredMarketplace(trust)
       const appVersion = hostAppVersion()
       // Resolve relative to the base path: the Registry may be served under a
@@ -686,7 +691,7 @@ export function registerPluginIpc(
         url.searchParams.set('compatible_only', 'true')
       }
       const res = await fetch(url)
-      if (!res.ok) throw new Error(`marketplace search failed: HTTP ${res.status}`)
+      if (!res.ok) throw new MarketplaceHttpError(`marketplace search failed: HTTP ${res.status}`, res.status)
       const body = (await res.json()) as { items?: Array<Record<string, unknown>> }
       // Target and engine compatibility are decided here, with the same rules
       // install uses, so the renderer never re-derives them. A Registry that
@@ -710,6 +715,18 @@ export function registerPluginIpc(
           icon_path: typeof item.icon_path === 'string' ? item.icon_path : null,
         })),
       }
+    }
+
+  ipcMain.handle(
+    'plugins:marketplaceSearch',
+    async (
+      event,
+      query?: string,
+      sort?: string,
+      options?: { category?: unknown; offset?: unknown; limit?: unknown; hideIncompatible?: unknown } | null
+    ) => {
+      assertAuthorized(event)
+      return marketplaceSearch(query, sort, options)
     }
   )
 
@@ -793,10 +810,8 @@ export function registerPluginIpc(
   // Read-only detail for the Marketplace detail view. Trust metadata and
   // signed envelopes stay main-side: the renderer only needs display fields,
   // and install still re-fetches and verifies through prepareInstall.
-  ipcMain.handle(
-    'plugins:marketplaceDetail',
-    async (event, args: { namespace?: unknown; name?: unknown } | null) => {
-      assertAuthorized(event)
+  // Shared with the agent's read-only `marketplace_detail` (marketplace.query, B2-a).
+  const marketplaceDetail = async (args: { namespace?: unknown; name?: unknown } | null) => {
       const namespace = marketplacePathSegment(args?.namespace)
       const name = marketplacePathSegment(args?.name)
       const marketplace = resolveConfiguredMarketplace(trust)
@@ -807,7 +822,7 @@ export function registerPluginIpc(
       // Compatibility is computed here from each row's `engines_navide`, so
       // the Registry's own verdict (and its `navide_version` input) is unused.
       const res = await fetch(base)
-      if (!res.ok) throw new Error(`marketplace detail failed: HTTP ${res.status}`)
+      if (!res.ok) throw new MarketplaceHttpError(`marketplace detail failed: HTTP ${res.status}`, res.status)
       const detail = (await res.json()) as Record<string, unknown> & {
         versions?: Array<Record<string, unknown>>
       }
@@ -881,6 +896,29 @@ export function registerPluginIpc(
         readme,
       }
     }
+
+  ipcMain.handle(
+    'plugins:marketplaceDetail',
+    async (event, args: { namespace?: unknown; name?: unknown } | null) => {
+      assertAuthorized(event)
+      return marketplaceDetail(args)
+    }
+  )
+
+  // B2-a: the backend's read-only Marketplace MCP tools ask through the
+  // authenticated Host session; the answer comes from the functions above.
+  manager.setMarketplaceQueryHandler?.((query) =>
+    answerMarketplaceQuery(query, {
+      search: (text, searchOptions) => marketplaceSearch(text, undefined, searchOptions),
+      detail: (namespace, name) => marketplaceDetail({ namespace, name }),
+      installed: () =>
+        listInstalledSummaries().map((summary) => ({
+          id: summary.id,
+          packageVersion: summary.packageVersion,
+          disabled: summary.disabled,
+          hasBackend: manager.installedPackageHasBackend(summary.id),
+        })),
+    })
   )
 
   // Update detection for installed Registry packages: compares each installed

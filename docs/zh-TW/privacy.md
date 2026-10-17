@@ -125,3 +125,7 @@ Successful observations from the existing Claude quota polling service are saved
 準備好的 bytes 保存在 backend 記憶體，15 分鐘後或重啟時失效，同時最多 8 份有效套件，另在記憶體保留最多 8 份輕量完成重試收據。安裝使用已檢視的快照，不重讀來源，寫入既有共用 Skills 根目錄，且不執行腳本或 plugin hooks。收據仍保留時，重試只回傳原結果而不再寫入；它沿用原 preview 到期時間，也可能提早被淘汰。到期或淘汰後重送回傳 missing/expired，不重新安裝。Inspect／prepare 會把 skill 文字、檔案資訊與來源路徑回傳給請求的 coding agent，其模型供應商可能依 CLI 自身資料政策接收這些結果；套件中應避免放入秘密資料。
 
 開啟 Skills sync 時，符合限制的安裝內容與投遞設定可透過既有流程傳到配對裝置。選定套件與 Skills 內容 export 使用相同限制：64 檔、每檔 256 KiB、總量 512 KiB；符合限制不保證同步已完成。後端產生的來源、digest 與時間紀錄存於本機 Navide marker，編輯與重啟後保留，但不進入 export／Skills sync。
+
+### 透過 MCP 查詢 Navide 市集
+
+`marketplace_search` 與 `marketplace_detail` 會讓 Navide App 向設定的 Registry 送出和 Navide 市集頁面相同的請求：搜尋文字、分類與頁數，或套件名稱。`plugins_list_installed` 不對外送出任何東西，只讀取本機的清單。三者都把結果（公開的上架資料，以及已安裝 Navide 外掛的 id、版本與狀態）回傳給發出請求的 coding agent，其設定的模型供應商可能依該 CLI 自己的資料政策收到這些內容。
