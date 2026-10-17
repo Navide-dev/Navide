@@ -144,7 +144,15 @@ tool means adding it there (or giving it a reserved prefix).
   hide text in a dialog.
 - The same rule applies to every `description` and `title` string anywhere in
   `inputSchema` (agents read the whole schema in tools/list); a violation is
-  `AGENT_TOOL_TEXT_INVALID` on field `inputSchema`.
+  `AGENT_TOOL_TEXT_INVALID` on field `inputSchema`. Values of the data keywords
+  `const`, `default`, `enum` and `examples` are not schema and are not checked.
+- No other schema string refuses a package: `enum`, `const`, `default` and
+  `examples` values and property names may contain anything. Instead the core
+  server neutralizes every string in the schema it serves in tools/list
+  (property names included, `pattern` values excepted): control characters,
+  bidi controls, zero-width characters and variation selectors
+  (U+FE00–U+FE0F, U+E0100–U+E01EF) are removed and boundary markers are broken,
+  with the same `external_content` rules that fence results.
 - Consent surfaces show each tool's `method` and its whole `inputSchema`
   (collapsible), the number of tools and their total size. Nothing limits the
   number of tools or the size of the whole declaration; DB9 applies per field

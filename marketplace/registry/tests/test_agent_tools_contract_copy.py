@@ -59,3 +59,16 @@ def test_publish_refuses_with_the_contract_error_code(change, code: str) -> None
     change(raw)
     with pytest.raises(ManifestError, match=code):
         parse_manifest(raw)
+
+
+def test_publish_accepts_schema_data_strings_and_property_names() -> None:
+    # Only description/title text is refused; other schema strings are
+    # neutralized in tools/list, never a reason to refuse a package.
+    validation = ROOT / "docs" / "plugin-contracts" / "agent-tools-fixtures" / "agent-tools-validation.json"
+    [case] = [c for c in json.loads(validation.read_text(encoding="utf-8"))["cases"]
+              if c["name"].startswith("schema data strings and property names are not refused")]
+    raw = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    raw["backend"]["agentTools"][0]["inputSchema"] = case["manifest"]["backend"]["agentTools"][0]["inputSchema"]
+    manifest = parse_manifest(raw)
+    assert manifest.backend is not None
+    assert manifest.backend.agentTools == raw["backend"]["agentTools"]

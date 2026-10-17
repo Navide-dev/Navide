@@ -149,6 +149,11 @@ def _has_non_integer_number(value: Any) -> bool:
     return False
 
 
+#: Schema keywords whose values are data, not schema: never refused for their
+#: text (the core neutralizes every schema string in tools/list instead).
+_SCHEMA_DATA_KEYWORDS = frozenset(("const", "default", "enum", "examples"))
+
+
 def _has_invalid_schema_text(value: Any) -> bool:
     """Every ``description`` / ``title`` string anywhere in a schema follows the text rules too."""
     if isinstance(value, list):
@@ -156,7 +161,9 @@ def _has_invalid_schema_text(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
     return any(
-        (not is_valid_agent_tool_text(item))
+        False
+        if key in _SCHEMA_DATA_KEYWORDS
+        else (not is_valid_agent_tool_text(item))
         if key in ("description", "title") and isinstance(item, str)
         else _has_invalid_schema_text(item)
         for key, item in value.items()
