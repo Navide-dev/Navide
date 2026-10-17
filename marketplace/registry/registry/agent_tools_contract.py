@@ -541,6 +541,19 @@ PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
 #: first-seen rows go, so a reinstalled plugin's first writes are new again.
 PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"
 
+# ── Host → backend: watchdog decisions (option C, section 5.2) ──────────────
+
+#: Host-authenticated: ``{rows: [{plugin_id, plugin_version, item, usage,
+#: threshold, decision, at}]}``, answered ``{ok, accepted}``
+#: (``src/shared/pluginResourceDecision.ts``).
+PLUGIN_RESOURCE_DECISION_MESSAGE = "plugin.resource.decision"
+#: What went over its threshold: memory, disk and stdoutPending (stdout a
+#: child sent without a newline yet; reserved until DB9, #375) in bytes,
+#: processes a count, cpu in cores.
+PLUGIN_RESOURCE_ITEMS = ("memory", "cpu", "processes", "disk", "stdoutPending")
+#: The notice, then the user's choice.
+PLUGIN_RESOURCE_DECISIONS = ("notified", "continue", "terminate")
+
 
 class MarketplaceQueryRequest(TypedDict):
     request_id: str
@@ -694,6 +707,20 @@ PLUGIN_AUDIT_DDL = (
     " workspace TEXT NOT NULL,"
     " first_at INTEGER NOT NULL,"
     " PRIMARY KEY (plugin_id, tool, workspace))",
+    # Watchdog option C (section 5.2): each resource notice and the user's
+    # continue / terminate. Numbers only, never a path or command line. Kept
+    # as long as plugin_activity_daily; a removed plugin's rows are forgotten.
+    "CREATE TABLE IF NOT EXISTS plugin_resource_decisions ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " item TEXT NOT NULL,"
+    " usage REAL NOT NULL,"
+    " threshold REAL NOT NULL,"
+    " decision TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_at ON plugin_resource_decisions (at)",
+    "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_plugin_at ON plugin_resource_decisions (plugin_id, at)",
 )
 
 # ── navide.db: agent plugin actions (B2-c) ──────────────────────────────────
