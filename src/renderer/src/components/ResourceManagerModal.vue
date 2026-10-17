@@ -21,6 +21,7 @@ import { useStorageUsage } from '../composables/useStorageUsage'
 import type { ResourceSummaryRow } from './ResourceSummaryPanel.vue'
 import StorageSection from './StorageSection.vue'
 import { formatBytes } from '../lib/formatBytes'
+import { revealInvisibleText } from '../../../shared/pluginAgentTools'
 import { formatCpuPercent, machineCpuShare, machineMemoryShare } from '../lib/resourceSampling'
 import { idleReclaimDisabled } from '../lib/idleReclaim'
 
@@ -126,7 +127,7 @@ watch(
 const resultHelperDetail = computed(() => {
   const helper = resultHelper.value
   if (!helper) return ''
-  if (helper.state === 'unavailable') return t('resource.result-helper-detail-unavailable', { error: helper.lastError })
+  if (helper.state === 'unavailable') return t('resource.result-helper-detail-unavailable', { error: revealInvisibleText(helper.lastError) })
   return helper.state === 'ready' ? t('resource.result-helper-detail-ready') : t('resource.result-helper-detail-idle')
 })
 

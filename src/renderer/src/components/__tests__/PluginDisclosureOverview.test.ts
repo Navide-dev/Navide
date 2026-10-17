@@ -59,4 +59,22 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('No Navide plugin from the Navide Marketplace is installed.')
   })
+
+  // Final review part 2 MED-1.
+  it('spells out invisible characters in the plugin id and version', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        installedDisclosures: vi.fn().mockResolvedValue([
+          { id: 'acme.‮quiet', version: '1.0.0​', disclosure: null, scan: null },
+          { id: 'acme.plain', version: '2.0.0', disclosure: null, scan: null },
+        ]),
+        activityReport: vi.fn(async () => ({ ok: true, report })),
+      },
+    }
+    wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+    await flushPromises()
+    const names = wrapper.findAll('.nv-overview-name').map((h) => h.text())
+    expect(names[0]).toBe('acme.\\u{202e}quiet 1.0.0\\u{200b}')
+    expect(names[1]).toBe('acme.plain 2.0.0')
+  })
 })

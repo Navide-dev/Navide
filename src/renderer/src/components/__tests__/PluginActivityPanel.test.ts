@@ -193,4 +193,47 @@ describe('PluginActivityPanel (D-f)', () => {
     mockPlugins({ backendResourceUsage: vi.fn().mockResolvedValue(usage(100)) })
     expect((await render()).text()).not.toMatch(/pluginActivity\./)
   })
+
+  // Final review part 2 MED-1: text from the plugin shows its invisible characters.
+  it('spells out invisible characters in every plugin-provided string', async () => {
+    const ZW = '​'
+    const RLO = '‮'
+    const report = structuredClone(fixture)
+    report.files[0].path = `src/${RLO}gnp.exe`
+    report.files[0].address = `fs.read${ZW}File`
+    report.commands[0].command = `git${ZW} status`
+    report.undeclared[0].address = `shell${RLO}.run`
+    report.undeclared[0].workspace = `/Users/me/${ZW}project`
+    report.declaredUnused[0].key = `ai${ZW}Cli`
+    report.toolCalls[0].tool = `devmap${RLO}_read`
+    report.anomalies[1].workspace = `/Users/${RLO}me`
+    report.anomalies[1].tool = `devmap${ZW}_write`
+    report.agentActions = [{ at: 1, action: `enable${ZW}`, callerKind: 'pane', paneId: 'p-1', paneName: 'dev', workspace: '/w', version: `1.0.0${RLO}` }]
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const panel = await render()
+    const text = panel.text()
+    expect(text).not.toContain(ZW)
+    expect(text).not.toContain(RLO)
+    expect(panel.get('.nv-activity-files').text()).toContain('src/\\u{202e}gnp.exe')
+    expect(panel.get('.nv-activity-files').text()).toContain('fs.read\\u{200b}File')
+    expect(panel.get('.nv-activity-commands').text()).toContain('git\\u{200b} status')
+    expect(panel.get('.nv-activity-undeclared').text()).toContain('shell\\u{202e}.run')
+    expect(panel.get('.nv-activity-undeclared').text()).toContain('/Users/me/\\u{200b}project')
+    expect(panel.get('.nv-activity-unused').text()).toContain('ai\\u{200b}Cli')
+    expect(panel.get('.nv-activity-tools').text()).toContain('devmap\\u{202e}_read')
+    expect(panel.get('.nv-activity-anomalies').text()).toContain('/Users/\\u{202e}me')
+    expect(panel.get('.nv-activity-anomalies').text()).toContain('devmap\\u{200b}_write')
+    expect(panel.get('.nv-activity-actions').text()).toContain('enable\\u{200b}')
+    expect(panel.get('.nv-activity-actions').text()).toContain('1.0.0\\u{202e}')
+    expect(panel.find('a').exists()).toBe(false)
+  })
+
+  it('shows ordinary strings exactly as given', async () => {
+    mockPlugins()
+    const panel = await render()
+    expect(panel.text()).not.toContain('\\u{')
+    expect(panel.get('.nv-activity-files').text()).toContain('docs/devmap.md')
+    expect(panel.get('.nv-activity-commands').text()).toContain('git status')
+    expect(panel.get('.nv-activity-unused').text()).toContain('aiCli')
+  })
 })
