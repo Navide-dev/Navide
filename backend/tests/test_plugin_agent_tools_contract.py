@@ -250,7 +250,7 @@ def test_split_refuses_a_piece_size_that_cannot_hold_every_code_point() -> None:
 
 @pytest.mark.parametrize("case", _CHUNKING["reassembly"], ids=lambda c: c["name"])
 def test_reassemble_payload_text(case: dict[str, Any]) -> None:
-    assert tools.reassemble_agent_tool_payload_text(case["chunks"], case["summary"]) == case["expected"]
+    assert tools.reassemble_agent_tool_payload_text(case["chunks"], case["summary"], case["chunkBytes"]) == case["expected"]
 
 
 @pytest.mark.parametrize("case", _CHUNKING["arguments"], ids=lambda c: c["name"])
@@ -262,6 +262,7 @@ def test_arguments_are_cut_from_the_shared_compact_spelling(case: dict[str, Any]
     joined = tools.reassemble_agent_tool_payload_text(
         [{"seq": seq, "data": data} for seq, data in enumerate(pieces)],
         {"chunks": len(pieces), "bytes": tools.utf8_byte_length(text)},
+        case["maxBytes"],
     )
     assert json.loads(joined["text"]) == case["arguments"]
 

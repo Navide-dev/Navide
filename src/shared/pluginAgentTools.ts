@@ -414,7 +414,7 @@ export interface AgentToolCallChunkedResponse {
 }
 
 /** `json` is set by the caller when the joined text does not parse. */
-export type AgentToolChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes' | 'json'
+export type AgentToolChunksInvalidReason = 'summary' | 'seq' | 'count' | 'short' | 'bytes' | 'json'
 
 export type AgentToolPayloadReassembly =
   | { ok: true; text: string }
@@ -453,11 +453,15 @@ function isCount(value: unknown, min: number): value is number {
 
 /**
  * Joins the pieces received for one request (in any arrival order) and checks
- * them against the summary. No size limit beyond memory.
+ * them against the summary. Every piece but the last must be full, at least
+ * `chunkBytes - 3` UTF-8 bytes (what {@link splitAgentToolPayloadText} always
+ * produces): a format rule, so a sender cannot drip a value to stretch the
+ * transfer. No size limit beyond memory.
  */
 export function reassembleAgentToolPayloadText(
   chunks: ReadonlyArray<{ seq: unknown; data: unknown }>,
   summary: unknown,
+  chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
 ): AgentToolPayloadReassembly {
   const invalid = (reason: AgentToolChunksInvalidReason): AgentToolPayloadReassembly =>
     ({ ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason })
@@ -470,6 +474,7 @@ export function reassembleAgentToolPayloadText(
     if (c.seq >= s.chunks || ordered[c.seq] !== undefined) return invalid('seq')
     ordered[c.seq] = c.data
   }
+  if (ordered.slice(0, -1).some((piece) => utf8ByteLength(piece) < chunkBytes - 3)) return invalid('short')
   const text = ordered.join('')
   if (utf8ByteLength(text) !== s.bytes) return invalid('bytes')
   return { ok: true, text }

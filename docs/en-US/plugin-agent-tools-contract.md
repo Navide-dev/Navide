@@ -764,7 +764,7 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_TIMEOUT` | `reason` `execution`: the plugin did not answer within `timeoutMs`; `reason` `transfer-idle`: a transfer of pieces stalled for `AGENT_TOOL_CHUNK_IDLE_MS` (4.4, Timing) |
 | `PLUGIN_TOOL_FAILED` | the backend answered with an error; its own code is in `plugin_error` |
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
-| `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `bytes` or `json` |
+| `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
@@ -821,10 +821,15 @@ the frame size child readers use. Each piece is `{seq, data}` with `seq` countin
 The receiver joins them with `reassembleAgentToolPayloadText(pieces,
 summary)`, which orders by `seq` (so arrival order does not matter) and checks
 that `seq` runs `0..chunks-1` exactly once each and that the joined text has
-`summary.bytes` UTF-8 bytes. The summary `{chunks, bytes}` travels in the
-message that completes the transfer. A mismatch is
-`PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` | `count` |
-`bytes`; joined text that does not parse as JSON is the same code with
+`summary.bytes` UTF-8 bytes. Every piece but the last must be full: at least
+`AGENT_TOOL_CHUNK_BYTES` − 3 UTF-8 bytes, which is what the splitter always
+produces (a piece ends early only when the next code point, up to 4 bytes,
+does not fit). This is a format rule, not a limit: it stops a sender from
+dripping a value one byte at a time to keep the idle timer alive and so stretch
+a call past `timeoutMs` (R1 is the only hop whose sender is not Navide). The
+summary `{chunks, bytes}` travels in the message that completes the transfer.
+A mismatch is `PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` |
+`count` | `short` | `bytes`; joined text that does not parse as JSON is the same code with
 `reason` `json`. It fails that one call and nothing else. A value whose text
 fits in one piece is sent exactly as before, with no pieces.
 
@@ -1009,7 +1014,8 @@ call is alive: it sends the request `agent.capability.progress`
 `{"request_id": "...", "phase": "arguments" | "execution" | "result"}` after
 each argument piece it writes to the child (`arguments`), when it writes the
 `navide/call` (`execution`) and after each result piece it receives from the
-child (`result`). The backend answers `{"ok": true, "accepted": true}`, or
+child (`result`). The backend accepts it only from the authenticated Host
+session, like the pieces, and answers `{"ok": true, "accepted": true}`, or
 `accepted: false` for a request id that is no longer pending. The backend's
 wait for a request restarts on every Host message about it (progress, result
 piece, result) and lasts `max(timeoutMs, AGENT_TOOL_CHUNK_IDLE_MS)` + 5 s, so

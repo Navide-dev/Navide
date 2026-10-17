@@ -108,7 +108,8 @@
       "expected": {
         "ok": true,
         "text": "{\"a\":\"中\"}"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "arrival order does not matter, seq does",
@@ -129,7 +130,8 @@
       "expected": {
         "ok": true,
         "text": "abcd"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "single empty piece",
@@ -146,7 +148,8 @@
       "expected": {
         "ok": true,
         "text": ""
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "missing piece",
@@ -168,7 +171,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "count"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "duplicate seq",
@@ -190,7 +194,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "seq"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "seq outside the announced count",
@@ -212,7 +217,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "seq"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "more pieces than announced",
@@ -234,7 +240,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "count"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "byte total disagrees",
@@ -256,7 +263,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "bytes"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "malformed summary",
@@ -274,7 +282,8 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "summary"
-      }
+      },
+      "chunkBytes": 4
     },
     {
       "name": "malformed piece",
@@ -292,6 +301,74 @@
         "ok": false,
         "code": "PLUGIN_TOOL_CHUNKS_INVALID",
         "reason": "seq"
+      },
+      "chunkBytes": 4
+    },
+    {
+      "name": "a short piece before the last is refused",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "cdefgh"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 8
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "short"
+      }
+    },
+    {
+      "name": "a full piece may end early by up to 3 bytes for a code point",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcde"
+        },
+        {
+          "seq": 1,
+          "data": "😀"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 9
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": true,
+        "text": "abcde😀"
+      }
+    },
+    {
+      "name": "the last piece may be short",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcdefgh"
+        },
+        {
+          "seq": 1,
+          "data": "i"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 9
+      },
+      "chunkBytes": 8,
+      "expected": {
+        "ok": true,
+        "text": "abcdefghi"
       }
     }
   ],

@@ -397,13 +397,18 @@ def _is_count(value: Any, minimum: int) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= MAX_SAFE_INTEGER
 
 
-def reassemble_agent_tool_payload_text(chunks: list[dict[str, Any]], summary: Any) -> dict[str, Any]:
+def reassemble_agent_tool_payload_text(
+    chunks: list[dict[str, Any]], summary: Any, chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES
+) -> dict[str, Any]:
     """Join the pieces received for one request (any arrival order) and check them against the summary.
 
-    Returns ``{"ok": True, "text": ...}`` or
-    ``{"ok": False, "code": "PLUGIN_TOOL_CHUNKS_INVALID", "reason": "summary" | "seq" | "count" | "bytes"}``.
-    No size limit beyond memory. A joined text that does not parse as JSON is
-    reported by the caller with reason ``"json"``.
+    Returns ``{"ok": True, "text": ...}`` or ``{"ok": False, "code":
+    "PLUGIN_TOOL_CHUNKS_INVALID", "reason": "summary" | "seq" | "count" | "short" | "bytes"}``.
+    Every piece but the last must be full, at least ``chunk_bytes - 3`` UTF-8
+    bytes (what ``split_agent_tool_payload_text`` always produces): a format
+    rule, so a sender cannot drip a value to stretch the transfer. No size
+    limit beyond memory. A joined text that does not parse as JSON is reported
+    by the caller with reason ``"json"``.
     """
 
     def invalid(reason: str) -> dict[str, Any]:
@@ -422,6 +427,8 @@ def reassemble_agent_tool_payload_text(chunks: list[dict[str, Any]], summary: An
         if seq >= count or ordered[seq] is not None:
             return invalid("seq")
         ordered[seq] = chunk["data"]
+    if any(utf8_byte_length(piece or "") < chunk_bytes - 3 for piece in ordered[:-1]):
+        return invalid("short")
     text = "".join(piece for piece in ordered if piece is not None)
     if utf8_byte_length(text) != summary["bytes"]:
         return invalid("bytes")

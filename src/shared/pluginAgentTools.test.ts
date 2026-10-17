@@ -134,7 +134,7 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
   const chunking = load('payload-chunking.json') as {
     constants: Record<string, string | number>
     splits: Case<{ name: string; text: string; maxBytes: number; expected: string[] }>
-    reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; expected: unknown }>
+    reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; chunkBytes: number; expected: unknown }>
     arguments: Case<{ name: string; arguments: unknown; text: string; maxBytes: number; expected: string[] }>
     argumentsDigest: Case<{ name: string; arguments: unknown; canonical: boolean; bytes: number; sha256: string }>
   }
@@ -180,15 +180,15 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     expect(() => splitAgentToolPayloadText('abc', 3)).toThrow(RangeError)
   })
 
-  it.each(chunking.reassembly)('reassembles: $name', ({ chunks, summary, expected }) => {
-    expect(reassembleAgentToolPayloadText(chunks, summary)).toEqual(expected)
+  it.each(chunking.reassembly)('reassembles: $name', ({ chunks, summary, chunkBytes, expected }) => {
+    expect(reassembleAgentToolPayloadText(chunks, summary, chunkBytes)).toEqual(expected)
   })
 
   it.each(chunking.arguments)('cuts arguments from the shared compact spelling: $name', ({ arguments: args, text, maxBytes, expected }) => {
     expect(JSON.stringify(args)).toBe(text)
     const pieces = splitAgentToolPayloadText(text, maxBytes)
     expect(pieces).toEqual(expected)
-    const joined = reassembleAgentToolPayloadText(pieces.map((data, seq) => ({ seq, data })), { chunks: pieces.length, bytes: utf8ByteLength(text) })
+    const joined = reassembleAgentToolPayloadText(pieces.map((data, seq) => ({ seq, data })), { chunks: pieces.length, bytes: utf8ByteLength(text) }, maxBytes)
     expect(JSON.parse((joined as { text: string }).text)).toEqual(args)
   })
 
