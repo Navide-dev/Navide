@@ -25,6 +25,8 @@ lifespan task — safe for the anyio task group inside.
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import sys
 import hashlib
 import json
 import logging
@@ -4930,9 +4932,135 @@ def _host_answer_timeout_s(payload: dict[str, Any]) -> float:
     return _AGENT_CAPABILITY_TIMEOUT_S
 
 
+# ── chunked transfer with the Host (agent-tools contract 4.4, A2 and R2) ────
+# Per pending agent request: the result pieces received so far and when the
+# Host last showed the call is alive (a progress message, a piece, the result).
+_agent_transfers: dict[str, dict[str, Any]] = {}
+
+
+def _agent_transfer_start(request_id: str) -> None:
+    _agent_transfers[request_id] = {
+        "pieces": [],
+        "bytes": 0,
+        "short": False,
+        "activity": asyncio.get_running_loop().time(),
+    }
+
+
+def note_agent_capability_activity(request_id: str) -> bool:
+    """The Host says a pending request is alive; False when nobody waits for it any more."""
+    transfer = _agent_transfers.get(request_id)
+    if transfer is None or request_id not in _agent_capability_pending.pending:
+        return False
+    transfer["activity"] = asyncio.get_running_loop().time()
+    return True
+
+
+def accept_agent_result_piece(request_id: str, seq: Any, data: Any) -> bool:
+    """Keep one result piece from the Host (R2). False tells the Host to stop sending.
+
+    Each piece is checked on arrival: one out of order, or any piece after a
+    short one, fails that call at once with PLUGIN_TOOL_CHUNKS_INVALID.
+    """
+    from agent_team_backend.plugins.agent_tools_contract import (
+        AGENT_TOOL_CHUNKS_INVALID,
+        agent_tool_chunk_arrival,
+        utf8_byte_length,
+    )
+
+    transfer = _agent_transfers.get(request_id)
+    if transfer is None or request_id not in _agent_capability_pending.pending:
+        return False
+    arrival = agent_tool_chunk_arrival(transfer["short"], data, seq=seq, expected_seq=len(transfer["pieces"]))
+    if not arrival["ok"]:
+        _agent_capability_pending.resolve(request_id, {
+            "ok": False,
+            "error": "The Navide plugin result did not arrive whole.",
+            "error_code": AGENT_TOOL_CHUNKS_INVALID,
+            "reason": arrival["reason"],
+        })
+        return False
+    transfer["pieces"].append(data)
+    transfer["bytes"] += utf8_byte_length(data)
+    transfer["short"] = arrival["short"]
+    # Only a full piece restarts the wait (contract 4.4, Timing), as on the Host.
+    if not arrival["short"]:
+        transfer["activity"] = asyncio.get_running_loop().time()
+    return True
+
+
+def _chunks_invalid(reason: str) -> dict[str, Any]:
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNKS_INVALID
+
+    return {
+        "ok": False,
+        "error": "The Navide plugin result did not arrive whole.",
+        "error_code": AGENT_TOOL_CHUNKS_INVALID,
+        "reason": reason,
+    }
+
+
 def resolve_agent_capability(request_id: str, result: dict[str, Any]) -> bool:
-    """Resolve one Host-brokered agent operation."""
+    """Resolve one Host-brokered agent operation.
+
+    A result sent in pieces (``resultChunks`` in place of ``result``) is
+    checked against what arrived and handed on as ``result_pieces``, never
+    joined or parsed on the event loop: the agent tool proxy has a helper
+    process parse and wrap it (agent_tool_result_worker). Each piece's order
+    and size was checked as it came.
+    """
+    if isinstance(result, dict) and "resultChunks" in result and "result" not in result:
+        transfer = _agent_transfers.get(request_id) or {"pieces": [], "bytes": 0}
+        summary = result["resultChunks"]
+
+        def count(value: Any, least: int) -> int | None:
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) and value >= least
+            return int(value) if ok else None
+
+        chunks = count(summary.get("chunks"), 1) if isinstance(summary, dict) else None
+        size = count(summary.get("bytes"), 0) if isinstance(summary, dict) else None
+        if chunks is None or size is None:
+            result = _chunks_invalid("summary")
+        elif chunks != len(transfer["pieces"]):
+            result = _chunks_invalid("count")
+        elif size != transfer["bytes"]:
+            result = _chunks_invalid("bytes")
+        else:
+            result = {key: item for key, item in result.items() if key != "resultChunks"} | {
+                "result_pieces": transfer["pieces"],
+                "result_pieces_bytes": transfer["bytes"],
+            }
     return _agent_capability_pending.resolve(request_id, result)
+
+
+async def _wait_for_host_answer(request_id: str, future: "asyncio.Future[dict[str, Any]]", window: float) -> Any:
+    """Wait for the Host's answer; every sign of life from it restarts the window (contract 4.4, Timing).
+
+    The window is ``max(timeoutMs, AGENT_TOOL_CHUNK_IDLE_MS) + 5 s``, so neither
+    a long plugin run nor a long transfer ends the wait while data still moves.
+    """
+    loop = asyncio.get_running_loop()
+
+    # A timer, not a timeout around the await: the answer is awaited directly,
+    # costing no more loop turns than a plain wait, and the window restarts
+    # without cancelling the future.
+    def window_ended(deadline: float) -> None:
+        nonlocal timer
+        if future.done():
+            return
+        transfer = _agent_transfers.get(request_id)
+        restarted = (transfer["activity"] + window) if transfer else deadline
+        if restarted <= loop.time():
+            future.set_result(TIMEOUT)
+        else:
+            timer = loop.call_at(restarted, window_ended, restarted)
+
+    deadline = loop.time() + window
+    timer = loop.call_at(deadline, window_ended, deadline)
+    try:
+        return await future
+    finally:
+        timer.cancel()
 
 
 async def request_host_agent_capability(
@@ -5040,19 +5168,37 @@ async def request_host_agent_workspace_backend(
         wait_payload = {"timeoutMs": agent_tool["timeout_ms"]}
     request_id = request["request_id"]
     future = _agent_capability_pending.register(request_id)
+    _agent_transfer_start(request_id)
     try:
-        sent = await app.unicast_host(make_event("agent.capability.request", request))
+        chunked = None
+        if agent_tool is not None and _may_need_pieces(request):
+            # Spelled and cut a slice at a time, handing the loop back between
+            # slices: a 10 MiB argument never stalls the backend.
+            chunked = await _agent_tool_argument_pieces(request)
+        if chunked is not None:
+            # Not shielded: a call cancelled while its pieces go stops before
+            # the request is sent, so the plugin never runs a cancelled call.
+            # The Host drops the pieces it holds after its idle window.
+            sent = await _send_agent_tool_pieces(app, make_event, request, *chunked)
+        else:
+            sent = await app.unicast_host(make_event("agent.capability.request", request))
         if not sent:
             return {
                 "ok": False,
                 "error": "Navide Host is not connected",
                 "error_code": "host_unavailable",
             }
-        result = await _agent_capability_pending.wait(
-            request_id,
-            future,
-            timeout=_host_answer_timeout_s(wait_payload),
-        )
+        if agent_tool is not None:
+            from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_IDLE_MS
+
+            window = max(_host_answer_timeout_s(wait_payload) - _HOST_ANSWER_GRACE_S, AGENT_TOOL_CHUNK_IDLE_MS / 1000)
+            result = await _wait_for_host_answer(request_id, future, window + _HOST_ANSWER_GRACE_S)
+        else:
+            result = await _agent_capability_pending.wait(
+                request_id,
+                future,
+                timeout=_host_answer_timeout_s(wait_payload),
+            )
         if result is TIMEOUT:
             return {
                 "ok": False,
@@ -5062,6 +5208,224 @@ async def request_host_agent_workspace_backend(
         return result
     finally:
         _agent_capability_pending.discard(request_id)
+        _agent_transfers.pop(request_id, None)
+
+
+#: Bytes of the /mcp request body being served, for the tool calls it makes;
+#: unset outside one (an in-process call).
+_request_body_bytes: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar("mcp_request_body_bytes", default=None)
+
+
+def _may_need_pieces(request: dict[str, Any]) -> bool:
+    """Whether an agent tool request's arguments might be longer than one piece.
+
+    A request whose /mcp body is at most an eighth of a piece cannot spell
+    its arguments longer than a piece (a number spelled again grows at most
+    about 4.5 times, "1e15" to "1000000000000000.0"), so the usual call skips
+    the walk. Otherwise a quick estimate that never calls a request small that
+    is not (each character counts as its longest escape); one it calls large
+    is measured exactly by :func:`_agent_tool_argument_pieces`."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
+
+    payload = request.get("payload")
+    if not isinstance(payload, dict) or set(payload) != {"arguments"}:
+        return False
+    body = _request_body_bytes.get()
+    if body is not None and 0 < body[0] <= AGENT_TOOL_CHUNK_BYTES // 8:
+        return False
+    return _spells_over(payload["arguments"], AGENT_TOOL_CHUNK_BYTES)
+
+
+#: Work on the event loop between two hand-backs while arguments are spelled and cut.
+_TURN_S = 0.002
+
+
+class _Turn:
+    """Hands the event loop back once a slice of work has run for ``_TURN_S``.
+    On the loop's own thread, so no other thread holds the interpreter: the
+    stall is bounded by the slice, however busy the machine is."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.get_running_loop()
+        self.until = self.loop.time() + _TURN_S
+
+    async def maybe_yield(self) -> None:
+        if self.loop.time() >= self.until:
+            await asyncio.sleep(0)
+            self.until = self.loop.time() + _TURN_S
+
+
+async def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int] | None:
+    """The pieces and byte size of an agent tool request's arguments when they
+    are longer than one piece (contract 4.4, A2), else None: sent inline.
+
+    The same pieces as ``split_agent_tool_payload_text(agent_tool_payload_text(...))``,
+    built as a stream: spelled part by part, encoded a batch at a time, and
+    cut as soon as more than a piece has gathered (each cut steps back off
+    continuation bytes), awaiting between steps. The whole text is never
+    joined, in characters or in bytes."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
+
+    payload = request.get("payload")
+    if not isinstance(payload, dict) or set(payload) != {"arguments"}:
+        return None
+    turn = _Turn()
+    pieces: list[str] = []
+    pending = bytearray()
+    size = 0
+
+    async def take(text: str) -> None:
+        nonlocal size
+        try:
+            data = text.encode("utf-8")
+        except UnicodeEncodeError:
+            # A lone surrogate, which UTF-8 cannot carry, is escaped as the
+            # contract spelling escapes it (character by character, so a batch
+            # at a time gives the same text).
+            data = _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text).encode("utf-8")
+        size += len(data)
+        pending.extend(data)
+        while len(pending) > AGENT_TOOL_CHUNK_BYTES:
+            end = AGENT_TOOL_CHUNK_BYTES
+            while pending[end] & 0xC0 == 0x80:
+                end -= 1
+            pieces.append(pending[:end].decode("utf-8"))
+            del pending[:end]
+            await turn.maybe_yield()
+
+    batch: list[str] = []
+    gathered = 0
+    for part in _spell_parts(payload["arguments"]):
+        batch.append(part)
+        gathered += len(part)
+        if gathered >= _SPELL_SLICE or len(batch) >= 4096:
+            await take("".join(batch))
+            batch, gathered = [], 0
+        await turn.maybe_yield()
+    await take("".join(batch))
+    if size <= AGENT_TOOL_CHUNK_BYTES:
+        return None
+    pieces.append(pending.decode("utf-8"))
+    return pieces, size
+
+
+#: Characters escaped or encoded per call when spelling arguments.
+_SPELL_SLICE = 1 << 16
+#: A UTF-16 surrogate standing alone, as agent_tools_contract escapes it.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _escape_in_slices(text: str) -> Iterator[str]:
+    """``json``'s string escape, a slice at a time for a long string: the
+    escape is per character, so the joined slices are the same text."""
+    if len(text) <= _SPELL_SLICE:
+        yield json.encoder.encode_basestring(text)
+        return
+    yield '"'
+    for at in range(0, len(text), _SPELL_SLICE):
+        yield json.encoder.encode_basestring(text[at : at + _SPELL_SLICE])[1:-1]
+    yield '"'
+
+
+#: A subtree whose spelling stays under this many bytes is spelled in one C call.
+_SPELL_SUBTREE_BYTES = 1 << 14
+_spell_small = json.JSONEncoder(separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode
+
+
+def _spells_over(value: Any, limit: int) -> bool:
+    """Whether ``value``'s spelling may pass ``limit`` bytes: a walk that stops
+    as soon as its estimate does (6 bytes a character, the longest escape)."""
+    estimate = 0
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            estimate += 6 * len(item) + 2
+        elif isinstance(item, dict):
+            estimate += 2
+            for key, child in item.items():
+                estimate += 6 * len(str(key)) + 4
+                stack.append(child)
+                if estimate > limit:
+                    return True
+        elif isinstance(item, (list, tuple)):
+            estimate += 2 + len(item)
+            if estimate > limit:
+                return True
+            stack.extend(item)
+        elif isinstance(item, int) and not isinstance(item, bool):
+            estimate += item.bit_length() // 3 + 3
+        else:
+            estimate += 25  # a float, true, false or null: at most 24 characters
+        if estimate > limit:
+            return True
+    return False
+
+
+def _spelled_key(key: Any) -> str:
+    """An object key as json.dumps spells it (a number or literal key becomes a string)."""
+    if isinstance(key, str):
+        return json.encoder.encode_basestring(key)
+    return _spell_small({key: 0})[1:-3]
+
+
+def _spelled_whole(value: Any) -> str | None:
+    """``value`` spelled in one C call when that call stays short, else None."""
+    if isinstance(value, str):
+        return json.encoder.encode_basestring(value) if len(value) <= _SPELL_SLICE else None
+    if isinstance(value, (dict, list, tuple)) and _spells_over(value, _SPELL_SUBTREE_BYTES):
+        return None
+    return _spell_small(value)
+
+
+def _spell_parts(value: Any) -> Iterator[str]:
+    """``value``'s compact spelling as json.dumps writes it, in parts: small
+    subtrees in one C call each, large containers item by item, long strings
+    in slices. Small items are spelled in place, without a generator each,
+    so a container of 400k items allocates little for the collector."""
+    whole = _spelled_whole(value)
+    if whole is not None:
+        yield whole
+    elif isinstance(value, str):
+        yield from _escape_in_slices(value)
+    elif isinstance(value, dict):
+        yield "{"
+        for index, (key, item) in enumerate(value.items()):
+            yield f"{',' if index else ''}{_spelled_key(key)}:"
+            spelled = _spelled_whole(item)
+            if spelled is not None:
+                yield spelled
+            else:
+                yield from _spell_parts(item)
+        yield "}"
+    elif isinstance(value, (list, tuple)):
+        yield "["
+        for index, item in enumerate(value):
+            spelled = _spelled_whole(item)
+            if spelled is not None:
+                yield f",{spelled}" if index else spelled
+            else:
+                if index:
+                    yield ","
+                yield from _spell_parts(item)
+        yield "]"
+    else:
+        yield _spell_small(value)
+
+
+async def _send_agent_tool_pieces(
+    app: Any, make_event: Any, request: dict[str, Any], pieces: list[str], size: int
+) -> bool:
+    """Send the argument pieces as ``agent.capability.request_chunk`` events,
+    each awaited, then the request with ``payload.argumentChunks`` (contract 4.4, A2)."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_CAPABILITY_REQUEST_CHUNK_EVENT
+
+    for seq, data in enumerate(pieces):
+        event = {"request_id": request["request_id"], "seq": seq, "data": data}
+        if not await app.unicast_host(make_event(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, event)):
+            return False
+    request = request | {"payload": {"argumentChunks": {"chunks": len(pieces), "bytes": size}}}
+    return await app.unicast_host(make_event("agent.capability.request", request))
 
 
 # ── UI control (ui_invoke / ui_snapshot / ui_list_actions) ─────────────────
@@ -9708,7 +10072,28 @@ class _PlanMcpASGI:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
-        await manager.handle_request(scope, receive, send)
+        # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
+        # size is disclosed in the backend log instead: every body longer than
+        # one transfer piece is logged with its byte count.
+        # The count is also what a tool call made by this request sees as its
+        # body size (_request_body_bytes), set before the call's tasks start.
+        received = [0]
+        token = _request_body_bytes.set(received)
+
+        async def counting_receive() -> Any:
+            message = await receive()
+            if message.get("type") == "http.request":
+                received[0] += len(message.get("body", b""))
+            return message
+
+        try:
+            await manager.handle_request(scope, counting_receive, send)
+        finally:
+            _request_body_bytes.reset(token)
+            from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
+
+            if received[0] > AGENT_TOOL_CHUNK_BYTES:
+                _log.info("mcp request body: %d bytes", received[0])
 
 
 asgi_app = _PlanMcpASGI()
@@ -9728,6 +10113,11 @@ async def startup() -> None:
         app=server._mcp_server,  # noqa: SLF001
         json_response=True,
         stateless=True,
+        # No request body limit for any tool, core or plugin (contract 4.4, A1;
+        # the SDK default is 4 MiB and it needs a positive integer). The body is
+        # read incrementally from the socket and parsed once as one JSON-RPC
+        # message; its size is logged by _PlanMcpASGI.
+        max_request_body_size=sys.maxsize,
     )
     await _lifecycle.enter_async_context(manager.run())
     _session_manager = manager

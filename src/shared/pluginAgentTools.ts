@@ -417,6 +417,25 @@ export const BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
 export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
 /** WebSocket event, backend → Host, one per argument piece, sent before `agent.capability.request`. */
 export const AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = 'agent.capability.request_chunk'
+/** backend → Host event: the state of the helper process that handles results in pieces (4.4, R2), sent on every change. */
+export const AGENT_TOOLS_RESULT_HELPER_EVENT = 'agent.tools.result_helper'
+
+/** The result helper's state, as the backend reports it and resource usage discloses it. */
+export interface AgentToolsResultHelperState {
+  state: 'idle' | 'ready' | 'unavailable'
+  lastError: string
+  /** When the state last changed (ms since the epoch). */
+  since: number
+}
+
+/** A backend report of the result helper's state, or null when it is not one. */
+export function parseAgentToolsResultHelperState(value: unknown): AgentToolsResultHelperState | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const { state, lastError, since } = value as Record<string, unknown>
+  if (state !== 'idle' && state !== 'ready' && state !== 'unavailable') return null
+  if (typeof lastError !== 'string' || typeof since !== 'number' || !Number.isFinite(since)) return null
+  return { state, lastError, since }
+}
 /** WebSocket request, Host → backend: the call is alive (keeps the backend's wait running). */
 export const AGENT_CAPABILITY_PROGRESS_MESSAGE = 'agent.capability.progress'
 /**
@@ -477,19 +496,34 @@ export function agentToolResultBytes(result: unknown): number {
 export function splitAgentToolPayloadText(text: string, maxBytes: number = AGENT_TOOL_CHUNK_BYTES): string[] {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 4) throw new RangeError('maxBytes must be an integer >= 4')
   const pieces: string[] = []
+  // A run of ASCII is one byte per unit, so a piece that lies inside one is
+  // cut without visiting its characters; everywhere else each code point is
+  // measured. `nextWide` is the first non-ASCII unit at or after `start`.
+  const wide = /[^\x00-\x7f]/g
+  let nextWide = -1
   let start = 0
-  let bytes = 0
-  for (let i = 0; i < text.length; ) {
-    const point = text.codePointAt(i) as number
-    const units = point > 0xffff ? 2 : 1
-    const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point > 0xffff ? 4 : 3
-    if (bytes + size > maxBytes) {
-      pieces.push(text.slice(start, i))
-      start = i
-      bytes = 0
+  while (text.length - start > 0) {
+    if (nextWide < start) {
+      wide.lastIndex = start
+      nextWide = wide.exec(text)?.index ?? text.length
     }
-    bytes += size
-    i += units
+    if (nextWide - start >= maxBytes && text.length - start > maxBytes) {
+      pieces.push(text.slice(start, start + maxBytes))
+      start += maxBytes
+      continue
+    }
+    let bytes = 0
+    let i = start
+    while (i < text.length) {
+      const point = text.codePointAt(i) as number
+      const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point > 0xffff ? 4 : 3
+      if (bytes + size > maxBytes) break
+      bytes += size
+      i += point > 0xffff ? 2 : 1
+    }
+    if (i === text.length) break
+    pieces.push(text.slice(start, i))
+    start = i
   }
   pieces.push(text.slice(start))
   return pieces
@@ -510,10 +544,16 @@ export function agentToolChunkArrival(
   shortSeen: boolean,
   data: unknown,
   chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
+  /** The piece's `seq` and the one expected next (0, 1, 2, …): a repeat or a step back is `seq`. */
+  seq?: unknown,
+  expectedSeq?: number,
+  /** The UTF-8 length of `data`, when the receiver already has it (a piece kept as bytes). */
+  byteLength?: number,
 ): AgentToolChunkArrival {
   if (typeof data !== 'string') return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
+  if (expectedSeq !== undefined && seq !== expectedSeq) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
   if (shortSeen) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'short' }
-  return { ok: true, short: utf8ByteLength(data) < chunkBytes - 3 }
+  return { ok: true, short: (byteLength ?? utf8ByteLength(data)) < chunkBytes - 3 }
 }
 
 function isCount(value: unknown, min: number): value is number {
@@ -536,7 +576,10 @@ export function reassembleAgentToolPayloadText(
     ({ ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason })
   const s = summary as Partial<AgentToolChunksSummary> | null
   if (!s || typeof s !== 'object' || !isCount(s.chunks, 1) || !isCount(s.bytes, 0)) return invalid('summary')
-  if (chunks.some((c) => !isCount(c.seq, 0) || typeof c.data !== 'string')) return invalid('seq')
+  // A piece that is not an object (null included) is a malformed piece, not a crash.
+  if (chunks.some((c) => c === null || typeof c !== 'object' || !isCount(c.seq, 0) || typeof c.data !== 'string')) {
+    return invalid('seq')
+  }
   if (chunks.length !== s.chunks) return invalid('count')
   const ordered: string[] = new Array(s.chunks)
   for (const c of chunks as ReadonlyArray<{ seq: number; data: string }>) {

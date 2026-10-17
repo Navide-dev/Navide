@@ -476,6 +476,21 @@ class ProcessTree(Protocol):
         """Kill `pid` and every descendant, including ones that left its group."""
         ...
 
+    def contain(self, pid: int) -> None:
+        """Make a child the root of a tree `end_contained` can end whole.
+
+        On Windows the child joins a Job Object that kills its processes when
+        closed (processes it starts afterwards join too). On POSIX it must
+        have been started in a session of its own (`start_new_session`); that
+        is already the tree, so nothing is done.
+        """
+        ...
+
+    def end_contained(self, pid: int) -> None:
+        """Kill the tree `contain` made for `pid`, everything in it, even when
+        the root itself has exited: killpg on POSIX, closing the job on Windows."""
+        ...
+
 
 class ChildProcess(Protocol):
     """The slice of `subprocess.Popen` a terminal session relies on."""

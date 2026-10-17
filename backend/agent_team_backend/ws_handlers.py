@@ -207,6 +207,13 @@ async def host_register(session: "Session", msg_id: str, msg_type: str, payload:
     session.disabled_plugins = frozenset(features.get("disabled_plugins", []) if isinstance(features, dict) else [])
     app.note_host_disabled_plugins(session.disabled_plugins)
     await session.send_json(make_response(msg_id, msg_type, {"registered": True}))
+    # A Host that connects again (its session dropped, this backend did not)
+    # starts from idle: tell it the result helper's state when there is one.
+    from .mcp_server.plugin_agent_tools import _result_worker
+    from .plugins.agent_tools_contract import AGENT_TOOLS_RESULT_HELPER_EVENT
+
+    if _result_worker.state != "idle":
+        await session.send_json(make_event(AGENT_TOOLS_RESULT_HELPER_EVENT, _result_worker.snapshot()))
 
 
 @handler("window.prove")
@@ -281,6 +288,55 @@ async def agent_capability_result(
         return
     delivered = plan_mcp.resolve_agent_capability(request_id, response)
     await session.send_json(make_response(msg_id, msg_type, {"ok": True, "delivered": delivered}))
+
+
+@handler("agent.capability.result_chunk")
+async def agent_capability_result_chunk(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """One piece of a Host agent tool result (agent-tools contract 4.4, R2)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    if not isinstance(payload, dict) or set(payload) != {"request_id", "seq", "data"} or not isinstance(
+        payload.get("request_id"), str
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agent.capability.result_chunk is malformed")
+        )
+        return
+    accepted = plan_mcp.accept_agent_result_piece(payload["request_id"], payload["seq"], payload["data"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
+
+
+@handler("agent.capability.progress")
+async def agent_capability_progress(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """The Host says a pending agent tool call is alive (contract 4.4, Timing)."""
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    from .mcp_server import server as plan_mcp
+
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"request_id", "phase"}
+        or not isinstance(payload.get("request_id"), str)
+        or payload.get("phase") not in ("arguments", "execution", "result")
+    ):
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "agent.capability.progress is malformed")
+        )
+        return
+    accepted = plan_mcp.note_agent_capability_activity(payload["request_id"])
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True, "accepted": accepted}))
 
 
 @handler("plugins.agentTools.sync")

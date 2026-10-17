@@ -834,13 +834,20 @@ failure keeps its own error, even when the deadline passes or the workspace
 closes meanwhile.
 
 The transport failures that exist today stay as they are (`host_unavailable`,
-`host_timeout`, lower-case, produced by the backend itself).
+`host_timeout`, lower-case, produced by the backend itself); the backend also
+produces `result_helper_failed` for a result in pieces its helper process
+could not handle (4.4, R2).
 
 `meta.resultBytes` is `agentToolResultBytes(result)`: the UTF-8 byte length of
 the compact `JSON.stringify` spelling of the result value the Host received
-(`null` when the plugin returned nothing), measured once, by the Host. It is
+(`null` when the plugin returned nothing), measured once, by the Host. For a
+result longer than one piece, which the Host forwards without parsing (4.4,
+R1), it is the byte count of that text: the summary's `bytes` of the pieces as
+the plugin sent them, or of the compact spelling of a one-frame value. It is
 `0` in the `meta` of an error response that carries no result. The backend
-does not measure again; it forwards the Host's number to the audit row.
+does not measure again; it forwards the Host's number to the audit row. When
+the Host sends no valid `meta.resultBytes` the size is unknown and the audit
+row stores `-1` (2.7).
 
 Before sending, the core server checks the arguments against the consented
 `inputSchema` in a worker thread, never on its event loop, and the Host checks
@@ -969,7 +976,7 @@ ensure_ascii=False, allow_nan=False)`) and cuts it with
 Even with every byte escaped as `\u00XX` a piece's frame stays below 1 MiB,
 the frame size child readers use. Each piece is `{seq, data}` with `seq` counting from 0.
 The receiver joins them with `reassembleAgentToolPayloadText(pieces,
-summary)`, which orders by `seq` (so arrival order does not matter) and checks
+summary)`, which orders the pieces by `seq` and checks
 that `seq` runs `0..chunks-1` exactly once each and that the joined text has
 `summary.bytes` UTF-8 bytes. Every piece but the last must be full: at least
 `AGENT_TOOL_CHUNK_BYTES` − 3 UTF-8 bytes, which is what the splitter always
@@ -977,12 +984,19 @@ produces (a piece ends early only when the next code point, up to 4 bytes,
 does not fit). This is a format rule, not a limit: it stops a sender from
 dripping a value one byte at a time to keep the idle timer alive and so stretch
 a call past `timeoutMs` (R1 is the only hop whose sender is not Navide).
-Senders send pieces in `seq` order, so a valid transfer has at most one short
-piece and it comes last. Receivers therefore check every piece as it arrives
-with `agentToolChunkArrival`: a piece that is not a string is `seq`, any piece
-after a short one fails the call at once as `short` (without waiting for the
-final message, which a dripping sender would never send), and a short piece
-does not restart the idle timer (see Timing). The joined pieces are checked
+Senders must send pieces in `seq` order (0, 1, 2, …), so a valid transfer has
+at most one short piece and it comes last. Receivers therefore check every
+piece in arrival order with `agentToolChunkArrival(shortSeen, data, chunkBytes,
+seq, expectedSeq)`: a piece whose `data` is not a string, or whose `seq` is not
+the next one expected (a repeat, a step back or a skip), is `seq`; any piece
+after a short one is `short`; both fail the call at once, without waiting for
+the final message (which a dripping or looping sender would never send). A
+short piece does not restart the idle timer (see Timing). Counts (`seq`,
+`chunks`, `bytes`) are safe integers; an integral float such as `1.0` counts,
+because `JSON.parse` gives TypeScript the integer `1` for it. A piece that is
+not an object (`null` included) is `seq`, never an exception. Before cutting,
+a sender written in Python escapes lone surrogates (`\ud800`) the way
+`JSON.stringify` does (`agent_tool_payload_text`), since UTF-8 cannot carry them. The joined pieces are checked
 again by `reassembleAgentToolPayloadText`. The summary `{chunks, bytes}`
 travels in the message that completes the transfer.
 A mismatch is `PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` |
@@ -1027,12 +1041,15 @@ and then the `agent.capability.request` event of 4.2 with
 
 Each piece is its own WebSocket message and each send is awaited before the
 next, so other sessions' and other panes' messages interleave with the pieces.
-The backend sends the pieces and the request as one sequence that the MCP
-call's cancellation does not interrupt. The Host keeps the pieces by
-`request_id` and accepts them only on the authenticated Host session; it joins
-them when the request arrives, then runs the checks of 4.2 on the joined
-arguments exactly as on inline ones. It drops the pieces it holds when the
-request arrives or the session closes. A join failure answers the request with
+The backend spells and cuts the arguments in a worker thread, then sends the
+pieces and the request in order. Cancelling the MCP call stops that sequence:
+a cancelled call's request is never sent, so the plugin does not run it (the
+audit row records `cancelled`). The Host keeps the pieces by `request_id` and
+accepts them only on the authenticated Host session; it joins them when the
+request arrives, then runs the checks of 4.2 on the joined arguments exactly
+as on inline ones. It drops the pieces it holds when the request arrives, the
+session closes, or no piece or request has come for `AGENT_TOOL_CHUNK_IDLE_MS`
+(the pieces of a cancelled call). A join failure answers the request with
 `{ok: false, error_code: "PLUGIN_TOOL_CHUNKS_INVALID", reason}`. The Host's
 client for this session sets the `ws` option `maxPayload: 0` (no message limit;
 the library default is 100 MiB).
@@ -1111,6 +1128,22 @@ one large frame therefore still delivers its result and keeps running; it only
 holds its other calls behind that frame. A frame that is not valid JSON-RPC
 stays a protocol error, whatever its size.
 
+A frame over 1 MiB, and a result piece frame over 16 KiB, is joined, decoded,
+checked (the same checks as any frame) and parsed in a worker thread; the
+frames after it wait their turn, so the order is kept, and a child that exits
+right after writing them still has them handled first. For an agent tool the
+Host's main thread never parses a large result: it keeps the result as text,
+the pieces as they came (their data as UTF-8 bytes) or the worker's compact
+spelling of a one-frame value cut into pieces, and forwards that text to the
+core (R2), which has it parsed once. A piece's data is UTF-8 by then, so a
+lone surrogate in it arrives as U+FFFD: pieces must be well-formed UTF-16
+text, as `splitAgentToolPayloadText` makes them. Every other caller (the
+built-in Plans, Git and mini-IDE views, a third-party view) receives the parsed
+value, so for them the main thread still decodes and parses a large result
+once, as before DB9 within the old 1 MiB bound; only the frame parsing has
+moved off it. Reading a child's stdout yields to other work after about 8 ms
+in one event-loop turn (pacing, not a limit: every byte is read).
+
 **R2: Host → backend (WebSocket session).** When the Host's response
 `result` spells longer than one piece, the Host sends the request message
 `agent.capability.result_chunk` once per piece,
@@ -1132,9 +1165,43 @@ Each piece is a separate WebSocket message, so other panes' requests and
 results interleave with the pieces on the same session; the one-at-a-time
 send gives flow control without a credit scheme. The backend accepts pieces
 only from the authenticated Host session and only for a pending request id,
-keeps them with that request's waiter, joins them when the final message
-arrives, and delivers `{ok: true, result: <parsed>, meta}` to the waiter as if
-it had arrived whole. The backend's wait is the one described under Timing:
+keeps them with that request's waiter and, when the final message arrives,
+checks them against the summary and hands them on, unjoined, to the agent tool
+proxy. The pieces are the plugin's own text, which the Host does not parse, so
+the core parses it with the Host's rules (no `NaN`, no `Infinity`, no number
+that only parses as an infinity): text that breaks them answers the call with
+`PLUGIN_TOOL_CHUNKS_INVALID`, reason `json`. Parsing, spelling for the agent
+and neutralizing such a result run in a helper process the backend starts
+the first time a result comes in pieces (`<backend> --agent-tool-result-worker`;
+a backend that never gets one starts no process, and the helper exits when
+the backend does, its stdin closing), so the event loop only moves bytes; the
+agent sees exactly the text the in-process functions would give. While it
+works the helper writes an empty frame every 2 s, and the backend waits 30 s
+for each frame (a time window, not a size limit). A helper that crashes or
+hangs is stopped and that call answers `result_helper_failed` (lower-case,
+produced by the backend), `reason` `crashed` or `timeout`, with the result's
+size in `error`; the work is not redone in the backend, where a result that
+hung the helper would hang the event loop, and the next call starts the
+helper again: a result that breaks the helper fails alone and keeps no other
+Navide plugin's result from it. A new helper must first write
+`{"ready": true}` within 30 s (a onefile build unpacks itself on every
+start). A helper that cannot be used, because it does not start or does not
+say it is ready (a broken build), leaves a result up to 1 MiB (what the
+backend handled before DB9) to be handled in the backend as then; a larger
+one answers `result_helper_failed`, `reason` `unavailable`. Each failed start is logged and recorded as
+`AGENT_TOOL_RESULT_HELPER_UNAVAILABLE` in the error ledger, and the next start
+is tried after 60 s. The helper's state (`idle`, `ready` or `unavailable`,
+with `lastError` and `since`) goes to the Host on every change (the
+`agent.tools.result_helper` event); the Host starts every new backend session
+from `idle`, and a backend whose helper is not idle sends its state again once
+the Host session is registered; `plugins:backendResourceUsage` discloses
+it as `backend.resultHelper`, Resource Manager shows it, and the first
+`unavailable` in a session raises a notice. The helper runs in a tree of its
+own (its own session on POSIX, a kill-on-close job on Windows); stopping it
+closes its stdin, then after 2 s kills the whole tree, the helper alive or
+not (a onefile build runs Python under a bootloader, and what the helper
+started may still run). A helper whose backend is gone (killed outright, so
+its stdin may not close while the helper is busy) kills its own tree. The backend's wait is the one described under Timing:
 every piece restarts it. When it ends (idle, MCP client gone) the pieces are
 dropped and later ones answer `accepted: false`. Results that fit one piece
 keep the current single message.
@@ -1156,9 +1223,10 @@ Time never acts as a size limit. Two clocks, and nothing else:
 - **Transfer**: every transfer of pieces runs on an idle timer of
   `AGENT_TOOL_CHUNK_IDLE_MS` = 30,000 ms that every piece restarts. It tells a
   stalled peer from a slow one: a value of any size passes as long as pieces
-  keep moving, and the timer only fires after 30 s without one. Only a full
-  piece restarts it; a short piece (the last one, 4.4 Pieces) does not, so a
-  sender cannot hold a call open by trickling bytes. On expiry the
+  keep moving, and the timer only fires after 30 s without one. On R1 it
+  starts at the child's first result frame, whether that first piece is full
+  or short. Only a full piece restarts it; a short piece (the last one, 4.4
+  Pieces) does not, so a sender cannot hold a call open by trickling bytes. On expiry the
   call fails with `PLUGIN_TOOL_TIMEOUT`, `reason: "transfer-idle"`, the pieces
   held so far are dropped, and the Host sends `notifications/cancelled` to the
   child. Where each hop restarts it: A2 — the Host, on each
@@ -1209,8 +1277,8 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
-| `error_code` | TEXT | `''` on success |
-| `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); 0 when the call has no result |
+| `error_code` | TEXT | `''` on success; otherwise a code of 4.2, `host_unavailable`, `host_timeout`, `result_helper_failed`, or `cancelled` (the caller cancelled the call before it was answered; arguments still in transfer are not sent on, so the plugin does not run it), anything else `other` |
+| `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); `0` when the call has no result; `-1` when the Host sent no valid size (unknown) |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
@@ -1287,6 +1355,35 @@ never the row's content.
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
+
+Rules for every surface that shows these rows (the activity page, disclosure
+views, exports):
+
+- A size of `-1` (`result_bytes`, or `args_bytes` should it ever be unknown)
+  is shown as "unknown", never as "-1 bytes", and is never added into a sum.
+  Every statistic and rollup (the D-e daily rollup, D-f trends, averages,
+  totals) leaves `-1` out and counts the unknown rows separately.
+- `fs_path`, `shell_command`, `address`, `denied_reason`, `pane_name`, the
+  workspace paths and every other stored text are shown as plain text: never
+  turned into a link, never rendered as HTML (`v-html`, `innerHTML`). A stored
+  `javascript:` or `mailto:` string is shown as those characters.
+
+Backend resource usage (`plugins:backendResourceUsage`) is Host state, not a
+table: `children.current` counts the **bound views** (each owns at most one
+child process; a view whose child has not started yet, or has stopped while
+idle, still counts), not live processes; `children.retained` counts children
+whose close failed and that may still be running.
+
+`views[].child.stdoutPending` (`{bytes, peakBytes}`) is the size of a stdout
+frame the child has started but not ended (no newline yet), held in Host
+memory. Frames have no size limit (4.4, R1), so a child that never ends a
+frame (a bug, or binary data written to stdout) grows it without bound; before
+DB9 such a child was restarted at 1 MiB. It is disclosed, never cut off.
+Proposed notification for the resource watchdog (line 5, watchdog C), handled
+like its other resource items: when `stdoutPending.bytes` passes
+**256 MiB, or 1/8 of the machine's memory if that is lower**, notify the user,
+who chooses to stop the plugin or let it continue; nothing is terminated
+automatically.
 
 `plugin_agent_actions` (B2-c; one row per attempt to request, decide, finish,
 disable or enable a change to a Navide plugin). Its DDL is
@@ -1606,6 +1703,7 @@ by editing the fixture.
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
 | Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
 | Transfer time | `timeoutMs` covers the plugin's execution only; transfers run on a 30 s idle timer restarted by every piece, and `agent.capability.progress` keeps the backend's wait alive | time must not turn into a size limit (review of #358, M2); the idle timer detects a dead peer, it does not bound a size |
+| Piece counts and odd input | an integral float counts (`1.0` = `1`); a non-object piece is `seq`; a repeated, skipped or backward `seq` fails on arrival; Python escapes lone surrogates like `JSON.stringify` | both languages give the same answer for every input (#358 review L1–L3, INFO) |
 | Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child (user decision 2026-10-17); pieces stay the normal path for interleaving |
 | Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under 1 MiB, the frame size child readers use (the built-in Plans backend's `MAX_FRAME_BYTES`); small enough that other calls interleave |
 | Arguments-size field | `args_bytes` only, measured by the backend as UTF-8 bytes of the compact spelling (the `resultBytes` measure); `args_sha256` stays canonical; no `meta.argsBytes` | one number for one fact, in the same unit as the result size; the backend sees the arguments first and writes the audit row |
