@@ -255,6 +255,9 @@ async function loginThroughBrowser(
   beforeCallback?: (port: string | null, query: URLSearchParams) => Promise<void>,
 ) {
   const child = spawn(process.execPath, [cli, 'login', '--registry', registry.url, '--no-browser'], { cwd, env })
+  // Listen before the callback: on a refused callback the CLI exits as soon as it
+  // has answered, and a 'close' emitted before the fetch settles would be lost.
+  const closed = new Promise<number | null>((resolve) => child.on('close', resolve))
   let stdout = ''
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => {
@@ -271,7 +274,7 @@ async function loginThroughBrowser(
   const port = authorize.searchParams.get('port')
   if (beforeCallback) await beforeCallback(port, new URLSearchParams(callback(authorize)))
   await fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`)
-  const status = await new Promise<number | null>((resolve) => child.on('close', resolve))
+  const status = await closed
   return { status, stdout, stderr }
 }
 
