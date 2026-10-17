@@ -554,3 +554,190 @@ def test_the_backend_keeps_one_audit_log_on_the_global_navide_db() -> None:
 
     assert isinstance(app.plugin_audit_log, PluginAuditLog)
     assert app.plugin_audit_log.db is app.database
+
+
+# ── follow-ups to #349 (after #358) ─────────────────────────────────────────
+
+_FIXTURES = Path(__file__).resolve().parents[2] / "docs" / "plugin-contracts" / "agent-tools-fixtures"
+
+
+def test_the_arguments_digest_is_the_contracts() -> None:
+    import json
+
+    cases = json.loads((_FIXTURES / "payload-chunking.json").read_text(encoding="utf-8"))["argumentsDigest"]
+    assert len(cases) >= 6
+    for case in cases:
+        assert contract.agent_tool_arguments_digest(case["arguments"]) == (case["sha256"], case["bytes"]), case["name"]
+
+
+def test_a_stored_row_has_the_contracts_arguments_digest(audit: PluginAuditLog) -> None:
+    import json
+
+    cases = json.loads((_FIXTURES / "payload-chunking.json").read_text(encoding="utf-8"))["argumentsDigest"]
+    for case in cases:
+        _call(audit, arguments=case["arguments"])
+    rows = _rows(audit, "plugin_tool_calls")
+    assert [(r["args_sha256"], r["args_bytes"]) for r in rows] == [(c["sha256"], c["bytes"]) for c in cases]
+
+
+def test_chunks_invalid_is_a_contract_error_code_kept_as_is(audit: PluginAuditLog) -> None:
+    assert "PLUGIN_TOOL_CHUNKS_INVALID" in contract.AGENT_TOOL_CALL_ERROR_CODES
+    _call(audit, outcome="error", error_code="PLUGIN_TOOL_CHUNKS_INVALID")
+    assert _rows(audit, "plugin_tool_calls")[0]["error_code"] == "PLUGIN_TOOL_CHUNKS_INVALID"
+
+
+def test_result_bytes_minus_one_means_unknown_and_other_negatives_are_refused(audit: PluginAuditLog) -> None:
+    assert _call(audit, result_bytes=-1) is not None
+    assert _call(audit, result_bytes=-2) is None
+    assert _call(audit, result_bytes=True) is None
+    assert [r["result_bytes"] for r in _rows(audit, "plugin_tool_calls")] == [-1]
+
+
+def test_unknown_sizes_never_change_what_retention_rolls_up(audit: PluginAuditLog, clock: Clock) -> None:
+    """Guard: nothing in the audit sums sizes; -1 rows are kept as they are."""
+    _call(audit, result_bytes=-1)
+    _call(audit, result_bytes=100)
+    for _ in range(3):
+        _activity(audit, at_ms=NOW - 8 * DAY_MS)
+    audit.prune(NOW)
+    assert [r["result_bytes"] for r in _rows(audit, "plugin_tool_calls")] == [-1, 100]
+    with audit.db.transaction() as cur:
+        assert cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0] == 3
+
+
+def test_undeclared_is_a_contract_denied_reason(audit: PluginAuditLog) -> None:
+    assert "undeclared" in contract.PLUGIN_ACTIVITY_DENIED_REASONS
+    _activity(audit, outcome="denied", denied_reason="undeclared")
+    assert _rows(audit, "plugin_activity")[0]["denied_reason"] == "undeclared"
+
+
+async def test_the_background_task_prunes_on_a_worker_thread(
+    audit: PluginAuditLog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import asyncio
+    import threading
+
+    from agent_team_backend.plugins import audit_log
+
+    monkeypatch.setattr(audit_log, "FLUSH_INTERVAL_S", 0.01)
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 0.0)
+    threads: list[int] = []
+    real = audit.prune
+
+    def recording(now_ms: int | None = None) -> None:
+        threads.append(threading.get_ident())
+        real(now_ms)
+
+    monkeypatch.setattr(audit, "prune", recording)
+    task = asyncio.create_task(audit.run())
+    for _ in range(300):
+        if threads:
+            break
+        await asyncio.sleep(0.01)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert threads and threading.get_ident() not in threads
+
+
+async def test_shutdown_stops_a_running_prune_before_the_final_flush(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling the task asks the prune to stop at its next batch and waits for it."""
+    import asyncio
+
+    from agent_team_backend.plugins import audit_log
+
+    monkeypatch.setattr(audit_log, "FLUSH_INTERVAL_S", 0.01)
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 0.0)
+    db = Database(tmp_path / "navide.db")
+    audit = PluginAuditLog(db, clock=Clock())
+    with db.transaction() as cur:
+        cur.executemany(
+            "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address, outcome)"
+            " VALUES (?, 'nerdtechnic.devmap', '0.2.0', '/w', 'broker', 'fs.read', 'allowed')",
+            ((NOW - 8 * DAY_MS + i,) for i in range(20 * audit_log.PRUNE_BATCH_ROWS)),
+        )
+    batches: list[int] = []
+    started = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    real_yield = audit_log._yield_the_lock
+
+    def slow_yield() -> None:
+        batches.append(1)
+        loop.call_soon_threadsafe(started.set)
+        time.sleep(0.05)
+        real_yield()
+
+    monkeypatch.setattr(audit_log, "_yield_the_lock", slow_yield)
+    task = asyncio.create_task(audit.run())
+    await asyncio.wait_for(started.wait(), 10)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    done = len(batches)
+    await asyncio.sleep(0.3)
+    assert len(batches) == done, "the prune kept running after the task ended"
+    assert done < 20
+    with db.transaction() as cur:
+        left = cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0]
+        rolled = cur.execute("SELECT COALESCE(SUM(count), 0) FROM plugin_activity_daily").fetchone()[0]
+    assert left + rolled == 20 * audit_log.PRUNE_BATCH_ROWS  # stopped between batches: nothing lost or doubled
+
+
+@pytest.mark.parametrize(
+    ("fs_path", "workspace", "kept"),
+    [
+        # A Windows spelling under a POSIX workspace is never "relative".
+        ("C:\\Users\\me\\.ssh\\id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("C:/Users/me/.ssh/id_rsa", "/Users/me/project", "<outside-workspace>"),
+        ("\\\\server\\share\\x", "/Users/me/project", "<outside-workspace>"),
+        # A colon in a file name is not a URI scheme.
+        ("notes:1.md", "/Users/me/project", "notes:1.md"),
+        ("src/a:b.txt", "/Users/me/project", "src/a:b.txt"),
+        ("/Users/me/project/a:b.txt", "/Users/me/project", "a:b.txt"),
+        ("https://user:" + "pw@host/x", "/Users/me/project", "<outside-workspace>"),
+        ("mailto:x@y", "/Users/me/project", "mailto:x@y"),
+    ],
+)
+def test_windows_spellings_and_colons_under_a_posix_workspace(
+    audit: PluginAuditLog, fs_path: str, workspace: str, kept: str
+) -> None:
+    _activity(audit, workspace=workspace, fs_path=fs_path)
+    assert _rows(audit, "plugin_activity")[0]["fs_path"] == kept
+
+
+async def test_a_restarted_task_prunes_to_the_end_after_a_cancel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#365 review N1: the stop request of one run must not stop the next."""
+    import asyncio
+
+    from agent_team_backend.plugins import audit_log
+
+    monkeypatch.setattr(audit_log, "FLUSH_INTERVAL_S", 0.01)
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 3600.0)
+    db = Database(tmp_path / "navide.db")
+    audit = PluginAuditLog(db, clock=Clock())
+    first = asyncio.create_task(audit.run())
+    await asyncio.sleep(0.05)
+    first.cancel()
+    await asyncio.gather(first, return_exceptions=True)
+
+    rows = 3 * audit_log.PRUNE_BATCH_ROWS
+    with db.transaction() as cur:
+        cur.executemany(
+            "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address, outcome)"
+            " VALUES (?, 'nerdtechnic.devmap', '0.2.0', '/w', 'broker', 'fs.read', 'allowed')",
+            ((NOW - 8 * DAY_MS + i,) for i in range(rows)),
+        )
+    monkeypatch.setattr(audit_log, "PRUNE_START_DELAY_S", 0.0)
+    second = asyncio.create_task(audit.run())
+    for _ in range(500):
+        with db.transaction() as cur:
+            if cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0:
+                break
+        await asyncio.sleep(0.01)
+    second.cancel()
+    await asyncio.gather(second, return_exceptions=True)
+    with db.transaction() as cur:
+        assert cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0
+        assert cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0] == rows
