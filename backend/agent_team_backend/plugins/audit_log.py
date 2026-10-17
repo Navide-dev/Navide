@@ -5,13 +5,30 @@ Two record tables, created from the contract's ``PLUGIN_AUDIT_DDL``
 
 - ``plugin_tool_calls``: one row per agent tool call (written by the B1 call
   path). The call arguments are never stored, only the SHA-256 and UTF-8
-  size of their canonical spelling.
+  size of their canonical spelling (an unsalted digest: an argument with
+  little entropy can be confirmed by guessing it).
 - ``plugin_activity``: one row per broker or shell-broker call and per agent
   tool call (written by D-e), with ``plugin_activity_daily`` holding the
   per-day counts of detail rows once they expire.
 
-Both are write-only: they decide nothing, and a write that fails is logged
-and dropped, never raised into the call it records.
+Both are write-only: they decide nothing. A record call only validates and
+queues the row in memory; ``flush`` writes the queue in one short
+transaction, off the call path (``run`` flushes every second). A write that
+fails is logged and dropped, never raised into the call it records. If the
+tables cannot be created the backend still starts, with the audit disabled
+and the reason in the error ledger (ui_diagnostics).
+
+What is kept, by field:
+- times are clamped to "now", so a row can never outlive its retention;
+- ``error_code`` and ``denied_reason`` are contract codes, anything else is
+  "other"; ``address`` must be ``namespace.method``, otherwise "other";
+- ``fs_path`` is workspace-relative with ``/``; a path outside the workspace
+  (absolute elsewhere, ``~``, ``..``, or any path when the workspace is a
+  filesystem root) is the fixed marker ``<outside-workspace>``;
+- ``shell_command`` is the executable's basename and a plain subcommand word:
+  leading ``NAME=value`` assignments, flags (``-pSECRET``, ``--password=``),
+  URLs (with or without ``user:pass@``) and every further argument are
+  dropped.
 
 Caller identity (B0 decision c): a ``pane`` caller is the pane whose MCP
 token it presented. The token proves the pane, not the process that used it:
@@ -21,19 +38,31 @@ config file can present it too. Reads say so in ``caller_verified``
 
 Retention (contract constants): tool calls 30 days, then the newest 10,000;
 activity detail 7 days, rolled up by UTC day into the daily table first;
-daily rows 90 days. Pruning runs on open and at most hourly from a write.
+daily rows 90 days. ``prune`` works in small batches, each its own short
+transaction, so it never holds navide.db for long; it runs from ``run`` (an
+hourly background task), never at import or inside a record call.
+
+navide.db is not in WAL mode: it uses a TRUNCATE rollback journal, and the
+backend shares one connection behind a lock (``db.py``). Every other store
+on navide.db waits while one of these transactions is open, which is why
+writes are batched off the call path and each prune batch is its own short
+transaction.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
+import ntpath
 import os
+import posixpath
+import re
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
 from typing import Any
 
 from ..db import Database
@@ -44,13 +73,35 @@ log = logging.getLogger(__name__)
 
 _COMPONENT = "plugin_audit"
 _DAY_MS = 86_400_000
-_PRUNE_INTERVAL_MS = 3_600_000
+#: Rows per prune transaction: small enough that no batch holds navide.db
+#: for more than a few milliseconds.
+PRUNE_BATCH_ROWS = 500
+FLUSH_INTERVAL_S = 1.0
+PRUNE_INTERVAL_S = 3_600.0
+#: The first prune waits this long after start, off the startup path.
+PRUNE_START_DELAY_S = 120.0
+
+OUTSIDE_WORKSPACE = "<outside-workspace>"
+OTHER = "other"
 
 CALLER_KINDS = ("pane", "external", "host")
 TOOL_CALL_OUTCOMES = ("ok", "error")
 TOOL_RISKS = ("read", "write")
 ACTIVITY_SOURCES = ("broker", "shell", "agentTool")
 ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
+#: The contract's call error codes plus the two transport codes the backend
+#: produces itself (contract 4.2).
+ERROR_CODES = frozenset((*contract.AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout"))
+#: Contract reasons a call or broker request is refused for; "undeclared" is
+#: the D3 "used but not declared" refusal.
+DENIED_REASONS = frozenset((
+    *contract.AGENT_TOOL_UNAVAILABLE_REASONS, *contract.AGENT_TOOL_CALL_ERROR_CODES, "undeclared",
+))
+
+_ADDRESS = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+")
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
+_SUBCOMMAND = re.compile(r"[a-z][a-z0-9-]*")
+_EXECUTABLE = re.compile(r"[A-Za-z0-9._+-]+")
 
 
 def _create_schema(cur: sqlite3.Cursor) -> None:
@@ -79,51 +130,120 @@ def _non_negative_int(value: Any) -> int:
     return value
 
 
+def _path_flavor(workspace: str) -> Any:
+    """The path module for ``workspace``: Windows spellings use ntpath."""
+    return ntpath if re.match(r"[A-Za-z]:[\\/]|\\\\", workspace) else posixpath
+
+
 def _relative_path(path: str, workspace: str) -> str:
-    """``path`` relative to ``workspace``, spelled with ``/`` on every
-    platform; "" when it is not inside it."""
+    """``path`` relative to ``workspace`` spelled with ``/``; the outside marker
+    when it is not inside it; "" when there is no path."""
     if not path:
         return ""
-    if not os.path.isabs(path):
-        relative = os.path.normpath(path)
-    elif not workspace or not os.path.isabs(workspace):
-        return ""
-    else:
+    if path.startswith("~"):
+        return OUTSIDE_WORKSPACE
+    flavor = _path_flavor(workspace or path)
+    if flavor.isabs(path):
+        if not workspace or not flavor.isabs(workspace):
+            return OUTSIDE_WORKSPACE
+        root = flavor.normpath(workspace)
+        if flavor.dirname(root) == root:  # "/" or "C:\": every path would be "inside"
+            return OUTSIDE_WORKSPACE
         try:
-            relative = os.path.relpath(path, workspace)
+            relative = flavor.relpath(flavor.normpath(path), root)
         except ValueError:  # another drive on Windows
-            return ""
-    if relative == ".." or relative.startswith(".." + os.sep):
+            return OUTSIDE_WORKSPACE
+    else:
+        relative = flavor.normpath(path)
+    sep = flavor.sep
+    # A root-relative "\\x" is not "absolute" to ntpath on Python 3.13+; it is
+    # still not inside the workspace.
+    if relative == ".." or relative.startswith((".." + sep, "/", "\\")) or flavor.isabs(relative):
+        return OUTSIDE_WORKSPACE
+    return relative.replace(sep, "/")
+
+
+def _shell_summary(command: str) -> str:
+    """The executable's basename and a plain subcommand word, nothing else."""
+    tokens = command.split()
+    while tokens and _ASSIGNMENT.fullmatch(tokens[0]):
+        tokens.pop(0)
+    if not tokens:
         return ""
-    return relative.replace(os.sep, "/")
+    executable = ntpath.basename(posixpath.basename(tokens[0]))
+    if not _EXECUTABLE.fullmatch(executable):
+        return OTHER
+    if len(tokens) > 1 and _SUBCOMMAND.fullmatch(tokens[1]):
+        return f"{executable} {tokens[1]}"
+    return executable
 
 
-def _executable_and_subcommand(command: str) -> str:
-    return " ".join(command.split()[:2])
+def _code(value: Any, allowed: frozenset[str]) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    return text if text in allowed else OTHER
 
 
-def _utc_day(at_ms: int) -> str:
-    return datetime.fromtimestamp(at_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+def _report_disabled(reason: str) -> None:
+    try:
+        from .. import error_ledger
+
+        error_ledger.record("backend", "error", "PLUGIN_AUDIT_DISABLED", f"Navide plugin audit is off: {reason}")
+    except Exception as err:  # noqa: BLE001 - diagnostics must not break start-up either
+        log.warning("plugin audit: could not record the disabled state: %s", err)
 
 
 class PluginAuditLog:
-    """Append-only writer and pruner for the plugin audit tables."""
+    """Write-only recorder, flusher and pruner for the plugin audit tables."""
 
     def __init__(self, db: Database, *, clock: Callable[[], float] = time.time) -> None:
         self.db = db
         self._clock = clock
-        self.db.migrate(_COMPONENT, 1, _create_schema)
-        self._last_prune_ms: int | None = None
-        self.prune()
+        self._lock = threading.Lock()
+        self._calls: list[tuple[Any, ...]] = []
+        self._activity: list[tuple[Any, ...]] = []
+        self._next_call_id: int | None = None
+        self.enabled = False
+        self.disabled_reason = ""
+        try:
+            self.db.migrate(_COMPONENT, 1, _create_schema)
+            self._next_call_id = self._read_next_call_id()
+            self.enabled = True
+        except Exception as err:  # noqa: BLE001 - the backend starts without the audit
+            self.disabled_reason = f"{type(err).__name__}: {err}"
+            log.error("plugin audit disabled: the tables could not be created: %s", self.disabled_reason)
+            _report_disabled(self.disabled_reason)
 
     def _now_ms(self) -> int:
         return int(self._clock() * 1000)
 
-    def _maybe_prune(self, now_ms: int) -> None:
-        if self._last_prune_ms is None or now_ms - self._last_prune_ms >= _PRUNE_INTERVAL_MS:
-            self.prune()
+    def _at(self, at_ms: int | None) -> int:
+        now = self._now_ms()
+        return now if at_ms is None else min(_non_negative_int(at_ms), now)
 
-    # ── writes ──────────────────────────────────────────────────────────
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            pending = len(self._calls) + len(self._activity)
+        return {"enabled": self.enabled, "reason": self.disabled_reason, "pending": pending}
+
+    # ── writes (queue only) ─────────────────────────────────────────────
+
+    def _read_next_call_id(self) -> int:
+        """Read once at open, so a record call never touches the database."""
+        with self.db.transaction() as cur:
+            seq = cur.execute("SELECT seq FROM sqlite_sequence WHERE name = 'plugin_tool_calls'").fetchone()
+            top = cur.execute("SELECT MAX(id) FROM plugin_tool_calls").fetchone()
+        return max(int(seq[0]) if seq else 0, int(top[0] or 0)) + 1
+
+    def _allocate_call_id(self) -> int:
+        """The next tool-call row id. Ids are handed out here, before the row
+        is written, so an activity row can name its tool call at once."""
+        if self._next_call_id is None:
+            self._next_call_id = self._read_next_call_id()
+        call_id = self._next_call_id
+        self._next_call_id += 1
+        return call_id
 
     def record_tool_call(
         self,
@@ -144,7 +264,9 @@ class PluginAuditLog:
         error_code: str = "",
         at_ms: int | None = None,
     ) -> int | None:
-        """Append one agent tool call; returns its row id, or None when it was not recorded."""
+        """Queue one agent tool call; returns its row id, or None when it is not recorded."""
+        if not self.enabled:
+            return None
         try:
             if caller_kind not in CALLER_KINDS:
                 raise ValueError(f"unknown caller kind {caller_kind!r}")
@@ -153,32 +275,25 @@ class PluginAuditLog:
             if risk not in TOOL_RISKS:
                 raise ValueError(f"unknown risk {risk!r}")
             args_sha256, args_bytes = _arguments_digest(arguments)
-            at = self._now_ms() if at_ms is None else _non_negative_int(at_ms)
+            at = self._at(at_ms)
             is_pane = caller_kind == "pane"
             caller_ws = str(caller_workspace) if is_pane else ""
             target_ws = str(target_workspace)
-            row = (
+            fields = (
                 at, caller_kind,
                 str(pane_id) if is_pane else "", str(pane_name) if is_pane else "",
                 caller_ws, target_ws, int(bool(caller_ws) and caller_ws != target_ws),
                 str(plugin_id), str(plugin_version), str(tool), risk,
-                args_sha256, args_bytes, outcome, "" if outcome == "ok" else str(error_code),
+                args_sha256, args_bytes, outcome, "" if outcome == "ok" else (_code(error_code, ERROR_CODES) or OTHER),
                 _non_negative_int(duration_ms), _non_negative_int(result_bytes),
             )
-            with self.db.transaction() as cur:
-                cur.execute(
-                    "INSERT INTO plugin_tool_calls (at, caller_kind, pane_id, pane_name, caller_workspace,"
-                    " target_workspace, cross_workspace, plugin_id, plugin_version, tool, risk, args_sha256,"
-                    " args_bytes, outcome, error_code, duration_ms, result_bytes)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    row,
-                )
-                row_id = int(cur.lastrowid or 0)
+            with self._lock:
+                call_id = self._allocate_call_id()
+                self._calls.append((call_id, *fields))
         except Exception as err:  # noqa: BLE001 - the audit never fails the call it records
             log.warning("plugin audit: tool call not recorded: %s", err)
             return None
-        self._maybe_prune(at)
-        return row_id
+        return call_id
 
     def record_activity(
         self,
@@ -194,12 +309,10 @@ class PluginAuditLog:
         shell_command: str = "",
         tool_call_id: int | None = None,
         at_ms: int | None = None,
-    ) -> int | None:
-        """Append one broker, shell or agent-tool activity row; None when it was not recorded.
-
-        ``fs_path`` is kept relative to ``workspace`` (dropped when outside it)
-        and ``shell_command`` is cut to its executable and subcommand.
-        """
+    ) -> bool:
+        """Queue one broker, shell or agent-tool activity row; False when it is not recorded."""
+        if not self.enabled:
+            return False
         try:
             if source not in ACTIVITY_SOURCES:
                 raise ValueError(f"unknown source {source!r}")
@@ -209,70 +322,138 @@ class PluginAuditLog:
                 raise ValueError("address is required")
             if tool_call_id is not None:
                 _non_negative_int(tool_call_id)
-            at = self._now_ms() if at_ms is None else _non_negative_int(at_ms)
             row = (
-                at, str(plugin_id), str(plugin_version), str(workspace), source, address, outcome,
-                str(denied_reason) if outcome == "denied" else "",
+                self._at(at_ms), str(plugin_id), str(plugin_version), str(workspace), source,
+                address if _ADDRESS.fullmatch(address) else OTHER, outcome,
+                (_code(denied_reason, DENIED_REASONS) or OTHER) if outcome == "denied" else "",
                 _relative_path(str(fs_path), str(workspace)),
-                _executable_and_subcommand(str(shell_command)),
+                _shell_summary(str(shell_command)),
                 tool_call_id,
             )
+            with self._lock:
+                self._activity.append(row)
+        except Exception as err:  # noqa: BLE001 - the audit never fails the call it records
+            log.warning("plugin audit: activity not recorded: %s", err)
+            return False
+        return True
+
+    def flush(self) -> None:
+        """Write every queued row in one short transaction; never raises."""
+        with self._lock:
+            calls, self._calls = self._calls, []
+            activity, self._activity = self._activity, []
+        if not calls and not activity:
+            return
+        try:
             with self.db.transaction() as cur:
-                cur.execute(
+                cur.executemany(
+                    "INSERT INTO plugin_tool_calls (id, at, caller_kind, pane_id, pane_name, caller_workspace,"
+                    " target_workspace, cross_workspace, plugin_id, plugin_version, tool, risk, args_sha256,"
+                    " args_bytes, outcome, error_code, duration_ms, result_bytes)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    calls,
+                )
+                cur.executemany(
                     "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address,"
                     " outcome, denied_reason, fs_path, shell_command, tool_call_id)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    row,
+                    activity,
                 )
-                row_id = int(cur.lastrowid or 0)
-        except Exception as err:  # noqa: BLE001 - the audit never fails the call it records
-            log.warning("plugin audit: activity not recorded: %s", err)
-            return None
-        self._maybe_prune(at)
-        return row_id
+        except Exception as err:  # noqa: BLE001 - dropped, never raised into a call
+            log.warning("plugin audit: %d rows not written: %s", len(calls) + len(activity), err)
 
     # ── retention ───────────────────────────────────────────────────────
 
+    def _batch(self, sql: str, params: tuple[Any, ...]) -> int:
+        with self.db.transaction() as cur:
+            return int(cur.execute(sql, params).rowcount or 0)
+
     def prune(self, now_ms: int | None = None) -> None:
-        """Apply the contract's retention; never raises."""
+        """Apply the contract's retention in small batches; never raises."""
+        if not self.enabled:
+            return
         now = self._now_ms() if now_ms is None else now_ms
+        self.flush()
         try:
-            calls_cutoff = now - contract.PLUGIN_TOOL_CALLS_RETENTION_DAYS * _DAY_MS
-            detail_cutoff = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
-            daily_cutoff = _utc_day(now - contract.PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS * _DAY_MS)
+            self._prune(now)
+        except Exception as err:  # noqa: BLE001 - retention must not break anything
+            log.warning("plugin audit: pruning failed: %s", err)
+
+    def _prune(self, now: int) -> None:
+        calls_cutoff = now - contract.PLUGIN_TOOL_CALLS_RETENTION_DAYS * _DAY_MS
+        detail_cutoff = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
+        daily_cutoff = now - contract.PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS * _DAY_MS
+        batch = PRUNE_BATCH_ROWS
+        while self._batch(
+            "DELETE FROM plugin_tool_calls WHERE id IN (SELECT id FROM plugin_tool_calls WHERE at < ? LIMIT ?)",
+            (calls_cutoff, batch),
+        ):
+            pass
+        with self.db.transaction() as cur:
+            row = cur.execute(
+                "SELECT id FROM plugin_tool_calls ORDER BY id DESC LIMIT 1 OFFSET ?",
+                (contract.PLUGIN_TOOL_CALLS_MAX_ROWS,),
+            ).fetchone()
+        if row is not None:
+            keep_above = int(row[0])
+            while self._batch(
+                "DELETE FROM plugin_tool_calls WHERE id IN (SELECT id FROM plugin_tool_calls WHERE id <= ? LIMIT ?)",
+                (keep_above, batch),
+            ):
+                pass
+        # Roll expiring detail up by UTC day and delete it, the oldest batch
+        # per transaction (read through the ``at`` index, so a batch costs the
+        # same however much has expired), so a row is counted exactly once.
+        while True:
             with self.db.transaction() as cur:
-                cur.execute("DELETE FROM plugin_tool_calls WHERE at < ?", (calls_cutoff,))
+                ids = [
+                    int(row[0])
+                    for row in cur.execute(
+                        "SELECT id FROM plugin_activity WHERE at < ? ORDER BY at, id LIMIT ?", (detail_cutoff, batch)
+                    )
+                ]
+                if not ids:
+                    break
+                marks = ",".join("?" * len(ids))
                 cur.execute(
-                    "DELETE FROM plugin_tool_calls WHERE id NOT IN"
-                    " (SELECT id FROM plugin_tool_calls ORDER BY id DESC LIMIT ?)",
-                    (contract.PLUGIN_TOOL_CALLS_MAX_ROWS,),
-                )
-                expiring = cur.execute(
-                    "SELECT at, plugin_id, workspace, source, address, outcome FROM plugin_activity WHERE at < ?",
-                    (detail_cutoff,),
-                ).fetchall()
-                counts: dict[tuple[str, str, str, str, str, str], int] = {}
-                for row in expiring:
-                    key = (_utc_day(int(row["at"])), row["plugin_id"], row["workspace"], row["source"],
-                           row["address"], row["outcome"])
-                    counts[key] = counts.get(key, 0) + 1
-                cur.executemany(
                     "INSERT INTO plugin_activity_daily (day, plugin_id, workspace, source, address, outcome, count)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    " SELECT strftime('%Y-%m-%d', at / 1000, 'unixepoch'), plugin_id, workspace, source, address,"
+                    f" outcome, COUNT(*) FROM plugin_activity WHERE id IN ({marks})"  # noqa: S608 - placeholders only
+                    " GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1"
                     " ON CONFLICT(day, plugin_id, workspace, source, address, outcome)"
                     " DO UPDATE SET count = count + excluded.count",
-                    [(*key, count) for key, count in counts.items()],
+                    ids,
                 )
-                cur.execute("DELETE FROM plugin_activity WHERE at < ?", (detail_cutoff,))
-                cur.execute("DELETE FROM plugin_activity_daily WHERE day < ?", (daily_cutoff,))
-        except Exception as err:  # noqa: BLE001 - retention must not break a write path
-            log.warning("plugin audit: pruning failed: %s", err)
-        self._last_prune_ms = now
+                cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
+        day = time.strftime("%Y-%m-%d", time.gmtime(daily_cutoff / 1000))
+        while self._batch(
+            "DELETE FROM plugin_activity_daily WHERE rowid IN"
+            " (SELECT rowid FROM plugin_activity_daily WHERE day < ? LIMIT ?)",
+            (day, batch),
+        ):
+            pass
+
+    async def run(self) -> None:
+        """Background loop: flush every second, prune hourly (first after a delay)."""
+        next_prune = time.monotonic() + PRUNE_START_DELAY_S
+        try:
+            while True:
+                await asyncio.sleep(FLUSH_INTERVAL_S)
+                await asyncio.to_thread(self.flush)
+                if time.monotonic() >= next_prune:
+                    next_prune = time.monotonic() + PRUNE_INTERVAL_S
+                    await asyncio.to_thread(self.prune)
+        finally:
+            # Shutdown (cancel) still writes what was queued.
+            await asyncio.to_thread(self.flush)
 
     # ── reads ───────────────────────────────────────────────────────────
 
     def recent_tool_calls(self, *, plugin_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """Newest tool calls first, each with ``caller_verified`` (see the module docstring)."""
+        """Newest written tool calls first, each with ``caller_verified`` (see the module docstring)."""
+        if not self.enabled:
+            return []
+        self.flush()
         query = "SELECT * FROM plugin_tool_calls"
         params: list[Any] = []
         if plugin_id is not None:
