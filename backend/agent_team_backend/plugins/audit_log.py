@@ -640,13 +640,21 @@ class PluginAuditLog:
         self, plugin_id: str, plugin_version: str, workspace: str, source: str, address: str, outcome: str,
         denied_reason: str, fs_path: str, shell_command: str, at: int, count: int,
     ) -> None:
-        if outcome == "allowed" or (outcome == "error" and address in contract.PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES):
-            # A failed write or command may have done something: it keeps its
-            # redacted path and command, as an allowed call does.
-            # The Host's <missing>: an allowed call that found nothing there.
-            missing = fs_path == contract.PLUGIN_ACTIVITY_MISSING_TARGET
-            path = fs_path if missing else _plain(_relative_path(str(fs_path), str(workspace)))
-            command = _plain(_shell_summary(str(shell_command)))
+        kept_error = (
+            outcome == "error" and address not in contract.PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES
+            and address != contract.PLUGIN_ACTIVITY_UNKNOWN_ADDRESS and _ADDRESS.fullmatch(address) is not None
+        )
+        if outcome == "allowed" or kept_error:
+            # A failed call that is not known to change nothing may have done
+            # something: it keeps its redacted path and command, as an allowed
+            # call does. The Host's own fixed value stays as it is: <missing>
+            # (an allowed read that found nothing), <failed> (answered before
+            # dispatch).
+            host_marker = (
+                contract.PLUGIN_ACTIVITY_MISSING_TARGET if outcome == "allowed" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
+            )
+            path = fs_path if fs_path == host_marker else _plain(_relative_path(str(fs_path), str(workspace)))
+            command = shell_command if shell_command == host_marker else _plain(_shell_summary(str(shell_command)))
         else:
             marker = contract.PLUGIN_ACTIVITY_DENIED_TARGET if outcome == "denied" else contract.PLUGIN_ACTIVITY_FAILED_TARGET
             path = marker if fs_path else ""

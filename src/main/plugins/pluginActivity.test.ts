@@ -5,6 +5,7 @@ import {
   ACTIVITY_FAILED_TARGET,
   ACTIVITY_MISSING_TARGET,
   ACTIVITY_UNKNOWN_ADDRESS,
+  READ_ONLY_ADDRESSES,
   activityRowFor,
   backendCallAddress,
   PluginActivityRecorder,
@@ -15,6 +16,7 @@ import {
   buildSuccess,
   isKnownCapabilityAddress,
   isUndeclaredDenial,
+  isUndispatched,
   planCapabilityCall,
   type CapabilityCall,
   type CapabilityResponse,
@@ -129,9 +131,10 @@ describe('text the plugin wrote is never a key', () => {
     expect(row(write, buildError('req-1', 'TIMEOUT', 'x')).fs_path).toBe('src/new.ts')
     const run = call({ ns: 'shell', method: 'run', args: { command: 'git push origin' } })
     expect(row(run, buildError('req-1', 'INTERNAL_ERROR', 'x')).shell_command).toBe('git push origin')
-    // Only those: an unknown address, or a write refused before it ran, changed nothing.
+    // Whatever code a handler answered with: it was dispatched, so it keeps its path.
+    expect(row(write, buildError('req-1', 'INVALID_ARGUMENT', 'x')).fs_path).toBe('src/new.ts')
+    // An unknown address ran nothing.
     expect(row(call({ method: 'readFile2' }), buildError('req-1', 'METHOD_NOT_FOUND', 'x')).fs_path).toBe(ACTIVITY_FAILED_TARGET)
-    expect(row(write, buildError('req-1', 'INVALID_ARGUMENT', 'x')).fs_path).toBe(ACTIVITY_FAILED_TARGET)
     const shell = call({ ns: 'shell', method: 'run', args: { command: 'curl -u me:secret https://x' } })
     expect(row(shell, buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ shell_command: ACTIVITY_DENIED_TARGET })
     // An allowed call keeps them: that IO happened.
@@ -159,6 +162,75 @@ describe('text the plugin wrote is never a key', () => {
     for (const value of ['<denied>', '<failed>', '<unknown>', '<missing>']) {
       expect(row(stat(value), buildSuccess('req-1', { exists: true })).fs_path).toBe(`./${value}`)
     }
+  })
+
+  // Review of #397 (7c9b995d3): whether a call ran is the broker's own mark,
+  // never a guess from its error code.
+  describe('a failed call before and after dispatch', () => {
+    const policy = manifestV2CapabilityPolicy({ system: ['fs'] })
+    const context: HostCapabilityContext = {
+      publisherEligible: true,
+      userGrant: { packageVersion: '1.0.0', system: ['fs'] },
+      runtimeBinding: {
+        pluginId: 'acme.indexer', packageVersion: '1.0.0', workspaceId: 'w', instanceId: 'i', audience: 'a',
+      },
+    }
+
+    it('records a writeFile refused before it ran as <failed>, and one that failed in its handler with its path', () => {
+      const invalid = call({ method: 'writeFile', args: { path: 'src/new.ts' } })  // no content: refused by the planner
+      const refused = respond(planCapabilityCall(invalid, policy, context))
+      expect(refused.error?.code).toBe('INVALID_ARGUMENT')
+      expect(isUndispatched(refused)).toBe(true)
+      expect(row(invalid, refused)).toMatchObject({ outcome: 'error', fs_path: ACTIVITY_FAILED_TARGET })
+      const ran = call({ method: 'writeFile', args: { path: 'src/new.ts', content: 'x' } })
+      expect(planCapabilityCall(ran, policy, context).kind).not.toBe('respond')
+      expect(row(ran, buildError('req-1', 'INVALID_ARGUMENT', 'from the handler')).fs_path).toBe('src/new.ts')
+    })
+
+    it('counts 1000 different paths to an unknown public capability as one row', async () => {
+      const sent: Array<{ rows: unknown[] }> = []
+      const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
+      for (let i = 0; i < 1000; i++) {
+        const bogus = call({ method: 'bogus', args: { path: `src/${i}.ts` } })
+        const response = respond(planCapabilityCall(bogus, policy, context))
+        expect(response.error?.code).toBe('METHOD_NOT_FOUND')
+        recorder.record(activityRowFor({ pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', call: bogus, response, at: AT }))
+      }
+      await recorder.flush()
+      expect(sent[0].rows).toEqual([expect.objectContaining({
+        address: ACTIVITY_UNKNOWN_ADDRESS, outcome: 'error', fs_path: ACTIVITY_FAILED_TARGET, count: 1000,
+      })])
+    })
+
+    it('keeps 100,000 stat and readFile calls to paths that do not exist at a handful of keys (HIGH-1)', async () => {
+      const sent: Array<{ rows: unknown[] }> = []
+      const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
+      for (let i = 0; i < 100_000; i++) {
+        const stat = call({ method: 'stat', args: { path: `missing/${i}` } })
+        recorder.record(activityRowFor({
+          pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', call: stat, at: AT,
+          response: buildSuccess('r', { exists: false, is_directory: false, size: 0 }),
+        }))
+        const read = call({ method: 'readFile', args: { path: `missing/${i}` } })
+        recorder.record(activityRowFor({
+          pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', call: read, at: AT,
+          response: buildSuccess('r', { ok: false, error: 'not a file', content: '' }),
+        }))
+        recorder.record(activityRowFor({
+          pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', call: read, at: AT,
+          response: buildError('r', 'TIMEOUT', 'x'),
+        }))
+      }
+      expect(recorder.pending).toBeLessThan(10)
+      await recorder.flush()
+      expect(sent[0].rows).toHaveLength(3)
+    })
+
+    it('keeps v2 createFile and createDirectory out of the read-only list', () => {
+      expect(READ_ONLY_ADDRESSES.has('fs.createFile')).toBe(false)
+      expect(READ_ONLY_ADDRESSES.has('fs.createDirectory')).toBe(false)
+      expect(READ_ONLY_ADDRESSES.has('fs.findInFiles')).toBe(false)  // its search runs a process
+    })
   })
 
   it('knows exactly the capabilities the broker routes', () => {

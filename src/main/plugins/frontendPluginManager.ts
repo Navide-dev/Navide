@@ -37,6 +37,7 @@ import {
   HOST_CAPABILITIES,
   HOST_EVENT_SOURCE_PLUGIN_ID,
   HOST_USER_INITIATOR,
+  undispatched,
   type CapabilityCall,
   type CapabilityErrorCode,
   type CapabilityResponse,
@@ -5171,7 +5172,7 @@ export class FrontendPluginManager {
         return buildError('', 'BAD_REQUEST', 'unknown plugin sender')
       }
       if (this.isPluginStopping(plugin)) {
-        return buildError('', 'PLUGIN_STOPPING', 'plugin runtime is stopping')
+        return undispatched(buildError('', 'PLUGIN_STOPPING', 'plugin runtime is stopping'))
       }
       const pluginId = plugin.id
       const reqId =
@@ -5179,14 +5180,14 @@ export class FrontendPluginManager {
           ? String((payload as Record<string, unknown>).reqId ?? '')
           : ''
       if (this.payloadClaimsInstance(payload)) {
-        return buildError(reqId, 'BAD_REQUEST', 'instance identity is Host-owned')
+        return undispatched(buildError(reqId, 'BAD_REQUEST', 'instance identity is Host-owned'))
       }
       if (this.payloadClaimsInitiator(payload)) {
-        return buildError(reqId, 'BAD_REQUEST', 'initiator identity is Host-owned')
+        return undispatched(buildError(reqId, 'BAD_REQUEST', 'initiator identity is Host-owned'))
       }
       const call = parseCapabilityCall(payload, pluginId)
       if (!call) {
-        return buildError(reqId, 'BAD_REQUEST', 'malformed capability call')
+        return undispatched(buildError(reqId, 'BAD_REQUEST', 'malformed capability call'))
       }
       if (call.ns === 'ui' && call.method === 'resolveDetailClose') {
         return this.resolveDetailClose(plugin, call.reqId, call.args)
@@ -5199,7 +5200,7 @@ export class FrontendPluginManager {
       }
       if (this.plansStorageReadinessHandler) {
         const storageAdmission = await this.plansInstanceStorageAdmission(plugin, reqId)
-        if (storageAdmission) return storageAdmission
+        if (storageAdmission) return undispatched(storageAdmission)
       }
 
       // Enforce scoping + route. A denied namespace is rejected here and never
@@ -5212,7 +5213,7 @@ export class FrontendPluginManager {
           this.capabilityContextForInitiator(plugin, HOST_USER_INITIATOR) ?? undefined
         )
       } catch {
-        return buildError(call.reqId, 'INVALID_ARGUMENT', 'invalid capability request')
+        return undispatched(buildError(call.reqId, 'INVALID_ARGUMENT', 'invalid capability request'))
       }
       if (plan.kind === 'respond') return plan.response
 
@@ -5239,11 +5240,11 @@ export class FrontendPluginManager {
           }
           const handler = this.publicStorageHandler
           if (!handler || !isStorageExecutionAddress(plan.address)) {
-            return buildError(
+            return undispatched(buildError(
               call.reqId,
               'BACKEND_UNAVAILABLE',
               'storage capability broker is not connected'
-            )
+            ))
           }
           try {
             const result = await handler({
@@ -6716,20 +6717,20 @@ export class FrontendPluginManager {
         ? (payload as Record<string, unknown>).reqId as string
         : ''
     const plugin = this.running.get(instanceId)
-    if (!plugin) return buildError(reqId, 'BAD_REQUEST', 'unknown plugin instance')
+    if (!plugin) return undispatched(buildError(reqId, 'BAD_REQUEST', 'unknown plugin instance'))
     if (this.isPluginStopping(plugin)) {
-      return buildError(reqId, 'PLUGIN_STOPPING', 'plugin runtime is stopping')
+      return undispatched(buildError(reqId, 'PLUGIN_STOPPING', 'plugin runtime is stopping'))
     }
     if (this.payloadClaimsInstance(payload) || this.payloadClaimsInitiator(payload)) {
-      return buildError(reqId, 'BAD_REQUEST', 'Host-owned identity cannot be supplied')
+      return undispatched(buildError(reqId, 'BAD_REQUEST', 'Host-owned identity cannot be supplied'))
     }
     const call = parseCapabilityCall(payload, plugin.id)
-    if (!call) return buildError(reqId, 'BAD_REQUEST', 'malformed capability call')
+    if (!call) return undispatched(buildError(reqId, 'BAD_REQUEST', 'malformed capability call'))
     if (plugin.capabilityPolicy.kind !== 'manifest-v2') {
       return buildError(call.reqId, 'CAPABILITY_DENIED', 'agent calls require a Manifest v2 capability')
     }
     const storageAdmission = await this.plansInstanceStorageAdmission(plugin, reqId)
-    if (storageAdmission) return storageAdmission
+    if (storageAdmission) return undispatched(storageAdmission)
     const initiator: AuthenticatedInitiator = Object.freeze({
       kind: 'agent',
       source: 'mcp',
@@ -6743,7 +6744,7 @@ export class FrontendPluginManager {
     try {
       plan = planCapabilityCall(call, plugin.capabilityPolicy, context)
     } catch {
-      return buildError(call.reqId, 'INVALID_ARGUMENT', 'invalid capability request')
+      return undispatched(buildError(call.reqId, 'INVALID_ARGUMENT', 'invalid capability request'))
     }
     if (plan.kind === 'respond') return plan.response
     if (plan.kind === 'public') {
@@ -6753,7 +6754,7 @@ export class FrontendPluginManager {
       try {
         if (plan.storage) {
           if (!this.publicStorageHandler || !isStorageExecutionAddress(plan.address)) {
-            return buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'storage capability broker is not connected')
+            return undispatched(buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'storage capability broker is not connected'))
           }
           const result = await this.publicStorageHandler({
             address: plan.address,
@@ -6777,7 +6778,7 @@ export class FrontendPluginManager {
           return buildSuccess(call.reqId, result)
         }
         if (!this.publicCapabilityHandler) {
-          return buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'public capability broker is not connected')
+          return undispatched(buildError(call.reqId, 'BACKEND_UNAVAILABLE', 'public capability broker is not connected'))
         }
         return buildSuccess(call.reqId, await this.publicCapabilityHandler(plan))
       } catch {
@@ -6790,7 +6791,7 @@ export class FrontendPluginManager {
     if (plan.kind === 'host') {
       return buildError(call.reqId, 'CAPABILITY_DENIED', 'agent Host actions are unavailable')
     }
-    return buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`)
+    return undispatched(buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`))
   }
 
   private headlessPlansKey(packageVersion: string, workspacePath: string): string {

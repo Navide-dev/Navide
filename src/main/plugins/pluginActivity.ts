@@ -24,6 +24,7 @@ import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
 import {
   isKnownCapabilityAddress,
   isUndeclaredDenial,
+  isUndispatched,
   type CapabilityCall,
   type CapabilityResponse,
 } from './pluginCapabilityBroker'
@@ -52,14 +53,17 @@ function plainText(value: string): string {
   return MARKERS.has(value) ? `./${value}` : value
 }
 
-/** Calls that change something (PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES): one
- *  that failed after it was dispatched may have done so, so it keeps its path
- *  and command. Any other failed call changed nothing: ACTIVITY_FAILED_TARGET. */
-export const STATE_CHANGING_ADDRESSES: ReadonlySet<string> = new Set([
-  'fs.writeFile', 'fs.write_file', 'fs.create_file', 'fs.delete', 'fs.mkdir', 'fs.rename', 'shell.run',
+/** Calls known to change nothing (PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES): a failed
+ *  one is ACTIVITY_FAILED_TARGET. Any other failed call that reached a handler
+ *  keeps its path and command (a new address too): it may have done something
+ *  before it failed. One answered before dispatch, or of an unknown address,
+ *  ran nothing. */
+export const READ_ONLY_ADDRESSES: ReadonlySet<string> = new Set([
+  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath',
+  'fs.listArchive', 'fs.previewResource', 'fs.convertOffice',
+  'fs.read_file', 'fs.read_image', 'fs.list_dir', 'fs.list_files_flat', 'fs.glob_files', 'fs.stat_path',
+  'fs.list_archive', 'fs.convert_office',
 ])
-/** Refusals of the request itself: the call never ran. */
-const NOT_DISPATCHED_CODES: ReadonlySet<string> = new Set(['UNKNOWN', 'BAD_REQUEST', 'METHOD_NOT_FOUND', 'INVALID_ARGUMENT'])
 
 /** Read-only calls that answer a missing path inside a successful call. */
 const READS_ANSWERING_MISSING: ReadonlySet<string> = new Set([
@@ -155,8 +159,8 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
   const kept = outcome === 'allowed' || (
-    outcome === 'error' && STATE_CHANGING_ADDRESSES.has(`${call.ns}.${call.method}`)
-    && !NOT_DISPATCHED_CODES.has(response.error?.code ?? '')
+    outcome === 'error' && row.address !== ACTIVITY_UNKNOWN_ADDRESS
+    && !READ_ONLY_ADDRESSES.has(row.address) && !isUndispatched(response)
   )
   const target = (value: string): string =>
     kept ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET

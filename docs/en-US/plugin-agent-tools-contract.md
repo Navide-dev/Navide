@@ -1324,16 +1324,26 @@ the counts stay exact:
   the call was refused (`outcome` `denied`), so the path or command it named is
   not kept.
 - `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path` /
-  `shell_command`: the call failed (`outcome` `error`; with `fs` granted, a
-  path that does not exist costs one stat) and changed nothing, so the path or
-  command it named is not kept. Only a call that changes something
-  (`PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES`: `fs.writeFile`, the legacy
-  `fs.write_file` / `fs.create_file` / `fs.delete` / `fs.mkdir` /
-  `fs.rename`, and `shell.run`) and failed after it was dispatched keeps its
-  redacted path and command, as an allowed call does: it may have done
-  something before it failed. A request refused before it ran (`UNKNOWN`,
-  `BAD_REQUEST`, `METHOD_NOT_FOUND`, `INVALID_ARGUMENT`), any other address and
-  `<unknown>` are `<failed>`.
+  `shell_command`: the call failed (`outcome` `error`) and changed nothing, so
+  the path or command it named is not kept. A failed call keeps its redacted
+  path and command by default, as an allowed call does (it may have done
+  something before it failed, and an address added later is covered the same
+  way); it is `<failed>` only when it is known to have changed nothing:
+  - its address is read-only (`PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES`, each
+    checked to write nothing to disk and start no process: `fs.readFile`,
+    `fs.readImage`, `fs.listDirectory`, `fs.listFilesFlat`, `fs.glob`,
+    `fs.stat`, `fs.statPath`, `fs.listArchive`, `fs.previewResource`,
+    `fs.convertOffice` and their legacy snake_case names; `fs.findInFiles`
+    runs a search process and is not in it);
+  - its address is `<unknown>` (no capability Navide has, such as `fs.bogus`
+    answered with `METHOD_NOT_FOUND`);
+  - the Host answered it before handing it to any handler (the planner
+    refused it, answered it or threw, or a check before it ran refused it):
+    the broker marks that answer itself, never by its error code, and the Host
+    sends `<failed>`, which the backend keeps as it is.
+
+  Only an `fs` call's `path` and a `shell` call's `command` are recorded at
+  all; other namespaces keep no text.
 - `<missing>` (`PLUGIN_ACTIVITY_MISSING_TARGET`), in `fs_path`: a read was
   allowed but its result found nothing usable there: `exists: false` (as
   `fs.stat` / `fs.statPath` answer for a path that does not exist) or

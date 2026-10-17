@@ -705,11 +705,16 @@ PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS = 90
 PLUGIN_ACTIVITY_UNKNOWN_ADDRESS = "<unknown>"
 PLUGIN_ACTIVITY_DENIED_TARGET = "<denied>"
 PLUGIN_ACTIVITY_FAILED_TARGET = "<failed>"
-#: Broker calls that change something. One that failed may have done so
-#: before it failed, so it keeps its redacted path and command; any other
-#: failed call (a read, an unknown address) changed nothing and is ``<failed>``.
-PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES = (
-    "fs.writeFile", "fs.write_file", "fs.create_file", "fs.delete", "fs.mkdir", "fs.rename", "shell.run",
+#: Broker calls known to change nothing (no disk write, no process): one that
+#: failed is ``<failed>``. Any other failed call keeps
+#: its redacted path and command (a new address too), unless the Host says it
+#: was answered before dispatch (it sends ``<failed>``) or its address is
+#: ``<unknown>``: it may have done something before it failed.
+PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES = (
+    "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+    "fs.listArchive", "fs.previewResource", "fs.convertOffice",
+    "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.glob_files", "fs.stat_path",
+    "fs.list_archive", "fs.convert_office",
 )
 #: The path of an allowed call whose result found nothing usable there
 #: (``exists: false`` or ``ok: false``).

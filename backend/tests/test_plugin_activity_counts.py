@@ -230,21 +230,27 @@ async def test_a_count_outside_sqlites_integers_is_skipped_and_the_batch_is_kept
     assert [(r["plugin_id"], r["count"]) for r in _counts(audit)] == [(PLUGIN, 2**63 - 1), ("acme.other", 2)]
 
 
-def test_a_failed_write_or_command_keeps_its_text(tmp_path: Path) -> None:
-    """Security review of #397: it may have done something before it failed; a failed read changed nothing."""
+def test_a_failed_call_keeps_its_text_unless_it_is_known_to_change_nothing(tmp_path: Path) -> None:
+    """Review of #397: a failed call keeps its redacted text by default (it may have done something); a
+    read-only one, an unknown address, or one the Host marks as answered before dispatch does not."""
     audit = _log(tmp_path / "navide.db")
     common = {"plugin_id": PLUGIN, "plugin_version": "1", "workspace": WORKSPACE, "outcome": "error", "at_ms": NOW - 1000}
     audit.record_activity(source="broker", address="fs.writeFile", fs_path=f"{WORKSPACE}/src/new.ts", **common)
+    audit.record_activity(source="broker", address="fs.createFile", fs_path=f"{WORKSPACE}/src/made.ts", **common)
     audit.record_activity(source="shell", address="shell.run", shell_command="git push origin main", **common)
-    audit.record_activity(source="broker", address="fs.readFile", fs_path=f"{WORKSPACE}/src/gone.ts", **common)
-    # Only listed addresses keep it: an unknown one changed nothing (security review).
-    audit.record_activity(source="broker", address="<unknown>", fs_path=f"{WORKSPACE}/x/1", **common)
-    audit.record_activity(source="broker", address="fs.readFile2", fs_path=f"{WORKSPACE}/x/2", **common)
-    assert [(r["address"], r["fs_path"], r["shell_command"]) for r in _counts(audit)] == [
-        ("fs.writeFile", "src/new.ts", ""), ("shell.run", "", "git push"), ("fs.readFile", "<failed>", ""),
-        ("<unknown>", "<failed>", ""), ("fs.readFile2", "<failed>", ""),
+    audit.record_activity(source="broker", address="fs.writeFile", fs_path="<failed>", **common)  # before dispatch
+    for i in range(1000):
+        audit.record_activity(source="broker", address="fs.readFile", fs_path=f"{WORKSPACE}/gone/{i}", **common)
+        audit.record_activity(source="broker", address="<unknown>", fs_path=f"{WORKSPACE}/x/{i}", **common)
+    assert [(r["address"], r["fs_path"], r["shell_command"], r["count"]) for r in _counts(audit)] == [
+        ("fs.writeFile", "src/new.ts", "", 1), ("fs.createFile", "src/made.ts", "", 1),
+        ("shell.run", "", "git push", 1), ("fs.writeFile", "<failed>", "", 1),
+        ("fs.readFile", "<failed>", "", 1000), ("<unknown>", "<failed>", "", 1000),
     ]
-    # STATE_CHANGING_ADDRESSES in src/main/plugins/pluginActivity.ts
-    assert contract.PLUGIN_ACTIVITY_STATE_CHANGING_ADDRESSES == (
-        "fs.writeFile", "fs.write_file", "fs.create_file", "fs.delete", "fs.mkdir", "fs.rename", "shell.run",
+    # READ_ONLY_ADDRESSES in src/main/plugins/pluginActivity.ts
+    assert contract.PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES == (
+        "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+        "fs.listArchive", "fs.previewResource", "fs.convertOffice",
+        "fs.read_file", "fs.read_image", "fs.list_dir", "fs.list_files_flat", "fs.glob_files", "fs.stat_path",
+        "fs.list_archive", "fs.convert_office",
     )

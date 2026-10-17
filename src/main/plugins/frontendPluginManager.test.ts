@@ -17231,6 +17231,27 @@ describe('plugin activity (D-e)', () => {
     ])
   })
 
+  // Review of #397: a planner that throws dispatched nothing, so the write's
+  // path is not kept (the plugin wrote it and nothing ran).
+  it('records a call whose planning threw as not dispatched', async () => {
+    vi.useFakeTimers()
+    const { mgr, socket, call } = connect('acme.activity-planner-throws')
+    const running = (mgr as unknown as { running: Map<string, { capabilityPolicy: unknown }> }).running
+    for (const plugin of running.values()) {
+      plugin.capabilityPolicy = new Proxy({}, { get: () => { throw new Error('planner broke') } })
+    }
+    for (let i = 0; i < 50; i++) {
+      await expect(call('fs', 'writeFile', { path: `/Users/me/project/${i}.py`, content: 'x' })).resolves.toMatchObject({
+        ok: false, error: { code: 'INVALID_ARGUMENT' },
+      })
+    }
+    await vi.advanceTimersByTimeAsync(1000)
+    const [batch] = activityOf(socket)
+    expect(batch.payload.rows).toEqual([expect.objectContaining({
+      address: 'fs.writeFile', outcome: 'error', fs_path: '<failed>', count: 50,
+    })])
+  })
+
   it('answers the plugin the same as before when the backend never takes the batch', async () => {
     vi.useFakeTimers()
     const { socket, call } = connect('acme.activity-unanswered')

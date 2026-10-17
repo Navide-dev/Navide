@@ -400,6 +400,23 @@ export function isKnownCapabilityAddress(ns: string, method: string): boolean {
   )
 }
 
+/** Answers the Host gave without handing the call to any handler (refused
+ *  or answered before dispatch): nothing could have run. Kept beside the
+ *  response object like undeclaredDenials, so the envelope is unchanged; the
+ *  activity record reads it with {@link isUndispatched}. */
+const undispatchedResponses = new WeakSet<CapabilityResponse>()
+
+/** Mark `response` as answered before any handler ran. */
+export function undispatched(response: CapabilityResponse): CapabilityResponse {
+  undispatchedResponses.add(response)
+  return response
+}
+
+/** Whether `response` was answered before the call reached any handler. */
+export function isUndispatched(response: CapabilityResponse): boolean {
+  return undispatchedResponses.has(response)
+}
+
 /** Whether `response` is the broker's refusal of an undeclared use. */
 export function isUndeclaredDenial(response: CapabilityResponse): boolean {
   return undeclaredDenials.has(response)
@@ -1162,13 +1179,13 @@ export function planCapabilityCall(
     if (!authorization) {
       return {
         kind: 'respond',
-        response: buildError(call.reqId, 'CAPABILITY_DENIED', 'Host authorization context is missing'),
+        response: undispatched(buildError(call.reqId, 'CAPABILITY_DENIED', 'Host authorization context is missing')),
       }
     }
     const decision = planPublicCapabilityCall(call, policy, authorization)
     return decision.kind === 'allow'
       ? decision.plan
-      : { kind: 'respond', response: decision.response }
+      : { kind: 'respond', response: undispatched(decision.response) }
   }
   if (!isCallAllowed(policy, call.ns, call.method)) {
     const label =
@@ -1177,11 +1194,11 @@ export function planCapabilityCall(
         : `${call.ns}.${call.method}`
     return {
       kind: 'respond',
-      response: undeclared(buildError(
+      response: undispatched(undeclared(buildError(
         call.reqId,
         'CAP_DENIED',
         `capability '${label}' not granted`
-      )),
+      ))),
     }
   }
   if (call.ns === 'ping') {
@@ -1195,7 +1212,7 @@ export function planCapabilityCall(
   if (!wsType) {
     return {
       kind: 'respond',
-      response: buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`),
+      response: undispatched(buildError(call.reqId, 'UNKNOWN', `no handler for '${call.ns}.${call.method}'`)),
     }
   }
   return { kind: 'backend', wsType }
