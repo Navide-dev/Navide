@@ -17,11 +17,27 @@ from registry.manifest import ManifestError, parse_manifest
 ROOT = Path(__file__).parents[3]
 CONTRACT = ROOT / "backend" / "agent_team_backend" / "plugins" / "agent_tools_contract.py"
 COPY = ROOT / "marketplace" / "registry" / "registry" / "agent_tools_contract.py"
+# agent_tools_contract imports .disclosure_contract (agent_tool_arguments_digest),
+# so the Registry package ships that module next to its copy too.
+DISCLOSURE_CONTRACT = ROOT / "backend" / "agent_team_backend" / "plugins" / "disclosure_contract.py"
+DISCLOSURE_COPY = ROOT / "marketplace" / "registry" / "registry" / "disclosure_contract.py"
+CHUNKING = ROOT / "docs" / "plugin-contracts" / "agent-tools-fixtures" / "payload-chunking.json"
 FIXTURE = ROOT / "docs" / "plugin-contracts" / "fixtures" / "valid" / "backend-agent-tools.json"
 
 
 def test_registry_copy_is_byte_identical_to_the_contract_module() -> None:
     assert COPY.read_bytes() == CONTRACT.read_bytes()
+
+
+def test_registry_disclosure_copy_is_byte_identical_to_the_contract_module() -> None:
+    assert DISCLOSURE_COPY.read_bytes() == DISCLOSURE_CONTRACT.read_bytes()
+
+
+def test_the_registry_copy_digests_arguments_without_an_import_error() -> None:
+    from registry.agent_tools_contract import agent_tool_arguments_digest
+
+    for case in json.loads(CHUNKING.read_text(encoding="utf-8"))["argumentsDigest"]:
+        assert agent_tool_arguments_digest(case["arguments"]) == (case["sha256"], case["bytes"]), case["name"]
 
 
 def test_publish_keeps_the_declared_agent_tools_verbatim() -> None:

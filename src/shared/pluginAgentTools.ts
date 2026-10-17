@@ -620,7 +620,7 @@ export interface PluginApprovalRequest {
 export interface PluginApprovalDecision {
   approval_id: string
   approve: boolean
-  /** Trust confirmation minted by the main window for {@link PLUGIN_APPROVAL_DECIDE_ACTION}, subject approval_id. */
+  /** Trust confirmation minted by the main window for {@link PLUGIN_APPROVAL_DECIDE_ACTION}, subject `<approval_id>:approve` or `<approval_id>:reject`. */
   confirmation: string
 }
 
