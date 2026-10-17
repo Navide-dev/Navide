@@ -676,7 +676,7 @@ async def test_evolve_report_tool_needs_a_pane_and_reaches_the_service(env, monk
     agent_messaging._reset_for_test()
     try:
         agent_messaging.register("p-1", "runner", env.a, "claude")
-        pane = ctx({"pane": "p-1", "t": plan_mcp_wiring.caller_token()})
+        pane = ctx({"pane": "p-1", "t": plan_mcp_wiring.caller_token("p-1")})
         assert (await plan_mcp.evolve_report("r1", "ok", "s", pane, tokens=5))["ok"] is True
         assert seen == [("p-1", {"run_id": "r1", "status": "ok", "summary": "s", "commits": None,
                                  "proposals": None, "panes": None, "tokens": 5,

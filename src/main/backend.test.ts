@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { platformId, setPlatformId } from '../shared/osplat'
 import {
+  bindBackendDisabledBuiltins,
   bindBackendPluginActivationCatalog,
   handConfirmKey,
   listNvmNodeBins,
@@ -42,6 +43,18 @@ describe('backend plugin activation environment', () => {
       AGENT_TEAM_PLUGIN_ACTIVATION_CATALOG: '/state/catalog.json',
       AGENT_TEAM_PLUGIN_ACTIVATION_CATALOG_SHA256: 'a'.repeat(64),
     })
+  })
+})
+
+describe('bindBackendDisabledBuiltins', () => {
+  it('hands a starting backend the disabled built-ins, and nothing at all when none is', () => {
+    expect(bindBackendDisabledBuiltins({ KEEP: 'yes' }, ['navide.plans', 'navide.git'])).toEqual({
+      KEEP: 'yes',
+      NAVIDE_DISABLED_BUILTIN_PLUGINS: 'navide.git,navide.plans',
+    })
+    // A value inherited from a launcher never survives an all-enabled start.
+    expect(bindBackendDisabledBuiltins({ KEEP: 'yes', NAVIDE_DISABLED_BUILTIN_PLUGINS: 'navide.git' }, []))
+      .toEqual({ KEEP: 'yes' })
   })
 })
 

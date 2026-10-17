@@ -59,6 +59,7 @@ import {
   formatCustomCommand,
   type DetectedEditor,
 } from '../lib/defaultEditor'
+import { useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 import { useCliAgentPrefs } from '../composables/useCliAgentPrefs'
 import { useOnboarding } from '../composables/useOnboarding'
 import {
@@ -1471,6 +1472,10 @@ async function loadDetectedEditors(refresh = false): Promise<void> {
     detectingEditors.value = false
   }
 }
+
+// A disabled Mini-IDE cannot be the default editor; the option says why.
+const disabledBuiltins = useDisabledBuiltins()
+const miniIdeDisabled = computed(() => disabledBuiltins.disabled.value.has('navide.mini-ide'))
 
 function isEditorAvailable(id: string): boolean {
   return detectedEditors.value.some((editor) => editor.id === id && editor.available)
@@ -3675,7 +3680,11 @@ watch(activeTab, (tab) => {
                   <div class="row-g gap">
                     <span v-if="selectedEditorCommand" class="s-ctrl-label">{{ selectedEditorCommand }}</span>
                     <select :value="defaultEditorModel" @change="onDefaultEditorChange(($event.target as HTMLSelectElement).value)">
-                      <option value="mini-ide">{{ $t('label.editor-mini-ide') }}</option>
+                      <option
+                        value="mini-ide"
+                        :disabled="miniIdeDisabled"
+                        :title="miniIdeDisabled ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+                      >{{ $t('label.editor-mini-ide') }}</option>
                       <option value="system">{{ $t('label.editor-system') }}</option>
                       <option
                         v-for="id in DETECTABLE_EDITOR_IDS"

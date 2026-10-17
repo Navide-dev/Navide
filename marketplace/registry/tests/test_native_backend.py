@@ -12,7 +12,10 @@ from sqlmodel import Session, select
 from registry.db import create_db_engine
 from registry.dns_verify import record_host, record_value
 from registry.models import Publisher
-from registry.native_backend import MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND
+from registry.native_backend import (
+    MIN_NAVIDE_FOR_BACKEND_SHELL,
+    MIN_NAVIDE_FOR_THIRD_PARTY_BACKEND,
+)
 from registry.secret_scan import MAX_SCANNED_BYTES_PER_FILE, scan_package
 from registry.similarity import check_extension_name
 from tests.fixtures import build_v2_package, contract_manifest
@@ -102,13 +105,38 @@ def test_self_service_publisher_needs_allowlist_and_verified_domain(client, dns,
     assert queued_artifacts(client, "acme-tools", "indexer")
 
 
-def test_backend_package_cannot_request_shell_or_old_navide(client, dns, token):
+def test_backend_package_may_declare_allowlist_shell_on_a_navide_with_the_shell_port(client, dns, token):
+    # DB5 (disclose, don't restrict): a backend package may declare
+    # shell: "allowlist"; its backend reaches git/gh/glab only through the
+    # Host shell broker, which first exists in MIN_NAVIDE_FOR_BACKEND_SHELL.
     _set_allowed(client)
     _verify_domain(client, dns)
-    shell = _backend_manifest(permissions={"system": ["fs"], "shell": "allowlist"})
-    resp = publish(client, token, _backend_package(shell), target="darwin-arm64")
+    allowlist = _backend_manifest(
+        permissions={"system": ["fs"], "shell": "allowlist"},
+        engines={"navide": f">={MIN_NAVIDE_FOR_BACKEND_SHELL}"},
+    )
+    accepted = publish(client, token, _backend_package(allowlist), target="darwin-arm64")
+    assert accepted.status_code == 201, accepted.text
+    assert queued_artifacts(client, "acme-tools", "indexer")
+
+
+def test_backend_package_cannot_request_shell_or_old_navide(client, dns, token):
+    # "shell" here is full shell, or allowlist shell on a Navide without the
+    # backend shell broker port.
+    _set_allowed(client)
+    _verify_domain(client, dns)
+    old_host = _backend_manifest(permissions={"system": ["fs"], "shell": "allowlist"})
+    resp = publish(client, token, _backend_package(old_host), target="darwin-arm64")
     assert resp.status_code == 403
-    assert "shell" in resp.json()["detail"]
+    assert MIN_NAVIDE_FOR_BACKEND_SHELL in resp.json()["detail"]
+
+    full = _backend_manifest(
+        permissions={"system": ["fs"], "shell": "full"},
+        engines={"navide": f">={MIN_NAVIDE_FOR_BACKEND_SHELL}"},
+    )
+    resp = publish(client, token, _backend_package(full), target="darwin-arm64")
+    assert resp.status_code == 403
+    assert "full shell" in resp.json()["detail"]
 
     no_methods = _backend_manifest()
     no_methods["backend"] = {k: v for k, v in no_methods["backend"].items() if k != "methods"}

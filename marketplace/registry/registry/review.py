@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select, update
 
+from .disclosure import sign_disclosure
 from .discovery import PACK_CATEGORY, pack_members
 from .manifest import manifest_capabilities
 from .models import Extension, ExtensionVersion, Publisher
@@ -242,6 +243,9 @@ def approve(
         )
         row.registry_envelope = envelope
         row.registry_signature = signature
+        row.disclosure, row.disclosure_envelope, row.disclosure_signature = (
+            sign_disclosure(signer, row.manifest or {}, envelope)
+        )
         row.trust_tier = compute_trust_tier(signed=True)
         row.review_status = APPROVED
         row.reviewed_at = now

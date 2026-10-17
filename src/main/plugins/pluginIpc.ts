@@ -66,10 +66,12 @@ import type {
   PluginLaunchDescriptor,
   PluginPackageRestartTransaction,
 } from './frontendPluginManager'
+import { BUILTIN_PLUGIN_NAMES, isReservedPluginId } from './frontendPluginManager'
 import type { ContributionIcon } from './pluginContributionIcon'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
 import { answerMarketplaceQuery, MarketplaceHttpError } from './marketplaceQuery'
+import type { PluginIdStoreStatus } from './pluginFactoryOptOutStore'
 import { PluginActivationSelector, type PluginPackageSelection } from './pluginActivationSelector'
 import type { HostCapabilityGrant } from './pluginCapabilityBroker'
 import {
@@ -159,6 +161,11 @@ export interface FactoryPackageSummary {
   version: string | null
   active: boolean
   optedOut: boolean
+  /** The user's Disabled switch for this built-in. */
+  disabled?: boolean
+  /** Removed by an earlier Navide version, which deleted its stored data; the
+   *  upgrade turned that removal into Disabled. */
+  dataDeletedByEarlierRemoval?: boolean
 }
 
 const MARKETPLACE_SORTS = new Set(['updated', 'downloads', 'rating'])
@@ -197,6 +204,15 @@ function newestInstallableVersion(
 /** SemVer prerelease suffix ⇒ pre-release channel (build metadata is not one). */
 export function isPrereleaseVersion(version: string): boolean {
   return version.split('+', 1)[0].includes('-')
+}
+
+/** A Registry-supplied JSON object (disclosure data), or null for anything
+ * else. Display data only: install re-verifies the signed disclosure in
+ * prepareInstall. */
+function jsonObjectOrNull(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
 }
 
 /** A Registry-supplied link, kept only when it is an https URL. */
@@ -322,6 +338,13 @@ export interface PluginIpcOptions {
   factoryRollbackRefusal?: (pluginId: string) => string | undefined
   listFactoryPackages?: () => FactoryPackageSummary[]
   restoreFactoryPackage?: (pluginId: string) => Promise<void> | void
+  /** Host side of the Disabled switch for the built-in Plans, Git and
+   *  Mini-IDE, called after the switch is recorded: drain on disable, reload
+   *  on enable. Its storage, grant and package stay either way. */
+  setBuiltinDisabled?: (pluginId: string, disabled: boolean) => Promise<void> | void
+  /** Called after the user reset an unreadable Disabled store: the built-ins
+   *  it held off are enabled again. */
+  onBuiltinSwitchReset?: () => void
   onFactoryPackageRemoved?: (pluginId: string) => void
   /** Load the App-bundled package and its grant after an installed package
    *  that replaced it was unregistered; the rollback path back to the factory. */
@@ -630,6 +653,8 @@ export function registerPluginIpc(
     async (event, args: { id?: unknown } | null) => {
       assertAuthorized(event)
       const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
+      // Built-ins are never removed any more, so there is nothing to restore.
+      if (isReservedPluginId(id)) throw new Error(`first-party plugin ${id} cannot be removed or restored`)
       if (!options.restoreFactoryPackage) throw new Error('factory package restore is unavailable')
       await options.restoreFactoryPackage(id)
       return { ok: true }
@@ -863,6 +888,10 @@ export function registerPluginIpc(
           compatible: isEngineCompatible(v.engines_navide, appVersion),
           min_navide_version: minNavideVersion(v.engines_navide),
           channel: typeof v.version === 'string' && isPrereleaseVersion(v.version) ? 'pre-release' : 'stable',
+          // Contract 3.4/3.5: shown before download, verified at prepareInstall.
+          disclosure: jsonObjectOrNull(v.disclosure),
+          scan: jsonObjectOrNull(v.scan),
+          registry: jsonObjectOrNull(v.registry),
         })),
         readme,
       }
@@ -1207,7 +1236,7 @@ export function registerPluginIpc(
     namespace: string
     name: string
     version?: string
-  }): Promise<PreparedInstall> => {
+  }): Promise<PreparedInstall & { registryFacts: Record<string, unknown> | null }> => {
     const marketplace = resolveConfiguredMarketplace(trust)
     const base = marketplace.registryUrl.replace(/\/+$/, '')
     const detailRes = await fetch(`${base}/api/extensions/${args.namespace}/${args.name}`)
@@ -1225,6 +1254,11 @@ export function registerPluginIpc(
         trust_tier: string
         yanked: boolean
         engines_navide?: string | null
+        disclosure?: unknown
+        disclosure_envelope?: unknown
+        disclosure_signature?: unknown
+        scan?: unknown
+        registry?: unknown
       }>
     }
     const wanted = args.version ?? detail.latest_version
@@ -1260,10 +1294,15 @@ export function registerPluginIpc(
       trustMetadata: detail.trust_metadata,
       trustMetadataSignature: detail.trust_metadata_signature,
       claimedTrustTier: versionRow.trust_tier,
+      disclosure: versionRow.disclosure,
+      disclosureEnvelope: versionRow.disclosure_envelope,
+      disclosureSignature: versionRow.disclosure_signature,
+      scan: versionRow.scan,
       provenance: 'official-registry',
     }, undefined, marketplace.trust)
     assertEngineCompatible(result.id, result.version, result.manifest, appVersion)
-    return result
+    // The `registry` facts are unsigned Registry information (contract 3.4).
+    return { ...result, registryFacts: jsonObjectOrNull(versionRow.registry) }
   }
 
   ipcMain.handle(
@@ -1290,6 +1329,9 @@ export function registerPluginIpc(
           !result.official &&
           !publisherTrust.isTrusted(result.publisherId, result.id),
         requiresRiskConfirmation: result.requiresConfirmation,
+        disclosure: result.disclosure ?? null,
+        scan: result.scan ?? null,
+        registry: result.registryFacts,
       }
     }
   )
@@ -2120,6 +2162,9 @@ export function registerPluginIpc(
 
   const uninstallPlugin = async (rawId: unknown, rawDataChoice?: unknown): Promise<{ ok: true }> => {
     const id = assertPluginRemovalTarget(pluginsRoot, rawId)
+    // Plans, Git and Mini-IDE ship with Navide and can only be disabled; no
+    // `navide.` package is removable, so its storage and grant always stay.
+    if (isReservedPluginId(id)) throw new Error(`first-party plugin ${id} cannot be removed or restored`)
     // No choice means keep, exactly as before this option existed.
     if (rawDataChoice !== undefined && rawDataChoice !== 'keep' && rawDataChoice !== 'delete') {
       throw new Error('invalid native backend data choice')
@@ -2206,6 +2251,65 @@ export function registerPluginIpc(
     return inspectNativeBackendData(root, id)
   })
 
+  // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
+  // the Marketplace switch below; the package stays loaded and the Host stops
+  // offering, mounting and serving it (FrontendPluginManager.isBuiltinPluginDisabled).
+  // Nothing here touches its storage, grant or lifecycle selection.
+  async function setBuiltinDisabled(id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> {
+    const hostSwitch = options.setBuiltinDisabled
+    if (!hostSwitch) throw new Error('built-in plugin disable is unavailable')
+    if (activeTransactions.has(id)) {
+      throw new Error(`plugin transaction already in progress for ${id}`)
+    }
+    if (disabledPlugins.has(id) === disabled) return { id, disabled }
+    activeTransactions.add(id)
+    try {
+      if (disabled) {
+        // Recorded first, so nothing can mount it again while it drains.
+        disabledPlugins.add(id)
+        await hostSwitch(id, true)
+      } else {
+        disabledPlugins.remove(id)
+        try {
+          await hostSwitch(id, false)
+        } catch (error) {
+          disabledPlugins.add(id)
+          throw error
+        }
+      }
+      return { id, disabled }
+    } finally {
+      activeTransactions.delete(id)
+    }
+  }
+
+  // Which built-ins are disabled, for the main window's tabs, commands and
+  // "open in editor" entries.
+  ipcMain.handle('plugins:disabledBuiltins', (event): string[] => {
+    assertAuthorized(event)
+    return manager.listDisabledBuiltinPlugins()
+  })
+
+  // Whether the Disabled store read normally, was rebuilt from its backup, or
+  // cannot be read (the built-ins then count as disabled until a reset).
+  ipcMain.handle('plugins:disabledStoreStatus', (event): { status: PluginIdStoreStatus } => {
+    assertAuthorized(event)
+    return { status: disabledPlugins.status() }
+  })
+
+  // The user's one-click reset of an unreadable Disabled store. Both damaged
+  // copies are kept aside; every switch starts from enabled.
+  ipcMain.handle('plugins:resetDisabledStore', (event): { status: PluginIdStoreStatus } => {
+    assertAuthorized(event)
+    if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
+    disabledPlugins.resetUnreadable()
+    for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
+      if (!manager.isBuiltinPluginDisabled(id)) manager.resumeBuiltinPlugin(id)
+    }
+    options.onBuiltinSwitchReset?.()
+    return { status: disabledPlugins.status() }
+  })
+
   // The user's "Disabled" switch for an installed Marketplace package. Disable
   // stops the package and unregisters its views and backend; its files, grant,
   // storage and lifecycle selection stay. Enable re-verifies the selected
@@ -2217,6 +2321,7 @@ export function registerPluginIpc(
       const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
       const disabled = args?.disabled
       if (typeof disabled !== 'boolean') throw new Error('invalid plugin disabled setting')
+      if (BUILTIN_PLUGIN_NAMES.has(id)) return setBuiltinDisabled(id, disabled)
       if (!manager.canDisablePlugin(id)) throw new Error(`first-party plugin ${id} cannot be disabled`)
       if (activeTransactions.has(id)) {
         throw new Error(`plugin transaction already in progress for ${id}`)

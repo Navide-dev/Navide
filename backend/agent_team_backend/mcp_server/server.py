@@ -193,6 +193,31 @@ server = FastMCP(
     ),
 )
 
+#: Tools owned by a built-in Navide plugin, hidden from tools/list while the
+#: user has that plugin disabled. Filled by the plugin's installer.
+_PLUGIN_OWNED_TOOLS: dict[str, frozenset[str]] = {}
+
+
+def hide_tools_while_plugin_disabled(plugin_id: str, names: list[str]) -> None:
+    """Hide ``names`` from tools/list while ``plugin_id`` is disabled. The
+    tools stay registered: a CLI that cached the list still reaches them, and
+    each refuses with PLUGIN_TOOL_UNAVAILABLE on its own."""
+    _PLUGIN_OWNED_TOOLS[plugin_id] = _PLUGIN_OWNED_TOOLS.get(plugin_id, frozenset()) | frozenset(names)
+
+
+async def list_visible_tools() -> list[Any]:
+    """tools/list: FastMCP's own list, minus the tools of disabled built-in
+    plugins. With none disabled it is FastMCP's list unchanged."""
+    from agent_team_backend import app
+
+    tools = await server.list_tools()
+    disabled = app.host_disabled_plugins()
+    hidden = frozenset().union(*(_PLUGIN_OWNED_TOOLS.get(plugin_id, frozenset()) for plugin_id in disabled))
+    return [tool for tool in tools if tool.name not in hidden] if hidden else tools
+
+
+server._mcp_server.list_tools()(list_visible_tools)
+
 
 # ── workspace resolution ────────────────────────────────────────────────────
 
@@ -402,7 +427,8 @@ def _bearer(request: Any) -> str:
 def _resolve_caller(ctx: Context) -> _Caller:
     """Validate the request's credential (pane / host / external).
 
-    Every pane is spawned pointing at `/plan-mcp?pane=<id>&t=<token>`; backend-
+    Every pane is spawned pointing at `/plan-mcp?pane=<id>&t=<token>`, with a
+    token minted for that pane id alone (mcp_wiring.caller_token); backend-
     written CLI config without a known pane id instead carries
     `?client=host&t=<internal token>` (see mcp_wiring.plan_mcp_url); an
     external client carries `?client=external&t=<external token>`, accepted
@@ -450,7 +476,15 @@ def _resolve_caller(ctx: Context) -> _Caller:
     pane_id = str(params.get("pane") or "")
     if not pane_id:
         raise CallerUnknown(_UNWIRED)
-    if not secrets.compare_digest(token, mcp_wiring.caller_token()):
+    # The token must be the one minted for the very id presented — the id the
+    # CLI was spawned with, which is also what any alias below is keyed by. An
+    # id this run never wired has no token, so nothing can stand in for it.
+    expected = mcp_wiring.bound_pane_token(pane_id)
+    if not expected and agent_messaging.was_forgotten(pane_id):
+        # A closed pane's token is revoked with it (wiring.release_pane_token);
+        # its CLI still hears what it always did, rather than a token error.
+        raise CallerUnknown(_STALE)
+    if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
     entry = agent_messaging.current(pane_id)
     if entry is None:
@@ -5023,14 +5057,13 @@ _UI_INVOKE_SLOW_TIMEOUT_S = 60.0
 #: caller's own pane; the only legitimate emitter, cli_read_incoming, always
 #: names its own.
 #:
-#: This is NOT a boundary around the inbox, and reading it as one would be a
-#: mistake. A pane caller's identity is the `pane=<id>` query param it was
-#: wired with, checked against a token shared by every pane on the machine
-#: (wiring.caller_token — a freshness check, readable via `ps` by anything
-#: running as the same user). So a local caller can present itself AS the
-#: victim pane and satisfy the check below. What this list buys is that a
-#: caller acting under its own identity cannot reach across to someone else's
-#: inbox; closing the impersonation case needs a per-pane token.
+#: A pane caller's identity is the `pane=<id>` query param it was wired with,
+#: checked against the token minted for that one pane (wiring.caller_token),
+#: so presenting another pane's id takes that pane's own token. What this list
+#: adds is that a caller acting under its own identity cannot reach across to
+#: someone else's inbox. It is not a boundary against a process that can read
+#: the victim pane's own environment or 0600 config file (same user), which
+#: holds that pane's token.
 #:
 #: Deliberately a short explicit list, not "every action with a paneId": focus,
 #: close, getStatus and interrupt are cross-pane by design.
@@ -8672,6 +8705,9 @@ async def _share_run(call: Callable[[Any], Awaitable[dict]]) -> dict:
     try:
         return {"ok": True, **await call(share_links.ServerLinksClient())}
     except share_links.ShareRefused as err:
+        if err.code == share_links.PLANS_DISABLED_CODE:
+            # The agent-tools contract's refusal for a disabled plugin.
+            return {"ok": False, "error": str(err), "code": "PLUGIN_TOOL_UNAVAILABLE", "reason": err.code}
         return {"ok": False, "error": str(err), "reason": err.code}
     except share_links.ShareRemoteError as err:
         if err.code in share_links.UNAVAILABLE_CODES:
