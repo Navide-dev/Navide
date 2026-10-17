@@ -21,13 +21,16 @@ interface VersionRecord {
 interface PersistedState {
   schemaVersion: 1
   plugins: Record<string, Record<string, VersionRecord>>
+  /** When each id was installed since its last removal (Unix ms; #373's
+   *  report request `installedAt`). Not changed by updates or rollbacks. */
+  installedAt: Record<string, number>
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
 function readState(path: string): PersistedState {
-  const empty: PersistedState = { schemaVersion: 1, plugins: {} }
+  const empty: PersistedState = { schemaVersion: 1, plugins: {}, installedAt: {} }
   if (!existsSync(path)) return empty
   try {
     const entry = lstatSync(path)
@@ -47,7 +50,13 @@ function readState(path: string): PersistedState {
         ;(plugins[id] ??= {})[version] = { scan, noticed }
       }
     }
-    return { schemaVersion: 1, plugins }
+    const installedAt: PersistedState['installedAt'] = {}
+    if (isRecord(parsed.installedAt)) {
+      for (const [id, at] of Object.entries(parsed.installedAt)) {
+        if (typeof at === 'number' && Number.isSafeInteger(at) && at >= 0) installedAt[id] = at
+      }
+    }
+    return { schemaVersion: 1, plugins, installedAt }
   } catch {
     return empty
   }
@@ -93,10 +102,26 @@ export class PluginInstallScanStore {
     return true
   }
 
+  /** When this id was installed since its last removal, or null when unknown
+   *  (installed before this was recorded). */
+  installedAt(pluginId: string): number | null {
+    return readState(this.file).installedAt[pluginId] ?? null
+  }
+
+  /** Record a fresh install's time; an existing time is kept (updates and
+   *  rollbacks never call this, and a second call changes nothing). */
+  markInstalled(pluginId: string, at: number): void {
+    const state = readState(this.file)
+    if (pluginId in state.installedAt) return
+    state.installedAt[pluginId] = at
+    this.write(state)
+  }
+
   removePlugin(pluginId: string): void {
     const state = readState(this.file)
-    if (!(pluginId in state.plugins)) return
+    if (!(pluginId in state.plugins) && !(pluginId in state.installedAt)) return
     delete state.plugins[pluginId]
+    delete state.installedAt[pluginId]
     this.write(state)
   }
 
