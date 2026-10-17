@@ -10988,6 +10988,33 @@
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   },
   "pluginDisclosure": {
+    "diff": {
+      "heading": "What this update changes",
+      "versions": "Installed {from} → update to {to}; only the differences are listed.",
+      "risk": "Risk level: {from} → {to}",
+      "none": "No permission was added or removed.",
+      "added": "New",
+      "removed": "Removed",
+      "unchanged": "Unchanged ({count})",
+      "fullCard": "Full disclosure card",
+      "badgeMore": "More permissions",
+      "badgeSame": "Same permissions",
+      "badgeTitle": "From the Navide Registry's data, not yet verified; before updating, Navide compares again against the downloaded package.",
+      "updatedNoNew": "{name} {version} adds no permissions, so the update was prepared without asking again.",
+      "item": {
+        "system": "Permission: {key}",
+        "shell": "Shell mode: {key}",
+        "shellExecutable": "Can run: {key}",
+        "fsScopeRoot": "File scope: {key}",
+        "fsScopeRead": "Can read: {key}",
+        "fsScopeWrite": "Can write: {key}",
+        "nativeBackend": "Ships native code",
+        "backendMethod": "Native code method: {key}",
+        "backendEvent": "Native code event: {key}",
+        "network": "Can reach remote hosts through commands",
+        "agentTool": "Agent tool: {key}"
+      }
+    },
     "title": "Disclosure",
     "riskLabel": "Risk level: {level}",
     "risk": {
@@ -11093,7 +11120,7 @@
       "embeddedRuntime": "embeds a {detail} runtime"
     },
     "registry": {
-      "domainVerified": "Publisher domain verified: {domain} ({date})",
+      "domainVerified": "The Navide Registry records that the publisher controls {domain} (checked {date})",
       "domainNotVerified": "Publisher domain not verified",
       "signedClaim": "The Navide Registry says this version is signed (key {keyId}); not yet verified",
       "signedVerified": "Navide Registry signature verified (key {keyId})",

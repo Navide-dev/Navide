@@ -11,6 +11,7 @@ type ManifestPermissionsSummary = import('../../shared/executionPolicy').Manifes
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
 type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
+type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
@@ -643,6 +644,8 @@ declare global {
     name: string
     installedVersion: string
     latestVersion: string
+    /** Plan B D2 badge, from the Registry's unverified listing. */
+    permissionChange?: 'more' | 'same'
   }
 
   interface MarketplaceListResponse {
@@ -662,6 +665,9 @@ declare global {
     publisherId: string
     requiresPublisherTrust: boolean
     requiresRiskConfirmation: boolean
+    /** Plan B D2: what this update changes, computed by the Host from the
+     *  installed and the downloaded manifests; null for a first install. */
+    disclosureDiff?: PluginDisclosureDiff | null
     /** Verified against the package and the Registry signature; null when the
      *  version carries no disclosure. */
     disclosure?: PluginManifestDisclosure | null

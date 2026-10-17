@@ -39,7 +39,8 @@ import {
   manifestToInstalledPackageSummary,
   type PluginActivationCatalogEntry,
 } from './installedPlugins'
-import { isManifestV2 } from './pluginManifest'
+import { isManifestV2, parseInstalledManifest } from './pluginManifest'
+import { parseManifestJson } from './pluginManifestJson'
 import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginPublisherTrustStore } from './pluginPublisherTrust'
 import {
@@ -78,6 +79,13 @@ import {
   type ManifestPermissionsSummary,
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
+import {
+  computeDisclosure,
+  diffDisclosure,
+  type DisclosureDiff,
+  type DisclosureManifestInput,
+  type ManifestDisclosure,
+} from '../../shared/pluginDisclosure'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -298,6 +306,10 @@ export interface PluginUpdateInfo {
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge: whether the latest version adds permissions, from the
+   *  Registry's listing (unverified; prepareInstall computes the binding diff
+   *  from the package itself). Absent when the listing carries no disclosure. */
+  permissionChange?: 'more' | 'same'
 }
 
 export interface PluginTrustRefreshController {
@@ -452,6 +464,37 @@ export function registerPluginIpc(
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
+  // Plan B D2 (D-d): what an update changes, computed by the Host from the
+  // active version's installed manifest and the verified package's own
+  // manifest, never from Registry data. Null when there is nothing to
+  // compare: a first install, a Manifest v1 package on either side, or an
+  // active version whose manifest cannot be read (that update asks as before).
+  const activeDisclosure = (id: string): ManifestDisclosure | null => {
+    const active = lifecycleSelector.read(id)?.active
+    if (!active) return null
+    try {
+      const dir = lifecycleSelector.packageDir(id, active)
+      const installed = parseInstalledManifest(parseManifestJson(readFileSync(join(dir, 'manifest.json'), 'utf8')))
+      return isManifestV2(installed) ? computeDisclosure(installed as unknown as DisclosureManifestInput) : null
+    } catch {
+      return null
+    }
+  }
+  const updateDisclosureDiff = (pkg: PreparedInstall): DisclosureDiff | null => {
+    if (!isManifestV2(pkg.manifest)) return null
+    const from = activeDisclosure(pkg.id)
+    if (!from) return null
+    try {
+      return diffDisclosure(from, computeDisclosure(pkg.manifest as unknown as DisclosureManifestInput))
+    } catch {
+      return null
+    }
+  }
+  // D2: an update that adds nothing and keeps the risk level carries the
+  // active version's consent, provided that version holds a grant (the user
+  // consented to it). Returns that grant, or null when the update must ask.
+  const consentCarriedByUpdate = (pkg: PreparedInstall, diff: DisclosureDiff | null): HostCapabilityGrant | null =>
+    diff !== null && !diff.widened ? capabilityGrants.get(pkg.id, diff.from.version) : null
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
   const packs = new PluginPackStore(pluginsRoot)
@@ -888,6 +931,16 @@ export function registerPluginIpc(
   // installing the update goes through the normal prepareInstall/commitInstall
   // consent path. The last answer is kept for windows that open later.
   let pendingUpdates: PluginUpdateInfo[] = []
+  // The update badge only: a malformed listing disclosure means no badge.
+  const listedPermissionChange = (id: string, listed: unknown): 'more' | 'same' | undefined => {
+    const from = activeDisclosure(id)
+    if (!from || !jsonObjectOrNull(listed)) return undefined
+    try {
+      return diffDisclosure(from, listed as ManifestDisclosure).widened ? 'more' : 'same'
+    } catch {
+      return undefined
+    }
+  }
   const checkInstalledUpdates = async (): Promise<PluginUpdateInfo[]> => {
     const candidates = manager
       .listInstalledPackages()
@@ -918,6 +971,7 @@ export function registerPluginIpc(
               target?: unknown
               yanked?: unknown
               engines_navide?: unknown
+              disclosure?: unknown
             }>
           }
           // A stable user is never offered a pre-release. Switching the opt-in
@@ -930,12 +984,18 @@ export function registerPluginIpc(
             optedIn.has(pkg.id)
           )
           if (!latestVersion || !isUpdateAvailable(pkg.packageVersion!, latestVersion)) return null
+          const permissionChange = listedPermissionChange(
+            pkg.id,
+            (detail.versions ?? []).find((row) => row.version === latestVersion && jsonObjectOrNull(row.disclosure))
+              ?.disclosure
+          )
           return {
             id: pkg.id,
             namespace,
             name,
             installedVersion: pkg.packageVersion!,
             latestVersion,
+            ...(permissionChange ? { permissionChange } : {}),
           }
         } catch (error) {
           // One unreachable package must not hide updates for the others.
@@ -1278,6 +1338,7 @@ export function registerPluginIpc(
         throw new Error(`${result.id} is an extension pack; install it from its Marketplace page`)
       }
       prepared.set(result.id, { pkg: result })
+      const disclosureDiff = updateDisclosureDiff(result)
       return {
         id: result.id,
         version: result.version,
@@ -1290,7 +1351,9 @@ export function registerPluginIpc(
           result.registryEvidence !== undefined &&
           !result.official &&
           !publisherTrust.isTrusted(result.publisherId, result.id),
-        requiresRiskConfirmation: result.requiresConfirmation,
+        requiresRiskConfirmation:
+          result.requiresConfirmation && consentCarriedByUpdate(result, disclosureDiff) === null,
+        disclosureDiff,
         disclosure: result.disclosure ?? null,
         scan: result.scan ?? null,
         registry: result.registryFacts,
@@ -1467,7 +1530,9 @@ export function registerPluginIpc(
       if (publisherRequiresTrust && args.publisherConfirmed !== true) {
         throw new Error(`publisher trust confirmation is required for ${pkg.publisherId}`)
       }
-      if (pkg.requiresConfirmation && args.riskConfirmed !== true) {
+      // Re-checked here: the active version may have changed since prepare.
+      const carriedGrant = consentCarriedByUpdate(pkg, updateDisclosureDiff(pkg))
+      if (pkg.requiresConfirmation && args.riskConfirmed !== true && carriedGrant === null) {
         throw new Error(`capability and backend risk confirmation is required for ${args.id}`)
       }
       // Commit deliberately stages only. It never drains the selected package,
@@ -1522,7 +1587,8 @@ export function registerPluginIpc(
             packageVersion: candidate.packageVersion,
             system: [...policy.system],
             ...(policy.shell ? { shell: policy.shell } : {}),
-            ...(policy.shell === 'full' && args.riskConfirmed === true
+            ...(policy.shell === 'full' &&
+            (args.riskConfirmed === true || carriedGrant?.highRiskShellConfirmed === true)
               ? { highRiskShellConfirmed: true as const }
               : {}),
             storage: true,

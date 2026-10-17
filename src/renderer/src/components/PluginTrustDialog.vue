@@ -7,6 +7,7 @@ import { useI18n } from 'vue-i18n'
 import type { PendingInstall } from '../composables/usePluginInstallFlow'
 import { useDialogFocus } from '../composables/useDialogFocus'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
+import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 
 defineProps<{ pending: PendingInstall; step: 'publisher' | 'risk' | null }>()
 const emit = defineEmits<{ confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -77,10 +78,13 @@ function capabilityHint(cap: string): string {
             )
           }}
         </p>
-        <p v-if="step === 'risk' && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
+        <!-- Plan B D2: an update shows only what it changes (the Host's diff of
+             the installed and the downloaded manifests); the full card folds. -->
+        <PluginDisclosureDiff v-if="step === 'risk' && pending.prepared.disclosureDiff" :diff="pending.prepared.disclosureDiff" />
+        <p v-if="step === 'risk' && !pending.prepared.disclosureDiff && pending.prepared.containsBackendExecutable" class="ext-backend-risk ext-risk-callout">
           {{ $t('settings.extensions.trust.backendRisk', { name: pending.label }) }}
         </p>
-        <template v-if="step === 'risk' && pending.prepared.sensitive.length">
+        <template v-if="step === 'risk' && !pending.prepared.disclosureDiff && pending.prepared.sensitive.length">
           <h5 class="ext-cap-heading">{{ $t('settings.extensions.trust.sensitiveHeading') }}</h5>
           <ul class="ext-cap-list" :aria-label="$t('settings.extensions.trust.sensitiveRisk', { name: pending.label, capabilities: pending.prepared.sensitive.join(', ') })">
             <li v-for="cap in pending.prepared.sensitive" :key="cap">
@@ -90,8 +94,21 @@ function capabilityHint(cap: string): string {
           </ul>
         </template>
         <!-- Plan B D1: the verified disclosure of exactly this package. -->
+        <details
+          v-if="step === 'risk' && pending.prepared.disclosureDiff && pending.prepared.disclosure !== undefined"
+          class="ext-trust-full-card"
+        >
+          <summary>{{ $t('pluginDisclosure.diff.fullCard') }}</summary>
+          <PluginDisclosureCard
+            class="ext-trust-disclosure"
+            :disclosure="pending.prepared.disclosure"
+            :scan="pending.prepared.scan ?? null"
+            :registry="pending.prepared.registry ?? null"
+            :verified="true"
+          />
+        </details>
         <PluginDisclosureCard
-          v-if="step === 'risk' && pending.prepared.disclosure !== undefined"
+          v-else-if="step === 'risk' && pending.prepared.disclosure !== undefined"
           class="ext-trust-disclosure"
           :disclosure="pending.prepared.disclosure"
           :scan="pending.prepared.scan ?? null"

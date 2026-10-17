@@ -13,6 +13,7 @@ import type {
 } from '../shared/executionPolicy'
 import type { LegacyPlansPreferenceProjection } from '../shared/plansPreferences'
 import type {
+  DisclosureDiff as PluginDisclosureDiff,
   ManifestDisclosure as PluginManifestDisclosure,
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
@@ -308,6 +309,8 @@ export interface PluginUpdateInfo {
   name: string
   installedVersion: string
   latestVersion: string
+  /** Plan B D2 badge, from the Registry's unverified listing. */
+  permissionChange?: 'more' | 'same'
 }
 
 export interface MarketplaceListResponse {
@@ -327,6 +330,9 @@ export interface PreparedInstallSummary {
   publisherId: string
   requiresPublisherTrust: boolean
   requiresRiskConfirmation: boolean
+  /** Plan B D2: what this update changes, computed by the Host from the
+   *  installed and the downloaded manifests; null for a first install. */
+  disclosureDiff?: PluginDisclosureDiff | null
   /** Verified against the package and the Registry signature; null when the
    *  version carries no disclosure. */
   disclosure?: PluginManifestDisclosure | null

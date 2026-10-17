@@ -23,10 +23,10 @@ const REGISTRY: RegistryDisclosureFacts = {
 }
 
 function render(props: Record<string, unknown>) {
-  return mount(PluginDisclosureCard, { props, global: { plugins: [i18n] } })
+  return mount(PluginDisclosureCard, { props: props as never, global: { plugins: [i18n] } })
 }
 
-let saved: string
+let saved: typeof i18n.global.locale.value
 beforeEach(() => {
   saved = i18n.global.locale.value
   i18n.global.locale.value = 'en-US'
@@ -43,6 +43,15 @@ describe('PluginDisclosureCard provenance (review I1 on #354)', () => {
     expect(text).not.toContain('signed by the Navide Registry.')
     expect(text).toContain('The scan was run by the Navide Registry.')
     expect(text).toContain('says this version is signed (key registry-2026); not yet verified')
+  })
+
+  it('states the publisher domain as the Registry\'s unsigned record, never as verified', () => {
+    const registry = { ...REGISTRY, publisher: { name: 'Acme', verifiedDomain: 'acme.example', domainVerifiedAt: '2026-10-01T00:00:00Z' } }
+    for (const verified of [false, true]) {
+      const facts = render({ disclosure: disclosureOf('ui-only'), scan: null, registry, verified }).get('.nv-disclosure-facts').text()
+      expect(facts).toContain('The Navide Registry records that the publisher controls acme.example')
+      expect(facts).not.toMatch(/domain verified/i)
+    }
   })
 
   it('marks the verified parts only for an install-time (prepareInstall) result', () => {
@@ -96,7 +105,7 @@ describe('PluginDisclosureCard content', () => {
     expect(wrapper.find('.nv-disclosure-level').exists()).toBe(false)
   })
 
-  it.each(['en-US', 'zh-TW', 'ja-JP'])('renders every fixture case without a missing string (%s)', (locale) => {
+  it.each(['en-US', 'zh-TW', 'ja-JP'] as const)('renders every fixture case without a missing string (%s)', (locale) => {
     i18n.global.locale.value = locale
     for (const scanCase of scanCases) {
       const text = render({

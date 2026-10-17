@@ -559,6 +559,16 @@ watch(installed, () => void refreshPacks())
             >
               {{ $t('settings.extensions.marketplace.update') }}
             </button>
+            <!-- Plan B D2: from the Registry's listing, so labelled unverified;
+                 the update itself asks only when the package adds permissions. -->
+            <span
+              v-if="!p.pendingCandidateVersion && updatesById.get(p.id)?.permissionChange"
+              class="ext-badge ext-permission-change"
+              :class="`ext-permission-change--${updatesById.get(p.id)?.permissionChange}`"
+              :title="$t('pluginDisclosure.diff.badgeTitle')"
+            >
+              {{ $t(updatesById.get(p.id)?.permissionChange === 'more' ? 'pluginDisclosure.diff.badgeMore' : 'pluginDisclosure.diff.badgeSame') }}
+            </span>
             <button
               v-if="p.pendingCandidateVersion"
               class="ext-restart nv-btn nv-btn--primary nv-btn--sm"
@@ -896,6 +906,14 @@ watch(installed, () => void refreshPacks())
 .ext-badge.ext-pack-badge {
   color: var(--accent-fg);
   background: var(--accent-subtle);
+}
+.ext-badge.ext-permission-change--more {
+  color: var(--accent-fg);
+  background: var(--accent-subtle);
+}
+.ext-badge.ext-permission-change--same {
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
 }
 .ext-badge.ext-incompatible {
   color: var(--danger-bright);

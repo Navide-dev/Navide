@@ -70,6 +70,13 @@ export function usePluginInstallFlow() {
         return
       }
       await commit(prepared.id, {})
+      // Plan B D2: an update that adds nothing is not interrupted, only noted.
+      if (prepared.disclosureDiff) {
+        notify.toast(
+          t('pluginDisclosure.diff.updatedNoNew', { name: `${namespace}.${name}`, version: prepared.version }),
+          { type: 'info' }
+        )
+      }
     } catch (err) {
       fail(err)
     } finally {

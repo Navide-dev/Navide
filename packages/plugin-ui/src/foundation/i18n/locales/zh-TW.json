@@ -10988,6 +10988,33 @@
     "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
   },
   "pluginDisclosure": {
+    "diff": {
+      "heading": "這次更新的權限變化",
+      "versions": "目前安裝 {from} → 更新到 {to}；以下只列出不同的地方。",
+      "risk": "風險等級：{from} → {to}",
+      "none": "沒有新增或移除任何權限。",
+      "added": "新增",
+      "removed": "已移除",
+      "unchanged": "沒有變動（{count} 項）",
+      "fullCard": "完整揭露卡",
+      "badgeMore": "權限變多",
+      "badgeSame": "權限沒變",
+      "badgeTitle": "依 Navide Registry 提供的資料，尚未驗證；更新前 Navide 會用下載的套件重新比對。",
+      "updatedNoNew": "{name} {version} 沒有新增權限，已直接準備好更新，沒有再次詢問。",
+      "item": {
+        "system": "權限：{key}",
+        "shell": "shell 模式：{key}",
+        "shellExecutable": "可執行：{key}",
+        "fsScopeRoot": "檔案範圍：{key}",
+        "fsScopeRead": "可讀取：{key}",
+        "fsScopeWrite": "可寫入：{key}",
+        "nativeBackend": "附帶原生程式",
+        "backendMethod": "原生程式的方法：{key}",
+        "backendEvent": "原生程式的事件：{key}",
+        "network": "可以透過指令連到遠端",
+        "agentTool": "agent 工具：{key}"
+      }
+    },
     "title": "揭露卡",
     "riskLabel": "風險等級：{level}",
     "risk": {
@@ -11093,7 +11120,7 @@
       "embeddedRuntime": "內嵌 {detail} 執行環境"
     },
     "registry": {
-      "domainVerified": "發佈者網域已驗證：{domain}（{date}）",
+      "domainVerified": "Navide Registry 紀錄：發佈者擁有網域 {domain}（{date} 確認）",
       "domainNotVerified": "發佈者網域未驗證",
       "signedClaim": "Navide Registry 表示這個版本已簽章（金鑰 {keyId}），尚未驗證",
       "signedVerified": "Navide Registry 的簽章已驗證（金鑰 {keyId}）",

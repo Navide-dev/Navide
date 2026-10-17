@@ -10988,6 +10988,33 @@
     "pin-needs-dir-login": "このペインを {account} に固定するには、そのアカウントの専用フォルダーで一度サインインしてください。サインインを開きました。"
   },
   "pluginDisclosure": {
+    "diff": {
+      "heading": "この更新での権限の変化",
+      "versions": "インストール済み {from} → {to} に更新。違いだけを表示します。",
+      "risk": "リスク：{from} → {to}",
+      "none": "追加・削除された権限はありません。",
+      "added": "追加",
+      "removed": "削除",
+      "unchanged": "変更なし（{count} 件）",
+      "fullCard": "開示カード全体",
+      "badgeMore": "権限が増える",
+      "badgeSame": "権限は同じ",
+      "badgeTitle": "Navide Registry の情報で、まだ検証されていません。更新前に Navide がダウンロードしたパッケージで改めて比較します。",
+      "updatedNoNew": "{name} {version} は権限を追加しないため、確認なしで更新を準備しました。",
+      "item": {
+        "system": "権限：{key}",
+        "shell": "shell モード：{key}",
+        "shellExecutable": "実行できる：{key}",
+        "fsScopeRoot": "ファイル範囲：{key}",
+        "fsScopeRead": "読み取れる：{key}",
+        "fsScopeWrite": "書き込める：{key}",
+        "nativeBackend": "ネイティブコードを含む",
+        "backendMethod": "ネイティブコードのメソッド：{key}",
+        "backendEvent": "ネイティブコードのイベント：{key}",
+        "network": "コマンド経由でリモートに接続できる",
+        "agentTool": "agent ツール：{key}"
+      }
+    },
     "title": "開示",
     "riskLabel": "リスク：{level}",
     "risk": {
@@ -11093,7 +11120,7 @@
       "embeddedRuntime": "{detail} の実行環境を内蔵している"
     },
     "registry": {
-      "domainVerified": "公開者のドメインは確認済み：{domain}（{date}）",
+      "domainVerified": "Navide Registry の記録：発行者はドメイン {domain} を所有（{date} に確認）",
       "domainNotVerified": "公開者のドメインは未確認",
       "signedClaim": "Navide Registry によると署名済み（鍵 {keyId}）、未検証",
       "signedVerified": "Navide Registry の署名を検証済み（鍵 {keyId}）",

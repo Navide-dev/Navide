@@ -1464,6 +1464,97 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('D-d: an update that adds nothing installs without a new risk confirmation and keeps the full-shell consent', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'full' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-same-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      const fresh = await prepare(null, { namespace: 'acme', name: 'demo' })
+      // A first install has nothing to compare against and asks as before.
+      expect(fresh).toMatchObject({ requiresRiskConfirmation: true, disclosureDiff: null })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
+      expect(update).toMatchObject({
+        requiresPublisherTrust: false,
+        requiresRiskConfirmation: false,
+        disclosureDiff: {
+          from: { id: 'acme.demo', version: '1.0.0' },
+          to: { id: 'acme.demo', version: '1.0.1' },
+          added: [],
+          removed: [],
+          widened: false,
+        },
+      })
+      await expect(commit(null, { id: 'acme.demo' })).resolves.toMatchObject({ restartRequired: true })
+      await restart(null, { id: 'acme.demo' })
+      expect(new PluginCapabilityGrantStore(root).get('acme.demo', '1.0.1')).toMatchObject({
+        packageVersion: '1.0.1',
+        shell: 'full',
+        highRiskShellConfirmed: true,
+      })
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-d: an update that adds a permission still asks, and reports only what changed', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-update-diff-wider-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await prepare(null, { namespace: 'acme', name: 'demo' })
+      await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+      await restart(null, { id: 'acme.demo' })
+
+      // The update badge reads the Registry's listing; no disclosure, no badge.
+      const listed = signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1')
+      installFetch(listed, second.bytes, second.digest)
+      expect(await controller.checkUpdates()).toEqual([
+        { id: 'acme.demo', namespace: 'acme', name: 'demo', installedVersion: '1.0.0', latestVersion: '1.0.1' },
+      ])
+      const disclosed = (permissions: Record<string, unknown>) => computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.1', publisher: 'acme', permissions,
+      } as never)
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({ shell: 'allowlist' })
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'more' }])
+      ;(listed.versions[0] as Record<string, unknown>).disclosure = disclosed({})
+      expect(await controller.checkUpdates()).toMatchObject([{ latestVersion: '1.0.1', permissionChange: 'same' }])
+
+      installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
+      const update = await prepare(null, { namespace: 'acme', name: 'demo', version: '1.0.1' }) as {
+        requiresRiskConfirmation: boolean
+        disclosureDiff: { added: unknown[] }
+      }
+      expect(update.requiresRiskConfirmation).toBe(true)
+      expect(update.disclosureDiff).toMatchObject({ removed: [], widened: true })
+      expect(update.disclosureDiff.added).toEqual(expect.arrayContaining([
+        expect.objectContaining({ kind: 'shell', key: 'allowlist' }),
+      ]))
+      await expect(commit(null, { id: 'acme.demo' })).rejects.toThrow(/risk confirmation/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
