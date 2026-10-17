@@ -625,6 +625,8 @@ export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
 /** Host-authenticated: `{plugin_id, declared?}` → a `PluginActivityReport` (contract 5.1). */
 export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
+/** Host-authenticated: `{plugin_id}`, sent when a plugin is removed. */
+export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 
@@ -669,6 +671,8 @@ export const PLUGIN_APPROVAL_LIST_MESSAGE = 'plugins.agent_requests.list'
 export const PLUGIN_APPROVAL_REQUEST_EVENT = 'plugins.agent_request'
 /** Backend -> windows: a plugin request was decided, finished or expired. */
 export const PLUGIN_APPROVAL_RESOLVED_EVENT = 'plugins.agent_request_resolved'
+/** Backend -> main windows: a main window went away while carrying out these approved requests; settle them. `{approval_ids}`. */
+export const PLUGIN_APPROVAL_RECOVER_EVENT = 'plugins.agent_requests.recover'
 
 // ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
 

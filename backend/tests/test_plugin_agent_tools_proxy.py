@@ -1252,3 +1252,54 @@ async def test_a_helper_that_cannot_start_leaves_results_main_handled_and_refuse
     assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     # Disclosed in the diagnostics, not only to the agent.
     assert any(args[2] == "AGENT_TOOL_RESULT_HELPER_UNAVAILABLE" for args in recorded)
+
+
+# ── B1 integration: the WebSocket sync handler through a call ──────────────
+
+
+async def test_end_to_end_from_the_sync_handler_to_a_fenced_tainted_result(host: FakeHost, monkeypatch) -> None:
+    session = app.Session(_FakeWebSocket())  # type: ignore[arg-type]
+    session.host_authenticated = True
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    await app.handle_message(session, {"id": "s1", "type": "plugins.agentTools.sync",
+                                       "payload": _snapshot(1, [_entry("devmap_read")])})
+    assert session.websocket.sent[-1]["payload"]["registered"] == ["devmap_read"]  # type: ignore[attr-defined]
+    [tool] = [tool for tool in await _tools() if tool.name == "devmap_read"]
+    assert tool.description.startswith("[third-party Navide plugin nerdtechnic.devmap v0.2.0 | ")
+
+    host.response = {"ok": True, "result": {"status": "done"}, "meta": {"resultBytes": 17}}
+    result = await core.server.call_tool("devmap_read", {"block_id": "b1"})
+    [request] = host.requests
+    assert _accepted_by_host_parser(request)
+    assert request["caller"]["verifiedTo"] == "pane"
+    assert result.isError is False and result.meta == {"resultBytes": 17}
+    lines = result.content[0].text.split("\n")
+    assert lines[0] == proxy.EXTERNAL_CONTENT_START and lines[-1] == proxy.EXTERNAL_CONTENT_END
+    assert is_tainted("p-41")
+
+    # A later snapshot drops the tool: a CLI that still lists it is refused
+    # here, and nothing reaches the Host.
+    await app.handle_message(session, {"id": "s2", "type": "plugins.agentTools.sync",
+                                       "payload": _snapshot(2, [_entry("devmap_read", state="plugin-disabled")])})
+    body = _body(await core.server.call_tool("devmap_read", {"block_id": "b1"}))
+    assert body["error_code"] == "PLUGIN_TOOL_UNAVAILABLE"
+    assert len(host.requests) == 1
+
+
+@pytest.mark.skip(reason=(
+    "record_tool_call (plugins/audit_log.py) is not called on the agent tool path yet: "
+    "DB9 PR2 (feat/agent-tool-result-chunking) wires it. Unskip when it merges."
+))
+async def test_a_tool_call_writes_one_audit_row(host: FakeHost, monkeypatch) -> None:
+    from agent_team_backend.plugins import audit_log
+
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    host.response = {"ok": True, "result": {"status": "done"}, "meta": {"resultBytes": 17}}
+    await core.server.call_tool("devmap_read", {"block_id": "b1"})
+    rows = audit_log.recent_tool_calls()  # the reader PR2 adds next to record_tool_call
+    assert [(row["plugin_id"], row["tool"], row["outcome"], row["result_bytes"]) for row in rows] == [
+        ("nerdtechnic.devmap", "devmap_read", "ok", 17),
+    ]

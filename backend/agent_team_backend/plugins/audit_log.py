@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import ntpath
 import os
 import posixpath
@@ -217,6 +218,13 @@ def _undeclared_uses(refusals: list[Any]) -> list[dict[str, Any]]:
     ]
     out.sort(key=lambda item: (-item["lastAt"], item["source"], item["address"], item["workspace"]))
     return out
+
+
+def _non_negative_number(value: Any) -> float:
+    """A finite number >= 0 (not a bool): a resource usage or threshold."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"expected a finite number >= 0, got {value!r}")
+    return float(value) if isinstance(value, float) else value
 
 
 def _non_negative_int(value: Any) -> int:
@@ -390,6 +398,7 @@ class PluginAuditLog:
         self._stopping = threading.Event()
         self._calls: list[tuple[Any, ...]] = []
         self._activity: list[tuple[Any, ...]] = []
+        self._decisions: list[tuple[Any, ...]] = []
         self._actions: list[tuple[Any, ...]] = []
         self._next_call_id: int | None = None
         self.enabled = False
@@ -428,7 +437,7 @@ class PluginAuditLog:
 
     def status(self) -> dict[str, Any]:
         with self._lock:
-            pending = len(self._calls) + len(self._activity) + len(self._actions)
+            pending = len(self._calls) + len(self._activity) + len(self._actions) + len(self._decisions)
         return {
             "enabled": self.enabled, "reason": self.disabled_reason, "pending": pending,
             "actions_enabled": self.actions_enabled, "actions_reason": self.actions_disabled_reason,
@@ -553,6 +562,40 @@ class PluginAuditLog:
             return False
         return True
 
+    def record_resource_decision(
+        self,
+        *,
+        plugin_id: str,
+        plugin_version: str,
+        item: str,
+        usage: float,
+        threshold: float,
+        decision: str,
+        at: int | None = None,
+    ) -> bool:
+        """Queue one watchdog notice or decision (section 5.2); False when it is not recorded.
+
+        ``at`` (Unix ms, from the Host) is clamped to now. Only the item and its
+        numbers are kept: there is no field for a path or a command line.
+        """
+        if not self.enabled:
+            return False
+        try:
+            if not isinstance(plugin_id, str) or not plugin_id or not isinstance(plugin_version, str):
+                raise ValueError("plugin_id and plugin_version are required")
+            if item not in contract.PLUGIN_RESOURCE_ITEMS:
+                raise ValueError(f"unknown item {item!r}")
+            if decision not in contract.PLUGIN_RESOURCE_DECISIONS:
+                raise ValueError(f"unknown decision {decision!r}")
+            numbers = (_non_negative_number(usage), _non_negative_number(threshold))
+            row = (self._at(at), plugin_id, plugin_version, item, *numbers, decision)
+            with self._lock:
+                self._decisions.append(row)
+        except Exception as err:  # noqa: BLE001 - the audit never fails what it records
+            log.warning("plugin audit: resource decision not recorded: %s", err)
+            return False
+        return True
+
     def record_agent_action(
         self,
         *,
@@ -606,6 +649,18 @@ class PluginAuditLog:
             calls, self._calls = self._calls, []
             activity, self._activity = self._activity, []
             actions, self._actions = self._actions, []
+            decisions, self._decisions = self._decisions, []
+        if decisions:
+            # Its own short transaction: a failure here never drops the activity rows.
+            try:
+                with self.db.transaction() as cur:
+                    cur.executemany(
+                        "INSERT INTO plugin_resource_decisions (at, plugin_id, plugin_version, item, usage, threshold,"
+                        " decision) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        decisions,
+                    )
+            except Exception as err:  # noqa: BLE001 - dropped, never raised into a decision
+                log.warning("plugin audit: %d resource-decision rows not written: %s", len(decisions), err)
         if actions:
             try:
                 with self.db.transaction() as cur:
@@ -620,6 +675,8 @@ class PluginAuditLog:
         if not calls and not activity:
             return
         calls = [row for row in map(_with_digest, calls) if row is not None]
+        # plugin_id, tool, target_workspace, at of each write call.
+        first_seen = [(row[8], row[10], row[6], row[1]) for row in calls if row[11] == "write"]
         try:
             with self.db.transaction() as cur:
                 cur.executemany(
@@ -628,6 +685,11 @@ class PluginAuditLog:
                     " args_bytes, outcome, error_code, duration_ms, result_bytes)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     calls,
+                )
+                cur.executemany(
+                    "INSERT INTO plugin_tool_first_seen (plugin_id, tool, workspace, first_at) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT(plugin_id, tool, workspace) DO UPDATE SET first_at = MIN(first_at, excluded.first_at)",
+                    first_seen,
                 )
                 cur.executemany(
                     "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address,"
@@ -762,6 +824,12 @@ class PluginAuditLog:
         ):
             pass
         while self._batch(
+            "DELETE FROM plugin_resource_decisions WHERE id IN"
+            " (SELECT id FROM plugin_resource_decisions WHERE at < ? LIMIT ?)",
+            (daily_cutoff, batch),
+        ):
+            pass
+        while self._batch(
             "DELETE FROM plugin_activity_denied_daily WHERE rowid IN"
             " (SELECT rowid FROM plugin_activity_denied_daily WHERE day < ? LIMIT ?)",
             (day, batch),
@@ -829,7 +897,12 @@ class PluginAuditLog:
             return [dict(row) for row in cur.execute(query, params).fetchall()]
 
     def activity_report(
-        self, plugin_id: str, *, declared: list[dict[str, str]] | None = None, now_ms: int | None = None
+        self,
+        plugin_id: str,
+        *,
+        declared: list[dict[str, str]] | None = None,
+        installed_at: int | None = None,
+        now_ms: int | None = None,
     ) -> dict[str, Any]:
         """One plugin's ``PluginActivityReport`` (contract 5.1; ``src/shared/pluginActivity.ts``).
 
@@ -851,14 +924,21 @@ class PluginAuditLog:
         - ``anomalies`` (flags only): ``volumeSpike`` (today over
           ``SPIKE_FACTOR`` times the 7-day average, never without a baseline),
           ``writeToolNewWorkspace`` (first write agent-tool call in a workspace
-          in the last 24 hours) and ``undeclaredDenied`` (per workspace, last
-          7 days).
-        - ``agentActions`` is null until B2-c's table exists.
+          in the last 24 hours, and, given ``installed_at``, the first since
+          the plugin was installed: a first-seen row from an earlier install
+          counts as absent, so a reinstall is new again even when the
+          ``plugin.activity.forget`` of its removal was lost) and
+          ``undeclaredDenied`` (per workspace, last 7 days).
+        - ``agentActions``: what agents did to the plugin in
+          ``plugin_agent_actions`` over the same 30 days, newest first (a
+          person's decisions are not listed); null when that table is off.
 
         Sizes are passed through as stored: ``-1`` (``UNKNOWN_SIZE``) is never
         added up. Reads only, in one short transaction; run it off the event loop.
         """
         now = self._now_ms() if now_ms is None else int(now_ms)
+        if installed_at is not None:
+            installed_at = min(int(installed_at), now)  # an install time in the future is now (#373 N4)
         window_from = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
         since = now - SUMMARY_WINDOW_DAYS * _DAY_MS
         report: dict[str, Any] = {
@@ -936,11 +1016,28 @@ class PluginAuditLog:
                 " AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1 ORDER BY 1",
                 (plugin_id, now - 7 * _DAY_MS),
             ).fetchall()
+            # From plugin_tool_first_seen, which outlives the call rows (L4).
+            floor = max(now - _DAY_MS, installed_at or 0)
             new_writes = cur.execute(
-                "SELECT tool, target_workspace, MIN(at) FROM plugin_tool_calls"
-                " WHERE plugin_id = ? AND risk = 'write' GROUP BY 1, 2 HAVING MIN(at) >= ? ORDER BY 3, 1, 2",
-                (plugin_id, now - _DAY_MS),
+                "SELECT tool, workspace, first_at FROM plugin_tool_first_seen"
+                " WHERE plugin_id = ? AND first_at >= ? ORDER BY 3, 1, 2",
+                (plugin_id, floor),
             ).fetchall()
+            if installed_at:
+                # A row older than this install is an earlier install's: the
+                # first write since installing is in the call rows (#373 F1).
+                # One grouped pass over this plugin's calls since the install
+                # (plugin_tool_calls_plugin_at), joined back: not one lookup per
+                # stale row (#373 N1).
+                new_writes += cur.execute(
+                    "SELECT f.tool, f.workspace, since.first_at FROM plugin_tool_first_seen f JOIN ("
+                    " SELECT tool, target_workspace AS workspace, MIN(at) AS first_at FROM plugin_tool_calls"
+                    "  WHERE plugin_id = ? AND at >= ? AND risk = 'write' GROUP BY 1, 2"
+                    ") since ON since.tool = f.tool AND since.workspace = f.workspace"
+                    " WHERE f.plugin_id = ? AND f.first_at < ? AND since.first_at >= ?",
+                    (plugin_id, installed_at, plugin_id, installed_at, floor),
+                ).fetchall()
+                new_writes.sort(key=lambda row: (row[2], row[0], row[1]))
         report["totals"] = {"calls": int(totals[0] or 0), "denied": int(totals[1] or 0), "errors": int(totals[2] or 0)}
         report["toolCalls"] = [
             {
@@ -985,7 +1082,40 @@ class PluginAuditLog:
             for ws, n, last_at in recent_undeclared
         )
         report["anomalies"] = anomalies
+        report["agentActions"] = self._agent_actions(plugin_id, since)
         return report
+
+    def _agent_actions(self, plugin_id: str, since: int) -> list[dict[str, Any]] | None:
+        """What agents did to ``plugin_id`` since ``since`` (``plugin_agent_actions``),
+        newest first; a person's own decisions are not agent actions. None
+        when that table is off."""
+        if not self.actions_enabled:
+            return None
+        with self.db.transaction() as cur:
+            rows = cur.execute(
+                "SELECT at, action, caller_kind, caller_pane_id, caller_pane_name, caller_workspace, plugin_version"
+                " FROM plugin_agent_actions WHERE plugin_id = ? AND at >= ? AND caller_kind != 'user'"
+                " ORDER BY at DESC, id DESC",
+                (plugin_id, since),
+            ).fetchall()
+        return [
+            {"at": at, "action": action, "callerKind": kind, "paneId": pane_id, "paneName": pane_name,
+             "workspace": workspace, "version": version}
+            for at, action, kind, pane_id, pane_name, workspace, version in rows
+        ]
+
+    def forget_plugin(self, plugin_id: str) -> None:
+        """A removed plugin: drop its first-seen rows, so a reinstall's first
+        write in a workspace is new again. Never raises."""
+        if not self.enabled:
+            return
+        self.flush()
+        try:
+            with self.db.transaction() as cur:
+                cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+                cur.execute("DELETE FROM plugin_resource_decisions WHERE plugin_id = ?", (plugin_id,))
+        except Exception as err:  # noqa: BLE001 - the audit never fails what it records
+            log.warning("plugin audit: %s not forgotten: %s", plugin_id, err)
 
     def historical_peak_concurrent_calls(self, plugin_id: str, *, since_ms: int, until_ms: int) -> dict[str, Any]:
         """The most agent tool calls of ``plugin_id`` that ran at once in the window.

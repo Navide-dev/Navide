@@ -1139,7 +1139,12 @@ watch(
               <!-- Plan B D1: summary and risk level of the listed version;
                    Registry data that nothing has verified yet. -->
               <div v-if="ext.disclosure" class="mkt-card-disclosure" :title="$t('pluginDisclosure.provenance.unverified')">
-                <PluginDisclosureSummary :disclosure="ext.disclosure" :scan="ext.scan ?? null" />
+                <PluginDisclosureSummary
+                  :disclosure="ext.disclosure"
+                  :scan="ext.scan ?? null"
+                  :level="ext.listRisk?.level"
+                  :variesByPlatform="ext.listRisk?.variesByPlatform === true"
+                />
               </div>
               <p v-if="isIncompatible(ext)" class="mkt-card-incompatible">
                 {{ $t('settings.extensions.marketplace.updateNavideToInstall', { current: ext.app_version ?? '' }) }}

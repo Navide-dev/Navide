@@ -174,10 +174,13 @@ import { canonicalTrustJson } from './pluginRegistryTrust'
 import {
   MARKETPLACE_QUERY_REQUEST_EVENT,
   MARKETPLACE_QUERY_RESULT_MESSAGE,
+  PLUGIN_ACTIVITY_FORGET_MESSAGE,
+  PLUGIN_ACTIVITY_REPORT_MESSAGE,
   PLUGIN_AGENT_ACTION_REQUEST_EVENT,
   PLUGIN_AGENT_ACTION_RESULT_MESSAGE,
   type PluginAgentActionAnswer,
 } from '../../shared/pluginAgentTools'
+import type { PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
@@ -6635,6 +6638,19 @@ export class FrontendPluginManager {
     throw new Error(`unsupported public capability '${plan.address}'`)
   }
 
+  /** D-e: a removed plugin's first-seen activity rows go (`plugin.activity.forget`),
+   *  so a reinstall's first writes in a workspace are flagged again. Best effort:
+   *  with no Host session it is skipped, and removal never waits for it. */
+  forgetPluginActivity(pluginId: string): void {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) return
+    void Promise.resolve()
+      .then(() => client.send(PLUGIN_ACTIVITY_FORGET_MESSAGE, { plugin_id: pluginId }, 10_000))
+      .catch((error: unknown) => {
+        console.debug(`[plugins] activity of ${pluginId} not forgotten:`, error)
+      })
+  }
+
   /** D-e: one `plugin_activity` row for a broker call of a third-party plugin.
    *  The bundled `navide.*` packages are not recorded. Never throws. */
   private recordCapabilityActivity(
@@ -7101,9 +7117,8 @@ export class FrontendPluginManager {
         (!spec.thirdParty.system.includes('fs') || grant.system.includes('fs')),
       )
     }
-    // Everything that can change while the call waits, checked again after
-    // every wait: catalog state, served methods, workspace and Grant, deadline.
-    const recheck = (): AgentToolCallResponse | null => {
+    // The package stopped being callable: catalog state or served methods.
+    const stoppedReason = (): AgentToolCallResponse | null => {
       const current = host.recheck(spec.pluginId, parsed.caller, isStopping, spec)
       if (!current.ok) return agentToolUnavailable(current.reason)
       const activation = this.pluginBackendHost.activationFor(spec.pluginId, spec.packageVersion, spec.packageDir)
@@ -7111,6 +7126,13 @@ export class FrontendPluginManager {
         !activation ||
         !this.pluginBackendHost.agentToolMethodsFor(spec.pluginId, spec.packageVersion).includes(tool.method)
       ) return agentToolUnavailable('tool-not-consented')
+      return null
+    }
+    // Everything that can change while the call waits, checked again after
+    // every wait: catalog state, served methods, workspace and Grant, deadline.
+    const recheck = (): AgentToolCallResponse | null => {
+      const stopped = stoppedReason()
+      if (stopped) return stopped
       if (!workspaceGranted()) {
         return agentToolError(
           'WORKSPACE_NOT_AUTHORIZED',
@@ -7150,6 +7172,11 @@ export class FrontendPluginManager {
     try {
       instanceId = await this.bindHeadlessAgentToolBackend(spec, root!, workspaceId!)
     } catch (error) {
+      // A bind refused or cancelled because the package stopped being
+      // callable meanwhile answers with that reason, not as a plugin failure.
+      // Any other bind failure keeps its own error, even past the deadline.
+      const stopped = stoppedReason()
+      if (stopped) return stopped
       return this.agentToolBackendError(error, meta(0))
     }
     const beforeCall = recheck()
@@ -7256,7 +7283,11 @@ export class FrontendPluginManager {
     meta: { durationMs: number; resultBytes: number; crossWorkspace: boolean },
   ): AgentToolCallResponse {
     if (error instanceof BackendPluginError) {
-      if (error.code === 'PLUGIN_STOPPING') return { ...agentToolUnavailable('plugin-stopping'), meta }
+      // USER_CANCELLED: a stop (disable, removal, revoked consent) cancelled
+      // the bind or the call; the plugin did not fail.
+      if (error.code === 'PLUGIN_STOPPING' || error.code === 'USER_CANCELLED') {
+        return { ...agentToolUnavailable('plugin-stopping'), meta }
+      }
       if (error.code === 'TIMEOUT') {
         return {
           ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin did not answer in time.'),
@@ -8980,6 +9011,18 @@ export class FrontendPluginManager {
    *  and inventory; see marketplaceQuery.ts. */
   setMarketplaceQueryHandler(handler: (query: unknown) => Promise<MarketplaceQueryAnswer>): void {
     this.marketplaceQueryHandler = handler
+  }
+
+  /** Plan B D-f: one plugin's activity report from the backend, asked over
+   *  this Host's authenticated session (contract 5.1; the backend accepts it
+   *  from that session only). Throws when the session is not ready or the
+   *  backend refuses; the caller shows that instead of a report. */
+  async requestPluginActivityReport(request: PluginActivityReportRequest): Promise<unknown> {
+    const client = this.wsClient
+    if (!client || !this.hostSessionRegistered) throw new Error('Navide Host session is not ready')
+    const response = await client.send(PLUGIN_ACTIVITY_REPORT_MESSAGE, { ...request }, 15_000)
+    if (!response.ok) throw new Error(response.error?.message ?? 'the backend did not answer the activity report')
+    return response.payload
   }
 
   /** Install the function that carries out an agent's plugins_disable /

@@ -1,0 +1,109 @@
+{
+  "description": "Plan B watchdog option C: rows of plugin.resource.decision (contract section 5.2). Each 'valid' row is accepted as is; each 'invalid' case is valid[0] with 'patch' applied and must be refused.",
+  "valid": [
+    {
+      "plugin_id": "nerdtechnic.indexer",
+      "plugin_version": "1.2.0",
+      "item": "memory",
+      "usage": 620756992,
+      "threshold": 536870912,
+      "decision": "notified",
+      "at": 1792800000000
+    },
+    {
+      "plugin_id": "nerdtechnic.indexer",
+      "plugin_version": "1.2.0",
+      "item": "memory",
+      "usage": 631242752,
+      "threshold": 536870912,
+      "decision": "continue",
+      "at": 1792800030000
+    },
+    {
+      "plugin_id": "nerdtechnic.indexer",
+      "plugin_version": "1.2.0",
+      "item": "memory",
+      "usage": 1300234240,
+      "threshold": 1262485504,
+      "decision": "notified",
+      "at": 1792803600000
+    },
+    {
+      "plugin_id": "nerdtechnic.indexer",
+      "plugin_version": "1.2.0",
+      "item": "memory",
+      "usage": 1300234240,
+      "threshold": 1262485504,
+      "decision": "terminate",
+      "at": 1792803620000
+    },
+    {
+      "plugin_id": "acme.render",
+      "plugin_version": "0.3.1",
+      "item": "cpu",
+      "usage": 1.42,
+      "threshold": 0.95,
+      "decision": "notified",
+      "at": 1792800000000
+    },
+    {
+      "plugin_id": "acme.render",
+      "plugin_version": "0.3.1",
+      "item": "processes",
+      "usage": 9,
+      "threshold": 8,
+      "decision": "continue",
+      "at": 1792800000000
+    },
+    {
+      "plugin_id": "acme.render",
+      "plugin_version": "0.3.1",
+      "item": "disk",
+      "usage": 1200000000,
+      "threshold": 1073741824,
+      "decision": "notified",
+      "at": 1792800000000
+    },
+    {
+      "plugin_id": "acme.render",
+      "plugin_version": "0.3.1",
+      "item": "stdoutPending",
+      "usage": 2097152,
+      "threshold": 1048576,
+      "decision": "notified",
+      "at": 1792800000000
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown-item",
+      "patch": {
+        "item": "network"
+      }
+    },
+    {
+      "name": "unknown-decision",
+      "patch": {
+        "decision": "ignore"
+      }
+    },
+    {
+      "name": "negative-usage",
+      "patch": {
+        "usage": -1
+      }
+    },
+    {
+      "name": "fractional-time",
+      "patch": {
+        "at": 1.5
+      }
+    },
+    {
+      "name": "empty-plugin",
+      "patch": {
+        "plugin_id": ""
+      }
+    }
+  ]
+}

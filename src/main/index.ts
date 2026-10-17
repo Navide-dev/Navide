@@ -37,7 +37,7 @@ import {
   registerPluginIpc,
   resolveConfiguredMarketplace,
 } from './plugins/pluginIpc'
-import { refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
+import { publishRescanNotices, refreshTrustThenUpdates } from './plugins/pluginUpdateReminder'
 import { readRegistryTrustSnapshot } from './plugins/pluginInstalledTrust'
 import { contributionIcon } from './plugins/pluginContributionIcon'
 import { broadcastQuitStage } from './quit-progress'
@@ -2081,6 +2081,20 @@ const refreshInstalledPluginTrustAndUpdates = (): void => {
         if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
         hostWindow.webContents.send('plugins:updatesChanged', updates)
       }
+      // D-f: rescans that found new items, from the same check; notice only.
+      publishRescanNotices({
+        take: () => pluginTrustRefresh.takeRescanNotices(),
+        restore: (notices) => pluginTrustRefresh.restoreRescanNotices(notices),
+        send: (notices) => {
+          let received = 0
+          for (const hostWindow of mainWindows) {
+            if (hostWindow.isDestroyed() || detachedWindowIds.has(hostWindow.id)) continue
+            hostWindow.webContents.send('plugins:rescanNotices', notices)
+            received += 1
+          }
+          return received
+        },
+      })
     },
     warn: (message) => console.warn(message),
   })

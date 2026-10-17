@@ -5,8 +5,7 @@ import {
   recoveryResult,
   type InstalledPackage,
   type PluginRequestApplyDeps,
-  type PluginRequestRecord,
-} from '../pluginAgentRequestApply'
+  type PluginRequestRecord, isAppliableKind } from '../pluginAgentRequestApply'
 
 function record(kind: PluginRequestRecord['kind'], version: string | null, status = 'applying'): PluginRequestRecord {
   return {
@@ -121,3 +120,12 @@ describe('recovery leaves alone what another open window is applying', () => {
   })
 })
 
+
+describe('isAppliableKind', () => {
+  it('names exactly the kinds applyApprovedRequest carries out', () => {
+    expect(['plugin-install', 'plugin-update', 'plugin-rollback', 'plugin-remove'].every(isAppliableKind)).toBe(true)
+    // A kind added on the backend first must not be approvable before this side applies it.
+    expect(isAppliableKind('plugin-enable')).toBe(false)
+    expect(isAppliableKind('skill')).toBe(false)
+  })
+})

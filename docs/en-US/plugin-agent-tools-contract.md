@@ -824,6 +824,15 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 | `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `short`, `bytes` or `json` |
 
+A call whose package stops being callable while its backend is being bound
+(the bind is refused or cancelled) answers `PLUGIN_TOOL_UNAVAILABLE` with the
+reason the checks then give, or `plugin-stopping` for a bind or call the stop
+cancelled; it is never reported as `PLUGIN_TOOL_FAILED`, which is the plugin's
+own failure. A call running when Navide closes every backend (a quit) is
+cancelled the same way and also answers `plugin-stopping`. Any other bind
+failure keeps its own error, even when the deadline passes or the workspace
+closes meanwhile.
+
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself); the backend also
 produces `result_helper_failed` for a result in pieces its helper process
@@ -1268,6 +1277,24 @@ reason of a refusal ("used but not declared" above all) outlives the 7 days of
 detail. It was added after the first tables: every open runs the audit DDL (all
 `CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
 
+`plugin_tool_first_seen` (D-e): `(plugin_id, tool, workspace)` primary key and
+`first_at`; the earliest call of each `risk: write` agent tool in each target
+workspace, written with the call rows. It is not pruned with them, so
+`writeToolNewWorkspace` flags a workspace once, not again each time its old
+calls expire, and no count limits it. When a plugin is removed the Host sends
+`plugin.activity.forget` (`PLUGIN_ACTIVITY_FORGET_MESSAGE`, Host-authenticated,
+`{plugin_id}`) and that plugin's rows go: a reinstalled plugin's first writes
+are new again. The forget is best effort: with no registered Host session, or
+when the send fails, it is not sent again, and the rows stay. The report does
+not depend on it: given the report request's `installedAt`, a first-seen row
+older than the install counts as absent, and the first write since the install
+is read from `plugin_tool_calls` (section 5.1). Like every other audit table it
+is created by the open-time DDL.
+
+A `plugin.activity.record` row the backend skips (malformed, a bad `at`, or
+refused by the redaction) is counted, and the counts by reason are logged;
+never the row's content.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
@@ -1314,7 +1341,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |
@@ -1332,7 +1359,9 @@ third-party plugins (the bundled `navide.*` packages are not recorded) and sends
 them in batches, about once a second, as `plugin.activity.record`
 (`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
 plugin_version, workspace, source: "broker" | "shell", address, outcome,
-denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+denied_reason?, fs_path?, shell_command?, at?}]}`; answered `{ok, accepted}`).
+`at` is when the call completed on the Host (Unix ms); the backend clamps it to
+its own now, and dates a row without one when it arrives. Raw
 paths and command lines cross the local Host session only; the backend keeps
 their redacted form. `denied_reason` is `undeclared` when the broker refused a
 namespace or shell use the manifest did not declare. A refused cast is recorded;
@@ -1349,9 +1378,24 @@ authenticated session (`host_authenticated`); the main window asks the Host
 over IPC, whose handler passes `assertAuthorized` (as
 `plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
 the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
-`backendMethod` methods, `agentTool` names) from the installed manifest, since
-the backend has no third-party manifest; without `declared`, `declaredUnused`
-is `[]`. Answer `PluginActivityReport`
+`agentTool` names) from the installed manifest, since the backend has no
+third-party manifest; without `declared`, `declaredUnused` is `[]`. The Host
+sends no `backendMethod` entries: a frontend's calls to its own backend
+(`plugin:backend:call`) are not recorded in `plugin_activity`, so such an
+entry could only ever read "declared but not used". The Host also sends
+`installedAt` (Unix ms, when the package was installed): `writeToolNewWorkspace`
+then counts only writes since then, so a first-seen row left by an earlier
+install of the same id counts as absent. It is the time of the install since
+the id was last removed: the Host records it in its own
+`.navide-install-scans.json` (owner-only, `0600`) when a fresh install becomes
+active (the activation finds no version of the id in place: no registered
+package, no active selection, no legacy backend-only install), keeps it
+through updates (over any layout, legacy included) and rollbacks, records
+nothing for a candidate that is staged and then discarded or fails to
+activate, and drops it when the plugin is removed. An id installed before
+this was recorded has none, and Manifest v1 packages (installed in place,
+without the staged activation) never have one; the request then carries no
+`installedAt` and the backend keeps its earlier behaviour. Answer `PluginActivityReport`
 (`src/shared/pluginActivity.ts`; fixture
 `docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
 (D-e) builds it from the tables above and does the aggregation and the
@@ -1379,6 +1423,64 @@ malformed one whole.
 known: such a value is shown as "unknown", never summed, averaged or counted
 in a statistic. Every string is shown as plain text: no link is made from a
 path or a command, and nothing is rendered as HTML.
+
+### 5.2 Resource thresholds: notice, then the user decides
+
+The Host samples every third-party native backend's process tree
+(`pluginBackendResourceWatchdog.ts`). The thresholds are unchanged: resident
+memory of the tree over 512 MiB on two consecutive samples, more than 8
+processes, CPU at or over 0.95 cores sustained for 5 minutes, the private data
+directory over 1 GiB. Going over one no longer stops the backend on its own:
+the Host tells the user which Navide plugin, which item and how much it uses
+now, and offers **Stop** and **Keep running**. The backend keeps running,
+unthrottled, until the user answers. Bundled `navide.*` plugins are not
+watched (unchanged).
+
+- **Stop** runs exactly the stop that used to happen automatically.
+- **Keep running** raises that item's notice level to twice the larger of the
+  level just crossed and the usage at that moment; for CPU the usage value
+  doubles and the 5-minute window stays. This decides only when to tell the
+  user again; it limits nothing. The raised level is not lowered when usage
+  falls back; it returns to the default when the backend starts again.
+- While a notice waits for an answer, the same item is not announced again.
+  A notice counts as delivered only when a main window has shown it; until
+  then it is kept and sent again when a window finishes loading. It is kept in
+  memory only: after a restart the watchdog measures again and, if the backend
+  is still over, raises a new notice.
+
+Every step is recorded, with no path or command line: the Host sends
+`plugin.resource.decision` (`PLUGIN_RESOURCE_DECISION_MESSAGE`,
+`src/shared/pluginResourceDecision.ts`; Host-authenticated, in batches)
+`{rows: [{plugin_id, plugin_version, item, usage, threshold, decision, at}]}`,
+answered `{ok, accepted}`. A failed send is logged and never holds up the
+user's choice. Fixture:
+`docs/plugin-contracts/agent-tools-fixtures/resource-decisions.json`.
+
+| Field | Content |
+|---|---|
+| `item` | `memory` / `cpu` / `processes` / `disk`: the watchdog's four thresholds (#367's counts have no threshold); `stdoutPending`: reserved for the stdout a child has sent without a newline yet (review M2 on #375), measured by the backend supervisor once DB9 (#375) lands, threshold set by DB9 |
+| `usage`, `threshold` | non-negative finite numbers; `memory`, `disk` and `stdoutPending` in bytes, `processes` a count, `cpu` in cores (fractional). `threshold` is the level this notice was raised at |
+| `decision` | `notified` (raised, no answer yet), `continue`, `terminate` |
+| `at` | Host Unix ms (the backend clamps a future time to now) |
+
+The backend stores them in `plugin_resource_decisions` (`CREATE TABLE IF NOT
+EXISTS`), kept 90 days like the daily rows, and removes a plugin's rows with
+`plugin.activity.forget`.
+
+Backend side (`PLUGIN_RESOURCE_DECISION_MESSAGE`, `PLUGIN_RESOURCE_ITEMS`,
+`PLUGIN_RESOURCE_DECISIONS` in `agent_tools_contract.py`): a row is accepted
+only with exactly these seven fields and types; any other field, such as a
+path, refuses the whole row. The Host's `parsePluginResourceDecisionRow`
+checks the same seven fields and types but drops an extra field instead of
+refusing the row, so a row the Host built never carries one. Known gaps:
+`plugin_id` and `plugin_version` get no format check beyond being strings
+(non-empty for the id), and an internal `ValueError` message can carry the
+refused value; it reaches only the backend log. Accepted rows are
+queued and written by the audit's batched flush, in a transaction of their own
+so a failure there never drops the activity rows. A skipped row is counted in
+the log, never with its content. Columns: `id`, `at`, `plugin_id`,
+`plugin_version`, `item`, `usage` (REAL), `threshold` (REAL), `decision`;
+indexes `(at)` and `(plugin_id, at)`.
 
 ## 6. Approval registry (B2)
 
@@ -1455,16 +1557,36 @@ B2-c tools and messages:
   connection a main window settles every other `applying` request against the
   installed packages: remove and the package is gone, or update / rollback /
   install and the installed version equals `target.version` → `completed`;
-  anything else → `failed` with error `interrupted`.
+  anything else → `failed` with error `interrupted`. A main window also does
+  this when the backend sends `plugins.agent_requests.recover`
+  (`PLUGIN_APPROVAL_RECOVER_EVENT`, `{approval_ids}`), which it sends to the
+  main windows still open when a main window that was carrying out approved
+  requests goes away, so they do not wait for another window to open. Either
+  way, a request is settled only if it is still unclaimed when the window
+  looks again after a grace (`RECOVERY_GRACE_MS`, a time window, not a
+  limit) taken from the WebSocket reconnect backoff (`reconnectDelayMs` in
+  `src/shared/wsClient.ts`): the first three reconnect waits (1.5 + 3 + 6 s)
+  plus one base wait for the handshake, 12 s. A window that was only
+  reconnecting claims its request back within that time.
 - A rollback restores the version Extensions keeps for rollback: the window
-  rolls back only when that is `target.version`, else it finishes `failed`
-  with the reason (it never installs a version the user did not approve).
+  asks the same confirmation as the Extensions pane first (cancelled →
+  `failed`, `not-applied`), and rolls back only when that is `target.version`,
+  else it finishes `failed` with the reason (it never installs a version the
+  user did not approve).
 - `plugins.agent_request.finish` `{approval_id, status: completed | failed,
   error, confirmation}` (window): the confirmation is minted for the action
   `plugins.agent_request.finish` (in `TRUST_CONFIRM_ACTIONS`) with subject
   `<approval_id>:<status>`, so a confirmation to report failure cannot report
   success; only `applying` moves. The result is broadcast as
   `plugins.agent_request_resolved` `{approval_id, status, error}`.
+  One exception, so the record matches what happened: when another window
+  settled the request (recovery) and the window that was carrying it out
+  reports afterwards, that window's result is taken, once. The record then
+  carries `finished_late: true` and `settled` `{status, error}` (what recovery
+  had said); the resolved event carries both too, the audit row is
+  `finish-late-completed` / `finish-late-failed`, and the window's card says
+  the result came late. Any other window is still refused
+  (`PLUGIN_APPROVAL_NOT_APPLYING`).
 
 ## 7. Changing this contract
 

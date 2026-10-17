@@ -30,6 +30,7 @@ import { projectBackendPluginActivationCatalog } from './pluginBackendActivation
 import { makeZip } from './zipFixture'
 import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
 import { readZipEntries } from './pluginPackage'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
 import { PluginDisabledStore } from './pluginDisabledStore'
@@ -75,6 +76,7 @@ import { app as electronApp } from 'electron'
 import {
   MARKETPLACE_ICON_MAX_BYTES,
   OFFICIAL_MARKETPLACE_URL,
+  declaredForActivity,
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
@@ -584,6 +586,32 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('forgets the removed plugin\'s activity first-seen rows, and only after a removal succeeds (D-e L4)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-remove-forget-'))
+    mkdirSync(join(root, 'acme.demo'), { recursive: true })
+    mkdirSync(join(root, 'acme.kept'), { recursive: true })
+    const manager = new FrontendPluginManager()
+    vi.spyOn(manager, 'preparePluginRemoval').mockImplementation(() => {})
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation(() => {})
+    const forget = vi.spyOn(manager, 'forgetPluginActivity').mockImplementation(() => {})
+    let failCleanup = false
+    const cleanupPluginStorage = vi.fn(async () => {
+      if (failCleanup) throw new Error('storage busy')
+    })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { cleanupPluginStorage })
+      const removeHandler = handlers.get('plugins:remove')!
+      failCleanup = true
+      await expect(removeHandler(null, { id: 'acme.kept' })).rejects.toThrow(/storage busy/)
+      expect(forget).not.toHaveBeenCalled()
+      failCleanup = false
+      await expect(removeHandler(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(forget).toHaveBeenCalledExactlyOnceWith('acme.demo')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('removes a valid direct-child id and clears its activation state', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-valid-'))
     const installedDir = join(root, 'acme.demo')
@@ -949,9 +977,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
   })
 
   /** Sign the contract 3.5 disclosure envelope onto every version row. */
-  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>): WireDetail {
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>, scanBody?: Record<string, unknown>): WireDetail {
     const disclosure = computeDisclosure(manifest as never)
     const rows = detail.versions.map((row) => {
+      const scan = scanBody
+        ? { ...scanBody, artifactDigest: row.registry_envelope.artifactDigest, target: row.registry_envelope.target }
+        : null
       const envelope = {
         schemaVersion: 1,
         artifactDigest: row.registry_envelope.artifactDigest,
@@ -961,14 +992,14 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         keyId: row.registry_envelope.keyId,
         signedAt: row.registry_envelope.signedAt,
         disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
-        scanDigest: null,
+        scanDigest: scan ? createHash('sha256').update(canonicalContractJson(scan), 'utf8').digest('hex') : null,
       }
       return {
         ...row,
         disclosure,
         disclosure_envelope: envelope,
         disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
-        scan: null,
+        scan,
         registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
       }
     })
@@ -1010,6 +1041,53 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         scan: null,
         registry: { review: { status: 'not-required' } },
       })
+  })
+
+  it('D-f: records the install-time scan, notes a rescan that found new items once, and forgets it on remove', async () => {
+    const scanCases = (JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8')) as {
+      cases: Array<{ name: string; scan: Record<string, unknown> }>
+    }).cases
+    const scanNamed = (name: string) => scanCases.find((entry) => entry.name === name)!.scan
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-rescan-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('nothing-found')), bytes, digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const file = join(root, '.navide-install-scans.json')
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']['1.0.0'].scan.scanner.id).toBe('navide-static-scan')
+
+      // The same answer the update check already fetches; nothing new yet.
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('ui-only-runs-git-push-undeclared')), bytes, digest)
+      const fetchCount = () => vi.mocked(global.fetch).mock.calls.length
+      await controller.checkUpdates()
+      const requests = fetchCount()
+      const [notice] = controller.takeRescanNotices()
+      expect(notice).toMatchObject({ id: 'acme.demo', version: '1.0.0' })
+      expect(notice.added.length).toBeGreaterThan(0)
+      // No request of its own: one detail fetch per check, as before.
+      expect(requests).toBe(1)
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+      // A notice no window received is put back for the next publish.
+      controller.restoreRescanNotices([notice])
+      expect(controller.takeRescanNotices()).toEqual([notice])
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']).toBeUndefined()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {
@@ -1595,6 +1673,28 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('B2: plugins:installedDisclosure answers the active version\'s disclosure, null when there is none', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-disclosure-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const installedDisclosure = handlers.get('plugins:installedDisclosure')!
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toBeNull()  // not installed
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toEqual(computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: { shell: 'allowlist' },
+      } as never))
+      await expect(installedDisclosure(null, { id: '../acme.demo' })).rejects.toThrow(/invalid plugin id/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('D-d: an update that adds a permission still asks, and reports only what changed', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     const second = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.1')
@@ -1640,6 +1740,151 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('D-f: asks the backend for the activity report with the declared items, and checks the answer', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-activity-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const fixture = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(fixture)
+      const report = handlers.get('plugins:activityReport')!
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true, report: fixture })
+      expect(ask).toHaveBeenCalledWith({
+        plugin_id: 'acme.demo',
+        declared: expect.arrayContaining([{ kind: 'shell', key: 'allowlist' }]),
+        installedAt: expect.any(Number),
+      })
+
+      ask.mockResolvedValue({ ...fixture, schemaVersion: 2 })
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'the activity report was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+      await expect(report(null, { id: 'acme.other' })).resolves.toMatchObject({ ok: false })
+      expect(ask).toHaveBeenCalledTimes(3)
+
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', version: '1.0.0', disclosure: expect.objectContaining({ network: 'via-shell' }), scan: null }),
+      ])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review M2 on #371: calls a frontend makes to its own backend
+  // (plugin:backend:call) are not recorded in plugin_activity, so a declared
+  // backend method could only ever read "declared but not used". The Host
+  // does not offer what it cannot measure.
+  it('D-f: never declares backend methods for declaredUnused, since their calls are not recorded', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'], shell: 'allowlist' },
+      backend: { entry: 'backend/bin', methods: ['index', 'search'], events: [] },
+    } as never)
+    expect(disclosure.nativeBackend?.methods).toEqual(['index', 'search'])
+    const declared = declaredForActivity(disclosure)
+    expect(declared.some((item) => item.kind === 'backendMethod')).toBe(false)
+    expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
+  })
+
+  // #373 follow-up (N2): installedAt is when the id was installed since its
+  // last removal; updates and rollbacks keep it, and without one the request
+  // carries none and still succeeds.
+  it('sends installedAt from the fresh install, kept by update and rollback, renewed by a reinstall', async () => {
+    const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const second = buildPkg('acme.demo', 'acme', {}, '1.0.1')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      const prepare = handlers.get('plugins:prepareInstall')!
+      const commit = handlers.get('plugins:commitInstall')!
+      const restart = handlers.get('plugins:restart')!
+      const report = handlers.get('plugins:activityReport')!
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(
+        JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid,
+      )
+      const sentInstalledAt = async () => {
+        await expect(report(null, { id: 'acme.demo' })).resolves.toMatchObject({ ok: true })
+        return (ask.mock.calls.at(-1)![0] as { installedAt?: number }).installedAt
+      }
+      const install = async (pkg: { bytes: Uint8Array; digest: string }, version: string, at: number) => {
+        vi.setSystemTime(at)
+        installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', version), pkg.bytes, pkg.digest)
+        await prepare(null, { namespace: 'acme', name: 'demo', version })
+        await commit(null, { id: 'acme.demo', publisherConfirmed: true })
+        await restart(null, { id: 'acme.demo' })
+      }
+
+      await install(first, '1.0.0', 1_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      await install(second, '1.0.1', 2_000_000)
+      expect(await sentInstalledAt()).toBe(1_000_000)
+      vi.setSystemTime(3_000_000)
+      await handlers.get('plugins:rollback')!(null, { id: 'acme.demo' })
+      expect(await sentInstalledAt()).toBe(1_000_000)
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      await install(first, '1.0.0', 4_000_000)
+      expect(await sentInstalledAt()).toBe(4_000_000)
+
+      // Installed before this was recorded: no field, and the request succeeds.
+      const file = join(root, '.navide-install-scans.json')
+      const state = JSON.parse(readFileSync(file, 'utf8'))
+      delete state.installedAt['acme.demo']
+      writeFileSync(file, JSON.stringify(state))
+      expect(await sentInstalledAt()).toBeUndefined()
+      expect(ask.mock.calls.at(-1)![0]).not.toHaveProperty('installedAt')
+      // A later update does not invent one either.
+      await install(second, '1.0.1', 5_000_000)
+      expect(await sentInstalledAt()).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review LOW1 on #380: a fresh install's time is recorded when the
+  // candidate becomes active, not when it is staged.
+  it('records installedAt only once a fresh install is activated', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-at-activate-'))
+    const manager = new FrontendPluginManager()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      vi.setSystemTime(1_000_000)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
+      vi.setSystemTime(2_000_000)
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBe(2_000_000)
+    } finally {
+      vi.useRealTimers()
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('D-f: the activity IPC refuses an unauthorized sender', async () => {
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => false, TRUST_CONFIG)
+    await expect(Promise.resolve().then(() => handlers.get('plugins:activityReport')!(null, { id: 'acme.demo' }))).rejects.toThrow()
+    expect(() => handlers.get('plugins:installedDisclosures')!(null)).toThrow()
   })
 
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
@@ -1758,6 +2003,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true })
+      // Review MED-1 on #380: an update over a legacy layout is not a fresh install.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')?.packageVersion).toBe('1.0.0')
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         candidate: { packageVersion: '1.0.1' },
@@ -1771,6 +2018,7 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
         active: { packageVersion: '1.0.1' },
         previous: { packageVersion: '1.0.0', artifactDigest: first.digest },
@@ -1871,10 +2119,13 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       installFetch(signedDetail(second.digest, 'acme.demo', 'acme', '1.0.1'), second.bytes, second.digest)
       await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo', version: '1.0.1' })
       await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      // Review MED-1 on #380: an update over a backend-only legacy install is not fresh.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
 
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).resolves.toMatchObject({
         packageVersion: '1.0.1',
       })
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(manager.hasBackendActivation('acme.demo', '1.0.0')).toBe(false)
       expect(manager.hasBackendActivation('acme.demo', '1.0.1')).toBe(true)
       expect(new PluginActivationSelector(root).read('acme.demo')).toMatchObject({
@@ -1924,6 +2175,8 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       const discard = handlers.get('plugins:discardCandidate')
       expect(discard).toBeTypeOf('function')
       await expect(discard!(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      // Review LOW1 on #380: a staged, then discarded, candidate records nothing.
+      expect(new PluginInstallScanStore(root).installedAt('acme.demo')).toBeNull()
       expect(new PluginActivationSelector(root).read('acme.demo')).toBeNull()
       expect(manager.getDescriptor('acme.demo')).toMatchObject({ packageVersion: '1.0.0', packageDir: legacyDir })
       await expect(handlers.get('plugins:restart')!(null, { id: 'acme.demo' })).rejects.toThrow(/no staged candidate/)
@@ -4376,6 +4629,35 @@ describe('Marketplace discovery (Phase 1)', () => {
     const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
     expect(byId['a.ok']).toMatchObject({ disclosure: disclosed('a.ok', '1.0.0'), scan: null })
     for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
+  })
+
+  it('D-f: the list risk is the highest platform level and says when platforms differ', async () => {
+    const ui = computeDisclosure({ schemaVersion: 2, id: 'a.multi', version: '1.0.0', publisher: 'a', permissions: { system: ['ui'] } } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.multi', namespace: 'a', name: 'multi', latest_version: '1.0.0', disclosure: ui, scan: null,
+          risk_by_target: { 'darwin-arm64': 'low', 'linux-x64': 'high' } },
+        { identity: 'a.same', namespace: 'a', name: 'same', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.same' } }, scan: null, risk_by_target: { universal: 'low' } },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.bad' } }, scan: null, risk_by_target: { x: 'IGNORE' } },
+        // A Registry newer than this App: unknown fields are ignored.
+        { identity: 'a.future', namespace: 'a', name: 'future', latest_version: '1.0.0', future_field: { x: 1 },
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.future' } }, scan: null },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.multi'].listRisk).toEqual({ level: 'high', variesByPlatform: true })
+    expect(byId['a.same'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    // A malformed map is dropped; the level still comes from the disclosure.
+    expect(byId['a.bad'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].disclosure).toEqual({ ...ui, plugin: { ...ui.plugin, id: 'a.future' } })
   })
 
   it('forwards category, paging and the hide-incompatible filter', async () => {

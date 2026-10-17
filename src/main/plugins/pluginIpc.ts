@@ -83,13 +83,22 @@ import {
   type PackageVersionGrantSummary,
 } from '../../shared/executionPolicy'
 import {
+  parsePluginActivityReport,
+  type PluginActivityReport,
+  type PluginActivityReportRequest,
+} from '../../shared/pluginActivity'
+import {
   computeDisclosure,
   diffDisclosure,
+  disclosureItems,
   type DisclosureDiff,
   type DisclosureManifestInput,
+  type DisclosureRiskLevel,
   type ManifestDisclosure,
 } from '../../shared/pluginDisclosure'
-import type { ScanReport } from '../../shared/pluginDisclosureScan'
+import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
+import { PluginInstallScanStore } from './pluginInstallScanStore'
+import { rescanFinding } from './pluginRescanNotice'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -223,10 +232,50 @@ export function isPrereleaseVersion(version: string): boolean {
 function listingDisclosure(item: Record<string, unknown>): {
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
+  listRisk: ListRisk | null
 } {
   const id = `${String(item.namespace)}.${String(item.name)}`
   const card = rowCard(item, id, typeof item.latest_version === 'string' ? item.latest_version : '')
-  return { disclosure: card?.manifest ?? null, scan: card?.scan ?? null }
+  return {
+    disclosure: card?.manifest ?? null,
+    scan: card?.scan ?? null,
+    listRisk: card ? listRisk(cardRiskLevel(card.manifest, card.scan), item.risk_by_target) : null,
+  }
+}
+
+const RISK_ORDER: readonly DisclosureRiskLevel[] = ['low', 'medium', 'high', 'highest']
+
+/** What the installed manifest declares, for `declaredUnused` (contract 5.1).
+ *  Backend methods are left out: a frontend's calls to its own backend
+ *  (plugin:backend:call) are not recorded in plugin_activity, so they could
+ *  only ever read "declared but not used" (review M2 on #371). */
+export function declaredForActivity(disclosure: ManifestDisclosure): NonNullable<PluginActivityReportRequest['declared']> {
+  const out: NonNullable<PluginActivityReportRequest['declared']> = []
+  for (const item of disclosureItems(disclosure)) {
+    if (item.kind === 'system' || item.kind === 'shell' || item.kind === 'agentTool') {
+      out.push({ kind: item.kind, key: item.key })
+    }
+  }
+  return out
+}
+
+/** The level a list card shows (D-f): the highest of this App's own
+ * `cardRiskLevel` and every platform's level the Registry lists, so the card
+ * never reads lower than what some platform installs; `variesByPlatform` when
+ * the platforms differ. The detail page and the consent dialog keep this
+ * platform's own level. A malformed `risk_by_target` is ignored whole. */
+export interface ListRisk {
+  level: DisclosureRiskLevel
+  variesByPlatform: boolean
+}
+
+function listRisk(own: DisclosureRiskLevel, byTarget: unknown): ListRisk {
+  const listed = jsonObjectOrNull(byTarget)
+  const levels = listed ? Object.values(listed) : []
+  const valid = levels.length > 0 && levels.every((level) => RISK_ORDER.includes(level as DisclosureRiskLevel))
+  const platform = valid ? (levels as DisclosureRiskLevel[]) : []
+  const highest = [own, ...platform].reduce((a, b) => (RISK_ORDER.indexOf(b) > RISK_ORDER.indexOf(a) ? b : a))
+  return { level: highest, variesByPlatform: new Set(platform).size > 1 }
 }
 
 /** A Registry-supplied JSON object (disclosure data), or null for anything
@@ -338,6 +387,18 @@ export interface PluginTrustRefreshController {
    *  Rejects when the Registry did not answer for some package, after
    *  remembering the merged answer (those packages keep their last update). */
   checkUpdates(): Promise<PluginUpdateInfo[]>
+  /** D-f: rescans of installed versions that found new items since the last
+   *  call, each reported once. Notice only. */
+  takeRescanNotices(): PluginRescanNotice[]
+  /** Put back notices no window received, to be sent after the next check. */
+  restoreRescanNotices(notices: PluginRescanNotice[]): void
+}
+
+/** A rescan of an installed version found these new scan items (D-f). */
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: ScanItem[]
 }
 
 export interface PluginIpcOptions {
@@ -519,6 +580,22 @@ export function registerPluginIpc(
   }
   const hostAppVersion = options.appVersion ?? ((): string => app.getVersion())
   const prereleases = new PluginPrereleaseStore(pluginsRoot)
+  // D-f: the scan verified at install, per version; a record for the rescan
+  // notice only. Its failures never fail an install or a removal.
+  const installScans = new PluginInstallScanStore(pluginsRoot)
+  let rescanNotices: PluginRescanNotice[] = []
+  // #373 follow-up: installedAt is recorded when a fresh install becomes
+  // active: the restart found no version of the id in place (no registered
+  // descriptor, no selector active, no legacy backend-only install), so an
+  // update over any layout, a rollback, or a staged-then-discarded candidate
+  // never records one (review MED-1, LOW1 on #380). Record only.
+  const recordFreshInstall = (id: string): void => {
+    try {
+      installScans.markInstalled(id, Date.now())
+    } catch (error) {
+      console.warn(`[plugins] installedAt for ${id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   const packs = new PluginPackStore(pluginsRoot)
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
@@ -715,6 +792,54 @@ export function registerPluginIpc(
   ipcMain.handle('plugins:backendCallConcurrency', (event): BackendCallConcurrency[] => {
     assertAuthorized(event)
     return options.backendCallConcurrency?.() ?? []
+  })
+
+  // Plan B D-f: one installed plugin's activity report. The Host fills
+  // `declared` from the installed manifest (the backend has none) and asks the
+  // backend over its authenticated session; the answer is rebuilt from
+  // validated fields before it reaches the page. Read only.
+  ipcMain.handle('plugins:activityReport', async (event, args: { id?: unknown } | null): Promise<
+    { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+  > => {
+    assertAuthorized(event)
+    const id = typeof args?.id === 'string' ? args.id : ''
+    if (!manager.listInstalledPackages().some((pkg) => pkg.id === id)) {
+      return { ok: false, error: `${id || '(none)'} is not an installed Navide plugin` }
+    }
+    const disclosure = activeDisclosure(id)
+    const declared = disclosure ? declaredForActivity(disclosure) : []
+    try {
+      // Sent only when known: an id installed before this was recorded has
+      // none, and the backend then keeps its earlier behaviour (#373).
+      const installedAt = installScans.installedAt(id)
+      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({
+        plugin_id: id,
+        declared,
+        ...(installedAt !== null ? { installedAt } : {}),
+      }))
+      return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  // D-f disclosure overview: each installed Registry package's disclosure,
+  // computed from its installed manifest, and the scan verified at install.
+  ipcMain.handle('plugins:installedDisclosures', (event): Array<{
+    id: string
+    version: string
+    disclosure: ManifestDisclosure | null
+    scan: ScanReport | null
+  }> => {
+    assertAuthorized(event)
+    return manager.listInstalledPackages()
+      .filter((pkg) => pkg.provenance === 'official-registry' && pkg.packageVersion)
+      .map((pkg) => ({
+        id: pkg.id,
+        version: pkg.packageVersion!,
+        disclosure: activeDisclosure(pkg.id),
+        scan: installScans.get(pkg.id, pkg.packageVersion!),
+      }))
   })
 
   ipcMain.handle('plugins:backendResourceUsage', (event): BackendResourceUsage => {
@@ -1044,7 +1169,20 @@ export function registerPluginIpc(
               yanked?: unknown
               engines_navide?: unknown
               disclosure?: unknown
+              scan?: unknown
             }>
+          }
+          // D-f: a rescan of the installed version that found new items is
+          // noticed once, from this same answer (no request of its own).
+          try {
+            const finding = rescanFinding(
+              installScans.get(pkg.id, pkg.packageVersion!), detail.versions ?? [], pkg.packageVersion!, hostTarget
+            )
+            if (finding && installScans.noticeOnce(pkg.id, pkg.packageVersion!, finding.digest)) {
+              rescanNotices.push({ id: pkg.id, version: pkg.packageVersion!, added: finding.added })
+            }
+          } catch (error) {
+            console.warn(`[plugins] rescan check for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
           }
           // A stable user is never offered a pre-release. Switching the opt-in
           // off again never downgrades: a newer stable release is offered
@@ -1672,6 +1810,15 @@ export function registerPluginIpc(
         lifecycleSelector.stageCandidate(pkg.id, candidate, {
           candidateGrant: { selection: candidate, grant: candidateGrant },
         })
+        try {
+          if (pkg.scan) installScans.record(pkg.id, pkg.version, pkg.scan)
+          const kept = lifecycleSelector.read(pkg.id)
+          installScans.keepVersions(pkg.id, [kept?.active, kept?.previous, kept?.candidate]
+            .filter((selection) => selection !== undefined && selection !== null)
+            .map((selection) => selection!.packageVersion))
+        } catch (error) {
+          console.warn(`[plugins] install scan record for ${pkg.id} failed: ${error instanceof Error ? error.message : String(error)}`)
+        }
         if (publisherRequiresTrust) {
           publisherTrust.trust(pkg.publisherId, pkg.id)
         }
@@ -1851,6 +1998,7 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
           id,
@@ -1860,6 +2008,7 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
@@ -2317,6 +2466,13 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      try {
+        installScans.removePlugin(id)
+      } catch (error) {
+        console.warn(`[plugins] install scan record for ${id} not removed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+      // Its activity "first write in a workspace" rows go with it (D-e).
+      manager.forgetPluginActivity(id)
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')
@@ -2350,6 +2506,14 @@ export function registerPluginIpc(
     const root = options.nativeBackendDataRoot
     if (!root) return { exists: false, bytes: 0, path: '' }
     return inspectNativeBackendData(root, id)
+  })
+
+  // The installed (active) version's disclosure, for the agent request card's
+  // permission diff (B2): from the installed manifest, never Registry data.
+  // Null when nothing is installed or the package is Manifest v1.
+  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
@@ -2522,6 +2686,14 @@ export function registerPluginIpc(
 
   return {
     checkUpdates: checkInstalledUpdates,
+    takeRescanNotices() {
+      const taken = rescanNotices
+      rescanNotices = []
+      return taken
+    },
+    restoreRescanNotices(notices) {
+      rescanNotices = [...notices, ...rescanNotices]
+    },
     async refreshRegistryTrust() {
       const packageIds = discoverInstalledRegistryPackageIds(pluginsRoot)
       const activeRegistryPackages = new Set(

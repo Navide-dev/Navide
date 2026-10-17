@@ -14,6 +14,7 @@ type PluginManifestDisclosure = import('../../shared/pluginDisclosure').Manifest
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
 type PluginScanReport = import('../../shared/pluginDisclosureScan').ScanReport
+type PluginActivityReport = import('../../shared/pluginActivity').PluginActivityReport
 type LegalRoute = import('../../shared/legalLinks').LegalRoute
 type NewWorkspaceResult = import('../../shared/workspaceCreate').NewWorkspaceResult
 
@@ -382,6 +383,15 @@ declare global {
         listFactoryPackages: () => Promise<FactoryPluginSummary[]>
         /** Current and peak in-flight backend calls per plugin (never capped) and dropped Host event notifications. */
         backendCallConcurrency?: () => Promise<Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>>
+        /** D-f: one installed plugin's activity report (read only). */
+        activityReport?: (id: string) => Promise<{ ok: true; report: PluginActivityReport } | { ok: false; error: string }>
+        /** D-f: installed Registry packages' disclosures and install-time scans. */
+        installedDisclosures?: () => Promise<Array<{
+          id: string
+          version: string
+          disclosure: PluginManifestDisclosure | null
+          scan: PluginScanReport | null
+        }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
           children: { current: number; peak: number; retained: number }
@@ -451,6 +461,7 @@ declare global {
         checkUpdates: () => Promise<PluginUpdateInfo[]>
         pendingUpdates: () => Promise<PluginUpdateInfo[]>
         onUpdatesChanged: (handler: (updates: PluginUpdateInfo[]) => void) => () => void
+        onRescanNotices?: (handler: (notices: PluginRescanNotice[]) => void) => () => void
         prepareInstall: (args: {
           namespace: string
           name: string
@@ -474,6 +485,8 @@ declare global {
         }>
         remove: (id: string, nativeBackendData?: 'keep' | 'delete') => Promise<{ ok: boolean }>
         nativeBackendData: (id: string) => Promise<{ exists: boolean; bytes: number; path: string }>
+        /** The installed version's disclosure (Manifest v2), or null. */
+        installedDisclosure?: (id: string) => Promise<import('../../shared/pluginDisclosure').ManifestDisclosure | null>
         restoreFactoryPackage: (id: string) => Promise<{ ok: boolean }>
         setPrerelease: (id: string, enabled: boolean) => Promise<{ id: string; enabled: boolean }>
         setDisabled: (id: string, disabled: boolean) => Promise<{ id: string; disabled: boolean }>
@@ -564,6 +577,8 @@ declare global {
      *  well formed and naming this item; unverified display data. */
     disclosure?: PluginManifestDisclosure | null
     scan?: PluginScanReport | null
+    /** D-f: the highest risk level across the latest version's platforms. */
+    listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
   }
 
   interface PackMemberSummary {
@@ -683,6 +698,12 @@ declare global {
     versions: MarketplaceVersionInfo[]
     /** Raw README markdown; rendered as text nodes, never as HTML. */
     readme: string | null
+  }
+
+  interface PluginRescanNotice {
+    id: string
+    version: string
+    added: Array<{ kind: string; key: string }>
   }
 
   interface PluginUpdateInfo {

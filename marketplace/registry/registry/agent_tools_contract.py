@@ -573,6 +573,22 @@ PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
 #: Host-authenticated: ``{plugin_id, declared?: [{kind, key}]}`` → a
 #: ``PluginActivityReport`` (contract 5.1, ``src/shared/pluginActivity.ts``).
 PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
+#: Host-authenticated: ``{plugin_id}``, sent when a plugin is removed: its
+#: first-seen rows go, so a reinstalled plugin's first writes are new again.
+PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"
+
+# ── Host → backend: watchdog decisions (option C, section 5.2) ──────────────
+
+#: Host-authenticated: ``{rows: [{plugin_id, plugin_version, item, usage,
+#: threshold, decision, at}]}``, answered ``{ok, accepted}``
+#: (``src/shared/pluginResourceDecision.ts``).
+PLUGIN_RESOURCE_DECISION_MESSAGE = "plugin.resource.decision"
+#: What went over its threshold: memory, disk and stdoutPending (stdout a
+#: child sent without a newline yet; reserved until DB9, #375) in bytes,
+#: processes a count, cpu in cores.
+PLUGIN_RESOURCE_ITEMS = ("memory", "cpu", "processes", "disk", "stdoutPending")
+#: The notice, then the user's choice.
+PLUGIN_RESOURCE_DECISIONS = ("notified", "continue", "terminate")
 
 
 class MarketplaceQueryRequest(TypedDict):
@@ -595,6 +611,9 @@ PLUGIN_APPROVAL_LIST_MESSAGE = "plugins.agent_requests.list"
 PLUGIN_APPROVAL_REQUEST_EVENT = "plugins.agent_request"
 #: Backend -> windows: a plugin request was decided, finished or expired.
 PLUGIN_APPROVAL_RESOLVED_EVENT = "plugins.agent_request_resolved"
+#: Backend -> main windows: a main window went away while carrying out these
+#: approved requests; the others settle them (review-370 R1). ``{approval_ids}``.
+PLUGIN_APPROVAL_RECOVER_EVENT = "plugins.agent_requests.recover"
 #: The longest marketplace_request_status waits for a decision.
 PLUGIN_APPROVAL_STATUS_MAX_WAIT_S = 60
 
@@ -718,6 +737,29 @@ PLUGIN_AUDIT_DDL = (
     " denied_reason TEXT NOT NULL,"
     " count INTEGER NOT NULL,"
     " PRIMARY KEY (day, plugin_id, workspace, source, address, denied_reason))",
+    # D-e follow-up: when each write agent tool was first called in each
+    # workspace. Not pruned with the call rows, so a workspace is "new" only
+    # once; a removed plugin's rows go with it (plugin.activity.forget).
+    "CREATE TABLE IF NOT EXISTS plugin_tool_first_seen ("
+    " plugin_id TEXT NOT NULL,"
+    " tool TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " first_at INTEGER NOT NULL,"
+    " PRIMARY KEY (plugin_id, tool, workspace))",
+    # Watchdog option C (section 5.2): each resource notice and the user's
+    # continue / terminate. Numbers only, never a path or command line. Kept
+    # as long as plugin_activity_daily; a removed plugin's rows are forgotten.
+    "CREATE TABLE IF NOT EXISTS plugin_resource_decisions ("
+    " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " at INTEGER NOT NULL,"
+    " plugin_id TEXT NOT NULL,"
+    " plugin_version TEXT NOT NULL,"
+    " item TEXT NOT NULL,"
+    " usage REAL NOT NULL,"
+    " threshold REAL NOT NULL,"
+    " decision TEXT NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_at ON plugin_resource_decisions (at)",
+    "CREATE INDEX IF NOT EXISTS plugin_resource_decisions_plugin_at ON plugin_resource_decisions (plugin_id, at)",
 )
 
 # ── navide.db: agent plugin actions (B2-c) ──────────────────────────────────
@@ -727,6 +769,8 @@ PLUGIN_AUDIT_DDL = (
 PLUGIN_AGENT_ACTIONS = (
     "disable", "enable", "request-install", "request-update", "request-rollback", "request-remove",
     "decide-approve", "decide-reject", "finish-completed", "finish-failed",
+    # The carrying window's own result, after another window had settled the request.
+    "finish-late-completed", "finish-late-failed",
 )
 #: ``user`` is a person in a Navide window (deciding or finishing a request).
 PLUGIN_AGENT_ACTION_CALLER_KINDS = ("pane", "external", "host", "user")

@@ -18,6 +18,7 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
+import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -257,6 +258,8 @@ export interface MarketplaceExtension {
    *  well formed and naming this item; unverified display data. */
   disclosure?: PluginManifestDisclosure | null
   scan?: PluginScanReport | null
+  /** D-f: the highest risk level across the latest version's platforms. */
+  listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
 }
 
 export interface PackMemberSummary {
@@ -383,6 +386,12 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   versions: MarketplaceVersionInfo[]
   /** Raw README markdown; rendered as text nodes, never as HTML. */
   readme: string | null
+}
+
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: Array<{ kind: string; key: string }>
 }
 
 export interface PluginUpdateInfo {
@@ -1133,6 +1142,17 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** D-f: one installed plugin's activity report (read only). */
+    activityReport: (id: string): Promise<
+      { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** D-f: installed Registry packages' disclosures and install-time scans. */
+    installedDisclosures: (): Promise<Array<{
+      id: string
+      version: string
+      disclosure: PluginManifestDisclosure | null
+      scan: PluginScanReport | null
+    }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),
     disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
@@ -1198,6 +1218,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
     },
+    /** D-f: rescans of installed versions that found new items (notice only). */
+    onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
+      const listener = (_event: unknown, notices: PluginRescanNotice[]): void => handler(notices)
+      ipcRenderer.on('plugins:rescanNotices', listener)
+      return () => ipcRenderer.removeListener('plugins:rescanNotices', listener)
+    },
     prepareInstall: (args: {
       namespace: string
       name: string
@@ -1224,6 +1250,7 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:remove', nativeBackendData === undefined ? { id } : { id, nativeBackendData }),
     nativeBackendData: (id: string): Promise<{ exists: boolean; bytes: number; path: string }> =>
       ipcRenderer.invoke('plugins:nativeBackendData', { id }),
+    installedDisclosure: (id: string): Promise<unknown> => ipcRenderer.invoke('plugins:installedDisclosure', { id }),
     setPrerelease: (id: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> =>
       ipcRenderer.invoke('plugins:setPrerelease', { id, enabled }),
     setDisabled: (id: string, disabled: boolean): Promise<{ id: string; disabled: boolean }> =>

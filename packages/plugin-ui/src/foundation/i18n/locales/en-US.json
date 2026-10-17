@@ -830,6 +830,10 @@
       "loop-stalled-notify-body": "The agent repeated itself for several turns without moving forward (it may be waiting on something) — the loop has stopped so it stops burning quota",
       "loop-capped-notify-title": "Loop stopped — continue limit reached",
       "loop-capped-notify-body": "The loop sent its maximum number of continue prompts without the agent reporting the task done — restart it if the work is still on track",
+      "loop-inject-failed-notify-title": "Loop stopped — continue could not be sent",
+      "loop-inject-failed-notify-body": "The continue prompt failed to reach the agent 3 times in a row (the input box did not accept it) — the loop has stopped; check the pane and restart it",
+      "loop-interrupted-notify-title": "Loop stopped — interrupted",
+      "loop-interrupted-notify-body": "You interrupted the agent, so the loop has stopped instead of sending another continue — restart it when you want it to keep going",
       "login-expired-badge": "⚠ Login expired",
       "exit-fault-badge": "⚠ Exited (code {code})",
       "exit-fault-tooltip": "The CLI ended with exit code {code}. It may have crashed; the code is also recorded in the error ledger.",
@@ -1523,6 +1527,10 @@
           "title": "Navide Marketplace",
           "summary": "Search the Navide plugin registry and install a Navide plugin, with publisher trust and capability confirmation."
         },
+        "disclosureOverview": {
+          "title": "Disclosure overview",
+          "summary": "Every installed Navide plugin's disclosure, risk, recent activity and unusual items"
+        },
         "help-mcp": {
           "title": "How Navide uses MCP",
           "summary": "The two directions MCP is used in: tools Navide offers CLI agents, and external servers Navide reads docs from."
@@ -1790,6 +1798,7 @@
       "sensitive": "sensitive",
       "empty": "No Navide plugins installed.",
       "permissionDetails": "Permissions and grants",
+      "permissionDetailsWithActivity": "Permissions, grants and activity",
       "plansRiskNote": "This Navide plugin has its own backend program, which runs with your user permissions and has no sandbox. It works on plan documents in the current project, starting from the Git repository root found above it (including repositories nested inside): the plan and report folders under .agent-team, .claude, .cursor and docs at any depth, .plans at the root, and their .history (read only). Its backend reads and writes them directly; deletes and renames still go through Navide.",
       "searchPlaceholder": "Search Navide plugins",
       "search": "Search",
@@ -2267,6 +2276,7 @@
       "analyzer": "Analyzer",
       "extensions": "Navide Plugins",
       "marketplace": "Navide Marketplace",
+      "disclosureOverview": "Disclosure overview",
       "executionPolicy": "Execution Policy",
       "statusBadges": "Status badges",
       "voice": "Voice Input",
@@ -2434,6 +2444,10 @@
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
+            },
+            "disclosureOverview": {
+              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
+              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -9193,6 +9207,41 @@
     "signin-hint": "This opens a pane that runs the sign-in for you. Most CLIs then open your browser; finish there and come back.",
     "dont-ask": "Stop asking about {label}"
   },
+  "plugin-request": {
+    "kicker": "Navide plugin request",
+    "title": {
+      "install": "Install the Navide plugin {plugin} {version}?",
+      "update": "Update the Navide plugin {plugin} from {from} to {version}?",
+      "rollback": "Roll the Navide plugin {plugin} back from {from} to {version}?",
+      "remove": "Remove the Navide plugin {plugin}?",
+      "enable": "Enable the Navide plugin {plugin} again?"
+    },
+    "desc": "An agent asked for this change. Nothing changes until you approve it here; the agent cannot approve it for you.",
+    "queue": "{count} pending",
+    "requester": "Requested by",
+    "workspace": "Workspace",
+    "expires": "Expires at",
+    "caller-unknown": "Unknown caller",
+    "disabled-by": "Disabled by",
+    "disabled-by-user": "You",
+    "disabled-at": "Disabled at",
+    "not-recorded": "Not recorded",
+    "reason": "Reason, written by the agent",
+    "diff": "What changes from the installed version",
+    "card": "What this version declares (from the Navide Marketplace, not verified yet)",
+    "no-card": "The Navide Marketplace has no disclosure for this version. The package itself is verified when it is downloaded, before anything is installed.",
+    "expired": "This request expired.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "applying": "Applying…",
+    "dismiss": "Dismiss",
+    "completed": "Done: {plugin}",
+    "completed-late": "{plugin}: done. Another window had marked this request interrupted while this one reconnected; the record now shows what really happened.",
+    "finished-late": "Another window had marked this request interrupted while this one reconnected; the record now shows this result instead.",
+    "failed": "Not done: {error}",
+    "not-appliable": "This version of Navide cannot carry out this kind of request yet; you can reject it.",
+    "unavailable": "Navide plugin actions are not available in this window."
+  },
   "skill-approval": {
     "kicker": "Skill install request",
     "title": "Install skill “{name}”?",
@@ -10318,7 +10367,7 @@
     "unavailable": "Navide Guard is not available from this backend yet. Restart Navide after updating.",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off."
+      "desc": "Judge each CLI action by how dangerous it is and who asked for it; stop or ask before the dangerous ones. The rules are fixed code, never an AI. Approving a high-risk action from a chat channel stays refused even when this is off. Terminal command protection, and the check on an agent answering a prompt through MCP, are not affected by this switch either."
     },
     "counts": {
       "critical": "Critical {n}",
@@ -10512,6 +10561,7 @@
       "text-missing": "text no longer in the message log",
       "text-none": "no message text recorded",
       "explain": "Its High and Critical actions need your confirmation on this computer. Clear the mark only if you have checked what it was sent.",
+      "explain-off": "Navide Guard is off, so nothing is asked for confirmation now. The mark is kept and applies again when you turn Guard back on.",
       "clear": "Clear",
       "no-hook-warning": "Navide Guard cannot block this CLI, and it runs without permission prompts. Be careful giving it commands from a chat room."
     },
@@ -11007,6 +11057,107 @@
     "pin-default-refused": "The built-in Default account has no folder of its own, so a pane cannot be fixed to it. Switch to another account first.",
     "pin-needs-dir-login": "To fix this pane to {account}, sign in once inside its own folder. The sign-in has opened."
   },
+  "pluginActivity": {
+    "title": "Activity",
+    "source": {
+      "broker": "Navide capability",
+      "shell": "shell command",
+      "agentTool": "agent tool"
+    },
+    "kind": {
+      "system": "Permission",
+      "shell": "Shell",
+      "backendMethod": "Native backend method",
+      "agentTool": "Agent tool"
+    },
+    "reason": {
+      "undeclared": "not declared"
+    },
+    "tab": "Activity",
+    "openOverview": "View in Disclosure overview",
+    "loading": "Loading activity…",
+    "notSupported": "this Navide cannot read activity yet",
+    "unavailable": "Activity is not available right now: {error}",
+    "window": "Records of the last 7 days, kept on this device.",
+    "totals": "{calls} calls, {denied} refused, {errors} errors",
+    "unknownSize": "unknown",
+    "empty": "Nothing recorded.",
+    "live": {
+      "heading": "Now (live)",
+      "inFlight": "Calls in progress: {current} (at most {peak} at once since Navide started)",
+      "historicalPeak": "Most calls at once in the records: {count} (last 7 days)",
+      "boundViews": "Views bound to a backend: {count} (not the number of running processes)",
+      "queue": "Waiting to be sent to the backend: {requestFrames} requests ({requestBytes}), {eventFrames} events ({eventBytes})",
+      "queueGrowing": "This Navide plugin's backend is not reading; Navide's memory keeps growing.",
+      "dropped": "Event notifications dropped: {count}"
+    },
+    "undeclared": {
+      "heading": "Used but not declared (refused by Navide)",
+      "item": "{address} ({source}) in {workspace}: {count} times, last {date}",
+      "reasons": "Reasons: {reasons}"
+    },
+    "unused": {
+      "heading": "Declared but not used in 30 days",
+      "never": "never used",
+      "last": "last used {date}"
+    },
+    "anomalies": {
+      "heading": "Unusual (marked only, nothing is blocked)"
+    },
+    "anomaly": {
+      "volumeSpike": "{date}: {count} calls, more than 10 times the 7-day average ({baseline})",
+      "writeToolNewWorkspace": "The writing tool {tool} was used in {workspace} for the first time ({date})",
+      "undeclaredDenied": "{count} undeclared uses refused in {workspace} (last {date})"
+    },
+    "tools": {
+      "heading": "Which agent called which tools",
+      "row": "{date} {caller} → {tool} ({risk}): {outcome}, {duration} ms, arguments {args}, result {result}",
+      "ok": "succeeded",
+      "failed": "failed ({code})",
+      "crossWorkspace": "Across workspaces: {from} → {to}",
+      "totalSize": "Arguments {args} and results {result} in total; {unknown} sizes are unknown and not counted"
+    },
+    "caller": {
+      "pane": "pane “{name}”",
+      "external": "an external client",
+      "host": "Navide"
+    },
+    "risk": {
+      "read": "read-only",
+      "write": "writing"
+    },
+    "outcome": {
+      "allowed": "allowed",
+      "denied": "refused",
+      "error": "error"
+    },
+    "files": {
+      "heading": "Files read and written",
+      "item": "{path} · {address} · {count} times · {outcome} · {date}"
+    },
+    "commands": {
+      "heading": "Commands run",
+      "item": "{command} · {count} times · {outcome} · {date}"
+    },
+    "trend": {
+      "heading": "Calls per day"
+    },
+    "agentActions": {
+      "heading": "Changes agents made to this Navide plugin",
+      "item": "{date} {caller}: {action} ({version})",
+      "notRecorded": "This version of Navide does not record this yet."
+    },
+    "overview": {
+      "title": "Disclosure overview",
+      "intro": "Every Navide plugin installed from the Navide Marketplace: what it declares, its risk level, recent activity and anything unusual, on one page. Records only; nothing here changes what a Navide plugin may do.",
+      "empty": "No Navide plugin from the Navide Marketplace is installed.",
+      "installedScan": "Scan verified at install",
+      "noScanRecord": "No scan was recorded at install.",
+      "activity": "Recent activity",
+      "undeclaredCount": "{count} undeclared uses refused",
+      "anomalyCount": "{count} unusual items"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "What this update changes",
@@ -11036,6 +11187,8 @@
     },
     "title": "Disclosure",
     "riskLabel": "Risk level: {level}",
+    "variesByPlatform": "(varies by platform; the highest is shown)",
+    "rescanNotice": "A Navide Registry rescan of {name} {version} found {count} new items (not yet verified). See Settings → Navide Plugins → Disclosure overview.",
     "risk": {
       "low": "Low",
       "medium": "Medium",
