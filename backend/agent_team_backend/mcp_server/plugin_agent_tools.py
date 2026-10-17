@@ -18,8 +18,9 @@ What it guarantees on this side of the boundary:
   nested text breaks the text rules or that uses ``$ref`` is not served.
   Each result, and a plugin's own error text, has control and invisible
   characters stripped and is wrapped as external content labelled with the
-  plugin id, version and permissions; a result is capped (DB9); the caller
-  pane is marked tainted like any other external content.
+  plugin id, version and permissions; its size (``resultBytes``) is disclosed,
+  not limited; the caller pane is marked tainted like any other external
+  content.
 - Arguments are checked against the consented inputSchema in a worker thread,
   never on the event loop, and plugin-supplied regular expressions
   (``pattern``, ``patternProperties``) are never run in the core: the plugin
@@ -56,7 +57,6 @@ from jsonschema import validators as jsonschema_validators
 from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
-    AGENT_TOOL_STABILITY_CAP_BYTES,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
@@ -191,12 +191,15 @@ def _fence(entry: dict[str, Any], what: str, text: str) -> str:
     ])
 
 
-def wrap_result(entry: dict[str, Any], result: Any) -> str | None:
-    """The agent-facing text of one result, or None when it is over the DB9 cap."""
-    text = _result_text(result)
-    if utf8_byte_length(sanitize_agent_tool_result_text(text)) > AGENT_TOOL_STABILITY_CAP_BYTES:
-        return None
-    return _fence(entry, "result", text)
+def result_bytes(result: Any) -> int:
+    """Size of a result as the plugin returned it (UTF-8 bytes, before fencing).
+    Disclosed, never limited here."""
+    return utf8_byte_length(_result_text(result))
+
+
+def wrap_result(entry: dict[str, Any], result: Any) -> str:
+    """The agent-facing text of one result, wrapped as external content."""
+    return _fence(entry, "result", _result_text(result))
 
 
 # ── snapshot validation and registration ────────────────────────────────────
@@ -524,10 +527,15 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         return _refusal("Navide Host answered with a malformed response", "BAD_REQUEST")
     if response.get("ok") is True:
         _taint(caller, entry)
-        text = wrap_result(entry, response.get("result"))
-        if text is None:
-            return _refusal(f"{name} returned more than the 1 MiB limit", "PLUGIN_TOOL_RESULT_TOO_LARGE")
-        return [TextContent(type="text", text=text)]
+        result = response.get("result")
+        size = result_bytes(result)
+        _log.info("plugin tool result %s: resultBytes=%d", name, size)
+        # Size is disclosed, not limited (DB9 ruling a).
+        return CallToolResult(
+            content=[TextContent(type="text", text=wrap_result(entry, result))],
+            isError=False,
+            _meta={"resultBytes": size},
+        )
     raw_code = response.get("error_code")
     error_code = raw_code if isinstance(raw_code, str) and _ERROR_CODE_RE.fullmatch(raw_code) else "PLUGIN_TOOL_FAILED"
     raw_reason = response.get("reason")
