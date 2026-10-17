@@ -7,7 +7,7 @@ a switch that cannot be read."""
 from __future__ import annotations
 
 import asyncio
-import time
+import threading
 
 import pytest
 
@@ -26,14 +26,17 @@ def events(monkeypatch):
     return seen
 
 
-def _slow_hook(monkeypatch):
-    real = guard_hooks.decide
+@pytest.fixture()
+def gate():
+    """Holds the timed-out hook's worker until the test has asserted: left to
+    finish, it would decide and announce its own ask into `events`."""
+    held = threading.Event()
+    yield held
+    held.set()
 
-    def slow(*a, **k):
-        time.sleep(0.3)
-        return real(*a, **k)
 
-    monkeypatch.setattr(guard_hooks, "decide", slow)
+def _slow_hook(monkeypatch, gate):
+    monkeypatch.setattr(guard_hooks, "decide", lambda *a, **k: gate.wait(5))
     monkeypatch.setattr(guard_hooks, "EVALUATE_BUDGET_S", 0.05)
     return asyncio.run(guard_hooks.respond("claude", CLAUDE_RM, pane_id="p1", cwd="/w", workspace="/w"))
 
@@ -44,14 +47,14 @@ def _broken_evaluate(monkeypatch, source):
                     cwd="/w", workspace="/w", source=source)
 
 
-def test_hook_timeout_is_not_announced_while_switched_off(guard_store, events, monkeypatch):
+def test_hook_timeout_is_not_announced_while_switched_off(guard_store, events, gate, monkeypatch):
     guard_store.set_enabled(False)
-    assert _slow_hook(monkeypatch) is None
+    assert _slow_hook(monkeypatch, gate) is None
     assert events == []
 
 
-def test_hook_timeout_is_announced_while_switched_on(guard_store, events, monkeypatch):
-    assert _slow_hook(monkeypatch) is None
+def test_hook_timeout_is_announced_while_switched_on(guard_store, events, gate, monkeypatch):
+    assert _slow_hook(monkeypatch, gate) is None
     assert [(t, p["action"]) for t, p in events] == [("guard.decision", "error")]
 
 
