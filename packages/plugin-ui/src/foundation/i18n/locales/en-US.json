@@ -1717,6 +1717,12 @@
         "title": "Native backends",
         "description": "Some Navide plugins include native code. Navide runs it in a sandbox with no network access of its own; it can read only the workspaces you open with it, and change files only where you allow. A Navide plugin that also runs git, gh and glab commands (marked high risk below) can, through them, contact network hosts and send workspace data, and read and change workspace files without that permission. Nothing native runs until you turn the switch below on.",
         "enable": "Allow third-party Navide plugins to run native backends",
+        "agentTools": {
+          "enable": "Let agents call tools from third-party Navide plugins",
+          "description": "Off by default. When on, agents in your panes can call the tools a third-party Navide plugin declares, once you have allowed that Navide plugin. A tool that changes files asks you once per workspace. With this off, Navide behaves as if no Navide plugin had tools.",
+          "externalCallers": "Let external MCP clients call them too",
+          "externalCallersDisclosure": "External programs share a single token, so the record of a call can only say \"an external client\", not which program it was. The Host credential is treated the same way."
+        },
         "empty": "No installed Navide plugin has a native backend.",
         "allow": "Allow",
         "disable": "Disable",
@@ -10357,7 +10363,8 @@
       "local": "Local",
       "relay": "Chat app",
       "remote": "Remote",
-      "agent": "Other agent"
+      "agent": "Other agent",
+      "plugin": "Navide plugin tool"
     },
     "vendors": {
       "title": "Which CLIs Guard can block",
