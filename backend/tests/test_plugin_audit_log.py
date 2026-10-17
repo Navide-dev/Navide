@@ -1183,3 +1183,16 @@ def test_installed_at_hides_nothing_written_since_and_flags_nothing_twice(audit:
     flags = [a["workspace"] for a in audit.activity_report(_PLUGIN, installed_at=installed_at, now_ms=NOW)["anomalies"]
              if a["kind"] == "writeToolNewWorkspace"]
     assert flags == ["/w/b"]
+
+
+def test_a_future_installed_at_counts_as_now(audit: PluginAuditLog, clock: Clock) -> None:
+    """#373 review N4: an install time later than now is clamped to now."""
+    clock.now_ms = NOW - 10 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/b", caller_workspace="/w/b")  # before "now": not since the install
+    clock.now_ms = NOW
+    _call(audit, target_workspace="/w/c", caller_workspace="/w/c")  # at now: since an install clamped to now
+    flags = [a["workspace"] for a in audit.activity_report(_PLUGIN, installed_at=NOW + DAY_MS, now_ms=NOW)["anomalies"]
+             if a["kind"] == "writeToolNewWorkspace"]
+    assert flags == ["/w/c"]

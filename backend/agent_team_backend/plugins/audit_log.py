@@ -732,6 +732,8 @@ class PluginAuditLog:
         added up. Reads only, in one short transaction; run it off the event loop.
         """
         now = self._now_ms() if now_ms is None else int(now_ms)
+        if installed_at is not None:
+            installed_at = min(int(installed_at), now)  # an install time in the future is now (#373 N4)
         window_from = now - contract.PLUGIN_ACTIVITY_DETAIL_RETENTION_DAYS * _DAY_MS
         since = now - SUMMARY_WINDOW_DAYS * _DAY_MS
         report: dict[str, Any] = {
@@ -819,16 +821,17 @@ class PluginAuditLog:
             if installed_at:
                 # A row older than this install is an earlier install's: the
                 # first write since installing is in the call rows (#373 F1).
-                new_writes += [
-                    row for row in cur.execute(
-                        "SELECT f.tool, f.workspace, (SELECT MIN(c.at) FROM plugin_tool_calls c"
-                        "  WHERE c.plugin_id = f.plugin_id AND c.tool = f.tool AND c.target_workspace = f.workspace"
-                        "  AND c.risk = 'write' AND c.at >= ?)"
-                        " FROM plugin_tool_first_seen f WHERE f.plugin_id = ? AND f.first_at < ?",
-                        (installed_at, plugin_id, installed_at),
-                    ).fetchall()
-                    if row[2] is not None and row[2] >= floor
-                ]
+                # One grouped pass over this plugin's calls since the install
+                # (plugin_tool_calls_plugin_at), joined back: not one lookup per
+                # stale row (#373 N1).
+                new_writes += cur.execute(
+                    "SELECT f.tool, f.workspace, since.first_at FROM plugin_tool_first_seen f JOIN ("
+                    " SELECT tool, target_workspace AS workspace, MIN(at) AS first_at FROM plugin_tool_calls"
+                    "  WHERE plugin_id = ? AND at >= ? AND risk = 'write' GROUP BY 1, 2"
+                    ") since ON since.tool = f.tool AND since.workspace = f.workspace"
+                    " WHERE f.plugin_id = ? AND f.first_at < ? AND since.first_at >= ?",
+                    (plugin_id, installed_at, plugin_id, installed_at, floor),
+                ).fetchall()
                 new_writes.sort(key=lambda row: (row[2], row[0], row[1]))
         report["totals"] = {"calls": int(totals[0] or 0), "denied": int(totals[1] or 0), "errors": int(totals[2] or 0)}
         report["toolCalls"] = [
