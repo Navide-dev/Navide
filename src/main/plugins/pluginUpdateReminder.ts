@@ -1,4 +1,4 @@
-import type { PluginUpdateInfo } from './pluginIpc'
+import type { PluginRescanNotice, PluginUpdateInfo } from './pluginIpc'
 
 /**
  * One periodic pass: the installed-plugin trust refresh, then the update
@@ -23,4 +23,18 @@ export async function refreshTrustThenUpdates(deps: {
       )
     }
   }
+}
+
+/** D-f: hand the rescan notices of the last check to the open main windows.
+ *  They are cleared only once at least one window received them; with none
+ *  open they go back to wait for the next check (review L1 on #371). */
+export function publishRescanNotices(deps: {
+  take: () => PluginRescanNotice[]
+  restore: (notices: PluginRescanNotice[]) => void
+  /** Sends to every open main window; returns how many received them. */
+  send: (notices: PluginRescanNotice[]) => number
+}): void {
+  const notices = deps.take()
+  if (notices.length === 0) return
+  if (deps.send(notices) === 0) deps.restore(notices)
 }

@@ -23,6 +23,7 @@ from .dns_verify import TxtResolver, doh_txt_resolver
 from .disclosure import registry_facts, sign_disclosure
 from .static_scan import run_scan
 from .plugin_contract.disclosure_contract import CanonicalJsonError
+from .plugin_contract.disclosure_scan_contract import card_risk_level
 from .discovery import (
     CATEGORIES,
     PACK_CATEGORY,
@@ -370,6 +371,11 @@ def _summary(
         ),
         disclosure=latest_row.disclosure if latest_row is not None else None,
         scan=latest_row.scan if latest_row is not None else None,
+        risk_by_target={
+            v.target: card_risk_level(v.disclosure, v.scan)
+            for v in versions
+            if v.version == latest and not v.yanked and v.disclosure
+        } or None,
     )
 
 

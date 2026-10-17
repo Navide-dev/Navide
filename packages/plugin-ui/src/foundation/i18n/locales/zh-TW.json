@@ -1523,6 +1523,10 @@
           "title": "Navide 市集",
           "summary": "搜尋 Navide 外掛登錄庫並安裝 Navide 外掛，含發佈者信任與能力確認。"
         },
+        "disclosureOverview": {
+          "title": "揭露總覽",
+          "summary": "所有已安裝 Navide 外掛的揭露、風險、最近活動和異常"
+        },
         "help-mcp": {
           "title": "MCP 說明",
           "summary": "MCP 的兩個方向：Navide 提供給 CLI agent 的工具，以及 Navide 用來讀文件的外部 server。"
@@ -1790,6 +1794,7 @@
       "sensitive": "敏感權限",
       "empty": "尚未安裝任何 Navide 外掛。",
       "permissionDetails": "權限與授予",
+      "permissionDetailsWithActivity": "權限、授予與活動",
       "plansRiskNote": "此 Navide 外掛有自己的後端程式，以您的使用者權限執行，沒有沙盒。它處理目前專案的計畫文件：從往上找到的 Git 儲存庫根目錄起（含其下的巢狀儲存庫），任何深度的 .agent-team、.claude、.cursor 與 docs 底下的 plans／reports 類資料夾、根目錄的 .plans，以及這些資料夾的 .history（只讀）。讀取與寫入計畫文件都由此 Navide 外掛的後端直接進行；刪除與改名仍經由 Navide 進行。",
       "searchPlaceholder": "搜尋 Navide 外掛",
       "search": "搜尋",
@@ -2267,6 +2272,7 @@
       "analyzer": "分析器",
       "extensions": "Navide 外掛",
       "marketplace": "Navide 市集",
+      "disclosureOverview": "揭露總覽",
       "executionPolicy": "執行政策",
       "statusBadges": "狀態徽章",
       "voice": "語音輸入",
@@ -2434,6 +2440,10 @@
             "marketplace": {
               "what": "搜尋 Navide 外掛登錄庫並從中安裝",
               "more": "本頁第 4 章"
+            },
+            "disclosureOverview": {
+              "what": "所有從 Navide 市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
+              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個 Navide 外掛完整的活動，也可以在「Navide 外掛」頁該 Navide 外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",
@@ -11007,6 +11017,107 @@
     "pin-default-refused": "內建的 Default 帳號沒有自己的資料夾，無法固定。請先切換到其他帳號。",
     "pin-needs-dir-login": "要把這個 pane 固定在 {account}，需要先在它的帳號資料夾登入一次。已開啟登入視窗。"
   },
+  "pluginActivity": {
+    "title": "活動",
+    "source": {
+      "broker": "Navide 功能",
+      "shell": "shell 指令",
+      "agentTool": "agent 工具"
+    },
+    "kind": {
+      "system": "權限",
+      "shell": "Shell",
+      "backendMethod": "原生 backend 方法",
+      "agentTool": "agent 工具"
+    },
+    "reason": {
+      "undeclared": "沒有宣告"
+    },
+    "tab": "活動",
+    "openOverview": "在揭露總覽查看",
+    "loading": "正在讀取活動紀錄…",
+    "notSupported": "這個版本的 Navide 還不能讀取活動紀錄",
+    "unavailable": "目前無法取得活動紀錄：{error}",
+    "window": "最近 7 天的紀錄，存在這台電腦。",
+    "totals": "{calls} 次呼叫、{denied} 次被拒、{errors} 次錯誤",
+    "unknownSize": "未知",
+    "empty": "沒有紀錄。",
+    "live": {
+      "heading": "目前（即時）",
+      "inFlight": "執行中的呼叫：{current} 個（Navide 啟動以來最多同時 {peak} 個）",
+      "historicalPeak": "紀錄中最多同時執行：{count} 個（最近 7 天）",
+      "boundViews": "已綁定 backend 的 view 數：{count}（不是執行中的程序數）",
+      "queue": "等待送給 backend：請求 {requestFrames} 筆（{requestBytes}）、事件 {eventFrames} 筆（{eventBytes}）",
+      "queueGrowing": "這個 Navide 外掛的 backend 沒有在讀取，Navide 的記憶體會持續增加。",
+      "dropped": "已丟棄的事件通知：{count} 則"
+    },
+    "undeclared": {
+      "heading": "用了但沒宣告（被 Navide 拒絕）",
+      "item": "{address}（{source}）在 {workspace}：{count} 次，最近一次 {date}",
+      "reasons": "原因：{reasons}"
+    },
+    "unused": {
+      "heading": "宣告了但 30 天內沒用到",
+      "never": "從未使用",
+      "last": "最後一次使用：{date}"
+    },
+    "anomalies": {
+      "heading": "異常（只標示，不攔截）"
+    },
+    "anomaly": {
+      "volumeSpike": "{date}：呼叫 {count} 次，超過 7 天平均（{baseline}）的 10 倍",
+      "writeToolNewWorkspace": "寫入類工具 {tool} 第一次用在 {workspace}（{date}）",
+      "undeclaredDenied": "{workspace} 有 {count} 次沒宣告的使用被拒絕（最近一次 {date}）"
+    },
+    "tools": {
+      "heading": "被哪個 agent 呼叫了哪些工具",
+      "row": "{date} {caller} → {tool}（{risk}）：{outcome}，{duration} ms，參數 {args}，結果 {result}",
+      "ok": "成功",
+      "failed": "失敗（{code}）",
+      "crossWorkspace": "跨工作區：{from} → {to}",
+      "totalSize": "參數共 {args}、結果共 {result}；另有 {unknown} 筆大小未知，沒有算進去"
+    },
+    "caller": {
+      "pane": "pane「{name}」",
+      "external": "外部用戶端",
+      "host": "Navide"
+    },
+    "risk": {
+      "read": "唯讀",
+      "write": "寫入"
+    },
+    "outcome": {
+      "allowed": "允許",
+      "denied": "被拒",
+      "error": "錯誤"
+    },
+    "files": {
+      "heading": "讀寫過的檔案",
+      "item": "{path} · {address} · {count} 次 · {outcome} · {date}"
+    },
+    "commands": {
+      "heading": "執行過的指令",
+      "item": "{command} · {count} 次 · {outcome} · {date}"
+    },
+    "trend": {
+      "heading": "每日呼叫量"
+    },
+    "agentActions": {
+      "heading": "agent 對這個 Navide 外掛做的變更",
+      "item": "{date} {caller}：{action}（{version}）",
+      "notRecorded": "這個版本的 Navide 還沒有記錄這項資料。"
+    },
+    "overview": {
+      "title": "揭露總覽",
+      "intro": "所有從 Navide 市集安裝的 Navide 外掛：宣告了什麼、風險等級、最近活動和異常，集中在這一頁。只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。",
+      "empty": "沒有安裝任何來自 Navide 市集的 Navide 外掛。",
+      "installedScan": "安裝時驗證過的掃描",
+      "noScanRecord": "安裝時沒有記錄掃描。",
+      "activity": "最近活動",
+      "undeclaredCount": "{count} 次沒宣告的使用被拒絕",
+      "anomalyCount": "{count} 項異常"
+    }
+  },
   "pluginDisclosure": {
     "diff": {
       "heading": "這次更新的權限變化",
@@ -11036,6 +11147,8 @@
     },
     "title": "揭露卡",
     "riskLabel": "風險等級：{level}",
+    "variesByPlatform": "（依平台不同，顯示最高者）",
+    "rescanNotice": "Navide Registry 重新掃描 {name} {version}，發現 {count} 個新項目（尚未驗證）。詳見「設定 → Navide 外掛 → 揭露總覽」。",
     "risk": {
       "low": "低",
       "medium": "中",

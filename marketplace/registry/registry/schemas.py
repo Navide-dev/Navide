@@ -84,6 +84,10 @@ class ExtensionSummary(BaseModel):
     scan: dict | None = None
     """Static scan report of one `latest_version` artifact (contract 3.8),
     display data for the list card's risk level; None when it has none."""
+    risk_by_target: dict[str, str] | None = None
+    """`cardRiskLevel` of each `latest_version` artifact by target (contract
+    3.3), so the list card can show the highest one; None without a
+    disclosure. Display data; readers that do not know it ignore it."""
     icon_path: str | None = None
     """Package-relative raster icon of `latest_version`, served by the website
     asset route; None when the package has no safe icon."""

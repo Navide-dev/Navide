@@ -360,6 +360,7 @@ import type {
 } from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
+import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
@@ -14698,6 +14699,8 @@ backend.on('scheduler.job_disabled', (raw) => {
 const evolve = useEvolve(backend)
 // Share-link created/opened events become announcements (none without Navide Cloud).
 useShareNotices(backend)
+// Plan B D-f: a Registry rescan of an installed plugin found new items (notice only).
+usePluginRescanNotices()
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId
