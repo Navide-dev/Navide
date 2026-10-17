@@ -130,20 +130,42 @@ async function live(packages: PackageFixture[], options: { enabled?: boolean } =
   const releases: Array<() => void> = []
   let managed: FrontendPluginManager | undefined
   cleanups.push(async () => {
+    let exited = false
     try {
       // A test that failed before releasing a hold would leave the close
       // waiting on it: free every hold, and bound the close.
       for (const release of releases.splice(0)) release()
-      await Promise.race([
-        managed?.closeBackendPlugins(),
-        new Promise((done) => setTimeout(done, 10_000)),
-      ])
+      let bound: ReturnType<typeof setTimeout> | undefined
+      try {
+        await Promise.race([
+          managed?.closeBackendPlugins(),
+          new Promise((done) => {
+            bound = setTimeout(done, 10_000)
+          }),
+        ])
+      } finally {
+        clearTimeout(bound)
+      }
       // Only the PIDs this file started, each waited for until it is gone.
       await waitUntil(() => pids.every((pid) => !alive(pid)))
+      exited = true
     } finally {
-      // Last resort, still only this file's own PIDs.
-      for (const pid of pids) if (alive(pid)) process.kill(pid, 'SIGKILL')
-      rmSync(root, { recursive: true, force: true })
+      try {
+        // Last resort, only when the wait failed and only for this file's own
+        // PIDs still alive (never a PID that exited and may be reused); one
+        // that exits in between (ESRCH) is already what is wanted.
+        if (!exited) {
+          for (const pid of pids.filter(alive)) {
+            try {
+              process.kill(pid, 'SIGKILL')
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
+            }
+          }
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true })
+      }
     }
   })
   const workspace = join(root, 'workspace')
