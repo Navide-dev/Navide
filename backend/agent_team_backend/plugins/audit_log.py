@@ -55,8 +55,6 @@ transaction.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import json
 import logging
 import ntpath
 import os
@@ -72,7 +70,6 @@ from urllib.parse import unquote, urlsplit
 
 from ..db import Database
 from . import agent_tools_contract as contract
-from .disclosure_contract import CanonicalJsonError, canonical_contract_json
 
 log = logging.getLogger(__name__)
 
@@ -101,18 +98,18 @@ ACTIVITY_OUTCOMES = ("allowed", "denied", "error")
 #: The contract's call error codes plus the two transport codes the backend
 #: produces itself (contract 4.2).
 ERROR_CODES = frozenset((*contract.AGENT_TOOL_CALL_ERROR_CODES, "host_unavailable", "host_timeout"))
-#: Contract reasons a call or broker request is refused for; "undeclared" is
-#: the D3 "used but not declared" refusal.
-DENIED_REASONS = frozenset((
-    *contract.AGENT_TOOL_UNAVAILABLE_REASONS, *contract.AGENT_TOOL_CALL_ERROR_CODES, "undeclared",
-))
+#: Contract reasons a call or broker request is refused for.
+DENIED_REASONS = frozenset(contract.PLUGIN_ACTIVITY_DENIED_REASONS)
 
 _ADDRESS = re.compile(r"[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+")
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
 _SUBCOMMAND = re.compile(r"[a-z][a-z0-9-]*")
 _EXECUTABLE = re.compile(r"[A-Za-z0-9._+-]+")
 # A URI scheme, but not a Windows drive ("C:\\x", "C:/x").
-_URI_SCHEME = re.compile(r"(?![A-Za-z]:[\\/])[A-Za-z][A-Za-z0-9+.-]*:")
+# A URI: "scheme://...", or any "file:" spelling. Anything else with a colon
+# ("notes:1.md") is a file name; a Windows drive ("C:\\x", "C:/x") is not a scheme.
+_URI_SCHEME = re.compile(r"(?i)file:|(?![A-Za-z]:[\\/])[A-Za-z][A-Za-z0-9+.-]*://")
+_WINDOWS_PATH = re.compile(r"[A-Za-z]:[\\/]|\\\\")
 
 
 def _create_schema(cur: sqlite3.Cursor) -> None:
@@ -121,24 +118,28 @@ def _create_schema(cur: sqlite3.Cursor) -> None:
 
 
 def _arguments_digest(arguments: Any) -> tuple[str, int]:
-    """SHA-256 and byte size of the arguments' canonical spelling.
-
-    Arguments with a fraction cannot be spelled canonically (safe integers
-    only); they are digested in the same sorted, compact, ASCII spelling with
-    the numbers as JSON writes them. Anything that is not JSON raises.
-    """
-    try:
-        spelled = canonical_contract_json(arguments)
-    except CanonicalJsonError:
-        spelled = json.dumps(arguments, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-    data = spelled.encode("utf-8")
-    return hashlib.sha256(data).hexdigest(), len(data)
+    """``args_sha256`` and ``args_bytes``: the contract's
+    ``agent_tool_arguments_digest`` (section 5). Anything that is not JSON raises."""
+    return contract.agent_tool_arguments_digest(arguments)
 
 
 def _non_negative_int(value: Any) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"expected a non-negative integer, got {value!r}")
     return value
+
+
+#: ``result_bytes`` when the Host sent no valid ``meta.resultBytes``: the size
+#: is unknown. The column is NOT NULL, so this stands in for NULL. Never add it
+#: up: a reader that totals, averages or takes the largest size must leave
+#: these rows out (``CASE WHEN result_bytes >= 0``) and count them apart.
+UNKNOWN_SIZE = -1
+
+
+def _result_bytes(value: Any) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value == UNKNOWN_SIZE:
+        return UNKNOWN_SIZE
+    return _non_negative_int(value)
 
 
 def _path_flavor(workspace: str) -> Any:
@@ -171,6 +172,10 @@ def _relative_path(path: str, workspace: str) -> str:
     if path.startswith("~"):
         return OUTSIDE_WORKSPACE
     flavor = _path_flavor(workspace or path)
+    # A Windows spelling (drive or UNC) under a POSIX workspace: posixpath
+    # would read it as a relative name.
+    if flavor is posixpath and _WINDOWS_PATH.match(path):
+        return OUTSIDE_WORKSPACE
     # A missing or relative workspace, or a filesystem root ("/", "C:\\"),
     # contains nothing a relative spelling could be checked against.
     if not workspace or not flavor.isabs(workspace):
@@ -242,6 +247,10 @@ def _yield_the_lock() -> None:
     time.sleep(0)
 
 
+class _PruneStopped(Exception):
+    """A prune asked to stop between two batches (shutdown)."""
+
+
 def _report_disabled(reason: str) -> None:
     try:
         from .. import error_ledger
@@ -258,6 +267,9 @@ class PluginAuditLog:
         self.db = db
         self._clock = clock
         self._lock = threading.Lock()
+        # Set when the background task is cancelled: a prune running on its
+        # worker thread stops at the next batch boundary.
+        self._stopping = threading.Event()
         self._calls: list[tuple[Any, ...]] = []
         self._activity: list[tuple[Any, ...]] = []
         self._next_call_id: int | None = None
@@ -342,7 +354,7 @@ class PluginAuditLog:
                 caller_ws, target_ws, int(bool(caller_ws) and caller_ws != target_ws),
                 str(plugin_id), str(plugin_version), str(tool), risk,
                 args_sha256, args_bytes, outcome, "" if outcome == "ok" else (_code(error_code, ERROR_CODES) or OTHER),
-                _non_negative_int(duration_ms), _non_negative_int(result_bytes),
+                _non_negative_int(duration_ms), _result_bytes(result_bytes),
             )
             with self._lock:
                 call_id = self._allocate_call_id()
@@ -421,10 +433,15 @@ class PluginAuditLog:
 
     # ── retention ───────────────────────────────────────────────────────
 
+    def _between_batches(self) -> None:
+        _yield_the_lock()
+        if self._stopping.is_set():
+            raise _PruneStopped
+
     def _batch(self, sql: str, params: tuple[Any, ...]) -> int:
         with self.db.transaction() as cur:
             count = int(cur.execute(sql, params).rowcount or 0)
-        _yield_the_lock()
+        self._between_batches()
         return count
 
     def prune(self, now_ms: int | None = None) -> None:
@@ -435,6 +452,8 @@ class PluginAuditLog:
         self.flush()
         try:
             self._prune(now)
+        except _PruneStopped:
+            log.info("plugin audit: pruning stopped for shutdown; it resumes on the next start")
         except Exception as err:  # noqa: BLE001 - retention must not break anything
             log.warning("plugin audit: pruning failed: %s", err)
 
@@ -484,7 +503,7 @@ class PluginAuditLog:
                     ids,
                 )
                 cur.execute(f"DELETE FROM plugin_activity WHERE id IN ({marks})", ids)  # noqa: S608 - placeholders only
-            _yield_the_lock()
+            self._between_batches()
         day = time.strftime("%Y-%m-%d", time.gmtime(daily_cutoff / 1000))
         while self._batch(
             "DELETE FROM plugin_activity_daily WHERE rowid IN"
@@ -496,15 +515,24 @@ class PluginAuditLog:
     async def run(self) -> None:
         """Background loop: flush every second, prune hourly (first after a delay)."""
         next_prune = time.monotonic() + PRUNE_START_DELAY_S
+        pruning: asyncio.Future[None] | None = None
         try:
             while True:
                 await asyncio.sleep(FLUSH_INTERVAL_S)
                 await asyncio.to_thread(self.flush)
                 if time.monotonic() >= next_prune:
                     next_prune = time.monotonic() + PRUNE_INTERVAL_S
-                    await asyncio.to_thread(self.prune)
+                    pruning = asyncio.ensure_future(asyncio.to_thread(self.prune))
+                    # Shielded: a cancel must not abandon the worker thread
+                    # mid-prune; it is stopped and awaited below instead.
+                    await asyncio.shield(pruning)
+                    pruning = None
         finally:
-            # Shutdown (cancel) still writes what was queued.
+            # Shutdown (cancel): stop a running prune at its next batch and
+            # wait for it, then write what was queued.
+            self._stopping.set()
+            if pruning is not None:
+                await asyncio.gather(pruning, return_exceptions=True)
             await asyncio.to_thread(self.flush)
 
     # ── reads ───────────────────────────────────────────────────────────

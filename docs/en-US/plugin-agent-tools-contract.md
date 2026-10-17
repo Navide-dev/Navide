@@ -1105,7 +1105,10 @@ deleted, then all but the newest 10,000.
 agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
 `plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
 `address` (`namespace.method`), `outcome` (`allowed` | `denied` | `error`),
-`denied_reason`, `fs_path` (workspace-relative, no content), `shell_command`
+`denied_reason` (only for `denied`: a `PLUGIN_TOOL_UNAVAILABLE` reason, a
+call error code, or `undeclared` for a use the manifest did not declare;
+`PLUGIN_ACTIVITY_DENIED_REASONS`, anything else is `other`), `fs_path`
+(workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
 Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
 

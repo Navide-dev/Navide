@@ -354,6 +354,11 @@ AGENT_TOOL_UNAVAILABLE_REASONS = (
     "name-collision",
 )
 
+#: ``plugin_activity.denied_reason`` (section 5): why a call or broker request
+#: was refused. "undeclared" is the D3 refusal of a use the manifest did not
+#: declare. Anything else is stored as "other".
+PLUGIN_ACTIVITY_DENIED_REASONS = (*AGENT_TOOL_UNAVAILABLE_REASONS, *AGENT_TOOL_CALL_ERROR_CODES, "undeclared")
+
 
 class AgentToolCallMeta(TypedDict):
     durationMs: int
