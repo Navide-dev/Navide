@@ -418,6 +418,7 @@ class AgentToolChunksSummary(TypedDict):
 
 
 _LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+_ENCODE_SLICE = 1 << 18
 
 
 def agent_tool_payload_text(value: Any) -> str:
@@ -429,25 +430,36 @@ def agent_tool_payload_text(value: Any) -> str:
     so only the backend measures argument sizes (section 5).
     """
     text = json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
-    return _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text)
+    return text
 
 
 def split_agent_tool_payload_text(text: str, max_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> list[str]:
-    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point."""
+    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point.
+
+    Cut on the encoded bytes: each cut steps back off continuation bytes to
+    the start of its code point. A lone surrogate counts its 3 bytes
+    (``surrogatepass``) and comes back unchanged.
+    """
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 4:
         raise ValueError("max_bytes must be an integer >= 4")
+    # Encoded a slice at a time (a slice never splits a code point), so no
+    # single call holds the interpreter for the whole text.
+    data = b"".join(
+        text[at : at + _ENCODE_SLICE].encode("utf-8", "surrogatepass") for at in range(0, len(text), _ENCODE_SLICE)
+    )
     pieces: list[str] = []
     start = 0
-    size = 0
-    for index, char in enumerate(text):
-        point = ord(char)
-        width = 1 if point < 0x80 else 2 if point < 0x800 else 4 if point > 0xFFFF else 3
-        if size + width > max_bytes:
-            pieces.append(text[start:index])
-            start = index
-            size = 0
-        size += width
-    pieces.append(text[start:])
+    while len(data) - start > max_bytes:
+        end = start + max_bytes
+        while data[end] & 0xC0 == 0x80:
+            end -= 1
+        pieces.append(data[start:end].decode("utf-8", "surrogatepass"))
+        start = end
+    pieces.append(data[start:].decode("utf-8", "surrogatepass"))
     return pieces
 
 

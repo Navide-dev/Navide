@@ -202,3 +202,149 @@ async def test_pieces_and_progress_need_an_authenticated_host_and_a_pending_requ
     assert unknown["payload"] == {"ok": True, "accepted": False}
     malformed = await _send(session, contract.AGENT_CAPABILITY_PROGRESS_MESSAGE, {"request_id": "mcp:gone", "phase": "later"})
     assert malformed["error"]["code"] == "BAD_REQUEST"
+
+
+async def _worst_loop_lag_of(work: Any) -> tuple[Any, float]:
+    """``work``'s result and the longest the event loop went without a turn meanwhile."""
+    loop = asyncio.get_running_loop()
+    worst = 0.0
+    done = False
+
+    async def tick() -> None:
+        nonlocal worst
+        last = loop.time()
+        while not done:
+            await asyncio.sleep(0.001)
+            now = loop.time()
+            worst = max(worst, now - last - 0.001)
+            last = now
+
+    ticker = asyncio.create_task(tick())
+    await asyncio.sleep(0.01)
+    try:
+        result = await work
+    finally:
+        done = True
+        await ticker
+    return result, worst
+
+
+async def _worst_loop_lag(work: Any) -> float:
+    return (await _worst_loop_lag_of(work))[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "shape",
+    [
+        pytest.param(lambda: _big(10 * 1_048_576), id="one 10 MiB string"),
+        pytest.param(lambda: {"rows": [{"k": i, "v": "abcdefgh中"} for i in range(345_000)]}, id="10 MiB of small values"),
+    ],
+)
+async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pytest.MonkeyPatch, shape: Any) -> None:
+    arguments = shape()
+    received: list[str] = []
+    summaries: list[dict[str, Any]] = []
+
+    async def host(event: dict[str, Any]) -> bool:
+        if event["type"] == contract.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT:
+            received.append(event["payload"]["data"])
+            return True
+        summaries.append(event["payload"]["payload"]["argumentChunks"])
+        plan_mcp.resolve_agent_capability(event["payload"]["request_id"], {"ok": True, "result": True})
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", host)
+    # The idle lag of this machine right now, then the lag during the call:
+    # the call may add less than 50 ms to it.
+    idle = await _worst_loop_lag(asyncio.sleep(0.3))
+    response, worst = await _worst_loop_lag_of(request_host_agent_workspace_backend(
+        "acme.devmap", "/workspace", {"arguments": arguments}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
+    ))
+    assert response == {"ok": True, "result": True}
+    assert len(received) >= 80
+    assert worst - idle < 0.05, f"event loop stalled {worst * 1000:.0f} ms (idle {idle * 1000:.0f} ms)"
+    # Checked after the measurement: the pieces join to the arguments' spelling.
+    joined = contract.reassemble_agent_tool_payload_text(
+        [{"seq": seq, "data": data} for seq, data in enumerate(received)], summaries[0]
+    )
+    assert joined["ok"] and joined["text"] == contract.agent_tool_payload_text(arguments)
+
+
+def test_the_sliced_spelling_is_the_contract_spelling() -> None:
+    long = ('a"b\\c\n\u0001中😀' * 40_000)
+    for value in (
+        {"a": 1, "b": [1.5, -0.0, 1e300, None, True, False], "c": {"中": "😀"}},
+        {"text": long, "list": [long[:7], {"k": long}]},
+        ["x" * 200_000, 3],
+        "plain",
+        {},
+        {"rows": [{"k": i, "v": "ab中😀", "f": i / 3, "n": None, "t": True} for i in range(5_000)]},
+        {"outer": {f"key{i}": {"inner": list(range(i % 7)), "s": "q\"" * (i % 5)} for i in range(3_000)}},
+        ([1, (2, 3)], {1: "int key", "s": 2}),
+        {"deep": [[[[{"x": "y" * 30_000}]]]]},
+    ):
+        assert plan_mcp._spell_in_slices(value) == contract.agent_tool_payload_text(value)  # noqa: SLF001
+    assert plan_mcp._spell_in_slices({"s": "a\ud800" * 100_000}) is None  # noqa: SLF001
+    with pytest.raises(ValueError):
+        plan_mcp._spell_in_slices({"n": float("nan")})  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_a_call_cancelled_while_its_pieces_go_never_sends_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    events: list[str] = []
+    third_piece = asyncio.Event()
+
+    async def host(event: dict[str, Any]) -> bool:
+        events.append(event["type"])
+        if events.count(contract.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT) == 3:
+            third_piece.set()
+        await asyncio.sleep(0.001)
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", host)
+    call = asyncio.create_task(request_host_agent_workspace_backend(
+        "acme.devmap", "/workspace", {"arguments": _big(3 * 1_048_576)}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
+    ))
+    await third_piece.wait()
+    call.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await call
+    await asyncio.sleep(0.2)
+    # The plugin never runs a call its caller cancelled.
+    assert "agent.capability.request" not in events
+    assert 3 <= events.count(contract.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT) < 24
+    assert plan_mcp._agent_capability_pending.pending == {}
+    assert plan_mcp._agent_transfers == {}
+
+
+@pytest.mark.asyncio
+async def test_only_a_full_result_piece_restarts_the_wait(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = _host_session()
+    seen: list[float] = []
+
+    async def host(event: dict[str, Any]) -> bool:
+        request_id = event["payload"]["request_id"]
+
+        async def answer() -> None:
+            await _send(session, contract.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE, {
+                "request_id": request_id, "seq": 0, "data": "x" * contract.AGENT_TOOL_CHUNK_BYTES,
+            })
+            seen.append(plan_mcp._agent_transfers[request_id]["activity"])
+            await asyncio.sleep(0.05)
+            await _send(session, contract.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE, {"request_id": request_id, "seq": 1, "data": "y"})
+            seen.append(plan_mcp._agent_transfers[request_id]["activity"])
+            await _send(session, "agent.capability.result", {"request_id": request_id, "response": {
+                "ok": True, "resultChunks": {"chunks": 2, "bytes": contract.AGENT_TOOL_CHUNK_BYTES + 1},
+            }})
+
+        asyncio.get_running_loop().create_task(answer())
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", host)
+    response = await request_host_agent_workspace_backend(
+        "acme.devmap", "/workspace", {"arguments": {}}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
+    )
+    assert response["ok"] is False and response["reason"] == "json"  # "xxx…y" is not JSON; the pieces were joined
+    # The short last piece did not restart the wait (contract 4.4, Timing).
+    assert seen[1] == seen[0]

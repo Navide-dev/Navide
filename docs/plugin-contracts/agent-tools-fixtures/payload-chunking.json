@@ -86,6 +86,44 @@
         "😀y",
         "z"
       ]
+    },
+    {
+      "name": "a 2-byte code point that would cross the cut starts the next piece",
+      "text": "abcé",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "é"
+      ]
+    },
+    {
+      "name": "a 4-byte code point that would cross the cut starts the next piece",
+      "text": "abc😀d",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "😀",
+        "d"
+      ]
+    },
+    {
+      "name": "an ASCII run longer than a piece, then wide text",
+      "text": "abcdefgh中x",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh",
+        "中x"
+      ]
+    },
+    {
+      "name": "a lone surrogate counts 3 bytes and is kept as it is",
+      "text": "a\ud800bc",
+      "maxBytes": 4,
+      "expected": [
+        "a\ud800",
+        "bc"
+      ]
     }
   ],
   "reassembly": [

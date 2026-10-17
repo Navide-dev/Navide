@@ -4940,6 +4940,7 @@ _agent_transfers: dict[str, dict[str, Any]] = {}
 def _agent_transfer_start(request_id: str) -> None:
     _agent_transfers[request_id] = {
         "pieces": [],
+        "bytes": 0,
         "short": False,
         "activity": asyncio.get_running_loop().time(),
     }
@@ -4963,6 +4964,7 @@ def accept_agent_result_piece(request_id: str, seq: Any, data: Any) -> bool:
     from agent_team_backend.plugins.agent_tools_contract import (
         AGENT_TOOL_CHUNKS_INVALID,
         agent_tool_chunk_arrival,
+        utf8_byte_length,
     )
 
     transfer = _agent_transfers.get(request_id)
@@ -4978,43 +4980,67 @@ def accept_agent_result_piece(request_id: str, seq: Any, data: Any) -> bool:
         })
         return False
     transfer["pieces"].append(data)
+    transfer["bytes"] += utf8_byte_length(data)
     transfer["short"] = arrival["short"]
-    transfer["activity"] = asyncio.get_running_loop().time()
+    # Only a full piece restarts the wait (contract 4.4, Timing), as on the Host.
+    if not arrival["short"]:
+        transfer["activity"] = asyncio.get_running_loop().time()
     return True
+
+
+#: Where a result joined from pieces waits to be parsed by the call it answers.
+_JOINED_RESULT = "_joined_result_text"
+
+
+def _chunks_invalid(reason: str) -> dict[str, Any]:
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNKS_INVALID
+
+    return {
+        "ok": False,
+        "error": "The Navide plugin result did not arrive whole.",
+        "error_code": AGENT_TOOL_CHUNKS_INVALID,
+        "reason": reason,
+    }
 
 
 def resolve_agent_capability(request_id: str, result: dict[str, Any]) -> bool:
     """Resolve one Host-brokered agent operation.
 
-    A result sent in pieces (``resultChunks`` in place of ``result``) is joined
-    here and delivered as if it had arrived whole.
+    A result sent in pieces (``resultChunks`` in place of ``result``) is
+    checked against what arrived and joined here; the call it answers parses
+    it off the event loop (:func:`_parse_off_loop`), so a large result never
+    stalls the backend. Each piece's order and size was checked as it came.
     """
     if isinstance(result, dict) and "resultChunks" in result and "result" not in result:
-        from agent_team_backend.plugins.agent_tools_contract import (
-            AGENT_TOOL_CHUNKS_INVALID,
-            reassemble_agent_tool_payload_text,
-        )
+        transfer = _agent_transfers.get(request_id) or {"pieces": [], "bytes": 0}
+        summary = result["resultChunks"]
 
-        transfer = _agent_transfers.get(request_id) or {"pieces": []}
-        joined = reassemble_agent_tool_payload_text(
-            [{"seq": seq, "data": data} for seq, data in enumerate(transfer["pieces"])], result["resultChunks"]
-        )
-        reason = joined.get("reason", "json")
-        if joined["ok"]:
-            try:
-                value = json.loads(joined["text"])
-                result = {key: item for key, item in result.items() if key != "resultChunks"} | {"result": value}
-                reason = None
-            except ValueError:
-                reason = "json"
-        if reason is not None:
-            result = {
-                "ok": False,
-                "error": "The Navide plugin result did not arrive whole.",
-                "error_code": AGENT_TOOL_CHUNKS_INVALID,
-                "reason": reason,
+        def count(value: Any, least: int) -> int | None:
+            ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) and value >= least
+            return int(value) if ok else None
+
+        chunks = count(summary.get("chunks"), 1) if isinstance(summary, dict) else None
+        size = count(summary.get("bytes"), 0) if isinstance(summary, dict) else None
+        if chunks is None or size is None:
+            result = _chunks_invalid("summary")
+        elif chunks != len(transfer["pieces"]):
+            result = _chunks_invalid("count")
+        elif size != transfer["bytes"]:
+            result = _chunks_invalid("bytes")
+        else:
+            result = {key: item for key, item in result.items() if key != "resultChunks"} | {
+                _JOINED_RESULT: "".join(transfer["pieces"]),
             }
     return _agent_capability_pending.resolve(request_id, result)
+
+
+def _parse_off_loop(text: str) -> Any:
+    """``json.loads(text)`` with the pure-Python scanner: run in a worker
+    thread, it lets the event loop keep its turns while 10 MiB is parsed."""
+    decoder = json.JSONDecoder()
+    decoder.parse_string = json.decoder.py_scanstring
+    decoder.scan_once = json.scanner.py_make_scanner(decoder)
+    return decoder.decode(text)
 
 
 async def _wait_for_host_answer(request_id: str, future: "asyncio.Future[dict[str, Any]]", window: float) -> Any:
@@ -5154,10 +5180,16 @@ async def request_host_agent_workspace_backend(
     future = _agent_capability_pending.register(request_id)
     _agent_transfer_start(request_id)
     try:
-        chunked = _agent_tool_argument_pieces(request) if agent_tool is not None else None
+        chunked = None
+        if agent_tool is not None and _may_need_pieces(request):
+            # Spelled and cut off the event loop (pure-Python encoder, so the
+            # loop keeps its turns): a 10 MiB argument never stalls the backend.
+            chunked = await asyncio.to_thread(_agent_tool_argument_pieces, request)
         if chunked is not None:
-            # Shielded: a cancelled MCP call never leaves the Host half a request.
-            sent = await asyncio.shield(_send_agent_tool_pieces(app, make_event, request, *chunked))
+            # Not shielded: a call cancelled while its pieces go stops before
+            # the request is sent, so the plugin never runs a cancelled call.
+            # The Host drops the pieces it holds after its idle window.
+            sent = await _send_agent_tool_pieces(app, make_event, request, *chunked)
         else:
             sent = await app.unicast_host(make_event("agent.capability.request", request))
         if not sent:
@@ -5171,6 +5203,12 @@ async def request_host_agent_workspace_backend(
 
             window = max(_host_answer_timeout_s(wait_payload) - _HOST_ANSWER_GRACE_S, AGENT_TOOL_CHUNK_IDLE_MS / 1000)
             result = await _wait_for_host_answer(request_id, future, window + _HOST_ANSWER_GRACE_S)
+            if isinstance(result, dict) and _JOINED_RESULT in result:
+                text = result.pop(_JOINED_RESULT)
+                try:
+                    result["result"] = await asyncio.to_thread(_parse_off_loop, text)
+                except (ValueError, RecursionError):
+                    result = _chunks_invalid("json")
         else:
             result = await _agent_capability_pending.wait(
                 request_id,
@@ -5189,11 +5227,24 @@ async def request_host_agent_workspace_backend(
         _agent_transfers.pop(request_id, None)
 
 
+def _may_need_pieces(request: dict[str, Any]) -> bool:
+    """Whether an agent tool request's arguments might be longer than one piece:
+    a quick estimate that never calls a request small that is not (each
+    character counts as its longest escape). One it calls large is measured
+    exactly by :func:`_agent_tool_argument_pieces`."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
+
+    payload = request.get("payload")
+    if not isinstance(payload, dict) or set(payload) != {"arguments"}:
+        return False
+    return _spells_over(payload["arguments"], AGENT_TOOL_CHUNK_BYTES)
+
+
 def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int] | None:
     """The pieces and byte size of an agent tool request's arguments when they
-    are longer than one piece (contract 4.4, A2), else None: sent inline."""
+    are longer than one piece (contract 4.4, A2), else None: sent inline.
+    Runs in a worker thread."""
     from agent_team_backend.plugins.agent_tools_contract import (
-        AGENT_TOOL_CHUNK_BYTES,
         agent_tool_payload_text,
         split_agent_tool_payload_text,
         utf8_byte_length,
@@ -5202,11 +5253,116 @@ def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int
     payload = request.get("payload")
     if not isinstance(payload, dict) or set(payload) != {"arguments"}:
         return None
-    text = agent_tool_payload_text(payload["arguments"])
-    size = utf8_byte_length(text)
-    if size <= AGENT_TOOL_CHUNK_BYTES:
+    text = _spell_in_slices(payload["arguments"])
+    if text is None:  # a lone surrogate: the contract spelling escapes it
+        text = agent_tool_payload_text(payload["arguments"])
+    pieces = split_agent_tool_payload_text(text)
+    if len(pieces) == 1:
         return None
-    return split_agent_tool_payload_text(text), size
+    return pieces, sum(utf8_byte_length(piece) for piece in pieces)
+
+
+#: Characters escaped or encoded per call when spelling arguments off the loop.
+_SPELL_SLICE = 1 << 16
+
+
+def _escape_in_slices(text: str) -> str:
+    """``json``'s string escape, a slice at a time for a long string: the
+    escape is per character, so the joined slices are the same text."""
+    if len(text) <= _SPELL_SLICE:
+        return json.encoder.encode_basestring(text)
+    return '"' + "".join(
+        json.encoder.encode_basestring(text[at : at + _SPELL_SLICE])[1:-1] for at in range(0, len(text), _SPELL_SLICE)
+    ) + '"'
+
+
+#: A subtree whose spelling stays under this many bytes is spelled in one C call.
+_SPELL_SUBTREE_BYTES = 1 << 14
+_spell_small = json.JSONEncoder(separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode
+
+
+def _spells_over(value: Any, limit: int) -> bool:
+    """Whether ``value``'s spelling may pass ``limit`` bytes: a walk that stops
+    as soon as its estimate does (6 bytes a character, the longest escape)."""
+    estimate = 0
+    stack: list[Any] = [value]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, str):
+            estimate += 6 * len(item) + 2
+        elif isinstance(item, dict):
+            estimate += 2
+            for key, child in item.items():
+                estimate += 6 * len(str(key)) + 4
+                stack.append(child)
+                if estimate > limit:
+                    return True
+        elif isinstance(item, (list, tuple)):
+            estimate += 2 + len(item)
+            stack.extend(item)
+        else:
+            estimate += len(repr(item)) + 1
+        if estimate > limit:
+            return True
+    return False
+
+
+class _Spelling:
+    """Parts of a spelling, joined in batches: one join of millions of parts
+    would hold the interpreter as long as one large C call."""
+
+    def __init__(self) -> None:
+        self.joined: list[str] = []
+        self.batch: list[str] = []
+
+    def add(self, part: str) -> None:
+        self.batch.append(part)
+        if len(self.batch) == 4096:
+            self.joined.append("".join(self.batch))
+            self.batch = []
+            time.sleep(0)  # let the event loop's thread take the interpreter
+
+    def text(self) -> str:
+        self.joined.append("".join(self.batch))
+        return "".join(self.joined)
+
+
+def _spell_parts(value: Any, out: _Spelling) -> None:
+    """``value``'s compact spelling, as json.dumps writes it: small subtrees in
+    one C call each, large containers item by item, long strings in slices."""
+    if isinstance(value, str):
+        out.add(_escape_in_slices(value))
+    elif isinstance(value, dict) and all(isinstance(key, str) for key in value) and _spells_over(value, _SPELL_SUBTREE_BYTES):
+        out.add("{")
+        for index, (key, item) in enumerate(value.items()):
+            out.add(f"{',' if index else ''}{_escape_in_slices(key)}:")
+            _spell_parts(item, out)
+        out.add("}")
+    elif isinstance(value, (list, tuple)) and _spells_over(value, _SPELL_SUBTREE_BYTES):
+        out.add("[")
+        for index, item in enumerate(value):
+            if index:
+                out.add(",")
+            _spell_parts(item, out)
+        out.add("]")
+    else:
+        out.add(_spell_small(value))
+
+
+def _spell_in_slices(value: Any) -> str | None:
+    """``agent_tool_payload_text(value)`` spelled so that no single call holds
+    the interpreter for long: the event loop keeps its turns while a worker
+    thread spells 10 MiB. None when the text holds a lone surrogate (the
+    contract spelling escapes it)."""
+    out = _Spelling()
+    _spell_parts(value, out)
+    text = out.text()
+    try:
+        for at in range(0, len(text), 4 * _SPELL_SLICE):
+            text[at : at + 4 * _SPELL_SLICE].encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    return text
 
 
 async def _send_agent_tool_pieces(

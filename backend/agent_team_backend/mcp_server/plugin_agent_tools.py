@@ -61,6 +61,7 @@ from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_CALL_ERROR_CODES,
+    AGENT_TOOL_CHUNK_BYTES,
     AGENT_TOOL_TIMEOUT_REASONS,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
@@ -849,9 +850,17 @@ async def _answer(
         audit["error_code"] = ""
         # -1 = the Host sent no valid size (contract 2.7, 5).
         audit["result_bytes"] = -1 if size is None else size
-        # Size is disclosed, not limited (DB9 ruling a).
+        # Size is disclosed, not limited (DB9 ruling a). A result longer than
+        # one piece (or of unknown size) is spelled and neutralized in a worker
+        # thread: that walks every character, and the event loop must keep
+        # serving other panes meanwhile. The plugin already ran, so the audit
+        # row above stays "ok" whatever happens to this call now.
+        if size is None or size > AGENT_TOOL_CHUNK_BYTES:
+            text = await asyncio.to_thread(wrap_result, entry, result)
+        else:
+            text = wrap_result(entry, result)
         return CallToolResult(
-            content=[TextContent(type="text", text=wrap_result(entry, result))],
+            content=[TextContent(type="text", text=text)],
             isError=False,
             _meta=None if size is None else {"resultBytes": size},
         )

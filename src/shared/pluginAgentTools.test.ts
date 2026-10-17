@@ -201,6 +201,45 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     expect(pieces.every((p) => utf8ByteLength(p) <= maxBytes)).toBe(true)
   })
 
+  it('cuts piece for piece as the code point loop it replaced does', () => {
+    // The original loop, kept as the reference.
+    const byCodePoint = (text: string, maxBytes: number): string[] => {
+      const pieces: string[] = []
+      let start = 0
+      let bytes = 0
+      for (let i = 0; i < text.length; ) {
+        const point = text.codePointAt(i) as number
+        const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point > 0xffff ? 4 : 3
+        if (bytes + size > maxBytes) {
+          pieces.push(text.slice(start, i))
+          start = i
+          bytes = 0
+        }
+        bytes += size
+        i += point > 0xffff ? 2 : 1
+      }
+      pieces.push(text.slice(start))
+      return pieces
+    }
+    const alphabet = ['a', '{', 'é', '\u07ff', '\u0800', '中', '\uffff', '😀', '\u{10000}', '\ud800', '\udfff']
+    let seed = 7
+    const next = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      return seed % n
+    }
+    for (let round = 0; round < 2000; round++) {
+      let text = ''
+      for (let length = next(60); length > 0; length--) text += alphabet[next(alphabet.length)]
+      for (const maxBytes of [4, 5, 6, 7, 8, 13, 64]) {
+        expect(splitAgentToolPayloadText(text, maxBytes)).toEqual(byCodePoint(text, maxBytes))
+      }
+    }
+    for (const unit of ['x', '中', 'x中😀é']) {
+      const text = unit.repeat(Math.floor(300_000 / unit.length))
+      expect(splitAgentToolPayloadText(text)).toEqual(byCodePoint(text, AGENT_TOOL_CHUNK_BYTES))
+    }
+  })
+
   it('refuses a piece size that cannot hold every code point', () => {
     expect(() => splitAgentToolPayloadText('abc', 3)).toThrow(RangeError)
   })

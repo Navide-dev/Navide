@@ -934,7 +934,7 @@ async def test_a_cancelled_call_is_audited(tmp_path, monkeypatch) -> None:
     with pytest.raises(asyncio.CancelledError):
         await task
     [row] = await _rows(log)
-    assert row["outcome"] == "error"
+    assert (row["outcome"], row["error_code"]) == ("error", "cancelled")
 
 
 async def test_an_audit_write_failure_never_changes_the_call(host: FakeHost, monkeypatch) -> None:
