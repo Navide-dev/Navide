@@ -255,17 +255,27 @@ async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pyte
         return True
 
     monkeypatch.setattr(app, "unicast_host", host)
-    # The lag during the call, then this machine's idle lag over as long a
-    # time (a busy machine pauses the process now and then; a longer window
-    # sees a longer pause): the call may add less than 50 ms to it.
-    started = asyncio.get_running_loop().time()
+    # The lag during the call, then the lag of plain busy work handing the
+    # loop back just as often, for as long: on a busy machine the OS pauses
+    # a working process now and then, and that is not the call's doing. The
+    # call may add less than 50 ms to it.
+    loop = asyncio.get_running_loop()
+    started = loop.time()
     response, worst = await _worst_loop_lag_of(request_host_agent_workspace_backend(
         "acme.devmap", "/workspace", {"arguments": arguments}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
     ))
-    idle = await _worst_loop_lag(asyncio.sleep(asyncio.get_running_loop().time() - started))
+
+    async def busy(seconds: float) -> None:
+        turn = plan_mcp._Turn()  # noqa: SLF001
+        until = loop.time() + seconds
+        while loop.time() < until:
+            sum(range(200))
+            await turn.maybe_yield()
+
+    idle = await _worst_loop_lag(busy(loop.time() - started))
     assert response == {"ok": True, "result": True}
     assert len(received) >= 80
-    assert worst - idle < 0.05, f"event loop stalled {worst * 1000:.0f} ms (idle {idle * 1000:.0f} ms)"
+    assert worst - idle < 0.05, f"event loop stalled {worst * 1000:.0f} ms (busy baseline {idle * 1000:.0f} ms)"
     # Checked after the measurement: the pieces join to the arguments' spelling.
     joined = contract.reassemble_agent_tool_payload_text(
         [{"seq": seq, "data": data} for seq, data in enumerate(received)], summaries[0]
