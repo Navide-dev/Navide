@@ -2523,6 +2523,14 @@ export function registerPluginIpc(
     return inspectNativeBackendData(root, id)
   })
 
+  // The installed (active) version's disclosure, for the agent request card's
+  // permission diff (B2): from the installed manifest, never Registry data.
+  // Null when nothing is installed or the package is Manifest v1.
+  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
+  })
+
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
   // the Marketplace switch below; the package stays loaded and the Host stops
   // offering, mounting and serving it (FrontendPluginManager.isBuiltinPluginDisabled).

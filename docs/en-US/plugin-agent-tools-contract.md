@@ -1273,7 +1273,7 @@ starts as usual.
 | `id` | INTEGER PK | autoincrement |
 | `at` | INTEGER | when |
 | `plugin_id`, `plugin_version` | TEXT | `plugin_version` `''` when not known |
-| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` |
+| `action` | TEXT | `disable` / `enable` / `request-install` / `request-update` / `request-rollback` / `request-remove` / `decide-approve` / `decide-reject` / `finish-completed` / `finish-failed` / `finish-late-completed` / `finish-late-failed` |
 | `caller_kind` | TEXT | `pane` / `external` / `host`, or `user` (a person in a Navide window: decide, finish) |
 | `caller_pane_id`, `caller_pane_name`, `caller_workspace` | TEXT | `''` when not a pane |
 | `approval_id` | TEXT | the request's id, `''` when none |
@@ -1401,8 +1401,13 @@ EXISTS`), kept 90 days like the daily rows, and removes a plugin's rows with
 
 Backend side (`PLUGIN_RESOURCE_DECISION_MESSAGE`, `PLUGIN_RESOURCE_ITEMS`,
 `PLUGIN_RESOURCE_DECISIONS` in `agent_tools_contract.py`): a row is accepted
-only with exactly these seven fields and types (`parsePluginResourceDecisionRow`'s
-rules; any other field, such as a path, refuses the row). Accepted rows are
+only with exactly these seven fields and types; any other field, such as a
+path, refuses the whole row. The Host's `parsePluginResourceDecisionRow`
+checks the same seven fields and types but drops an extra field instead of
+refusing the row, so a row the Host built never carries one. Known gaps:
+`plugin_id` and `plugin_version` get no format check beyond being strings
+(non-empty for the id), and an internal `ValueError` message can carry the
+refused value; it reaches only the backend log. Accepted rows are
 queued and written by the audit's batched flush, in a transaction of their own
 so a failure there never drops the activity rows. A skipped row is counted in
 the log, never with its content. Columns: `id`, `at`, `plugin_id`,
@@ -1495,16 +1500,36 @@ B2-c tools and messages:
   connection a main window settles every other `applying` request against the
   installed packages: remove and the package is gone, or update / rollback /
   install and the installed version equals `target.version` → `completed`;
-  anything else → `failed` with error `interrupted`.
+  anything else → `failed` with error `interrupted`. A main window also does
+  this when the backend sends `plugins.agent_requests.recover`
+  (`PLUGIN_APPROVAL_RECOVER_EVENT`, `{approval_ids}`), which it sends to the
+  main windows still open when a main window that was carrying out approved
+  requests goes away, so they do not wait for another window to open. Either
+  way, a request is settled only if it is still unclaimed when the window
+  looks again after a grace (`RECOVERY_GRACE_MS`, a time window, not a
+  limit) taken from the WebSocket reconnect backoff (`reconnectDelayMs` in
+  `src/shared/wsClient.ts`): the first three reconnect waits (1.5 + 3 + 6 s)
+  plus one base wait for the handshake, 12 s. A window that was only
+  reconnecting claims its request back within that time.
 - A rollback restores the version Extensions keeps for rollback: the window
-  rolls back only when that is `target.version`, else it finishes `failed`
-  with the reason (it never installs a version the user did not approve).
+  asks the same confirmation as the Extensions pane first (cancelled →
+  `failed`, `not-applied`), and rolls back only when that is `target.version`,
+  else it finishes `failed` with the reason (it never installs a version the
+  user did not approve).
 - `plugins.agent_request.finish` `{approval_id, status: completed | failed,
   error, confirmation}` (window): the confirmation is minted for the action
   `plugins.agent_request.finish` (in `TRUST_CONFIRM_ACTIONS`) with subject
   `<approval_id>:<status>`, so a confirmation to report failure cannot report
   success; only `applying` moves. The result is broadcast as
   `plugins.agent_request_resolved` `{approval_id, status, error}`.
+  One exception, so the record matches what happened: when another window
+  settled the request (recovery) and the window that was carrying it out
+  reports afterwards, that window's result is taken, once. The record then
+  carries `finished_late: true` and `settled` `{status, error}` (what recovery
+  had said); the resolved event carries both too, the audit row is
+  `finish-late-completed` / `finish-late-failed`, and the window's card says
+  the result came late. Any other window is still refused
+  (`PLUGIN_APPROVAL_NOT_APPLYING`).
 
 ## 7. Changing this contract
 

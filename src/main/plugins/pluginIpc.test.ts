@@ -1674,6 +1674,28 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     }
   })
 
+  it('B2: plugins:installedDisclosure answers the active version\'s disclosure, null when there is none', async () => {
+    const first = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-installed-disclosure-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const installedDisclosure = handlers.get('plugins:installedDisclosure')!
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toBeNull()  // not installed
+      installFetch(signedDetail(first.digest, 'acme.demo', 'acme', '1.0.0'), first.bytes, first.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      expect(await installedDisclosure(null, { id: 'acme.demo' })).toEqual(computeDisclosure({
+        schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: { shell: 'allowlist' },
+      } as never))
+      await expect(installedDisclosure(null, { id: '../acme.demo' })).rejects.toThrow(/invalid plugin id/)
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('D-d: an update that adds a permission still asks, and reports only what changed', async () => {
     const first = buildPkg('acme.demo', 'acme', {}, '1.0.0')
     const second = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.1')

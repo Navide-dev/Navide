@@ -9207,6 +9207,41 @@
     "signin-hint": "這會開一個 pane 幫你跑登入。多數 CLI 接著會開啟瀏覽器，在那裡完成後回來即可。",
     "dont-ask": "不要再詢問 {label}"
   },
+  "plugin-request": {
+    "kicker": "Navide 外掛請求",
+    "title": {
+      "install": "要安裝 Navide 外掛 {plugin} {version} 嗎？",
+      "update": "要把 Navide 外掛 {plugin} 從 {from} 更新到 {version} 嗎？",
+      "rollback": "要把 Navide 外掛 {plugin} 從 {from} 回退到 {version} 嗎？",
+      "remove": "要移除 Navide 外掛 {plugin} 嗎？",
+      "enable": "要重新啟用 Navide 外掛 {plugin} 嗎？"
+    },
+    "desc": "有 agent 要求這項變更。你在這裡核准之前，什麼都不會改變；agent 無法代你核准。",
+    "queue": "{count} 筆待處理",
+    "requester": "請求者",
+    "workspace": "工作區",
+    "expires": "到期時間",
+    "caller-unknown": "不明的呼叫端",
+    "disabled-by": "停用者",
+    "disabled-by-user": "你",
+    "disabled-at": "停用時間",
+    "not-recorded": "未記錄",
+    "reason": "理由（由 agent 撰寫）",
+    "diff": "和已安裝版本相比的變化",
+    "card": "這個版本宣告的內容（來自 Navide Marketplace，尚未驗證）",
+    "no-card": "Navide Marketplace 沒有這個版本的揭露資料。套件本身會在下載時、安裝任何東西之前驗證。",
+    "expired": "這個請求已經過期。",
+    "approve": "核准",
+    "reject": "拒絕",
+    "applying": "套用中…",
+    "dismiss": "關閉",
+    "completed": "已完成：{plugin}",
+    "completed-late": "{plugin}：已完成。這個視窗重新連線期間，另一個視窗已把這筆請求標成中斷；紀錄已改成實際結果。",
+    "finished-late": "這個視窗重新連線期間，另一個視窗已把這筆請求標成中斷；紀錄已改成這裡的結果。",
+    "failed": "沒有完成：{error}",
+    "not-appliable": "這個版本的 Navide 還不能執行這種請求；你可以拒絕它。",
+    "unavailable": "這個視窗無法執行 Navide 外掛的操作。"
+  },
   "skill-approval": {
     "kicker": "技能安裝請求",
     "title": "安裝技能「{name}」？",
@@ -10332,7 +10367,7 @@
     "unavailable": "目前的後端還沒有 Navide Guard，更新後請重新啟動 Navide。",
     "enabled": {
       "title": "Navide Guard",
-      "desc": "依動作的危險程度與要求來源判斷每個 CLI 動作，危險的先擋下或要求確認。判斷是固定規則的程式碼，不經過 AI。即使關閉，從聊天頻道核准高風險動作仍會被拒絕。"
+      "desc": "依動作的危險程度與要求來源判斷每個 CLI 動作，危險的先擋下或要求確認。判斷是固定規則的程式碼，不經過 AI。即使關閉，從聊天頻道核准高風險動作仍會被拒絕。終端機指令防護，以及 agent 透過 MCP 回答提示時的檢查，也不受這個開關影響。"
     },
     "counts": {
       "critical": "嚴重 {n}",
@@ -10526,6 +10561,7 @@
       "text-missing": "訊息紀錄裡已沒有這段內文",
       "text-none": "沒有記錄到訊息內文",
       "explain": "它的「高」與「嚴重」動作需要你在這台電腦上確認。確認過它收到的內容後再清除標記。",
+      "explain-off": "Navide Guard 已關閉：目前不會要求確認。標記會保留，重新開啟 Guard 後再次生效。",
       "clear": "清除",
       "no-hook-warning": "這個 CLI 無法被 Guard 阻擋，從聊天室下指令請謹慎"
     },

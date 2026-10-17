@@ -820,7 +820,7 @@ def test_totals_and_lists_cover_the_7_day_window_and_daily_every_day_kept(audit:
         {"day": "2026-10-14", "calls": 3, "denied": 0, "errors": 0},
         {"day": "2026-10-15", "calls": 3, "denied": 1, "errors": 1},
     ]
-    assert report["agentActions"] is None and report["schemaVersion"] == 1
+    assert report["agentActions"] == [] and report["schemaVersion"] == 1  # no agent acted on it
 
 
 def test_tool_calls_come_newest_first_with_unknown_sizes_as_stored(audit: PluginAuditLog, clock: Clock) -> None:
@@ -958,6 +958,12 @@ def _seeded_report(tmp_path: Path) -> dict[str, Any]:
     _act(audit, NOW - 2 * DAY_MS, fs_path="docs/devmap.md")
     _act(audit, NOW - 2 * DAY_MS, "shell.run", source="shell", shell_command="git status")
     _act(audit, NOW - DAY_MS, "net.fetch", outcome="denied", denied_reason="undeclared")
+    clock.now_ms = NOW - DAY_MS
+    audit.record_agent_action(
+        plugin_id=_PLUGIN, plugin_version="0.2.0", action="disable", caller_kind="pane", outcome="allowed",
+        pane_id="p-41", pane_name="dev", caller_workspace="/Users/me/project",
+    )
+    clock.now_ms = NOW
     audit.flush()
     return audit.activity_report(_PLUGIN, declared=[{"kind": "system", "key": "ui"}], now_ms=NOW)
 
@@ -968,9 +974,8 @@ def test_the_report_has_the_contract_fixtures_shape(tmp_path: Path) -> None:
     valid = json.loads((_REPORT_FIXTURES / "activity-report.json").read_text(encoding="utf-8"))["valid"]
     report = _seeded_report(tmp_path)
     assert all(isinstance(report[key], list) and report[key] for key in (
-        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies",
+        "toolCalls", "files", "commands", "daily", "declaredUnused", "undeclared", "anomalies", "agentActions",
     )), "the seed fills every list"
-    assert report["agentActions"] is None  # until B2-c
     assert _conforms(report, valid)
     # The check does refuse a wrong shape.
     assert not _conforms({**report, "extra": 1}, valid)
@@ -1095,6 +1100,30 @@ def test_a_zero_ms_call_counts_toward_the_peak(
         _timed_call(audit, clock, base + end, duration)
     clock.now_ms = NOW
     assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == peak
+
+
+# ── B2: agentActions from plugin_agent_actions ──────────────────────────────
+
+
+def test_agent_actions_list_what_agents_did_newest_first_without_user_decisions(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 40 * DAY_MS
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="disable", caller_kind="pane", outcome="allowed")
+    clock.now_ms = NOW - 2 * DAY_MS
+    assert audit.record_agent_action(
+        plugin_id=_PLUGIN, plugin_version="0.2.0", action="request-update", caller_kind="pane", outcome="allowed",
+        pane_id="p-41", pane_name="dev", caller_workspace="/Users/me/project",
+    )
+    clock.now_ms = NOW - DAY_MS
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="decide-approve", caller_kind="user", outcome="allowed")
+    assert audit.record_agent_action(plugin_id=_PLUGIN, action="enable", caller_kind="external", outcome="allowed")
+    assert audit.record_agent_action(plugin_id="other.plugin", action="enable", caller_kind="host", outcome="allowed")
+    audit.flush()
+    assert audit.activity_report(_PLUGIN, now_ms=NOW)["agentActions"] == [
+        {"at": NOW - DAY_MS, "action": "enable", "callerKind": "external", "paneId": "", "paneName": "",
+         "workspace": "", "version": ""},
+        {"at": NOW - 2 * DAY_MS, "action": "request-update", "callerKind": "pane", "paneId": "p-41",
+         "paneName": "dev", "workspace": "/Users/me/project", "version": "0.2.0"},
+    ]
 
 
 # ── #368 follow-up L4: first write of a tool in a workspace (plugin_tool_first_seen) ──

@@ -649,6 +649,8 @@ export const PLUGIN_APPROVAL_LIST_MESSAGE = 'plugins.agent_requests.list'
 export const PLUGIN_APPROVAL_REQUEST_EVENT = 'plugins.agent_request'
 /** Backend -> windows: a plugin request was decided, finished or expired. */
 export const PLUGIN_APPROVAL_RESOLVED_EVENT = 'plugins.agent_request_resolved'
+/** Backend -> main windows: a main window went away while carrying out these approved requests; settle them. `{approval_ids}`. */
+export const PLUGIN_APPROVAL_RECOVER_EVENT = 'plugins.agent_requests.recover'
 
 // ── backend -> Host: plugins.agent_action (B2-c disable / enable) ───────────
 

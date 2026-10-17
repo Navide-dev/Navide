@@ -219,10 +219,11 @@ async def respond(
 
 def _announce_failure(pane_id: str, reason: str) -> None:
     """Tell the window a call went through undecided; never raises (the guard
-    itself may be what is broken)."""
+    itself may be what is broken). Not while the Guard switch is off."""
     try:
-        from .guard.engine import _emit_failure
+        from .guard.engine import _emit_failure, switched_off
 
-        _emit_failure(pane_id, reason)
+        if not switched_off():
+            _emit_failure(pane_id, reason)
     except Exception:  # noqa: BLE001
         log.warning("guard: could not announce a fail-open", exc_info=True)
