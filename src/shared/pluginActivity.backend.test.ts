@@ -14,10 +14,9 @@ describe('the backend activity report (contract 5.1)', () => {
     expect(parsePluginActivityReport(backendReport)).toEqual(backendReport)
   })
 
-  it('fills every list the page shows, and leaves agentActions null until B2-c', () => {
-    for (const key of ['toolCalls', 'files', 'commands', 'daily', 'declaredUnused', 'undeclared', 'anomalies']) {
+  it('fills every list the page shows, agentActions included (B2)', () => {
+    for (const key of ['toolCalls', 'files', 'commands', 'daily', 'declaredUnused', 'undeclared', 'anomalies', 'agentActions']) {
       expect((backendReport[key] as unknown[]).length, key).toBeGreaterThan(0)
     }
-    expect(backendReport.agentActions).toBeNull()
   })
 })
