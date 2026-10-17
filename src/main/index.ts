@@ -1857,6 +1857,7 @@ const pluginTrustRefresh = registerPluginIpc(
       if (!disabled) builtinRemovedEarlier.remove(pluginId)
       builtinSwitchReconciler.sync()
     },
+    holdBuiltinSwitch: (task) => builtinSwitchReconciler.hold(task),
   }
 )
 /** The Host side of a built-in's Disabled switch: drain and close it, or bring

@@ -5238,10 +5238,36 @@ describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
         .rejects.toThrow(/unreadable/)
       expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
 
-      expect(handlers.get('plugins:resetDisabledStore')!(null)).toEqual({ status: 'ok' })
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
       expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
       expect(reset).toHaveBeenCalledTimes(1)
       expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('runs the built-in switch and the reset inside the Host hold, so a store check cannot interleave', async () => {
+    const { root, manager } = setup('navide-builtin-hold-')
+    const events: string[] = []
+    const hold = async <T>(task: () => Promise<T>): Promise<T> => {
+      events.push('hold')
+      try { return await task() } finally { events.push('release') }
+    }
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { events.push(`switch ${id} ${disabled}`) },
+      onBuiltinSwitchReset: () => { events.push('reset') },
+      holdBuiltinSwitch: hold,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.plans', disabled: true })
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
+      expect(events).toEqual(['hold', 'switch navide.plans true', 'release', 'hold', 'reset', 'release'])
     } finally {
       warn.mockRestore()
       rmSync(root, { recursive: true, force: true })

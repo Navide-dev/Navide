@@ -43,4 +43,25 @@ describe('PluginFactoryOptOutStore', () => {
       rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('warns once when the store becomes unreadable and once when it reads again', () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-factory-opt-outs-'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const file = join(root, '.navide-factory-plugin-opt-outs.json')
+      writeFileSync(file, '{not-json', { mode: 0o600 })
+      const store = new PluginFactoryOptOutStore(root)
+      for (let i = 0; i < 3; i += 1) store.has('navide.git')
+      new PluginFactoryOptOutStore(root).has('navide.git')
+      expect(warn).toHaveBeenCalledTimes(1)
+      store.resetUnreadable()
+      store.has('navide.git')
+      store.has('navide.git')
+      expect(warn).toHaveBeenCalledTimes(2)
+      expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('readable again'))
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
