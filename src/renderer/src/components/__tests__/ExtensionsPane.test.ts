@@ -224,6 +224,43 @@ describe('ExtensionsPane', () => {
     expect(api.restoreFactoryPackage).not.toHaveBeenCalled()
   })
 
+  it('shows a built-in switch and the reset as busy until the Host finishes, however long that takes', async () => {
+    const enabled = { id: 'navide.plans', version: '0.1.0', active: true, optedOut: false, disabled: false }
+    let finishSwitch!: () => void
+    let finishReset!: () => void
+    const api = mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([]),
+      listFactoryPackages: vi.fn().mockResolvedValue([enabled]),
+      setDisabled: vi.fn(() => new Promise((resolve) => { finishSwitch = () => resolve({ id: 'navide.plans', disabled: true }) })),
+      disabledStoreStatus: vi.fn().mockResolvedValue({ status: 'unreadable' }),
+      resetDisabledStore: vi.fn(() => new Promise((resolve) => { finishReset = () => resolve({ status: 'ok' }) })),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    let row = wrapper.get('[data-factory-id="navide.plans"]')
+    expect(row.find('.ext-switch-busy').exists()).toBe(false)
+    await row.get('.ext-disable').trigger('click')
+    await flushPromises()
+    expect(api.setDisabled).toHaveBeenCalledWith('navide.plans', true)
+    row = wrapper.get('[data-factory-id="navide.plans"]')
+    const busy = row.get('.ext-switch-busy')
+    expect(busy.attributes('role')).toBe('status')
+    expect(busy.text()).toContain('Applying')
+    expect(row.get('.ext-disable').attributes('disabled')).toBeDefined()
+    finishSwitch()
+    await flushPromises()
+    expect(wrapper.find('[data-factory-id="navide.plans"] .ext-switch-busy').exists()).toBe(false)
+
+    await wrapper.get('.ext-store-reset').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.ext-store-unreadable .ext-switch-busy').text()).toContain('Applying')
+    expect(wrapper.get('.ext-store-reset').attributes('disabled')).toBeDefined()
+    finishReset()
+    await flushPromises()
+    expect(wrapper.find('.ext-switch-busy').exists()).toBe(false)
+  })
+
   it('says a built-in removed by an earlier version lost its data and only offers Enable', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([]),

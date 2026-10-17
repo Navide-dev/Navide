@@ -5399,6 +5399,8 @@ describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
       await expect(handlers.get('plugins:resetDisabledStore')!(null)).resolves.toEqual({ status: 'ok' })
       expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
       expect(reset).toHaveBeenCalledTimes(1)
+      // The Host finishes enabling each built-in the reset brought back (Git's forced legacy registration).
+      expect(reset).toHaveBeenCalledWith([...BUILTINS])
       expect(calls).toEqual([])
     } finally {
       warn.mockRestore()

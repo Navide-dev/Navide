@@ -368,8 +368,9 @@ export interface PluginIpcOptions {
    *  on enable. Its storage, grant and package stay either way. */
   setBuiltinDisabled?: (pluginId: string, disabled: boolean) => Promise<void> | void
   /** Called after the user reset an unreadable Disabled store: the built-ins
-   *  it held off are enabled again. */
-  onBuiltinSwitchReset?: () => void
+   *  it held off are enabled again. `resumed` names them, so the Host can
+   *  finish enabling each one as the Enable switch does. */
+  onBuiltinSwitchReset?: (resumed: string[]) => void
   /** Runs the built-in switch and the reset, so the Host's own check of the
    *  Disabled store never interleaves with them. */
   holdBuiltinSwitch?: <T>(task: () => Promise<T>) => Promise<T>
@@ -2389,10 +2390,14 @@ export function registerPluginIpc(
     return holdBuiltinSwitch(async () => {
       if (disabledPlugins.status() !== 'unreadable') return { status: disabledPlugins.status() }
       disabledPlugins.resetUnreadable()
+      const resumed: string[] = []
       for (const id of BUILTIN_PLUGIN_NAMES.keys()) {
-        if (!manager.isBuiltinPluginDisabled(id)) manager.resumeBuiltinPlugin(id)
+        if (!manager.isBuiltinPluginDisabled(id)) {
+          manager.resumeBuiltinPlugin(id)
+          resumed.push(id)
+        }
       }
-      options.onBuiltinSwitchReset?.()
+      options.onBuiltinSwitchReset?.(resumed)
       return { status: disabledPlugins.status() }
     })
   })
