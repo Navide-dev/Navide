@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from 'node:child_process'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { TextDecoder } from 'node:util'
 import {
   isAllowedBackendTimeout,
@@ -1047,6 +1048,18 @@ function defaultSpawnProcess(entryFile: string, options: SpawnOptions): ChildPro
   return spawn(entryFile, [], options) as ChildProcessWithoutNullStreams
 }
 
+// spawn() is synchronous (fork and exec). A hundred plugins starting at once
+// used to spawn back to back in one turn and hold the event loop for about a
+// second. Each spawn now takes its own turn so I/O runs in between; every
+// child still starts, in the order its start reached this point.
+let spawnTurn: Promise<unknown> = Promise.resolve()
+
+function takeSpawnTurn(): Promise<void> {
+  const turn = spawnTurn.then(() => nextTurn())
+  spawnTurn = turn
+  return turn
+}
+
 function waitForExit(exitPromise: Promise<void>, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
     let settled = false
@@ -1769,6 +1782,8 @@ export class PluginBackendSupervisor {
       await this.refreshRootIfNeeded()
       if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
       await this.beforeSpawn?.()
+      if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
+      await takeSpawnTurn()
       if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
       this.spawnChild()
       const id = this.nextRequestId()

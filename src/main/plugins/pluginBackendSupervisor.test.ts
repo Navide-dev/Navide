@@ -443,6 +443,32 @@ describe('PluginBackendSupervisor', () => {
     await Promise.all(supervisors.splice(0).map((supervisor) => supervisor.close()))
   })
 
+  it('gives every child spawn its own event-loop turn and still starts them all', async () => {
+    let turn = 0
+    let ticking = true
+    const tick = (): void => {
+      if (!ticking) return
+      turn += 1
+      setImmediate(tick)
+    }
+    setImmediate(tick)
+    const spawnedAt: number[] = []
+    const started = Array.from({ length: 5 }, (_, index) => {
+      const supervisor = makeSupervisor({
+        spawnProcess: () => {
+          spawnedAt.push(turn)
+          return makeControlledChild(index + 1)
+        },
+      })
+      supervisors.push(supervisor)
+      return supervisor.start()
+    })
+    await Promise.all(started)
+    ticking = false
+    expect(spawnedAt).toHaveLength(5)
+    expect(new Set(spawnedAt).size).toBe(5)
+  })
+
   describe('chunked transfer (agent-tools contract 4.4)', () => {
     const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex')
     const big = (bytes: number): { data: string } => {
