@@ -73,6 +73,31 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(panel.html()).not.toMatch(/href=/)
   })
 
+  // #397: a refused or failed call keeps no path, and an unknown capability no
+  // name; what is shown says so and is styled apart from a real path.
+  it('shows the fixed values in words, apart from real paths and commands', async () => {
+    const report = {
+      ...fixture,
+      files: [
+        { path: '<denied>', address: 'fs.readFile', workspace: '/w', outcome: 'denied', count: 7, lastAt: 1 },
+        { path: '<failed>', address: 'fs.readFile', workspace: '/w', outcome: 'error', count: 3, lastAt: 1 },
+        { path: 'src/a.py', address: 'fs.readFile', workspace: '/w', outcome: 'allowed', count: 1, lastAt: 1 },
+      ],
+      commands: [{ command: '<denied>', workspace: '/w', outcome: 'denied', count: 2, lastAt: 1 }],
+      undeclared: [{ source: 'broker', address: '<unknown>', workspace: '/w', count: 4, lastAt: 1, reasons: [{ reason: 'undeclared', count: 4 }] }],
+    }
+    mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: true, report }) })
+    const panel = await render()
+    const files = panel.findAll('.nv-activity-files li')
+    expect(files[0].text()).toContain('path or command not kept: the call was refused')
+    expect(files[1].text()).toContain('path or command not kept: the call failed')
+    expect(files.map((li) => li.classes('nv-activity-marker'))).toEqual([true, true, false])
+    expect(files[2].text()).toContain('src/a.py')
+    expect(panel.get('.nv-activity-commands li').classes()).toContain('nv-activity-marker')
+    expect(panel.text()).toContain('not a Navide capability')
+    expect(panel.text()).not.toContain('<denied>')
+  })
+
   it('marks undeclared uses in red with their reasons, and anomalies as marks only', async () => {
     mockPlugins()
     const panel = await render()

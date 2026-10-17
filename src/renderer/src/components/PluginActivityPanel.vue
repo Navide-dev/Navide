@@ -91,6 +91,22 @@ function outcome(value: string): string {
   return te(key) ? t(key) : value
 }
 
+/** The fixed values recorded in place of text a plugin wrote (contract 5):
+ *  shown as what they mean, styled apart from a real path, command or address. */
+const MARKERS: Readonly<Record<string, string>> = {
+  '<denied>': 'denied',
+  '<failed>': 'failed',
+  '<unknown>': 'unknown',
+}
+
+function isMarker(value: string): boolean {
+  return Object.hasOwn(MARKERS, value)
+}
+
+function shown(value: string): string {
+  return isMarker(value) ? t(`pluginActivity.marker.${MARKERS[value]}`) : value
+}
+
 /** A source, kind or refusal reason in words; anything unknown stays as given (L5 on #371). */
 function word(group: 'source' | 'kind' | 'reason', value: string): string {
   const key = `pluginActivity.${group}.${value}`
@@ -164,8 +180,12 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
       <div v-if="report.undeclared.length" class="nv-activity-undeclared">
         <h5>{{ $t('pluginActivity.undeclared.heading') }}</h5>
         <ul>
-          <li v-for="entry in report.undeclared" :key="`${entry.source}:${entry.address}:${entry.workspace}`">
-            {{ $t('pluginActivity.undeclared.item', { address: entry.address, source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
+          <li
+            v-for="entry in report.undeclared"
+            :key="`${entry.source}:${entry.address}:${entry.workspace}`"
+            :class="{ 'nv-activity-marker': isMarker(entry.address) }"
+          >
+            {{ $t('pluginActivity.undeclared.item', { address: shown(entry.address), source: word('source', entry.source), workspace: entry.workspace, count: entry.count, date: date(entry.lastAt) }) }}
             <span class="nv-activity-muted">{{ $t('pluginActivity.undeclared.reasons', { reasons: list(entry.reasons.map((r) => `${word('reason', r.reason)} × ${r.count}`)) }) }}</span>
           </li>
         </ul>
@@ -208,16 +228,24 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
 
       <h5>{{ $t('pluginActivity.files.heading') }}</h5>
       <ul v-if="report.files.length" class="nv-activity-files">
-        <li v-for="entry in report.files" :key="`${entry.address}:${entry.path}`">
-          {{ $t('pluginActivity.files.item', { path: entry.path, address: entry.address, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+        <li
+          v-for="entry in report.files"
+          :key="`${entry.address}:${entry.path}`"
+          :class="{ 'nv-activity-marker': isMarker(entry.path) || isMarker(entry.address) }"
+        >
+          {{ $t('pluginActivity.files.item', { path: shown(entry.path), address: shown(entry.address), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
 
       <h5>{{ $t('pluginActivity.commands.heading') }}</h5>
       <ul v-if="report.commands.length" class="nv-activity-commands">
-        <li v-for="entry in report.commands" :key="`${entry.command}:${entry.outcome}`">
-          {{ $t('pluginActivity.commands.item', { command: entry.command, count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
+        <li
+          v-for="entry in report.commands"
+          :key="`${entry.command}:${entry.outcome}`"
+          :class="{ 'nv-activity-marker': isMarker(entry.command) }"
+        >
+          {{ $t('pluginActivity.commands.item', { command: shown(entry.command), count: entry.count, outcome: outcome(entry.outcome), date: date(entry.lastAt) }) }}
         </li>
       </ul>
       <p v-else class="nv-activity-muted">{{ $t('pluginActivity.empty') }}</p>
@@ -265,6 +293,11 @@ const maxDaily = computed(() => Math.max(1, ...(report.value?.daily ?? []).map((
 }
 .nv-activity-muted {
   color: var(--text-secondary);
+}
+/* A fixed value recorded in place of a plugin's text, not a real path or command. */
+.nv-activity-marker {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 .nv-activity-undeclared {
   border-left: 3px solid var(--danger-fg);

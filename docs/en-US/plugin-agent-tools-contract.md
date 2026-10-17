@@ -1306,12 +1306,22 @@ the backend redacts it and adds `count` into the row of that key and minute
 (`minute`, `count`, `last_at`; created by `PLUGIN_AUDIT_DDL` like the other
 activity tables). Text the plugin wrote is never a key, because it has no
 limit on its length or on how many different values there are, and a refused
-or failed call cost the plugin nothing: the address of a capability the
-broker does not know (not in the public catalog, a Host action, a
-backend-mapped call or `ping`) is `<unknown>`
-(`PLUGIN_ACTIVITY_UNKNOWN_ADDRESS`), and the `fs_path` / `shell_command` of a
-`denied` or `error` call is `<denied>` / `<failed>`
-(`PLUGIN_ACTIVITY_DENIED_TARGET`, `PLUGIN_ACTIVITY_FAILED_TARGET`). An
+or failed call cost the plugin nothing. Three fixed values take its place;
+the counts stay exact:
+
+- `<unknown>` (`PLUGIN_ACTIVITY_UNKNOWN_ADDRESS`), in `address`: the plugin
+  called a capability Navide does not have, one address of the public
+  catalog, a Host action or a backend-mapped call (`ping`, which answers any
+  method name, is not one address either). Its `source` is kept.
+- `<denied>` (`PLUGIN_ACTIVITY_DENIED_TARGET`), in `fs_path` / `shell_command`:
+  the call was refused (`outcome` `denied`), so the path or command it named is
+  not kept.
+- `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path` / `shell_command`:
+  the call failed (`outcome` `error`; with `fs` granted, a path that does not
+  exist costs one stat), so the path or command it named is not kept.
+
+Displays show each as what it means, set apart from a real path, command or
+address (the activity page words them and styles them differently). An
 `allowed` call keeps its redacted path and command: that IO happened, so the
 number of different values follows the work the plugin really did. Kept and
 rolled up into `plugin_activity_daily` / `plugin_activity_denied_daily` like

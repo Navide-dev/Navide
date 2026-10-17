@@ -11103,6 +11103,11 @@
     "window": "最近 7 天的紀錄，存在這台電腦。",
     "totals": "{calls} 次呼叫、{denied} 次被拒、{errors} 次錯誤",
     "unknownSize": "未知",
+    "marker": {
+      "denied": "（呼叫被拒，不記錄路徑或指令）",
+      "failed": "（呼叫失敗，不記錄路徑或指令）",
+      "unknown": "（Navide 沒有這項功能）"
+    },
     "empty": "沒有紀錄。",
     "live": {
       "heading": "目前（即時）",
