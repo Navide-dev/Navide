@@ -1,7 +1,8 @@
 /**
  * Plan B D-f: what the activity page and the disclosure overview read
- * (contract section 5.1). The backend (D-e) answers the WebSocket request
- * `plugins.activity.report` from `plugin_tool_calls`, `plugin_activity`,
+ * (contract section 5.1). The backend (D-e) answers `plugins.activity.report`,
+ * which only the Host's authenticated session may send (the renderer asks the
+ * Host over IPC), from `plugin_tool_calls`, `plugin_activity`,
  * `plugin_activity_daily` and, once B2-c lands, `plugin_agent_actions`; it
  * does the aggregation and the anomaly checks. The renderer only shows the
  * answer, after rebuilding it from validated fields (`parsePluginActivityReport`).
@@ -141,9 +142,13 @@ export interface PluginActivityReport {
   agentActions: PluginAgentAction[] | null
 }
 
-/** `plugins.activity.report` request: one plugin's report. */
+/** `plugins.activity.report` request: one plugin's report. The Host sends it
+ *  over its authenticated session and fills `declared` from the installed
+ *  manifest (the backend has no third-party manifest); without `declared`,
+ *  `declaredUnused` is `[]`. */
 export interface PluginActivityReportRequest {
   plugin_id: string
+  declared?: Array<{ kind: PluginActivityDeclaredUnused['kind']; key: string }>
 }
 
 /** Sum of the known sizes; unknown (-1) ones are counted, never added. */
