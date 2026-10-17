@@ -1,0 +1,81 @@
+{
+  "$comment": "Chunked transfer of agent tool results (contract section 4.4). DB9 decision a: results have no size cap; their size is disclosed as resultBytes. splitAgentToolResultText cuts the compact JSON text of a result into pieces of at most maxBytes UTF-8 bytes without splitting a code point; reassembleAgentToolResultText joins the pieces received for one request and checks them against the final message's resultChunks summary. Both hops (plugin child -> Host on Backend Wire, Host -> backend on the WebSocket session) use the same pieces and the same summary.",
+  "constants": {
+    "chunkBytes": 131072,
+    "wireChunkMethod": "notifications/navide/resultChunk",
+    "wireChunksKey": "io.navide/resultChunks",
+    "wsChunkMessage": "agent.capability.result_chunk",
+    "invalidCode": "RESULT_CHUNKS_INVALID"
+  },
+  "splits": [
+    { "name": "fits in one piece", "text": "{\"a\":1}", "maxBytes": 16, "expected": ["{\"a\":1}"] },
+    { "name": "exact multiple", "text": "abcdefgh", "maxBytes": 4, "expected": ["abcd", "efgh"] },
+    { "name": "remainder piece", "text": "abcdefghij", "maxBytes": 4, "expected": ["abcd", "efgh", "ij"] },
+    { "name": "empty text is one empty piece", "text": "", "maxBytes": 4, "expected": [""] },
+    { "name": "never splits a 3-byte code point", "text": "ab中文", "maxBytes": 4, "expected": ["ab", "中", "文"] },
+    { "name": "never splits a 4-byte code point", "text": "a😀b", "maxBytes": 4, "expected": ["a", "😀", "b"] },
+    { "name": "mixed widths fill each piece", "text": "x中😀yz", "maxBytes": 5, "expected": ["x中", "😀y", "z"] }
+  ],
+  "reassembly": [
+    {
+      "name": "in order",
+      "chunks": [{ "seq": 0, "data": "{\"a\":" }, { "seq": 1, "data": "\"中\"}" }],
+      "summary": { "chunks": 2, "bytes": 11 },
+      "expected": { "ok": true, "text": "{\"a\":\"中\"}" }
+    },
+    {
+      "name": "arrival order does not matter, seq does",
+      "chunks": [{ "seq": 1, "data": "cd" }, { "seq": 0, "data": "ab" }],
+      "summary": { "chunks": 2, "bytes": 4 },
+      "expected": { "ok": true, "text": "abcd" }
+    },
+    {
+      "name": "single empty piece",
+      "chunks": [{ "seq": 0, "data": "" }],
+      "summary": { "chunks": 1, "bytes": 0 },
+      "expected": { "ok": true, "text": "" }
+    },
+    {
+      "name": "missing piece",
+      "chunks": [{ "seq": 0, "data": "ab" }, { "seq": 2, "data": "ef" }],
+      "summary": { "chunks": 3, "bytes": 6 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "count" }
+    },
+    {
+      "name": "duplicate seq",
+      "chunks": [{ "seq": 0, "data": "ab" }, { "seq": 0, "data": "ab" }],
+      "summary": { "chunks": 2, "bytes": 4 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "seq" }
+    },
+    {
+      "name": "seq outside the announced count",
+      "chunks": [{ "seq": 0, "data": "ab" }, { "seq": 5, "data": "cd" }],
+      "summary": { "chunks": 2, "bytes": 4 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "seq" }
+    },
+    {
+      "name": "more pieces than announced",
+      "chunks": [{ "seq": 0, "data": "ab" }, { "seq": 1, "data": "cd" }],
+      "summary": { "chunks": 1, "bytes": 4 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "count" }
+    },
+    {
+      "name": "byte total disagrees",
+      "chunks": [{ "seq": 0, "data": "ab" }, { "seq": 1, "data": "中" }],
+      "summary": { "chunks": 2, "bytes": 4 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "bytes" }
+    },
+    {
+      "name": "malformed summary",
+      "chunks": [{ "seq": 0, "data": "ab" }],
+      "summary": { "chunks": 0, "bytes": 2 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "summary" }
+    },
+    {
+      "name": "malformed piece",
+      "chunks": [{ "seq": "0", "data": "ab" }],
+      "summary": { "chunks": 1, "bytes": 2 },
+      "expected": { "ok": false, "code": "RESULT_CHUNKS_INVALID", "reason": "seq" }
+    }
+  ]
+}

@@ -199,3 +199,60 @@ def test_audit_and_activity_ddl_is_valid_sqlite() -> None:
 def test_approval_kinds_and_decide_action() -> None:
     assert tools.APPROVAL_KINDS == ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove")
     assert tools.PLUGIN_APPROVAL_DECIDE_ACTION == "plugins.agent_request.decide"
+
+
+# ── chunked result transfer (DB9 decision a: no result cap) ─────────────────
+
+_CHUNKING = _load("result-chunking.json")
+
+
+def test_chunking_constants_match_the_shared_fixture() -> None:
+    assert {
+        "chunkBytes": tools.AGENT_TOOL_RESULT_CHUNK_BYTES,
+        "wireChunkMethod": tools.BACKEND_WIRE_RESULT_CHUNK_METHOD,
+        "wireChunksKey": tools.BACKEND_WIRE_RESULT_CHUNKS_KEY,
+        "wsChunkMessage": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+        "invalidCode": tools.RESULT_CHUNKS_INVALID,
+    } == _CHUNKING["constants"]
+
+
+def test_a_fully_escaped_piece_fits_the_backend_ws_message_limit() -> None:
+    # uvicorn's default ws_max_size (16 MiB); __main__.py does not override it.
+    from uvicorn.config import Config
+
+    worst = json.dumps(
+        {"type": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE, "id": "x" * 64,
+         "payload": {"request_id": "x" * 64, "seq": tools.MAX_SAFE_INTEGER, "data": "\u0001" * tools.AGENT_TOOL_RESULT_CHUNK_BYTES}},
+        separators=(",", ":"),
+    )
+    assert len(worst.encode("utf-8")) < Config(app=None).ws_max_size
+
+
+@pytest.mark.parametrize("case", _CHUNKING["splits"], ids=lambda c: c["name"])
+def test_split_result_text(case: dict[str, Any]) -> None:
+    pieces = tools.split_agent_tool_result_text(case["text"], case["maxBytes"])
+    assert pieces == case["expected"]
+    assert all(tools.utf8_byte_length(p) <= case["maxBytes"] for p in pieces)
+
+
+def test_split_refuses_a_piece_size_that_cannot_hold_every_code_point() -> None:
+    with pytest.raises(ValueError):
+        tools.split_agent_tool_result_text("abc", 3)
+
+
+@pytest.mark.parametrize("case", _CHUNKING["reassembly"], ids=lambda c: c["name"])
+def test_reassemble_result_text(case: dict[str, Any]) -> None:
+    assert tools.reassemble_agent_tool_result_text(case["chunks"], case["summary"]) == case["expected"]
+
+
+def test_a_10_mib_result_round_trips_with_no_cap() -> None:
+    result = {"rows": [f"row {i} 中文 😀 " + "x" * 230 for i in range(42_000)]}
+    text = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
+    size = tools.utf8_byte_length(text)
+    assert size > 10 * 1_048_576
+    pieces = tools.split_agent_tool_result_text(text)
+    assert all(tools.utf8_byte_length(p) <= tools.AGENT_TOOL_RESULT_CHUNK_BYTES for p in pieces)
+    received = [{"seq": seq, "data": data} for seq, data in enumerate(pieces)][::-1]
+    joined = tools.reassemble_agent_tool_result_text(received, {"chunks": len(pieces), "bytes": size})
+    assert joined == {"ok": True, "text": text}
+    assert hashlib.sha256(joined["text"].encode()).digest() == hashlib.sha256(text.encode()).digest()

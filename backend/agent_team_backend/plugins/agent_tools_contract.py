@@ -23,7 +23,9 @@ _PREFIX_PATTERN = re.compile(r"[a-z][a-z0-9]{1,15}")
 AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
 #: Same bound as the Host's backend calls (pluginBackendLimits.MAX_BACKEND_TIMEOUT_MS).
 AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
-#: DB9: the technical cap on one description, one canonical input schema and one result, in UTF-8 bytes.
+#: DB9: the technical cap on one description and one canonical input schema, in UTF-8 bytes.
+#: Results have no cap (DB9 decision a): they travel in chunks (section 4.4) and
+#: their size is disclosed as ``resultBytes``.
 AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 #: The largest integer both languages print the same way.
 MAX_SAFE_INTEGER = 2**53 - 1
@@ -293,6 +295,7 @@ AGENT_TOOL_CALL_ERROR_CODES = (
     "PLUGIN_TOOL_INVALID_ARGUMENTS",
     "PLUGIN_TOOL_TIMEOUT",
     "PLUGIN_TOOL_FAILED",
+    # No longer produced: results have no size cap (DB9 decision a). Kept for older readers.
     "PLUGIN_TOOL_RESULT_TOO_LARGE",
 )
 
@@ -313,8 +316,88 @@ AGENT_TOOL_UNAVAILABLE_REASONS = (
 
 class AgentToolCallMeta(TypedDict):
     durationMs: int
+    #: UTF-8 bytes of the result's compact JSON text as the Host received it; 0 without a result.
     resultBytes: int
     crossWorkspace: bool
+
+
+# ── chunked result transfer (section 4.4) ───────────────────────────────────
+
+#: UTF-8 bytes of the ``data`` of one result piece. A transport unit, not a cap:
+#: a result of any size is sent as as many pieces as it needs. Even fully
+#: escaped (6 bytes per byte) a piece stays under the 1 MiB Backend Wire frame.
+AGENT_TOOL_RESULT_CHUNK_BYTES = 131_072
+#: Backend Wire notification, child -> Host, one per piece.
+BACKEND_WIRE_RESULT_CHUNK_METHOD = "notifications/navide/resultChunk"
+#: Client capability key in ``navide/call`` ``_meta`` and summary key in the final response ``_meta``.
+BACKEND_WIRE_RESULT_CHUNKS_KEY = "io.navide/resultChunks"
+#: WebSocket message, Host -> backend, one per piece; answered like any request.
+AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = "agent.capability.result_chunk"
+RESULT_CHUNKS_INVALID = "RESULT_CHUNKS_INVALID"
+
+
+class AgentToolResultChunkMessage(TypedDict):
+    request_id: str
+    seq: int
+    data: str
+
+
+class AgentToolResultChunksSummary(TypedDict):
+    chunks: int
+    bytes: int
+
+
+def split_agent_tool_result_text(text: str, max_bytes: int = AGENT_TOOL_RESULT_CHUNK_BYTES) -> list[str]:
+    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point."""
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 4:
+        raise ValueError("max_bytes must be an integer >= 4")
+    pieces: list[str] = []
+    start = 0
+    size = 0
+    for index, char in enumerate(text):
+        point = ord(char)
+        width = 1 if point < 0x80 else 2 if point < 0x800 else 4 if point > 0xFFFF else 3
+        if size + width > max_bytes:
+            pieces.append(text[start:index])
+            start = index
+            size = 0
+        size += width
+    pieces.append(text[start:])
+    return pieces
+
+
+def _is_count(value: Any, minimum: int) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= MAX_SAFE_INTEGER
+
+
+def reassemble_agent_tool_result_text(chunks: list[dict[str, Any]], summary: Any) -> dict[str, Any]:
+    """Join the pieces received for one request (any arrival order) and check them against the summary.
+
+    Returns ``{"ok": True, "text": ...}`` or
+    ``{"ok": False, "code": "RESULT_CHUNKS_INVALID", "reason": "summary" | "seq" | "count" | "bytes"}``.
+    No size limit beyond memory.
+    """
+
+    def invalid(reason: str) -> dict[str, Any]:
+        return {"ok": False, "code": RESULT_CHUNKS_INVALID, "reason": reason}
+
+    if not isinstance(summary, dict) or not _is_count(summary.get("chunks"), 1) or not _is_count(summary.get("bytes"), 0):
+        return invalid("summary")
+    if any(not _is_count(c.get("seq"), 0) or not isinstance(c.get("data"), str) for c in chunks):
+        return invalid("seq")
+    count = summary["chunks"]
+    if len(chunks) != count:
+        return invalid("count")
+    ordered: list[str | None] = [None] * count
+    for chunk in chunks:
+        seq = chunk["seq"]
+        if seq >= count or ordered[seq] is not None:
+            return invalid("seq")
+        ordered[seq] = chunk["data"]
+    text = "".join(piece for piece in ordered if piece is not None)
+    if utf8_byte_length(text) != summary["bytes"]:
+        return invalid("bytes")
+    return {"ok": True, "text": text}
 
 
 # ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────

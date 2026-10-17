@@ -42,7 +42,10 @@ const PREFIX_PATTERN = /^[a-z][a-z0-9]{1,15}$/
 export const AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
 /** Same bound as the Host's backend calls (pluginBackendLimits.MAX_BACKEND_TIMEOUT_MS). */
 export const AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
-/** DB9: the technical cap on one description, one canonical input schema and one result, in UTF-8 bytes. */
+/**
+ * DB9: the technical cap on one description and one canonical input schema, in UTF-8 bytes.
+ * Results have no cap (DB9 decision a): they travel in chunks (section 4.4) and their size is disclosed as `resultBytes`.
+ */
 export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 
 export const AGENT_TOOL_REQUIRED_FIELDS = ['name', 'method', 'risk', 'title', 'description', 'inputSchema'] as const
@@ -298,6 +301,7 @@ export type AgentToolCallErrorCode =
   | 'PLUGIN_TOOL_INVALID_ARGUMENTS'
   | 'PLUGIN_TOOL_TIMEOUT'
   | 'PLUGIN_TOOL_FAILED'
+  /** No longer produced: results have no size cap (DB9 decision a). Kept so older readers still type-check. */
   | 'PLUGIN_TOOL_RESULT_TOO_LARGE'
 
 /** `reason` of PLUGIN_TOOL_UNAVAILABLE, in Host check order. */
@@ -315,6 +319,7 @@ export type AgentToolUnavailableReason =
 
 export interface AgentToolCallMeta {
   durationMs: number
+  /** UTF-8 bytes of the result's compact JSON text as the Host received it ({@link agentToolResultBytes}); 0 without a result. */
   resultBytes: number
   /** True when the target workspace differs from caller.workspace. */
   crossWorkspace: boolean
@@ -331,6 +336,113 @@ export type AgentToolCallResponse =
       plugin_error?: string
       meta?: AgentToolCallMeta
     }
+
+// ── chunked result transfer (section 4.4) ───────────────────────────────────
+
+/**
+ * UTF-8 bytes of the `data` of one result piece. A transport unit, not a cap: a
+ * result of any size is sent as as many pieces as it needs. Even if every byte
+ * of a piece were escaped as `\u00XX` (6 bytes) the frame stays under the
+ * 1 MiB Backend Wire frame (pluginBackendSupervisor maxFrameBytes).
+ */
+export const AGENT_TOOL_RESULT_CHUNK_BYTES = 131_072
+/** Backend Wire notification, child → Host, one per piece. */
+export const BACKEND_WIRE_RESULT_CHUNK_METHOD = 'notifications/navide/resultChunk'
+/**
+ * Key of the client capability the Host advertises in `navide/call` `_meta`
+ * clientCapabilities, and of the summary in the final success response `_meta`.
+ */
+export const BACKEND_WIRE_RESULT_CHUNKS_KEY = 'io.navide/resultChunks'
+/** WebSocket message, Host → backend, one per piece; answered like any request. */
+export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
+
+/** Backend Wire `params` of {@link BACKEND_WIRE_RESULT_CHUNK_METHOD}; `requestId` is the `navide/call` id. */
+export interface BackendWireResultChunkParams {
+  requestId: string | number
+  seq: number
+  data: string
+}
+
+/** Payload of {@link AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE}; `request_id` is the agent.capability request id. */
+export interface AgentToolResultChunkMessage {
+  request_id: string
+  seq: number
+  data: string
+}
+
+/** Announced in the final message: how many pieces were sent and the UTF-8 bytes of the joined text. */
+export interface AgentToolResultChunksSummary {
+  chunks: number
+  bytes: number
+}
+
+/** The final Host → backend response of a chunked result: `result` is replaced by `resultChunks`. */
+export interface AgentToolCallChunkedResponse {
+  ok: true
+  resultChunks: AgentToolResultChunksSummary
+  meta: AgentToolCallMeta
+}
+
+export type AgentToolResultChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes'
+
+export type AgentToolResultReassembly =
+  | { ok: true; text: string }
+  | { ok: false; code: 'RESULT_CHUNKS_INVALID'; reason: AgentToolResultChunksInvalidReason }
+
+/** The value of `meta.resultBytes`: UTF-8 bytes of the compact JSON text of a result (`null` when absent). */
+export function agentToolResultBytes(result: unknown): number {
+  return utf8ByteLength(JSON.stringify(result === undefined ? null : result))
+}
+
+/** Cuts `text` into pieces of at most `maxBytes` UTF-8 bytes, never inside a code point. Always at least one piece. */
+export function splitAgentToolResultText(text: string, maxBytes: number = AGENT_TOOL_RESULT_CHUNK_BYTES): string[] {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 4) throw new RangeError('maxBytes must be an integer >= 4')
+  const pieces: string[] = []
+  let start = 0
+  let bytes = 0
+  for (let i = 0; i < text.length; ) {
+    const point = text.codePointAt(i) as number
+    const units = point > 0xffff ? 2 : 1
+    const size = point < 0x80 ? 1 : point < 0x800 ? 2 : point > 0xffff ? 4 : 3
+    if (bytes + size > maxBytes) {
+      pieces.push(text.slice(start, i))
+      start = i
+      bytes = 0
+    }
+    bytes += size
+    i += units
+  }
+  pieces.push(text.slice(start))
+  return pieces
+}
+
+function isCount(value: unknown, min: number): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= min
+}
+
+/**
+ * Joins the pieces received for one request (in any arrival order) and checks
+ * them against the final message's summary. No size limit beyond memory.
+ */
+export function reassembleAgentToolResultText(
+  chunks: ReadonlyArray<{ seq: unknown; data: unknown }>,
+  summary: unknown,
+): AgentToolResultReassembly {
+  const invalid = (reason: AgentToolResultChunksInvalidReason): AgentToolResultReassembly =>
+    ({ ok: false, code: 'RESULT_CHUNKS_INVALID', reason })
+  const s = summary as Partial<AgentToolResultChunksSummary> | null
+  if (!s || typeof s !== 'object' || !isCount(s.chunks, 1) || !isCount(s.bytes, 0)) return invalid('summary')
+  if (chunks.some((c) => !isCount(c.seq, 0) || typeof c.data !== 'string')) return invalid('seq')
+  if (chunks.length !== s.chunks) return invalid('count')
+  const ordered: string[] = new Array(s.chunks)
+  for (const c of chunks as ReadonlyArray<{ seq: number; data: string }>) {
+    if (c.seq >= s.chunks || ordered[c.seq] !== undefined) return invalid('seq')
+    ordered[c.seq] = c.data
+  }
+  const text = ordered.join('')
+  if (utf8ByteLength(text) !== s.bytes) return invalid('bytes')
+  return { ok: true, text }
+}
 
 // ── backend → Host: marketplace.query (B2 read-only tools) ──────────────────
 

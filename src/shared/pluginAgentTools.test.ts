@@ -3,14 +3,21 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_TOOL_DEFAULT_TIMEOUT_MS,
+  AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
   AGENT_TOOL_MAX_TIMEOUT_MS,
+  AGENT_TOOL_RESULT_CHUNK_BYTES,
   AGENT_TOOL_STABILITY_CAP_BYTES,
+  BACKEND_WIRE_RESULT_CHUNK_METHOD,
+  BACKEND_WIRE_RESULT_CHUNKS_KEY,
   CORE_TOOL_NAMES,
   PLUGIN_APPROVAL_DECIDE_ACTION,
   RESERVED_TOOL_PREFIXES,
+  agentToolResultBytes,
   deriveAgentToolPrefix,
   isValidAgentToolText,
+  reassembleAgentToolResultText,
   sanitizeAgentToolResultText,
+  splitAgentToolResultText,
   utf8ByteLength,
   validateAgentToolName,
   validateAgentTools,
@@ -112,5 +119,69 @@ describe('contract fragments that are not wired yet', () => {
 
   it('names the trust-confirm action the B2 decide handler will require', () => {
     expect(PLUGIN_APPROVAL_DECIDE_ACTION).toBe('plugins.agent_request.decide')
+  })
+})
+
+describe('chunked result transfer (DB9 decision a: no result cap)', () => {
+  const chunking = load('result-chunking.json') as {
+    constants: Record<string, string | number>
+    splits: Case<{ name: string; text: string; maxBytes: number; expected: string[] }>
+    reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; expected: unknown }>
+  }
+
+  it('pins the transport constants to the shared fixture', () => {
+    expect({
+      chunkBytes: AGENT_TOOL_RESULT_CHUNK_BYTES,
+      wireChunkMethod: BACKEND_WIRE_RESULT_CHUNK_METHOD,
+      wireChunksKey: BACKEND_WIRE_RESULT_CHUNKS_KEY,
+      wsChunkMessage: AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+      invalidCode: 'RESULT_CHUNKS_INVALID',
+    }).toEqual(chunking.constants)
+  })
+
+  it('keeps a fully escaped piece inside one Backend Wire frame', () => {
+    // Read as text: src/shared is also compiled by the web project, which cannot import src/main.
+    const supervisor = readFileSync(join(process.cwd(), 'src/main/plugins/pluginBackendSupervisor.ts'), 'utf8')
+    const frame = Number(/maxFrameBytes \?\? ([\d_]+)/.exec(supervisor)?.[1]?.replace(/_/g, ''))
+    expect(frame).toBeGreaterThan(0)
+    const worst = JSON.stringify({
+      jsonrpc: '2.0', method: BACKEND_WIRE_RESULT_CHUNK_METHOD,
+      params: { requestId: 'x'.repeat(64), seq: Number.MAX_SAFE_INTEGER, data: '\u0001'.repeat(AGENT_TOOL_RESULT_CHUNK_BYTES) },
+    })
+    expect(utf8ByteLength(worst) + 1).toBeLessThan(frame)
+  })
+
+  it.each(chunking.splits)('splits: $name', ({ text, maxBytes, expected }) => {
+    const pieces = splitAgentToolResultText(text, maxBytes)
+    expect(pieces).toEqual(expected)
+    expect(pieces.every((p) => utf8ByteLength(p) <= maxBytes)).toBe(true)
+  })
+
+  it('refuses a piece size that cannot hold every code point', () => {
+    expect(() => splitAgentToolResultText('abc', 3)).toThrow(RangeError)
+  })
+
+  it.each(chunking.reassembly)('reassembles: $name', ({ chunks, summary, expected }) => {
+    expect(reassembleAgentToolResultText(chunks, summary)).toEqual(expected)
+  })
+
+  it('carries a 10 MiB result intact with no cap and discloses its size', () => {
+    const result = { rows: Array.from({ length: 42_000 }, (_, i) => `row ${i} 中文 😀 ${'x'.repeat(230)}`) }
+    const text = JSON.stringify(result)
+    const bytes = agentToolResultBytes(result)
+    expect(bytes).toBe(utf8ByteLength(text))
+    expect(bytes).toBeGreaterThan(10 * 1_048_576)
+    const pieces = splitAgentToolResultText(text)
+    expect(pieces.length).toBeGreaterThanOrEqual(Math.ceil(bytes / AGENT_TOOL_RESULT_CHUNK_BYTES))
+    expect(pieces.every((p) => utf8ByteLength(p) <= AGENT_TOOL_RESULT_CHUNK_BYTES)).toBe(true)
+    const shuffled = pieces.map((data, seq) => ({ seq, data })).reverse()
+    const joined = reassembleAgentToolResultText(shuffled, { chunks: pieces.length, bytes })
+    expect(joined).toEqual({ ok: true, text })
+    expect(JSON.parse((joined as { text: string }).text)).toEqual(result)
+  })
+
+  it('measures an absent result as JSON null', () => {
+    expect(agentToolResultBytes(undefined)).toBe(4)
+    expect(agentToolResultBytes(null)).toBe(4)
   })
 })

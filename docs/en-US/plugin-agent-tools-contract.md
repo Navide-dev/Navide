@@ -33,7 +33,8 @@ The governing rule of plan B is **disclose, don't restrict**: everything a
 package can do is declared, shown and consented to. The only hard rules are the
 ones that stop impersonation or deception (tool-name prefixes, reserved names,
 text that could fake another tool or a system message) and the DB9 stability
-cap.
+cap on declarations. Tool results have no size cap: their size is disclosed
+([section 4.4](#44-chunked-result-transfer)).
 
 ## 1. Vocabulary
 
@@ -188,10 +189,18 @@ integers, DB9) stay in `validateAgentTools`.
 
 ### 2.7 DB9 stability cap
 
-1 MiB (1,048,576 bytes, UTF-8) each for one `description`, one `inputSchema`
-in its canonical spelling, and one tool result. It protects the MCP server,
-not a policy; the disclosure card says the cap exists. A result over the cap
-fails with `PLUGIN_TOOL_RESULT_TOO_LARGE`.
+1 MiB (1,048,576 bytes, UTF-8) each for one `description` and one
+`inputSchema` in its canonical spelling (`AGENT_TOOL_STABILITY_CAP_BYTES`,
+checked by `validateAgentTools`).
+
+**Tool results have no size cap** (user decision 2026-10-17, DB9 option a:
+"拿掉 1 MiB 回傳上限，只揭露資料大小；穩定性改用分段傳送處理"). Stability comes
+from the chunked transfer in [section 4.4](#44-chunked-result-transfer), never
+from refusing a result. The size of every result is disclosed instead: the Host
+measures it as `meta.resultBytes`, the audit row stores it as
+`plugin_tool_calls.result_bytes` ([section 5](#5-storage-in-navidedb)), and the
+activity page shows it per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in the
+error-code list for older readers but is no longer produced.
 
 ### 2.8 Consent binding (for B1-a)
 
@@ -748,10 +757,16 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_INVALID_ARGUMENTS` | arguments do not match `inputSchema` |
 | `PLUGIN_TOOL_TIMEOUT` | the backend did not answer within `timeoutMs` |
 | `PLUGIN_TOOL_FAILED` | the backend answered with an error; its own code is in `plugin_error` |
-| `PLUGIN_TOOL_RESULT_TOO_LARGE` | result over the DB9 cap |
+| `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
 
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
+
+`meta.resultBytes` is `agentToolResultBytes(result)`: the UTF-8 byte length of
+the compact `JSON.stringify` spelling of the result value the Host received
+(`null` when the plugin returned nothing), measured once, by the Host. It is
+`0` in the `meta` of an error response that carries no result. The backend
+does not measure again; it forwards the Host's number to the audit row.
 
 ### 4.3 Backend → Host: `marketplace.query`
 
@@ -777,6 +792,96 @@ error, error_code}` with `BAD_REQUEST` | `NOT_FOUND` | `REGISTRY_UNAVAILABLE` |
 `HOST_UNAVAILABLE`. Every piece of third-party text (names, descriptions) is
 wrapped as external content by the backend before an agent sees it.
 
+### 4.4 Chunked result transfer
+
+A result of any size reaches the agent intact. Every hop has a single-message
+limit of its own (the plugin child's 1 MiB Backend Wire frame, uvicorn's
+16 MiB WebSocket message), so a result larger than one piece travels as
+ordered pieces and is joined at the receiving end. The pieces are a transport
+unit, not a cap: nothing refuses a result because of its size, and the
+receiver holds as much as memory allows.
+
+**Pieces.** The sender spells the result value as compact JSON text
+(`JSON.stringify`, no whitespace) and cuts it with
+`splitAgentToolResultText(text)` into pieces of at most
+`AGENT_TOOL_RESULT_CHUNK_BYTES` = 131,072 UTF-8 bytes, never inside a code
+point. Even with every byte escaped as `\u00XX` a piece's frame stays below
+the 1 MiB Backend Wire frame. The receiver joins them with
+`reassembleAgentToolResultText(pieces, summary)`, which orders by `seq` (so
+arrival order does not matter), and checks that `seq` runs `0..chunks-1`
+exactly once each and that the joined text has `summary.bytes` UTF-8 bytes. A
+mismatch is `RESULT_CHUNKS_INVALID` with `reason` `summary` | `seq` | `count`
+| `bytes`; it fails that one call and nothing else. The joined text is then
+parsed as JSON. A result whose text fits in one piece is sent exactly as
+before, with no pieces.
+
+**Hop 1: plugin child → Host (Backend Wire).** The Host advertises support in
+every `navide/call` it sends:
+`params._meta["io.modelcontextprotocol/clientCapabilities"]["io.navide/resultChunks"] = {}`.
+A child may send pieces only when it sees that capability; a Host without it
+treats an unknown notification as a protocol error. For each piece the child
+writes the notification
+
+```json
+{"jsonrpc":"2.0","method":"notifications/navide/resultChunk","params":{"requestId":"<navide/call id>","seq":0,"data":"{\"rows\":[..."}}
+```
+
+and after the last piece the ordinary success response with no `value` and the
+summary in `_meta`:
+
+```json
+{"jsonrpc":"2.0","id":"<navide/call id>","result":{"resultType":"complete","_meta":{"io.modelcontextprotocol/serverInfo":{"name":"devmap","version":"0.2.0"},"io.navide/resultChunks":{"chunks":81,"bytes":10612345}}}}
+```
+
+The child writes each piece as its own frame and may write frames of other
+requests (responses, progress, events) between them, so other calls to the same
+child are never held behind a large result. The Host keeps the pieces of each
+pending call in that call's entry; pieces for an id that is not pending (the
+call was cancelled, timed out or already settled) are dropped and counted, not
+a protocol error. The call's `timeoutMs` covers the whole transfer up to the
+final response. On timeout or cancellation the Host sends the existing
+`notifications/cancelled`, drops the pieces held so far, and the child should
+stop sending pieces for that id. The child is not restarted for any of this;
+the existing rule that a single frame over the frame limit is a protocol error
+stays, and pieces are what keep a correct child under it.
+
+`backend-wire-v1.schema.json` gains the notification and the summary-only
+success response together with the Host's parser change (the contract gate
+test pins every valid wire fixture to the parser), in the implementation PR.
+
+**Hop 2: Host → backend (WebSocket session).** When the Host's response
+`result` spells longer than one piece, the Host sends the request message
+`agent.capability.result_chunk` once per piece,
+
+```json
+{"request_id": "mcp:3f2a...", "seq": 0, "data": "{\"rows\":[..."}
+```
+
+waiting for each one's response before sending the next (the backend answers
+`{"ok": true, "accepted": true}`, or `accepted: false` when the request id is
+no longer pending, at which point the Host stops sending), then the existing
+`agent.capability.result` with `result` replaced by `resultChunks`:
+
+```json
+{"request_id": "mcp:3f2a...", "response": {"ok": true, "resultChunks": {"chunks": 81, "bytes": 10612345}, "meta": {"durationMs": 2310, "resultBytes": 10612345, "crossWorkspace": false}}}
+```
+
+Each piece is a separate WebSocket message, so other panes' requests and
+results interleave with the pieces on the same session; the one-at-a-time
+send gives flow control without a credit scheme. The backend accepts pieces
+only from the authenticated Host session and only for a pending request id,
+keeps them with that request's waiter, joins them when the final message
+arrives, and delivers `{ok: true, result: <parsed>, meta}` to the waiter as if
+it had arrived whole. The existing wait (`timeoutMs` + 5 s) covers the whole
+transfer; when it ends (timeout, MCP client gone) the pieces are dropped and
+later ones answer `accepted: false`. Results that fit one piece keep the
+current single message.
+
+**Hop 3: backend → agent (MCP HTTP).** The MCP server returns the joined
+result in one `tools/call` response. FastMCP's streamable HTTP transport has no
+response-size limit, so nothing is cut here; how much of a large result an
+agent CLI shows is that CLI's own behaviour and outside Navide.
+
 ## 5. Storage in `navide.db`
 
 The DDL is `PLUGIN_AUDIT_DDL` in `agent_tools_contract.py`; B1-d and D-e
@@ -798,7 +903,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | of the canonical arguments; the arguments are **not** stored |
 | `outcome` | TEXT | `ok` / `error` |
 | `error_code` | TEXT | `''` on success |
-| `duration_ms`, `result_bytes` | INTEGER | |
+| `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); 0 when the call has no result |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
@@ -815,6 +920,10 @@ Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
 outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
+
+The agent-tool row of `plugin_activity` carries no size of its own: the activity
+page shows the size of each call from `plugin_tool_calls.result_bytes` through
+`tool_call_id`.
 
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
@@ -896,4 +1005,7 @@ by editing the fixture.
 | DS7 Rescan | manual admin rescan; old reports are kept | a scanner upgrade is a deliberate operation |
 | DS8 Envelope | the 9-field disclosure envelope ships first, `scanDigest` may be `null` | D-a, D-b and D-c can merge before the scanner without another envelope change |
 | DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
+| DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
+| Result piece size | 131,072 UTF-8 bytes on both hops | worst-case escaping keeps a piece frame under the 1 MiB Backend Wire frame; small enough that other calls interleave |
+| Who measures the size | the Host, once, compact JSON (`agentToolResultBytes`) | one number from the hop that sees the plugin's value; the backend's spelling differs |
 | Example backend method names | lowercase dotted (`devmap.block.status`) | the Host supervisor refuses upper-case method names (2.1) |
