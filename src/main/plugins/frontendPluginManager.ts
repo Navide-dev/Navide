@@ -127,6 +127,7 @@ import {
   BackendPluginError,
   type BackendPluginLaunchSpec,
   type BackendPluginSubscription,
+  type BackendResultText,
   type JsonValue,
 } from './pluginBackendSupervisor'
 import {
@@ -183,13 +184,37 @@ import type { PluginActivityReportRequest } from '../../shared/pluginActivity'
 import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
+  AGENT_CAPABILITY_PROGRESS_MESSAGE,
+  AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+  AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+  AGENT_TOOL_CHUNK_BYTES,
+  AGENT_TOOL_CHUNK_IDLE_MS,
   AGENT_TOOLS_SYNC_EVENT,
-  agentToolResultBytes,
+  agentToolChunkArrival,
+  reassembleAgentToolPayloadText,
+  splitAgentToolPayloadText,
+  utf8ByteLength,
   type AgentToolCaller,
   type AgentToolCallResponse,
+  type AgentToolChunksInvalidReason,
   type AgentToolsSyncPayload,
 } from '../../shared/pluginAgentTools'
 import { agentToolUnavailableMessage, type PluginAgentToolsHost } from './pluginAgentToolsHost'
+
+/** An agent tool answer as the Host sends it: a result longer than one piece
+ *  stays the plugin's text in pieces, never parsed here (contract 4.4, R1 to R2). */
+type HostAgentToolResponse =
+  | AgentToolCallResponse
+  | { ok: true; resultText: BackendResultText; meta: { durationMs: number; resultBytes: number; crossWorkspace: boolean } }
+
+/** The Host's backend session takes messages of any size (agent-tools contract
+ *  4.4, A2); the `ws` default would close it at 100 MiB. Pieces keep every
+ *  message small anyway. */
+class UnboundedNodeWebSocket extends NodeWebSocket {
+  constructor(address: string, protocols?: string | string[]) {
+    super(address, protocols ?? [], { maxPayload: 0 })
+  }
+}
 import type { ThirdPartyLaunchSpec } from './pluginThirdPartyBackends'
 
 /** Everything the manager needs to launch one plugin view. */
@@ -1425,6 +1450,13 @@ export class FrontendPluginManager {
   /** instanceId -> canonical workspace root of a headless agent-tool binding. */
   private readonly headlessAgentToolRoots = new Map<string, string>()
   /** Agent-tool calls in flight, by their initiator id (read by the fs bridge). */
+  /** Argument pieces of agent tool requests whose request has not arrived yet (contract 4.4, A2). */
+  private readonly agentRequestPieces = new Map<string, {
+    pieces: string[]
+    shortSeen: boolean
+    failed?: AgentToolChunksInvalidReason
+    idle?: ReturnType<typeof setTimeout>
+  }>()
   private readonly agentToolCalls = new Map<string, {
     pluginId: string
     risk: 'read' | 'write'
@@ -7033,7 +7065,10 @@ export class FrontendPluginManager {
    * -> first-write confirmation (DB3) -> execution policy -> headless binding
    * -> call. Plans never comes here: its route above is unchanged.
    */
-  async executeAgentToolCall(request: Record<string, unknown>): Promise<AgentToolCallResponse> {
+  async executeAgentToolCall(
+    request: Record<string, unknown>,
+    onTransferProgress?: (phase: 'arguments' | 'execution' | 'result') => void,
+  ): Promise<HostAgentToolResponse> {
     const received = Date.now()
     const parsed = parseAgentToolCallRequest(request)
     if (!parsed) return agentToolError('BAD_REQUEST', 'malformed agent tool request')
@@ -7149,19 +7184,83 @@ export class FrontendPluginManager {
     // The bridge lets this call write only when it came through a write tool.
     this.agentToolCalls.set(initiator.id, { pluginId: spec.pluginId, risk, workspaceRoot: root!, caller: parsed.caller, spec })
     try {
-      const result = await this.pluginBackendHost.call(instanceId, tool.method, parsed.arguments, {
+      const text = await this.pluginBackendHost.callForResultText(instanceId, tool.method, parsed.arguments, {
         initiator,
         timeoutMs: Math.max(1, Math.min(tool.timeoutMs, Math.ceil(deadline - Date.now()))),
+        ...(onTransferProgress ? { onTransferProgress } : {}),
       })
       // DB9: no result cap. The tool already ran, so the result goes back
-      // whole and carries its size.
-      const resultBytes = agentToolResultBytes(result)
-      return { ok: true, result, meta: meta(resultBytes) }
+      // whole and carries its size. Longer than one piece, it is forwarded as
+      // the text it came in (the core parses it); within one piece it is
+      // parsed here and sent inline as before.
+      if (text.chunks > 1) return { ok: true, resultText: text, meta: meta(text.bytes) }
+      let result: unknown
+      try {
+        result = JSON.parse(text.piece(0))
+      } catch {
+        return {
+          ...agentToolError('PLUGIN_TOOL_CHUNKS_INVALID', 'The Navide plugin result did not arrive whole.'),
+          reason: 'json',
+          meta: meta(0),
+        }
+      }
+      return { ok: true, result, meta: meta(text.bytes) }
     } catch (error) {
       return this.agentToolBackendError(error, meta(0))
     } finally {
       this.agentToolCalls.delete(initiator.id)
     }
+  }
+
+  /** Send an agent tool answer to the core: a result longer than one piece
+   *  goes as `agent.capability.result_chunk` requests, each awaited, then the
+   *  summary in place of `result` (contract 4.4, R2). */
+  private async sendAgentToolResponse(client: WsClient, requestId: string, response: HostAgentToolResponse): Promise<void> {
+    if (response.ok && 'resultText' in response) {
+      // Each piece is decoded just before it goes, as the plugin spelled it.
+      const { resultText, ...rest } = response
+      for (let seq = 0; seq < resultText.chunks; seq++) {
+        const answer = await client.send<{ accepted?: boolean }>(
+          AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+          { request_id: requestId, seq, data: resultText.piece(seq) },
+          AGENT_TOOL_CHUNK_IDLE_MS,
+        ).catch(() => null)
+        // The core no longer waits for this request (timeout, client gone): stop.
+        if (!answer?.ok || answer.payload?.accepted !== true) return
+      }
+      await client.send(
+        'agent.capability.result',
+        { request_id: requestId, response: { ...rest, resultChunks: { chunks: resultText.chunks, bytes: resultText.bytes } } },
+        AGENT_TOOL_CHUNK_IDLE_MS,
+      ).catch(() => undefined)
+      return
+    }
+    if (response.ok) {
+      const text = JSON.stringify(response.result ?? null)
+      const bytes = utf8ByteLength(text)
+      if (bytes > AGENT_TOOL_CHUNK_BYTES) {
+        const pieces = splitAgentToolPayloadText(text)
+        for (const [seq, data] of pieces.entries()) {
+          const answer = await client.send<{ accepted?: boolean }>(
+            AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+            { request_id: requestId, seq, data },
+            AGENT_TOOL_CHUNK_IDLE_MS,
+          ).catch(() => null)
+          // The core no longer waits for this request (timeout, client gone): stop.
+          if (!answer?.ok || answer.payload?.accepted !== true) return
+        }
+        const { result: _sent, ...rest } = response
+        await client.send(
+          'agent.capability.result',
+          { request_id: requestId, response: { ...rest, resultChunks: { chunks: pieces.length, bytes } } },
+          AGENT_TOOL_CHUNK_IDLE_MS,
+        ).catch(() => undefined)
+        return
+      }
+    }
+    await client.send('agent.capability.result', { request_id: requestId, response }, 10_000).catch(() => {
+      // The MCP waiter has its own timeout; a closed backend is reported there.
+    })
   }
 
   /** The agent-tool call an initiator id belongs to, while it runs. */
@@ -7190,7 +7289,18 @@ export class FrontendPluginManager {
         return { ...agentToolUnavailable('plugin-stopping'), meta }
       }
       if (error.code === 'TIMEOUT') {
-        return { ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin did not answer in time.'), meta }
+        return {
+          ...agentToolError('PLUGIN_TOOL_TIMEOUT', 'The Navide plugin did not answer in time.'),
+          reason: error.reason === 'transfer-idle' ? 'transfer-idle' : 'execution',
+          meta,
+        }
+      }
+      if (error.code === 'CHUNKS_INVALID') {
+        return {
+          ...agentToolError('PLUGIN_TOOL_CHUNKS_INVALID', 'The Navide plugin result did not arrive whole.'),
+          reason: (error.reason ?? 'bytes') as AgentToolChunksInvalidReason,
+          meta,
+        }
       }
       if (error.code === 'INVALID_ARGUMENT' || error.pluginCode === 'INVALID_ARGUMENT') {
         return { ...agentToolError('PLUGIN_TOOL_INVALID_ARGUMENTS', 'The tool arguments are invalid.'), meta }
@@ -8525,9 +8635,14 @@ export class FrontendPluginManager {
     if (!this.backendWsUrl) return null
     if (!this.wsClient) {
       const client = createWsClient({
-        WebSocketImpl: NodeWebSocket as unknown as WsConstructor,
+        WebSocketImpl: UnboundedNodeWebSocket as unknown as WsConstructor,
         onStatus: (s) => {
-          if (s !== 'connected') this.hostSessionRegistered = false
+          if (s !== 'connected') {
+            this.hostSessionRegistered = false
+            // Pieces belong to the session that sent them.
+            for (const held of this.agentRequestPieces.values()) clearTimeout(held.idle)
+            this.agentRequestPieces.clear()
+          }
           this.dispatchBackendStatus(s)
           if (s === 'connected') this.registerHostSession(client)
         },
@@ -8547,6 +8662,9 @@ export class FrontendPluginManager {
       }
       client.on('agent.capability.request', (payload) => {
         void this.handleAgentCapabilityRequest(client, payload)
+      })
+      client.on(AGENT_CAPABILITY_REQUEST_CHUNK_EVENT, (payload) => {
+        this.holdAgentRequestPiece(client, payload)
       })
       client.on(MARKETPLACE_QUERY_REQUEST_EVENT, (payload) => {
         void this.handleMarketplaceQueryRequest(client, payload)
@@ -8730,6 +8848,51 @@ export class FrontendPluginManager {
     })
   }
 
+  /** Keep one argument piece of an agent tool request until the request arrives (contract 4.4, A2). */
+  private holdAgentRequestPiece(client: WsClient, payload: unknown): void {
+    if (this.wsClient !== client || !this.hostSessionRegistered) return
+    const record = exactRecord(payload, ['request_id', 'seq', 'data'])
+    if (!record || !nonEmptyString(record.request_id)) return
+    const requestId = record.request_id
+    const held = this.agentRequestPieces.get(requestId) ?? { pieces: [], shortSeen: false }
+    if (held.failed) return
+    const arrival = agentToolChunkArrival(held.shortSeen, record.data, AGENT_TOOL_CHUNK_BYTES, record.seq, held.pieces.length)
+    if (!arrival.ok) {
+      held.failed = arrival.reason
+    } else {
+      held.pieces.push(record.data as string)
+      held.shortSeen = arrival.short
+    }
+    // A piece that never gets its request is dropped after the idle time; a
+    // short piece (the last one) does not restart it.
+    if (!arrival.ok || held.pieces.length === 1 || !arrival.short) {
+      clearTimeout(held.idle)
+      held.idle = setTimeout(() => {
+        if (this.agentRequestPieces.get(requestId) === held) this.agentRequestPieces.delete(requestId)
+      }, AGENT_TOOL_CHUNK_IDLE_MS)
+      held.idle.unref?.()
+    }
+    this.agentRequestPieces.set(requestId, held)
+  }
+
+  /** Join the argument pieces of a request that carries `payload.argumentChunks`. */
+  private joinAgentRequestArguments(
+    requestId: string,
+    summary: unknown,
+  ): { ok: true; arguments: unknown } | { ok: false; reason: AgentToolChunksInvalidReason } {
+    const held = this.agentRequestPieces.get(requestId)
+    this.agentRequestPieces.delete(requestId)
+    clearTimeout(held?.idle)
+    if (held?.failed) return { ok: false, reason: held.failed }
+    const joined = reassembleAgentToolPayloadText((held?.pieces ?? []).map((data, seq) => ({ seq, data })), summary)
+    if (!joined.ok) return { ok: false, reason: joined.reason }
+    try {
+      return { ok: true, arguments: JSON.parse(joined.text) }
+    } catch {
+      return { ok: false, reason: 'json' }
+    }
+  }
+
   private async handleAgentCapabilityRequest(client: WsClient, payload: unknown): Promise<void> {
     const record: Record<string, unknown> =
       typeof payload === 'object' && payload !== null && !Array.isArray(payload)
@@ -8779,24 +8942,38 @@ export class FrontendPluginManager {
       nonEmptyString((record.target as Record<string, unknown>).plugin_id) &&
       nonEmptyString((record.target as Record<string, unknown>).workspace_path)
     if (record.operation === 'agentTool' && nonEmptyString(record.request_id)) {
-      let toolResponse: AgentToolCallResponse
-      try {
-        toolResponse = await this.executeAgentToolCall(record)
-      } catch (error) {
-        // Never forward an internal message (it can carry local paths).
-        console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)
-        toolResponse = agentToolError('PLUGIN_TOOL_FAILED', 'The Navide plugin tool failed.')
+      const requestId = record.request_id
+      let toolResponse: HostAgentToolResponse
+      // Arguments sent in pieces (contract 4.4, A2) are joined before anything else.
+      const chunked = exactRecord(record.payload, ['argumentChunks'])
+      const joined = chunked ? this.joinAgentRequestArguments(requestId, chunked.argumentChunks) : null
+      if (joined && !joined.ok) {
+        toolResponse = {
+          ...agentToolError('PLUGIN_TOOL_CHUNKS_INVALID', 'The tool arguments did not arrive whole.'),
+          reason: joined.reason,
+        }
+      } else {
+        // Each step of a long call tells the core the call is alive (contract 4.4, Timing).
+        const progress = (phase: 'arguments' | 'execution' | 'result'): void => {
+          if (this.wsClient !== client) return
+          void client.send(AGENT_CAPABILITY_PROGRESS_MESSAGE, { request_id: requestId, phase }, AGENT_TOOL_CHUNK_IDLE_MS)
+            .catch(() => undefined)
+        }
+        try {
+          toolResponse = await this.executeAgentToolCall(
+            joined ? { ...record, payload: { arguments: joined.arguments } } : record,
+            progress,
+          )
+        } catch (error) {
+          // Never forward an internal message (it can carry local paths).
+          console.warn(`[plugin-backend] agent tool request failed: ${error instanceof Error ? error.message : String(error)}`)
+          toolResponse = agentToolError('PLUGIN_TOOL_FAILED', 'The Navide plugin tool failed.')
+        }
       }
       if (this.wsClient !== client || !this.hostSessionRegistered) {
         return refuse('BACKEND_UNAVAILABLE', 'Host backend session lapsed while the request ran')
       }
-      await client.send(
-        'agent.capability.result',
-        { request_id: record.request_id, response: toolResponse },
-        10_000,
-      ).catch(() => {
-        // The MCP waiter has its own timeout; a closed backend is reported there.
-      })
+      await this.sendAgentToolResponse(client, requestId, toolResponse)
       return
     }
     if (!legacyRequest && !workspaceRequest) {

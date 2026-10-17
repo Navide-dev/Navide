@@ -68,6 +68,8 @@ const childToHostWireFixtures = [
   'missing-result-type.json',
   'missing-result-value.json',
   'missing-server-info.json',
+  'result-chunk-without-request-id.json',
+  'result-chunks-with-value.json',
   'subscription-close-missing-id.json',
 ]
 const hostToChildWireFixtures = [

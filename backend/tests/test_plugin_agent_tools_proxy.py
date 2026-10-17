@@ -25,6 +25,7 @@ from agent_team_backend.guard.taint import is_tainted, list_tainted
 from agent_team_backend.mcp_server import plugin_agent_tools as proxy
 from agent_team_backend.mcp_server import server as core
 from agent_team_backend.mcp_server.server import _Caller
+from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_IDLE_MS, reassemble_agent_tool_payload_text
 
 pytestmark = pytest.mark.asyncio
 
@@ -77,10 +78,21 @@ class FakeHost:
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
         self.response: dict[str, Any] = {"ok": True, "result": {"status": "done"}, "meta": {}}
+        self.argument_pieces: list[dict[str, Any]] = []
 
     async def unicast_host(self, event: dict[str, Any]) -> bool:
+        # Arguments longer than one piece arrive first as request_chunk events
+        # (contract 4.4, A2); the Host joins them when the request comes.
+        if event["type"] == "agent.capability.request_chunk":
+            self.argument_pieces.append(event["payload"])
+            return True
         assert event["type"] == "agent.capability.request"
         request = event["payload"]
+        if "argumentChunks" in request["payload"]:
+            joined = reassemble_agent_tool_payload_text(self.argument_pieces, request["payload"]["argumentChunks"])
+            assert joined["ok"], joined
+            request = request | {"payload": {"arguments": json.loads(joined["text"])}}
+            self.argument_pieces = []
         self.requests.append(request)
         assert core.resolve_agent_capability(request["request_id"], self.response)
         return True
@@ -368,15 +380,17 @@ async def test_the_wait_follows_the_tool_timeout(host: FakeHost, monkeypatch) ->
     _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
     _apply(_snapshot(1, [_entry("devmap_read", timeoutMs=1234)]))
     waits: list[float] = []
-    original = core._agent_capability_pending.wait
+    original = core._wait_for_host_answer
 
-    async def recording_wait(request_id: str, future: Any, *, timeout: float) -> Any:
-        waits.append(timeout)
-        return await original(request_id, future, timeout=timeout)
+    async def recording_wait(request_id: str, future: Any, window: float) -> Any:
+        waits.append(window)
+        return await original(request_id, future, window)
 
-    monkeypatch.setattr(core._agent_capability_pending, "wait", recording_wait)
+    monkeypatch.setattr(core, "_wait_for_host_answer", recording_wait)
     await core.server.call_tool("devmap_read", {})
-    assert waits == [1.234 + core._HOST_ANSWER_GRACE_S]
+    # Contract 4.4, Timing: max(timeoutMs, the 30 s transfer idle time) + 5 s,
+    # restarted by every sign of life from the Host.
+    assert waits == [max(1.234, AGENT_TOOL_CHUNK_IDLE_MS / 1000) + core._HOST_ANSWER_GRACE_S]
 
 
 @pytest.mark.parametrize("state", [
@@ -822,6 +836,138 @@ async def test_two_declared_values_served_alike_are_refused_not_guessed(host: Fa
     # The declared value itself is never ambiguous.
     await core.server.call_tool("devmap_read", {"mode": "a\u200bb"})
     assert host.requests[0]["payload"] == {"arguments": {"mode": "a\u200bb"}}
+
+
+# ── audit rows (contract 5): every call is recorded, sizes as measured ──────
+
+
+def _audit(tmp_path, monkeypatch) -> Any:
+    from agent_team_backend.plugins.audit_log import PluginAuditLog
+
+    log = PluginAuditLog(Database(tmp_path / "audit.db"))
+    monkeypatch.setattr(app, "plugin_audit_log", log)
+    return log
+
+
+async def _rows(log: Any) -> list[dict[str, Any]]:
+    import asyncio
+    import sqlite3
+
+    # flush computes digests: never on the event loop.
+    await asyncio.to_thread(log.flush)
+    connection = sqlite3.connect(log.db.path)
+    connection.row_factory = sqlite3.Row
+    try:
+        return [dict(row) for row in connection.execute("SELECT * FROM plugin_tool_calls ORDER BY id")]
+    finally:
+        connection.close()
+
+
+async def test_a_call_is_audited_with_its_real_argument_and_result_sizes(host: FakeHost, tmp_path, monkeypatch) -> None:
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    host.response = {"ok": True, "result": {"status": "done"}, "meta": {"durationMs": 1, "resultBytes": 17, "crossWorkspace": False}}
+    arguments = {"block_id": "中文 😀"}
+    await core.server.call_tool("devmap_read", arguments)
+    [row] = await _rows(log)
+    assert row["outcome"] == "ok" and row["error_code"] == ""
+    assert row["args_bytes"] == len(json.dumps(arguments, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+    assert row["result_bytes"] == 17
+    assert (row["caller_kind"], row["pane_id"], row["pane_name"]) == ("pane", "p-41", "dev")
+    assert (row["plugin_id"], row["plugin_version"], row["tool"], row["risk"]) == ("nerdtechnic.devmap", "0.2.0", "devmap_read", "read")
+    assert row["target_workspace"] == "/ws/project" and row["cross_workspace"] == 0
+
+
+async def test_an_unknown_result_size_is_audited_as_minus_one(host: FakeHost, tmp_path, monkeypatch) -> None:
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    host.response = {"ok": True, "result": {"status": "done"}, "meta": {}}
+    await core.server.call_tool("devmap_read", {})
+    [row] = await _rows(log)
+    assert (row["outcome"], row["result_bytes"]) == ("ok", -1)
+
+
+async def test_a_failed_call_is_audited_with_its_error_code(host: FakeHost, tmp_path, monkeypatch) -> None:
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    host.response = {"ok": False, "error": "slow", "error_code": "PLUGIN_TOOL_TIMEOUT", "reason": "transfer-idle"}
+    body = _body(await core.server.call_tool("devmap_read", {}))
+    # The transfer reason reaches the agent too (contract 4.4, Timing).
+    assert (body["error_code"], body["reason"]) == ("PLUGIN_TOOL_TIMEOUT", "transfer-idle")
+    [row] = await _rows(log)
+    assert (row["outcome"], row["error_code"], row["result_bytes"]) == ("error", "PLUGIN_TOOL_TIMEOUT", 0)
+
+
+async def test_a_refused_call_is_audited_too(host: FakeHost, tmp_path, monkeypatch) -> None:
+    log = _audit(tmp_path, monkeypatch)
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read", state="plugin-disabled")]))
+    await core.server.call_tool("devmap_read", {})
+    [row] = await _rows(log)
+    assert (row["outcome"], row["error_code"]) == ("error", "PLUGIN_TOOL_UNAVAILABLE")
+    assert host.requests == []
+
+
+async def test_a_cancelled_call_is_audited(tmp_path, monkeypatch) -> None:
+    import asyncio
+
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    sent = asyncio.Event()
+
+    async def silent_host(_event: dict[str, Any]) -> bool:
+        sent.set()
+        return True
+
+    monkeypatch.setattr(app, "unicast_host", silent_host)
+    task = asyncio.create_task(core.server.call_tool("devmap_read", {}))
+    await sent.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    [row] = await _rows(log)
+    assert (row["outcome"], row["error_code"]) == ("error", "cancelled")
+
+
+async def test_an_audit_write_failure_never_changes_the_call(host: FakeHost, monkeypatch) -> None:
+    class Broken:
+        def record_tool_call(self, **_kwargs: Any) -> int:
+            raise RuntimeError("disk full")
+
+    monkeypatch.setattr(app, "plugin_audit_log", Broken())
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    result = await core.server.call_tool("devmap_read", {})
+    assert result.isError is False
+    assert '{"status": "done"}' in result.content[0].text
+
+
+async def test_auditing_10_mib_of_arguments_does_not_hold_the_event_loop(host: FakeHost, tmp_path, monkeypatch) -> None:
+    import time
+
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_read")]))
+    arguments = {"block_id": "x" * (10 * 1_048_576)}
+    started = time.perf_counter()
+    log.record_tool_call(
+        caller_kind="pane", target_workspace="/ws/project", plugin_id="nerdtechnic.devmap", plugin_version="0.2.0",
+        tool="devmap_read", risk="read", arguments=arguments, outcome="ok", duration_ms=1, result_bytes=0,
+    )
+    # Queuing is O(1); the digest of the 10 MiB runs at flush, off the loop.
+    assert time.perf_counter() - started < 0.02
+    [row] = await _rows(log)
+    assert row["args_bytes"] == len(json.dumps(arguments, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
 
 
 async def test_a_declared_value_another_one_is_served_as_is_refused_not_guessed(host: FakeHost, monkeypatch) -> None:

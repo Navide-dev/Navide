@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from 'node:child_process'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { TextDecoder } from 'node:util'
+import { isLargePieceFrame, OFF_THREAD_FRAME_BYTES, parseFrameOffThread, type OffThreadFrame } from './backendFrameWorker'
 import {
   isAllowedBackendTimeout,
   MAX_BACKEND_BRIDGE_QUEUE_BYTES,
@@ -26,6 +28,18 @@ import {
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import type { PluginSystemNamespace } from './pluginManifestV2'
 import type { DisclosureAgentTool, DisclosurePermissions } from '../../shared/pluginDisclosure'
+import {
+  AGENT_TOOL_CHUNK_BYTES,
+  AGENT_TOOL_CHUNK_IDLE_MS,
+  BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+  BACKEND_WIRE_ARGUMENT_CHUNKS_KEY,
+  BACKEND_WIRE_RESULT_CHUNK_METHOD,
+  BACKEND_WIRE_RESULT_CHUNKS_KEY,
+  agentToolChunkArrival,
+  reassembleAgentToolPayloadText,
+  splitAgentToolPayloadText,
+  utf8ByteLength,
+} from '../../shared/pluginAgentTools'
 
 /** Private Electron-main seam for Backend Wire v1 conformance tests. */
 export const MCP_PROTOCOL_REVISION = '2026-07-28'
@@ -127,6 +141,8 @@ export type BackendPluginErrorCode =
   | 'PROTOCOL_ERROR'
   | 'PLUGIN_STOPPING'
   | 'RESULT_TOO_LARGE'
+  /** The pieces of a result could not be joined (contract 4.4); `reason` says why. */
+  | 'CHUNKS_INVALID'
 
 const ERROR_MESSAGES: Record<BackendPluginErrorCode, string> = {
   INVALID_ACTIVATION: 'Backend plugin activation is invalid.',
@@ -142,24 +158,28 @@ const ERROR_MESSAGES: Record<BackendPluginErrorCode, string> = {
   PROTOCOL_ERROR: PROTOCOL_ERROR_MESSAGE,
   PLUGIN_STOPPING: 'Backend plugin is stopping.',
   RESULT_TOO_LARGE: 'Backend plugin result is too large.',
+  CHUNKS_INVALID: 'Backend plugin result pieces could not be joined.',
 }
 
 export class BackendPluginError extends Error {
   readonly code: BackendPluginErrorCode
   readonly requestId?: WireRequestId
   readonly pluginCode?: string
+  /** TIMEOUT: `execution` or `transfer-idle`; CHUNKS_INVALID: the join reason (contract 4.4). */
+  readonly reason?: string
   override readonly cause?: unknown
 
   constructor(
     code: BackendPluginErrorCode,
     message = ERROR_MESSAGES[code],
-    options: { requestId?: WireRequestId; pluginCode?: string; cause?: unknown } = {}
+    options: { requestId?: WireRequestId; pluginCode?: string; cause?: unknown; reason?: string } = {}
   ) {
     super(message, { cause: options.cause })
     this.name = 'BackendPluginError'
     this.code = code
     this.requestId = options.requestId
     this.pluginCode = options.pluginCode
+    this.reason = options.reason
     this.cause = options.cause
   }
 }
@@ -171,6 +191,22 @@ export interface BackendPluginCallOptions {
   timeoutMs?: number
   /** Host-only origin override; never accepted from child payloads. */
   initiator?: AuthenticatedInitiator
+  /** Told each time the call makes progress (contract 4.4, Timing): an argument
+   *  piece left the output queue, the call was written, a result piece arrived. */
+  onTransferProgress?: (phase: 'arguments' | 'execution' | 'result') => void
+  /** Host-only: settle with a {@link BackendResultText} in place of the parsed
+   *  value. A result longer than one piece is then never joined or parsed on
+   *  this thread (agent tools, contract 4.4, R1 to R2). */
+  resultText?: boolean
+}
+
+/** A call's result as its compact JSON spelling in pieces, never parsed by the Host. */
+export interface BackendResultText {
+  /** UTF-8 bytes of the whole spelling. */
+  readonly bytes: number
+  readonly chunks: number
+  /** Piece `index`, decoded when asked for: at most AGENT_TOOL_CHUNK_BYTES bytes. */
+  piece(index: number): string
 }
 
 export interface BackendPluginEvent {
@@ -257,6 +293,15 @@ export interface BackendChildResourceUsage {
   outputQueue: { requests: BackendQueueUsage; notifications: BackendQueueUsage }
   /** Always 0 now that notifications are never dropped; kept for older readers. */
   droppedNotifications: number
+  /** Result pieces that arrived for a call no longer pending and were dropped (contract 4.4, R1). */
+  droppedResultPieces: number
+  /**
+   * Bytes of a stdout frame the child has started but not ended (no newline
+   * yet), held in Host memory; `peakBytes` since this supervisor was created.
+   * A frame has no size limit, so a child that never ends one grows this
+   * without bound: disclosed, never cut off.
+   */
+  stdoutPending: { bytes: number; peakBytes: number }
 }
 
 export interface PluginBackendSupervisorOptions {
@@ -295,12 +340,24 @@ export interface AuthorizedPlanRootBinding {
   value: string | null
 }
 
+/** One stdout frame: its bytes, or for a frame over the off-thread threshold
+ *  the chunks it came in, handed to the worker without being joined here. */
+type StdoutLine = Buffer | { readonly parts: Uint8Array[] }
+
 interface PendingRequest {
   readonly generation: ChildGeneration
   readonly origin?: PlansBridgeOrigin
   readonly resolve: (response: BackendWireResponse) => void
   readonly reject: (error: BackendPluginError) => void
   readonly cleanup: () => void
+  /** Takes one result piece (contract 4.4, R1); `pieces` holds them in order,
+   *  as bytes when they came as bytes and the caller takes text. */
+  readonly receivePiece: (seq: JsonValue, data: JsonValue, dataBytes?: Uint8Array) => void
+  readonly pieces: Array<string | Uint8Array>
+  /** UTF-8 bytes of `pieces`, counted as each arrives. */
+  readonly pieceBytes: () => number
+  /** The caller takes the result as text (`resultText`). */
+  readonly resultText: boolean
 }
 
 interface BridgeOriginBinding {
@@ -326,7 +383,15 @@ interface ChildGeneration {
   readonly id: number
   readonly child: ChildProcessWithoutNullStreams
   exited: boolean
-  stdoutBuffer: Buffer
+  /** Bytes of the unterminated frame so far, joined once its newline arrives. */
+  stdoutPending: Buffer[]
+  stdoutPendingBytes: number
+  /** Frames that arrived while a larger one is parsed off the main thread, in order. */
+  parkedLines: StdoutLine[] | null
+  /** Time spent on this child's stdout in the current event-loop turn, and the pause it may cause. */
+  stdoutTurnMs: number
+  stdoutTurnScheduled: boolean
+  stdoutPaused: boolean
   stderrBuffer: Buffer
   stderrTruncated: boolean
   diagnosticEmittedBytes: number
@@ -340,6 +405,10 @@ interface ChildGeneration {
   outputNotificationBytes: number
   outputWriting: boolean
   droppedNotifications: number
+  /** Resolved each time the output queue runs empty (argument pieces wait on it). */
+  drainWaiters: Array<() => void>
+  /** The child's navide/health said it reads argument pieces (contract 4.4, A3). */
+  acceptsArgumentChunks: boolean
   resolveExit?: () => void
   terminationTask?: Promise<void>
   listeners: {
@@ -356,6 +425,14 @@ interface SuccessResponse {
   value?: JsonValue
   serverInfo: BackendServerInfo
   subscriptionId?: WireRequestId
+  /** `{chunks, bytes}` of a result sent in pieces, in place of `value` (contract 4.4, R1). */
+  resultChunks?: JsonValue
+  /** navide/health only: the child reads argument pieces (contract 4.4, A3). */
+  argumentChunks?: boolean
+  /** A value parsed off the main thread, as its UTF-8 spelling and piece cuts (`value` is null). */
+  offThreadValue?: { bytes: Uint8Array; cuts: number[] }
+  /** A result received in pieces and kept as text, for a `resultText` call. */
+  resultPieces?: { pieces: Array<string | Uint8Array>; bytes: number }
 }
 
 interface PluginErrorResponse {
@@ -407,11 +484,21 @@ interface BackendBridgeCancellationNotification {
   reason?: string
 }
 
+interface ResultChunkNotification {
+  kind: 'result-chunk'
+  requestId: WireRequestId
+  seq: JsonValue
+  data: JsonValue
+  /** The data as UTF-8, when the frame was parsed off the main thread (`data` is ""). */
+  dataBytes?: Uint8Array
+}
+
 type BackendWireNotification =
   | SubscriptionAcknowledgedNotification
   | EventNotification
   | ProgressNotification
   | BackendBridgeCancellationNotification
+  | ResultChunkNotification
 
 export type BackendWireHostFrame = BackendWireResponse | BackendWireNotification | BackendBridgeRequestFrame
 
@@ -766,7 +853,13 @@ function validateSuccessResponse(frame: { [key: string]: unknown }): SuccessResp
   if (subscriptionId !== undefined && !isRequestId(subscriptionId)) {
     throw new Error(PROTOCOL_ERROR_MESSAGE)
   }
-  if (!hasValue && subscriptionId === undefined) throw new Error(PROTOCOL_ERROR_MESSAGE)
+  // A result sent in pieces ends with its summary in place of `value`; the
+  // summary itself is checked when the pieces are joined.
+  const resultChunks = meta[BACKEND_WIRE_RESULT_CHUNKS_KEY]
+  if (resultChunks !== undefined && (hasValue || subscriptionId !== undefined || !isJsonValue(resultChunks))) {
+    throw new Error(PROTOCOL_ERROR_MESSAGE)
+  }
+  if (!hasValue && subscriptionId === undefined && resultChunks === undefined) throw new Error(PROTOCOL_ERROR_MESSAGE)
   const value = frame.result.value
   return {
     kind: 'success',
@@ -774,6 +867,8 @@ function validateSuccessResponse(frame: { [key: string]: unknown }): SuccessResp
     ...(hasValue ? { value: value as JsonValue } : {}),
     serverInfo: info,
     ...(subscriptionId !== undefined ? { subscriptionId } : {}),
+    ...(resultChunks !== undefined ? { resultChunks: resultChunks as JsonValue } : {}),
+    ...(isRecord(meta[BACKEND_WIRE_ARGUMENT_CHUNKS_KEY]) ? { argumentChunks: true } : {}),
   }
 }
 
@@ -925,6 +1020,13 @@ function validateNotification(frame: JsonValue): BackendWireNotification {
       payload: frame.params.payload,
     }
   }
+  if (frame.method === BACKEND_WIRE_RESULT_CHUNK_METHOD) {
+    if (!hasExactKeys(frame.params, ['requestId', 'seq', 'data']) || !isRequestId(frame.params.requestId)) {
+      throw new Error(PROTOCOL_ERROR_MESSAGE)
+    }
+    if (!isJsonValue(frame.params.seq) || !isJsonValue(frame.params.data)) throw new Error(PROTOCOL_ERROR_MESSAGE)
+    return { kind: 'result-chunk', requestId: frame.params.requestId, seq: frame.params.seq, data: frame.params.data }
+  }
   if (frame.method === 'notifications/progress') {
     if (!hasOnlyKeys(frame.params, ['progressToken', 'progress', 'total', 'message'])) {
       throw new Error(PROTOCOL_ERROR_MESSAGE)
@@ -988,6 +1090,21 @@ function encodeFrame(frame: JsonValue): Buffer {
 
 function defaultSpawnProcess(entryFile: string, options: SpawnOptions): ChildProcessWithoutNullStreams {
   return spawn(entryFile, [], options) as ChildProcessWithoutNullStreams
+}
+
+/** Milliseconds of stdout work per event-loop turn before reading yields (see paceStdout). */
+const STDOUT_TURN_MS = 8
+
+// spawn() is synchronous (fork and exec). A hundred plugins starting at once
+// used to spawn back to back in one turn and hold the event loop for about a
+// second. Each spawn now takes its own turn so I/O runs in between; every
+// child still starts, in the order its start reached this point.
+let spawnTurn: Promise<unknown> = Promise.resolve()
+
+function takeSpawnTurn(): Promise<void> {
+  const turn = spawnTurn.then(() => nextTurn())
+  spawnTurn = turn
+  return turn
 }
 
 function waitForExit(exitPromise: Promise<void>, timeoutMs: number): Promise<boolean> {
@@ -1076,6 +1193,9 @@ export class PluginBackendSupervisor {
   private currentGeneration?: ChildGeneration
   private nextGenerationId = 0
   private readonly pending = new Map<WireRequestId, PendingRequest>()
+  /** Result pieces that arrived for a call no longer pending (contract 4.4: dropped and counted). */
+  private droppedResultPieces = 0
+  private stdoutPendingPeak = 0
   private readonly subscriptions = new Set<SubscriptionState>()
   private readonly subscriptionsByRequestId = new Map<WireRequestId, SubscriptionState>()
   private readonly subscriptionsByProgressToken = new Map<WireRequestId, SubscriptionState>()
@@ -1196,6 +1316,8 @@ export class PluginBackendSupervisor {
         },
       },
       droppedNotifications: generation?.droppedNotifications ?? 0,
+      droppedResultPieces: this.droppedResultPieces,
+      stdoutPending: { bytes: generation?.stdoutPendingBytes ?? 0, peakBytes: this.stdoutPendingPeak },
     }
   }
 
@@ -1710,6 +1832,8 @@ export class PluginBackendSupervisor {
       if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
       await this.beforeSpawn?.()
       if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
+      await takeSpawnTurn()
+      if (this.state !== 'starting') throw new BackendPluginError(this.lifecycleErrorCode())
       this.spawnChild()
       const id = this.nextRequestId()
       const response = await this.sendRequest(
@@ -1724,6 +1848,9 @@ export class PluginBackendSupervisor {
       const health = this.successResult(response)
       if (this.state !== 'starting') {
         throw new BackendPluginError(this.lifecycleErrorCode())
+      }
+      if (this.currentGeneration) {
+        this.currentGeneration.acceptsArgumentChunks = response.kind === 'success' && response.argumentChunks === true
       }
       this.health = health
       this.state = 'ready'
@@ -1812,7 +1939,12 @@ export class PluginBackendSupervisor {
       id: ++this.nextGenerationId,
       child,
       exited: false,
-      stdoutBuffer: Buffer.alloc(0),
+      stdoutPending: [],
+      stdoutPendingBytes: 0,
+      parkedLines: null,
+      stdoutTurnMs: 0,
+      stdoutTurnScheduled: false,
+      stdoutPaused: false,
       stderrBuffer: Buffer.alloc(0),
       stderrTruncated: false,
       diagnosticEmittedBytes: 0,
@@ -1823,6 +1955,8 @@ export class PluginBackendSupervisor {
       outputNotificationBytes: 0,
       outputWriting: false,
       droppedNotifications: 0,
+      drainWaiters: [],
+      acceptsArgumentChunks: false,
       exitPromise: new Promise<void>((resolve) => {
         resolveExit = resolve
       }),
@@ -1863,37 +1997,131 @@ export class PluginBackendSupervisor {
       this.state === 'failed' ||
       this.state === 'restarting'
     ) return
-    const bytes = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
-    generation.stdoutBuffer = Buffer.concat([generation.stdoutBuffer, bytes])
-    if (generation.stdoutBuffer.length > this.maxFrameBytes && !generation.stdoutBuffer.includes(0x0a)) {
+    const started = performance.now()
+    try {
+      this.readStdout(generation, chunk)
+    } finally {
+      this.paceStdout(generation, performance.now() - started)
+    }
+  }
+
+  /**
+   * A child that writes fast hands over many frames in one event-loop turn
+   * (libuv reads up to 2 MiB per wakeup). Once a turn has spent
+   * STDOUT_TURN_MS on this child's frames, reading pauses until the next
+   * turn, so timers, IPC and other children run in between. Pacing, not a
+   * limit: every byte is read, a few milliseconds later.
+   */
+  private paceStdout(generation: ChildGeneration, elapsedMs: number): void {
+    generation.stdoutTurnMs += elapsedMs
+    if (!generation.stdoutTurnScheduled) {
+      generation.stdoutTurnScheduled = true
+      setImmediate(() => {
+        generation.stdoutTurnMs = 0
+        generation.stdoutTurnScheduled = false
+      })
+    }
+    if (generation.stdoutTurnMs <= STDOUT_TURN_MS || generation.stdoutPaused || generation.exited) return
+    generation.stdoutPaused = true
+    generation.child.stdout.pause()
+    setTimeout(() => {
+      generation.stdoutPaused = false
+      if (!generation.exited) generation.child.stdout.resume()
+    }, 0)
+  }
+
+  private readStdout(generation: ChildGeneration, chunk: Buffer | string): void {
+    let rest = typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : chunk
+    // Frames of any size are read (contract 4.4, R1): a frame's size never
+    // fails or restarts the child. Only a malformed frame is a protocol error.
+    // Only the new bytes are scanned, and a frame's bytes are joined once, when
+    // its newline arrives, so a large frame costs linear time.
+    while (true) {
+      const newline = rest.indexOf(0x0a)
+      if (newline < 0) {
+        if (rest.length > 0) {
+          generation.stdoutPending.push(rest)
+          generation.stdoutPendingBytes += rest.length
+          this.stdoutPendingPeak = Math.max(this.stdoutPendingPeak, generation.stdoutPendingBytes)
+        }
+        return
+      }
+      const head = rest.subarray(0, newline)
+      const line: StdoutLine = generation.stdoutPendingBytes + head.length > OFF_THREAD_FRAME_BYTES
+        ? { parts: [...generation.stdoutPending, head] }
+        : generation.stdoutPending.length === 0 ? head : Buffer.concat([...generation.stdoutPending, head])
+      generation.stdoutPending = []
+      generation.stdoutPendingBytes = 0
+      rest = rest.subarray(newline + 1)
+      if (generation.parkedLines) {
+        generation.parkedLines.push(line)
+        continue
+      }
+      if (!this.acceptLine(generation, line)) return
+    }
+  }
+
+  /** Parse and handle one frame; false once the child has failed. */
+  private acceptLine(generation: ChildGeneration, line: StdoutLine): boolean {
+    if (!Buffer.isBuffer(line) || line.length > OFF_THREAD_FRAME_BYTES || isLargePieceFrame(line)) {
+      // A large frame is joined, decoded, checked (a carriage return fails
+      // the same scan) and parsed in a worker thread; the frames after it
+      // wait, so frames are still handled in the order they came.
+      generation.parkedLines = []
+      parseFrameOffThread(Buffer.isBuffer(line) ? [line] : line.parts, AGENT_TOOL_CHUNK_BYTES, JsonScanner).then(
+        (parsed) => this.resumeAfterOffThread(generation, parsed),
+        () => this.resumeAfterOffThread(generation, null),
+      )
+      return true
+    }
+    if (line.includes(0x0d)) {
+      this.failProcess(generation, 'PROTOCOL_ERROR')
+      return false
+    }
+    let frame: BackendWireHostFrame
+    try {
+      frame = parseBackendWireHostFrame(line)
+    } catch {
+      this.failProcess(generation, 'PROTOCOL_ERROR')
+      return false
+    }
+    try {
+      this.handleFrame(generation, frame)
+    } catch {
+      this.failProcess(generation, 'PROTOCOL_ERROR')
+      return false
+    }
+    return true
+  }
+
+  private resumeAfterOffThread(generation: ChildGeneration, parsed: OffThreadFrame | null): void {
+    const parked = generation.parkedLines ?? []
+    generation.parkedLines = null
+    if (
+      this.currentGeneration !== generation ||
+      this.state === 'closed' ||
+      this.state === 'failed' ||
+      this.state === 'restarting'
+    ) return
+    let frame: BackendWireHostFrame
+    try {
+      if (!parsed) throw new Error(PROTOCOL_ERROR_MESSAGE)
+      frame = parseBackendWireHostFrame(parsed.envelope)
+      if (parsed.value && frame.kind === 'success') frame = { ...frame, offThreadValue: parsed.value }
+      if (parsed.data && frame.kind === 'result-chunk') frame = { ...frame, dataBytes: parsed.data }
+      this.handleFrame(generation, frame)
+    } catch {
       this.failProcess(generation, 'PROTOCOL_ERROR')
       return
     }
-    while (true) {
-      const newline = generation.stdoutBuffer.indexOf(0x0a)
-      if (newline < 0) {
-        if (generation.stdoutBuffer.length > this.maxFrameBytes) this.failProcess(generation, 'PROTOCOL_ERROR')
+    for (const [index, line] of parked.entries()) {
+      // acceptLine may have parked again on a large frame: the rest wait behind it.
+      const parkedAgain = generation.parkedLines as StdoutLine[] | null
+      if (parkedAgain) {
+        parkedAgain.push(...parked.slice(index))
         return
       }
-      const line = generation.stdoutBuffer.subarray(0, newline)
-      generation.stdoutBuffer = generation.stdoutBuffer.subarray(newline + 1)
-      if (line.length > this.maxFrameBytes || line.includes(0x0d)) {
-        this.failProcess(generation, 'PROTOCOL_ERROR')
-        return
-      }
-      let frame: BackendWireHostFrame
-      try {
-        frame = parseBackendWireHostFrame(line)
-      } catch {
-        this.failProcess(generation, 'PROTOCOL_ERROR')
-        return
-      }
-      try {
-        this.handleFrame(generation, frame)
-      } catch {
-        this.failProcess(generation, 'PROTOCOL_ERROR')
-        return
-      }
+      if (!this.acceptLine(generation, line)) return
     }
   }
 
@@ -1957,7 +2185,7 @@ export class PluginBackendSupervisor {
       return
     }
     if (this.state !== 'closed' && this.state !== 'failed' && this.state !== 'restarting') {
-      const isProtocolError = generation.stdoutBuffer.length > 0
+      const isProtocolError = generation.stdoutPending.length > 0
       const isEarlyExit = this.state === 'starting' || this.state === 'idle'
       let exitCause: Error | undefined
       const stderrText = generation.stderrBuffer.length > 0 ? generation.stderrBuffer.toString('utf8') : ''
@@ -1989,6 +2217,17 @@ export class PluginBackendSupervisor {
     }
     if (frame.kind === 'bridge-cancelled') {
       this.cancelBridgeRequest(frame.requestId, frame.reason ?? 'cancelled')
+      return
+    }
+    if (frame.kind === 'result-chunk') {
+      const pending = this.pending.get(frame.requestId)
+      // A piece for a call that is no longer pending (cancelled, timed out,
+      // settled) is dropped and counted, never a protocol error (contract 4.4).
+      if (!pending || pending.generation !== generation) {
+        this.droppedResultPieces += 1
+        return
+      }
+      pending.receivePiece(frame.seq, frame.data, frame.dataBytes)
       return
     }
     if (
@@ -2294,7 +2533,7 @@ export class PluginBackendSupervisor {
 
   private handleNotification(
     generation: ChildGeneration,
-    notification: Exclude<BackendWireNotification, BackendBridgeCancellationNotification>,
+    notification: Exclude<BackendWireNotification, BackendBridgeCancellationNotification | ResultChunkNotification>,
   ): void {
     if (this.currentGeneration !== generation) return
     if (notification.kind === 'subscription-acknowledged') {
@@ -2371,6 +2610,52 @@ export class PluginBackendSupervisor {
     const pending = this.pending.get(requestId)
     if (pending) {
       if (pending.generation !== generation) return
+      if (response.kind === 'success' && response.resultChunks !== undefined && pending.resultText) {
+        // Kept as the pieces that came: never joined or parsed here. The
+        // pieces were checked as they arrived; the summary must match them.
+        const summary = response.resultChunks
+        const reason = !isRecord(summary) || !Number.isSafeInteger(summary.chunks) || (summary.chunks as number) < 1 ||
+          !Number.isSafeInteger(summary.bytes) || (summary.bytes as number) < 0
+          ? 'summary'
+          : summary.chunks !== pending.pieces.length
+            ? 'count'
+            : summary.bytes !== pending.pieceBytes() ? 'bytes' : null
+        if (reason) {
+          this.rememberIgnoredRequestId(requestId)
+          this.settle(requestId, () => pending.reject(new BackendPluginError('CHUNKS_INVALID', undefined, { requestId, reason })))
+          return
+        }
+        const kept: SuccessResponse = {
+          kind: 'success', id: response.id, value: null, serverInfo: response.serverInfo,
+          resultPieces: { pieces: pending.pieces, bytes: pending.pieceBytes() },
+        }
+        this.settle(requestId, () => pending.resolve(kept))
+        return
+      }
+      if (response.kind === 'success' && response.resultChunks !== undefined) {
+        const joined = reassembleAgentToolPayloadText(
+          pending.pieces.map((data, seq) => ({ seq, data: data as string })),
+          response.resultChunks,
+        )
+        let value: JsonValue | undefined
+        const reason: string = joined.ok ? 'json' : joined.reason
+        if (joined.ok) {
+          try {
+            const parsed: unknown = JSON.parse(joined.text)
+            if (isJsonValue(parsed)) value = parsed
+          } catch {
+            // reason stays 'json'
+          }
+        }
+        if (value === undefined) {
+          this.rememberIgnoredRequestId(requestId)
+          this.settle(requestId, () => pending.reject(new BackendPluginError('CHUNKS_INVALID', undefined, { requestId, reason })))
+          return
+        }
+        const whole: SuccessResponse = { kind: 'success', id: response.id, value, serverInfo: response.serverInfo }
+        this.settle(requestId, () => pending.resolve(whole))
+        return
+      }
       if (response.kind === 'success') {
         this.settle(requestId, () => pending.resolve(response))
         return
@@ -2447,15 +2732,32 @@ export class PluginBackendSupervisor {
       !isJsonValue(args)
     ) throw new BackendPluginError('INVALID_ARGUMENT')
     const id = this.nextRequestId()
+    const meta = this.clientMeta()
+    // Every call advertises that the Host joins result pieces (contract 4.4, R1).
+    meta['io.modelcontextprotocol/clientCapabilities'] = {
+      ...(meta['io.modelcontextprotocol/clientCapabilities'] as { [key: string]: JsonValue }),
+      [BACKEND_WIRE_RESULT_CHUNKS_KEY]: {},
+    }
+    // Arguments longer than one piece go in pieces to a child that reads them
+    // (A3); any other child gets them in one frame of any size.
+    let pieces: string[] | undefined
+    if (this.currentGeneration?.acceptsArgumentChunks) {
+      const text = JSON.stringify(args)
+      const bytes = utf8ByteLength(text)
+      if (bytes > AGENT_TOOL_CHUNK_BYTES) {
+        pieces = splitAgentToolPayloadText(text)
+        meta[BACKEND_WIRE_ARGUMENT_CHUNKS_KEY] = { chunks: pieces.length, bytes }
+      }
+    }
     const response = await this.sendRequest(
       {
         jsonrpc: '2.0',
         id,
         method: 'navide/call',
         params: {
-          _meta: this.clientMeta(),
+          _meta: meta,
           name,
-          arguments: args,
+          ...(pieces ? {} : { arguments: args }),
           runtime: { ...runtime },
         },
       },
@@ -2464,9 +2766,51 @@ export class PluginBackendSupervisor {
       runtime,
       workspacePath,
       authorizedPlanRoot,
+      pieces?.map((data, seq) => encodeFrame({
+        jsonrpc: '2.0',
+        method: BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+        params: { requestId: id, seq, data },
+      })),
     )
+    if (options.resultText) return this.resultTextOf(response) as unknown as Result
     const result = this.successResult(response)
+    if (response.kind === 'success' && response.offThreadValue) {
+      // A caller that needs the value parses it here; agent tools take text.
+      const value: unknown = JSON.parse(new TextDecoder('utf-8').decode(response.offThreadValue.bytes))
+      if (!isJsonValue(value)) throw new BackendPluginError('PROTOCOL_ERROR')
+      return value as Result
+    }
     return result.value as Result
+  }
+
+  /** A `resultText` call's result: the pieces as they came, the off-thread
+   *  spelling, or (a frame within the synchronous path) the value spelled here. */
+  private resultTextOf(response: BackendWireResponse): BackendResultText {
+    if (response.kind === 'success' && response.resultPieces) {
+      const { pieces, bytes } = response.resultPieces
+      const decoder = new TextDecoder('utf-8')
+      return {
+        bytes,
+        chunks: pieces.length,
+        piece: (index) => {
+          const piece = pieces[index]
+          return typeof piece === 'string' ? piece : decoder.decode(piece)
+        },
+      }
+    }
+    const result = this.successResult(response)
+    if (response.kind === 'success' && response.offThreadValue) {
+      const { bytes, cuts } = response.offThreadValue
+      const decoder = new TextDecoder('utf-8')
+      return {
+        bytes: bytes.length,
+        chunks: cuts.length,
+        piece: (index) => decoder.decode(bytes.subarray(index === 0 ? 0 : cuts[index - 1], cuts[index])),
+      }
+    }
+    const text = JSON.stringify(result.value)
+    const pieces = splitAgentToolPayloadText(text)
+    return { bytes: utf8ByteLength(text), chunks: pieces.length, piece: (index) => pieces[index] }
   }
 
   private successResult(response: BackendWireResponse): BackendHealth {
@@ -2493,6 +2837,8 @@ export class PluginBackendSupervisor {
     runtime?: BackendRuntimeContext,
     workspacePath?: string,
     authorizedPlanRoot?: string,
+    /** Argument pieces written before the request itself (contract 4.4, A3). */
+    argumentPieces?: Buffer[],
   ): Promise<BackendWireResponse> {
     const requestId = isRecord(frame) && isRequestId(frame.id) ? frame.id : undefined
     const generation = this.currentGeneration
@@ -2511,32 +2857,50 @@ export class PluginBackendSupervisor {
       ))
     }
 
-    // One frame larger than the child's whole input queue can never be
-    // written: refuse the request instead of writing it, because an overflow
-    // on the write path is fatal to the child.
+    // A request frame of any size is written (contract 4.4, A3): it waits in
+    // the output queue like any other control frame and never fails the child.
     const encoded = encodeFrame(frame)
-    if (encoded.length > MAX_BACKEND_BRIDGE_QUEUE_BYTES) {
-      return Promise.reject(new BackendPluginError('RESOURCE_LIMIT'))
+    const progress = (phase: 'arguments' | 'execution' | 'result'): void => {
+      try {
+        options.onTransferProgress?.(phase)
+      } catch {
+        // An observer must not change the call.
+      }
     }
 
     return new Promise<BackendWireResponse>((resolve, reject) => {
       let settled = false
-      const timer = setTimeout(() => {
-        this.cancelPending(requestId, 'TIMEOUT')
-      }, timeoutMs)
+      // Two clocks (contract 4.4, Timing): `timeoutMs` covers the plugin's own
+      // work, from writing the request to its first result frame; transfers of
+      // pieces run on an idle timer that every full piece restarts.
+      let executionTimer: ReturnType<typeof setTimeout> | undefined
+      let idleTimer: ReturnType<typeof setTimeout> | undefined
+      const startIdle = (): void => {
+        clearTimeout(idleTimer)
+        idleTimer = setTimeout(() => this.cancelPending(requestId, 'TIMEOUT', 'transfer-idle'), AGENT_TOOL_CHUNK_IDLE_MS)
+        idleTimer.unref?.()
+      }
+      const startExecution = (): void => {
+        clearTimeout(idleTimer)
+        executionTimer = setTimeout(() => this.cancelPending(requestId, 'TIMEOUT', 'execution'), timeoutMs)
+      }
       const abort = (): void => this.cancelPending(
         requestId,
         options.signal?.reason === 'plugin-stopping' ? 'PLUGIN_STOPPING' : 'USER_CANCELLED',
       )
       options.signal?.addEventListener('abort', abort, { once: true })
       const cleanup = (): void => {
-        clearTimeout(timer)
+        clearTimeout(executionTimer)
+        clearTimeout(idleTimer)
         options.signal?.removeEventListener('abort', abort)
         if (origin) {
           this.unregisterBridgeOrigin(origin, generation)
           this.abortBridgeRequestsForOrigin(origin)
         }
       }
+      const pieces: Array<string | Uint8Array> = []
+      let pieceBytes = 0
+      let shortSeen = false
       const pending: PendingRequest = {
         generation,
         ...(origin ? { origin } : {}),
@@ -2553,34 +2917,108 @@ export class PluginBackendSupervisor {
           reject(error)
         },
         cleanup,
+        pieces,
+        pieceBytes: () => pieceBytes,
+        resultText: options.resultText === true,
+        receivePiece: (seq, data, dataBytes) => {
+          if (settled) return
+          const arrival = agentToolChunkArrival(shortSeen, data, AGENT_TOOL_CHUNK_BYTES, seq, pieces.length, dataBytes?.length)
+          if (!arrival.ok) {
+            this.cancelPending(requestId, 'CHUNKS_INVALID', arrival.reason)
+            return
+          }
+          // The first result frame ends the execution clock; from there the
+          // transfer runs on the idle timer, which a short piece never restarts.
+          if (pieces.length === 0) {
+            clearTimeout(executionTimer)
+            startIdle()
+          } else if (!arrival.short) {
+            startIdle()
+          }
+          // Bytes stay bytes for a caller that takes text; one that needs the
+          // value joins strings.
+          pieces.push(dataBytes && options.resultText ? dataBytes : dataBytes ? new TextDecoder('utf-8').decode(dataBytes) : data as string)
+          pieceBytes += dataBytes?.length ?? utf8ByteLength(data as string)
+          shortSeen = arrival.short
+          progress('result')
+        },
       }
       this.pending.set(requestId, pending)
       if (origin && runtime) {
         this.registerBridgeOrigin(origin, runtime, generation, workspacePath, authorizedPlanRoot)
       }
-      try {
-        if (generation.exited || generation.child.stdin.destroyed || generation.child.stdin.writableEnded) {
-          throw new Error(
-            `child stdin not writable (exited=${generation.exited}, destroyed=${generation.child.stdin.destroyed}, ended=${generation.child.stdin.writableEnded})`,
-          )
+      const write = (bytes: Buffer): boolean => {
+        try {
+          if (generation.exited || generation.child.stdin.destroyed || generation.child.stdin.writableEnded) {
+            throw new Error(
+              `child stdin not writable (exited=${generation.exited}, destroyed=${generation.child.stdin.destroyed}, ended=${generation.child.stdin.writableEnded})`,
+            )
+          }
+          this.writeFrame(generation, bytes)
+          return true
+        } catch (error) {
+          this.failProcess(generation, 'BACKEND_UNAVAILABLE', false, error)
+          return false
         }
-        this.writeFrame(generation, encoded)
-      } catch (error) {
-        this.failProcess(generation, 'BACKEND_UNAVAILABLE', false, error)
       }
+      if (!argumentPieces || argumentPieces.length === 0) {
+        if (write(encoded)) {
+          startExecution()
+          progress('execution')
+        }
+        return
+      }
+      // Argument pieces: each is written once the output queue is empty, so
+      // frames of other calls interleave; a queue that does not drain within
+      // the idle time ends the call as transfer-idle.
+      void (async (): Promise<void> => {
+        for (const piece of argumentPieces) {
+          if (settled) return
+          startIdle()
+          if (!write(piece)) return
+          if (!(await this.waitForDrain(generation))) {
+            if (!settled) this.cancelPending(requestId, 'TIMEOUT', 'transfer-idle')
+            return
+          }
+          progress('arguments')
+        }
+        if (settled) return
+        if (write(encoded)) {
+          startExecution()
+          progress('execution')
+        }
+      })()
+    })
+  }
+
+  /** Resolves true once the generation's output queue is empty, false after the idle time or when it ends. */
+  private waitForDrain(generation: ChildGeneration): Promise<boolean> {
+    if (!generation.outputWriting && generation.outputQueue.length === 0) return Promise.resolve(true)
+    return new Promise((resolve) => {
+      let done = false
+      const finish = (drained: boolean): void => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        resolve(drained)
+      }
+      const timer = setTimeout(() => finish(false), AGENT_TOOL_CHUNK_IDLE_MS)
+      timer.unref?.()
+      generation.drainWaiters.push(() => finish(!generation.exited && this.currentGeneration === generation))
     })
   }
 
   private cancelPending(
     requestId: WireRequestId,
-    code: 'TIMEOUT' | 'USER_CANCELLED' | 'PLUGIN_STOPPING',
+    code: 'TIMEOUT' | 'USER_CANCELLED' | 'PLUGIN_STOPPING' | 'CHUNKS_INVALID',
+    reason?: string,
   ): void {
     const pending = this.pending.get(requestId)
     if (!pending) return
     this.pending.delete(requestId)
     this.rememberIgnoredRequestId(requestId)
     pending.cleanup()
-    pending.reject(new BackendPluginError(code, undefined, { requestId }))
+    pending.reject(new BackendPluginError(code, undefined, { requestId, ...(reason ? { reason } : {}) }))
     this.sendCancellation(requestId, undefined, pending.generation)
   }
 
@@ -2788,7 +3226,10 @@ export class PluginBackendSupervisor {
       generation.exited
     ) return
     const frame = generation.outputQueue.shift()
-    if (!frame) return
+    if (!frame) {
+      for (const waiter of generation.drainWaiters.splice(0)) waiter()
+      return
+    }
     generation.outputQueueBytes -= frame.length
     if (generation.outputNotificationFrames.delete(frame)) generation.outputNotificationBytes -= frame.length
     generation.outputWriting = true

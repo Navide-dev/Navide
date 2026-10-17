@@ -8,6 +8,7 @@ import {
   type BackendPluginEvent,
   type BackendPluginLaunchSpec,
   type BackendPluginSubscription,
+  type BackendResultText,
   type BackendPluginSubscriptionOptions,
   type BackendRuntimeContext,
   type JsonValue,
@@ -886,6 +887,17 @@ export class PluginBackendHost {
       idle.inFlight--
       this.scheduleIdleStop(thirdPartyView)
     }
+  }
+
+  /** {@link call} for an agent tool: the result as text in pieces, never
+   *  parsed by the Host when it is longer than one piece (contract 4.4). */
+  async callForResultText(
+    instanceId: string,
+    name: string,
+    args: JsonValue,
+    options?: BackendPluginCallOptions,
+  ): Promise<BackendResultText> {
+    return await this.call(instanceId, name, args, { ...options, resultText: true }) as unknown as BackendResultText
   }
 
   private async callBound<Result extends JsonValue>(

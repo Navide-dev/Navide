@@ -49,6 +49,7 @@ import itertools
 import json
 import logging
 import re
+import time
 import unicodedata
 import weakref
 from dataclasses import dataclass, field
@@ -60,6 +61,8 @@ from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_CALL_ERROR_CODES,
+    AGENT_TOOL_CHUNK_BYTES,
+    AGENT_TOOL_TIMEOUT_REASONS,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
@@ -712,35 +715,104 @@ def _open_workspace(requested: Any) -> str | None:
     return wanted if wanted in agent_messaging.workspaces() else None
 
 
+# Reasons a transfer or a timeout carries back to the agent (contract 4.4),
+# besides the unavailable reasons.
+_TRANSFER_REASONS = frozenset((*AGENT_TOOL_TIMEOUT_REASONS, "summary", "seq", "count", "short", "bytes", "json"))
+
+
 async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult | list[TextContent]:
-    """Answer one call to a third-party tool name."""
+    """Answer one call to a third-party tool name, and record it in the audit.
+
+    Every call of a catalogued tool gets one ``plugin_tool_calls`` row whatever
+    its end (success, refusal, failure, timeout, cancellation), written after
+    the call and only queued here: the audit never changes or delays the call.
+    """
     core = _server()
     try:
         caller = core._resolve_caller(ctx)  # noqa: SLF001
     except core.CallerUnknown as err:
         return _refusal(str(err), "BAD_REQUEST")
+    audit: dict[str, Any] = {
+        "outcome": "error",
+        "error_code": "cancelled",
+        "result_bytes": 0,
+        "arguments": arguments,
+        "workspace": "",
+    }
+    started = time.monotonic()
+    try:
+        return await _answer(name, arguments, caller, audit)
+    finally:
+        _record_call(name, caller, audit, started)
+
+
+def _record_call(name: str, caller: Any, audit: dict[str, Any], started: float) -> None:
+    """Queue the audit row of one call (contract 5). A failed write is logged, never raised."""
+    entry = _catalog.entries.get(name)
+    if entry is None:
+        return
+    try:
+        from agent_team_backend import agent_messaging, app
+
+        core = _server()
+        pane = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+        arguments = audit["arguments"]
+        app.plugin_audit_log.record_tool_call(
+            caller_kind=caller.kind,
+            target_workspace=audit["workspace"],
+            plugin_id=entry["pluginId"],
+            plugin_version=entry["pluginVersion"],
+            tool=name,
+            risk=entry["risk"],
+            arguments=arguments if isinstance(arguments, dict) else {},
+            outcome=audit["outcome"],
+            duration_ms=int((time.monotonic() - started) * 1000),
+            result_bytes=audit["result_bytes"],
+            pane_id=caller.pane_id or "",
+            pane_name=getattr(pane, "name", "") or "",
+            caller_workspace=core._caller_workspace(caller),  # noqa: SLF001
+            error_code=audit["error_code"],
+        )
+    except Exception as err:  # noqa: BLE001 - the audit never fails the call it records
+        _log.warning("plugin tool call %s: audit row not recorded: %s", name, err)
+
+
+async def _answer(
+    name: str, arguments: dict[str, Any], caller: Any, audit: dict[str, Any]
+) -> CallToolResult | list[TextContent]:
+    """The call itself; ``audit`` collects what its row records."""
+    core = _server()
+
+    def refuse(error: str, error_code: str, reason: str | None = None) -> CallToolResult:
+        audit["outcome"] = "error"
+        audit["error_code"] = error_code
+        return _refusal(error, error_code, reason)
+
     reason = _unavailable_reason(name)
     if reason is not None:
-        return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+        return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
     entry = _catalog.entries[name]
     caller_object = _caller_object(caller)
     workspace = caller_object["workspace"] or ""
     if caller.kind != "pane":
         if not _catalog.external_callers:
             reason = "external-callers-off"
-            return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+            return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
         # Taken out before the plugin's schema check and never forwarded.
         arguments = dict(arguments)
         workspace = _open_workspace(arguments.pop("workspace_path", None)) or ""
+        audit["arguments"] = arguments
         if not workspace:
-            return _refusal(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")
+            return refuse(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")
     elif not workspace:
-        return _refusal("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
+        return refuse("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
+    audit["workspace"] = workspace
     # The whole consented inputSchema (regexes excepted), off the event loop;
     # the Host checks again.
     arguments, invalid = await asyncio.to_thread(_prepared_arguments, name, entry["inputSchema"], arguments)
     if invalid is not None:
-        return _refusal(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
+        return refuse(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
+    audit["arguments"] = arguments
     # A pane targets its own workspace; a caller without a pane has none to compare.
     cross_workspace: bool | None = workspace != caller_object["workspace"] if caller.kind == "pane" else None
     _log.info(
@@ -760,7 +832,7 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         },
     )
     if not isinstance(response, dict):
-        return _refusal("Navide Host answered with a malformed response", "BAD_REQUEST")
+        return refuse("Navide Host answered with a malformed response", "BAD_REQUEST")
     if response.get("ok") is True:
         _taint(caller, entry)
         result = response.get("result")
@@ -774,22 +846,34 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         else:
             size = None
             _log.warning("plugin tool result %s: the Host sent no valid resultBytes; size unknown", name)
-        # Size is disclosed, not limited (DB9 ruling a).
+        audit["outcome"] = "ok"
+        audit["error_code"] = ""
+        # -1 = the Host sent no valid size (contract 2.7, 5).
+        audit["result_bytes"] = -1 if size is None else size
+        # Size is disclosed, not limited (DB9 ruling a). A result longer than
+        # one piece (or of unknown size) is spelled and neutralized in a worker
+        # thread: that walks every character, and the event loop must keep
+        # serving other panes meanwhile. The plugin already ran, so the audit
+        # row above stays "ok" whatever happens to this call now.
+        if size is None or size > AGENT_TOOL_CHUNK_BYTES:
+            text = await asyncio.to_thread(wrap_result, entry, result)
+        else:
+            text = wrap_result(entry, result)
         return CallToolResult(
-            content=[TextContent(type="text", text=wrap_result(entry, result))],
+            content=[TextContent(type="text", text=text)],
             isError=False,
             _meta=None if size is None else {"resultBytes": size},
         )
     raw_code = response.get("error_code")
     error_code = raw_code if isinstance(raw_code, str) and raw_code in _HOST_ERROR_CODES else "PLUGIN_TOOL_FAILED"
     raw_reason = response.get("reason")
-    reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS else None
+    reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS or raw_reason in _TRANSFER_REASONS else None
     error = str(response.get("error") or "the call failed")
     if error_code == "PLUGIN_TOOL_FAILED":
         # The message is the plugin's own text: fenced like a result.
         _taint(caller, entry)
-        return _refusal(_fence(entry, "error", error), error_code, reason_value)
-    return _refusal(_neutralize(_clean(error)), error_code, reason_value)
+        return refuse(_fence(entry, "error", error), error_code, reason_value)
+    return refuse(_neutralize(_clean(error)), error_code, reason_value)
 
 
 def _taint(caller: Any, entry: dict[str, Any]) -> None:
