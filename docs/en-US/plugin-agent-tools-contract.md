@@ -1147,7 +1147,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | Column | Type | Content |
 |---|---|---|
 | `id` | INTEGER PK | autoincrement |
-| `at` | INTEGER | call start |
+| `at` | INTEGER | call **end** (Unix ms): the row is written once the call is over, with its duration and result size; the call ran over `[at − duration_ms, at]` |
 | `caller_kind` | TEXT | `pane` / `external` / `host` |
 | `pane_id`, `pane_name` | TEXT | `''` when not a pane |
 | `caller_workspace`, `target_workspace` | TEXT | |
@@ -1177,12 +1177,72 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 90 days, which covers "declared but unused for 30 days" and the 7-day baseline
 of the 10× anomaly.
 
+`plugin_activity_denied_daily` (D-e): `(day, plugin_id, workspace, source,
+address, denied_reason)` primary key and `count`; the refusals among the detail rows, by reason, rolled up in the
+same transaction as `plugin_activity_daily` and kept as long (90 days), so the
+reason of a refusal ("used but not declared" above all) outlives the 7 days of
+detail. It was added after the first tables: every open runs the audit DDL (all
+`CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
 
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
+
+The Host's capability broker records the broker and shell-broker rows of
+third-party plugins (the bundled `navide.*` packages are not recorded) and sends
+them in batches, about once a second, as `plugin.activity.record`
+(`PLUGIN_ACTIVITY_RECORD_MESSAGE`, Host-authenticated, `{rows: [{plugin_id,
+plugin_version, workspace, source: "broker" | "shell", address, outcome,
+denied_reason?, fs_path?, shell_command?}]}`; answered `{ok, accepted}`). Raw
+paths and command lines cross the local Host session only; the backend keeps
+their redacted form. `denied_reason` is `undeclared` when the broker refused a
+namespace or shell use the manifest did not declare. A refused cast is recorded;
+a dispatched cast (terminal input) is not.
+
+The activity page reads it back with `plugins.activity.report`
+(`PLUGIN_ACTIVITY_REPORT_MESSAGE`), section 5.1.
+
+### 5.1 Reading activity: `plugins.activity.report`
+
+The activity page and the disclosure overview (D-f) read one plugin's report.
+The backend accepts `plugins.activity.report` only from the Host's
+authenticated session (`host_authenticated`); the main window asks the Host
+over IPC, whose handler passes `assertAuthorized` (as
+`plugins:backendCallConcurrency` does). Request `{plugin_id, declared}`, where
+the Host fills `declared` (`[{kind, key}]`: `system` names, `shell` mode,
+`backendMethod` methods, `agentTool` names) from the installed manifest, since
+the backend has no third-party manifest; without `declared`, `declaredUnused`
+is `[]`. Answer `PluginActivityReport`
+(`src/shared/pluginActivity.ts`; fixture
+`docs/plugin-contracts/agent-tools-fixtures/activity-report.json`). The backend
+(D-e) builds it from the tables above and does the aggregation and the
+anomaly checks; the renderer rebuilds it from validated fields and refuses a
+malformed one whole.
+
+| Field | Content |
+|---|---|
+| `schemaVersion` | `1` |
+| `pluginId`, `generatedAt` | the plugin; when the report was made (Unix ms) |
+| `window` | `{from, to}`: the detail window the lists cover (7 days) |
+| `totals` | `{calls, denied, errors}` of `plugin_activity` within `window` |
+| `historicalPeakConcurrency` | the largest number of the plugin's `plugin_tool_calls` that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
+| `undeclaredSince` | start of the window `undeclared` covers (30 days) |
+| `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |
+| `files[]` | fs paths, newest first: `path` (workspace-relative), `address`, `workspace`, `outcome`, `count`, `lastAt` |
+| `commands[]` | shell commands (executable and subcommand only), newest first: `command`, `workspace`, `outcome`, `count`, `lastAt` |
+| `daily[]` | oldest first, up to the 90 days kept: `day` (`YYYY-MM-DD`, UTC), `calls`, `denied`, `errors` (daily rows plus the detail rows not yet rolled up) |
+| `declaredUnused[]` | declared but not called in 30 days: `kind` (`system` / `shell` / `backendMethod` / `agentTool`), `key`, `lastUsedAt` (or null) |
+| `undeclared[]` | one entry per `(source, address, workspace)` with at least one `denied_reason = 'undeclared'` within 30 days: `count` (the `undeclared` refusals only), `lastAt`, `reasons[]` (`{reason, count}`: every `denied_reason` of that entry within 30 days, `undeclared` included, largest first) |
+| `anomalies[]` | marked only, never acted on: `kind`, `at`, `workspace`, `tool`, `count`, `baseline` (null where not applicable). `volumeSpike`: `at` = that day 00:00 UTC, `workspace` `''`, `count` = calls that day, `baseline` = the 7-day daily average. `writeToolNewWorkspace`: `at` = the first call there, `tool`. `undeclaredDenied`: one per workspace, `at` = the last refusal, `count` = refusals within 7 days |
+| `agentActions` | B2-c's `plugin_agent_actions` rows (`at`, `action`, `callerKind`, `paneId`, `paneName`, `workspace`, `version`), or `null` until that table exists |
+
+`argsBytes` and `resultBytes` are `-1` (`UNKNOWN_BYTES`) when the size is not
+known: such a value is shown as "unknown", never summed, averaged or counted
+in a statistic. Every string is shown as plain text: no link is made from a
+path or a command, and nothing is rendered as HTML.
 
 ## 6. Approval registry (B2)
 

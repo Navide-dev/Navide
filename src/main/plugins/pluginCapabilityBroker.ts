@@ -373,6 +373,25 @@ function publicDenied(reqId: string, code: CapabilityErrorCode, message: string)
   return { kind: 'deny', response: buildError(reqId, code, message) }
 }
 
+/** Refusals of a use the manifest did not declare (D3 "used but not declared").
+ *  Kept beside the response object, so the Plugin-facing envelope is unchanged;
+ *  the activity record reads it with {@link isUndeclaredDenial}. */
+const undeclaredDenials = new WeakSet<CapabilityResponse>()
+
+function undeclared(response: CapabilityResponse): CapabilityResponse {
+  undeclaredDenials.add(response)
+  return response
+}
+
+function undeclaredDenied(reqId: string, message: string): PublicCapabilityDecision {
+  return { kind: 'deny', response: undeclared(buildError(reqId, 'CAPABILITY_DENIED', message)) }
+}
+
+/** Whether `response` is the broker's refusal of an undeclared use. */
+export function isUndeclaredDenial(response: CapabilityResponse): boolean {
+  return undeclaredDenials.has(response)
+}
+
 function sameBinding(
   left: AuthenticatedRuntimeBinding,
   right: AuthenticatedRuntimeBinding
@@ -769,9 +788,9 @@ export function planPublicCapabilityCall(
     // Storage is Host-granted and deliberately absent from Manifest v2's
     // `permissions.system` namespace array.
   } else if (entry.namespace === 'shell') {
-    if (!policy.shell) return publicDenied(call.reqId, 'CAPABILITY_DENIED', 'shell access is not declared')
+    if (!policy.shell) return undeclaredDenied(call.reqId, 'shell access is not declared')
   } else if (!policy.system.includes(entry.namespace)) {
-    return publicDenied(call.reqId, 'CAPABILITY_DENIED', `system namespace '${entry.namespace}' is not declared`)
+    return undeclaredDenied(call.reqId, `system namespace '${entry.namespace}' is not declared`)
   }
 
   if (entry.eligibility === 'firstParty' && !context.publisherEligible) {
@@ -1145,11 +1164,11 @@ export function planCapabilityCall(
         : `${call.ns}.${call.method}`
     return {
       kind: 'respond',
-      response: buildError(
+      response: undeclared(buildError(
         call.reqId,
         'CAP_DENIED',
         `capability '${label}' not granted`
-      ),
+      )),
     }
   }
   if (call.ns === 'ping') {
