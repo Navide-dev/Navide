@@ -36,6 +36,8 @@ import {
   type TrustTier,
 } from './pluginVerify'
 import {
+  RegistryTrustError,
+  verifyRegistryDisclosure,
   verifyRegistryPackageTrust,
   type RegistryAuthority,
   type RegistryPackageEnvelope,
@@ -64,6 +66,13 @@ import {
   type OfficialReceipt,
 } from './installedPlugins'
 import { compareSemver } from './pluginManifestV2'
+import {
+  canonicalContractJson,
+  computeDisclosure,
+  type DisclosureManifestInput,
+  type ManifestDisclosure,
+} from '../../shared/pluginDisclosure'
+import type { ScanReport } from '../../shared/pluginDisclosureScan'
 import type { PluginLaunchDescriptor } from './frontendPluginManager'
 import { UNIVERSAL_PLUGIN_TARGET, currentPluginHostTarget } from './pluginTarget'
 import {
@@ -96,6 +105,15 @@ export interface InstallRequest {
   registrySignature?: string | null
   trustMetadata?: RegistryTrustMetadata | null
   trustMetadataSignature?: string | null
+  /** Registry-signed disclosure (contract 3.5): the version row's
+   * `disclosure`, `disclosure_envelope` and `disclosure_signature`, as
+   * received. All absent for a version published before the Registry signed
+   * disclosures; that version installs as before. */
+  disclosure?: unknown
+  disclosureEnvelope?: unknown
+  disclosureSignature?: unknown
+  /** The version row's `scan` (contract 3.8), bound by `scanDigest`. */
+  scan?: unknown
   /** Install provenance selected by the Host, never inferred from schemaVersion. */
   provenance: 'official-registry' | 'developer-local-unpacked'
 }
@@ -158,6 +176,12 @@ export interface PreparedInstall {
     trustSnapshot: RegistryTrustSnapshot
   }
   provenance: 'official-registry' | 'developer-local-unpacked'
+  /** The Registry-signed disclosure, verified against the package's own
+   * manifest; null when the version carries none. */
+  disclosure?: ManifestDisclosure | null
+  /** The Registry-signed scan report (contract 3.8); null when the version
+   * has none. Informational: it never decides the install. */
+  scan?: ScanReport | null
 }
 
 export class InstallError extends Error {
@@ -357,6 +381,8 @@ export async function prepareInstall(
   let trustTier = packageVerification.trustTier
   let registryEvidence: PreparedInstall['registryEvidence']
   let official = false
+  let disclosure: ManifestDisclosure | null = null
+  let scan: ScanReport | null = null
 
   if (provenance === 'official-registry') {
     if (!req.registryEnvelope || !req.trustMetadata || !req.target) {
@@ -389,6 +415,39 @@ export async function prepareInstall(
       expectedHostTarget: trust.expectedTarget ?? currentPluginHostTarget(),
       now: trust.now,
     })
+    // Contract 3.5: the signed disclosure must be what this package's own
+    // manifest discloses. A version without one installs as before.
+    const signed = verifyRegistryDisclosure({
+      disclosure: req.disclosure,
+      disclosureEnvelope: req.disclosureEnvelope,
+      disclosureSignature: req.disclosureSignature,
+      scan: req.scan,
+      packageEnvelope: req.registryEnvelope,
+      trustMetadata: req.trustMetadata,
+    })
+    if (signed !== null) {
+      const signedDisclosure = signed.disclosure
+      if (!v2) {
+        throw new RegistryTrustError(
+          'DISCLOSURE_INVALID',
+          `plugin '${manifest.id}' is a Manifest v1 package but the Registry sent a disclosure; the install was refused`
+        )
+      }
+      let recomputed: string | null
+      try {
+        recomputed = canonicalContractJson(computeDisclosure(manifest as unknown as DisclosureManifestInput))
+      } catch {
+        recomputed = null
+      }
+      if (recomputed !== canonicalContractJson(signedDisclosure)) {
+        throw new RegistryTrustError(
+          'DISCLOSURE_MISMATCH',
+          `plugin '${manifest.id}' ${manifest.version}: what the Marketplace disclosed about this package does not match the permissions in the package itself; the install was refused`
+        )
+      }
+      disclosure = signedDisclosure
+      scan = signed.scan
+    }
     const requestedRegistryUrl = new URL(req.registryUrl).toString().replace(/\/+$/, '')
     const officialRegistryUrl = trust.officialRegistryUrl
       ? new URL(trust.officialRegistryUrl).toString().replace(/\/+$/, '')
@@ -456,6 +515,8 @@ export async function prepareInstall(
     signature: v2 ? req.registrySignature ?? null : req.signature ?? null,
     registryEvidence,
     provenance,
+    disclosure,
+    scan,
   }
 }
 

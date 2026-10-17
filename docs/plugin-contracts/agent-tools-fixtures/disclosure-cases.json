@@ -1218,6 +1218,98 @@
           }
         }
       }
+    },
+    {
+      "name": "fs-scopes-root-null",
+      "manifest": {
+        "schemaVersion": 2,
+        "apiVersion": "^2.0.0",
+        "id": "acme.reader",
+        "name": "Example",
+        "version": "1.2.3",
+        "publisher": "acme",
+        "marketplace": {
+          "description": "Example package",
+          "license": "MIT"
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "scopes": {
+            "fs": {
+              "read": [
+                "docs/**",
+                "README.md"
+              ],
+              "root": null
+            }
+          }
+        },
+        "contributes": {
+          "views": [
+            {
+              "id": "main",
+              "kind": "custom",
+              "location": "main",
+              "title": "Main",
+              "entry": "index.html"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "schemaVersion": 1,
+        "plugin": {
+          "id": "acme.reader",
+          "version": "1.2.3",
+          "publisher": "acme"
+        },
+        "summary": {
+          "template": "plugin-disclosure.summary.v1",
+          "clauses": [
+            {
+              "key": "files",
+              "params": {
+                "access": "read"
+              }
+            }
+          ]
+        },
+        "risk": {
+          "level": "medium",
+          "reasons": [
+            {
+              "key": "system.fs",
+              "level": "medium"
+            }
+          ]
+        },
+        "permissions": {
+          "system": [
+            "fs"
+          ],
+          "shell": null,
+          "scopes": {
+            "fs": {
+              "root": "workspace",
+              "read": [
+                "README.md",
+                "docs/**"
+              ],
+              "write": []
+            }
+          }
+        },
+        "nativeBackend": null,
+        "network": "none",
+        "agentTools": [],
+        "dataLocations": {
+          "hostStorage": true,
+          "backendDataDirectory": false,
+          "projectWrites": "none"
+        }
+      }
     }
   ]
 }

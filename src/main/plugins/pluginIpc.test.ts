@@ -7,7 +7,7 @@
 // material remains `unsigned` only on the legacy v1 compatibility path.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { generateKeyPairSync, sign as edSign } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, sep } from 'node:path'
@@ -28,6 +28,7 @@ import { defaultInstallerDeps, type InstallerTrustConfig } from './pluginInstall
 import { backendEntryOnDisk, type PluginActivationCatalogEntry } from './installedPlugins'
 import { projectBackendPluginActivationCatalog } from './pluginBackendActivationCatalog'
 import { makeZip } from './zipFixture'
+import { canonicalContractJson, computeDisclosure } from '../../shared/pluginDisclosure'
 import { readZipEntries } from './pluginPackage'
 import { PluginCapabilityGrantStore } from './pluginCapabilityGrantStore'
 import { PluginPackStore } from './pluginPackStore'
@@ -900,6 +901,83 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  /** Sign the contract 3.5 disclosure envelope onto every version row. */
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>): WireDetail {
+    const disclosure = computeDisclosure(manifest as never)
+    const rows = detail.versions.map((row) => {
+      const envelope = {
+        schemaVersion: 1,
+        artifactDigest: row.registry_envelope.artifactDigest,
+        packageId: row.registry_envelope.packageId,
+        version: row.registry_envelope.version,
+        target: row.registry_envelope.target,
+        keyId: row.registry_envelope.keyId,
+        signedAt: row.registry_envelope.signedAt,
+        disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
+        scanDigest: null,
+      }
+      return {
+        ...row,
+        disclosure,
+        disclosure_envelope: envelope,
+        disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
+        scan: null,
+        registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
+      }
+    })
+    return { ...detail, versions: rows }
+  }
+
+  async function prepareFromApprovedRegistry(detail: WireDetail, bytes: Uint8Array, digest: string): Promise<unknown> {
+    installFetch(detail, bytes, digest)
+    const root = mkdtempSync(join(tmpdir(), 'navide-disclosure-registry-'))
+    const approvalFile = join(root, 'root-approval.json')
+    writeFileSync(approvalFile, JSON.stringify({
+      schemaVersion: 1,
+      registryUrl: 'https://registry.acme.test',
+      rootPublicKeyPem: registryRoot.pubPem,
+      confirmedFingerprint: registryRootFingerprint(registryRoot.pubPem),
+    }))
+    process.env['AGENT_TEAM_MARKETPLACE_URL'] = 'https://registry.acme.test'
+    process.env['AGENT_TEAM_REGISTRY_ROOT_APPROVAL_FILE'] = approvalFile
+    try {
+      registerPluginIpc(new FrontendPluginManager(), '/plugins', () => true, TRUST_CONFIG)
+      const handler = handlers.get('plugins:prepareInstall')
+      if (!handler) throw new Error('prepareInstall handler not registered')
+      return await handler(null, { namespace: 'acme', name: 'demo' })
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  }
+
+  const DISCLOSED_PERMISSIONS = { system: ['fs'], scopes: { fs: { root: 'workspace', read: ['README.md'] } } }
+  const disclosedManifest = {
+    schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: DISCLOSED_PERMISSIONS,
+  }
+
+  it('carries the signed disclosure, scan and registry facts through prepareInstall', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), disclosedManifest), bytes, digest))
+      .resolves.toMatchObject({
+        disclosure: computeDisclosure(disclosedManifest as never),
+        scan: null,
+        registry: { review: { status: 'not-required' } },
+      })
+  })
+
+  it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const narrower = { ...disclosedManifest, permissions: {} }
+    await expect(prepareFromApprovedRegistry(withDisclosure(signedDetail(digest), narrower), bytes, digest))
+      .rejects.toMatchObject({ code: 'DISCLOSURE_MISMATCH' })
+  })
+
+  it('installs a version without disclosure fields as before', async () => {
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    await expect(prepareFromApprovedRegistry(signedDetail(digest), bytes, digest))
+      .resolves.toMatchObject({ trustTier: 'signed-verified', disclosure: null, scan: null, registry: null })
   })
 
   it('uses an approved self-hosted root for the default local Registry profile', () => {
@@ -3824,6 +3902,11 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
               registry_envelope: { a: 1 },
               registry_signature: 'x',
               package_digest: 'd',
+              disclosure: { schemaVersion: 1, plugin: { id: 'acme.demo' } },
+              disclosure_envelope: { a: 2 },
+              disclosure_signature: 'y',
+              scan: { schemaVersion: 1 },
+              registry: { publisher: { verifiedDomain: 'acme.example' } },
             },
           ],
         },
@@ -3841,6 +3924,12 @@ describe('plugins:marketplaceDetail / plugins:checkUpdates', () => {
     expect(detail).not.toHaveProperty('trust_metadata_signature')
     expect(detail.versions[0]).not.toHaveProperty('registry_envelope')
     expect(detail.versions[0]).not.toHaveProperty('registry_signature')
+    // Contract 3.5: display data is carried; the signed envelopes stay main-side.
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_envelope')
+    expect(detail.versions[0]).not.toHaveProperty('disclosure_signature')
+    expect(detail.versions[0].disclosure).toEqual({ schemaVersion: 1, plugin: { id: 'acme.demo' } })
+    expect(detail.versions[0].scan).toEqual({ schemaVersion: 1 })
+    expect(detail.versions[0].registry).toEqual({ publisher: { verifiedDomain: 'acme.example' } })
     expect(detail.versions[0].capabilities).toEqual(['fs'])
     expect(detail.versions[0].installable).toBe(true)
     expect(detail.latest_installable_version).toBe('1.1.0')
