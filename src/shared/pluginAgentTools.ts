@@ -508,8 +508,12 @@ export function agentToolChunkArrival(
   shortSeen: boolean,
   data: unknown,
   chunkBytes: number = AGENT_TOOL_CHUNK_BYTES,
+  /** The piece's `seq` and the one expected next (0, 1, 2, …): a repeat or a step back is `seq`. */
+  seq?: unknown,
+  expectedSeq?: number,
 ): AgentToolChunkArrival {
   if (typeof data !== 'string') return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
+  if (expectedSeq !== undefined && seq !== expectedSeq) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' }
   if (shortSeen) return { ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'short' }
   return { ok: true, short: utf8ByteLength(data) < chunkBytes - 3 }
 }
@@ -534,7 +538,10 @@ export function reassembleAgentToolPayloadText(
     ({ ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason })
   const s = summary as Partial<AgentToolChunksSummary> | null
   if (!s || typeof s !== 'object' || !isCount(s.chunks, 1) || !isCount(s.bytes, 0)) return invalid('summary')
-  if (chunks.some((c) => !isCount(c.seq, 0) || typeof c.data !== 'string')) return invalid('seq')
+  // A piece that is not an object (null included) is a malformed piece, not a crash.
+  if (chunks.some((c) => c === null || typeof c !== 'object' || !isCount(c.seq, 0) || typeof c.data !== 'string')) {
+    return invalid('seq')
+  }
   if (chunks.length !== s.chunks) return invalid('count')
   const ordered: string[] = new Array(s.chunks)
   for (const c of chunks as ReadonlyArray<{ seq: number; data: string }>) {

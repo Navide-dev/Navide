@@ -831,7 +831,9 @@ The transport failures that exist today stay as they are (`host_unavailable`,
 the compact `JSON.stringify` spelling of the result value the Host received
 (`null` when the plugin returned nothing), measured once, by the Host. It is
 `0` in the `meta` of an error response that carries no result. The backend
-does not measure again; it forwards the Host's number to the audit row.
+does not measure again; it forwards the Host's number to the audit row. When
+the Host sends no valid `meta.resultBytes` the size is unknown and the audit
+row stores `-1` (2.7).
 
 Before sending, the core server checks the arguments against the consented
 `inputSchema` in a worker thread, never on its event loop, and the Host checks
@@ -912,7 +914,7 @@ ensure_ascii=False, allow_nan=False)`) and cuts it with
 Even with every byte escaped as `\u00XX` a piece's frame stays below 1 MiB,
 the frame size child readers use. Each piece is `{seq, data}` with `seq` counting from 0.
 The receiver joins them with `reassembleAgentToolPayloadText(pieces,
-summary)`, which orders by `seq` (so arrival order does not matter) and checks
+summary)`, which orders the pieces by `seq` and checks
 that `seq` runs `0..chunks-1` exactly once each and that the joined text has
 `summary.bytes` UTF-8 bytes. Every piece but the last must be full: at least
 `AGENT_TOOL_CHUNK_BYTES` − 3 UTF-8 bytes, which is what the splitter always
@@ -920,12 +922,19 @@ produces (a piece ends early only when the next code point, up to 4 bytes,
 does not fit). This is a format rule, not a limit: it stops a sender from
 dripping a value one byte at a time to keep the idle timer alive and so stretch
 a call past `timeoutMs` (R1 is the only hop whose sender is not Navide).
-Senders send pieces in `seq` order, so a valid transfer has at most one short
-piece and it comes last. Receivers therefore check every piece as it arrives
-with `agentToolChunkArrival`: a piece that is not a string is `seq`, any piece
-after a short one fails the call at once as `short` (without waiting for the
-final message, which a dripping sender would never send), and a short piece
-does not restart the idle timer (see Timing). The joined pieces are checked
+Senders must send pieces in `seq` order (0, 1, 2, …), so a valid transfer has
+at most one short piece and it comes last. Receivers therefore check every
+piece in arrival order with `agentToolChunkArrival(shortSeen, data, chunkBytes,
+seq, expectedSeq)`: a piece whose `data` is not a string, or whose `seq` is not
+the next one expected (a repeat, a step back or a skip), is `seq`; any piece
+after a short one is `short`; both fail the call at once, without waiting for
+the final message (which a dripping or looping sender would never send). A
+short piece does not restart the idle timer (see Timing). Counts (`seq`,
+`chunks`, `bytes`) are safe integers; an integral float such as `1.0` counts,
+because `JSON.parse` gives TypeScript the integer `1` for it. A piece that is
+not an object (`null` included) is `seq`, never an exception. Before cutting,
+a sender written in Python escapes lone surrogates (`\ud800`) the way
+`JSON.stringify` does (`agent_tool_payload_text`), since UTF-8 cannot carry them. The joined pieces are checked
 again by `reassembleAgentToolPayloadText`. The summary `{chunks, bytes}`
 travels in the message that completes the transfer.
 A mismatch is `PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` |
@@ -1099,9 +1108,10 @@ Time never acts as a size limit. Two clocks, and nothing else:
 - **Transfer**: every transfer of pieces runs on an idle timer of
   `AGENT_TOOL_CHUNK_IDLE_MS` = 30,000 ms that every piece restarts. It tells a
   stalled peer from a slow one: a value of any size passes as long as pieces
-  keep moving, and the timer only fires after 30 s without one. Only a full
-  piece restarts it; a short piece (the last one, 4.4 Pieces) does not, so a
-  sender cannot hold a call open by trickling bytes. On expiry the
+  keep moving, and the timer only fires after 30 s without one. On R1 it
+  starts at the child's first result frame, whether that first piece is full
+  or short. Only a full piece restarts it; a short piece (the last one, 4.4
+  Pieces) does not, so a sender cannot hold a call open by trickling bytes. On expiry the
   call fails with `PLUGIN_TOOL_TIMEOUT`, `reason: "transfer-idle"`, the pieces
   held so far are dropped, and the Host sends `notifications/cancelled` to the
   child. Where each hop restarts it: A2 — the Host, on each
@@ -1153,7 +1163,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`. `args_bytes`: UTF-8 byte length of the compact spelling the arguments travel in (`agent_tool_payload_text`, as `resultBytes` measures results), so `{"q":"中文"}` is 14. `args_sha256`: SHA-256 of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them), so key order does not change it. The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
 | `error_code` | TEXT | `''` on success |
-| `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); 0 when the call has no result |
+| `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); `0` when the call has no result; `-1` when the Host sent no valid size (unknown) |
 
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
@@ -1177,6 +1187,24 @@ of the 10× anomaly.
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.
+
+Rules for every surface that shows these rows (the activity page, disclosure
+views, exports):
+
+- A size of `-1` (`result_bytes`, or `args_bytes` should it ever be unknown)
+  is shown as "unknown", never as "-1 bytes", and is never added into a sum.
+  Every statistic and rollup (the D-e daily rollup, D-f trends, averages,
+  totals) leaves `-1` out and counts the unknown rows separately.
+- `fs_path`, `shell_command`, `address`, `denied_reason`, `pane_name`, the
+  workspace paths and every other stored text are shown as plain text: never
+  turned into a link, never rendered as HTML (`v-html`, `innerHTML`). A stored
+  `javascript:` or `mailto:` string is shown as those characters.
+
+Backend resource usage (`plugins:backendResourceUsage`) is Host state, not a
+table: `children.current` counts the **bound views** (each owns at most one
+child process; a view whose child has not started yet, or has stopped while
+idle, still counts), not live processes; `children.retained` counts children
+whose close failed and that may still be running.
 
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
@@ -1271,6 +1299,7 @@ by editing the fixture.
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
 | Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
 | Transfer time | `timeoutMs` covers the plugin's execution only; transfers run on a 30 s idle timer restarted by every piece, and `agent.capability.progress` keeps the backend's wait alive | time must not turn into a size limit (review of #358, M2); the idle timer detects a dead peer, it does not bound a size |
+| Piece counts and odd input | an integral float counts (`1.0` = `1`); a non-object piece is `seq`; a repeated, skipped or backward `seq` fails on arrival; Python escapes lone surrogates like `JSON.stringify` | both languages give the same answer for every input (#358 review L1–L3, INFO) |
 | Child frame size | no limit on the Host's reader; the 1 MiB `maxFrameBytes` failure is removed | a size must never kill or restart a child (user decision 2026-10-17); pieces stay the normal path for interleaving |
 | Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under 1 MiB, the frame size child readers use (the built-in Plans backend's `MAX_FRAME_BYTES`); small enough that other calls interleave |
 | Arguments-size field | `args_bytes` only, measured by the backend as UTF-8 bytes of the compact spelling (the `resultBytes` measure); `args_sha256` stays canonical; no `meta.argsBytes` | one number for one fact, in the same unit as the result size; the backend sees the arguments first and writes the audit row |

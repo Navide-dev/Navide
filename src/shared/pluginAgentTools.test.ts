@@ -159,7 +159,7 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     constants: Record<string, string | number>
     splits: Case<{ name: string; text: string; maxBytes: number; expected: string[] }>
     reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; chunkBytes: number; expected: unknown }>
-    arrival: Case<{ name: string; chunkBytes: number; pieces: unknown[]; expected: unknown[] }>
+    arrival: Case<{ name: string; chunkBytes: number; pieces: unknown[]; seqs?: unknown[]; expected: unknown[] }>
     arguments: Case<{ name: string; arguments: unknown; text: string; maxBytes: number; expected: string[] }>
     argumentsDigest: Case<{ name: string; arguments: unknown; canonical: boolean; bytes: number; sha256: string }>
   }
@@ -209,11 +209,13 @@ describe('chunked transfer of results and arguments (no size cap, section 4.4)',
     expect(reassembleAgentToolPayloadText(chunks, summary, chunkBytes)).toEqual(expected)
   })
 
-  it.each(chunking.arrival)('checks each piece on arrival: $name', ({ chunkBytes, pieces, expected }) => {
+  it.each(chunking.arrival)('checks each piece on arrival: $name', ({ chunkBytes, pieces, seqs, expected }) => {
     const seen: AgentToolChunkArrival[] = []
     let shortSeen = false
-    for (const data of pieces) {
-      const result = agentToolChunkArrival(shortSeen, data, chunkBytes)
+    for (const [index, data] of pieces.entries()) {
+      const result = seqs === undefined
+        ? agentToolChunkArrival(shortSeen, data, chunkBytes)
+        : agentToolChunkArrival(shortSeen, data, chunkBytes, seqs[index], index)
       seen.push(result)
       if (!result.ok) break
       shortSeen = result.short

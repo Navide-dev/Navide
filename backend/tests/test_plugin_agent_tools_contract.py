@@ -282,8 +282,12 @@ def test_reassemble_payload_text(case: dict[str, Any]) -> None:
 def test_each_piece_is_checked_on_arrival(case: dict[str, Any]) -> None:
     seen: list[dict[str, Any]] = []
     short_seen = False
-    for data in case["pieces"]:
-        result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+    seqs = case.get("seqs")
+    for index, data in enumerate(case["pieces"]):
+        if seqs is None:
+            result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+        else:
+            result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"], seqs[index], index)
         seen.append(result)
         if not result["ok"]:
             break
