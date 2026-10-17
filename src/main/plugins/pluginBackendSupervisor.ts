@@ -670,10 +670,13 @@ function isApprovedBridgePortList(value: unknown): value is readonly PlansBridge
  * until a later contract assigns one explicitly. */
 function executionPolicyNamespaceForBridgePort(
   port: PlansBridgePort,
-): PluginSystemNamespace | undefined {
+): PluginSystemNamespace | 'shell' | undefined {
   switch (port) {
     case 'filesystem':
       return 'fs'
+    case 'shell':
+      // The agent shell policy is judged on the command itself, like shell.run.
+      return 'shell'
     case 'workspace-storage':
     case 'terminal':
     case 'agent-messaging':
@@ -684,6 +687,11 @@ function executionPolicyNamespaceForBridgePort(
   }
   const exhaustive: never = port
   return exhaustive
+}
+
+/** The command of a shell Bridge request, or '' (which no shell policy allows). */
+function bridgeShellCommand(value: JsonValue): string {
+  return isRecord(value) && typeof value.command === 'string' ? value.command : ''
 }
 
 function serverInfo(value: unknown): BackendServerInfo | undefined {
@@ -1974,6 +1982,7 @@ export class PluginBackendSupervisor {
         originBinding.runtime.initiator,
         this.currentExecutionPolicy(originBinding.runtime, originBinding.workspacePath),
         policyNamespace,
+        policyNamespace === 'shell' ? bridgeShellCommand(request.arguments) : undefined,
       ))
     ) {
       this.sendBridgeError(generation, request.id, 'CAPABILITY_DENIED')

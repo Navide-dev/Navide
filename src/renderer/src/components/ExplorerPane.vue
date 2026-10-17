@@ -10,6 +10,7 @@ import { revealPath } from '../composables/hostShell'
 import { i18n, useNotify, vTruncate } from '@navide/plugin-ui/foundation'
 
 import { usePreview } from '../preview/usePreview'
+import { isMiniIdeOnlyOpenBlocked, useDisabledBuiltins } from '../composables/useDisabledBuiltins'
 
 const props = defineProps<{
   workspacePath: string
@@ -283,6 +284,8 @@ function openInEditor(entry: FsEntry): void {
 
 // ── Open a folder in an editor ───────────────────────────────────────────────
 const { editorTargets, loadEditorTargets } = useEditorTargets()
+// Read for its subscription: keeps the disabled-Mini-IDE state current.
+useDisabledBuiltins()
 
 // The pane also runs inside the editor window's file tree; hosts without the
 // bridge simply don't get the folder-open items.
@@ -789,7 +792,12 @@ defineExpose({ revealFile, focusTree })
           <button v-if="!ctx.entry.is_dir" class="exp-ctx-item" @click="openInEditor(ctx.entry!); closeCtx()">{{ $t('action.open-in-editor') }}</button>
           <button v-if="!ctx.entry.is_dir && props.onAskAiAboutFile" class="exp-ctx-item" @click="props.onAskAiAboutFile!(ctx.entry!.rel_path); closeCtx()">{{ $t('action.ask-ai-about-file') }}</button>
           <template v-if="ctx.entry.is_dir && canOpenFolderInEditor()">
-            <button class="exp-ctx-item" @click="openFolderInEditor(ctx.entry!); closeCtx()">{{ $t('action.open-in-default-editor') }}</button>
+            <button
+              class="exp-ctx-item"
+              :disabled="isMiniIdeOnlyOpenBlocked()"
+              :title="isMiniIdeOnlyOpenBlocked() ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
+              @click="openFolderInEditor(ctx.entry!); closeCtx()"
+            >{{ $t('action.open-in-default-editor') }}</button>
             <div class="exp-ctx-item has-sub">
               <span>{{ $t('action.open-with') }}</span><span class="exp-ctx-caret">▸</span>
               <div class="exp-ctx-submenu">
@@ -797,6 +805,8 @@ defineExpose({ revealFile, focusTree })
                   v-for="target in editorTargets"
                   :key="target.id"
                   class="exp-ctx-item"
+                  :disabled="isMiniIdeOnlyOpenBlocked(target.id)"
+                  :title="isMiniIdeOnlyOpenBlocked(target.id) ? $t('settings.extensions.builtinDisabledTooltip', { name: 'Mini-IDE' }) : undefined"
                   @click="openFolderInEditor(ctx!.entry!, target.id); closeCtx()"
                 >{{ $t(target.labelKey) }}</button>
               </div>

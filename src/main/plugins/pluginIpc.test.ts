@@ -625,17 +625,18 @@ describe('plugins:remove boundary validation', () => {
       .mockImplementation(() => undefined)
     const onFactoryPackageRemoved = vi.fn()
     try {
+      // The generic factory path; the built-ins themselves are never removed.
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         cleanupPluginStorage: vi.fn(async () => undefined),
-        factoryPackageIds: ['navide.git'],
+        factoryPackageIds: ['acme.factory'],
         onFactoryPackageRemoved,
       })
       const removeHandler = handlers.get('plugins:remove')
       if (!removeHandler) throw new Error('remove handler not registered')
 
-      await expect(removeHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('navide.git')
-      expect(removeInstalledPlugin).toHaveBeenCalledWith('navide.git', {
+      await expect(removeHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(onFactoryPackageRemoved).toHaveBeenCalledWith('acme.factory')
+      expect(removeInstalledPlugin).toHaveBeenCalledWith('acme.factory', {
         restoreBuiltin: false,
       })
     } finally {
@@ -651,7 +652,7 @@ describe('plugins:remove boundary validation', () => {
       registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
         restoreFactoryPackage,
         listFactoryPackages: () => [
-          { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+          { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
         ],
       })
       const listHandler = handlers.get('plugins:listFactoryPackages')
@@ -659,10 +660,10 @@ describe('plugins:remove boundary validation', () => {
       if (!listHandler || !restoreHandler) throw new Error('factory handlers not registered')
 
       expect(listHandler(null)).toEqual([
-        { id: 'navide.git', version: '0.1.0', active: false, optedOut: true },
+        { id: 'acme.factory', version: '0.1.0', active: false, optedOut: true },
       ])
-      await expect(restoreHandler(null, { id: 'navide.git' })).resolves.toEqual({ ok: true })
-      expect(restoreFactoryPackage).toHaveBeenCalledWith('navide.git')
+      await expect(restoreHandler(null, { id: 'acme.factory' })).resolves.toEqual({ ok: true })
+      expect(restoreFactoryPackage).toHaveBeenCalledWith('acme.factory')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
@@ -4939,7 +4940,10 @@ describe('plugins:setDisabled', () => {
   it('refuses first-party ids, packages that are not installed and malformed requests', async () => {
     const { root, manager, setDisabled } = setup('navide-plugin-disable-refuse-')
     try {
-      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/first-party/)
+      // A `navide.` id that is not one of the three built-ins stays refused.
+      await expect(setDisabled(null, { id: 'navide.other', disabled: true })).rejects.toThrow(/first-party/)
+      // A built-in needs the Host side of the switch, which this setup lacks.
+      await expect(setDisabled(null, { id: 'navide.git', disabled: true })).rejects.toThrow(/unavailable/)
       await expect(setDisabled(null, { id: 'acme.missing', disabled: true })).rejects.toThrow(/not an installed/)
       await expect(setDisabled(null, { id: 'acme.demo', disabled: 'yes' })).rejects.toThrow(/invalid/)
       await expect(setDisabled(null, { id: '../escape', disabled: true })).rejects.toThrow(/invalid plugin id/)
@@ -5059,6 +5063,125 @@ describe('plugins:remove native backend data choice', () => {
       expect(new PluginPrereleaseStore(root).has('acme.demo')).toBe(true)
     } finally {
       rmSync(base, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('built-in Plans, Git and Mini-IDE: disabled, never removed', () => {
+  const BUILTINS = ['navide.plans', 'navide.git', 'navide.mini-ide'] as const
+
+  function setup(prefix: string, hostSwitch?: (id: string, disabled: boolean) => Promise<void> | void) {
+    const root = mkdtempSync(join(tmpdir(), prefix))
+    const manager = new FrontendPluginManager()
+    manager.setDisabledPluginResolver((id) => new PluginDisabledStore(root).has(id))
+    const cleanupPluginStorage = vi.fn(async () => undefined)
+    const onFactoryPackageRemoved = vi.fn()
+    const restoreFactoryPackage = vi.fn(async () => undefined)
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage,
+      factoryPackageIds: ['navide.git', 'navide.mini-ide'],
+      onFactoryPackageRemoved,
+      restoreFactoryPackage,
+      ...(hostSwitch ? { setBuiltinDisabled: hostSwitch } : {}),
+    })
+    return { root, manager, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage }
+  }
+
+  it('refuses to remove or restore any built-in, keeping its files, storage and grant', async () => {
+    const { root, cleanupPluginStorage, onFactoryPackageRemoved, restoreFactoryPackage } = setup('navide-builtin-remove-')
+    try {
+      for (const id of BUILTINS) {
+        mkdirSync(join(root, id), { recursive: true })
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:remove')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:remove')!(null, { id, nativeBackendData: 'delete' }))
+          .rejects.toThrow(/cannot be removed/)
+        await expect(handlers.get('plugins:restoreFactoryPackage')!(null, { id })).rejects.toThrow(/cannot be removed/)
+        expect(existsSync(join(root, id))).toBe(true)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(onFactoryPackageRemoved).not.toHaveBeenCalled()
+      expect(restoreFactoryPackage).not.toHaveBeenCalled()
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('disables and enables each built-in through the Host, durably, without touching storage or grants', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager, cleanupPluginStorage } = setup('navide-builtin-disable-', (id, disabled) => {
+      calls.push([id, disabled])
+    })
+    try {
+      for (const id of BUILTINS) {
+        new PluginCapabilityGrantStore(root).set(id, { packageVersion: '1.0.0', system: [], storage: true })
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: true }))
+          .resolves.toEqual({ id, disabled: true })
+        // As a restart sees it: a fresh store over the same root.
+        expect(new PluginDisabledStore(root).has(id)).toBe(true)
+        expect(manager.isBuiltinPluginDisabled(id)).toBe(true)
+        // A second Disable is a no-op.
+        await handlers.get('plugins:setDisabled')!(null, { id, disabled: true })
+      }
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      for (const id of BUILTINS) {
+        await expect(handlers.get('plugins:setDisabled')!(null, { id, disabled: false }))
+          .resolves.toEqual({ id, disabled: false })
+        expect(new PluginDisabledStore(root).has(id)).toBe(false)
+        expect(new PluginCapabilityGrantStore(root).get(id, '1.0.0')).not.toBeNull()
+      }
+      expect(calls).toEqual([...BUILTINS.map((id) => [id, true]), ...BUILTINS.map((id) => [id, false])])
+      expect(cleanupPluginStorage).not.toHaveBeenCalled()
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('fails closed for the built-ins when the store and its backup are unreadable, until a one-click reset', async () => {
+    const calls: Array<[string, boolean]> = []
+    const { root, manager } = setup('navide-builtin-unreadable-', (id, disabled) => { calls.push([id, disabled]) })
+    const reset = vi.fn()
+    // Re-register with the reset hook (setup registers without it).
+    registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+      cleanupPluginStorage: vi.fn(async () => undefined),
+      setBuiltinDisabled: (id, disabled) => { calls.push([id, disabled]) },
+      onBuiltinSwitchReset: reset,
+    })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      writeFileSync(join(root, '.navide-disabled-plugins.json'), '{torn')
+      writeFileSync(join(root, '.navide-disabled-plugins.json.bak'), '{torn too')
+      expect(handlers.get('plugins:disabledStoreStatus')!(null)).toEqual({ status: 'unreadable' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([...BUILTINS].sort())
+      expect(manager.isBuiltinPluginDisabled('navide.plans')).toBe(true)
+      // Enabling cannot silently rewrite the damaged store.
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/unreadable/)
+      expect(readFileSync(join(root, '.navide-disabled-plugins.json'), 'utf8')).toBe('{torn')
+
+      expect(handlers.get('plugins:resetDisabledStore')!(null)).toEqual({ status: 'ok' })
+      expect(handlers.get('plugins:disabledBuiltins')!(null)).toEqual([])
+      expect(reset).toHaveBeenCalledTimes(1)
+      expect(calls).toEqual([])
+    } finally {
+      warn.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('stays disabled when the Host cannot enable it', async () => {
+    const { root } = setup('navide-builtin-enable-fail-', (_id, disabled) => {
+      if (!disabled) throw new Error('bundled package missing')
+    })
+    try {
+      await handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: true })
+      await expect(handlers.get('plugins:setDisabled')!(null, { id: 'navide.git', disabled: false }))
+        .rejects.toThrow(/bundled package missing/)
+      expect(new PluginDisabledStore(root).has('navide.git')).toBe(true)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
     }
   })
 })
