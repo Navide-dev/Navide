@@ -705,6 +705,12 @@ PLUGIN_ACTIVITY_DAILY_RETENTION_DAYS = 90
 PLUGIN_ACTIVITY_UNKNOWN_ADDRESS = "<unknown>"
 PLUGIN_ACTIVITY_DENIED_TARGET = "<denied>"
 PLUGIN_ACTIVITY_FAILED_TARGET = "<failed>"
+#: Read-only broker calls: a failed one changed nothing, so its path is
+#: ``<failed>``. Any other call that failed keeps its redacted path and
+#: command: it may have done something before it failed.
+PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES = (
+    "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+)
 #: The path of an allowed call whose result found nothing usable there
 #: (``exists: false`` or ``ok: false``).
 PLUGIN_ACTIVITY_MISSING_TARGET = "<missing>"

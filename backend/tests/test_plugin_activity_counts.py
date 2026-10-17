@@ -228,3 +228,19 @@ async def test_a_count_outside_sqlites_integers_is_skipped_and_the_batch_is_kept
     ]})
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 2}
     assert [(r["plugin_id"], r["count"]) for r in _counts(audit)] == [(PLUGIN, 2**63 - 1), ("acme.other", 2)]
+
+
+def test_a_failed_write_or_command_keeps_its_text(tmp_path: Path) -> None:
+    """Security review of #397: it may have done something before it failed; a failed read changed nothing."""
+    audit = _log(tmp_path / "navide.db")
+    common = {"plugin_id": PLUGIN, "plugin_version": "1", "workspace": WORKSPACE, "outcome": "error", "at_ms": NOW - 1000}
+    audit.record_activity(source="broker", address="fs.writeFile", fs_path=f"{WORKSPACE}/src/new.ts", **common)
+    audit.record_activity(source="shell", address="shell.run", shell_command="git push origin main", **common)
+    audit.record_activity(source="broker", address="fs.readFile", fs_path=f"{WORKSPACE}/src/gone.ts", **common)
+    assert [(r["address"], r["fs_path"], r["shell_command"]) for r in _counts(audit)] == [
+        ("fs.writeFile", "src/new.ts", ""), ("shell.run", "", "git push"), ("fs.readFile", "<failed>", ""),
+    ]
+    # READ_ONLY_ADDRESSES in src/main/plugins/pluginActivity.ts
+    assert contract.PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES == (
+        "fs.readFile", "fs.readImage", "fs.listDirectory", "fs.listFilesFlat", "fs.glob", "fs.stat", "fs.statPath",
+    )

@@ -1323,9 +1323,14 @@ the counts stay exact:
 - `<denied>` (`PLUGIN_ACTIVITY_DENIED_TARGET`), in `fs_path` / `shell_command`:
   the call was refused (`outcome` `denied`), so the path or command it named is
   not kept.
-- `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path` / `shell_command`:
-  the call failed (`outcome` `error`; with `fs` granted, a path that does not
-  exist costs one stat), so the path or command it named is not kept.
+- `<failed>` (`PLUGIN_ACTIVITY_FAILED_TARGET`), in `fs_path`: a read-only
+  call (`PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES`: `fs.readFile`, `fs.readImage`,
+  `fs.listDirectory`, `fs.listFilesFlat`, `fs.glob`, `fs.stat`, `fs.statPath`)
+  failed (`outcome` `error`; with `fs` granted, a path that does not exist
+  costs one stat), so it changed nothing and the path is not kept. Any other
+  call that failed (a write, `shell.run`, …) keeps its redacted path and
+  command, as an allowed call does: it may have done something before it
+  failed.
 - `<missing>` (`PLUGIN_ACTIVITY_MISSING_TARGET`), in `fs_path`: a read was
   allowed but its result found nothing usable there: `exists: false` (as
   `fs.stat` / `fs.statPath` answer for a path that does not exist) or

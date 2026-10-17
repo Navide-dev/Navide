@@ -52,6 +52,13 @@ function plainText(value: string): string {
   return MARKERS.has(value) ? `./${value}` : value
 }
 
+/** Read-only calls (PLUGIN_ACTIVITY_READ_ONLY_ADDRESSES): a failed one changed
+ *  nothing, so its path is ACTIVITY_FAILED_TARGET. Any other failed call keeps
+ *  its path and command: it may have done something before it failed. */
+export const READ_ONLY_ADDRESSES: ReadonlySet<string> = new Set([
+  'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.listFilesFlat', 'fs.glob', 'fs.stat', 'fs.statPath',
+])
+
 /** Read-only calls that answer a missing path inside a successful call. */
 const READS_ANSWERING_MISSING: ReadonlySet<string> = new Set([
   'fs.readFile', 'fs.readImage', 'fs.listDirectory', 'fs.stat', 'fs.statPath',
@@ -145,8 +152,9 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
     count: 1,
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
+  const kept = outcome === 'allowed' || (outcome === 'error' && !READ_ONLY_ADDRESSES.has(`${call.ns}.${call.method}`))
   const target = (value: string): string =>
-    outcome === 'allowed' ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
+    kept ? plainText(value) : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined
   if (fsPath) row.fs_path = outcome === 'allowed' && foundNothing(call, response) ? ACTIVITY_MISSING_TARGET : target(fsPath)
   const command = call.ns === 'shell' ? stringArg(call.args, 'command') : undefined

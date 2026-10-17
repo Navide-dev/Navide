@@ -124,6 +124,11 @@ describe('text the plugin wrote is never a key', () => {
     })
     expect(row(call(), buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ fs_path: ACTIVITY_DENIED_TARGET })
     expect(row(call(), buildError('req-1', 'INTERNAL_ERROR', 'x'))).toMatchObject({ fs_path: ACTIVITY_FAILED_TARGET })
+    // A failed write or command may have done something first: it keeps its text (security review).
+    const write = call({ method: 'writeFile', args: { path: 'src/new.ts', content: 'x' } })
+    expect(row(write, buildError('req-1', 'TIMEOUT', 'x')).fs_path).toBe('src/new.ts')
+    const run = call({ ns: 'shell', method: 'run', args: { command: 'git push origin' } })
+    expect(row(run, buildError('req-1', 'INTERNAL_ERROR', 'x')).shell_command).toBe('git push origin')
     const shell = call({ ns: 'shell', method: 'run', args: { command: 'curl -u me:secret https://x' } })
     expect(row(shell, buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ shell_command: ACTIVITY_DENIED_TARGET })
     // An allowed call keeps them: that IO happened.
