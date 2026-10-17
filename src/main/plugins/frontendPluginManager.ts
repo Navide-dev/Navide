@@ -176,7 +176,7 @@ import type { MarketplaceQueryAnswer } from './marketplaceQuery'
 import { dockSurfaceForPlugin } from '../dockSurfaceProvider'
 import {
   AGENT_TOOLS_SYNC_EVENT,
-  utf8ByteLength,
+  agentToolResultBytes,
   type AgentToolCaller,
   type AgentToolCallResponse,
   type AgentToolsSyncPayload,
@@ -7081,7 +7081,7 @@ export class FrontendPluginManager {
       })
       // DB9: no result cap. The tool already ran, so the result goes back
       // whole and carries its size.
-      const resultBytes = utf8ByteLength(JSON.stringify(result ?? null))
+      const resultBytes = agentToolResultBytes(result)
       return { ok: true, result, meta: meta(resultBytes) }
     } catch (error) {
       return this.agentToolBackendError(error, meta(0))
