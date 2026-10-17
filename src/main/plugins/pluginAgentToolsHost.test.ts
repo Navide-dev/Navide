@@ -81,10 +81,10 @@ function harness(overrides: Partial<PluginAgentToolsHostOptions> = {}, initial: 
     consentGrantedAt: (pluginId) => state.grantedAt.get(pluginId) ?? null,
     setAgentMethods,
     confirmWrite: async () => true,
-    send: (payload) => {
-      if (!state.sessionUp.value) return false
+    send: async (payload) => {
+      if (!state.sessionUp.value) return 'no-session'
       state.sent.push(structuredClone(payload))
-      return true
+      return 'delivered'
     },
     ...overrides,
   })
@@ -324,5 +324,71 @@ describe('PluginAgentToolsHost per-call checks (contract 4.2 order)', () => {
     expect(admission.ok).toBe(true)
     h.disabled.add('nerdtechnic.devmap')
     expect(h.host.recheck('nerdtechnic.devmap', PANE, notStopping, DEVMAP)).toEqual({ ok: false, reason: 'plugin-disabled' })
+  })
+})
+
+describe('PluginAgentToolsHost review fixes', () => {
+  const call = { pluginId: 'nerdtechnic.devmap', toolName: 'devmap_set_status', pluginVersion: '0.2.0', caller: PANE }
+
+  it('keeps a revocation while the package is still listed during the drain (production order)', async () => {
+    const h = harness({}, { enabled: true })
+    await h.host.refresh()
+    // index.ts marks first and refreshes while the activation is still listed.
+    h.host.mark('nerdtechnic.devmap', 'revoked')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual(['plugin-revoked', 'plugin-revoked'])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual([])
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'plugin-revoked' })
+    // The drain or the removal failed: it stays listed, and stays revoked.
+    await h.host.refresh()
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.every((entry) => entry.state === 'plugin-revoked')).toBe(true)
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'plugin-revoked' })
+  })
+
+  it('ends a mark only for another version or directory, or a new consent', async () => {
+    const h = harness({}, { enabled: true })
+    h.host.mark('nerdtechnic.devmap', 'quarantined')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools[0].state).toBe('plugin-quarantined')
+    h.packages = [spec('nerdtechnic.devmap', '0.2.1', [tool('devmap_read', 'devmap.read')])]
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => [entry.pluginVersion, entry.state])).toEqual([['0.2.1', 'available']])
+    h.host.mark('nerdtechnic.devmap', 'revoked')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools[0].state).toBe('plugin-revoked')
+    h.host.clearMark('nerdtechnic.devmap')
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools[0].state).toBe('available')
+  })
+
+  it('retries a failed push a bounded number of times, and never an outdated one', async () => {
+    let failures = 5
+    const attempts: number[] = []
+    const h = harness({
+      retryDelaysMs: [0, 0],
+      send: async (payload) => {
+        attempts.push(payload.revision)
+        return failures-- > 0 ? 'failed' : 'delivered'
+      },
+    }, { enabled: true })
+    await h.host.refresh()
+    await new Promise((done) => setTimeout(done, 20))
+    expect(attempts).toEqual([1, 1, 1])
+    attempts.length = 0
+    failures = 1
+    await h.host.refresh()
+    await h.host.refresh()
+    await new Promise((done) => setTimeout(done, 20))
+    // Revision 2 failed once, but 3 superseded it: 2 is not retried.
+    expect(attempts).toEqual([2, 3])
+  })
+
+  it('treats a consent that never covered the tool list as no consent', async () => {
+    const h = harness({ hasConsent: async () => false }, { enabled: true })
+    await h.host.refresh()
+    expect(h.sent.at(-1)!.tools.map((entry) => entry.state)).toEqual(['consent-required', 'consent-required'])
+    expect(h.methods.get('nerdtechnic.devmap@0.2.0')).toEqual([])
+    await expect(h.host.admit(call, notStopping)).resolves.toEqual({ ok: false, reason: 'consent-required' })
   })
 })

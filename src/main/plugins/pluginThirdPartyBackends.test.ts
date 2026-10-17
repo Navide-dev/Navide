@@ -11,6 +11,7 @@ import { isWindows } from '../../shared/osplat'
 import {
   BACKEND_RESTART_DELAYS_MS,
   backendPermissionsKey,
+  agentToolsDigest,
   consentedAgentMethods,
   readInstalledManifestV2,
   ThirdPartyBackendController,
@@ -678,21 +679,87 @@ describe.skipIf(POSIX_SANDBOX_SKIPPED)('agent-tool consent and first-write confi
     await expect(instance.hasConsent(spec)).resolves.toBe(false)
   })
 
-  it('asks once per workspace naming the tool, records the grant, and remembers a "no"', async () => {
+  it('asks its own DB3 question naming the agent tool, apart from the view grant, once per version and consent', async () => {
     const spec = writePackage({ system: ['fs'] })
+    const promptAgentToolWrite = vi.fn(async () => true)
     const promptWorkspaceWrite = vi.fn(async () => true)
-    const { instance } = controller({ promptWorkspaceWrite })
+    const { instance } = controller({ promptAgentToolWrite, promptWorkspaceWrite })
     const tool = { name: 'indexer_search', title: 'Search' }
+    await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(false)
+    await instance.allow(spec)
+    // The view's "allow file changes" grant is not an answer to the agent question.
+    store.setWorkspaceWrite('acme.indexer', '/w1', true)
     await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
     await expect(instance.confirmAgentToolWrite(spec, '/w1', tool)).resolves.toBe(true)
-    expect(promptWorkspaceWrite).toHaveBeenCalledTimes(1)
-    expect(promptWorkspaceWrite).toHaveBeenCalledWith({ pluginId: 'acme.indexer', name: 'Indexer', workspacePath: '/w1', agentTool: tool })
-    expect(store.allowsWorkspaceWrite('acme.indexer', '/w1')).toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(1)
+    expect(promptAgentToolWrite).toHaveBeenCalledWith({
+      pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', workspacePath: '/w1', tool,
+    })
+    expect(promptWorkspaceWrite).not.toHaveBeenCalled()
+    expect(store.record('acme.indexer').agentToolWrite).toMatchObject({ packageVersion: '1.0.0', workspaces: ['/w1'] })
 
-    promptWorkspaceWrite.mockResolvedValue(false)
+    // An update asks again; so does a new consent; so does a disable.
+    await expect(instance.confirmAgentToolWrite({ ...spec, packageVersion: '1.0.1' }, '/w1', tool)).resolves.toBe(true)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(2)
+    await instance.allow(spec)
+    expect(store.record('acme.indexer').agentToolWrite).toBeUndefined()
+    store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, '/w1')
+    store.setDisabled('acme.indexer', true)
+    expect(store.record('acme.indexer').agentToolWrite).toBeUndefined()
+    store.setDisabled('acme.indexer', false)
+
+    promptAgentToolWrite.mockResolvedValue(false)
     await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
     await expect(instance.confirmAgentToolWrite(spec, '/w2', tool)).resolves.toBe(false)
-    expect(promptWorkspaceWrite).toHaveBeenCalledTimes(2)
+    expect(promptAgentToolWrite).toHaveBeenCalledTimes(3)
+  })
+
+  it('counts agent tools as consented only when the consent recorded their current digest', async () => {
+    const parsed = (() => {
+      writePackage({ system: ['fs'] })
+      return readInstalledManifestV2(packageDir)
+    })()
+    const tools = [{ name: 'indexer_search', method: 'files.search', risk: 'read', title: 'Search', description: 'Search.', inputSchema: { type: 'object', properties: {} } }]
+    const make = (agentTools: unknown) => thirdPartyBackendLaunchSpec(
+      { pluginId: 'acme.indexer', packageVersion: '1.0.0', packageDir, views: [], backend: { entryFile: join(packageDir, 'backend', 'acme-indexer'), protocolVersion: 1, activation: 'startup' } },
+      { ...parsed, backend: { ...parsed.backend!, agentTools } as never },
+    )!
+    const spec = make(tools)
+    const { instance } = controller()
+    await instance.allow(spec)
+    // Every consent until B1-a: the native backend is allowed, the tools are not.
+    await expect(instance.hasConsent(spec)).resolves.toBe(true)
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(false)
+    const consent = store.record('acme.indexer').consent!
+    store.grantConsent('acme.indexer', { ...consent, agentToolsSha256: agentToolsDigest(spec)! })
+    await expect(instance.hasAgentToolsConsent(spec)).resolves.toBe(true)
+    await expect(instance.hasAgentToolsConsent(make([{ ...tools[0], description: 'Search better.' }]))).resolves.toBe(false)
+    expect(agentToolsDigest(writePackage({ system: ['fs'] }))).toBeNull()
+  })
+
+  it('lets an agent write through the bridge only inside a write-tool call with the DB3 answer, never prompting', async () => {
+    const spec = writePackage({ system: ['fs'] })
+    const port = { writeFile: vi.fn(async () => ({ ok: true })) } as unknown as PlansFilesystemPort
+    const promptWorkspaceWrite = vi.fn(async () => true)
+    let call: { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
+    const { instance } = controller({ promptWorkspaceWrite, filesystemPort: () => port, agentToolCall: () => call })
+    await instance.allow(spec)
+    const admission = await instance.admit(spec, undefined)
+    const context = {
+      runtime: { pluginId: 'acme.indexer', packageVersion: '1.0.0', workspaceId: 'w', instanceId: 'i', contributionKey: 'k', hostWindowId: null, initiator: { kind: 'agent', source: 'mcp', id: 'agent-1' } },
+      workspacePath: '/w1', authorizedPlanRoot: '/w1', requestId: 'b', signal: new AbortController().signal, emit: () => undefined,
+    } as unknown as PlansBridgeContext
+    const request = { id: 'b', origin: { kind: 'call' as const, requestId: 'r' }, port: 'filesystem' as const, operation: 'write_file', arguments: { rel_path: 'a', content: 'x' } as never }
+    // Outside a call, inside a read-tool call, or without the DB3 answer: refused.
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'read', workspaceRoot: '/w1' }
+    store.setWorkspaceWrite('acme.indexer', '/w1', true)
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    call = { pluginId: 'acme.indexer', risk: 'write', workspaceRoot: '/w1' }
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).rejects.toMatchObject({ code: 'CAPABILITY_DENIED' })
+    store.setAgentToolWrite('acme.indexer', '1.0.0', store.record('acme.indexer').consent!.grantedAt, '/w1')
+    await expect(admission.bridgeDispatcher.dispatch(request, context)).resolves.toEqual({ ok: true })
+    expect(promptWorkspaceWrite).not.toHaveBeenCalled()
   })
 
   it('tells the agent-tool catalog when the first-use dialog grants consent', async () => {
@@ -722,6 +789,27 @@ describe('NativeBackendStore agent-tool switches', () => {
       schemaVersion: 1, enabled: false, plugins: {}, agentTools: { enabled: 'yes', externalCallers: 1 },
     }))
     expect(new NativeBackendStore(join(root, 'switch-store')).agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+  })
+
+  it('keeps the agent-tool consent fields B1-a writes', () => {
+    const consents = new NativeBackendStore(join(root, 'consent-store'))
+    consents.grantConsent('acme.indexer', {
+      binarySha256: 'a'.repeat(64), permissionsKey: '{}', packageVersion: '1.0.0',
+      agentToolsSha256: 'b'.repeat(64), agentToolsSince: '2026-10-01T00:00:00.000Z',
+    })
+    expect(new NativeBackendStore(join(root, 'consent-store')).record('acme.indexer').consent).toMatchObject({
+      agentToolsSha256: 'b'.repeat(64), agentToolsSince: '2026-10-01T00:00:00.000Z',
+    })
+  })
+
+  it('turns external clients off with the agent switch, so turning it on never re-enables them silently', () => {
+    const switches = new NativeBackendStore(join(root, 'switch-store'))
+    switches.setAgentToolSwitches({ enabled: true })
+    switches.setAgentToolSwitches({ externalCallers: true })
+    switches.setAgentToolSwitches({ enabled: false })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: false, externalCallers: false })
+    switches.setAgentToolSwitches({ enabled: true })
+    expect(switches.agentToolSwitches()).toEqual({ enabled: true, externalCallers: false })
   })
 
   it('turns a switch off in memory even when the save fails', () => {

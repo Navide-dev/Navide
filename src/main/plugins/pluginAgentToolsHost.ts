@@ -31,15 +31,27 @@ export interface PluginAgentToolsHostOptions {
   listPackages: () => ThirdPartyLaunchSpec[]
   /** The user's "Disabled" switch for the package or for its native backend. */
   isDisabled: (pluginId: string) => boolean
-  /** Consent covers this exact package content and permission set. */
+  /** Consent covers this exact package content, permission set and agent-tool
+   * list (the consent recorded the tool-list digest). */
   hasConsent: (spec: ThirdPartyLaunchSpec) => Promise<boolean>
   /** When the user consented (ISO time); decides which of two same-named tools is served. */
   consentGrantedAt: (pluginId: string) => string | null
   setAgentMethods: (pluginId: string, packageVersion: string, methods: string[]) => void
   /** DB3 first-write confirmation for one (package, workspace). */
   confirmWrite: (spec: ThirdPartyLaunchSpec, tool: DisclosureAgentTool, workspaceRoot: string) => Promise<boolean>
-  /** Deliver one snapshot to the core backend; false when no Host session exists. */
-  send: (payload: AgentToolsSyncPayload) => boolean
+  /** Deliver one snapshot to the core backend. `no-session`: nothing to send
+   * to (a fresh snapshot follows registration); `failed`: retried, bounded. */
+  send: (payload: AgentToolsSyncPayload) => Promise<AgentToolsSyncDelivery>
+  /** Delays between retries of a failed push (default 1 s, 5 s, 15 s). */
+  retryDelaysMs?: readonly number[]
+}
+
+export type AgentToolsSyncDelivery = 'delivered' | 'failed' | 'no-session'
+
+interface PackageMark {
+  kind: AgentToolPackageMark
+  /** The package version and directory the mark applies to; another one clears it. */
+  identity: { packageVersion: string; packageDir: string } | null
 }
 
 export type AgentToolAdmission =
@@ -74,7 +86,7 @@ export class PluginAgentToolsHost {
   private lastSentEnabled: boolean | null = null
   /** Last seen spec per package, kept while it is disabled, quarantined or revoked. */
   private readonly known = new Map<string, ThirdPartyLaunchSpec>()
-  private readonly marks = new Map<string, AgentToolPackageMark>()
+  private readonly marks = new Map<string, PackageMark>()
   /** Packages that left the catalog without a mark (removed); kept so a
    * quarantine or revocation reported afterwards can still name its tools. */
   private readonly departed = new Map<string, ThirdPartyLaunchSpec>()
@@ -104,9 +116,21 @@ export class PluginAgentToolsHost {
 
   /** A trust refresh quarantined, or a spawn-time trust check revoked, the package. */
   mark(pluginId: string, mark: AgentToolPackageMark): void {
-    this.marks.set(pluginId, mark)
     const departed = this.departed.get(pluginId)
     if (departed && !this.known.has(pluginId)) this.known.set(pluginId, departed)
+    const spec = this.known.get(pluginId) ?? this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
+    // Sticky: the mark holds for this package version and directory, also
+    // while it is still listed during a drain or when its removal fails,
+    // until another version or directory replaces it or the user consents again.
+    this.marks.set(pluginId, {
+      kind: mark,
+      identity: spec ? { packageVersion: spec.packageVersion, packageDir: spec.packageDir } : null,
+    })
+  }
+
+  /** The user consented again: a revocation or quarantine of the old decision ends. */
+  clearMark(pluginId: string): void {
+    this.marks.delete(pluginId)
   }
 
   /** The last catalog pushed or computed (empty while the switch is off). */
@@ -139,8 +163,14 @@ export class PluginAgentToolsHost {
     }
     for (const spec of present) {
       this.known.set(spec.pluginId, spec)
-      this.marks.delete(spec.pluginId)
       this.departed.delete(spec.pluginId)
+      const mark = this.marks.get(spec.pluginId)
+      if (mark?.identity === null) {
+        mark.identity = { packageVersion: spec.packageVersion, packageDir: spec.packageDir }
+      } else if (
+        mark &&
+        (mark.identity.packageVersion !== spec.packageVersion || mark.identity.packageDir !== spec.packageDir)
+      ) this.marks.delete(spec.pluginId)
     }
     for (const pluginId of [...this.marks.keys()]) {
       if (!this.known.has(pluginId)) this.marks.delete(pluginId)
@@ -148,7 +178,7 @@ export class PluginAgentToolsHost {
   }
 
   private async packageState(spec: ThirdPartyLaunchSpec, present: boolean): Promise<AgentToolState> {
-    const mark = this.marks.get(spec.pluginId)
+    const mark = this.marks.get(spec.pluginId)?.kind
     if (mark === 'quarantined') return 'plugin-quarantined'
     if (mark === 'revoked') return 'plugin-revoked'
     if (!present || this.options.isDisabled(spec.pluginId)) return 'plugin-disabled'
@@ -231,7 +261,32 @@ export class PluginAgentToolsHost {
 
   private push(snapshot: Omit<AgentToolsSyncPayload, 'revision'>): void {
     this.revision += 1
-    if (this.options.send({ revision: this.revision, ...snapshot })) this.lastSentEnabled = snapshot.enabled
+    const payload: AgentToolsSyncPayload = { revision: this.revision, ...snapshot }
+    // Synchronously known: the Host had a session to send to.
+    this.lastSentEnabled = snapshot.enabled
+    void this.deliver(payload, 0)
+  }
+
+  /** Send, and retry a failed push a bounded number of times while it is
+   * still the newest snapshot. A reconnect sends a fresh one anyway. */
+  private async deliver(payload: AgentToolsSyncPayload, attempt: number): Promise<void> {
+    let delivery: AgentToolsSyncDelivery
+    try {
+      delivery = await this.options.send(payload)
+    } catch {
+      delivery = 'failed'
+    }
+    if (delivery === 'no-session') {
+      if (payload.revision === this.revision) this.lastSentEnabled = null
+      return
+    }
+    const delays = this.options.retryDelaysMs ?? [1_000, 5_000, 15_000]
+    if (delivery !== 'failed' || attempt >= delays.length || payload.revision !== this.revision) return
+    await new Promise<void>((done) => {
+      const timer = setTimeout(done, delays[attempt])
+      timer.unref?.()
+    })
+    if (payload.revision === this.revision) await this.deliver(payload, attempt + 1)
   }
 
   /** The synchronous part of the per-call check, in contract order up to the
@@ -245,7 +300,7 @@ export class PluginAgentToolsHost {
     const switches = this.options.switches()
     if (!switches.enabled) return { ok: false, reason: 'master-switch-off' }
     if (caller.kind !== 'pane' && !switches.externalCallers) return { ok: false, reason: 'external-callers-off' }
-    const mark = this.marks.get(pluginId)
+    const mark = this.marks.get(pluginId)?.kind
     if (mark) return { ok: false, reason: mark === 'quarantined' ? 'plugin-quarantined' : 'plugin-revoked' }
     const spec = this.options.listPackages().find((candidate) => candidate.pluginId === pluginId)
     if (this.options.isDisabled(pluginId)) return { ok: false, reason: 'plugin-disabled' }

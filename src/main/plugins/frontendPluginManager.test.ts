@@ -15856,7 +15856,9 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       )
       const [instanceId, method, args, callOptions] = f.call.mock.calls[0] as unknown as [string, string, unknown, { initiator: unknown; timeoutMs: number }]
       expect([instanceId, method, args]).toEqual(['headless-1', 'devmap.setStatus', { block_id: 'b1', status: 'done' }])
-      expect(callOptions.timeoutMs).toBe(30_000)
+      // What is left of the tool's deadline, counted from receipt.
+      expect(callOptions.timeoutMs).toBeLessThanOrEqual(30_000)
+      expect(callOptions.timeoutMs).toBeGreaterThan(25_000)
       expect(callOptions.initiator).toEqual({
         kind: 'agent', source: 'mcp', id: expect.any(String),
         caller: { kind: 'pane', paneId: 'p-41', workspace: f.workspace, verifiedTo: 'pane' },
@@ -15899,6 +15901,25 @@ describe('third-party agent tool calls (contract 4.2)', () => {
       expect(f.bind).toHaveBeenLastCalledWith(expect.anything(), expect.any(String), other)
       const same = await ask(f, toolRequest(f, { request_id: 'mcp:same' }))
       expect(same).toMatchObject({ ok: true, meta: { crossWorkspace: false } })
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('refuses an external caller whose workspace_path names no open workspace, with a clear error', async () => {
+    const f = await fixture()
+    try {
+      await f.gate.setSwitches({ externalCallers: true })
+      const closed = join(f.root, 'closed')
+      mkdirSync(closed)
+      await expect(ask(f, toolRequest(f, {
+        caller: { kind: 'external', paneId: null, workspace: null },
+        target: { plugin_id: 'nerdtechnic.devmap', workspace_path: closed },
+      }))).resolves.toEqual({
+        ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED',
+        error: 'An external or Host caller must name an open Navide workspace in workspace_path.',
+      })
+      expect(f.bind).not.toHaveBeenCalled()
     } finally {
       await f.cleanup()
     }
@@ -16040,10 +16061,9 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     }
   })
 
-  it('lets only the headless agent-tool binding, with an agent initiator, reach the workspace filesystem', async () => {
+  it('lets only an in-flight agent-tool call on its headless binding reach the workspace filesystem', async () => {
     const f = await fixture()
     try {
-      await ask(f, toolRequest(f))
       const internals = f.mgr as unknown as {
         thirdPartyFilesystemGrantAllows: (payload: Record<string, unknown>, context: PlansBridgeContext) => boolean
       }
@@ -16058,22 +16078,189 @@ describe('third-party agent tool calls (contract 4.2)', () => {
         signal: new AbortController().signal,
         emit: () => undefined,
       } as PlansBridgeContext)
-      const agent = { kind: 'agent', source: 'mcp', id: 'a' }
       const payload = { rel_path: 'a.txt', workspace_path: f.workspace }
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(true)
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('other-instance', agent))).toBe(false)
-      expect(internals.thirdPartyFilesystemGrantAllows({ ...payload, workspace_path: f.root }, context('headless-1', agent))).toBe(false)
-      f.grant.value = null
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
-      f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
-      // The workspace closed since the binding was made.
-      f.openWorkspaces.delete(f.workspace)
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
-      f.openWorkspaces.add(f.workspace)
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(true)
-      await f.gate.setSwitches({ enabled: false })
-      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))).toBe(false)
+      const seen: Record<string, boolean> = {}
+      f.call.mockImplementationOnce((async (_id: string, _method: string, _args: unknown, options: { initiator: { id: string } }) => {
+        const agent = options.initiator
+        const allows = () => internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', agent))
+        seen.inCall = allows()
+        seen.otherInstance = internals.thirdPartyFilesystemGrantAllows(payload, context('other-instance', agent))
+        seen.otherRoot = internals.thirdPartyFilesystemGrantAllows({ ...payload, workspace_path: f.root }, context('headless-1', agent))
+        seen.otherInitiator = internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', { kind: 'agent', source: 'mcp', id: 'forged' }))
+        f.grant.value = null
+        seen.noGrant = allows()
+        f.grant.value = { packageVersion: '0.2.0', system: ['fs'], storage: true }
+        f.openWorkspaces.delete(f.workspace)
+        seen.workspaceClosed = allows()
+        f.openWorkspaces.add(f.workspace)
+        f.disabled.add('nerdtechnic.devmap')
+        seen.disabled = allows()
+        f.disabled.clear()
+        f.gate.mark('nerdtechnic.devmap', 'revoked')
+        seen.revoked = allows()
+        f.gate.clearMark('nerdtechnic.devmap')
+        f.switches.enabled = false
+        seen.switchOff = allows()
+        f.switches.enabled = true
+        seen.restored = allows()
+        return { status: 'done' }
+      }) as never)
+      await ask(f, toolRequest(f))
+      expect(seen).toEqual({
+        inCall: true, otherInstance: false, otherRoot: false, otherInitiator: false, noGrant: false,
+        workspaceClosed: false, disabled: false, revoked: false, switchOff: false, restored: true,
+      })
+      // After the call no agent request reaches the filesystem.
+      expect(internals.thirdPartyFilesystemGrantAllows(payload, context('headless-1', { kind: 'agent', source: 'mcp', id: 'a' }))).toBe(false)
     } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('external callers lose filesystem access when DB4 is turned off mid-call', async () => {
+    const f = await fixture()
+    try {
+      await f.gate.setSwitches({ externalCallers: true })
+      const internals = f.mgr as unknown as {
+        thirdPartyFilesystemGrantAllows: (payload: Record<string, unknown>, context: PlansBridgeContext) => boolean
+      }
+      let before = false
+      let after = true
+      f.call.mockImplementationOnce((async (_id: string, _method: string, _args: unknown, options: { initiator: unknown }) => {
+        const context = {
+          runtime: {
+            pluginId: 'nerdtechnic.devmap', packageVersion: '0.2.0', workspaceId: f.mgr.workspaceIdForPath(f.workspace),
+            instanceId: 'headless-1', contributionKey: 'k', hostWindowId: null, initiator: options.initiator as never,
+          },
+          workspacePath: f.workspace, authorizedPlanRoot: f.workspace, requestId: 'b',
+          signal: new AbortController().signal, emit: () => undefined,
+        } as PlansBridgeContext
+        const payload = { rel_path: 'a.txt', workspace_path: f.workspace }
+        before = internals.thirdPartyFilesystemGrantAllows(payload, context)
+        f.switches.externalCallers = false
+        after = internals.thirdPartyFilesystemGrantAllows(payload, context)
+        return null
+      }) as never)
+      await ask(f, toolRequest(f, { caller: { kind: 'external', paneId: null, workspace: null } }))
+      expect([before, after]).toEqual([true, false])
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('does not dispatch once the deadline passed during the first-write dialog, so a retry writes once', async () => {
+    const f = await fixture()
+    const realNow = Date.now
+    try {
+      f.confirmWrite.mockImplementationOnce(async () => {
+        const later = realNow() + 31_000
+        vi.spyOn(Date, 'now').mockImplementation(() => later)
+        return true
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_TIMEOUT' })
+      expect(f.bind).not.toHaveBeenCalled()
+      expect(f.call).not.toHaveBeenCalled()
+      vi.mocked(Date.now).mockRestore()
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:retry' }))).resolves.toMatchObject({ ok: true })
+      expect(f.call).toHaveBeenCalledTimes(1)
+    } finally {
+      Date.now = realNow
+      await f.cleanup()
+    }
+  })
+
+  it('does not dispatch when the bind finishes after the deadline', async () => {
+    const f = await fixture()
+    const realNow = Date.now
+    try {
+      f.bind.mockImplementationOnce(async () => {
+        const later = realNow() + 31_000
+        vi.spyOn(Date, 'now').mockImplementation(() => later)
+        return 'headless-1'
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_TIMEOUT' })
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      Date.now = realNow
+      await f.cleanup()
+    }
+  })
+
+  it('re-checks the workspace and Grant after the dialog and after the bind', async () => {
+    const f = await fixture()
+    try {
+      f.confirmWrite.mockImplementationOnce(async () => {
+        f.openWorkspaces.delete(f.workspace)
+        return true
+      })
+      await expect(ask(f, toolRequest(f))).resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      expect(f.bind).not.toHaveBeenCalled()
+      f.openWorkspaces.add(f.workspace)
+      f.bind.mockImplementationOnce(async () => {
+        f.grant.value = null
+        return 'headless-1'
+      })
+      await expect(ask(f, toolRequest(f, { request_id: 'mcp:2' }))).resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_NOT_AUTHORIZED' })
+      expect(f.call).not.toHaveBeenCalled()
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('asks the DB3 question for a read tool that shares a write method', async () => {
+    const f = await fixture()
+    try {
+      const shared = f.spec()
+      ;(shared.thirdParty as unknown as { agentTools: unknown[] }).agentTools = [
+        ...(shared.thirdParty.agentTools ?? []),
+        { name: 'devmap_peek', method: 'devmap.setStatus', risk: 'read', title: 'Peek', description: 'Peek.', timeoutMs: 30_000, inputSchema: { type: 'object', properties: {} } },
+      ]
+      f.confirmWrite.mockResolvedValueOnce(false)
+      await expect(ask(f, toolRequest(f, { tool: { name: 'devmap_peek', plugin_version: '0.2.0', sync_revision: 1 }, payload: { arguments: {} } })))
+        .resolves.toMatchObject({ ok: false, error_code: 'WORKSPACE_WRITE_DECLINED' })
+      expect(f.confirmWrite).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ name: 'devmap_peek' }), f.workspace)
+    } finally {
+      await f.cleanup()
+    }
+  })
+
+  it('evaluates the execution policy for a package that declares no system namespace', () => {
+    const mgr = new FrontendPluginManager()
+    mgr.setExecutionPolicyResolver(() => ({
+      policy: { ...HOST_DEFAULT_EXECUTION_POLICY, mode: 'allowlist', system: [], shell: [] }, revision: 1, state: 'user',
+    }))
+    const internals = mgr as unknown as {
+      agentToolPolicyAllows: (root: string, initiator: unknown, spec: unknown) => boolean
+    }
+    const spec = { thirdParty: { name: 'x', system: [] } }
+    expect(internals.agentToolPolicyAllows('/w', { kind: 'agent', source: 'mcp', id: 'a' }, spec)).toBe(false)
+    mgr.setExecutionPolicyResolver(() => ({ policy: HOST_DEFAULT_EXECUTION_POLICY, revision: 1, state: 'default' }))
+    expect(internals.agentToolPolicyAllows('/w', { kind: 'agent', source: 'mcp', id: 'a' }, spec)).toBe(true)
+  })
+
+  it('never forwards an internal error message to the agent', async () => {
+    const f = await fixture()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      f.confirmWrite.mockRejectedValueOnce(new Error('EACCES: /Users/me/Library/Application Support/Navide/native-backends.json'))
+      const response = await ask(f, toolRequest(f))
+      expect(response).toEqual({ ok: false, error_code: 'PLUGIN_TOOL_FAILED', error: 'The Navide plugin tool failed.' })
+    } finally {
+      warn.mockRestore()
+      await f.cleanup()
+    }
+  })
+
+  it('stops and forgets its headless bindings when the tools are no longer served', async () => {
+    const f = await fixture()
+    const unbind = vi.spyOn(PluginBackendHost.prototype, 'unbindView').mockResolvedValue(undefined)
+    try {
+      await ask(f, toolRequest(f))
+      await f.gate.setSwitches({ enabled: false })
+      expect(unbind).toHaveBeenCalledWith('headless-1', 'plugin-stopping')
+      expect((f.mgr as unknown as { headlessAgentToolRoots: Map<string, string> }).headlessAgentToolRoots.size).toBe(0)
+    } finally {
+      unbind.mockRestore()
       await f.cleanup()
     }
   })

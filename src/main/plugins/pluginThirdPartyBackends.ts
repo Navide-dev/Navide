@@ -43,7 +43,7 @@ import { parseManifestJson } from './pluginManifestJson'
 import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
 import { validateAgentTools } from '../../shared/pluginAgentTools'
-import { computeDisclosure, type DisclosureManifestInput } from '../../shared/pluginDisclosure'
+import { canonicalContractJson, computeDisclosure, type DisclosureManifestInput } from '../../shared/pluginDisclosure'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -140,6 +140,15 @@ export function consentedAgentMethods(
 ): string[] {
   if (!gates.masterSwitch || !gates.consentMatches) return []
   return [...new Set((spec.thirdParty.agentTools ?? []).map((tool) => tool.method))].sort()
+}
+
+/** SHA-256 of the canonical agent-tool list (disclosure form), or null when
+ * the package declares none. A consent covers the tools only when it records
+ * this digest (contract 2.8; written by the consent flow of B1-a). */
+export function agentToolsDigest(spec: ThirdPartyLaunchSpec): string | null {
+  const tools = spec.thirdParty.agentTools ?? []
+  if (tools.length === 0) return null
+  return createHash('sha256').update(canonicalContractJson(tools)).digest('hex')
 }
 
 /** Canonical permission set a consent is bound to. */
@@ -245,8 +254,15 @@ export interface NativeBackendWritePrompt {
   pluginId: string
   name: string
   workspacePath: string
-  /** Set when an agent's first write-risk tool call asks (DB3). */
-  agentTool?: { name: string; title: string }
+}
+
+/** DB3: an agent called a write-risk tool of this package in this workspace. */
+export interface AgentToolWritePrompt {
+  pluginId: string
+  name: string
+  packageVersion: string
+  workspacePath: string
+  tool: { name: string; title: string }
 }
 
 export interface ThirdPartyAdmission {
@@ -280,6 +296,11 @@ export interface ThirdPartyBackendControllerOptions {
   ) => BackendResourceWatch
   /** A consent was granted from the first-use dialog (the agent-tool catalog follows it). */
   onConsentGranted?: (pluginId: string) => void
+  /** DB3: ask before an agent's first write-risk tool call in a workspace. Absent = deny. */
+  promptAgentToolWrite?: (prompt: AgentToolWritePrompt) => Promise<boolean>
+  /** The agent-tool call an agent initiator id belongs to, while it runs; the
+   * bridge lets an agent write only inside a call made through a write tool. */
+  agentToolCall?: (initiatorId: string) => { pluginId: string; risk: 'read' | 'write'; workspaceRoot: string } | undefined
   /** Digest the consent binds to (default: packageContentDigest). */
   digestBackend?: (spec: ThirdPartyLaunchSpec) => Promise<string>
   /** Kill what is left of one sandbox after its child exits (default: killSandboxProcessesSync). */
@@ -400,16 +421,50 @@ export class ThirdPartyBackendController {
     }
   }
 
-  /** DB3: ask once per (package, workspace) before an agent's first write-risk
-   * tool call there. It is the same per-workspace file-change grant the
-   * filesystem bridge enforces, so an answer covers both; a "no" is kept for
-   * the session. */
-  confirmAgentToolWrite(
+  /** True when the consent covers this exact package AND recorded the digest
+   * of its current agent-tool list. A consent that never showed the tools
+   * (every consent until B1-a) covers none of them. */
+  async hasAgentToolsConsent(spec: ThirdPartyLaunchSpec): Promise<boolean> {
+    const digest = agentToolsDigest(spec)
+    if (digest === null || this.store.record(spec.pluginId).consent?.agentToolsSha256 !== digest) return false
+    return this.hasConsent(spec)
+  }
+
+  /** DB3: ask once per (package, version, consent, workspace) before an agent's
+   * first write-risk tool call there. This is its own record, separate from
+   * the view's "allow file changes" grant, and the dialog says an agent asked.
+   * A "no" is kept for the session. */
+  async confirmAgentToolWrite(
     spec: ThirdPartyLaunchSpec,
     workspacePath: string,
     tool: { name: string; title: string },
   ): Promise<boolean> {
-    return this.ensureWorkspaceWrite(spec, workspacePath, tool)
+    const consent = this.store.record(spec.pluginId).consent
+    if (!consent) return false
+    if (this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)) return true
+    const identity = `agent-write\n${spec.pluginId}\n${spec.packageVersion}\n${consent.grantedAt}\n${workspacePath}`
+    if (this.declinedWrite.has(identity) || !this.options.promptAgentToolWrite) return false
+    let pending = this.pendingPrompts.get(identity)
+    if (!pending) {
+      pending = this.options.promptAgentToolWrite({
+        pluginId: spec.pluginId,
+        name: spec.thirdParty.name,
+        packageVersion: spec.packageVersion,
+        workspacePath,
+        tool: { name: tool.name, title: tool.title },
+      }).catch(() => false)
+      this.pendingPrompts.set(identity, pending)
+      void pending.finally(() => this.pendingPrompts.delete(identity))
+    }
+    if (!(await pending)) {
+      this.declinedWrite.add(identity)
+      return false
+    }
+    const current = this.store.record(spec.pluginId).consent
+    // The consent may have changed while the dialog was open.
+    if (current?.grantedAt !== consent.grantedAt) return false
+    this.store.setAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, workspacePath)
+    return true
   }
 
   /** Decide whether the child may start; asks for consent when `prompt`
@@ -541,7 +596,13 @@ export class ThirdPartyBackendController {
         const root = context.authorizedPlanRoot
         if (!root) throw new PlansBridgeError('WORKSPACE_SCOPE_VIOLATION')
         if (PACKAGE_FS_WRITE_OPERATIONS.has(request.operation)) {
-          if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
+          if (context.runtime.initiator.kind === 'agent') {
+            // An agent writes only inside a call made through a write-risk
+            // tool, where the user answered the DB3 question; never prompts.
+            if (!this.agentToolWriteAllowed(spec, context.runtime.initiator.id, root)) {
+              throw new PlansBridgeError('CAPABILITY_DENIED')
+            }
+          } else if (!(await this.ensureWorkspaceWrite(spec, root))) throw new PlansBridgeError('CAPABILITY_DENIED')
         } else if (!PACKAGE_FS_READ_OPERATIONS.has(request.operation)) {
           throw new PlansBridgeError('METHOD_NOT_FOUND')
         }
@@ -562,11 +623,20 @@ export class ThirdPartyBackendController {
     })
   }
 
-  private async ensureWorkspaceWrite(
-    spec: ThirdPartyLaunchSpec,
-    workspacePath: string,
-    agentTool?: { name: string; title: string },
-  ): Promise<boolean> {
+  private agentToolWriteAllowed(spec: ThirdPartyLaunchSpec, initiatorId: string, root: string): boolean {
+    const call = this.options.agentToolCall?.(initiatorId)
+    const consent = this.store.record(spec.pluginId).consent
+    return Boolean(
+      call &&
+      call.pluginId === spec.pluginId &&
+      call.risk === 'write' &&
+      call.workspaceRoot === root &&
+      consent &&
+      this.store.allowsAgentToolWrite(spec.pluginId, spec.packageVersion, consent.grantedAt, root),
+    )
+  }
+
+  private async ensureWorkspaceWrite(spec: ThirdPartyLaunchSpec, workspacePath: string): Promise<boolean> {
     if (this.store.allowsWorkspaceWrite(spec.pluginId, workspacePath)) return true
     const identity = `${spec.pluginId}\n${workspacePath}`
     if (this.declinedWrite.has(identity) || !this.options.promptWorkspaceWrite) return false
@@ -576,7 +646,6 @@ export class ThirdPartyBackendController {
         pluginId: spec.pluginId,
         name: spec.thirdParty.name,
         workspacePath,
-        ...(agentTool ? { agentTool: { name: agentTool.name, title: agentTool.title } } : {}),
       }).catch(() => false)
       this.pendingPrompts.set(`write\n${identity}`, pending)
       void pending.finally(() => this.pendingPrompts.delete(`write\n${identity}`))
@@ -635,6 +704,7 @@ export class ThirdPartyBackendController {
       packageVersion: spec.packageVersion,
     })
     this.resetFailures(spec.pluginId)
+    this.options.onConsentGranted?.(spec.pluginId)
   }
 
   resetFailures(pluginId: string): void {

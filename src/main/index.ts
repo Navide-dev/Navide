@@ -187,6 +187,7 @@ import {
   thirdPartyBackendLaunchSpec,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
+  type AgentToolWritePrompt,
   type NativeBackendConsentPrompt,
   type NativeBackendWritePrompt,
 } from './plugins/pluginThirdPartyBackends'
@@ -1149,9 +1150,12 @@ const thirdPartyBackends = new ThirdPartyBackendController({
   stopBackends: (pluginId) => frontendPluginManager.stopThirdPartyBackends(pluginId),
   promptConsent: promptNativeBackendConsent,
   promptWorkspaceWrite: promptNativeBackendWorkspaceWrite,
-  onConsentGranted: () => {
+  onConsentGranted: (pluginId) => {
+    agentToolsHost?.clearMark(pluginId)
     void agentToolsHost?.refresh().catch(() => undefined)
   },
+  promptAgentToolWrite: promptAgentToolWorkspaceWrite,
+  agentToolCall: (initiatorId) => frontendPluginManager.agentToolCallFor(initiatorId),
 })
 frontendPluginManager.setThirdPartyBackendAdmitter((activation, workspacePath) =>
   isThirdPartyLaunchSpec(activation)
@@ -1207,10 +1211,26 @@ async function promptNativeBackendWorkspaceWrite(prompt: NativeBackendWritePromp
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Allow file changes',
-    message: prompt.agentTool
-      ? `An agent called "${prompt.agentTool.title}" (${prompt.agentTool.name}) from ${prompt.name}. Allow ${prompt.name} to change files in this workspace?`
-      : `Allow ${prompt.name} to change files in this workspace?`,
+    message: `Allow ${prompt.name} to change files in this workspace?`,
     detail: `${prompt.workspacePath}\n\nYou can revoke this in Settings → Extensions.`,
+    buttons: ['Don\'t allow', 'Allow'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  }
+  const parent = nativeBackendDialogParent()
+  const result = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
+  return result.response === 1
+}
+
+// DB3: an agent asked for a write-risk tool. Its own question, naming the
+// agent and the tool, separate from the view's "allow file changes".
+async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Promise<boolean> {
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: 'Agent wants to change files',
+    message: `An agent asked to use "${prompt.tool.title}" (${prompt.tool.name}) of ${prompt.name} ${prompt.packageVersion}, which changes files. Allow agents to do this in this workspace?`,
+    detail: `${prompt.workspacePath}\n\nThe agent, not you, started this. You are asked again after an update or a new permission.`,
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,
@@ -1556,6 +1576,14 @@ const applyPluginActivationChange = ({
     (entry) => entry.pluginId !== pluginId
   )
   if (activation) approvedInstalledPluginActivations.push(activation)
+  // Removed, disabled or quarantined: its DB3 answers do not carry over.
+  if (!activation) {
+    try {
+      nativeBackendStore.forgetAgentToolWrites(pluginId)
+    } catch (error) {
+      console.warn(`[main] agent write grants for ${pluginId} could not be cleared: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   void agentToolsHost?.refresh().catch(() => undefined)
   for (const win of mainWindows) {
     if (!win.isDestroyed() && !detachedWindowIds.has(win.id)) {
@@ -1632,8 +1660,14 @@ agentToolsHost = new PluginAgentToolsHost({
     !nativeBackendStore.isEnabled() ||
     frontendPluginManager.isPluginDisabled(pluginId) ||
     nativeBackendStore.record(pluginId).disabled === true,
-  hasConsent: (spec) => thirdPartyBackends.hasConsent(spec),
-  consentGrantedAt: (pluginId) => nativeBackendStore.record(pluginId).consent?.grantedAt ?? null,
+  // Until B1-a records the tool-list digest in the consent, nothing qualifies.
+  hasConsent: (spec) => thirdPartyBackends.hasAgentToolsConsent(spec),
+  // Collision order: when the consent first covered the tools (B1-a's
+  // agentToolsSince), else when it was granted.
+  consentGrantedAt: (pluginId) => {
+    const consent = nativeBackendStore.record(pluginId).consent
+    return consent?.agentToolsSince ?? consent?.grantedAt ?? null
+  },
   setAgentMethods: (pluginId, packageVersion, methods) =>
     frontendPluginManager.setThirdPartyAgentMethods(pluginId, packageVersion, methods),
   confirmWrite: (spec, tool, workspaceRoot) =>
