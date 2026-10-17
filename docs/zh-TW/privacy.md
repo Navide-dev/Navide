@@ -12,6 +12,7 @@ Navide 採用 **Local-first**，但不代表所有情況都完全離線。Electr
 - 應用程式資料目錄中的 Role、Pipeline、Recent Workspace、UI Setting、Analyzer Setting 與 AI Provider Setting
 - 應用程式資料目錄中的 Host 管理 Plugin Storage Partition；它們依驗證過的 Plugin／Package 及（Workspace Scope）驗證過的 Workspace 分隔，不會傳送給 Navide 或 Plugin Registry
 - 從本機 CLI Log 衍生的 Token Attribution 與 Deduplication Metadata
+- 本機 `navide.db` 裡的第三方 Navide 外掛活動紀錄（`plugin_activity`）：哪個外掛、哪個 `namespace.method`、時間、workspace、被允許／拒絕／失敗、workspace 內的相對路徑（workspace 外的路徑只記 `<outside-workspace>`，從不存檔案內容），shell 呼叫只記執行檔與子指令。明細保留 7 天，之後只留每日計數 90 天。內建的 Plans、Git、Mini-IDE 不記錄。這些資料不會離開這台電腦
 - 選用的 AI Provider API Key；它會儲存在受限制檔案權限保護的本機設定檔中（受支援系統上為 `0600`）
 
 Navide 不營運專案 Telemetry 服務，也不要求建立 Navide 帳號。

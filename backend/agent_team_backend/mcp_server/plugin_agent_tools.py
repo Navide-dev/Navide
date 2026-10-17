@@ -44,6 +44,7 @@ never forwarded as a plugin argument.
 from __future__ import annotations
 
 import asyncio
+import functools
 import itertools
 import json
 import logging
@@ -322,15 +323,31 @@ class _AmbiguousArgument(Exception):
     """An argument names a served value two declared values share."""
 
 
-def _restored_string(value: str, declared: list[str]) -> str:
-    """``value`` as the plugin declared it: a declared value is kept; the
-    served spelling of exactly one declared value becomes that value."""
-    if value in declared:
+@functools.lru_cache(maxsize=None)
+def _served_index(declared: tuple[str, ...]) -> dict[str, frozenset[str]]:
+    """Served spelling -> the declared values served as it, for one schema
+    node's declared values (only schema text ever reaches here, so the cache
+    holds what the registered schemas declare). Built once per node, so a call
+    looks each argument up instead of neutralizing every declared value."""
+    index: dict[str, set[str]] = {}
+    for original in declared:
+        index.setdefault(_served_string(original), set()).add(original)
+    return {served: frozenset(originals) for served, originals in index.items()}
+
+
+def _restored_string(value: str, index: dict[str, frozenset[str]]) -> str:
+    """``value`` as the plugin declared it: the served spelling of exactly one
+    declared value becomes that value. When more than one declared value is
+    served as ``value`` (``ab`` and ``a\u200bb`` are both served ``ab``) the
+    argument is ambiguous, even if one of them is ``value`` itself: never
+    guessed. A declared value sent as written that no other value is served
+    as is kept."""
+    matches = index.get(value)
+    if not matches:
         return value
-    matches = {original for original in declared if original != value and _served_string(original) == value}
     if len(matches) > 1:
         raise _AmbiguousArgument
-    return matches.pop() if matches else value
+    return next(iter(matches))
 
 
 def _restored_arguments(schema: Any, value: Any) -> Any:
@@ -344,19 +361,41 @@ def _restored_arguments(schema: Any, value: Any) -> Any:
         declared = [schema["const"]] if "const" in schema else []
         if isinstance(schema.get("enum"), list):
             declared += schema["enum"]
-        return _restored_string(value, [item for item in declared if isinstance(item, str)])
+        if not declared:
+            return value
+        return _restored_string(value, _served_index(tuple(item for item in declared if isinstance(item, str))))
     if isinstance(value, dict):
         properties = schema.get("properties") if isinstance(schema.get("properties"), dict) else {}
         extra = schema.get("additionalProperties")
+        names = _served_index(tuple(properties)) if properties else {}
         out: dict[str, Any] = {}
         for key, item in value.items():
-            original = _restored_string(key, list(properties))
+            original = _restored_string(key, names)
             out[original] = _restored_arguments(properties.get(original, extra), item)
         return out
     if isinstance(value, list):
         items = schema.get("items")
         return [_restored_arguments(items, item) for item in value]
     return value
+
+
+def _merged_names(value: Any) -> int:
+    """How many names in the schema's maps are served as the same text as
+    another name in the same map (those keys merge in tools/list)."""
+    if isinstance(value, list):
+        return sum(_merged_names(item) for item in value)
+    if not isinstance(value, dict):
+        return 0
+    merged = 0
+    for key, item in value.items():
+        if key in _DATA_KEYWORDS:
+            continue
+        if key in _SCHEMA_MAPS and key != "patternProperties" and isinstance(item, dict):
+            merged += len(item) - len({_served_string(name) for name in item})
+            merged += sum(_merged_names(schema) for schema in item.values())
+        else:
+            merged += _merged_names(item)
+    return merged
 
 
 def _served_data(value: Any) -> Any:
@@ -533,6 +572,12 @@ def _register(entry: dict[str, Any]) -> None:
     # The plugin's own schema with every string neutralized for the agent;
     # arguments are still checked against the consented one, and by the Host.
     tool.parameters = _served_schema(entry["inputSchema"])
+    merged = _merged_names(entry["inputSchema"])
+    if merged:
+        _log.warning(
+            "agent tool %s: %d schema member names are served as the same text as another; "
+            "a call naming one is refused as ambiguous", entry["name"], merged,
+        )
 
 
 def _unregister(name: str) -> None:
@@ -574,6 +619,9 @@ def apply_sync(payload: Any, session_key: int) -> dict[str, Any]:
     for name in set(_catalog.registered) | set(available):
         cache.pop(name, None)
 
+    # Indexes of replaced schemas are never used again; live ones rebuild on
+    # their next call.
+    _served_index.cache_clear()
     _catalog.session_key = session_key
     _catalog.revision = payload["revision"]
     _catalog.enabled = payload["enabled"]
