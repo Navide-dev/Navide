@@ -134,7 +134,7 @@ A derived prefix in this list is refused (`AGENT_TOOL_PREFIX_RESERVED`):
 `share_` `skills_` `stage_` `ui_` `workspace_`
 
 Every core tool name is also refused (`AGENT_TOOL_NAME_RESERVED`). The list is
-pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 77
+pinned in `agent-tools-fixtures/reserved-names-v1.json` (`coreToolNames`, 80
 names: `mcp_server/server.py` plus the plan and skills tools the built-in
 packages install). `test_every_live_core_tool_is_reserved` fails when a core
 tool exists that is neither listed nor under a reserved prefix; adding a core
