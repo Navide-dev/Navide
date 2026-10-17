@@ -178,3 +178,92 @@ async def test_a_malformed_report_request_is_refused(audit: PluginAuditLog, payl
     host = _session(host=True)
     await ws_handlers.plugins_activity_report(host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, payload)
     assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+# ── #368 follow-up L3: the Host sends when the call happened ────────────────
+
+
+async def test_a_row_keeps_the_hosts_time_and_a_future_one_is_clamped_to_now(audit: PluginAuditLog) -> None:
+    import time
+
+    now = int(time.time() * 1000)
+    before_midnight = now - now % 86_400_000 - 1  # the last ms of yesterday (UTC)
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+        _row(at=before_midnight), _row(at=now + 3_600_000), _row(),
+    ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 3}
+    after = int(time.time() * 1000)
+    stored = [r["at"] for r in _stored(audit)]
+    assert stored[0] == before_midnight
+    assert now <= stored[1] <= after  # never later than now
+    assert now <= stored[2] <= after  # no time sent: when it arrived
+
+
+@pytest.mark.parametrize("at", ["1792108800000", True, -1, 1.5, None])
+async def test_a_row_with_a_bad_time_is_skipped(audit: PluginAuditLog, at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_record(
+        host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row(at=at), _row()]}
+    )
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+
+
+# ── #368 follow-up L4: a removed plugin is forgotten ────────────────────────
+
+
+async def test_only_the_host_can_forget_a_plugin_and_it_forgets_that_plugin(audit: PluginAuditLog) -> None:
+    calls: list[str] = []
+    audit.forget_plugin = lambda plugin_id: calls.append(plugin_id)  # type: ignore[method-assign]
+    window = _session(host=False)
+    await ws_handlers.plugin_activity_forget(window, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert window.websocket.sent[-1]["error"]["code"] == "UNAUTHORIZED" and calls == []
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "2", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True} and calls == ["a.b"]
+
+
+@pytest.mark.parametrize("payload", [{}, {"plugin_id": ""}, {"plugin_id": 1}, {"plugin_id": "a.b", "x": 1}, []])
+async def test_a_malformed_forget_is_refused(audit: PluginAuditLog, payload: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, payload)
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_the_report_request_carries_the_install_time(audit: PluginAuditLog) -> None:
+    seen: list[Any] = []
+    real = audit.activity_report
+    audit.activity_report = lambda plugin_id, **kw: (seen.append(kw), real(plugin_id, **kw))[1]  # type: ignore[method-assign]
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": 1_792_000_000_000}
+    )
+    assert host.websocket.sent[-1]["payload"]["schemaVersion"] == 1
+    assert seen == [{"declared": [], "installed_at": 1_792_000_000_000}]
+
+
+@pytest.mark.parametrize("installed_at", ["1", True, -1, 1.5])
+async def test_a_bad_install_time_is_refused(audit: PluginAuditLog, installed_at: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugins_activity_report(
+        host, "1", contract.PLUGIN_ACTIVITY_REPORT_MESSAGE, {"plugin_id": "a.b", "installedAt": installed_at}
+    )
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"
+
+
+async def test_skipped_rows_are_logged_by_count_and_reason_without_their_content(
+    audit: PluginAuditLog, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#373 review F3."""
+    import logging
+
+    host = _session(host=True)
+    secret = "/Users/me/.ssh/id_rsa"
+    with caplog.at_level(logging.WARNING):
+        await ws_handlers.plugin_activity_record(host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [
+            _row(), _row(source="agentTool", fs_path=secret), _row(at=-1), "x", _row(outcome="ok"),
+        ]})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+    messages = [r.getMessage() for r in caplog.records if "plugin activity" in r.getMessage()]
+    assert messages == ["plugin activity: 4 of 5 rows skipped (malformed: 2, bad at: 1, refused: 1)"]
+    assert secret not in caplog.text
