@@ -536,6 +536,18 @@ export function loopStallVerdict(s: {
   return 'ok'
 }
 
+/** Consecutive continue injections that failed before the loop stops itself.
+ *  A stop condition, not a capacity limit: a failed inject leaves the arm
+ *  untouched, so the next poll retries at once, and a pane whose input box
+ *  keeps refusing the prompt would otherwise retry forever with nothing but a
+ *  console line to show for it. One success clears the count. */
+export const LOOP_INJECT_FAIL_LIMIT = 3
+
+/** The consecutive-failure count after one continue injection. */
+export function loopInjectFailures(prev: number, ok: boolean): number {
+  return ok ? 0 : prev + 1
+}
+
 /** Parse a CLI event timestamp into epoch ms. Accepts ISO-8601 (Claude/Codex
  *  emit their log's ISO timestamp) and a bare epoch-ms string (Kimi emits the
  *  wire.jsonl `time` field). Returns NaN when unparseable. */
@@ -576,14 +588,18 @@ export function isReplayedTurnComplete(
  *  Judged on clean assistant text from the CLI's own conversation log (role-
  *  separated at the source: kickoff echo is a user message and can never
  *  appear here). Mid-text mentions or quoted protocol examples never match —
- *  only a deliberate bare-line sentinel ending the turn counts. */
+ *  only a deliberate bare-line sentinel ending the turn counts. A line that is
+ *  the sentinel wrapped in markdown decoration (backticks, `*`, `_`) counts
+ *  too: agents often format the marker as code or bold, and missing it keeps
+ *  the loop sending continues after the work is done. The bare comparison runs
+ *  first so a sentinel that itself starts or ends with `_` still matches. */
 export function turnEndsWithSentinel(text: string, sentinel: string): boolean {
   if (!text || !sentinel) return false
   const lines = text.split('\n')
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim()
     if (!line) continue
-    return line === sentinel
+    return line === sentinel || line.replace(/^[`*_\s]+|[`*_\s]+$/g, '') === sentinel
   }
   return false
 }

@@ -166,7 +166,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -5028,6 +5028,11 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   }
   const gen = loopGen.get(paneId)
   watcher.continuing = true
+  // The turn this continue wakes can end before injectPane returns; arming at
+  // the return would place armedAt after that turn's own signals and the loop
+  // would wait on a turn that already happened. Stamp the start, arm with it
+  // only once the inject lands (a failed one keeps the old arm, as before).
+  const armAt = Date.now()
   await acquireInjectionSlot()
   let ok = false
   try {
@@ -5048,12 +5053,18 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // Loop turned off / restarted while the injection was in flight — don't arm.
   if (loopGen.get(paneId) !== gen || !pane.loopActive) return
   if (!ok) {
+    watcher.injectFailures = loopInjectFailures(watcher.injectFailures, false)
+    if (watcher.injectFailures >= LOOP_INJECT_FAIL_LIMIT) {
+      stopLoopSpinning(paneId, 'inject-failed')
+      return
+    }
     console.warn(`[loop] pane ${paneId}: continue injection failed — will retry next turn`)
     return
   }
+  watcher.injectFailures = loopInjectFailures(watcher.injectFailures, true)
   pane.loopTurnCount = (pane.loopTurnCount ?? 0) + 1
   // Fresh turn started: re-arm and refresh the pre-limit estimate window.
-  armLoopTurn(paneId)
+  armLoopTurn(paneId, armAt)
   // Hold the next continue for the current stall tier (0 while productive), and
   // count this one against the hard cap.
   watcher.continues += 1
@@ -5137,7 +5148,7 @@ function noteLoopWait(paneId: string, text: string, timestamp: string): boolean 
 /** The loop is spinning without finishing — it repeated itself past the stall
  *  limit, or burned through the continue cap. Stop it (same teardown as the
  *  done path) and ask for attention instead of injecting another continue. */
-function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped'): void {
+function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped' | 'inject-failed' | 'interrupted'): void {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !pane.loopActive) return
   console.warn(`[loop] pane ${paneId}: loop stopped — ${reason}`)
@@ -5183,10 +5194,10 @@ function stopLoopComplete(paneId: string, reason: 'done-marker' | 'turn-cap' = '
 
 /** Set the turn-complete arm time on a pane's loop watcher (no-op if the
  *  watcher is gone). Only a turn_complete after this instant is judged. */
-function armLoopTurn(paneId: string): void {
+function armLoopTurn(paneId: string, at: number = Date.now()): void {
   const watcher = loopLimitWatchers.get(paneId)
   if (!watcher) return
-  watcher.armedAt = Date.now()
+  watcher.armedAt = at
   // Per-TURN counter: what the next turn does with tools says nothing about
   // what the last one did. toolSignalsSeen is per-PANE and deliberately kept.
   watcher.toolUsesThisTurn = 0
@@ -5268,6 +5279,9 @@ interface LoopLimitWatcher {
   /** The tool judgement already ran on this armed turn's text (or the turn
    *  was honoured as a LOOP_WAIT), so a later empty copy adds nothing. */
   toolJudged: boolean
+  /** Consecutive continue injections that failed (0 after any success) —
+   *  LOOP_INJECT_FAIL_LIMIT of them stop the loop. */
+  injectFailures: number
   /** Consecutive turns that ended with LOOP_WAIT_MARKER (0 after any other). */
   consecutive: number
   /** Time this run has already granted to LOOP_WAIT holds, bounded by
@@ -5312,6 +5326,7 @@ function startLoopLimitWatcher(paneId: string): void {
     toolSignalsSeen: false,
     emptyCharged: false,
     toolJudged: false,
+    injectFailures: 0,
     consecutive: 0,
     totalWaitedMs: 0,
   }
@@ -8904,6 +8919,10 @@ async function onInterrupt(paneId: string): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (!ref?.sessionId) return false
+  // The user stopping the agent stops its loop too — otherwise the interrupted
+  // turn's end reads as a finished turn and the loop answers it with a
+  // continue. Stopped before the interrupt so an in-flight continue aborts.
+  if (panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
     const issued = await ref.interrupt()
     persistPaneStopped(paneId, true)
