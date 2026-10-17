@@ -5182,9 +5182,9 @@ async def request_host_agent_workspace_backend(
     try:
         chunked = None
         if agent_tool is not None and _may_need_pieces(request):
-            # Spelled and cut off the event loop (pure-Python encoder, so the
-            # loop keeps its turns): a 10 MiB argument never stalls the backend.
-            chunked = await asyncio.to_thread(_agent_tool_argument_pieces, request)
+            # Spelled and cut a slice at a time, handing the loop back between
+            # slices: a 10 MiB argument never stalls the backend.
+            chunked = await _agent_tool_argument_pieces(request)
         if chunked is not None:
             # Not shielded: a call cancelled while its pieces go stops before
             # the request is sent, so the plugin never runs a cancelled call.
@@ -5240,40 +5240,82 @@ def _may_need_pieces(request: dict[str, Any]) -> bool:
     return _spells_over(payload["arguments"], AGENT_TOOL_CHUNK_BYTES)
 
 
-def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int] | None:
+#: Work on the event loop between two hand-backs while arguments are spelled and cut.
+_TURN_S = 0.002
+
+
+class _Turn:
+    """Hands the event loop back once a slice of work has run for ``_TURN_S``.
+    On the loop's own thread, so no other thread holds the interpreter: the
+    stall is bounded by the slice, however busy the machine is."""
+
+    def __init__(self) -> None:
+        self.loop = asyncio.get_running_loop()
+        self.until = self.loop.time() + _TURN_S
+
+    async def maybe_yield(self) -> None:
+        if self.loop.time() >= self.until:
+            await asyncio.sleep(0)
+            self.until = self.loop.time() + _TURN_S
+
+
+async def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str], int] | None:
     """The pieces and byte size of an agent tool request's arguments when they
     are longer than one piece (contract 4.4, A2), else None: sent inline.
-    Runs in a worker thread."""
-    from agent_team_backend.plugins.agent_tools_contract import (
-        agent_tool_payload_text,
-        split_agent_tool_payload_text,
-        utf8_byte_length,
-    )
+
+    The same pieces as ``split_agent_tool_payload_text(agent_tool_payload_text(...))``,
+    built a slice at a time: spelled part by part, encoded a slice at a time,
+    cut on the bytes (each cut steps back off continuation bytes), awaiting
+    between slices."""
+    from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES, agent_tool_payload_text
 
     payload = request.get("payload")
     if not isinstance(payload, dict) or set(payload) != {"arguments"}:
         return None
-    text = _spell_in_slices(payload["arguments"])
-    if text is None:  # a lone surrogate: the contract spelling escapes it
-        text = agent_tool_payload_text(payload["arguments"])
-    pieces = split_agent_tool_payload_text(text)
-    if len(pieces) == 1:
+    turn = _Turn()
+    out = _Spelling()
+    for part in _spell_parts(payload["arguments"]):
+        out.add(part)
+        await turn.maybe_yield()
+    text = out.text()
+    encoded: list[bytes] = []
+    try:
+        for at in range(0, len(text), 4 * _SPELL_SLICE):
+            encoded.append(text[at : at + 4 * _SPELL_SLICE].encode("utf-8"))
+            await turn.maybe_yield()
+    except UnicodeEncodeError:
+        # A lone surrogate, which UTF-8 cannot carry: the contract spelling escapes it.
+        encoded = [agent_tool_payload_text(payload["arguments"]).encode("utf-8")]
+    data = b"".join(encoded)
+    if len(data) <= AGENT_TOOL_CHUNK_BYTES:
         return None
-    return pieces, sum(utf8_byte_length(piece) for piece in pieces)
+    pieces: list[str] = []
+    start = 0
+    while len(data) - start > AGENT_TOOL_CHUNK_BYTES:
+        end = start + AGENT_TOOL_CHUNK_BYTES
+        while data[end] & 0xC0 == 0x80:
+            end -= 1
+        pieces.append(data[start:end].decode("utf-8"))
+        start = end
+        await turn.maybe_yield()
+    pieces.append(data[start:].decode("utf-8"))
+    return pieces, len(data)
 
 
-#: Characters escaped or encoded per call when spelling arguments off the loop.
+#: Characters escaped or encoded per call when spelling arguments.
 _SPELL_SLICE = 1 << 16
 
 
-def _escape_in_slices(text: str) -> str:
+def _escape_in_slices(text: str) -> Iterator[str]:
     """``json``'s string escape, a slice at a time for a long string: the
     escape is per character, so the joined slices are the same text."""
     if len(text) <= _SPELL_SLICE:
-        return json.encoder.encode_basestring(text)
-    return '"' + "".join(
-        json.encoder.encode_basestring(text[at : at + _SPELL_SLICE])[1:-1] for at in range(0, len(text), _SPELL_SLICE)
-    ) + '"'
+        yield json.encoder.encode_basestring(text)
+        return
+    yield '"'
+    for at in range(0, len(text), _SPELL_SLICE):
+        yield json.encoder.encode_basestring(text[at : at + _SPELL_SLICE])[1:-1]
+    yield '"'
 
 
 #: A subtree whose spelling stays under this many bytes is spelled in one C call.
@@ -5299,6 +5341,8 @@ def _spells_over(value: Any, limit: int) -> bool:
                     return True
         elif isinstance(item, (list, tuple)):
             estimate += 2 + len(item)
+            if estimate > limit:
+                return True
             stack.extend(item)
         else:
             estimate += len(repr(item)) + 1
@@ -5307,9 +5351,16 @@ def _spells_over(value: Any, limit: int) -> bool:
     return False
 
 
+def _spelled_key(key: Any) -> str:
+    """An object key as json.dumps spells it (a number or literal key becomes a string)."""
+    if isinstance(key, str):
+        return json.encoder.encode_basestring(key)
+    return _spell_small({key: 0})[1:-3]
+
+
 class _Spelling:
     """Parts of a spelling, joined in batches: one join of millions of parts
-    would hold the interpreter as long as one large C call."""
+    would hold the loop as long as one large C call."""
 
     def __init__(self) -> None:
         self.joined: list[str] = []
@@ -5320,49 +5371,54 @@ class _Spelling:
         if len(self.batch) == 4096:
             self.joined.append("".join(self.batch))
             self.batch = []
-            time.sleep(0)  # let the event loop's thread take the interpreter
 
     def text(self) -> str:
         self.joined.append("".join(self.batch))
         return "".join(self.joined)
 
 
-def _spell_parts(value: Any, out: _Spelling) -> None:
-    """``value``'s compact spelling, as json.dumps writes it: small subtrees in
-    one C call each, large containers item by item, long strings in slices."""
+def _spelled_whole(value: Any) -> str | None:
+    """``value`` spelled in one C call when that call stays short, else None."""
     if isinstance(value, str):
-        out.add(_escape_in_slices(value))
-    elif isinstance(value, dict) and all(isinstance(key, str) for key in value) and _spells_over(value, _SPELL_SUBTREE_BYTES):
-        out.add("{")
-        for index, (key, item) in enumerate(value.items()):
-            out.add(f"{',' if index else ''}{_escape_in_slices(key)}:")
-            _spell_parts(item, out)
-        out.add("}")
-    elif isinstance(value, (list, tuple)) and _spells_over(value, _SPELL_SUBTREE_BYTES):
-        out.add("[")
-        for index, item in enumerate(value):
-            if index:
-                out.add(",")
-            _spell_parts(item, out)
-        out.add("]")
-    else:
-        out.add(_spell_small(value))
-
-
-def _spell_in_slices(value: Any) -> str | None:
-    """``agent_tool_payload_text(value)`` spelled so that no single call holds
-    the interpreter for long: the event loop keeps its turns while a worker
-    thread spells 10 MiB. None when the text holds a lone surrogate (the
-    contract spelling escapes it)."""
-    out = _Spelling()
-    _spell_parts(value, out)
-    text = out.text()
-    try:
-        for at in range(0, len(text), 4 * _SPELL_SLICE):
-            text[at : at + 4 * _SPELL_SLICE].encode("utf-8")
-    except UnicodeEncodeError:
+        return json.encoder.encode_basestring(value) if len(value) <= _SPELL_SLICE else None
+    if isinstance(value, (dict, list, tuple)) and _spells_over(value, _SPELL_SUBTREE_BYTES):
         return None
-    return text
+    return _spell_small(value)
+
+
+def _spell_parts(value: Any) -> Iterator[str]:
+    """``value``'s compact spelling as json.dumps writes it, in parts: small
+    subtrees in one C call each, large containers item by item, long strings
+    in slices. Small items are spelled in place, without a generator each,
+    so a container of 400k items allocates little for the collector."""
+    whole = _spelled_whole(value)
+    if whole is not None:
+        yield whole
+    elif isinstance(value, str):
+        yield from _escape_in_slices(value)
+    elif isinstance(value, dict):
+        yield "{"
+        for index, (key, item) in enumerate(value.items()):
+            yield f"{',' if index else ''}{_spelled_key(key)}:"
+            spelled = _spelled_whole(item)
+            if spelled is not None:
+                yield spelled
+            else:
+                yield from _spell_parts(item)
+        yield "}"
+    elif isinstance(value, (list, tuple)):
+        yield "["
+        for index, item in enumerate(value):
+            spelled = _spelled_whole(item)
+            if spelled is not None:
+                yield f",{spelled}" if index else spelled
+            else:
+                if index:
+                    yield ","
+                yield from _spell_parts(item)
+        yield "]"
+    else:
+        yield _spell_small(value)
 
 
 async def _send_agent_tool_pieces(

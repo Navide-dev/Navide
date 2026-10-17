@@ -255,12 +255,14 @@ async def test_10_mib_of_arguments_never_stalls_the_event_loop(monkeypatch: pyte
         return True
 
     monkeypatch.setattr(app, "unicast_host", host)
-    # The idle lag of this machine right now, then the lag during the call:
-    # the call may add less than 50 ms to it.
-    idle = await _worst_loop_lag(asyncio.sleep(0.3))
+    # The lag during the call, then this machine's idle lag over as long a
+    # time (a busy machine pauses the process now and then; a longer window
+    # sees a longer pause): the call may add less than 50 ms to it.
+    started = asyncio.get_running_loop().time()
     response, worst = await _worst_loop_lag_of(request_host_agent_workspace_backend(
         "acme.devmap", "/workspace", {"arguments": arguments}, caller=_Caller(kind="external"), agent_tool=_agent_tool(),
     ))
+    idle = await _worst_loop_lag(asyncio.sleep(asyncio.get_running_loop().time() - started))
     assert response == {"ok": True, "result": True}
     assert len(received) >= 80
     assert worst - idle < 0.05, f"event loop stalled {worst * 1000:.0f} ms (idle {idle * 1000:.0f} ms)"
@@ -284,10 +286,9 @@ def test_the_sliced_spelling_is_the_contract_spelling() -> None:
         ([1, (2, 3)], {1: "int key", "s": 2}),
         {"deep": [[[[{"x": "y" * 30_000}]]]]},
     ):
-        assert plan_mcp._spell_in_slices(value) == contract.agent_tool_payload_text(value)  # noqa: SLF001
-    assert plan_mcp._spell_in_slices({"s": "a\ud800" * 100_000}) is None  # noqa: SLF001
+        assert "".join(plan_mcp._spell_parts(value)) == contract.agent_tool_payload_text(value)  # noqa: SLF001
     with pytest.raises(ValueError):
-        plan_mcp._spell_in_slices({"n": float("nan")})  # noqa: SLF001
+        list(plan_mcp._spell_parts({"n": float("nan")}))  # noqa: SLF001
 
 
 @pytest.mark.asyncio
@@ -348,3 +349,15 @@ async def test_only_a_full_result_piece_restarts_the_wait(monkeypatch: pytest.Mo
     assert response["ok"] is False and response["reason"] == "json"  # "xxx…y" is not JSON; the pieces were joined
     # The short last piece did not restart the wait (contract 4.4, Timing).
     assert seen[1] == seen[0]
+
+
+@pytest.mark.asyncio
+async def test_cut_arguments_are_the_contract_pieces_lone_surrogates_too() -> None:
+    for arguments in ({"s": "a\ud800" * 100_000}, _big(300_000), {"rows": [{"k": i, "v": "中"} for i in range(20_000)]}):
+        text = contract.agent_tool_payload_text(arguments)
+        cut = await plan_mcp._agent_tool_argument_pieces({"payload": {"arguments": arguments}})  # noqa: SLF001
+        assert cut is not None
+        pieces, size = cut
+        assert pieces == contract.split_agent_tool_payload_text(text)
+        assert size == contract.utf8_byte_length(text)
+    assert await plan_mcp._agent_tool_argument_pieces({"payload": {"arguments": {"a": 1}}}) is None  # noqa: SLF001
