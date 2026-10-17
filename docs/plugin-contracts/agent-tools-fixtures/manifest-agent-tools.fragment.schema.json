@@ -14,7 +14,7 @@
       "required": ["name", "method", "risk", "title", "description", "inputSchema"],
       "properties": {
         "name": { "type": "string", "pattern": "^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$" },
-        "method": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-zA-Z0-9]*(\\.[a-z][a-zA-Z0-9]*)+$" },
+        "method": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$" },
         "risk": { "enum": ["read", "write"] },
         "title": { "$ref": "#/$defs/agentToolText" },
         "description": { "$ref": "#/$defs/agentToolText" },

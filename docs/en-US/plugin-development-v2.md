@@ -343,7 +343,8 @@ all of these hold, and they are checked again before every restart:
   off, opening a plugin never prompts and never turns it on.
 - The user has not disabled the plugin's backend.
 - The user allowed this exact package content with this exact permission set
-  (`permissions`, `backend.methods`, `backend.events`). The digest covers every
+  (`permissions`, `backend.methods`, `backend.events`, and - only when the
+  package declares any - `backend.agentTools`). The digest covers every
   file in the package (relative path and content), because a backend can read
   any package file and turn it into code at run time. Any new version that
   changes any file - frontend files included - is staged but not started until
@@ -432,13 +433,71 @@ disclosure data's `network` field is still `"none"` in contract v1 and is
 being revisited separately. The broker rules are exactly those of a view's
 `shell.run`.
 
-Planned, not yet accepted: a `backend.agentTools` manifest field that lets a
-package offer consented agent tools on the core MCP server, and the disclosure
-data computed from every manifest. Their interface contract (field rules,
-naming, disclosure shape, Host messages, audit tables) is
-[plugin-agent-tools-contract.md](plugin-agent-tools-contract.md). Until the
-manifest schema accepts the field, a package that declares it is refused and
-the sentence above holds unchanged.
+#### Agent tools (`backend.agentTools`)
+
+A package with a backend may declare tools that agents call through the core
+`navide` MCP server. The full rules are in
+[plugin-agent-tools-contract.md](plugin-agent-tools-contract.md) section 2;
+the manifest side is:
+
+```json
+"backend": {
+  "entry": "backend/devmap",
+  "protocolVersion": 1,
+  "activation": "startup",
+  "methods": ["devmap.read", "devmap.status"],
+  "agentTools": [
+    {
+      "name": "devmap_set_status",
+      "method": "devmap.status",
+      "risk": "write",
+      "title": "Set block status",
+      "description": "Set one block's status (done|wip|plan) in this workspace's dev map.",
+      "timeoutMs": 30000,
+      "inputSchema": {
+        "type": "object",
+        "required": ["block_id", "status"],
+        "properties": { "block_id": { "type": "string" }, "status": { "enum": ["done", "wip", "plan"] } }
+      }
+    }
+  ]
+}
+```
+
+| Tool field | Required | Rule |
+|---|---|---|
+| `name` | yes | `^[a-z][a-z0-9]{1,15}_[a-z0-9_]{1,40}$`, unique in the package, and starting with the prefix derived from the plugin id: its last dot segment with every `-` removed (`nerdtechnic.dev-map` → `devmap_`). A prefix that cannot be derived, a reserved prefix (`cli_`, `plan_`, `navide_`, the built-in packages' `git_`, `plans_`, `miniide_`, ... see the contract) and every core tool name are refused |
+| `method` | yes | One of `backend.methods`, the Host forwards the call to it. It must also be a name the backend supervisor accepts (`isMethodName` in `src/main/plugins/pluginBackendSupervisor.ts`): lower-case dotted segments such as `devmap.read` or `devmap.block.status`. A camelCase method (`devmap.setStatus`) passes the `backend.methods` pattern but is refused at activation, so a tool naming one is refused at install and publish |
+| `risk` | yes | `read` or `write`; shown wherever the tool is disclosed, and `write` makes the package high risk |
+| `title`, `description` | yes | Non-empty plain text with no control characters, no U+2028/U+2029, no `<` or `>`, and no invisible character (bidi controls, zero-width and other format characters, variation selectors, tag characters; see the contract); no length limit apart from the 1 MiB stability cap on `description` |
+| `inputSchema` | yes | JSON Schema whose `type` is `"object"`; every number in it must be a safe integer; every nested `description` and `title` string follows the same text rule; its canonical spelling is capped at 1 MiB |
+| `timeoutMs` | no | Integer 1–120000; default 30000 |
+
+A package with any invalid tool is refused at install and at publish, exactly
+like a schema error. `agentTools` needs a native backend, so frontend-only
+packages cannot declare it.
+
+What the user sees and consents to: the install confirmation and the native
+backend consent dialog list every declared tool with its name, the method it
+calls, its full description, its declared read-only or changes-data claim (the
+package's own claim), its timeout and its whole input schema, plus the number
+of tools and their total size. There is no limit on the number of tools. The tools are part of
+the consent: any change to any tool (name, method, risk, text, schema, timeout)
+asks again. A package that declares no tools keeps exactly the consent it had
+before this field existed.
+
+Two packages can derive the same prefix. When both declare the same tool name,
+the package the user first allowed with that name keeps it (a name an update
+adds counts from that update); the later one's tool stays
+offline, and Settings → Navide Plugins says so in both rows. A package the user
+has not allowed (or not re-allowed since its tools changed), or whose native
+backend the user disabled, holds no names, and a version that declares no
+tools gives up its place.
+
+Serving the tools to agents comes in a later release step, behind a master
+switch that is off by default. Until then declared tools are validated,
+disclosed and consented to but never served, and the sentence above
+("Third-party methods are never callable by MCP agents") holds.
 
 `backend.methods` and `backend.events` declare the package-local names the
 Host forwards (1–64 methods, 1–32 events, dotted lower-camel names such as
@@ -772,6 +831,7 @@ The version axes are independent:
 | `engines.navide` | Optional product/runtime requirement | Only when the plugin needs a particular Navide product feature |
 | `backend.protocolVersion` | Navide child-process wire profile; `1` freezes the MCP 2026-07-28-aligned conventions above | Only when adopting another supported Navide wire profile |
 | `backend.methods` / `backend.events` | Package-local names the Host forwards to and from a third-party backend | When the backend's public methods or events change (users must consent again) |
+| `backend.agentTools` | Tools agents may call through the core MCP server, each forwarded to one declared method | When any tool changes (users must consent again) |
 
 `engines.navide` is read as the lowest Navide release the package supports,
 the way VS Code reads `engines.vscode`: `^0.2.9`, `~0.2.9`, `>=0.2.9` and a
@@ -830,6 +890,7 @@ matches.
 | `backend.activation` | yes | `startup` | |
 | `backend.methods` | no | Up to 64 unique dotted names | The Host forwards only declared names |
 | `backend.events` | no | Up to 32 unique dotted names | The Host forwards only declared names |
+| `backend.agentTools` | no | 1 or more tool objects | See [Agent tools](#agent-tools-backendagenttools) |
 
 ### Extension Packs
 
