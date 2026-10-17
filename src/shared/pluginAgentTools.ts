@@ -156,6 +156,12 @@ export function revealInvisibleText(text: string): string {
   return text.replace(INVISIBLE_TEXT, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)
 }
 
+/** `revealInvisibleText` for a value shown as is: a string is spelled out,
+ *  anything else (a missing field) is returned unchanged. */
+export function revealInvisibleValue<T>(value: T): T {
+  return (typeof value === 'string' ? revealInvisibleText(value) : value) as T
+}
+
 // Cc except tab and line feed.
 // eslint-disable-next-line no-control-regex
 const RESULT_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g

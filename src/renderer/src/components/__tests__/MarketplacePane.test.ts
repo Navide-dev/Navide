@@ -2115,3 +2115,107 @@ describe('MarketplacePane list card risk across platforms', () => {
     expect(level.text()).toContain('varies by platform')
   })
 })
+
+// Review MED-2 on #396: Registry text (from the publisher's manifest) cannot
+// pass for another plugin with a bidi override or a zero-width character.
+describe('MarketplacePane invisible characters', () => {
+  let wrapper: VueWrapper | undefined
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  const listItem = {
+    namespace: 'acme', name: 'demo', identity: 'acme.demo', display_name: 'Navide\u202e Git', description: 'De\u200bmo',
+    categories: ['to\u200bols'], latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: true, license: 'MI\u202eT',
+  }
+
+  it('spells them out on the list cards and the featured shelf', async () => {
+    const card = { ...listItem, name: 'card', identity: 'acme.card', featured: false }
+    mockPlugins({ marketplaceSearch: vi.fn().mockResolvedValue({ items: [listItem, card], total: 2, offset: 0, limit: 20 }) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    expect(wrapper.get('.mkt-featured-name').text()).toBe('Navide\\u{202e} Git')
+    expect(wrapper.get('.mkt-featured-desc').text()).toBe('De\\u{200b}mo')
+    const row = wrapper.get('[data-id="acme.card"]')
+    expect(row.get('.ext-id').text()).toBe('Navide\\u{202e} Git')
+    expect(row.get('.mkt-card-desc').text()).toBe('De\\u{200b}mo')
+    expect(row.text()).toContain('MI\\u{202e}T')
+    expect(row.text()).toContain('acme.card')
+    expect(wrapper.text()).toContain('to\\u{200b}ols')
+    expect(wrapper.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out on the detail page: name, publisher, description, license, categories', async () => {
+    mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({
+        display_name: 'Navide\u202e Git', publisher: 'ac\u200bme', description: 'De\u200bmo', license: 'MI\u202eT', categories: ['to\u200bols'],
+        readme: 'Hello',
+      })),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    const view = wrapper.get('[data-detail-id="acme.demo"]')
+    expect(view.get('h3').text()).toBe('Navide\\u{202e} Git')
+    expect(view.text()).toContain('ac\\u{200b}me')
+    expect(view.get('.mkt-desc').text()).toBe('De\\u{200b}mo')
+    expect(view.text()).toContain('MI\\u{202e}T')
+    expect(view.text()).toContain('to\\u{200b}ols')
+    expect(view.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out in the install consent: id, version and publisher', async () => {
+    mockPlugins({
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '1.0.0\u200b', publisherId: 'ac\u202eme', trustTier: 'signed-verified', sensitive: ['fs'],
+        containsBackendExecutable: false, requiresConfirmation: true, requiresPublisherTrust: true, requiresRiskConfirmation: true,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('.ext-search button').trigger('click')
+    await flushPromises()
+    await wrapper.get('.ext-install').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.get('.ext-trust-dialog')
+    expect(dialog.get('.nv-dialog-subtitle').text()).toBe('acme.demo · 1.0.0\\u{200b}')
+    expect(dialog.get('.ext-publisher-risk').text()).toContain('ac\\u{202e}me')
+    expect(dialog.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+
+  it('spells them out for pack members on the detail page and in the pack dialog', async () => {
+    const member = (id: string, extra: Record<string, unknown> = {}) => ({
+      id, status: 'ready', display_name: null, version: '1.0.0', capabilities: [], sensitive_capabilities: [], min_navide_version: null, ...extra,
+    })
+    mockPlugins({
+      marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({
+        extension_pack: ['acme.hello'], versions: [{ ...demoDetail().versions[0], capabilities: [], sensitive_capabilities: [] }],
+      })),
+      marketplacePackMembers: vi.fn().mockResolvedValue([member('acme.hello', { display_name: 'He\u200bllo' })]),
+      preparePack: vi.fn().mockResolvedValue({
+        id: 'acme.demo', version: '1.0.0', display_name: 'Demo\u202e Pack', trustTier: 'signed-verified', publisherId: 'acme',
+        members: [member('acme.hello', { display_name: 'He\u200bllo' })],
+      }),
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.hello', version: '1.0.0', trustTier: 'signed-verified', sensitive: [], containsBackendExecutable: false,
+        requiresConfirmation: false, publisherId: 'hello\u202e-co', requiresPublisherTrust: true, requiresRiskConfirmation: false,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-pack-member-name').text()).toBe('He\\u{200b}llo')
+    await wrapper.get('.mkt-pack-install').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('#pack-dialog-title').text()).toContain('Demo\\u{202e} Pack')
+    expect(wrapper.get('.pack-member--summary .pack-member-name').text()).toBe('He\\u{200b}llo')
+    await wrapper.get('.pack-review').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.pack-publisher-risk').text()).toContain('hello\\u{202e}-co')
+    expect(wrapper.get('.pack-dialog').text()).not.toMatch(/[\u200b\u202e]/)
+  })
+})
