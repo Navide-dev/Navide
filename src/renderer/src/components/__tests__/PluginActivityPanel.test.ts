@@ -107,6 +107,31 @@ describe('PluginActivityPanel (D-f)', () => {
     expect(panel.get('.nv-activity-queue-growing').text()).toBe("This Navide plugin's backend is not reading; Navide's memory keeps growing.")
   })
 
+  // Watchdog option C: the live usage of this backend against its thresholds.
+  it('shows the backend usage against each threshold, what is over and what waits for a choice', async () => {
+    const MiB = 1024 * 1024
+    const status = {
+      pluginId: 'nerdtechnic.devmap', name: 'Dev map', packageVersion: '0.2.0',
+      usage: { memory: 600 * MiB, cpu: 0.2, processes: 2, disk: 10 * MiB },
+      thresholds: { memory: 512 * MiB, cpu: 0.95, processes: 8, disk: 1024 * MiB },
+      levels: { memory: 512 * MiB, cpu: 1.9, processes: 8, disk: 1024 * MiB },
+      waiting: ['memory'],
+    }
+    mockPlugins()
+    ;((window as unknown as { agentTeam: { plugins: Record<string, unknown> } }).agentTeam.plugins).nativeBackends = {
+      resourceStatus: vi.fn().mockResolvedValue([status]),
+    }
+    const resource = (await render()).get('.nv-activity-resources')
+    const rows = resource.findAll('li').map((li) => li.text())
+    expect(rows[0]).toContain('Memory: 600 MB of 512 MB')
+    expect(rows[0]).toContain('over the threshold')
+    expect(rows[0]).toContain('waiting for your choice')
+    expect(rows[1]).toContain('CPU: 0.2 cores of 0.95 cores')
+    expect(rows[1]).toContain('kept running; next notice above 1.9 cores')
+    expect(rows[2]).toContain('Processes: 2 of 8')
+    expect(rows[2]).not.toContain('over the threshold')
+  })
+
   it('says why when the report is not available', async () => {
     mockPlugins({ activityReport: vi.fn().mockResolvedValue({ ok: false, error: 'Navide Host session is not ready' }) })
     expect((await render()).get('.nv-activity-error').text()).toBe('Activity is not available right now: Navide Host session is not ready')

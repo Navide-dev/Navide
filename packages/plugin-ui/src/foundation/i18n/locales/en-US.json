@@ -11019,6 +11019,19 @@
   },
   "pluginActivity": {
     "title": "Activity",
+    "resources": {
+      "heading": "Resources (live)",
+      "row": "{item}: {usage} of {threshold}",
+      "over": "over the threshold",
+      "waiting": "waiting for your choice",
+      "kept": "kept running; next notice above {level}",
+      "item": {
+        "memory": "Memory",
+        "cpu": "CPU",
+        "processes": "Processes",
+        "disk": "Data folder"
+      }
+    },
     "source": {
       "broker": "Navide capability",
       "shell": "shell command",

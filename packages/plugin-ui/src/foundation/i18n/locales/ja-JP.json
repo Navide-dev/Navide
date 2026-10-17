@@ -11019,6 +11019,19 @@
   },
   "pluginActivity": {
     "title": "アクティビティ",
+    "resources": {
+      "heading": "リソース（リアルタイム）",
+      "row": "{item}：{usage}／しきい値 {threshold}",
+      "over": "しきい値超過",
+      "waiting": "選択待ち",
+      "kept": "実行を継続中。{level} を超えたら再度お知らせ",
+      "item": {
+        "memory": "メモリ",
+        "cpu": "CPU",
+        "processes": "プロセス数",
+        "disk": "データフォルダ"
+      }
+    },
     "source": {
       "broker": "Navide の機能",
       "shell": "shell コマンド",

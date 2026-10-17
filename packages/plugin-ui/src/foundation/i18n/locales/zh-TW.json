@@ -11019,6 +11019,19 @@
   },
   "pluginActivity": {
     "title": "活動",
+    "resources": {
+      "heading": "資源用量（即時）",
+      "row": "{item}：{usage}／門檻 {threshold}",
+      "over": "超過門檻",
+      "waiting": "等你選擇",
+      "kept": "已選擇繼續執行；超過 {level} 才會再通知",
+      "item": {
+        "memory": "記憶體",
+        "cpu": "CPU",
+        "processes": "程序數",
+        "disk": "資料夾大小"
+      }
+    },
     "source": {
       "broker": "Navide 功能",
       "shell": "shell 指令",
