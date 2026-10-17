@@ -561,6 +561,32 @@ in the reserved `navide.` namespace (first-party: Plans, Git, mini-IDE).
 Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`, `NOT_FOUND`,
 `REGISTRY_UNAVAILABLE` or `HOST_UNAVAILABLE`.
 
+### Navide Marketplace requests, disable and enable
+
+These tools ask for a change to a Navide plugin, or disable and enable one.
+Like the read-only ones they work for every caller. None of them takes a
+consent argument: installing, updating, rolling back and removing happen only
+after the user approves the request in a Navide window, and a consent flag
+sent along is ignored. The bundled Navide plugins (Plans, Git, Mini-IDE, the
+`navide.*` namespace) are refused (`BUILTIN_PLUGIN`); the user manages them in
+Extensions.
+
+| Tool | Parameters | What it does |
+|---|---|---|
+| `marketplace_request_install` | `namespace`, `name`, `version`, `reason=""` | Files a request to install `<namespace>.<name>` at `version`, which the Marketplace must list (`NOT_FOUND` otherwise) and which must not be installed yet. The user sees who asked, the `reason` (shown as written by an agent) and the disclosure card, and decides. Returns `{ok, approval_id, status: "pending", expires_at, note}`; a request expires after 15 minutes, and a second request for the same package and version returns the pending one |
+| `marketplace_request_update` | `namespace`, `name`, `version`, `reason=""` | The same for a newer version of an installed package (`NOT_INSTALLED` when it is not installed) |
+| `marketplace_request_rollback` | `namespace`, `name`, `version`, `reason=""` | The same for an older version of an installed package |
+| `plugins_request_remove` | `namespace`, `name`, `reason=""` | Files a request to remove an installed package |
+| `marketplace_request_status` | `approval_id`, `wait_s=0` | `{ok, approval_id, kind, target: {id, version}, status, error, expires_at}`; `status` is `pending`, `applying` (approved, being carried out), `completed`, `failed`, `rejected` or `expired`. `wait_s` (0-60) waits that long for it to move on |
+| `plugins_disable` | `namespace`, `name` | Disables an installed Marketplace package at once, as the user's Extensions switch does: its views, backend and agent tools stop, its files, grants and data stay. The user is told which caller did it, with a one-click undo, and the change is recorded. Returns `{ok, pluginId, pluginVersion, disabled: true, changed}`; when it was already disabled, `changed` is false, nothing happens and nobody is told |
+| `plugins_enable` | `namespace`, `name` | Enables it again under the consent the user already gave. Returns `{ok, pluginId, pluginVersion, disabled: false, changed}` |
+
+Errors are `{ok: false, error, error_code}` with `BAD_REQUEST`,
+`BUILTIN_PLUGIN`, `NOT_INSTALLED`, `NOT_FOUND`, `ACTION_FAILED`,
+`REGISTRY_UNAVAILABLE` or `HOST_UNAVAILABLE`. Every request, decision,
+result, disable and enable is recorded with the caller (pane name, external
+client or Navide Host) in the `plugin_agent_actions` table of navide.db.
+
 ### Pipelines
 
 A pipeline is a saved multi-stage run: an ordered set of stages, each with

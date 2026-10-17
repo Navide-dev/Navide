@@ -65,9 +65,10 @@ const tabs: TabRow[] = [
   // Navide Cloud, Navide Plugins and Navide Marketplace are the fourth
   // `.s-nav-group` in SettingsModal.vue, System the fifth. The execution policy
   // is not a page of its own: it is the editable block at the top of Navide Plugins.
-  { key: 'cloud', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 3, navKey: 'settings.nav.crossDevice' },
+  { key: 'cloud', groupKey: 'settings.nav.group.navidePlugins', groupSpan: 4, navKey: 'settings.nav.crossDevice' },
   { key: 'extensions', navKey: 'settings.nav.extensions' },
   { key: 'marketplace', navKey: 'settings.nav.marketplace' },
+  { key: 'disclosureOverview', navKey: 'settings.nav.disclosureOverview' },
   { key: 'shortcuts', groupKey: 'settings.nav.group.system', groupSpan: 3, navKey: 'settings.nav.keybindings' },
   { key: 'updates', navKey: 'settings.nav.updates' },
   { key: 'help', navKey: 'settings.nav.help' },
@@ -341,6 +342,7 @@ const settingsGroups = computed(() => [
       { label: t('settings.nav.crossDevice') },
       { label: t('settings.nav.extensions') },
       { label: t('settings.nav.marketplace') },
+      { label: t('settings.nav.disclosureOverview') },
     ],
   },
   {

@@ -75,6 +75,7 @@ import { app as electronApp } from 'electron'
 import {
   MARKETPLACE_ICON_MAX_BYTES,
   OFFICIAL_MARKETPLACE_URL,
+  declaredForActivity,
   isTrustedPluginManagementSender,
   registerPluginIpc,
   resolveConfiguredMarketplace,
@@ -975,9 +976,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
   })
 
   /** Sign the contract 3.5 disclosure envelope onto every version row. */
-  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>): WireDetail {
+  function withDisclosure(detail: WireDetail, manifest: Record<string, unknown>, scanBody?: Record<string, unknown>): WireDetail {
     const disclosure = computeDisclosure(manifest as never)
     const rows = detail.versions.map((row) => {
+      const scan = scanBody
+        ? { ...scanBody, artifactDigest: row.registry_envelope.artifactDigest, target: row.registry_envelope.target }
+        : null
       const envelope = {
         schemaVersion: 1,
         artifactDigest: row.registry_envelope.artifactDigest,
@@ -987,14 +991,14 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         keyId: row.registry_envelope.keyId,
         signedAt: row.registry_envelope.signedAt,
         disclosureDigest: createHash('sha256').update(canonicalContractJson(disclosure), 'utf8').digest('hex'),
-        scanDigest: null,
+        scanDigest: scan ? createHash('sha256').update(canonicalContractJson(scan), 'utf8').digest('hex') : null,
       }
       return {
         ...row,
         disclosure,
         disclosure_envelope: envelope,
         disclosure_signature: signCanonical(envelope, registrySigner.privateKey),
-        scan: null,
+        scan,
         registry: { review: { status: 'not-required', reviewedAt: null, nativeCodeInspected: null } },
       }
     })
@@ -1036,6 +1040,53 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
         scan: null,
         registry: { review: { status: 'not-required' } },
       })
+  })
+
+  it('D-f: records the install-time scan, notes a rescan that found new items once, and forgets it on remove', async () => {
+    const scanCases = (JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/scan-cases.json'), 'utf8')) as {
+      cases: Array<{ name: string; scan: Record<string, unknown> }>
+    }).cases
+    const scanNamed = (name: string) => scanCases.find((entry) => entry.name === name)!.scan
+    const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-rescan-'))
+    const manager = new FrontendPluginManager()
+    try {
+      const controller = registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, {
+        ...TEST_PREFLIGHT_OPTIONS,
+        cleanupPluginStorage: async () => undefined,
+      })
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('nothing-found')), bytes, digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+      const file = join(root, '.navide-install-scans.json')
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']['1.0.0'].scan.scanner.id).toBe('navide-static-scan')
+
+      // The same answer the update check already fetches; nothing new yet.
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+
+      installFetch(withDisclosure(signedDetail(digest), disclosedManifest, scanNamed('ui-only-runs-git-push-undeclared')), bytes, digest)
+      const fetchCount = () => vi.mocked(global.fetch).mock.calls.length
+      await controller.checkUpdates()
+      const requests = fetchCount()
+      const [notice] = controller.takeRescanNotices()
+      expect(notice).toMatchObject({ id: 'acme.demo', version: '1.0.0' })
+      expect(notice.added.length).toBeGreaterThan(0)
+      // No request of its own: one detail fetch per check, as before.
+      expect(requests).toBe(1)
+      await controller.checkUpdates()
+      expect(controller.takeRescanNotices()).toEqual([])
+      // A notice no window received is put back for the next publish.
+      controller.restoreRescanNotices([notice])
+      expect(controller.takeRescanNotices()).toEqual([notice])
+
+      await handlers.get('plugins:remove')!(null, { id: 'acme.demo' })
+      expect(JSON.parse(readFileSync(file, 'utf8')).plugins['acme.demo']).toBeUndefined()
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('refuses the install when the signed disclosure does not match the package (DISCLOSURE_MISMATCH)', async () => {
@@ -1666,6 +1717,64 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       await manager.closeBackendPlugins()
       rmSync(root, { recursive: true, force: true })
     }
+  })
+
+  it('D-f: asks the backend for the activity report with the declared items, and checks the answer', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', { shell: 'allowlist' }, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-activity-'))
+    const manager = new FrontendPluginManager()
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      await handlers.get('plugins:prepareInstall')!(null, { namespace: 'acme', name: 'demo' })
+      await handlers.get('plugins:commitInstall')!(null, { id: 'acme.demo', publisherConfirmed: true, riskConfirmed: true })
+      await handlers.get('plugins:restart')!(null, { id: 'acme.demo' })
+
+      const fixture = JSON.parse(readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')).valid
+      const ask = vi.spyOn(manager, 'requestPluginActivityReport').mockResolvedValue(fixture)
+      const report = handlers.get('plugins:activityReport')!
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true, report: fixture })
+      expect(ask).toHaveBeenCalledWith({
+        plugin_id: 'acme.demo',
+        declared: expect.arrayContaining([{ kind: 'shell', key: 'allowlist' }]),
+      })
+
+      ask.mockResolvedValue({ ...fixture, schemaVersion: 2 })
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'the activity report was malformed' })
+      ask.mockRejectedValue(new Error('Navide Host session is not ready'))
+      await expect(report(null, { id: 'acme.demo' })).resolves.toEqual({ ok: false, error: 'Navide Host session is not ready' })
+      await expect(report(null, { id: 'acme.other' })).resolves.toMatchObject({ ok: false })
+      expect(ask).toHaveBeenCalledTimes(3)
+
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', version: '1.0.0', disclosure: expect.objectContaining({ network: 'via-shell' }), scan: null }),
+      ])
+    } finally {
+      await manager.closeBackendPlugins()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  // Review M2 on #371: calls a frontend makes to its own backend
+  // (plugin:backend:call) are not recorded in plugin_activity, so a declared
+  // backend method could only ever read "declared but not used". The Host
+  // does not offer what it cannot measure.
+  it('D-f: never declares backend methods for declaredUnused, since their calls are not recorded', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, id: 'acme.indexer', version: '1.0.0', publisher: 'acme',
+      permissions: { system: ['fs'], shell: 'allowlist' },
+      backend: { entry: 'backend/bin', methods: ['index', 'search'], events: [] },
+    } as never)
+    expect(disclosure.nativeBackend?.methods).toEqual(['index', 'search'])
+    const declared = declaredForActivity(disclosure)
+    expect(declared.some((item) => item.kind === 'backendMethod')).toBe(false)
+    expect(declared).toEqual(expect.arrayContaining([{ kind: 'system', key: 'fs' }, { kind: 'shell', key: 'allowlist' }]))
+  })
+
+  it('D-f: the activity IPC refuses an unauthorized sender', async () => {
+    registerPluginIpc(new FrontendPluginManager(), '/plugins', () => false, TRUST_CONFIG)
+    await expect(Promise.resolve().then(() => handlers.get('plugins:activityReport')!(null, { id: 'acme.demo' }))).rejects.toThrow()
+    expect(() => handlers.get('plugins:installedDisclosures')!(null)).toThrow()
   })
 
   it('stages an immutable replacement without touching the active runtime until restart', async () => {
@@ -4402,6 +4511,35 @@ describe('Marketplace discovery (Phase 1)', () => {
     const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
     expect(byId['a.ok']).toMatchObject({ disclosure: disclosed('a.ok', '1.0.0'), scan: null })
     for (const id of ['a.other', 'a.bad', 'a.none']) expect(byId[id]).toMatchObject({ disclosure: null, scan: null })
+  })
+
+  it('D-f: the list risk is the highest platform level and says when platforms differ', async () => {
+    const ui = computeDisclosure({ schemaVersion: 2, id: 'a.multi', version: '1.0.0', publisher: 'a', permissions: { system: ['ui'] } } as never)
+    jsonFetch({
+      items: [
+        { identity: 'a.multi', namespace: 'a', name: 'multi', latest_version: '1.0.0', disclosure: ui, scan: null,
+          risk_by_target: { 'darwin-arm64': 'low', 'linux-x64': 'high' } },
+        { identity: 'a.same', namespace: 'a', name: 'same', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.same' } }, scan: null, risk_by_target: { universal: 'low' } },
+        { identity: 'a.bad', namespace: 'a', name: 'bad', latest_version: '1.0.0',
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.bad' } }, scan: null, risk_by_target: { x: 'IGNORE' } },
+        // A Registry newer than this App: unknown fields are ignored.
+        { identity: 'a.future', namespace: 'a', name: 'future', latest_version: '1.0.0', future_field: { x: 1 },
+          disclosure: { ...ui, plugin: { ...ui.plugin, id: 'a.future' } }, scan: null },
+      ],
+      total: 4,
+    })
+    registerAll()
+    const result = (await handlers.get('plugins:marketplaceSearch')!(null)) as {
+      items: Array<Record<string, unknown>>
+    }
+    const byId = Object.fromEntries(result.items.map((item) => [item.identity, item]))
+    expect(byId['a.multi'].listRisk).toEqual({ level: 'high', variesByPlatform: true })
+    expect(byId['a.same'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    // A malformed map is dropped; the level still comes from the disclosure.
+    expect(byId['a.bad'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].listRisk).toEqual({ level: 'low', variesByPlatform: false })
+    expect(byId['a.future'].disclosure).toEqual({ ...ui, plugin: { ...ui.plugin, id: 'a.future' } })
   })
 
   it('forwards category, paging and the hide-incompatible filter', async () => {

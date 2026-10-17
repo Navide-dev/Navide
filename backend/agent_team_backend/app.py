@@ -436,6 +436,32 @@ async def unicast_any(event: dict[str, Any]) -> bool:
     return False
 
 
+def is_main_window(session: "Session") -> bool:
+    """A proven Navide window that runs the UI action bus: a main window."""
+    return bool(getattr(session, "navide_window", False) and getattr(session, "ui_bus_ready", False))
+
+
+async def broadcast_main_windows(event: dict[str, Any]) -> None:
+    """Send *event* to every connected main window only (not plugin, editor
+    or other WS clients): for records naming a requester's pane and workspace."""
+    for session in list(_SESSIONS):
+        if session.dead or not is_main_window(session):
+            continue
+        try:
+            await session.send_json(event)
+        except Exception as err:  # noqa: BLE001
+            log.warning("main-window broadcast send failed: %s", err)
+            _SESSIONS.discard(session)
+
+
+def live_main_window_ids() -> set[str]:
+    """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
+    return {
+        s.window_id for s in list(_SESSIONS)
+        if not s.dead and is_main_window(s) and getattr(s, "window_id", "")
+    }
+
+
 async def unicast_host(event: dict[str, Any]) -> bool:
     """Send one internal agent request to the authenticated Electron Host."""
     for session in list(_SESSIONS):
@@ -599,6 +625,9 @@ class Session:
         # most recently focused first.
         self.ui_bus_ready = False
         self.ui_focused_at = 0.0
+        # A main window's page-load id (`ui.invoke.ready` window_id): stays the
+        # same across reconnects, changes when the window reloads (B2-c).
+        self.window_id = ""
         # Set by `window.prove` answering this connection's challenge (see
         # navide_window_proof_matches): a Navide window, as opposed to any
         # other client holding the token. ui_bus_ready is self-declared.

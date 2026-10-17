@@ -345,10 +345,22 @@ import {
 import { entryBelongsToWorkspace, filterWorkspaceEntries, historyEntriesFor, historyEntryLabel, isHistoryEntryRemoved, legacyHistoryLogPath, manualLogFileName, updateHistoryCustomName, type HistoryCleanupMode, type HistoryDeletePreview, type HistoryDeleteTarget, type SpawnHistoryEntry, type WorkspaceIdentity } from './lib/spawnHistory'
 import { executeCommand, formatKeySpec, initKeybindingsPort, useKeybindings, registerCommand, setContext, settingsKeySpec } from '@navide/plugin-ui/shared'
 import { useUiActionBus } from './composables/useUiActionBus'
-import { releaseAnnouncementId, useAnnouncements, type SchedulerDisabledNotice } from './composables/useAnnouncements'
-import type { ConvenienceAnnouncementAction, EvolveAnnouncementAction } from './composables/useAnnouncements'
+import {
+  pluginAgentNoticeTitle,
+  pluginAgentUndoApplies,
+  releaseAnnouncementId,
+  useAnnouncements,
+  type SchedulerDisabledNotice,
+} from './composables/useAnnouncements'
+import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
+import type {
+  ConvenienceAnnouncementAction,
+  EvolveAnnouncementAction,
+  PluginAgentAnnouncementAction,
+} from './composables/useAnnouncements'
 import { useEvolve } from './composables/useEvolve'
 import { useShareNotices } from './composables/useShareNotices'
+import { usePluginRescanNotices } from './composables/usePluginRescanNotices'
 import { openConvenienceOverview, useConvenience } from './composables/useConvenience'
 import {
   useQuotaFailover,
@@ -898,6 +910,17 @@ function replayWelcomeTour(): void {
 }
 // Announcements centre: the status-bar feed of release notes + updater news.
 const announcements = useAnnouncements()
+// Agent Navide plugin requests (B2-c): a request a restart left `applying` is
+// settled once, on this window's first connection, from the installed packages.
+const pluginAgentRequests = usePluginAgentRequests(backend)
+let pluginAgentRequestsRecovered = false
+watch(() => backend.status.value, (status) => {
+  if (status !== 'connected' || pluginAgentRequestsRecovered) return
+  pluginAgentRequestsRecovered = true
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle interrupted agent plugin requests', error)
+  })
+}, { immediate: true })
 const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.
@@ -6109,6 +6132,7 @@ let stopPluginContributionChanges: (() => void) | null = null
 let stopGitRecoveryChanged: (() => void) | null = null
 let stopPlansRecoveryChanged: (() => void) | null = null
 let stopPlansBackendStopped: (() => void) | null = null
+let stopPluginAgentAction: (() => void) | null = null
 onMounted(() => {
   stopGitContributionActions = window.agentTeam?.onGitContributionAction?.(onGitContributionAction) ?? null
   stopGitRecoveryChanged = window.agentTeam?.onGitRecoveryChanged?.((change) => {
@@ -6124,6 +6148,12 @@ onMounted(() => {
   stopPlansBackendStopped = window.agentTeam?.onPlansBackendStopped?.(({ workspacePath }) => {
     notifyRestore.toast(plansBackendStoppedNotice(workspacePath), { type: 'error' })
   }) ?? null
+  // An agent disabled or enabled a Navide plugin (B2-c): say who at once, and
+  // keep a row with the undo in the announcements centre.
+  stopPluginAgentAction = window.agentTeam?.onPluginAgentAction?.((notice) => {
+    announcements.notePluginAgentNotice(notice)
+    notifyRestore.toast(pluginAgentNoticeTitle(notice), { type: 'info' })
+  }) ?? null
   void refreshPluginContributions()
   stopPluginContributionChanges = window.agentTeam?.plugins?.onContributionsChanged?.(() => {
     void refreshPluginContributions()
@@ -6138,6 +6168,8 @@ onUnmounted(() => {
   stopPlansRecoveryChanged = null
   stopPlansBackendStopped?.()
   stopPlansBackendStopped = null
+  stopPluginAgentAction?.()
+  stopPluginAgentAction = null
   stopPluginContributionChanges?.()
   stopPluginContributionChanges = null
 })
@@ -14667,6 +14699,8 @@ backend.on('scheduler.job_disabled', (raw) => {
 const evolve = useEvolve(backend)
 // Share-link created/opened events become announcements (none without Navide Cloud).
 useShareNotices(backend)
+// Plan B D-f: a Registry rescan of an installed plugin found new items (notice only).
+usePluginRescanNotices()
 function onEvolveAction(action: EvolveAnnouncementAction): void {
   closePopover()
   const paneId = action.paneId
@@ -14691,6 +14725,25 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
 const convenience = useConvenience(backend, {
   agentLabel: (agentKey) => agentSpecs.find((s) => s.agentKey === agentKey)?.label ?? agentKey,
 })
+/** The undo on an "an agent disabled / enabled a Navide plugin" row: the
+ *  user's own Extensions switch, set back (B2-c). */
+async function onPluginAgentUndo(action: PluginAgentAnnouncementAction): Promise<void> {
+  try {
+    // Only what the agent did: if the user changed it since, leave it be.
+    const installed = (await window.agentTeam?.plugins?.listInstalled?.()) ?? []
+    if (!pluginAgentUndoApplies(action, installed)) {
+      notifyRestore.toast(i18n.global.t('plugin-agent.notice.undo-stale'), { type: 'info' })
+      return
+    }
+    await window.agentTeam?.plugins?.setDisabled?.(action.pluginId, action.disable)
+  } catch (error) {
+    notifyRestore.toast(
+      i18n.global.t('plugin-agent.notice.undo-failed', { error: error instanceof Error ? error.message : String(error) }),
+      { type: 'error' },
+    )
+  }
+}
+
 async function onConvenienceAction(action: ConvenienceAnnouncementAction): Promise<void> {
   switch (action.kind) {
     case 'convenience-overview':
@@ -22389,6 +22442,7 @@ function paneIsCommander(p: ActivePane): boolean {
       @tour="startAnnouncementTour"
       @evolve-action="onEvolveAction"
       @convenience-action="(action) => void onConvenienceAction(action)"
+      @plugin-agent-action="(action) => void onPluginAgentUndo(action)"
     />
 
     <!-- Workspace self-evolution panel (opened from the sidebar heading and

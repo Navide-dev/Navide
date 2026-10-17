@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { refreshTrustThenUpdates } from './pluginUpdateReminder'
+import { refreshTrustThenUpdates, publishRescanNotices } from './pluginUpdateReminder'
 
 const update = {
   id: 'acme.demo',
@@ -60,5 +60,32 @@ describe('refreshTrustThenUpdates', () => {
       })
     ).rejects.toThrow('trust failed')
     expect(checkUpdates).toHaveBeenCalledOnce()
+  })
+})
+
+// Review L1 on #371: a rescan notice is cleared only once it reached a window.
+describe('publishRescanNotices', () => {
+  const notice = { id: 'acme.demo', version: '1.0.0', added: [{ kind: 'shell', key: 'git push' }] }
+
+  it('sends the notices to every open window and keeps nothing', () => {
+    const restore = vi.fn()
+    const sent: unknown[] = []
+    publishRescanNotices({ take: () => [notice], restore, send: (notices) => { sent.push(notices); return 2 } })
+    expect(sent).toEqual([[notice]])
+    expect(restore).not.toHaveBeenCalled()
+  })
+
+  it('puts the notices back when no window received them', () => {
+    const restore = vi.fn()
+    publishRescanNotices({ take: () => [notice], restore, send: () => 0 })
+    expect(restore).toHaveBeenCalledWith([notice])
+  })
+
+  it('does nothing when there is nothing to send', () => {
+    const send = vi.fn(() => 1)
+    const restore = vi.fn()
+    publishRescanNotices({ take: () => [], restore, send })
+    expect(send).not.toHaveBeenCalled()
+    expect(restore).not.toHaveBeenCalled()
   })
 })

@@ -18,6 +18,7 @@ import type {
   RegistryDisclosureFacts as PluginRegistryDisclosureFacts,
 } from '../shared/pluginDisclosure'
 import type { ScanReport as PluginScanReport } from '../shared/pluginDisclosureScan'
+import type { PluginActivityReport } from '../shared/pluginActivity'
 import { LEGAL_LINKS, type LegalRoute } from '../shared/legalLinks'
 import type { NewWorkspaceResult } from '../shared/workspaceCreate'
 import { FN_KEY_EVENT_CHANNEL, FN_KEY_STATUS_CHANNEL, type FnKeyApi } from '../shared/fnKey'
@@ -100,6 +101,29 @@ function isPlansBackendStopped(payload: unknown): payload is PlansBackendStopped
     !Array.isArray(payload) &&
     'workspacePath' in payload &&
     typeof payload.workspacePath === 'string'
+  )
+}
+
+/** An agent disabled or enabled a Navide plugin (B2-c), as the Host reports it. */
+export interface PluginAgentActionNotice {
+  action: 'disable' | 'enable'
+  pluginId: string
+  pluginVersion: string
+  requester: { paneId: string | null; paneName: string | null; workspace: string | null; callerKind: 'pane' | 'external' | 'host' }
+}
+
+function isPluginAgentActionNotice(payload: unknown): payload is PluginAgentActionNotice {
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return false
+  const record = payload as Record<string, unknown>
+  const requester = record.requester as Record<string, unknown> | null
+  const nullableString = (value: unknown): boolean => value === null || typeof value === 'string'
+  return (
+    (record.action === 'disable' || record.action === 'enable') &&
+    typeof record.pluginId === 'string' &&
+    typeof record.pluginVersion === 'string' &&
+    typeof requester === 'object' && requester !== null &&
+    ['pane', 'external', 'host'].includes(String(requester.callerKind)) &&
+    nullableString(requester.paneId) && nullableString(requester.paneName) && nullableString(requester.workspace)
   )
 }
 
@@ -232,6 +256,8 @@ export interface MarketplaceExtension {
    *  well formed and naming this item; unverified display data. */
   disclosure?: PluginManifestDisclosure | null
   scan?: PluginScanReport | null
+  /** D-f: the highest risk level across the latest version's platforms. */
+  listRisk?: { level: 'low' | 'medium' | 'high' | 'highest'; variesByPlatform: boolean } | null
 }
 
 export interface PackMemberSummary {
@@ -360,6 +386,12 @@ export interface MarketplaceExtensionDetail extends MarketplaceExtension {
   readme: string | null
 }
 
+export interface PluginRescanNotice {
+  id: string
+  version: string
+  added: Array<{ kind: string; key: string }>
+}
+
 export interface PluginUpdateInfo {
   id: string
   namespace: string
@@ -486,6 +518,14 @@ contextBridge.exposeInMainWorld('agentTeam', {
     }
     ipcRenderer.on('plans:backendStopped', listener)
     return () => ipcRenderer.removeListener('plans:backendStopped', listener)
+  },
+  // An agent disabled or enabled a Navide plugin (B2-c): who, and the undo.
+  onPluginAgentAction: (cb: (notice: PluginAgentActionNotice) => void): (() => void) => {
+    const listener = (_event: unknown, payload: unknown): void => {
+      if (isPluginAgentActionNotice(payload)) cb(payload)
+    }
+    ipcRenderer.on('plugins:agentAction', listener)
+    return () => ipcRenderer.removeListener('plugins:agentAction', listener)
   },
   onMenuAction: (cb: (action: string) => void): void => {
     ipcRenderer.on('menu:action', (_event, action: string) => cb(action))
@@ -1100,6 +1140,17 @@ contextBridge.exposeInMainWorld('agentTeam', {
       ipcRenderer.invoke('plugins:listFactoryPackages'),
     backendCallConcurrency: (): Promise<BackendCallConcurrency[]> =>
       ipcRenderer.invoke('plugins:backendCallConcurrency'),
+    /** D-f: one installed plugin's activity report (read only). */
+    activityReport: (id: string): Promise<
+      { ok: true; report: PluginActivityReport } | { ok: false; error: string }
+    > => ipcRenderer.invoke('plugins:activityReport', { id }),
+    /** D-f: installed Registry packages' disclosures and install-time scans. */
+    installedDisclosures: (): Promise<Array<{
+      id: string
+      version: string
+      disclosure: PluginManifestDisclosure | null
+      scan: PluginScanReport | null
+    }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),
     disabledBuiltins: (): Promise<string[]> => ipcRenderer.invoke('plugins:disabledBuiltins'),
@@ -1164,6 +1215,12 @@ contextBridge.exposeInMainWorld('agentTeam', {
       const listener = (_event: unknown, updates: PluginUpdateInfo[]): void => handler(updates)
       ipcRenderer.on('plugins:updatesChanged', listener)
       return () => ipcRenderer.removeListener('plugins:updatesChanged', listener)
+    },
+    /** D-f: rescans of installed versions that found new items (notice only). */
+    onRescanNotices: (handler: (notices: PluginRescanNotice[]) => void): (() => void) => {
+      const listener = (_event: unknown, notices: PluginRescanNotice[]): void => handler(notices)
+      ipcRenderer.on('plugins:rescanNotices', listener)
+      return () => ipcRenderer.removeListener('plugins:rescanNotices', listener)
     },
     prepareInstall: (args: {
       namespace: string
