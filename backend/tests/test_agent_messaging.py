@@ -1367,7 +1367,7 @@ def _mcp_ctx(pane_id: str) -> Any:
     return SimpleNamespace(
         request_context=SimpleNamespace(
             request=SimpleNamespace(
-                query_params={"pane": pane_id, "t": plan_mcp_wiring.caller_token()}
+                query_params={"pane": pane_id, "t": plan_mcp_wiring.caller_token(pane_id)}
             )
         )
     )

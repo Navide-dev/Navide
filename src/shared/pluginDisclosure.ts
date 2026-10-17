@@ -2,7 +2,7 @@
  * Step-0 contract for Navide plugin disclosure (plan B, D1–D5).
  *
  * The disclosure ("揭露資料") is computed from a package manifest only, so the
- * Registry (at publish time, inside the signed envelope) and the App (at
+ * Registry (at publish time, in the signed disclosure envelope) and the App (at
  * prepareInstall, from the package's own manifest) compute the same object and
  * compare their canonical spellings. Registry-only facts (publisher
  * verification, review and scan results) travel beside it, never inside it.
@@ -54,6 +54,7 @@ export type DisclosureSummaryClause =
   | { key: 'ui'; params: Record<string, never> }
   | { key: 'agentTools'; params: { read: number; write: number } }
   | { key: 'network'; params: Record<string, never> }
+  | { key: 'networkViaShell'; params: Record<string, never> }
   | { key: 'noPermissions'; params: Record<string, never> }
 
 export interface DisclosureSummary {
@@ -87,13 +88,16 @@ export interface ManifestDisclosure {
   risk: { level: DisclosureRiskLevel; reasons: Array<{ key: DisclosureRiskReasonKey; level: DisclosureRiskLevel }> }
   permissions: DisclosurePermissions
   nativeBackend: { methods: string[]; events: string[] } | null
-  /** DB10 is deferred: always "none" until a network permission exists. */
-  network: 'none'
+  /** The sandboxes have no network (DB10, a network permission, is deferred),
+   * but a declared shell runs git/gh/glab (or, in full mode, anything), which
+   * reach remote hosts: "via-shell" whenever shell is declared, else "none".
+   * The scan (section 3.8) names the concrete hosts. */
+  network: 'none' | 'via-shell'
   agentTools: DisclosureAgentTool[]
   dataLocations: { hostStorage: true; backendDataDirectory: boolean; projectWrites: DisclosureProjectWrites }
 }
 
-/** Facts only the Registry knows; computed and signed there, never derived from the manifest. */
+/** Facts only the Registry knows; computed there (not covered by a signature), never derived from the manifest. */
 export interface RegistryDisclosureFacts {
   publisher: { name: string; verifiedDomain: string | null; domainVerifiedAt: string | null }
   signature: { signed: boolean; keyId: string | null }
@@ -234,6 +238,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     clauses.push({ key: 'files', params: { access: readOnly ? 'read' : 'readWrite' } })
   }
   if (shell) clauses.push({ key: 'shell', params: shell })
+  if (shell) clauses.push({ key: 'networkViaShell', params: {} })
   if (system.includes('aiCli')) clauses.push({ key: 'aiCli', params: {} })
   if (system.includes('ui')) clauses.push({ key: 'ui', params: {} })
   if (agentTools.length > 0) clauses.push({ key: 'agentTools', params: { read: readTools, write: writeTools } })
@@ -254,7 +259,7 @@ export function computeDisclosure(manifest: DisclosureManifestInput): ManifestDi
     risk: { level: riskLevelForReasons(reasons), reasons },
     permissions: { system, shell, scopes },
     nativeBackend,
-    network: 'none',
+    network: shell ? 'via-shell' : 'none',
     agentTools,
     dataLocations: { hostStorage: true, backendDataDirectory: nativeBackend !== null, projectWrites },
   }

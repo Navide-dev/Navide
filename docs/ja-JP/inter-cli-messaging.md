@@ -773,6 +773,13 @@ Pane は最初から新しい Settings File を持っています。
 からの再試行も、他の送信と同じようにこれを消費します。配信失敗通知は独自の別予算
 を持つため、フィードバックが送信者の Quota を消費することはありません。
 
+MCP 呼び出し元の場合、送信者とは、その Navide MCP 接続が配線された Pane のことです。
+各 Pane の接続にはその Pane 専用に発行された Token が付くため、ある Pane の配線で
+別の Pane として送信することはできません。ただし、同じユーザーとして動作するプロセスが、
+別の Pane の Token を環境変数や設定ファイルから読み取ることまでは防げません。呼び出し元を
+その Pane 自身のプロセスに結び付ける対応は、今後の作業として計画されています。
+[architecture.md（英語）](../en-US/architecture.md#trust-boundaries)の Trust Boundaries の節を参照してください。
+
 ---
 
 ## Messages パネル

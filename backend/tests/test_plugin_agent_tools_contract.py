@@ -7,6 +7,7 @@ drift between the two languages is a red test on whichever side moved.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -165,6 +166,13 @@ def test_canonical_spelling_of_a_disclosure() -> None:
     manifest = _BY_NAME[_CANONICAL["disclosureCase"]]["manifest"]
     assert disclosure.canonical_contract_json(disclosure.compute_disclosure(manifest)) == \
         _CANONICAL["disclosureExpected"]
+
+
+def test_disclosure_digest_is_sha256_of_the_canonical_spelling() -> None:
+    # Section 3.5: the disclosure envelope's disclosureDigest.
+    manifest = _BY_NAME[_CANONICAL["disclosureCase"]]["manifest"]
+    spelling = disclosure.canonical_contract_json(disclosure.compute_disclosure(manifest))
+    assert hashlib.sha256(spelling.encode("ascii")).hexdigest() == _CANONICAL["disclosureDigestExpected"]
 
 
 @pytest.mark.parametrize("case", _DIFFS, ids=lambda c: c["name"])

@@ -24,7 +24,7 @@ FLAG_VENDORS = ("claude", "codex", "copilot", "qwen")
 
 
 def _secrets() -> tuple[str, str]:
-    return plan_mcp_wiring.caller_token(), plan_mcp_auth.internal_token()
+    return plan_mcp_wiring.caller_token("pane-1"), plan_mcp_auth.internal_token()
 
 
 def _argv(command: object) -> str:
@@ -79,7 +79,7 @@ def test_codex_reads_the_credential_from_the_spawn_env() -> None:
         "-c",
         f'mcp_servers.navide.bearer_token_env_var="{plan_mcp_wiring.TOKEN_ENV}"',
     ]
-    assert env == {plan_mcp_wiring.TOKEN_ENV: plan_mcp_wiring.caller_token()}
+    assert env == {plan_mcp_wiring.TOKEN_ENV: plan_mcp_wiring.caller_token("pane-1")}
 
 
 def test_stale_pane_config_files_are_cleared_at_startup() -> None:
@@ -99,7 +99,7 @@ def test_pane_bearer_header_is_accepted() -> None:
     try:
         agent_messaging.register("pa", "sender", "/ws/alpha")
         caller = _resolve_caller(
-            _ctx({"pane": "pa"}, {"authorization": f"Bearer {plan_mcp_wiring.caller_token()}"})
+            _ctx({"pane": "pa"}, {"authorization": f"Bearer {plan_mcp_wiring.caller_token('pa')}"})
         )
     finally:
         agent_messaging._reset_for_test()

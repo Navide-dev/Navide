@@ -1,7 +1,7 @@
 """Step-0 contract for Navide plugin disclosure (plan B, D1-D5).
 
 The disclosure is computed from a package manifest only, so the Registry (at
-publish time, inside the signed envelope) and the App (at prepareInstall, from
+publish time, in the signed disclosure envelope) and the App (at prepareInstall, from
 the package's own manifest) compute the same object and compare their
 canonical spellings. Registry-only facts (publisher verification, review and
 scan results) travel beside it, never inside it.
@@ -52,13 +52,13 @@ class ManifestDisclosure(TypedDict):
     risk: dict[str, Any]
     permissions: dict[str, Any]
     nativeBackend: dict[str, list[str]] | None
-    network: Literal["none"]
+    network: Literal["none", "via-shell"]
     agentTools: list[dict[str, Any]]
     dataLocations: dict[str, Any]
 
 
 class RegistryDisclosureFacts(TypedDict):
-    """Facts only the Registry knows; computed and signed there, never derived from the manifest."""
+    """Facts only the Registry knows; computed there (not covered by a signature), never derived from the manifest."""
 
     publisher: dict[str, Any]   # {name, verifiedDomain, domainVerifiedAt}
     signature: dict[str, Any]   # {signed, keyId}
@@ -168,6 +168,9 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         clauses.append({"key": "files", "params": {"access": "read" if read_only else "readWrite"}})
     if shell:
         clauses.append({"key": "shell", "params": dict(shell)})
+        # A declared shell runs git/gh/glab (or anything, in full mode), which
+        # reach remote hosts even though the sandboxes have no network.
+        clauses.append({"key": "networkViaShell", "params": {}})
     if "aiCli" in system:
         clauses.append({"key": "aiCli", "params": {}})
     if "ui" in system:
@@ -193,7 +196,7 @@ def compute_disclosure(manifest: dict[str, Any]) -> ManifestDisclosure:
         "risk": {"level": risk_level_for_reasons(reasons), "reasons": reasons},
         "permissions": {"system": system, "shell": shell, "scopes": scopes},
         "nativeBackend": native,
-        "network": "none",
+        "network": "via-shell" if shell else "none",
         "agentTools": tools,
         "dataLocations": {"hostStorage": True, "backendDataDirectory": native is not None,
                           "projectWrites": project_writes},
