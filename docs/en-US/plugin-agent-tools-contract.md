@@ -1184,6 +1184,15 @@ reason of a refusal ("used but not declared" above all) outlives the 7 days of
 detail. It was added after the first tables: every open runs the audit DDL (all
 `CREATE … IF NOT EXISTS`), so an older `navide.db` gains it and keeps its rows.
 
+`plugin_tool_first_seen` (D-e): `(plugin_id, tool, workspace)` primary key and
+`first_at`; the earliest call of each `risk: write` agent tool in each target
+workspace, written with the call rows. It is not pruned with them, so
+`writeToolNewWorkspace` flags a workspace once, not again each time its old
+calls expire, and no count limits it. When a plugin is removed the Host sends
+`plugin.activity.forget` (`PLUGIN_ACTIVITY_FORGET_MESSAGE`, Host-authenticated,
+`{plugin_id}`) and that plugin's rows go: a reinstalled plugin's first writes
+are new again. Like every other audit table it is created by the open-time DDL.
+
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
 page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
 `result_bytes` through `tool_call_id`.

@@ -599,6 +599,8 @@ export const MARKETPLACE_QUERY_RESULT_MESSAGE = 'marketplace.query.result'
 export const PLUGIN_ACTIVITY_RECORD_MESSAGE = 'plugin.activity.record'
 /** Host-authenticated: `{plugin_id, declared?}` → a `PluginActivityReport` (contract 5.1). */
 export const PLUGIN_ACTIVITY_REPORT_MESSAGE = 'plugins.activity.report'
+/** Host-authenticated: `{plugin_id}`, sent when a plugin is removed. */
+export const PLUGIN_ACTIVITY_FORGET_MESSAGE = 'plugin.activity.forget'
 
 // ── approval registry (B2) ──────────────────────────────────────────────────
 

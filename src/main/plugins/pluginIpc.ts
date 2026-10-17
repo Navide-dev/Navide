@@ -2313,6 +2313,8 @@ export function registerPluginIpc(
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
       disabledPlugins.remove(id)
+      // Its activity "first write in a workspace" rows go with it (D-e).
+      manager.forgetPluginActivity(id)
       if (options.factoryPackageIds?.includes(id)) {
         if (!options.onFactoryPackageRemoved) {
           throw new Error('factory package removal is unavailable')

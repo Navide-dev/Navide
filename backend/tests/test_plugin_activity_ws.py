@@ -207,3 +207,24 @@ async def test_a_row_with_a_bad_time_is_skipped(audit: PluginAuditLog, at: Any) 
         host, "1", contract.PLUGIN_ACTIVITY_RECORD_MESSAGE, {"rows": [_row(at=at), _row()]}
     )
     assert host.websocket.sent[-1]["payload"] == {"ok": True, "accepted": 1}
+
+
+# ── #368 follow-up L4: a removed plugin is forgotten ────────────────────────
+
+
+async def test_only_the_host_can_forget_a_plugin_and_it_forgets_that_plugin(audit: PluginAuditLog) -> None:
+    calls: list[str] = []
+    audit.forget_plugin = lambda plugin_id: calls.append(plugin_id)  # type: ignore[method-assign]
+    window = _session(host=False)
+    await ws_handlers.plugin_activity_forget(window, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert window.websocket.sent[-1]["error"]["code"] == "UNAUTHORIZED" and calls == []
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "2", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, {"plugin_id": "a.b"})
+    assert host.websocket.sent[-1]["payload"] == {"ok": True} and calls == ["a.b"]
+
+
+@pytest.mark.parametrize("payload", [{}, {"plugin_id": ""}, {"plugin_id": 1}, {"plugin_id": "a.b", "x": 1}, []])
+async def test_a_malformed_forget_is_refused(audit: PluginAuditLog, payload: Any) -> None:
+    host = _session(host=True)
+    await ws_handlers.plugin_activity_forget(host, "1", contract.PLUGIN_ACTIVITY_FORGET_MESSAGE, payload)
+    assert host.websocket.sent[-1]["error"]["code"] == "BAD_REQUEST"

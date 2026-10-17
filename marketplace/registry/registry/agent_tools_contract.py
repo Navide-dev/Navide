@@ -535,6 +535,9 @@ PLUGIN_ACTIVITY_RECORD_MESSAGE = "plugin.activity.record"
 #: Host-authenticated: ``{plugin_id, declared?: [{kind, key}]}`` → a
 #: ``PluginActivityReport`` (contract 5.1, ``src/shared/pluginActivity.ts``).
 PLUGIN_ACTIVITY_REPORT_MESSAGE = "plugins.activity.report"
+#: Host-authenticated: ``{plugin_id}``, sent when a plugin is removed: its
+#: first-seen rows go, so a reinstalled plugin's first writes are new again.
+PLUGIN_ACTIVITY_FORGET_MESSAGE = "plugin.activity.forget"
 
 
 class MarketplaceQueryRequest(TypedDict):
@@ -652,4 +655,13 @@ PLUGIN_AUDIT_DDL = (
     " denied_reason TEXT NOT NULL,"
     " count INTEGER NOT NULL,"
     " PRIMARY KEY (day, plugin_id, workspace, source, address, denied_reason))",
+    # D-e follow-up: when each write agent tool was first called in each
+    # workspace. Not pruned with the call rows, so a workspace is "new" only
+    # once; a removed plugin's rows go with it (plugin.activity.forget).
+    "CREATE TABLE IF NOT EXISTS plugin_tool_first_seen ("
+    " plugin_id TEXT NOT NULL,"
+    " tool TEXT NOT NULL,"
+    " workspace TEXT NOT NULL,"
+    " first_at INTEGER NOT NULL,"
+    " PRIMARY KEY (plugin_id, tool, workspace))",
 )

@@ -400,6 +400,28 @@ def _declared_items(value: Any) -> list[dict[str, str]] | None:
     return items
 
 
+@handler("plugin.activity.forget")
+async def plugin_activity_forget(
+    session: "Session", msg_id: str, msg_type: str, payload: dict
+) -> None:
+    """A plugin was removed: forget its first-seen rows (Host-authenticated)."""
+    from . import app
+
+    if not session.host_authenticated:
+        await session.send_json(
+            make_error(msg_id, msg_type, "UNAUTHORIZED", "Host session is not authenticated")
+        )
+        return
+    plugin_id = payload.get("plugin_id") if isinstance(payload, dict) else None
+    if not isinstance(plugin_id, str) or not plugin_id or set(payload) != {"plugin_id"}:
+        await session.send_json(
+            make_error(msg_id, msg_type, "BAD_REQUEST", "plugin.activity.forget is malformed")
+        )
+        return
+    await asyncio.to_thread(app.plugin_audit_log.forget_plugin, plugin_id)
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("plugins.activity.report")
 async def plugins_activity_report(
     session: "Session", msg_id: str, msg_type: str, payload: dict

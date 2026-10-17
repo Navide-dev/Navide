@@ -1095,3 +1095,64 @@ def test_a_zero_ms_call_counts_toward_the_peak(
         _timed_call(audit, clock, base + end, duration)
     clock.now_ms = NOW
     assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == peak
+
+
+# ── #368 follow-up L4: first write of a tool in a workspace (plugin_tool_first_seen) ──
+
+
+def _new_workspace_flags(audit: PluginAuditLog, now: int) -> list[dict[str, Any]]:
+    return [a for a in audit.activity_report(_PLUGIN, now_ms=now)["anomalies"] if a["kind"] == "writeToolNewWorkspace"]
+
+
+def test_a_workspace_is_not_new_again_once_its_old_calls_are_pruned(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 40 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    audit.prune(NOW)  # the 40-day-old call row is gone
+    assert _rows(audit, "plugin_tool_calls") == []
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    assert _new_workspace_flags(audit, NOW) == []
+
+
+def test_only_write_tools_are_remembered(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 3600_000
+    _call(audit, tool="devmap_read", risk="read")
+    _call(audit, tool="devmap_set_status", risk="write")
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute("SELECT plugin_id, tool, workspace FROM plugin_tool_first_seen")]
+    assert rows == []  # queued, not flushed yet
+    audit.flush()
+    with audit.db.transaction() as cur:
+        rows = [tuple(r) for r in cur.execute(
+            "SELECT plugin_id, tool, workspace, first_at FROM plugin_tool_first_seen"
+        )]
+    assert rows == [(_PLUGIN, "devmap_set_status", "/Users/me/project", NOW - 3600_000)]
+
+
+def test_removing_a_plugin_forgets_it_so_a_reinstall_is_new_again(audit: PluginAuditLog, clock: Clock) -> None:
+    clock.now_ms = NOW - 10 * DAY_MS
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    _call(audit, plugin_id="other.plugin", target_workspace="/w/a", caller_workspace="/w/a")
+    audit.flush()
+    audit.forget_plugin(_PLUGIN)
+    with audit.db.transaction() as cur:
+        left = [r[0] for r in cur.execute("SELECT plugin_id FROM plugin_tool_first_seen")]
+    assert left == ["other.plugin"]
+    clock.now_ms = NOW - 3600_000
+    _call(audit, target_workspace="/w/a", caller_workspace="/w/a")
+    assert [a["workspace"] for a in _new_workspace_flags(audit, NOW)] == ["/w/a"]
+
+
+def test_an_old_database_gains_the_first_seen_table_and_keeps_its_rows(tmp_path: Path, clock: Clock) -> None:
+    path = tmp_path / "navide.db"
+    old = PluginAuditLog(Database(path), clock=clock)
+    assert _call(old) is not None
+    old.flush()
+    with old.db.transaction() as cur:
+        cur.execute("DROP TABLE plugin_tool_first_seen")  # as a database from before this table
+    old.db.close()
+    again = PluginAuditLog(Database(path), clock=clock)
+    with again.db.transaction() as cur:
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_tool_first_seen)")]
+    assert cols == ["plugin_id", "tool", "workspace", "first_at"]
+    assert len(_rows(again, "plugin_tool_calls")) == 1

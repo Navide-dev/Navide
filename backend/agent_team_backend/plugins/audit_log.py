@@ -525,6 +525,8 @@ class PluginAuditLog:
         if not calls and not activity:
             return
         calls = [row for row in map(_with_digest, calls) if row is not None]
+        # plugin_id, tool, target_workspace, at of each write call.
+        first_seen = [(row[8], row[10], row[6], row[1]) for row in calls if row[11] == "write"]
         try:
             with self.db.transaction() as cur:
                 cur.executemany(
@@ -533,6 +535,11 @@ class PluginAuditLog:
                     " args_bytes, outcome, error_code, duration_ms, result_bytes)"
                     " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     calls,
+                )
+                cur.executemany(
+                    "INSERT INTO plugin_tool_first_seen (plugin_id, tool, workspace, first_at) VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT(plugin_id, tool, workspace) DO UPDATE SET first_at = MIN(first_at, excluded.first_at)",
+                    first_seen,
                 )
                 cur.executemany(
                     "INSERT INTO plugin_activity (at, plugin_id, plugin_version, workspace, source, address,"
@@ -794,9 +801,10 @@ class PluginAuditLog:
                 " AND outcome = 'denied' AND denied_reason = 'undeclared' GROUP BY 1 ORDER BY 1",
                 (plugin_id, now - 7 * _DAY_MS),
             ).fetchall()
+            # From plugin_tool_first_seen, which outlives the call rows (L4).
             new_writes = cur.execute(
-                "SELECT tool, target_workspace, MIN(at) FROM plugin_tool_calls"
-                " WHERE plugin_id = ? AND risk = 'write' GROUP BY 1, 2 HAVING MIN(at) >= ? ORDER BY 3, 1, 2",
+                "SELECT tool, workspace, first_at FROM plugin_tool_first_seen"
+                " WHERE plugin_id = ? AND first_at >= ? ORDER BY 3, 1, 2",
                 (plugin_id, now - _DAY_MS),
             ).fetchall()
         report["totals"] = {"calls": int(totals[0] or 0), "denied": int(totals[1] or 0), "errors": int(totals[2] or 0)}
@@ -844,6 +852,18 @@ class PluginAuditLog:
         )
         report["anomalies"] = anomalies
         return report
+
+    def forget_plugin(self, plugin_id: str) -> None:
+        """A removed plugin: drop its first-seen rows, so a reinstall's first
+        write in a workspace is new again. Never raises."""
+        if not self.enabled:
+            return
+        self.flush()
+        try:
+            with self.db.transaction() as cur:
+                cur.execute("DELETE FROM plugin_tool_first_seen WHERE plugin_id = ?", (plugin_id,))
+        except Exception as err:  # noqa: BLE001 - the audit never fails what it records
+            log.warning("plugin audit: %s not forgotten: %s", plugin_id, err)
 
     def historical_peak_concurrent_calls(self, plugin_id: str, *, since_ms: int, until_ms: int) -> dict[str, Any]:
         """The most agent tool calls of ``plugin_id`` that ran at once in the window.

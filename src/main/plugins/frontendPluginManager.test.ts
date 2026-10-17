@@ -16887,3 +16887,31 @@ describe('plugin activity (D-e)', () => {
     expect(activityOf(socket)).toEqual([])
   })
 })
+
+describe('plugin activity forget (D-e L4)', () => {
+  type SentMessage = { id: string; type: string; payload: Record<string, unknown> }
+
+  it('sends plugin.activity.forget over the registered Host session, and nothing without one', async () => {
+    const mgr = new FrontendPluginManager()
+    mgr.open(
+      asHost(new FakeBrowserWindow()),
+      { id: 'acme.activity-forget', requires: ['terminal'], devUrl: '', entryFile: '/plugins/acme.activity-forget/index.html' },
+      { x: 0, y: 0, width: 10, height: 10 },
+    )
+    mgr.setBackendHostToken('host-token')
+    mgr.setBackendWsUrl('ws://activity-forget')
+    const socket = wsMock.FakeNodeWebSocket.instances.at(-1)!
+    socket.open()
+    const sent = (): SentMessage[] => socket.sent.map((raw) => JSON.parse(raw) as SentMessage)
+    mgr.forgetPluginActivity('acme.gone')
+    await Promise.resolve()
+    expect(sent().filter((m) => m.type === 'plugin.activity.forget')).toEqual([])  // not registered yet
+    const registration = sent().find((m) => m.type === 'host.register')!
+    socket.receive({ id: registration.id, type: 'host.register', ok: true, payload: { registered: true }, error: null, timestamp: '' })
+    await vi.waitFor(() => {
+      mgr.forgetPluginActivity('acme.gone')  // a no-op until the session is registered
+      expect(sent().filter((m) => m.type === 'plugin.activity.forget').length).toBeGreaterThan(0)
+    })
+    expect(sent().find((m) => m.type === 'plugin.activity.forget')!.payload).toEqual({ plugin_id: 'acme.gone' })
+  })
+})

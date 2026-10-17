@@ -584,6 +584,32 @@ describe('plugins:remove boundary validation', () => {
     }
   })
 
+  it('forgets the removed plugin\'s activity first-seen rows, and only after a removal succeeds (D-e L4)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'navide-remove-forget-'))
+    mkdirSync(join(root, 'acme.demo'), { recursive: true })
+    mkdirSync(join(root, 'acme.kept'), { recursive: true })
+    const manager = new FrontendPluginManager()
+    vi.spyOn(manager, 'preparePluginRemoval').mockImplementation(() => {})
+    vi.spyOn(manager, 'removeInstalledPlugin').mockImplementation(() => {})
+    const forget = vi.spyOn(manager, 'forgetPluginActivity').mockImplementation(() => {})
+    let failCleanup = false
+    const cleanupPluginStorage = vi.fn(async () => {
+      if (failCleanup) throw new Error('storage busy')
+    })
+    try {
+      registerPluginIpc(manager, root, () => true, TRUST_CONFIG, undefined, { cleanupPluginStorage })
+      const removeHandler = handlers.get('plugins:remove')!
+      failCleanup = true
+      await expect(removeHandler(null, { id: 'acme.kept' })).rejects.toThrow(/storage busy/)
+      expect(forget).not.toHaveBeenCalled()
+      failCleanup = false
+      await expect(removeHandler(null, { id: 'acme.demo' })).resolves.toEqual({ ok: true })
+      expect(forget).toHaveBeenCalledExactlyOnceWith('acme.demo')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('removes a valid direct-child id and clears its activation state', async () => {
     const root = mkdtempSync(join(tmpdir(), 'navide-remove-valid-'))
     const installedDir = join(root, 'acme.demo')
