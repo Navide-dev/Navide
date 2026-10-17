@@ -1,9 +1,11 @@
 /**
- * Plugin activity (plan B, D-e): one row per capability-broker call, and the
- * calls into a third-party plugin's own backend (whichever path made them: its
- * frontend, an agent tool, an agent capability request) counted per
- * (plugin, version, workspace, `backend.<method>`, outcome) within each batch
- * (source `backend`, with `count`).
+ * Plugin activity (plan B, D-e): capability-broker calls counted per
+ * (plugin, version, workspace, address, outcome, reason, path, command,
+ * minute) within each batch, and the calls into a third-party plugin's own
+ * backend (whichever path made them: its frontend, an agent tool, an agent
+ * capability request) counted per (plugin, version, workspace,
+ * `backend.<method>`, outcome) within each batch (source `backend`). Every
+ * row carries its `count`.
  *
  * The broker records what a Navide plugin asked for and what came of it: the
  * plugin, the `namespace.method` address, the workspace, an fs path or a shell
@@ -19,7 +21,21 @@
  */
 
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
-import { isUndeclaredDenial, type CapabilityCall, type CapabilityResponse } from './pluginCapabilityBroker'
+import {
+  isKnownCapabilityAddress,
+  isUndeclaredDenial,
+  type CapabilityCall,
+  type CapabilityResponse,
+} from './pluginCapabilityBroker'
+
+/** The one address every call of a capability the broker does not know is
+ *  counted under (contract 5): such names are the plugin's free text, with no
+ *  limit on their length or variety, so they are never keys. */
+export const ACTIVITY_UNKNOWN_ADDRESS = '<unknown>'
+/** The path or command of a refused call, and of a failed one: the plugin
+ *  wrote it, the call cost it nothing, so it is never a key (contract 5). */
+export const ACTIVITY_DENIED_TARGET = '<denied>'
+export const ACTIVITY_FAILED_TARGET = '<failed>'
 
 export type PluginActivitySource = 'broker' | 'shell' | 'backend'
 export type PluginActivityOutcome = 'allowed' | 'denied' | 'error'
@@ -36,8 +52,10 @@ export interface PluginActivityRow {
   denied_reason?: 'undeclared'
   fs_path?: string
   shell_command?: string
-  /** When the call completed (Unix ms). The backend clamps it to its own now. */
+  /** When the (last counted) call completed (Unix ms). The backend clamps it to its own now. */
   at: number
+  /** Calls with this key in the same minute of one batch. */
+  count: number
 }
 
 /** Backend calls counted within one batch (source `backend`), per minute. */
@@ -77,8 +95,10 @@ function stringArg(args: unknown, key: string): string | undefined {
   return typeof value === 'string' && value ? value : undefined
 }
 
-/** The activity row of one broker call. Raw path and command text go to the
- *  backend, which keeps only their redacted form. */
+/** The activity row of one broker call. Raw path and command text of an
+ *  allowed call go to the backend, which keeps only their redacted form; a
+ *  refused or failed call's are a fixed marker, and a capability the broker
+ *  does not know is ACTIVITY_UNKNOWN_ADDRESS. */
 export function activityRowFor({ pluginId, packageVersion, workspace, call, response, at }: PluginActivityInput): PluginActivityRow {
   const outcome: PluginActivityOutcome = response.ok
     ? 'allowed'
@@ -88,17 +108,20 @@ export function activityRowFor({ pluginId, packageVersion, workspace, call, resp
     plugin_version: packageVersion ?? '',
     workspace: workspace ?? '',
     source: call.ns === 'shell' ? 'shell' : 'broker',
-    address: `${call.ns}.${call.method}`,
+    address: isKnownCapabilityAddress(call.ns, call.method) ? `${call.ns}.${call.method}` : ACTIVITY_UNKNOWN_ADDRESS,
     outcome,
     // Dated here, not when the batch is sent: a call just before midnight
     // stays on its own day.
     at: at ?? Date.now(),
+    count: 1,
   }
   if (outcome === 'denied' && isUndeclaredDenial(response)) row.denied_reason = 'undeclared'
+  const target = (value: string): string =>
+    outcome === 'allowed' ? value : outcome === 'denied' ? ACTIVITY_DENIED_TARGET : ACTIVITY_FAILED_TARGET
   const fsPath = call.ns === 'fs' ? stringArg(call.args, 'path') : undefined
-  if (fsPath) row.fs_path = fsPath
+  if (fsPath) row.fs_path = target(fsPath)
   const command = call.ns === 'shell' ? stringArg(call.args, 'command') : undefined
-  if (command) row.shell_command = command
+  if (command) row.shell_command = target(command)
   return row
 }
 
@@ -114,9 +137,10 @@ export type PluginActivitySend = (
   payload: { rows: Array<PluginActivityRow | BackendCallActivityRow> },
 ) => Promise<unknown> | unknown
 
-/** Queues rows and sends them to the backend about once a second. */
+/** Counts rows per key and sends them to the backend about once a second. */
 export class PluginActivityRecorder {
-  private queue: PluginActivityRow[] = []
+  /** Broker calls of this batch, counted per key and minute (one map lookup per call). */
+  private queue = new Map<string, PluginActivityRow>()
   /** Backend calls of this batch, counted per key (one map lookup per call). */
   private backendCalls = new Map<string, BackendCallActivityRow>()
   private timer: ReturnType<typeof setTimeout> | null = null
@@ -126,9 +150,19 @@ export class PluginActivityRecorder {
     private readonly intervalMs = 1000,
   ) {}
 
-  /** Queue one row; never throws. */
+  /** Count one row into this batch's row for its key and minute; never throws. */
   record(row: PluginActivityRow): void {
-    this.queue.push(row)
+    const minute = row.at - (row.at % 60_000)
+    const key = `${minute}\u0000${row.plugin_id}\u0000${row.plugin_version}\u0000${row.workspace}\u0000${row.source}`
+      + `\u0000${row.address}\u0000${row.outcome}\u0000${row.denied_reason ?? ''}\u0000${row.fs_path ?? ''}`
+      + `\u0000${row.shell_command ?? ''}`
+    const counted = this.queue.get(key)
+    if (counted) {
+      counted.count += row.count
+      if (row.at > counted.at) counted.at = row.at
+    } else {
+      this.queue.set(key, { ...row })
+    }
     this.schedule()
   }
 
@@ -155,8 +189,8 @@ export class PluginActivityRecorder {
       clearTimeout(this.timer)
       this.timer = null
     }
-    const rows: Array<PluginActivityRow | BackendCallActivityRow> = [...this.queue, ...this.backendCalls.values()]
-    this.queue = []
+    const rows: Array<PluginActivityRow | BackendCallActivityRow> = [...this.queue.values(), ...this.backendCalls.values()]
+    this.queue = new Map()
     this.backendCalls = new Map()
     if (rows.length === 0) return
     try {
@@ -169,6 +203,6 @@ export class PluginActivityRecorder {
 
   /** Rows waiting to be sent (diagnostics and tests). */
   get pending(): number {
-    return this.queue.length + this.backendCalls.size
+    return this.queue.size + this.backendCalls.size
   }
 }

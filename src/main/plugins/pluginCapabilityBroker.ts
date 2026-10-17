@@ -387,6 +387,19 @@ function undeclaredDenied(reqId: string, message: string): PublicCapabilityDecis
   return { kind: 'deny', response: undeclared(buildError(reqId, 'CAPABILITY_DENIED', message)) }
 }
 
+/** Whether `ns.method` is a capability the broker knows (the public catalog,
+ *  a Host-implemented action, a backend-mapped call or the `ping` built-in),
+ *  whether or not this plugin may call it. Four map lookups. */
+export function isKnownCapabilityAddress(ns: string, method: string): boolean {
+  const address = `${ns}.${method}`
+  return (
+    BUILTIN_CAPABILITIES.includes(ns) ||
+    publicCapabilityEntry(address) !== null ||
+    Object.hasOwn(HOST_CAPABILITIES, address) ||
+    resolveWsType(ns, method) !== null
+  )
+}
+
 /** Whether `response` is the broker's refusal of an undeclared use. */
 export function isUndeclaredDenial(response: CapabilityResponse): boolean {
   return undeclaredDenials.has(response)

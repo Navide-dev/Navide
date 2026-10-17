@@ -17103,13 +17103,15 @@ describe('plugin activity (D-e)', () => {
     expect(batch.payload.rows).toEqual([
       {
         plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
-        address: 'fs.readFile', outcome: 'denied', denied_reason: 'undeclared', fs_path: '/Users/me/project/a.py',
-        at: expect.any(Number),
+        // A refused call's path is the plugin's text: never sent (final review part 2, H1).
+        address: 'fs.readFile', outcome: 'denied', denied_reason: 'undeclared', fs_path: '<denied>',
+        at: expect.any(Number), count: 1,
       },
       {
         plugin_id: 'acme.activity', plugin_version: '', workspace: '', source: 'broker',
-        address: 'net.fetch', outcome: 'denied', denied_reason: 'undeclared',
-        at: expect.any(Number),
+        // No capability the broker routes: one fixed address.
+        address: '<unknown>', outcome: 'denied', denied_reason: 'undeclared',
+        at: expect.any(Number), count: 1,
       },
     ])
   })

@@ -1283,8 +1283,9 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 Indexes `(at)` and `(plugin_id, at)`. Retention: rows older than 30 days are
 deleted, then all but the newest 10,000.
 
-`plugin_activity` (D-e; one row per broker or shell-broker call, plus one per
-agent tool call with `tool_call_id` set): `id`, `at`, `plugin_id`,
+`plugin_activity` (D-e; one row per agent tool call with `tool_call_id` set,
+and the broker and shell-broker rows an earlier version wrote, until they
+expire): `id`, `at`, `plugin_id`,
 `plugin_version`, `workspace`, `source` (`broker` | `shell` | `agentTool`),
 `address` (`namespace.method`; never `backend.…`, see below),
 `outcome` (`allowed` | `denied` | `error`),
@@ -1294,6 +1295,30 @@ call error code, or `undeclared` for a use the manifest did not declare;
 (workspace-relative, no content), `shell_command`
 (executable and subcommand only, no further arguments), `tool_call_id`.
 Indexes `(at)` and `(plugin_id, at)`. Detail rows are kept 7 days (DB14).
+
+`plugin_activity_counts` (final review part 2, H1; broker and shell-broker
+calls). Counted, never one row per call: a plugin needs no permission to be
+refused, so it can make refused calls as fast as it likes. The Host counts
+calls per `(plugin, version, workspace, source, address, outcome,
+denied_reason, fs_path, shell_command, minute)` within each batch and sends
+the row of `plugin_activity` with `count` and `at` (the latest call counted);
+the backend redacts it and adds `count` into the row of that key and minute
+(`minute`, `count`, `last_at`; created by `PLUGIN_AUDIT_DDL` like the other
+activity tables). Text the plugin wrote is never a key, because it has no
+limit on its length or on how many different values there are, and a refused
+or failed call cost the plugin nothing: the address of a capability the
+broker does not know (not in the public catalog, a Host action, a
+backend-mapped call or `ping`) is `<unknown>`
+(`PLUGIN_ACTIVITY_UNKNOWN_ADDRESS`), and the `fs_path` / `shell_command` of a
+`denied` or `error` call is `<denied>` / `<failed>`
+(`PLUGIN_ACTIVITY_DENIED_TARGET`, `PLUGIN_ACTIVITY_FAILED_TARGET`). An
+`allowed` call keeps its redacted path and command: that IO happened, so the
+number of different values follows the work the plugin really did. Kept and
+rolled up into `plugin_activity_daily` / `plugin_activity_denied_daily` like
+detail rows (7 days, by the UTC day of `minute`); a removed plugin's rows go
+with `forget_plugin`. Every report field below reads `plugin_activity` and
+`plugin_activity_counts` together, with the same values as one row per call;
+a window reads the minute it starts in whole.
 
 `plugin_backend_call_minutes` (D-e; calls into a third-party plugin's own
 backend, whichever path made them: its frontend, an agent tool, an agent
@@ -1467,7 +1492,7 @@ malformed one whole.
 | `schemaVersion` | `1` |
 | `pluginId`, `generatedAt` | the plugin; when the report was made (Unix ms) |
 | `window` | `{from, to}`: the detail window the lists cover (7 days) |
-| `totals` | `{calls, denied, errors}` of `plugin_activity` within `window` |
+| `totals` | `{calls, denied, errors}` of `plugin_activity` and `plugin_activity_counts` within `window` |
 | `historicalPeakConcurrency` | the largest number of the plugin's `plugin_tool_calls` that overlapped in time within `window`, from recorded call intervals. **Historical only**: the number in flight now is read live from the Host (`plugins:backendCallConcurrency`), never from a report, because running calls are not recorded yet |
 | `undeclaredSince` | start of the window `undeclared` covers (30 days) |
 | `toolCalls[]` | `plugin_tool_calls` rows, newest first: `id`, `at`, `callerKind`, `paneId`, `paneName`, `callerWorkspace`, `targetWorkspace`, `crossWorkspace`, `pluginVersion`, `tool`, `risk`, `outcome`, `errorCode`, `durationMs`, `argsBytes`, `resultBytes` |

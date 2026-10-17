@@ -1,9 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PLUGIN_ACTIVITY_RECORD_MESSAGE } from '../../shared/pluginAgentTools'
-import { activityRowFor, backendCallAddress, PluginActivityRecorder, type PluginActivityRow } from './pluginActivity'
+import {
+  ACTIVITY_DENIED_TARGET,
+  ACTIVITY_FAILED_TARGET,
+  ACTIVITY_UNKNOWN_ADDRESS,
+  activityRowFor,
+  backendCallAddress,
+  PluginActivityRecorder,
+  type PluginActivityRow,
+} from './pluginActivity'
 import {
   buildError,
   buildSuccess,
+  isKnownCapabilityAddress,
   isUndeclaredDenial,
   planCapabilityCall,
   type CapabilityCall,
@@ -42,6 +51,7 @@ describe('activityRowFor', () => {
       outcome: 'allowed',
       fs_path: 'src/a.py',
       at: AT,
+      count: 1,
     })
   })
 
@@ -73,7 +83,8 @@ describe('activityRowFor', () => {
     const response = respond(planCapabilityCall(call({ ns: 'net', method: 'fetch' }), ['fs']))
     expect(isUndeclaredDenial(response)).toBe(true)
     expect(row(call({ ns: 'net', method: 'fetch', args: {} }), response)).toMatchObject({
-      outcome: 'denied', denied_reason: 'undeclared', address: 'net.fetch',
+      // net.fetch is no capability the broker routes: one fixed address.
+      outcome: 'denied', denied_reason: 'undeclared', address: ACTIVITY_UNKNOWN_ADDRESS,
     })
   })
 
@@ -103,6 +114,45 @@ describe('activityRowFor', () => {
   })
 })
 
+// Final review part 2, H1: a plugin needs no permission to be refused, and
+// what it writes (address, path, command) has no length or variety limit.
+describe('text the plugin wrote is never a key', () => {
+  it('records a capability the broker does not know under one address, and a refused or failed call without its path or command', () => {
+    expect(row(call({ ns: 'made', method: 'up' }), buildError('req-1', 'METHOD_NOT_FOUND', 'x'))).toMatchObject({
+      address: ACTIVITY_UNKNOWN_ADDRESS, outcome: 'error',
+    })
+    expect(row(call(), buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ fs_path: ACTIVITY_DENIED_TARGET })
+    expect(row(call(), buildError('req-1', 'INTERNAL_ERROR', 'x'))).toMatchObject({ fs_path: ACTIVITY_FAILED_TARGET })
+    const shell = call({ ns: 'shell', method: 'run', args: { command: 'curl -u me:secret https://x' } })
+    expect(row(shell, buildError('req-1', 'CAPABILITY_DENIED', 'x'))).toMatchObject({ shell_command: ACTIVITY_DENIED_TARGET })
+    // An allowed call keeps them: that IO happened.
+    expect(row(call(), buildSuccess('req-1', {}))).toMatchObject({ address: 'fs.readFile', fs_path: '/Users/me/project/src/a.py' })
+  })
+
+  it('knows exactly the capabilities the broker routes', () => {
+    expect(isKnownCapabilityAddress('fs', 'readFile')).toBe(true)  // public catalog
+    expect(isKnownCapabilityAddress('ui', 'open_in_editor')).toBe(true)  // Host action
+    expect(isKnownCapabilityAddress('ping', 'anything')).toBe(true)  // built-in
+    expect(isKnownCapabilityAddress('fs', 'readFile2')).toBe(false)
+    expect(isKnownCapabilityAddress('toString', '')).toBe(false)
+  })
+
+  it('counts 300,000 refused calls with 300,000 different names and paths as one row', async () => {
+    const sent: Array<{ rows: unknown[] }> = []
+    const recorder = new PluginActivityRecorder(() => async (_type, payload) => { sent.push(payload) }, 60_000)
+    for (let i = 0; i < 300_000; i++) {
+      recorder.record(activityRowFor({
+        pluginId: 'acme.indexer', packageVersion: '1.0.0', workspace: '/w', at: AT,
+        call: call({ ns: `ns${i}`, method: `m${i}`, args: { path: `/tmp/${i}` } }),
+        response: buildError('req-1', 'METHOD_NOT_FOUND', 'x'),
+      }))
+    }
+    expect(recorder.pending).toBe(1)
+    await recorder.flush()
+    expect(sent[0].rows).toEqual([expect.objectContaining({ address: ACTIVITY_UNKNOWN_ADDRESS, count: 300_000 })])
+  })
+})
+
 describe('PluginActivityRecorder', () => {
   afterEach(() => { vi.useRealTimers() })
   const sample = row(call(), buildSuccess('req-1', {}))
@@ -115,7 +165,8 @@ describe('PluginActivityRecorder', () => {
     recorder.record(sample)
     expect(sent).toEqual([])
     await vi.advanceTimersByTimeAsync(1000)
-    expect(sent).toEqual([[PLUGIN_ACTIVITY_RECORD_MESSAGE, { rows: [sample, sample] }]])
+    // Same key, same minute: one row, counted twice.
+    expect(sent).toEqual([[PLUGIN_ACTIVITY_RECORD_MESSAGE, { rows: [{ ...sample, count: 2 }] }]])
     expect(recorder.pending).toBe(0)
   })
 

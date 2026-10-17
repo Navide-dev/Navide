@@ -205,7 +205,7 @@ def test_a_failing_decision_write_never_drops_the_activity_rows(
     monkeypatch.setattr(audit.db, "transaction", real)
     with audit.db.transaction() as cur:
         assert cur.execute("SELECT COUNT(*) FROM plugin_resource_decisions").fetchone()[0] == 0
-        assert [tuple(r) for r in cur.execute("SELECT plugin_id, address FROM plugin_activity")] == [
+        assert [tuple(r) for r in cur.execute("SELECT plugin_id, address FROM plugin_activity_counts")] == [
             ("nerdtechnic.devmap", "fs.readFile")
         ]
     assert audit.status()["pending"] == 0
@@ -222,7 +222,7 @@ def test_an_old_database_gains_the_table_and_keeps_its_rows(tmp_path: Path) -> N
     again = PluginAuditLog(Database(path))
     with again.db.transaction() as cur:
         cols = [r[1] for r in cur.execute("PRAGMA table_info(plugin_resource_decisions)")]
-        kept = cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0]
+        kept = cur.execute("SELECT SUM(count) FROM plugin_activity_counts").fetchone()[0]
     assert cols == ["id", "at", "plugin_id", "plugin_version", "item", "usage", "threshold", "decision"]
     assert kept == 1
 

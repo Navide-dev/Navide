@@ -411,7 +411,7 @@ async def plugins_agent_action_result(
 
 
 _ACTIVITY_ROW_REQUIRED = frozenset(("plugin_id", "plugin_version", "source", "address", "outcome"))
-_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at"}
+_ACTIVITY_ROW_FIELDS = _ACTIVITY_ROW_REQUIRED | {"workspace", "denied_reason", "fs_path", "shell_command", "at", "count"}
 #: The Host records broker and shell-broker calls; agent tool calls are the
 #: backend's own rows (B1).
 _HOST_ACTIVITY_SOURCES = frozenset(("broker", "shell"))
@@ -449,7 +449,8 @@ async def plugin_activity_record(
 ) -> None:
     """Store the Host's batch of broker and shell-broker calls (plan B, D-e).
 
-    Write-only: each row is redacted and queued by ``record_activity``; a row
+    Write-only: each row (calls the Host counted per key and minute, with
+    ``count``) is redacted and counted by ``record_activity``; a row
     it refuses is skipped, and nothing here can fail the calls it records.
     Rows with source ``backend`` (calls into a plugin's own backend, counted)
     go to the per-minute counts instead. The ``backend.`` address prefix and
@@ -494,11 +495,16 @@ async def plugin_activity_record(
         if "at" in row and (isinstance(at, bool) or not isinstance(at, int) or at < 0):
             skipped["bad at"] += 1
             continue
-        fields = {key: value for key, value in row.items() if key != "at" and isinstance(value, str)}
-        if len(fields) != len(row) - ("at" in row):
+        # `count`: calls the Host counted under this key in that minute (1 when absent).
+        count = row.get("count", 1)
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
             skipped["malformed"] += 1
             continue
-        if app.plugin_audit_log.record_activity(**fields, at_ms=at):
+        fields = {key: value for key, value in row.items() if key not in ("at", "count") and isinstance(value, str)}
+        if len(fields) != len(row) - ("at" in row) - ("count" in row):
+            skipped["malformed"] += 1
+            continue
+        if app.plugin_audit_log.record_activity(**fields, at_ms=at, count=count):
             accepted += 1
         else:
             skipped["refused"] += 1

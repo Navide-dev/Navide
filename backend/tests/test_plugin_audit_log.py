@@ -66,6 +66,13 @@ def _call(audit: PluginAuditLog, **overrides: Any) -> int | None:
 def _rows(audit: PluginAuditLog, table: str) -> list[dict[str, Any]]:
     audit.flush()
     with audit.db.transaction() as cur:
+        if table == "plugin_activity":
+            # Broker and shell calls are counted (plugin_activity_counts); each
+            # row reads as the latest call of its key and minute.
+            return [
+                {**dict(row), "at": row["last_at"]}
+                for row in cur.execute("SELECT * FROM plugin_activity_counts ORDER BY rowid")
+            ]
         return [dict(row) for row in cur.execute(f"SELECT * FROM {table} ORDER BY id")]  # noqa: S608
 
 
@@ -233,10 +240,13 @@ def test_an_activity_row_keeps_a_relative_path_and_only_executable_and_subcomman
     rows = _rows(audit, "plugin_activity")
     assert rows[0]["fs_path"] == ".navide/devmap.json"
     assert rows[1]["shell_command"] == "git log"
-    assert rows[2]["tool_call_id"] == tool_call and rows[2]["source"] == "agentTool"
-    # Outside the workspace there is no relative path to keep.
-    assert rows[3]["fs_path"] == "<outside-workspace>" and rows[3]["denied_reason"] == "undeclared"
+    # A refused call keeps no path at all: the plugin wrote it (final review part 2, H1).
+    assert rows[2]["fs_path"] == "<denied>" and rows[2]["denied_reason"] == "undeclared"
     assert all(row["at"] == NOW for row in rows)
+    # An agent tool call is still one row of its own.
+    with audit.db.transaction() as cur:
+        [tool_row] = cur.execute("SELECT * FROM plugin_activity").fetchall()
+    assert tool_row["tool_call_id"] == tool_call and tool_row["source"] == "agentTool" and tool_row["at"] == NOW
 
 
 def test_a_relative_fs_path_is_spelled_with_forward_slashes(audit: PluginAuditLog) -> None:
@@ -245,8 +255,8 @@ def test_a_relative_fs_path_is_spelled_with_forward_slashes(audit: PluginAuditLo
     _activity(audit, workspace=ws, fs_path="C:\\Users\\me\\project\\.navide\\devmap.json")
     _activity(audit, workspace=ws, fs_path="D:\\elsewhere\\x.json")
     _activity(audit, workspace=ws, fs_path="\\Users\\x")
-    assert [row["fs_path"] for row in _rows(audit, "plugin_activity")] == [
-        ".navide/devmap.json", "<outside-workspace>", "<outside-workspace>",
+    assert [(row["fs_path"], row["count"]) for row in _rows(audit, "plugin_activity")] == [
+        (".navide/devmap.json", 1), ("<outside-workspace>", 2),
     ]
 
 
@@ -830,7 +840,8 @@ def test_totals_and_lists_cover_the_7_day_window_and_daily_every_day_kept(audit:
     assert report["window"] == {"from": NOW - 7 * DAY_MS, "to": NOW}
     assert report["totals"] == {"calls": 6, "denied": 1, "errors": 1}
     assert report["files"] == [
-        {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "error",
+        # A failed call keeps no path: the plugin wrote it (final review part 2, H1).
+        {"path": "<failed>", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "error",
          "count": 1, "lastAt": NOW - DAY_MS},
         {"path": "src/a.py", "address": "fs.readFile", "workspace": "/Users/me/project", "outcome": "allowed",
          "count": 3, "lastAt": NOW - 2 * DAY_MS},
