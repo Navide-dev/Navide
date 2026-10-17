@@ -112,6 +112,19 @@ def test_stability_cap_applies_to_description_and_schema() -> None:
     assert tools.validate_agent_tools(manifest) == []
 
 
+def test_neither_the_tool_count_nor_the_whole_declaration_is_limited() -> None:
+    def tool(index: int, size: int) -> dict[str, Any]:
+        return {"name": f"devmap_t{index}", "method": "devmap.read", "risk": "read", "title": "T",
+                "description": "x" * size, "inputSchema": {"type": "object"}}
+
+    def manifest(items: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"id": "nerdtechnic.devmap", "backend": {"methods": ["devmap.read"], "agentTools": items}}
+
+    many = [tool(i, 600 * 1024) for i in range(2)]
+    assert tools.validate_agent_tools(manifest(many)) == []
+    assert tools.validate_agent_tools(manifest([tool(i, 100) for i in range(500)])) == []
+
+
 def test_schema_fragment_matches_the_validator_constants() -> None:
     fragment = _load("manifest-agent-tools.fragment.schema.json")["$defs"]["agentTool"]
     assert fragment["properties"]["timeoutMs"] == {
@@ -121,10 +134,22 @@ def test_schema_fragment_matches_the_validator_constants() -> None:
     assert fragment["required"] == list(tools.AGENT_TOOL_REQUIRED_FIELDS)
 
 
-def test_manifest_schema_still_refuses_agent_tools_until_b1a() -> None:
-    schema = json.loads((FIXTURES.parent / "plugin-manifest-v2.schema.json").read_text(encoding="utf-8"))
-    assert schema["$defs"]["backend"]["additionalProperties"] is False
-    assert "agentTools" not in schema["$defs"]["backend"]["properties"]
+def test_manifest_schema_accepts_agent_tools_exactly_as_the_fragment() -> None:
+    # B1-a turned the fragment on (contract section 2.6); both schema copies
+    # must carry it verbatim, apart from the field's description.
+    fragment = _load("manifest-agent-tools.fragment.schema.json")
+    for path in (
+        FIXTURES.parent / "plugin-manifest-v2.schema.json",
+        FIXTURES.parents[2] / "packages/plugin-contracts/src/schemas/plugin-manifest-v2.schema.json",
+    ):
+        schema = json.loads(path.read_text(encoding="utf-8"))
+        backend = schema["$defs"]["backend"]
+        assert backend["additionalProperties"] is False
+        field = dict(backend["properties"]["agentTools"])
+        field.pop("description")
+        assert field == fragment["backendProperties"]["agentTools"]
+        assert schema["$defs"]["agentTool"] == fragment["$defs"]["agentTool"]
+        assert schema["$defs"]["agentToolText"] == fragment["$defs"]["agentToolText"]
 
 
 # ── disclosure ──────────────────────────────────────────────────────────────
@@ -199,3 +224,103 @@ def test_audit_and_activity_ddl_is_valid_sqlite() -> None:
 def test_approval_kinds_and_decide_action() -> None:
     assert tools.APPROVAL_KINDS == ("skill", "plugin-install", "plugin-update", "plugin-rollback", "plugin-remove")
     assert tools.PLUGIN_APPROVAL_DECIDE_ACTION == "plugins.agent_request.decide"
+
+
+# ── chunked transfer of results and arguments (no size cap, section 4.4) ────
+
+_CHUNKING = _load("payload-chunking.json")
+
+
+def test_chunking_constants_match_the_shared_fixture() -> None:
+    assert {
+        "chunkBytes": tools.AGENT_TOOL_CHUNK_BYTES,
+        "wireResultChunkMethod": tools.BACKEND_WIRE_RESULT_CHUNK_METHOD,
+        "wireResultChunksKey": tools.BACKEND_WIRE_RESULT_CHUNKS_KEY,
+        "wireArgumentChunkMethod": tools.BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+        "wireArgumentChunksKey": tools.BACKEND_WIRE_ARGUMENT_CHUNKS_KEY,
+        "wsResultChunkMessage": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+        "wsRequestChunkEvent": tools.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+        "invalidCode": tools.AGENT_TOOL_CHUNKS_INVALID,
+        "wsProgressMessage": tools.AGENT_CAPABILITY_PROGRESS_MESSAGE,
+        "chunkIdleMs": tools.AGENT_TOOL_CHUNK_IDLE_MS,
+        "timeoutReasons": list(tools.AGENT_TOOL_TIMEOUT_REASONS),
+        "progressPhases": list(tools.AGENT_TOOL_PROGRESS_PHASES),
+    } == _CHUNKING["constants"]
+    assert tools.AGENT_TOOL_CHUNKS_INVALID in tools.AGENT_TOOL_CALL_ERROR_CODES
+
+
+def test_a_fully_escaped_piece_fits_the_backend_ws_message_limit() -> None:
+    # uvicorn's default ws_max_size (16 MiB); __main__.py does not override it.
+    from uvicorn.config import Config
+
+    worst = json.dumps(
+        {"type": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE, "id": "x" * 64,
+         "payload": {"request_id": "x" * 64, "seq": tools.MAX_SAFE_INTEGER, "data": "\u0001" * tools.AGENT_TOOL_CHUNK_BYTES}},
+        separators=(",", ":"),
+    )
+    assert len(worst.encode("utf-8")) < Config(app=None).ws_max_size
+
+
+@pytest.mark.parametrize("case", _CHUNKING["splits"], ids=lambda c: c["name"])
+def test_split_payload_text(case: dict[str, Any]) -> None:
+    pieces = tools.split_agent_tool_payload_text(case["text"], case["maxBytes"])
+    assert pieces == case["expected"]
+    assert all(tools.utf8_byte_length(p) <= case["maxBytes"] for p in pieces)
+
+
+def test_split_refuses_a_piece_size_that_cannot_hold_every_code_point() -> None:
+    with pytest.raises(ValueError):
+        tools.split_agent_tool_payload_text("abc", 3)
+
+
+@pytest.mark.parametrize("case", _CHUNKING["reassembly"], ids=lambda c: c["name"])
+def test_reassemble_payload_text(case: dict[str, Any]) -> None:
+    assert tools.reassemble_agent_tool_payload_text(case["chunks"], case["summary"], case["chunkBytes"]) == case["expected"]
+
+
+@pytest.mark.parametrize("case", _CHUNKING["arrival"], ids=lambda c: c["name"])
+def test_each_piece_is_checked_on_arrival(case: dict[str, Any]) -> None:
+    seen: list[dict[str, Any]] = []
+    short_seen = False
+    for data in case["pieces"]:
+        result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+        seen.append(result)
+        if not result["ok"]:
+            break
+        short_seen = result["short"]
+    assert seen == case["expected"]
+
+
+@pytest.mark.parametrize("case", _CHUNKING["arguments"], ids=lambda c: c["name"])
+def test_arguments_are_cut_from_the_shared_compact_spelling(case: dict[str, Any]) -> None:
+    text = tools.agent_tool_payload_text(case["arguments"])
+    assert text == case["text"]
+    pieces = tools.split_agent_tool_payload_text(text, case["maxBytes"])
+    assert pieces == case["expected"]
+    joined = tools.reassemble_agent_tool_payload_text(
+        [{"seq": seq, "data": data} for seq, data in enumerate(pieces)],
+        {"chunks": len(pieces), "bytes": tools.utf8_byte_length(text)},
+        case["maxBytes"],
+    )
+    assert json.loads(joined["text"]) == case["arguments"]
+
+
+@pytest.mark.parametrize("case", _CHUNKING["argumentsDigest"], ids=lambda c: c["name"])
+def test_arguments_digest_is_the_audit_args_fields(case: dict[str, Any]) -> None:
+    assert tools.agent_tool_arguments_digest(case["arguments"]) == (case["sha256"], case["bytes"])
+
+
+@pytest.mark.parametrize("direction", ["result", "arguments"])
+def test_a_10_mib_value_round_trips_with_no_cap(direction: str) -> None:
+    value = {"rows": [f"row {i} 中文 😀 " + "x" * 230 for i in range(42_000)]}
+    text = tools.agent_tool_payload_text(value)
+    size = tools.utf8_byte_length(text)
+    assert size > 10 * 1_048_576
+    pieces = tools.split_agent_tool_payload_text(text)
+    assert all(tools.utf8_byte_length(p) <= tools.AGENT_TOOL_CHUNK_BYTES for p in pieces)
+    received = [{"seq": seq, "data": data} for seq, data in enumerate(pieces)][::-1]
+    joined = tools.reassemble_agent_tool_payload_text(received, {"chunks": len(pieces), "bytes": size})
+    assert joined == {"ok": True, "text": text}
+    assert hashlib.sha256(joined["text"].encode()).digest() == hashlib.sha256(text.encode()).digest()
+    if direction == "arguments":
+        assert tools.agent_tool_arguments_digest(json.loads(joined["text"]))[1] >= size
