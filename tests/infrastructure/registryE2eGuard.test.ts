@@ -13,7 +13,9 @@ import { repositoryTestFiles } from '../support/testInventory'
 const SELF = resolve(__filename)
 
 /** The source without its comments (line and block); string and template
- *  literals are kept as they are, so a `//` inside a URL stays code. */
+ *  literals are kept as they are, so a `//` inside a URL stays code. Known
+ *  limit: regex literals are not parsed, so a quote or `//` inside one can
+ *  make the rest of that line read as a string or a comment. */
 function stripComments(source: string): string {
   let out = ''
   let i = 0
