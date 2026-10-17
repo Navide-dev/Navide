@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest'
+import type { ResourceViolation } from './pluginBackendResourceWatchdog'
 import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -15220,7 +15221,7 @@ describe('third-party workspace filesystem (real package bridge, port and grant 
       promptConsent: async () => true,
       promptWorkspaceWrite,
       filesystemPort: () => mgr.createWorkspaceFilesystemPort(),
-      watchResources: () => ({ dispose: () => undefined, sample: async () => null }),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     })
     const host = new FakeBrowserWindow()
     try {
@@ -15358,7 +15359,7 @@ describe('third-party backend shell broker (real package bridge, port and grant 
       probe: { platform: 'darwin', sandboxExec: () => '/usr/bin/sandbox-exec', bubblewrap: () => null },
       promptConsent: async () => true,
       shellPort: () => mgr.createThirdPartyShellPort(),
-      watchResources: () => ({ dispose: () => undefined, sample: async () => null }),
+      watchResources: () => ({ dispose: () => undefined, sample: async () => null, terminate: async (item: ResourceViolation) => item, keepRunning: () => 0 }),
     })
     const host = new FakeBrowserWindow()
     try {
