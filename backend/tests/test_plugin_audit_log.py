@@ -465,6 +465,10 @@ def test_a_failed_table_setup_leaves_the_audit_off_and_says_why(
 
 
 @pytest.mark.serial
+# ~1100 short transactions: seconds on macOS/Linux, but each commit has a high
+# fixed cost on Windows runners (64 s to over 90 s seen), past the suite's
+# per-test timeout. The bound under test is per transaction, not total time.
+@pytest.mark.timeout(600)
 def test_pruning_500k_rows_never_holds_the_database_for_long(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Review of #349 (H1): retention runs in batches, each a short transaction."""
     import contextlib
