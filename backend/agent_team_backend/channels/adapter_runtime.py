@@ -349,7 +349,9 @@ async def _download(
             if declared.isdigit() and int(declared) > max_bytes:
                 raise MediaTooLarge(f"{declared} bytes")
             size = 0
-            fh = await asyncio.to_thread(open, dest, "wb")
+            # Opened on the loop, not in a worker thread: a timeout landing while a thread is
+            # opening would leave a handle nobody closes, and Windows then cannot delete dest.
+            fh = open(dest, "wb")  # noqa: ASYNC230
             try:
                 async for chunk in resp.aiter_bytes():
                     size += len(chunk)
