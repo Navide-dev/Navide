@@ -190,6 +190,22 @@ function applyDeps(): PluginRequestApplyDeps {
       if (flow.error.value) throw new Error(flow.error.value)
     },
     async rollback(pluginId: string): Promise<void> {
+      // The same confirmation the Extensions pane asks before a rollback.
+      const row = (await plugins().listInstalled()).find((p) => p.id === pluginId)
+      const confirmed = await notify.confirm(
+        row?.rollbackKind === 'factory'
+          ? t('settings.extensions.rollback.confirmFactory', { id: pluginId })
+          : t('settings.extensions.rollback.confirmPrevious', {
+              id: pluginId,
+              version: row?.rollbackToVersion ?? t('settings.extensions.rollback.previousVersion'),
+            }),
+        {
+          title: t('settings.extensions.rollback.title'),
+          confirmText: t('settings.extensions.rollback.confirm'),
+          danger: true,
+        },
+      )
+      if (!confirmed) return  // cancelled: nothing rolled back, the request finishes not-applied
       await plugins().rollback(pluginId)
       await inventory.refresh()
     },
@@ -262,8 +278,11 @@ onMounted(() => {
   offs.push(props.backend.on(PLUGIN_APPROVAL_REQUEST_EVENT, (raw) => enqueue(raw as PluginAgentRequest)))
   offs.push(props.backend.on(PLUGIN_APPROVAL_RESOLVED_EVENT, (raw) => {
     const { approval_id: approvalId } = raw as { approval_id: string }
-    // The request this window is carrying out stays until its own result shows.
-    if (approvalId !== busyId.value && outcome.value === null) drop(approvalId)
+    // The request this window is carrying out stays until its own result shows,
+    // and a shown failed result stays until dismissed; any other request goes.
+    if (approvalId === busyId.value) return
+    if (outcome.value !== null && approvalId === current.value?.approval_id) return
+    drop(approvalId)
   }))
   void refresh()
 })

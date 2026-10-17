@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import PluginAgentRequestDialog, { type PluginAgentRequest } from '../PluginAgentRequestDialog.vue'
-import { i18n } from '@navide/plugin-ui/foundation'
+import { i18n, useNotify } from '@navide/plugin-ui/foundation'
 import { createMockBackend } from '../../composables/__tests__/mockBackend'
 import { computeDisclosure } from '../../../../shared/pluginDisclosure'
 
@@ -141,6 +141,56 @@ describe('PluginAgentRequestDialog (B2)', () => {
     expect(wrapper.find('[data-testid="plugin-request-error"]').text()).toContain('not-applied')
   })
 
+  const rollbackRequest = () => request({
+    kind: 'plugin-rollback',
+    target: { id: 'acme.indexer', namespace: 'acme', name: 'indexer', version: '1.1.0', fromVersion: '1.2.0' },
+  })
+
+  async function approveRollback(mock: ReturnType<typeof createMockBackend>): Promise<VueWrapper> {
+    plugins.listInstalled.mockResolvedValue([
+      { id: 'acme.indexer', packageVersion: '1.2.0', rollbackKind: 'previous', rollbackToVersion: '1.1.0' },
+    ])
+    mock.setResponse('plugins.agent_requests.list', { requests: [rollbackRequest()] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...rollbackRequest(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...rollbackRequest(), status: 'failed' } })
+    const w = await open(mock)
+    await w.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    return w
+  }
+
+  it('asks the Extensions rollback confirmation, and reports not-applied when the user cancels it', async () => {
+    const mock = createMockBackend('connected')
+    wrapper = await approveRollback(mock)
+    const dialog = useNotify().dialog.value!
+    expect(dialog).toMatchObject({
+      kind: 'confirm',
+      danger: true,
+      title: i18n.global.t('settings.extensions.rollback.title'),
+      confirmText: i18n.global.t('settings.extensions.rollback.confirm'),
+      message: i18n.global.t('settings.extensions.rollback.confirmPrevious', { id: 'acme.indexer', version: '1.1.0' }),
+    })
+    expect(mock.sent.some((s) => s.type === 'plugins.agent_request.finish')).toBe(false)  // still waiting
+    useNotify().resolveDialog(false)
+    await flushPromises()
+    expect(plugins.rollback).not.toHaveBeenCalled()
+    const finish = mock.sent.find((s) => s.type === 'plugins.agent_request.finish')!
+    expect(finish.payload).toMatchObject({ approval_id: 'r1', status: 'failed', error: 'not-applied' })
+  })
+
+  it('rolls back only once the user confirms', async () => {
+    const mock = createMockBackend('connected')
+    wrapper = await approveRollback(mock)
+    expect(plugins.rollback).not.toHaveBeenCalled()
+    plugins.listInstalled.mockResolvedValue([{ id: 'acme.indexer', packageVersion: '1.1.0' }])
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...rollbackRequest(), status: 'completed' } })
+    useNotify().resolveDialog(true)
+    await flushPromises()
+    expect(plugins.rollback).toHaveBeenCalledWith('acme.indexer')
+    const finish = mock.sent.find((s) => s.type === 'plugins.agent_request.finish')!
+    expect(finish.payload).toMatchObject({ approval_id: 'r1', status: 'completed' })
+  })
+
   it('rejects with a reject-bound confirmation and touches nothing', async () => {
     const mock = createMockBackend('connected')
     mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
@@ -159,6 +209,26 @@ describe('PluginAgentRequestDialog (B2)', () => {
     mock.setResponse('plugins.agent_requests.list', { requests: [request()] })
     wrapper = await open(mock)
     mock.emit('plugins.agent_request_resolved', { approval_id: 'r1', status: 'rejected' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
+  })
+
+  it('drops another queued request resolved elsewhere while a failed result is still shown', async () => {
+    plugins.prepareInstall.mockRejectedValue(new Error('download failed'))
+    const mock = createMockBackend('connected')
+    mock.setResponse('plugins.agent_requests.list', { requests: [request(), request({ approval_id: 'r2' })] })
+    mock.setResponse('plugins.agent_request.decide', { approval: { ...request(), status: 'applying' } })
+    mock.setResponse('plugins.agent_request.finish', { approval: { ...request(), status: 'failed' } })
+    wrapper = await open(mock)
+    await wrapper.find('[data-testid="plugin-request-approve"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="plugin-request-error"]').exists()).toBe(true)
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r1', status: 'failed' })
+    mock.emit('plugins.agent_request_resolved', { approval_id: 'r2', status: 'rejected' })
+    await flushPromises()
+    // The failed result stays until dismissed; r2 no longer waits behind it.
+    expect(wrapper.find('[data-testid="plugin-request-error"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="plugin-request-dismiss"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('[data-testid="plugin-request-dialog"]').exists()).toBe(false)
   })

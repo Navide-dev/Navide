@@ -2479,20 +2479,20 @@ export function registerPluginIpc(
 
   // What the remove dialog discloses: whether this plugin's native backend left
   // private data on this device, how large it is and where.
-  // The installed (active) version's disclosure, for the agent request card's
-  // permission diff (B2): from the installed manifest, never Registry data.
-  // Null when nothing is installed or the package is Manifest v1.
-  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
-    assertAuthorized(event)
-    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
-  })
-
   ipcMain.handle('plugins:nativeBackendData', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
     const root = options.nativeBackendDataRoot
     if (!root) return { exists: false, bytes: 0, path: '' }
     return inspectNativeBackendData(root, id)
+  })
+
+  // The installed (active) version's disclosure, for the agent request card's
+  // permission diff (B2): from the installed manifest, never Registry data.
+  // Null when nothing is installed or the package is Manifest v1.
+  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
