@@ -741,3 +741,42 @@ async def test_a_restarted_task_prunes_to_the_end_after_a_cancel(
     with db.transaction() as cur:
         assert cur.execute("SELECT COUNT(*) FROM plugin_activity").fetchone()[0] == 0
         assert cur.execute("SELECT SUM(count) FROM plugin_activity_daily").fetchone()[0] == rows
+
+
+# ── D-e: the call path never digests arguments (N2) ─────────────────────────
+
+
+async def test_recording_a_10_mib_call_does_not_hold_the_event_loop(audit: PluginAuditLog) -> None:
+    """The digest of large arguments is computed by flush, off the event loop."""
+    import asyncio
+
+    arguments = {"blob": "x" * (10 * 1024 * 1024)}
+    late: list[float] = []
+
+    async def ticker() -> None:
+        for _ in range(20):
+            started = time.perf_counter()
+            await asyncio.sleep(0.005)
+            late.append(time.perf_counter() - started - 0.005)
+
+    tick = asyncio.create_task(ticker())
+    await asyncio.sleep(0)
+    started = time.perf_counter()
+    for _ in range(5):
+        assert _call(audit, arguments=arguments) is not None
+    record_s = time.perf_counter() - started
+    await tick
+    assert record_s < 0.05, f"5 records of 10 MiB took {record_s:.3f}s on the loop"
+    assert max(late) < 0.05, f"a 5 ms sleep came back {max(late):.3f}s late"
+    await asyncio.to_thread(audit.flush)
+    rows = _rows(audit, "plugin_tool_calls")
+    assert [r["args_bytes"] for r in rows] == [contract.agent_tool_arguments_digest(arguments)[1]] * 5
+
+
+def test_arguments_that_are_not_json_inside_are_dropped_at_flush(audit: PluginAuditLog) -> None:
+    assert _call(audit, arguments={"ok": 1}) is not None
+    assert _call(audit, arguments={"bad": object()}) is not None
+    assert _call(audit, arguments={"ok": 2}) is not None
+    assert [r["args_bytes"] for r in _rows(audit, "plugin_tool_calls")] == [
+        contract.agent_tool_arguments_digest({"ok": 1})[1], contract.agent_tool_arguments_digest({"ok": 2})[1],
+    ]

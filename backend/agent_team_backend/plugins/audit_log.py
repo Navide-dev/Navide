@@ -247,6 +247,20 @@ def _yield_the_lock() -> None:
     time.sleep(0)
 
 
+#: Where a queued tool-call row holds its arguments until flush digests them.
+_ARGS_AT = 12
+
+
+def _with_digest(row: tuple[Any, ...]) -> tuple[Any, ...] | None:
+    """A queued tool-call row with its arguments replaced by their digest."""
+    try:
+        args_sha256, args_bytes = _arguments_digest(row[_ARGS_AT])
+    except Exception as err:  # noqa: BLE001 - not JSON: the row is dropped, never raised
+        log.warning("plugin audit: tool call %s not recorded: %s", row[0], err)
+        return None
+    return (*row[:_ARGS_AT], args_sha256, args_bytes, *row[_ARGS_AT + 2:])
+
+
 class _PruneStopped(Exception):
     """A prune asked to stop between two batches (shutdown)."""
 
@@ -343,7 +357,11 @@ class PluginAuditLog:
                 raise ValueError(f"unknown outcome {outcome!r}")
             if risk not in TOOL_RISKS:
                 raise ValueError(f"unknown risk {risk!r}")
-            args_sha256, args_bytes = _arguments_digest(arguments)
+            # Tool arguments are a JSON object. The digest walks all of it, so
+            # it is computed by flush, off the event loop (#365 review N2);
+            # arguments that turn out not to be JSON inside are dropped there.
+            if not isinstance(arguments, dict):
+                raise ValueError("arguments must be a JSON object")
             at = self._at(at_ms)
             is_pane = caller_kind == "pane"
             caller_ws = str(caller_workspace) if is_pane else ""
@@ -353,7 +371,7 @@ class PluginAuditLog:
                 str(pane_id) if is_pane else "", str(pane_name) if is_pane else "",
                 caller_ws, target_ws, int(bool(caller_ws) and caller_ws != target_ws),
                 str(plugin_id), str(plugin_version), str(tool), risk,
-                args_sha256, args_bytes, outcome, "" if outcome == "ok" else (_code(error_code, ERROR_CODES) or OTHER),
+                arguments, None, outcome, "" if outcome == "ok" else (_code(error_code, ERROR_CODES) or OTHER),
                 _non_negative_int(duration_ms), _result_bytes(result_bytes),
             )
             with self._lock:
@@ -413,6 +431,7 @@ class PluginAuditLog:
             activity, self._activity = self._activity, []
         if not calls and not activity:
             return
+        calls = [row for row in map(_with_digest, calls) if row is not None]
         try:
             with self.db.transaction() as cur:
                 cur.executemany(
