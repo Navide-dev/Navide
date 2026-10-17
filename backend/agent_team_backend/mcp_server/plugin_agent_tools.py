@@ -63,6 +63,7 @@ from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_CALL_ERROR_CODES,
     AGENT_TOOL_CHUNK_BYTES,
     AGENT_TOOL_TIMEOUT_REASONS,
+    AGENT_TOOLS_RESULT_HELPER_EVENT,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
@@ -216,6 +217,22 @@ def wrap_result(entry: dict[str, Any], result: Any) -> str:
 
 _result_worker = ResultWorker()
 
+
+def _publish_helper_state(state: dict[str, Any]) -> None:
+    """Tell the Host the helper's state (resource usage shows it, the first
+    `unavailable` raises a notice), on the Host session events already use."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(app.unicast_host(make_event(AGENT_TOOLS_RESULT_HELPER_EVENT, state)))
+
+
+_result_worker.on_state = _publish_helper_state
+
 #: The largest result the backend handled before DB9 (one frame, 1 MiB). When
 #: the helper process cannot start, a result up to this size is handled in the
 #: backend as it was then; a larger one is refused with the reason. Where the
@@ -231,7 +248,10 @@ class _HelperFailed(Exception):
 
 
 def _disclose_helper_unavailable(name: str, detail: str) -> None:
-    message = f"the agent tool result helper process could not be started ({detail}); results over 1 MiB are refused until it can"
+    message = (
+        f"the agent tool result helper process cannot be used ({detail}); results over 1 MiB are refused "
+        "until it can, and Navide retries in about a minute"
+    )
     _log.error("plugin tool result %s: %s", name, message)
     try:
         from agent_team_backend import error_ledger
@@ -252,7 +272,10 @@ async def _large_result_text(name: str, entry: dict[str, Any], pieces: list[str]
     try:
         return await _result_worker.wrap(entry, pieces)
     except ResultWorkerUnavailable as error:
-        _disclose_helper_unavailable(name, str(error))
+        # Disclosed when a start was tried and failed, not for every result
+        # while waiting for the next try.
+        if error.attempted:
+            _disclose_helper_unavailable(name, error.detail)
         if size > IN_PROCESS_RESULT_BYTES:
             raise _HelperFailed("unavailable", size) from None
     except ResultWorkerError as error:
@@ -269,12 +292,10 @@ def _helper_failed_message(failed: _HelperFailed) -> str:
     what = {
         "crashed": "stopped while handling it",
         "timeout": f"did not answer within {IDLE_S:g} s",
-        "unavailable": "could not be started (results up to 1 MiB are still delivered)",
+        "unavailable": "cannot be used right now (results up to 1 MiB are still delivered)",
     }.get(failed.reason, "failed")
-    return (
-        f"The Navide plugin result ({failed.size} bytes) was not delivered: Navide's result helper process {what}. "
-        "The next call starts it again."
-    )
+    again = "Navide retries starting it in about a minute." if failed.reason == "unavailable" else "The next call starts it again."
+    return f"The Navide plugin result ({failed.size} bytes) was not delivered: Navide's result helper process {what}. {again}"
 
 
 # ── snapshot validation and registration ────────────────────────────────────

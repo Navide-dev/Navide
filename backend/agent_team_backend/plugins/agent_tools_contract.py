@@ -392,6 +392,10 @@ BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = "io.navide/argumentChunks"
 AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = "agent.capability.result_chunk"
 #: WebSocket event, backend -> Host, one per argument piece, sent before ``agent.capability.request``.
 AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = "agent.capability.request_chunk"
+#: backend → Host event: the state of the helper process that handles results
+#: in pieces, ``{state: "idle" | "ready" | "unavailable", lastError, since}``
+#: (4.4, R2), sent on every change.
+AGENT_TOOLS_RESULT_HELPER_EVENT = "agent.tools.result_helper"
 #: WebSocket request, Host -> backend: the call is alive (keeps the backend's wait running).
 AGENT_CAPABILITY_PROGRESS_MESSAGE = "agent.capability.progress"
 #: Idle timer of a transfer of pieces, restarted by every piece. It detects a

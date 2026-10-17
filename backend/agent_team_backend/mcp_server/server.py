@@ -5260,45 +5260,53 @@ async def _agent_tool_argument_pieces(request: dict[str, Any]) -> tuple[list[str
     are longer than one piece (contract 4.4, A2), else None: sent inline.
 
     The same pieces as ``split_agent_tool_payload_text(agent_tool_payload_text(...))``,
-    built a slice at a time: spelled part by part, encoded a slice at a time,
-    cut on the bytes (each cut steps back off continuation bytes), awaiting
-    between slices."""
+    built as a stream: spelled part by part, encoded a batch at a time, and
+    cut as soon as more than a piece has gathered (each cut steps back off
+    continuation bytes), awaiting between steps. The whole text is never
+    joined, in characters or in bytes."""
     from agent_team_backend.plugins.agent_tools_contract import AGENT_TOOL_CHUNK_BYTES
 
     payload = request.get("payload")
     if not isinstance(payload, dict) or set(payload) != {"arguments"}:
         return None
     turn = _Turn()
-    out = _Spelling()
-    for part in _spell_parts(payload["arguments"]):
-        out.add(part)
-        await turn.maybe_yield()
-    text = out.text()
-    encoded: list[bytes] = []
-    for at in range(0, len(text), 4 * _SPELL_SLICE):
-        part = text[at : at + 4 * _SPELL_SLICE]
+    pieces: list[str] = []
+    pending = bytearray()
+    size = 0
+
+    async def take(text: str) -> None:
+        nonlocal size
         try:
-            encoded.append(part.encode("utf-8"))
+            data = text.encode("utf-8")
         except UnicodeEncodeError:
             # A lone surrogate, which UTF-8 cannot carry, is escaped as the
-            # contract spelling escapes it (character by character, so a slice
+            # contract spelling escapes it (character by character, so a batch
             # at a time gives the same text).
-            encoded.append(_LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", part).encode("utf-8"))
+            data = _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text).encode("utf-8")
+        size += len(data)
+        pending.extend(data)
+        while len(pending) > AGENT_TOOL_CHUNK_BYTES:
+            end = AGENT_TOOL_CHUNK_BYTES
+            while pending[end] & 0xC0 == 0x80:
+                end -= 1
+            pieces.append(pending[:end].decode("utf-8"))
+            del pending[:end]
+            await turn.maybe_yield()
+
+    batch: list[str] = []
+    gathered = 0
+    for part in _spell_parts(payload["arguments"]):
+        batch.append(part)
+        gathered += len(part)
+        if gathered >= _SPELL_SLICE or len(batch) >= 4096:
+            await take("".join(batch))
+            batch, gathered = [], 0
         await turn.maybe_yield()
-    data = b"".join(encoded)
-    if len(data) <= AGENT_TOOL_CHUNK_BYTES:
+    await take("".join(batch))
+    if size <= AGENT_TOOL_CHUNK_BYTES:
         return None
-    pieces: list[str] = []
-    start = 0
-    while len(data) - start > AGENT_TOOL_CHUNK_BYTES:
-        end = start + AGENT_TOOL_CHUNK_BYTES
-        while data[end] & 0xC0 == 0x80:
-            end -= 1
-        pieces.append(data[start:end].decode("utf-8"))
-        start = end
-        await turn.maybe_yield()
-    pieces.append(data[start:].decode("utf-8"))
-    return pieces, len(data)
+    pieces.append(pending.decode("utf-8"))
+    return pieces, size
 
 
 #: Characters escaped or encoded per call when spelling arguments.
@@ -5359,25 +5367,6 @@ def _spelled_key(key: Any) -> str:
     if isinstance(key, str):
         return json.encoder.encode_basestring(key)
     return _spell_small({key: 0})[1:-3]
-
-
-class _Spelling:
-    """Parts of a spelling, joined in batches: one join of millions of parts
-    would hold the loop as long as one large C call."""
-
-    def __init__(self) -> None:
-        self.joined: list[str] = []
-        self.batch: list[str] = []
-
-    def add(self, part: str) -> None:
-        self.batch.append(part)
-        if len(self.batch) == 4096:
-            self.joined.append("".join(self.batch))
-            self.batch = []
-
-    def text(self) -> str:
-        self.joined.append("".join(self.batch))
-        return "".join(self.joined)
 
 
 def _spelled_whole(value: Any) -> str | None:

@@ -12,19 +12,23 @@ Frames on stdin and stdout: an 8-byte big-endian length, then that many bytes.
 A request is a JSON header frame (``{"entry": {...}}``) and the result text
 (UTF-8, ``surrogatepass``). The answer is a JSON header frame (``{"ok": true}``
 or ``{"ok": false, "reason": "json" | "error"}``) and, when ok, the wrapped text.
-While it works the helper writes an empty frame every ``HEARTBEAT_S`` seconds;
-the backend waits ``IDLE_S`` for each frame, so a helper that crashes or hangs
-is given up on in bounded time (a time window, not a size limit) and the
-result is handled in the backend process instead.
+Once its imports are done the helper writes ``{"ready": true}``: a helper that
+has not said so within ``READY_S``, or fails before it has answered once, is
+counted as unavailable. While it works it writes an empty frame every
+``HEARTBEAT_S`` seconds; the backend waits ``IDLE_S`` for each frame, so a
+helper that crashes or hangs is given up on in bounded time (a time window,
+not a size limit).
 
 Started as ``<backend> --agent-tool-result-worker`` (``__main__``) or, from a
-source checkout, by running this file. It exits when stdin closes, so it never
-outlives the backend.
+source checkout, by running this file, in a session of its own. It exits when
+stdin closes, and when the backend (``PARENT_ENV``) is gone it ends its whole
+process tree, so it never outlives the backend.
 """
 
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
 import math
 import os
@@ -44,8 +48,13 @@ IDLE_S = 30.0
 STOP_GRACE_S = 2.0
 #: Seconds after a failed start before the next start is tried (each try forks).
 RETRY_START_S = 60.0
+#: Seconds a new helper has to say it is ready.
+READY_S = 10.0
+#: The backend's pid, handed to the helper: it ends itself when that is gone.
+PARENT_ENV = "NAVIDE_RESULT_HELPER_PARENT"
 #: Characters encoded, and bytes decoded, per step on the event loop.
 _SLICE = 1 << 18
+_READY = b'{"ready": true}'
 
 
 def strict_loads(text: str) -> Any:
@@ -77,6 +86,23 @@ def _write_frame(stream: BinaryIO, data: bytes) -> None:
     stream.write(data)
 
 
+def _end_when_parent_goes(parent: int, group: int) -> None:
+    """Watch the backend; once it is gone, kill this helper's whole tree.
+
+    A helper that is idle sees its stdin close when the backend dies; one
+    that is busy or hung does not, and lives in a session of its own, so it
+    checks."""
+    from agent_team_backend import osplat
+
+    while True:
+        time.sleep(HEARTBEAT_S)
+        if not osplat.process_tree.is_alive(parent):
+            try:
+                osplat.process_tree.kill_group(group, force=True)
+            finally:
+                os._exit(1)
+
+
 def main() -> int:
     """Serve requests until stdin closes."""
     # Frames go to the original stdout; anything else written to fd 1 from
@@ -84,7 +110,16 @@ def main() -> int:
     out = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
     stdin = sys.stdin.buffer
+    parent = os.environ.get(PARENT_ENV, "")
+    if parent.isdigit():
+        # The group the backend started: this process, or under a onefile
+        # bootloader that process.
+        group = os.getppid() if getattr(sys, "frozen", False) else os.getpid()
+        threading.Thread(target=_end_when_parent_goes, args=(int(parent), group), daemon=True).start()
     from agent_team_backend.mcp_server.plugin_agent_tools import wrap_result
+
+    _write_frame(out, _READY)
+    out.flush()
 
     def work(header: bytes, text: bytes, done: list[tuple[dict[str, Any], bytes | None]]) -> None:
         try:
@@ -128,13 +163,17 @@ class ResultWorkerError(Exception):
     def __init__(self, reason: str, detail: str = "") -> None:
         super().__init__(f"{reason}: {detail}" if detail else reason)
         self.reason = reason
+        self.detail = detail
 
 
 class ResultWorkerUnavailable(ResultWorkerError):
-    """The helper process could not be started at all."""
+    """The helper process cannot be used: it did not start, did not say it
+    was ready, or failed before answering once. ``attempted`` is true when
+    this call tried a start (false while waiting for the retry)."""
 
-    def __init__(self, detail: str = "") -> None:
+    def __init__(self, detail: str = "", *, attempted: bool) -> None:
         super().__init__("unavailable", detail)
+        self.attempted = attempted
 
 
 class InvalidResult(Exception):
@@ -142,13 +181,34 @@ class InvalidResult(Exception):
 
 
 class ResultWorker:
-    """The backend's side: one long-lived helper, one request at a time."""
+    """The backend's side: one long-lived helper, one request at a time.
+
+    ``state`` is ``idle`` (no helper running), ``ready`` or ``unavailable``,
+    with ``last_error`` and ``since`` (ms); ``on_state`` hears every change."""
 
     def __init__(self) -> None:
         self._process: asyncio.subprocess.Process | None = None
         self._lock: asyncio.Lock | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._start_failed: tuple[float, str] | None = None
+        self._answered = False
+        self.state = "idle"
+        self.last_error = ""
+        self.since = int(time.time() * 1000)
+        self.on_state: Any = None
+
+    def snapshot(self) -> dict[str, Any]:
+        return {"state": self.state, "lastError": self.last_error, "since": self.since}
+
+    def _set_state(self, state: str, error: str = "") -> None:
+        if (state, error) == (self.state, self.last_error):
+            return
+        self.state, self.last_error, self.since = state, error, int(time.time() * 1000)
+        if self.on_state is not None:
+            try:
+                self.on_state(self.snapshot())
+            except Exception:  # noqa: BLE001 - a listener never breaks the helper
+                pass
 
     @staticmethod
     def argv() -> list[str]:
@@ -164,63 +224,96 @@ class ResultWorker:
             self._loop = loop
             self._lock = asyncio.Lock()
 
+    def _unavailable(self, detail: str) -> ResultWorkerUnavailable:
+        """A start that did not give a working helper: no new start for RETRY_START_S."""
+        self.stop()
+        self._start_failed = (time.monotonic() + RETRY_START_S, detail)
+        self._set_state("unavailable", detail)
+        return ResultWorkerUnavailable(detail, attempted=True)
+
     async def _started(self) -> asyncio.subprocess.Process:
         self._bind()
         process = self._process
         if process is not None and process.returncode is None:
             return process
         if self._start_failed is not None and time.monotonic() < self._start_failed[0]:
-            raise ResultWorkerUnavailable(self._start_failed[1])
+            raise ResultWorkerUnavailable(self._start_failed[1], attempted=False)
         try:
             # Its own session (process group on POSIX), so stop() ends the
             # whole tree: a onefile build runs Python under a bootloader.
-            self._process = await asyncio.create_subprocess_exec(
+            process = await asyncio.create_subprocess_exec(
                 *self.argv(),
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 limit=_SLICE,
                 start_new_session=True,
+                env={**os.environ, PARENT_ENV: str(os.getpid())},
             )
         except OSError as error:
-            self._start_failed = (time.monotonic() + RETRY_START_S, str(error))
-            raise ResultWorkerUnavailable(str(error)) from error
+            raise self._unavailable(f"it could not be started: {error}") from error
+        self._process = process
+        from agent_team_backend import osplat
+
+        try:
+            # The tree stop() can end whole (a kill-on-close job on Windows).
+            osplat.process_tree.contain(process.pid)
+        except OSError:
+            pass
+        assert process.stdout is not None
+        try:
+            ready = await self._frame(process.stdout, READY_S)
+        except (asyncio.TimeoutError, TimeoutError):
+            raise self._unavailable(f"it did not say it was ready within {READY_S:g} s") from None
+        except (asyncio.IncompleteReadError, OSError) as error:
+            raise self._unavailable(f"it exited before it was ready ({type(error).__name__})") from None
+        if ready != _READY:
+            raise self._unavailable("it answered something other than ready")
         self._start_failed = None
-        return self._process
+        self._answered = False
+        self._set_state("ready")
+        return process
 
     @staticmethod
-    async def _frame(stream: asyncio.StreamReader) -> bytes:
-        """The next non-empty frame; each wait is bounded by IDLE_S, which the
-        helper's empty frames (it is still working) restart."""
+    async def _frame(stream: asyncio.StreamReader, window: float | None = None) -> bytes:
+        """The next non-empty frame; each wait is bounded by ``window`` (IDLE_S),
+        which the helper's empty frames (it is still working) restart."""
+        window = IDLE_S if window is None else window
         while True:
-            size = int.from_bytes(await asyncio.wait_for(stream.readexactly(8), IDLE_S), "big")
+            size = int.from_bytes(await asyncio.wait_for(stream.readexactly(8), window), "big")
             if size:
-                return await asyncio.wait_for(stream.readexactly(size), IDLE_S)
+                return await asyncio.wait_for(stream.readexactly(size), window)
 
     def stop(self) -> None:
         """End the helper; the next request starts a new one.
 
         Its stdin is closed first, so a helper that is waiting exits by
         itself (a onefile bootloader then removes what it unpacked); after
-        STOP_GRACE_S the whole process tree is killed, whatever it is doing."""
+        STOP_GRACE_S its whole process tree is killed, whatever it is doing,
+        and also when it has exited (what it started may still run)."""
         process, self._process = self._process, None
-        if process is None or process.returncode is not None:
+        if process is None:
             return
+        if self.state == "ready":
+            self._set_state("idle")
         if process.stdin is not None and not process.stdin.is_closing():
             try:
                 process.stdin.close()
             except RuntimeError:
                 pass  # its event loop is gone, and the pipe with it
-        # A timer thread, not the event loop: it runs even if the loop ends first.
-        timer = threading.Timer(STOP_GRACE_S, _kill_tree, args=(process,))
+        # A timer thread, not the event loop: it runs even if the loop ends
+        # first; one still waiting when the backend exits is run then.
+        _stopping.add(process)
+        timer = threading.Timer(STOP_GRACE_S if process.returncode is None else 0, _kill_tree, args=(process,))
         timer.daemon = True
         timer.start()
 
     async def wrap(self, entry: dict[str, Any], pieces: list[str]) -> str:
         """``wrap_result(entry, strict_loads("".join(pieces)))``, computed by the helper.
 
-        Raises InvalidResult when the text is not strict JSON, and
-        ResultWorkerError when the helper cannot answer. The event loop only
-        encodes, writes, reads and decodes, a slice at a time.
+        Raises InvalidResult when the text is not strict JSON,
+        ResultWorkerUnavailable when no working helper can be had, and
+        ResultWorkerError when a helper that has answered before fails. The
+        event loop only encodes, writes, reads and decodes, a slice at a time.
         """
         self._bind()
         assert self._lock is not None
@@ -241,24 +334,30 @@ class ResultWorker:
                 answer = json.loads(await self._frame(process.stdout))
                 if not answer.get("ok"):
                     if answer.get("reason") == "json":
+                        self._answered = True
                         raise InvalidResult
                     raise ResultWorkerError("crashed", f"the helper reported {answer.get('reason')}")
                 data = await self._frame(process.stdout)
-            except InvalidResult:
-                raise
-            except ResultWorkerUnavailable:
-                self.stop()
+                self._answered = True
+            except (InvalidResult, ResultWorkerUnavailable):
                 raise
             except BaseException as error:
                 # A request cut short leaves the pipes mid-frame: start over next time.
-                self.stop()
                 if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
-                    raise ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s") from error
-                if isinstance(error, ResultWorkerError):
+                    failure = ResultWorkerError("timeout", f"nothing for {IDLE_S:g} s")
+                elif isinstance(error, ResultWorkerError):
+                    failure = error
+                elif isinstance(error, Exception):
+                    failure = ResultWorkerError("crashed", f"{type(error).__name__}: {error}")
+                else:
+                    self.stop()
                     raise
-                if isinstance(error, Exception):
-                    raise ResultWorkerError("crashed", f"{type(error).__name__}: {error}") from error
-                raise
+                if not self._answered:
+                    # Never answered once: a helper that cannot work (a broken
+                    # build), not a result that broke it.
+                    raise self._unavailable(f"it failed before answering once ({failure})") from error
+                self.stop()
+                raise failure from error
         parts: list[str] = []
         start = 0
         while len(data) - start > _SLICE:
@@ -272,14 +371,24 @@ class ResultWorker:
         return "".join(parts)
 
 
+#: Helpers stopped whose grace has not run out yet.
+_stopping: set[asyncio.subprocess.Process] = set()
+
+
+@atexit.register
+def _kill_stopping() -> None:
+    for process in list(_stopping):
+        _kill_tree(process)
+
+
 def _kill_tree(process: asyncio.subprocess.Process) -> None:
-    """Kill a helper that has not exited, with every process under it."""
-    if process.returncode is not None:
-        return
+    """Kill a helper with every process under it, also when the helper itself
+    has exited: what it started may still run."""
+    _stopping.discard(process)
     from agent_team_backend import osplat
 
     try:
-        osplat.process_tree.kill_group(process.pid, force=True)
+        osplat.process_tree.end_contained(process.pid)
     except OSError:
         pass
 
