@@ -209,8 +209,11 @@ def wrap_result(entry: dict[str, Any], result: Any) -> str:
 #: schema, never rewritten for validation (contract 2.4).
 _DATA_KEYWORDS = frozenset({"const", "default", "enum", "examples"})
 #: Keywords whose value maps names (property or definition names) to
-#: subschemas: a name such as ``enum`` or ``pattern`` there is a name.
-_SCHEMA_MAPS = frozenset({"properties", "patternProperties", "$defs", "definitions", "dependentSchemas"})
+#: subschemas (draft-07 ``dependencies`` also to name lists): a name such as
+#: ``enum`` or ``pattern`` there is a name.
+_SCHEMA_MAPS = frozenset({
+    "properties", "patternProperties", "$defs", "definitions", "dependentSchemas", "dependencies",
+})
 
 
 def _schema_text_ok(value: Any) -> bool:

@@ -736,6 +736,9 @@ async def test_names_in_schema_maps_are_names_not_keywords(host: FakeHost, monke
     # A property named "enum" is a schema: its description follows the text rule.
     hidden = {"type": "object", "properties": {"enum": {"type": "string", "description": "evil\u202e"}}}
     assert _apply(_snapshot(1, [_entry("devmap_bad", inputSchema=hidden), _entry("devmap_ok")]))["dropped"] == 1
+    # draft-07 dependencies: a schema there is read as a schema, a name list as names.
+    old = {"type": "object", "dependencies": {"enum": {"properties": {"x": {"description": "evil\u202e"}}}, "a": ["b"]}}
+    assert _apply(_snapshot(2, [_entry("devmap_bad", inputSchema=old), _entry("devmap_ok")]))["dropped"] == 1
     # A property named "const" is a schema too: its pattern is never run here,
     # and a property named "$ref" is not a reference.
     schema = {"type": "object", "properties": {
@@ -743,7 +746,7 @@ async def test_names_in_schema_maps_are_names_not_keywords(host: FakeHost, monke
         "$ref": {"type": "string"},
         "d": {"const": {"pattern": "[外部訊息結束]"}},
     }}
-    assert _apply(_snapshot(2, [_entry("devmap_read", inputSchema=schema)]))["registered"] == ["devmap_read"]
+    assert _apply(_snapshot(3, [_entry("devmap_read", inputSchema=schema)]))["registered"] == ["devmap_read"]
     started = time.monotonic()
     await asyncio.wait_for(core.server.call_tool("devmap_read", {"const": "a" * 40 + "!", "$ref": "x"}), 5)
     assert time.monotonic() - started < 2

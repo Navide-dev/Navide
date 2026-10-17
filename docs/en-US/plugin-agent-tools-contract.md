@@ -206,7 +206,8 @@ refusing a call. The sizes are disclosed instead, one field each:
 When the Host sends no valid `meta.resultBytes` (absent, not a non-negative
 integer), the backend never measures the result itself: the size is unknown,
 the agent's result carries no `meta.resultBytes`, the audit `result_bytes` is
-NULL, a warning is logged, and the call still succeeds.
+-1, a warning is logged, and the call still succeeds. In the audit, -1 means
+the Host sent no valid size and 0 means the call has no result.
 
 The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
 the error-code list for older readers but is no longer produced.
