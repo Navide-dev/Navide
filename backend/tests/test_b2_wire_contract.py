@@ -53,8 +53,10 @@ def _kind(value: Any) -> str:
     return "object"
 
 
-def _problems(actual: Any, example: Any, path: str, optional: list[str]) -> list[str]:
+def _problems(actual: Any, example: Any, path: str, optional: list[str], nullable: list[str] = ()) -> list[str]:
     """The same rules as the Host test's shapeProblems."""
+    if actual is None and path in nullable:
+        return []
     if path in FIXTURE["opaque"]:
         return [] if actual is None or isinstance(actual, dict) else [f"{path}: expected an object"]
     if example is None:
@@ -62,7 +64,7 @@ def _problems(actual: Any, example: Any, path: str, optional: list[str]) -> list
     if _kind(actual) != _kind(example):
         return [f"{path or '(root)'}: expected {_kind(example)}, got {_kind(actual)}"]
     if isinstance(example, list):
-        return [] if not example else [p for item in actual for p in _problems(item, example[0], f"{path}[]", optional)]
+        return [] if not example else [p for item in actual for p in _problems(item, example[0], f"{path}[]", optional, nullable)]
     if not isinstance(example, dict):
         return []
     at = (lambda key: f"{path}.{key}" if path else key)
@@ -72,7 +74,7 @@ def _problems(actual: Any, example: Any, path: str, optional: list[str]) -> list
             if at(key) not in optional:
                 problems.append(f"{at(key)}: missing")
             continue
-        problems.extend(_problems(actual[key], value, at(key), optional))
+        problems.extend(_problems(actual[key], value, at(key), optional, nullable))
     return problems
 
 
@@ -80,7 +82,8 @@ def wire_problems(kind: str, message: Any) -> list[str]:
     entries = FIXTURE["messages"].get(kind)
     if not entries:
         return [f"{kind}: no fixture entry"]
-    found = [_problems(message, entry["message"], "", entry.get("optional", [])) for entry in entries]
+    found = [_problems(message, entry["message"], "", entry.get("optional", []), entry.get("nullable", []))
+             for entry in entries]
     return next((p for p in found if not p), min(found, key=len))
 
 
@@ -241,6 +244,37 @@ async def test_every_fixture_action_result_is_accepted(host, audit, pane, name) 
     else:
         assert out == {"ok": False, "error_code": "BUILTIN_PLUGIN",
                        "error": "the bundled Navide plugins are disabled and enabled by the user in Extensions"}
+
+
+def test_the_fixture_accepts_null_only_where_an_entry_lists_it() -> None:
+    message = entry("plugins.agent_action.result", "approval-required")
+    assert wire_problems("plugins.agent_action.result", message) == []
+    assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "at": None}}) == []
+    assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "by": None}})
+    assert wire_problems("plugins.agent_action.result", {**message, "pluginVersion": None})
+    # Nullable is null or the example's type, never another type.
+    assert wire_problems("plugins.agent_action.result", {**message, "disabled": {**message["disabled"], "at": "x"}})
+
+
+async def test_the_fixture_approval_required_files_a_plugin_enable_request(host, audit, pane) -> None:
+    """B2-c option B: the Host refuses to enable a package the user disabled;
+    the backend files a plugin-enable request for the user instead."""
+    host.answers = {
+        "action": entry("plugins.agent_action.result", "approval-required"),
+        "detail": entry("marketplace.query.result", "detail"),
+    }
+    out = await mcp.plugins_enable(None, "nerdtechnic", "devmap")
+    assert out["ok"] is False and out["error_code"] == "APPROVAL_REQUIRED"
+    assert out["status"] == "pending" and isinstance(out["approval_id"], str)
+    # The Host was asked to enable, in the fixture's request shape, and nothing else acted.
+    actions = [e["payload"] for e in host.asked if e["type"] != contract.MARKETPLACE_QUERY_REQUEST_EVENT]
+    assert [a["action"] for a in actions] == ["enable"]
+    assert wire_problems("plugins.agent_action.request", actions[0]) == []
+    record = skills_approvals.registry.get(out["approval_id"])
+    assert record is not None and record["kind"] == "plugin-enable" and record["status"] == "pending"
+    assert record["target"]["id"] == "nerdtechnic.devmap" and record["target"]["version"] == "0.2.0"
+    # Host time is Unix ms; the record keeps Unix seconds.
+    assert record["disabled"] == {"by": "user", "at": 1760000000.0, "agent": None}
 
 
 # ── window and Host messages to the backend ─────────────────────────────────
