@@ -1207,3 +1207,36 @@ describe('ExtensionsPane', () => {
     expect(row.find('.ext-disable').exists()).toBe(true)
   })
 })
+
+// Review MED-2 on #396: a plugin's own text cannot hide or reorder the listing.
+describe('ExtensionsPane invisible characters', () => {
+  let wrapper: VueWrapper | undefined
+
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('spells out invisible characters in installed ids, pack names, members and the uninstall dialog', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([{ id: 'acme.\u202edemo', requires: [], sensitive: [], provenance: 'official-registry' }]),
+      listPacks: vi.fn().mockResolvedValue([
+        { id: 'acme.pack', displayName: 'Web\u202e Pack', version: '1.0.0', members: ['acme.he\u200bllo'], installedByPack: ['acme.he\u200bllo'] },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const row = wrapper.get('[data-pack-id="acme.pack"]')
+    expect(row.get('.ext-id').text()).toBe('Web\\u{202e} Pack')
+    expect(row.get('.ext-pack-includes').text()).toBe('Includes: acme.he\\u{200b}llo')
+    expect(wrapper.text()).toContain('acme.\\u{202e}demo')
+    // The letter tile shows the spelled-out form's first character, not the override.
+    expect(wrapper.get('[data-id="acme.\u202edemo"] .mkt-icon').text()).toBe('\\')
+    await row.get('.ext-pack-remove').trigger('click')
+    await flushPromises()
+    const dialog = wrapper.get('.pack-uninstall-dialog')
+    expect(dialog.get('h4').text()).toBe('Uninstall “Web\\u{202e} Pack”?')
+    expect(dialog.get('.pack-uninstall-member').text()).toContain('acme.he\\u{200b}llo')
+    expect(wrapper.text()).not.toMatch(/[\u200b\u202e]/)
+  })
+})

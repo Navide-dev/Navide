@@ -839,8 +839,11 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
 
 
 def _record_call(name: str, caller: Any, audit: dict[str, Any], started: float) -> None:
-    """Queue the audit row of one call (contract 5). A failed write is logged, never raised."""
-    entry = _catalog.entries.get(name)
+    """Queue the audit row of one call (contract 5). A failed write is logged, never raised.
+
+    The row names the plugin, version and risk the call started with: the
+    package may be removed, switched off or upgraded while the call runs."""
+    entry = audit.get("entry") or _catalog.entries.get(name)
     if entry is None:
         return
     try:
@@ -884,6 +887,7 @@ async def _answer(
     if reason is not None:
         return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
     entry = _catalog.entries[name]
+    audit["entry"] = entry
     caller_object = _caller_object(caller)
     workspace = caller_object["workspace"] or ""
     if caller.kind != "pane":

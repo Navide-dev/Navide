@@ -45,6 +45,7 @@ from urllib.parse import unquote
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.types import Receive, Scope, Send
 
@@ -476,12 +477,39 @@ def _resolve_caller(ctx: Context) -> _Caller:
     shown an unaddressable sender.
     """
     from agent_team_backend import agent_messaging
-    from agent_team_backend.mcp_server import auth, wiring as mcp_wiring
 
     request = getattr(ctx.request_context, "request", None)
     params = getattr(request, "query_params", None)
     if params is None:
         raise CallerUnknown(_UNWIRED)
+    caller = _credential(request)
+    if caller.kind != "pane":
+        return caller
+    pane_id = caller.pane_id
+    entry = agent_messaging.current(pane_id)
+    if entry is None:
+        if agent_messaging.was_forgotten(pane_id):
+            raise CallerUnknown(_STALE)
+        if pane_id not in _logged_unregistered:
+            # Once per id: a CLI that keeps calling would otherwise write the
+            # same line on every tool call for the rest of its life.
+            _logged_unregistered.add(pane_id)
+            _log.warning("plan-mcp: refused pane %s — it was never registered", pane_id)
+        raise CallerUnknown(_UNREGISTERED)
+    return _Caller(kind="pane", pane_id=entry.pane_id)
+
+
+def _credential(request: Any) -> _Caller:
+    """Check the credential a /plan-mcp request carries, without its body.
+
+    The token checks of :func:`_resolve_caller`: host, external (only while
+    enabled) or the token minted for the pane id presented. The pane id is
+    returned as presented; following it to the live pane is left to
+    _resolve_caller. Raises CallerUnknown with the caller-facing message."""
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import auth, wiring as mcp_wiring
+
+    params = request.query_params
     token = str(params.get("t") or "") or _bearer(request)
     client = str(params.get("client") or "")
     if client == "host":
@@ -507,17 +535,7 @@ def _resolve_caller(ctx: Context) -> _Caller:
         raise CallerUnknown(_STALE)
     if not expected or not secrets.compare_digest(token, expected):
         raise CallerUnknown("caller token rejected; reopen the pane to re-wire it")
-    entry = agent_messaging.current(pane_id)
-    if entry is None:
-        if agent_messaging.was_forgotten(pane_id):
-            raise CallerUnknown(_STALE)
-        if pane_id not in _logged_unregistered:
-            # Once per id: a CLI that keeps calling would otherwise write the
-            # same line on every tool call for the rest of its life.
-            _logged_unregistered.add(pane_id)
-            _log.warning("plan-mcp: refused pane %s — it was never registered", pane_id)
-        raise CallerUnknown(_UNREGISTERED)
-    return _Caller(kind="pane", pane_id=entry.pane_id)
+    return _Caller(kind="pane", pane_id=pane_id)
 
 
 def _target_view(entry: Any, same_workspace: bool) -> dict[str, Any]:
@@ -10087,6 +10105,15 @@ class _PlanMcpASGI:
             response = PlainTextResponse("plan MCP server not started", status_code=503)
             await response(scope, receive, send)
             return
+        # The credential is checked before any of the body is read: a request
+        # without a valid one is answered 401 and its body never received, so
+        # only an authenticated caller's body is read, of any size.
+        if scope.get("type") == "http":
+            try:
+                _credential(Request(scope))
+            except CallerUnknown as err:
+                await PlainTextResponse(str(err), status_code=401)(scope, receive, send)
+                return
         # Request bodies have no size limit (agent-tools contract 4.4, A1). Their
         # size is disclosed in the backend log instead: every body longer than
         # one transfer piece is logged with its byte count.
