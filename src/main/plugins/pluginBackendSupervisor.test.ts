@@ -22,6 +22,8 @@ import {
   type BackendRuntimeContext,
 } from './pluginBackendSupervisor'
 import { AGENT_TOOL_CHUNK_BYTES, utf8ByteLength } from '../../shared/pluginAgentTools'
+import { DEFAULT_BACKEND_RESOURCE_LIMITS, watchBackendResources } from './pluginBackendResourceWatchdog'
+import { stdoutPendingOf } from './pluginThirdPartyBackends'
 import {
   PLANS_BRIDGE_PORTS,
   createInMemoryPlansBridgeDispatcher,
@@ -532,7 +534,52 @@ describe('PluginBackendSupervisor', () => {
       await call
     }, 120_000)
 
-    const loopLag = (): { stop: () => number } => {
+    // #386 reads this disclosure through stdoutPendingOf from the Host's
+    // backendResourceUsage().views[]: it notices, and never stops the child.
+    it('feeds the resource watchdog a frame the child never ends, so the user is told and the child keeps running', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null) as number
+      // The same entry shape PluginBackendHost.backendResourceUsage() lists.
+      const usage = () => ({ views: [{ pluginId: 'acme.indexer', instanceId: 'view-1', subscriptions: { current: 0, peak: 0 }, child: supervisor.resourceUsage() }] })
+      const killed: number[] = []
+      const onExceeded = vi.fn()
+      const watch = watchBackendResources(pid, '/data', vi.fn(), { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, {
+        listProcesses: async () => [{ pid, ppid: 1, rssBytes: 1_048_576, cpuMs: 0 }],
+        dataDirBytes: async () => 0,
+        kill: (victim) => killed.push(victim),
+        now: () => 0,
+        setInterval: () => 'handle',
+        clearInterval: () => undefined,
+      }, undefined, {
+        onExceeded,
+        stdoutPending: { bytes: () => stdoutPendingOf(usage(), 'acme.indexer', 'view-1'), threshold: 2 * 1_048_576 },
+      })
+      try {
+        await watch.sample()
+        expect(onExceeded).not.toHaveBeenCalled()
+        const call = client.call('fixture.nonewline', { bytes: 8 * 1_048_576 }, { timeoutMs: 60_000 }).catch((error) => error)
+        await vi.waitFor(async () => {
+          await watch.sample()
+          expect(onExceeded).toHaveBeenCalledWith(expect.objectContaining({ item: 'stdoutPending', threshold: 2 * 1_048_576 }))
+        }, { timeout: 30_000 })
+        expect(onExceeded.mock.calls[0]?.[0].usage).toBeGreaterThan(2 * 1_048_576)
+        // Another view's child reads nothing.
+        expect(stdoutPendingOf(usage(), 'acme.indexer', 'view-2')).toBe(0)
+        expect(killed).toEqual([])
+        expect(onFailure).not.toHaveBeenCalled()
+        expect(() => process.kill(pid, 0)).not.toThrow()
+        await supervisor.close()
+        await call
+      } finally {
+        watch.dispose()
+      }
+    }, 120_000)
+
+    const loopLag =(): { stop: () => number } => {
       let worst = 0
       let last = performance.now()
       const timer = setInterval(() => {
