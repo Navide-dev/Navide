@@ -38,6 +38,9 @@ SCAN_LIMITS = {
     "timeBudgetMs": 30_000,
 }
 
+#: ``coverage.skipped`` reasons that make a scan incomplete (section 3.8).
+INCOMPLETE_SKIP_REASONS = ("scannerError", "tooComplex")
+
 ShellCategory = Literal["remoteWrite", "remoteRead", "localWrite", "local", "other", "unknownSubcommand"]
 ScanSource = Literal["frontend", "backend"]
 
@@ -187,6 +190,11 @@ def _incomplete_reasons(scan: ScanReport) -> list[str]:
         reasons.add("timedOut")
     if coverage["truncated"]:
         reasons.add("truncated")
+    # A scanner failure on a file, or a structural ceiling it hit, means part of
+    # the package was not scanned (DS2).
+    for skipped in coverage["skipped"]:
+        if skipped["reason"] in INCOMPLETE_SKIP_REASONS and skipped["count"]:
+            reasons.add(skipped["reason"])
     for source in ("frontend", "backend"):
         signals = scan["code"][source]
         if signals and signals["obfuscationSignals"]:

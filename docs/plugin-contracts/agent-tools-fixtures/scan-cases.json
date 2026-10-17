@@ -936,6 +936,119 @@
       }
     },
     {
+      "name": "scanner-error-and-too-complex",
+      "disclosureCase": "ui-only",
+      "scan": {
+        "schemaVersion": 1,
+        "scanner": {
+          "id": "navide-static-scan",
+          "version": "1.0.0"
+        },
+        "artifactDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "target": "universal",
+        "scannedAt": "2026-10-17T00:00:00Z",
+        "coverage": {
+          "filesTotal": 3,
+          "filesScanned": 1,
+          "bytesScanned": 100,
+          "skipped": [
+            {
+              "reason": "scannerError",
+              "count": 1
+            },
+            {
+              "reason": "tooComplex",
+              "count": 1
+            }
+          ],
+          "truncated": false,
+          "timedOut": false
+        },
+        "shell": {
+          "calls": [],
+          "dynamic": {
+            "count": 0,
+            "files": 0
+          }
+        },
+        "network": {
+          "hosts": []
+        },
+        "files": {
+          "readPaths": [],
+          "writePaths": [],
+          "dynamicPaths": 0
+        },
+        "capabilities": [],
+        "code": {
+          "frontend": {
+            "eval": 0,
+            "newFunction": 0,
+            "dynamicImport": 0,
+            "stringTimers": 0,
+            "obfuscationSignals": []
+          },
+          "backend": null
+        },
+        "native": []
+      },
+      "expected": {
+        "sentences": [
+          {
+            "key": "coverage.incomplete",
+            "params": {
+              "reasons": [
+                "scannerError",
+                "tooComplex"
+              ]
+            }
+          },
+          {
+            "key": "notFound.shell",
+            "params": {}
+          },
+          {
+            "key": "notFound.network",
+            "params": {}
+          },
+          {
+            "key": "notFound.files",
+            "params": {}
+          },
+          {
+            "key": "notFound.dynamicCode",
+            "params": {}
+          },
+          {
+            "key": "coverage",
+            "params": {
+              "scannerVersion": "1.0.0",
+              "scannedAt": "2026-10-17T00:00:00Z",
+              "filesScanned": 1,
+              "filesTotal": 3
+            }
+          }
+        ],
+        "riskReasons": [
+          {
+            "key": "scan.incomplete",
+            "level": "high"
+          }
+        ],
+        "cardRiskLevel": "high",
+        "declaredVsScanned": {
+          "undeclared": [],
+          "declaredNotSeen": [
+            {
+              "kind": "system",
+              "key": "ui"
+            }
+          ]
+        },
+        "items": []
+      }
+    },
+    {
       "name": "git-unknown-subcommand",
       "disclosureCase": "shell-allowlist-no-backend",
       "scan": {
@@ -1578,6 +1691,10 @@
     "local"
   ],
   "scannerId": "navide-static-scan",
+  "incompleteSkipReasons": [
+    "scannerError",
+    "tooComplex"
+  ],
   "scanDigestCase": "devmap-push-and-reads",
   "scanDigestExpected": "3c0fe709e19b8a9fded974d3112c58e83b5ca4846fadfcc5c8d027cd365e080a"
 }
