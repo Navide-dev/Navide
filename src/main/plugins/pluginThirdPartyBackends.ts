@@ -44,6 +44,7 @@ import type { PluginManifestV2, PluginSystemNamespace } from './pluginManifestV2
 import { HOST_SHELL_EXECUTABLE_ALLOWLIST } from './pluginCapabilityCatalog'
 import { canonicalExistingDirectory } from './workspacePathPolicy'
 import type { JsonValue } from './pluginBackendSupervisor'
+import type { SupportedLocale } from '../hostLocale'
 
 /**
  * Admission control for third-party package backends (every package backend
@@ -213,39 +214,122 @@ export interface NativeBackendConsentPrompt {
   update: boolean
 }
 
+interface NativeBackendConsentStrings {
+  title: string
+  messageNew: (name: string) => string
+  messageUpdate: (name: string, version: string) => string
+  sandbox: string
+  sandboxWithShell: string
+  readFiles: string
+  readFilesSeparateWrite: string
+  noFiles: string
+  shell: string
+  methods: (list: string) => string
+  noMethods: string
+  disable: string
+  notNow: string
+  allow: string
+  separator: string
+}
+
+/** Plan B D-g: the dialog in the user's language (main has no i18n of its
+ * own; see menuStrings.ts), now also listing the methods the backend serves.
+ * The en-US wording is unchanged except the Settings page name. */
+const NATIVE_BACKEND_CONSENT_STRINGS: Record<SupportedLocale, NativeBackendConsentStrings> = {
+  'en-US': {
+    title: 'Native code',
+    messageNew: (name) => `${name} contains native code that runs on your computer. Allow it to run?`,
+    messageUpdate: (name, version) => `${name} ${version} changed its native code or permissions. Allow it to run?`,
+    sandbox: 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.',
+    sandboxWithShell: 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.',
+    readFiles: 'It asks to read files in the workspace you open it in.',
+    readFilesSeparateWrite: 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.',
+    noFiles: 'It asks for no access to your files.',
+    shell: 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
+      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
+      + 'this workspace to them, and it can change the repository. '
+      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
+      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).',
+    methods: (list) => `Methods it serves: ${list}.`,
+    noMethods: 'It declares no methods.',
+    disable: 'You can disable it at any time in Settings → Navide Plugins.',
+    notNow: 'Not now',
+    allow: 'Allow',
+    separator: ', ',
+  },
+  'zh-TW': {
+    title: '原生程式',
+    messageNew: (name) => `${name} 含有會在你電腦上執行的原生程式。要允許它執行嗎？`,
+    messageUpdate: (name, version) => `${name} ${version} 的原生程式或權限有變更。要允許它執行嗎？`,
+    sandbox: 'Navide 會在沙盒裡執行它：它不能連網，也不能讀取你的家目錄。',
+    sandboxWithShell: 'Navide 會在沙盒裡執行它：它自己不能建立網路連線，也不能讀取你的家目錄。',
+    readFiles: '它要求讀取你開啟它的工作區裡的檔案。',
+    readFilesSeparateWrite: '它要求讀取你開啟它的工作區裡的檔案。修改檔案需要你另外允許。',
+    noFiles: '它沒有要求存取你的檔案。',
+    shell: '高風險：它也要求透過 Navide 的指令仲介，在這個工作區執行 git、gh、glab 指令。'
+      + '透過這些指令，它可以連到網路主機（例如 git push 或 fetch 到任何網址，或 gh api），把這個工作區的資料送過去，也可以修改儲存庫。'
+      + '透過 git，它不需要另外的修改檔案權限，就能讀取、修改這個工作區裡受版本控制的檔案，並刪除未受版本控制的檔案。'
+      + '你停用它或撤銷權限時，已經開始執行的指令會執行完畢（最多約 30 秒）。',
+    methods: (list) => `它提供的方法：${list}。`,
+    noMethods: '它沒有宣告任何方法。',
+    disable: '你隨時可以在「設定 → Navide 外掛」停用它。',
+    notNow: '暫不',
+    allow: '允許',
+    separator: '、',
+  },
+  'ja-JP': {
+    title: 'ネイティブコード',
+    messageNew: (name) => `${name} にはこのコンピューターで実行されるネイティブコードが含まれています。実行を許可しますか？`,
+    messageUpdate: (name, version) => `${name} ${version} のネイティブコードまたは権限が変更されました。実行を許可しますか？`,
+    sandbox: 'Navide はこれをサンドボックスで実行します。ネットワークには接続できず、ホームフォルダも読み取れません。',
+    sandboxWithShell: 'Navide はこれをサンドボックスで実行します。自分ではネットワーク接続を開けず、ホームフォルダも読み取れません。',
+    readFiles: '開いたワークスペース内のファイルの読み取りを求めています。',
+    readFilesSeparateWrite: '開いたワークスペース内のファイルの読み取りを求めています。ファイルの変更には別途あなたの許可が必要です。',
+    noFiles: 'ファイルへのアクセスは求めていません。',
+    shell: '高リスク：Navide のコマンド仲介を通じて、このワークスペースで git・gh・glab コマンドを実行することも求めています。'
+      + 'これらを通じてネットワーク上のホストに接続し（例：任意の URL への git push や fetch、gh api）、このワークスペースのデータを送ったり、リポジトリを変更したりできます。'
+      + 'git を通じて、別途のファイル変更の許可なしに、このワークスペースで追跡されているファイルを読み取り・変更し、追跡されていないファイルを削除できます。'
+      + '無効化や権限の取り消しの時点ですでに開始したコマンドは、最後まで実行されます（最大約 30 秒）。',
+    methods: (list) => `提供するメソッド：${list}。`,
+    noMethods: 'メソッドを宣言していません。',
+    disable: '「設定 → Navide プラグイン」でいつでも無効にできます。',
+    notNow: '今はしない',
+    allow: '許可',
+    separator: '、',
+  },
+}
+
 /** The native-backend consent dialog's text. A package that declares shell
  * reaches the network through git/gh/glab (push, fetch, `gh api`), so the
  * "no network access" sentence is only true without shell: saying it there
  * would deceive the user (anti-deception, not a restriction). */
-export function nativeBackendConsentText(prompt: NativeBackendConsentPrompt): { message: string; detail: string } {
+export function nativeBackendConsentText(
+  prompt: NativeBackendConsentPrompt,
+  locale: SupportedLocale = 'en-US'
+): { title: string; message: string; detail: string; buttons: [string, string] } {
+  const s = NATIVE_BACKEND_CONSENT_STRINGS[locale] ?? NATIVE_BACKEND_CONSENT_STRINGS['en-US']
   // With shell, git reads and changes workspace files without the separate
   // file-change grant, so neither "no access" nor "separate permission" holds.
   const access = prompt.shell
-    ? prompt.system.includes('fs') ? 'It asks to read files in the workspace you open it in.' : ''
+    ? prompt.system.includes('fs') ? s.readFiles : ''
     : prompt.system.includes('fs')
-      ? 'It asks to read files in the workspace you open it in. Changing files needs your separate permission.'
-      : 'It asks for no access to your files.'
-  const sandbox = prompt.shell
-    ? 'Navide runs it in a sandbox: it cannot open network connections itself and cannot read your home folder.'
-    : 'Navide runs it in a sandbox: it has no network access and cannot read your home folder.'
+      ? s.readFilesSeparateWrite
+      : s.noFiles
+  const sandbox = prompt.shell ? s.sandboxWithShell : s.sandbox
   // DB5: shell is allowed for a backend and disclosed as high risk.
-  const shell = prompt.shell
-    ? 'High risk: it also asks to run git, gh and glab commands in that workspace through the Navide command broker. '
-      + 'Through them it can contact network hosts (for example git push or fetch to any URL, or gh api) and send data from '
-      + 'this workspace to them, and it can change the repository. '
-      + 'Through git it can read and change files tracked in this workspace and delete untracked files, without the separate file-change permission. '
-      + 'Commands it has already started when you disable it or revoke its permission run to completion (up to about 30 seconds).'
-    : ''
+  const shell = prompt.shell ? s.shell : ''
+  const methods = [...prompt.methods].sort()
   return {
-    message: prompt.update
-      ? `${prompt.name} ${prompt.packageVersion} changed its native code or permissions. Allow it to run?`
-      : `${prompt.name} contains native code that runs on your computer. Allow it to run?`,
+    title: s.title,
+    message: prompt.update ? s.messageUpdate(prompt.name, prompt.packageVersion) : s.messageNew(prompt.name),
     detail: [
       sandbox,
       access,
       shell,
-      'You can disable it at any time in Settings → Extensions.',
+      methods.length ? s.methods(methods.join(s.separator)) : s.noMethods,
+      s.disable,
     ].filter(Boolean).join('\n\n'),
+    buttons: [s.notNow, s.allow],
   }
 }
 

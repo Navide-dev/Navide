@@ -712,6 +712,36 @@ describe('NativeBackendStore', () => {
 describe('native backend consent text', () => {
   const base = { pluginId: 'acme.indexer', name: 'Indexer', packageVersion: '1.0.0', methods: ['files.search'], update: false }
 
+  // Plan B D-g: localized, with the methods listed.
+  it('lists the methods the backend serves, sorted, in every locale', () => {
+    const prompt = { ...base, system: [], methods: ['files.search', 'files.index'] }
+    expect(nativeBackendConsentText(prompt).detail).toContain('Methods it serves: files.index, files.search.')
+    expect(nativeBackendConsentText(prompt, 'zh-TW').detail).toContain('它提供的方法：files.index、files.search。')
+    expect(nativeBackendConsentText(prompt, 'ja-JP').detail).toContain('提供するメソッド：files.index、files.search。')
+    expect(nativeBackendConsentText({ ...prompt, methods: [] }).detail).toContain('It declares no methods.')
+  })
+
+  it.each(['zh-TW', 'ja-JP'] as const)('localizes the whole dialog (%s) and keeps the shell disclosure honest', (locale) => {
+    const plain = nativeBackendConsentText({ ...base, system: ['fs'] }, locale)
+    const shell = nativeBackendConsentText({ ...base, system: ['fs'], shell: 'allowlist' }, locale)
+    for (const text of [plain, shell]) {
+      expect(`${text.title}${text.message}${text.detail}${text.buttons.join('')}`).not.toMatch(/[A-Za-z]{4,} [a-z]{3,} [a-z]{3,}/)
+      expect(text.detail).toContain('Navide')
+    }
+    expect(shell.detail).toMatch(/高風險|高リスク/)
+    expect(shell.detail).toContain('git push')
+    expect(shell.detail).not.toContain(plain.detail.split('\n\n')[0])
+    expect(shell.detail).toMatch(/30/)
+  })
+
+  it('names the Navide plugins settings page, not the CLI extensions page', () => {
+    const { detail, title, buttons } = nativeBackendConsentText({ ...base, system: [] })
+    expect(detail).toContain('Settings → Navide Plugins')
+    expect(detail).not.toContain('Settings → Extensions')
+    expect(title).toBe('Native code')
+    expect(buttons).toEqual(['Not now', 'Allow'])
+  })
+
   it('says "no network access" only for a package without shell', () => {
     for (const system of [[], ['fs']] as const) {
       const { message, detail } = nativeBackendConsentText({ ...base, system: [...system] })
