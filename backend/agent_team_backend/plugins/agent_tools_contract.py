@@ -108,11 +108,12 @@ def validate_agent_tool_name(name: Any, plugin_id: Any) -> str | None:
 
 # Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
 # characters that reorder or hide text: bidi controls, zero-width and other
-# invisible format characters (U+00AD, U+034F, U+180E), variation selectors
-# and tag characters.
+# invisible format characters (U+00AD, U+034F, U+180E), fillers that render
+# as nothing (U+115F, U+1160, U+3164, U+FFA0, U+2800), variation selectors and
+# tag characters.
 _FORBIDDEN_TEXT = re.compile(
-    "[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u00ad\u034f\u061c\u180e\u200b-\u200f\u202a-\u202e"
-    "\u2060-\u2069\ufe00-\ufe0f\ufeff\U000e0000-\U000e007f]"
+    "[\u0000-\u001f\u007f-\u009f\u2028\u2029<>\u00ad\u034f\u061c\u115f\u1160\u180e\u200b-\u200f"
+    "\u202a-\u202e\u2060-\u2069\u2800\u3164\ufe00-\ufe0f\ufeff\uffa0\U000e0000-\U000e007f]"
 )
 # Cc except tab and line feed.
 _RESULT_CONTROL = re.compile("[\u0000-\u0008\u000b-\u001f\u007f-\u009f]")
