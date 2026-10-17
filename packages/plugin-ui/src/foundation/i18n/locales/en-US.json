@@ -1523,6 +1523,10 @@
           "title": "Navide Marketplace",
           "summary": "Search the Navide plugin registry and install a Navide plugin, with publisher trust and capability confirmation."
         },
+        "disclosureOverview": {
+          "title": "Disclosure overview",
+          "summary": "Every installed Navide plugin's disclosure, risk, recent activity and unusual items"
+        },
         "help-mcp": {
           "title": "How Navide uses MCP",
           "summary": "The two directions MCP is used in: tools Navide offers CLI agents, and external servers Navide reads docs from."
@@ -2261,6 +2265,7 @@
       "analyzer": "Analyzer",
       "extensions": "Navide Plugins",
       "marketplace": "Navide Marketplace",
+      "disclosureOverview": "Disclosure overview",
       "executionPolicy": "Execution Policy",
       "statusBadges": "Status badges",
       "voice": "Voice Input",
@@ -2428,6 +2433,10 @@
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
+            },
+            "disclosureOverview": {
+              "what": "Each installed Marketplace Navide plugin's disclosure card, risk level, recent activity and unusual items on one page.",
+              "more": "Records only: nothing here changes what a Navide plugin may do. Each plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",

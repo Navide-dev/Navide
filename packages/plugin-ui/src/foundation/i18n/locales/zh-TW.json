@@ -1523,6 +1523,10 @@
           "title": "Navide 市集",
           "summary": "搜尋 Navide 外掛登錄庫並安裝 Navide 外掛，含發佈者信任與能力確認。"
         },
+        "disclosureOverview": {
+          "title": "揭露總覽",
+          "summary": "所有已安裝 Navide 外掛的揭露、風險、最近活動和異常"
+        },
         "help-mcp": {
           "title": "MCP 說明",
           "summary": "MCP 的兩個方向：Navide 提供給 CLI agent 的工具，以及 Navide 用來讀文件的外部 server。"
@@ -2261,6 +2265,7 @@
       "analyzer": "分析器",
       "extensions": "Navide 外掛",
       "marketplace": "Navide 市集",
+      "disclosureOverview": "揭露總覽",
       "executionPolicy": "執行政策",
       "statusBadges": "狀態徽章",
       "voice": "語音輸入",
@@ -2428,6 +2433,10 @@
             "marketplace": {
               "what": "搜尋 Navide 外掛登錄庫並從中安裝",
               "more": "本頁第 4 章"
+            },
+            "disclosureOverview": {
+              "what": "所有從市集安裝的 Navide 外掛：揭露卡、風險等級、最近活動和異常，集中在同一頁。",
+              "more": "只是紀錄，這裡的內容不會改變 Navide 外掛能做的事。每個外掛完整的活動也可以在「Navide 外掛」頁該外掛的那一列打開。"
             },
             "shortcuts": {
               "what": "快捷鍵改綁、匯入匯出",

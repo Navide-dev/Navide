@@ -1,0 +1,62 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import { i18n } from '@navide/plugin-ui/foundation'
+import PluginDisclosureOverview from '../PluginDisclosureOverview.vue'
+import { computeDisclosure } from '../../../../shared/pluginDisclosure'
+
+const report = JSON.parse(
+  readFileSync(join(process.cwd(), 'docs/plugin-contracts/agent-tools-fixtures/activity-report.json'), 'utf8')
+).valid
+const disclosure = computeDisclosure({
+  schemaVersion: 2, id: 'nerdtechnic.devmap', version: '0.2.0', publisher: 'nerdtechnic', permissions: { shell: 'allowlist' },
+} as never)
+
+let wrapper: VueWrapper | undefined
+let saved: typeof i18n.global.locale.value
+beforeEach(() => {
+  saved = i18n.global.locale.value
+  i18n.global.locale.value = 'en-US'
+})
+afterEach(() => {
+  wrapper?.unmount()
+  i18n.global.locale.value = saved
+  delete (window as unknown as Record<string, unknown>).agentTeam
+})
+
+describe('PluginDisclosureOverview (D5, D-f)', () => {
+  it('shows each installed plugin with its card, recent activity and unusual items on one page', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        installedDisclosures: vi.fn().mockResolvedValue([
+          { id: 'nerdtechnic.devmap', version: '0.2.0', disclosure, scan: null },
+          { id: 'acme.quiet', version: '1.0.0', disclosure: null, scan: null },
+        ]),
+        activityReport: vi.fn(async (id: string) => id === 'nerdtechnic.devmap'
+          ? { ok: true, report }
+          : { ok: false, error: 'Navide Host session is not ready' }),
+      },
+    }
+    wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+    await flushPromises()
+
+    const devmap = wrapper.get('[data-id="nerdtechnic.devmap"]')
+    expect(devmap.find('.nv-disclosure-level--high').exists()).toBe(true)
+    expect(devmap.text()).toContain('42 calls, 3 refused, 1 errors')
+    expect(devmap.get('.nv-overview-undeclared').text()).toBe('3 undeclared uses refused')
+    expect(devmap.text()).toContain('3 unusual items')
+    // Nothing on the page is a link; the full panel is mounted only when opened.
+    expect(wrapper.find('a').exists()).toBe(false)
+    expect(devmap.find('.nv-activity').exists()).toBe(false)
+    expect(wrapper.get('[data-id="acme.quiet"]').text()).toContain('Activity is not available right now: Navide Host session is not ready')
+  })
+
+  it('says when no Marketplace plugin is installed', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = { plugins: { installedDisclosures: vi.fn().mockResolvedValue([]) } }
+    wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('No Navide plugin from the Marketplace is installed.')
+  })
+})

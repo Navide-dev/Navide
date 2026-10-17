@@ -1511,6 +1511,10 @@
           "title": "Navide マーケットプレイス",
           "summary": "Navide プラグインレジストリを検索し、公開元の信頼性と機能の権限を確認してインストールします。"
         },
+        "disclosureOverview": {
+          "title": "開示の一覧",
+          "summary": "インストール済みの各 Navide プラグインの開示、リスク、最近のアクティビティ、異常"
+        },
         "help-mcp": {
           "title": "Navide での MCP の使い方",
           "summary": "CLI エージェントに提供するツールと、文書の読み取りに利用する外部サーバーという、MCP の 2 つの用途を説明します。"
@@ -2261,6 +2265,7 @@
       "analyzer": "アナライザー",
       "extensions": "Navide プラグイン",
       "marketplace": "Navide マーケットプレイス",
+      "disclosureOverview": "開示の一覧",
       "executionPolicy": "実行ポリシー",
       "statusBadges": "ステータスバッジ",
       "voice": "音声入力",
@@ -2428,6 +2433,10 @@
             "marketplace": {
               "what": "Navide プラグインレジストリの検索とインストール",
               "more": "このページのセクション 4"
+            },
+            "disclosureOverview": {
+              "what": "マーケットプレイスからインストールした各 Navide プラグインの開示カード、リスク、最近のアクティビティ、異常を 1 ページにまとめます。",
+              "more": "記録のみで、Navide プラグインができることは変わりません。各プラグインの詳しいアクティビティは「Navide プラグイン」ページのその行からも開けます。"
             },
             "shortcuts": {
               "what": "ショートカットの割り当て変更、インポートとエクスポート",
