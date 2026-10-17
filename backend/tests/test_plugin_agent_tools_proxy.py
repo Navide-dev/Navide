@@ -954,6 +954,35 @@ async def test_a_cancelled_call_is_audited(tmp_path, monkeypatch) -> None:
     assert (row["outcome"], row["error_code"]) == ("error", "cancelled")
 
 
+@pytest.mark.parametrize(
+    "later",
+    [
+        _snapshot(2, []),
+        _snapshot(2, [_entry("devmap_write", risk="write")], enabled=False),
+        _snapshot(2, [_entry("devmap_write", risk="read", pluginVersion="0.3.0")]),
+    ],
+    ids=["removed", "master-switch-off", "upgraded"],
+)
+async def test_a_call_the_plugin_ran_is_audited_as_it_started(host: FakeHost, tmp_path, monkeypatch, later) -> None:
+    log = _audit(tmp_path, monkeypatch)
+    agent_messaging.register("p-41", "dev", "/ws/project")
+    _as_caller(monkeypatch, _Caller(kind="pane", pane_id="p-41"))
+    _apply(_snapshot(1, [_entry("devmap_write", risk="write")]))
+    answer = host.unicast_host
+
+    async def change_while_running(event: dict[str, Any]) -> bool:
+        # The plugin has the request; the catalog changes before its answer.
+        _apply(later)
+        return await answer(event)
+
+    monkeypatch.setattr(app, "unicast_host", change_while_running)
+    await core.server.call_tool("devmap_write", {})
+    assert len(host.requests) == 1
+    [row] = await _rows(log)
+    assert (row["plugin_id"], row["plugin_version"], row["tool"], row["risk"]) == ("nerdtechnic.devmap", "0.2.0", "devmap_write", "write")
+    assert (row["outcome"], row["error_code"]) == ("ok", "")
+
+
 async def test_an_audit_write_failure_never_changes_the_call(host: FakeHost, monkeypatch) -> None:
     class Broken:
         def record_tool_call(self, **_kwargs: Any) -> int:
