@@ -10,6 +10,7 @@ import { usePluginUpdates } from '../../composables/usePluginUpdates'
 import MarketplacePane from '../MarketplacePane.vue'
 import MarketplaceIcon from '../MarketplaceIcon.vue'
 import ExtensionsPane from '../ExtensionsPane.vue'
+import { computeDisclosure } from '../../../../shared/pluginDisclosure'
 
 function mountMarketplace() {
   return mount(MarketplacePane, { global: { plugins: [i18n] } })
@@ -2043,5 +2044,43 @@ describe('MarketplacePane', () => {
       await flushPromises()
       expect(wrapper.find('.mkt-empty .mkt-sigil').exists()).toBe(true)
     })
+  })
+})
+
+// Plan B D1 (review L4 on #360): the list card shows the template summary and
+// the risk level, from listing data the Host has kept for that item, and says
+// the data is unverified.
+describe('MarketplacePane list card disclosure', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('shows the summary and risk level when the item carries a disclosure, unverified', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false, ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [
+          row('shell', {
+            disclosure: computeDisclosure({ schemaVersion: 2, id: 'acme.shell', version: '1.0.0', publisher: 'acme', permissions: { shell: 'allowlist' } } as never),
+            scan: null,
+          }),
+          row('plain', { disclosure: null, scan: null }),
+        ],
+        total: 2, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+
+    const card = wrapper.get('[data-id="acme.shell"] .mkt-card-disclosure')
+    expect(card.get('.nv-disclosure-summary').text()).toBe('Runs commands: gh, git, glab; Can reach remote hosts through those commands')
+    expect(card.get('.nv-disclosure-level').classes()).toContain('nv-disclosure-level--high')
+    expect(card.attributes('title')).toContain('not yet verified')
+    expect(wrapper.find('[data-id="acme.plain"] .mkt-card-disclosure').exists()).toBe(false)
   })
 })

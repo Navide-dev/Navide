@@ -1220,13 +1220,14 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 }
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
-  const { message, detail } = nativeBackendConsentText(prompt)
+  // Plan B D-g: in the user's language, with the methods it serves.
+  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, currentUiLocale())
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
-    title: 'Native code',
+    title,
     message,
     detail,
-    buttons: ['Not now', 'Allow'],
+    buttons,
     defaultId: 0,
     cancelId: 0,
     noLink: true,
@@ -1703,6 +1704,7 @@ const pluginTrustRefresh = registerPluginIpc(
         return error instanceof Error ? error.message : String(error)
       }
     },
+    backendCallConcurrency: () => frontendPluginManager.backendCallConcurrency(),
     listFactoryPackages: () => {
       const descriptor = frontendPluginManager.getDescriptor('navide.git')
       const factoryActive = frontendPluginManager

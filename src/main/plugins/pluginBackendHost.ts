@@ -19,7 +19,6 @@ import {
 import type { ExecutionPolicySnapshot } from './executionPolicy'
 import {
   isAllowedBackendTimeout,
-  MAX_BACKEND_CALLS_PER_INSTANCE,
   MAX_BACKEND_CHILDREN,
   MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
 } from './pluginBackendLimits'
@@ -203,6 +202,20 @@ export const BACKEND_RESTART_BUDGET_SPENT_MESSAGE =
   'Backend plugin failed repeatedly and will not be restarted.'
 
 /**
+ * In-flight backend calls of one plugin across all its bound views: how many
+ * run now and the most that ran at once since the Host started. Calls are
+ * never capped (user ruling L3); this is what discloses the load instead.
+ * `droppedNotifications` counts Host event notifications its children dropped
+ * because their event backlog was full, since the Host started.
+ */
+export interface BackendCallConcurrency {
+  pluginId: string
+  current: number
+  peak: number
+  droppedNotifications: number
+}
+
+/**
  * Host-owned router for one package's Backend Wire child processes.
  *
  * A registered package is only metadata. Each bound view gets its own
@@ -239,6 +252,8 @@ export class PluginBackendHost {
   private reservedChildSlots = 0
   /** Slots consumed by children whose close failed; never reclaimed. */
   private retainedChildSlots = 0
+  /** In-flight calls and dropped notifications per plugin id; see {@link backendCallConcurrency}. */
+  private readonly callConcurrency = new Map<string, { current: number; peak: number; droppedNotifications: number }>()
 
   constructor(options: PluginBackendHostOptions = {}) {
     this.environment = Object.freeze({ ...(options.environment ?? {}) })
@@ -253,6 +268,22 @@ export class PluginBackendHost {
     this.admitThirdParty = options.admitThirdParty
     this.thirdPartyIdleMs = options.thirdPartyIdleMs ?? THIRD_PARTY_BACKEND_IDLE_MS
     this.createSupervisor = options.createSupervisor ?? defaultSupervisor
+  }
+
+  /** Current and peak in-flight calls and dropped notifications of every plugin that has had any, by plugin id. */
+  backendCallConcurrency(): BackendCallConcurrency[] {
+    return [...this.callConcurrency]
+      .map(([pluginId, { current, peak, droppedNotifications }]) => ({ pluginId, current, peak, droppedNotifications }))
+      .sort((a, b) => a.pluginId.localeCompare(b.pluginId))
+  }
+
+  private concurrencyFor(pluginId: string): { current: number; peak: number; droppedNotifications: number } {
+    let entry = this.callConcurrency.get(pluginId)
+    if (!entry) {
+      entry = { current: 0, peak: 0, droppedNotifications: 0 }
+      this.callConcurrency.set(pluginId, entry)
+    }
+    return entry
   }
 
   /** Install the third-party admission gate before views are bound. */
@@ -472,6 +503,7 @@ export class PluginBackendHost {
         environment: this.environment,
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
         bridgeDispatcher: this.bridgeDispatcher,
+        onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
         authorizedPlanRoot: view.authorizedPlanRoot,
         ...(this.reverifyBeforeSpawn
           ? { beforeSpawn: () => this.reverifyBeforeSpawn?.(view.activation) }
@@ -566,6 +598,7 @@ export class PluginBackendHost {
       const supervisor: PluginBackendSupervisor = this.createSupervisor(view.activation, {
         environment: this.environment,
         clientInfo: { name: 'navide-host', version: view.activation.packageVersion },
+        onNotificationDropped: () => { this.concurrencyFor(view.runtime.pluginId).droppedNotifications++ },
         spawnProcess: admission.spawnProcess,
         bridgeDispatcher: admission.bridgeDispatcher,
         authorizedPlanRoot: view.authorizedPlanRoot,
@@ -785,14 +818,14 @@ export class PluginBackendHost {
     if (options?.timeoutMs !== undefined && !isAllowedBackendTimeout(options.timeoutMs)) {
       throw new BackendPluginError('INVALID_ARGUMENT')
     }
-    if (view.calls.size >= MAX_BACKEND_CALLS_PER_INSTANCE) {
-      throw new BackendPluginError('RESOURCE_LIMIT')
-    }
     const controller = new AbortController()
     const abort = (): void => controller.abort()
     if (options?.signal?.aborted) controller.abort()
     else options?.signal?.addEventListener('abort', abort, { once: true })
     view.calls.add(controller)
+    const concurrency = this.concurrencyFor(view.runtime.pluginId)
+    concurrency.current++
+    concurrency.peak = Math.max(concurrency.peak, concurrency.current)
     try {
       const runtime = runtimeWithInitiator(view.runtime, options?.initiator)
       const supervisorOptions: BackendPluginCallOptions = { ...options }
@@ -822,7 +855,9 @@ export class PluginBackendHost {
           controller.signal.reason === 'plugin-stopping' ? 'PLUGIN_STOPPING' : 'USER_CANCELLED',
         )
       }
-      return view.supervisor.clientFor(runtime, {
+      // Awaited so the finally below runs when the call settles: the in-flight
+      // count, the caller's abort listener and view.calls all span the call.
+      return await view.supervisor.clientFor(runtime, {
         workspacePath: view.workspacePath,
         authorizedPlanRoot: view.authorizedPlanRoot.value ?? undefined,
       }).call<Result>(name, args, {
@@ -832,6 +867,7 @@ export class PluginBackendHost {
     } finally {
       options?.signal?.removeEventListener('abort', abort)
       view.calls.delete(controller)
+      concurrency.current--
     }
   }
 

@@ -137,11 +137,13 @@ export function validateAgentToolName(name: unknown, pluginId: unknown): AgentTo
 
 /** The characters that reorder or hide text: bidi controls, zero-width and
  *  other invisible format characters (soft hyphen, Mongolian vowel separator,
- *  combining grapheme joiner), variation selectors and tag characters (which
+ *  combining grapheme joiner), fillers that render as nothing (Hangul fillers,
+ *  the braille blank), variation selectors and tag characters (which
  *  can smuggle ASCII an agent reads but a dialog does not show). One set for
  *  the text rule and for display. */
 const INVISIBLE_CHARACTERS =
-  '\\u00ad\\u034f\\u061c\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\ufe00-\\ufe0f\\ufeff\\u{e0000}-\\u{e007f}'
+  '\\u00ad\\u034f\\u061c\\u115f\\u1160\\u180e\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2069\\u2800\\u3164' +
+  '\\ufe00-\\ufe0f\\ufeff\\uffa0\\u{e0000}-\\u{e007f}'
 // Cc (C0, DEL, C1), the two Unicode line/paragraph separators, markup, and the
 // invisible characters above.
 const FORBIDDEN_TEXT = new RegExp(`[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029<>${INVISIBLE_CHARACTERS}]`, 'u')
@@ -203,9 +205,10 @@ function hasNonIntegerNumber(value: unknown): boolean {
  *  text (the core neutralizes every schema string in tools/list instead). */
 const SCHEMA_DATA_KEYWORDS: ReadonlySet<string> = new Set(['const', 'default', 'enum', 'examples'])
 /** Keywords whose value maps names (property names, definition names) to
- *  subschemas: a name such as `enum` there is a name, not a keyword. */
+ *  subschemas (draft-07 `dependencies` also to name lists): a name such as
+ *  `enum` there is a name, not a keyword. */
 const SCHEMA_MAP_KEYWORDS: ReadonlySet<string> = new Set([
-  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas',
+  'properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas', 'dependencies',
 ])
 
 /** Every `description` / `title` string anywhere in a schema follows the text rules too:

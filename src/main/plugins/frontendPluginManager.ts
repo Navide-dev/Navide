@@ -106,12 +106,12 @@ import {
   BACKEND_RESTART_BUDGET_SPENT_MESSAGE,
   canonicalBackendPackageDir,
   PluginBackendHost,
+  type BackendCallConcurrency,
   type ThirdPartyAdmitter,
 } from './pluginBackendHost'
 import { currentPluginHostTarget, UNIVERSAL_PLUGIN_TARGET } from './pluginTarget'
 import {
   isAllowedBackendTimeout,
-  MAX_BACKEND_CALLS_PER_INSTANCE,
   MAX_BACKEND_SUBSCRIPTIONS_PER_INSTANCE,
 } from './pluginBackendLimits'
 import {
@@ -5650,9 +5650,6 @@ export class FrontendPluginManager {
       if (calls.has(record.reqId)) {
         return buildError(record.reqId, 'BAD_REQUEST', 'backend request id is already pending')
       }
-      if (calls.size >= MAX_BACKEND_CALLS_PER_INSTANCE) {
-        return buildError(record.reqId, 'RESOURCE_LIMIT', 'backend call limit reached')
-      }
       if (
         plugin.id === PLANS_PLUGIN_ID &&
         plugin.hasV2DescriptorIdentity &&
@@ -10724,6 +10721,11 @@ export class FrontendPluginManager {
   /** All registered (installed + built-in) descriptors. */
   listDescriptors(): PluginLaunchDescriptor[] {
     return [...this.descriptors.values()]
+  }
+
+  /** Current and peak in-flight backend calls per plugin (never capped); the activity page (D-f) reads this. */
+  backendCallConcurrency(): BackendCallConcurrency[] {
+    return this.pluginBackendHost.backendCallConcurrency()
   }
 
   /** All validated packages installed from disk, including backend-only packages. */

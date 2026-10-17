@@ -78,6 +78,12 @@ class ExtensionSummary(BaseModel):
     """Member ids when `latest_version` is an Extension Pack, else None."""
     latest_prerelease_version: str | None = None
     """Newest pre-release when it is newer than `latest_version`, else None."""
+    disclosure: dict | None = None
+    """Manifest disclosure of `latest_version` (contract 3.1), display data for
+    the list card's summary and risk level; None for versions without one."""
+    scan: dict | None = None
+    """Static scan report of one `latest_version` artifact (contract 3.8),
+    display data for the list card's risk level; None when it has none."""
     icon_path: str | None = None
     """Package-relative raster icon of `latest_version`, served by the website
     asset route; None when the package has no safe icon."""

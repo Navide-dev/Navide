@@ -982,6 +982,97 @@ describe('ExtensionsPane', () => {
     expect(row.find('.ext-restart').exists()).toBe(false)
   })
 
+  it('D2: badges whether an update adds permissions, labelled as unverified Registry data', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.more', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+        { id: 'acme.same', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+        { id: 'acme.unknown', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      checkUpdates: vi.fn().mockResolvedValue([
+        { id: 'acme.more', namespace: 'acme', name: 'more', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'more' },
+        { id: 'acme.same', namespace: 'acme', name: 'same', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'same' },
+        { id: 'acme.unknown', namespace: 'acme', name: 'unknown', installedVersion: '1.0.0', latestVersion: '1.1.0' },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    const more = wrapper.get('[data-id="acme.more"] .ext-permission-change')
+    expect(more.text()).toBe('More permissions')
+    expect(more.attributes('title')).toContain('not yet verified')
+    expect(wrapper.get('[data-id="acme.same"] .ext-permission-change').text()).toBe('Same permissions')
+    expect(wrapper.find('[data-id="acme.unknown"] .ext-permission-change').exists()).toBe(false)
+  })
+
+  // User ruling 2026-10-17 (D-d option B): the update asks as on main; the
+  // dialog shows the diff, here that nothing changed.
+  it('D2: an update that adds no permissions still asks, and the dialog says nothing changed', async () => {
+    const commitInstall = vi.fn().mockResolvedValue({ id: 'acme.same', requires: [], restartRequired: true })
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.same', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      checkUpdates: vi.fn().mockResolvedValue([
+        { id: 'acme.same', namespace: 'acme', name: 'same', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'same' },
+      ]),
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.same', version: '1.1.0', trustTier: 'signed-verified', sensitive: ['shell'],
+        containsBackendExecutable: false, requiresConfirmation: true, publisherId: 'acme',
+        requiresPublisherTrust: false, requiresRiskConfirmation: true,
+        disclosureDiff: {
+          schemaVersion: 1,
+          from: { id: 'acme.same', version: '1.0.0', risk: 'high' },
+          to: { id: 'acme.same', version: '1.1.0', risk: 'high' },
+          added: [], removed: [], unchanged: [{ kind: 'shell', key: 'allowlist', detail: null }], widened: false,
+        },
+      }),
+      commitInstall,
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    await wrapper.get('[data-id="acme.same"] .ext-update').trigger('click')
+    await flushPromises()
+    expect(commitInstall).not.toHaveBeenCalled()
+    expect(wrapper.get('.ext-trust-dialog .nv-diff').text()).toContain('No permission was added or removed.')
+    await wrapper.get('.ext-confirm-risk').trigger('click')
+    await flushPromises()
+    expect(commitInstall).toHaveBeenCalledWith('acme.same', { publisherConfirmed: false, riskConfirmed: true })
+  })
+
+  // An update that needs no confirmation commits directly with no extra
+  // notice, exactly as on main (D-d option B).
+  it('D2: an update that needs no confirmation commits directly, as on main', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.wider', requires: [], sensitive: [], packageVersion: '1.0.0', provenance: 'official-registry' },
+      ]),
+      checkUpdates: vi.fn().mockResolvedValue([
+        { id: 'acme.wider', namespace: 'acme', name: 'wider', installedVersion: '1.0.0', latestVersion: '1.1.0', permissionChange: 'more' },
+      ]),
+      prepareInstall: vi.fn().mockResolvedValue({
+        id: 'acme.wider', version: '1.1.0', trustTier: 'signed-verified', sensitive: [],
+        containsBackendExecutable: false, requiresConfirmation: false, publisherId: 'acme',
+        requiresPublisherTrust: false, requiresRiskConfirmation: false,
+        disclosureDiff: {
+          schemaVersion: 1,
+          from: { id: 'acme.wider', version: '1.0.0', risk: 'low' },
+          to: { id: 'acme.wider', version: '1.1.0', risk: 'low' },
+          added: [{ kind: 'system', key: 'ui', detail: null }], removed: [], unchanged: [], widened: true,
+        },
+      }),
+      commitInstall: vi.fn().mockResolvedValue({ id: 'acme.wider', requires: ['ui'], restartRequired: true }),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+
+    await wrapper.get('[data-id="acme.wider"] .ext-update').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.ext-trust-dialog').exists()).toBe(false)
+    expect(useNotify().toasts.value.some((toast) => toast.message.startsWith('acme.wider'))).toBe(false)
+  })
+
   it('restarts a staged Registry update without offering a second install', async () => {
     const listInstalled = vi.fn()
       .mockResolvedValueOnce([{ id: 'navide.mini-ide', packageVersion: '1.0.0', pendingCandidateVersion: '2.0.0', requires: [], sensitive: [] }])
