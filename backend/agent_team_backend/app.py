@@ -454,6 +454,30 @@ async def broadcast_main_windows(event: dict[str, Any]) -> None:
             _SESSIONS.discard(session)
 
 
+async def nudge_plugin_request_recovery(session: "Session") -> None:
+    """A main window went away (review-370 R1): if it was carrying out approved
+    plugin requests, ask the main windows still open to settle them, instead of
+    leaving them ``applying`` until another window opens. Each window waits a
+    short grace before settling, so a window that is only reconnecting claims
+    its request back first (R2). Never raises."""
+    window_id = getattr(session, "window_id", "")
+    if not window_id or not is_main_window(session):
+        return
+    try:
+        from .ipc import make_event
+        from .plugins import agent_tools_contract as contract
+        from .skills_approvals import registry
+
+        held = [
+            r["approval_id"] for r in registry.plugin_requests()
+            if r["status"] == "applying" and registry.applying_by(r["approval_id"]) == window_id
+        ]
+        if held:
+            await broadcast_main_windows(make_event(contract.PLUGIN_APPROVAL_RECOVER_EVENT, {"approval_ids": held}))
+    except Exception as err:  # noqa: BLE001 - a closing socket must not fail on this
+        log.warning("plugin request recovery nudge failed: %s", err)
+
+
 def live_main_window_ids() -> set[str]:
     """The page-load ids (``ui.invoke.ready`` window_id) of the main windows connected now."""
     return {
@@ -3239,6 +3263,7 @@ async def ws(websocket: WebSocket) -> None:
         # Peer is gone: silence any in-flight sends before cancelling tasks.
         session.dead = True
         _SESSIONS.discard(session)
+        await nudge_plugin_request_recovery(session)
         await _kill_onboarding_runs(session)
         # Release PTY ownership so their output is dropped until reattached.
         orphaned = [tid for tid, owner in _PTY_OWNERS.items() if owner is session]

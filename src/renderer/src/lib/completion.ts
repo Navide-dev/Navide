@@ -536,6 +536,18 @@ export function loopStallVerdict(s: {
   return 'ok'
 }
 
+/** Consecutive continue injections that failed before the loop stops itself.
+ *  A stop condition, not a capacity limit: a failed inject leaves the arm
+ *  untouched, so the next poll retries at once, and a pane whose input box
+ *  keeps refusing the prompt would otherwise retry forever with nothing but a
+ *  console line to show for it. One success clears the count. */
+export const LOOP_INJECT_FAIL_LIMIT = 3
+
+/** The consecutive-failure count after one continue injection. */
+export function loopInjectFailures(prev: number, ok: boolean): number {
+  return ok ? 0 : prev + 1
+}
+
 /** Parse a CLI event timestamp into epoch ms. Accepts ISO-8601 (Claude/Codex
  *  emit their log's ISO timestamp) and a bare epoch-ms string (Kimi emits the
  *  wire.jsonl `time` field). Returns NaN when unparseable. */
@@ -584,6 +596,24 @@ export function turnEndsWithSentinel(text: string, sentinel: string): boolean {
     const line = lines[i].trim()
     if (!line) continue
     return line === sentinel
+  }
+  return false
+}
+
+/** turnEndsWithSentinel for the loop's DONE marker only: the final line may
+ *  also be the marker wrapped in markdown decoration (backticks, `*`, `_`).
+ *  Agents often format the marker as code or bold, and missing it keeps the
+ *  loop sending continues after the work is done. Deliberately not used for
+ *  LOOP_WAIT or pipeline stage sentinels, whose gates stay exact. The bare
+ *  comparison runs first; a line with any other text is still rejected. */
+export function turnEndsWithLoopDone(text: string, marker: string): boolean {
+  if (turnEndsWithSentinel(text, marker)) return true
+  if (!text || !marker) return false
+  const lines = text.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (!line) continue
+    return line.replace(/^[`*_\s]+|[`*_\s]+$/g, '') === marker
   }
   return false
 }

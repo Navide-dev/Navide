@@ -166,7 +166,7 @@ import {
   CLI_PASTE_LINE_CAP
 } from '@navide/terminal'
 import { planDropPrompt, type PlanDragRef } from './lib/planDrag'
-import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
+import { activityMeansWorking, allSlotsFinished, applyLoopWait, applyTurnProgress, clearProvisionalStall, detailMeansToolUse, recordTurnComplete, paneSignalResetKeys, loopWaitBackoffMs, loopWaitHonoured, isReplayedTurnComplete, loopBackoffMs, loopContinueReady, loopInjectFailures, loopSettleMs, loopStallVerdict, loopWaitingOnSubagents, LOOP_INJECT_FAIL_LIMIT, LOOP_STALL_LIMIT, turnCompleteDone, turnEndsWithLoopDone, turnEndsWithSentinel, type SlotSignal, type LoopWaitState } from './lib/completion'
 import { createPaneSessionPersistence, createTurnTextGate, MAX_KICKOFF_ATTEMPTS, runPipelineKickoff } from './lib/cliCoordination'
 import { reorderByIds, reorderStrings, sortByIdOrder } from './lib/paneOrder'
 import { computeRangeSelection } from './lib/paneSelection'
@@ -353,6 +353,7 @@ import {
   type SchedulerDisabledNotice,
 } from './composables/useAnnouncements'
 import { usePluginAgentRequests } from './composables/usePluginAgentRequests'
+import { PLUGIN_APPROVAL_RECOVER_EVENT } from '../../shared/pluginAgentTools'
 import type {
   ConvenienceAnnouncementAction,
   EvolveAnnouncementAction,
@@ -430,6 +431,7 @@ const CoachMark = defineAsyncComponent(() => import('./components/CoachMark.vue'
 const CliHealthGuide = defineAsyncComponent(() => import('./components/CliHealthGuide.vue'))
 const CliInstallDialog = defineAsyncComponent(() => import('./components/CliInstallDialog.vue'))
 const SkillInstallApprovalDialog = defineAsyncComponent(() => import('./components/SkillInstallApprovalDialog.vue'))
+const PluginAgentRequestDialog = defineAsyncComponent(() => import('./components/PluginAgentRequestDialog.vue'))
 const DebugModal = defineAsyncComponent(() => import('./components/DebugModal.vue'))
 const RestoreScopeModal = defineAsyncComponent(() => import('./components/RestoreScopeModal.vue'))
 const AccountFollowSwitchDialog = defineAsyncComponent(() => import('./components/AccountFollowSwitchDialog.vue'))
@@ -921,6 +923,14 @@ watch(() => backend.status.value, (status) => {
     console.warn('[plugins] could not settle interrupted agent plugin requests', error)
   })
 }, { immediate: true })
+// And when a main window went away while carrying out approved requests
+// (review-370 R1): the backend names them, and recover() settles whatever is
+// still unclaimed after its grace.
+backend.on(PLUGIN_APPROVAL_RECOVER_EVENT, () => {
+  void pluginAgentRequests.recover().catch((error: unknown) => {
+    console.warn('[plugins] could not settle agent plugin requests a closed window left', error)
+  })
+})
 const quotaFailover = useQuotaFailover()
 // Status-bar popovers (backend / announcements / clock) share one open id, so
 // opening any of them closes whichever was showing.
@@ -5030,10 +5040,17 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   watcher.continuing = true
   await acquireInjectionSlot()
   let ok = false
+  // The turn this continue wakes can end before injectPane returns; arming at
+  // the return would place armedAt after that turn's own signals and the loop
+  // would wait on a turn that already happened. Stamp once the slot is held,
+  // right before the inject (so time queued for the slot never counts), and arm
+  // with it only once the inject lands (a failed one keeps the old arm).
+  let armAt = 0
   try {
     // Cancelled / restarted while queued on the semaphore? Abort before the
     // inject so no stray "繼續" lands in a CLI whose loop was just turned off.
     if (loopGen.get(paneId) !== gen || !pane.loopActive || held()) return
+    armAt = Date.now()
     ok = await injectPane(
       paneId,
       withLoopDoneInstruction(loopResumeTextFor(paneId)),
@@ -5048,12 +5065,21 @@ async function fireLoopContinue(paneId: string): Promise<void> {
   // Loop turned off / restarted while the injection was in flight — don't arm.
   if (loopGen.get(paneId) !== gen || !pane.loopActive) return
   if (!ok) {
+    // A quota hold that cancelled the inject is not a failure to count.
+    if (!held()) {
+      watcher.injectFailures = loopInjectFailures(watcher.injectFailures, false)
+      if (watcher.injectFailures >= LOOP_INJECT_FAIL_LIMIT) {
+        stopLoopSpinning(paneId, 'inject-failed')
+        return
+      }
+    }
     console.warn(`[loop] pane ${paneId}: continue injection failed — will retry next turn`)
     return
   }
+  watcher.injectFailures = loopInjectFailures(watcher.injectFailures, true)
   pane.loopTurnCount = (pane.loopTurnCount ?? 0) + 1
   // Fresh turn started: re-arm and refresh the pre-limit estimate window.
-  armLoopTurn(paneId)
+  armLoopTurn(paneId, armAt)
   // Hold the next continue for the current stall tier (0 while productive), and
   // count this one against the hard cap.
   watcher.continues += 1
@@ -5137,7 +5163,7 @@ function noteLoopWait(paneId: string, text: string, timestamp: string): boolean 
 /** The loop is spinning without finishing — it repeated itself past the stall
  *  limit, or burned through the continue cap. Stop it (same teardown as the
  *  done path) and ask for attention instead of injecting another continue. */
-function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped'): void {
+function stopLoopSpinning(paneId: string, reason: 'stalled' | 'capped' | 'inject-failed' | 'interrupted'): void {
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane || !pane.loopActive) return
   console.warn(`[loop] pane ${paneId}: loop stopped — ${reason}`)
@@ -5183,10 +5209,10 @@ function stopLoopComplete(paneId: string, reason: 'done-marker' | 'turn-cap' = '
 
 /** Set the turn-complete arm time on a pane's loop watcher (no-op if the
  *  watcher is gone). Only a turn_complete after this instant is judged. */
-function armLoopTurn(paneId: string): void {
+function armLoopTurn(paneId: string, at: number = Date.now()): void {
   const watcher = loopLimitWatchers.get(paneId)
   if (!watcher) return
-  watcher.armedAt = Date.now()
+  watcher.armedAt = at
   // Per-TURN counter: what the next turn does with tools says nothing about
   // what the last one did. toolSignalsSeen is per-PANE and deliberately kept.
   watcher.toolUsesThisTurn = 0
@@ -5268,6 +5294,9 @@ interface LoopLimitWatcher {
   /** The tool judgement already ran on this armed turn's text (or the turn
    *  was honoured as a LOOP_WAIT), so a later empty copy adds nothing. */
   toolJudged: boolean
+  /** Consecutive continue injections that failed (0 after any success) —
+   *  LOOP_INJECT_FAIL_LIMIT of them stop the loop. */
+  injectFailures: number
   /** Consecutive turns that ended with LOOP_WAIT_MARKER (0 after any other). */
   consecutive: number
   /** Time this run has already granted to LOOP_WAIT holds, bounded by
@@ -5312,6 +5341,7 @@ function startLoopLimitWatcher(paneId: string): void {
     toolSignalsSeen: false,
     emptyCharged: false,
     toolJudged: false,
+    injectFailures: 0,
     consecutive: 0,
     totalWaitedMs: 0,
   }
@@ -8899,11 +8929,19 @@ async function rebuildPaneClean(paneId: string): Promise<void> {
  *
  *  The UI callers ignore this; ui.pane.interrupt reports it, because
  *  "nothing was sent" and "it was sent and the agent kept going" are different
- *  answers and an MCP caller cannot tell them apart otherwise. */
-async function onInterrupt(paneId: string): Promise<boolean> {
+ *  answers and an MCP caller cannot tell them apart otherwise.
+ *
+ *  `keepLoop` is for interrupts not aimed at this one pane (batch, evolve):
+ *  they leave its loop running. */
+async function onInterrupt(paneId: string, opts: { keepLoop?: boolean } = {}): Promise<boolean> {
   if (!panes.value.find((p) => p.id === paneId)?.realized) return false
   const ref = paneRefs[paneId]
   if (!ref?.sessionId) return false
+  // An explicit interrupt of this pane (user or agent) stops its loop too —
+  // otherwise the interrupted turn's end reads as a finished turn and the loop
+  // answers it with a continue. Stopped before the interrupt so an in-flight
+  // continue aborts.
+  if (!opts.keepLoop && panes.value.find((p) => p.id === paneId)?.loopActive) stopLoopSpinning(paneId, 'interrupted')
   try {
     const issued = await ref.interrupt()
     persistPaneStopped(paneId, true)
@@ -8929,7 +8967,7 @@ async function onKillAll(paneIds?: readonly string[]): Promise<void> {
 
 // ── Batch actions on the multi-select set (right-click a selected pane) ───────
 async function batchInterrupt(ids: string[]): Promise<void> {
-  for (const id of ids) await onInterrupt(id)
+  for (const id of ids) await onInterrupt(id, { keepLoop: true })
 }
 
 function batchMinimize(ids: string[]): void {
@@ -14268,7 +14306,7 @@ backend.on('agent.activity', (raw) => {
     // Unattended loop: the CLI printed LOOP_DONE_MARKER as this turn's final
     // line → the whole task is done. Stop the loop so the poll never resends
     // the resume prompt again (runs before the poll's turn-complete continue).
-    if (ev.text && turnEndsWithSentinel(ev.text, LOOP_DONE_MARKER)) {
+    if (ev.text && turnEndsWithLoopDone(ev.text, LOOP_DONE_MARKER)) {
       stopLoopOnDoneMarker(ev.pane_id, ev.timestamp ?? '')
     }
     // Unattended loop: judge whether this turn actually moved the task forward.
@@ -14710,7 +14748,7 @@ function onEvolveAction(action: EvolveAnnouncementAction): void {
       if (paneId) void focusPaneFromNotification(paneId)
       break
     case 'evolve-interrupt':
-      if (paneId) void onInterrupt(paneId)
+      if (paneId) void onInterrupt(paneId, { keepLoop: true })
       break
     case 'evolve-reclaim':
       if (paneId) void reclaimPaneFromMenu(paneId)
@@ -20895,6 +20933,7 @@ function paneIsCommander(p: ActivePane): boolean {
   />
   <!-- An agent's skills_install waits here for the user's approval. -->
   <SkillInstallApprovalDialog :backend="backend" />
+  <PluginAgentRequestDialog :backend="backend" />
   <RestoreScopeModal
     v-if="showRestoreScopeModal"
     :open="showRestoreScopeModal"

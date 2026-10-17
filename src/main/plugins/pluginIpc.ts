@@ -584,6 +584,18 @@ export function registerPluginIpc(
   // notice only. Its failures never fail an install or a removal.
   const installScans = new PluginInstallScanStore(pluginsRoot)
   let rescanNotices: PluginRescanNotice[] = []
+  // #373 follow-up: installedAt is recorded when a fresh install becomes
+  // active: the restart found no version of the id in place (no registered
+  // descriptor, no selector active, no legacy backend-only install), so an
+  // update over any layout, a rollback, or a staged-then-discarded candidate
+  // never records one (review MED-1, LOW1 on #380). Record only.
+  const recordFreshInstall = (id: string): void => {
+    try {
+      installScans.markInstalled(id, Date.now())
+    } catch (error) {
+      console.warn(`[plugins] installedAt for ${id} not recorded: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   const packs = new PluginPackStore(pluginsRoot)
   // The manager reads the same file through the resolver the Host installs
   // before the first package load; this handle only records the user's switch.
@@ -797,7 +809,14 @@ export function registerPluginIpc(
     const disclosure = activeDisclosure(id)
     const declared = disclosure ? declaredForActivity(disclosure) : []
     try {
-      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({ plugin_id: id, declared }))
+      // Sent only when known: an id installed before this was recorded has
+      // none, and the backend then keeps its earlier behaviour (#373).
+      const installedAt = installScans.installedAt(id)
+      const report = parsePluginActivityReport(await manager.requestPluginActivityReport({
+        plugin_id: id,
+        declared,
+        ...(installedAt !== null ? { installedAt } : {}),
+      }))
       return report ? { ok: true, report } : { ok: false, error: 'the activity report was malformed' }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
@@ -1979,6 +1998,7 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
           id,
@@ -1988,6 +2008,7 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
@@ -2485,6 +2506,14 @@ export function registerPluginIpc(
     const root = options.nativeBackendDataRoot
     if (!root) return { exists: false, bytes: 0, path: '' }
     return inspectNativeBackendData(root, id)
+  })
+
+  // The installed (active) version's disclosure, for the agent request card's
+  // permission diff (B2): from the installed manifest, never Registry data.
+  // Null when nothing is installed or the package is Manifest v1.
+  ipcMain.handle('plugins:installedDisclosure', async (event, args: { id?: unknown } | null) => {
+    assertAuthorized(event)
+    return activeDisclosure(assertPluginRemovalTarget(pluginsRoot, args?.id))
   })
 
   // The Disabled switch for the built-in Plans, Git and Mini-IDE. Same store as
