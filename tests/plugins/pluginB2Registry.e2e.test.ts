@@ -177,7 +177,13 @@ describe.skipIf(!REGISTRY_AVAILABLE)('B2 against a real Registry: search → req
     ].join('\n')
     execFileSync(REGISTRY_PYTHON, ['-c', code, JSON.stringify(commands)], {
       cwd: REGISTRY_DIR,
-      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', HOME: work, NAVIDE_PLUGIN_CONFIG_DIR: join(work, 'cli-config') },
+      // The CLI opens a Registry data dir (database, trust keys) too. Its
+      // default, .registry-data under cwd, is shared with pluginRegistry.e2e,
+      // and two first runs at once race to create it (CI runs both together).
+      env: {
+        ...process.env, PYTHONDONTWRITEBYTECODE: '1', HOME: work,
+        NAVIDE_PLUGIN_CONFIG_DIR: join(work, 'cli-config'), REGISTRY_DATA_DIR: join(work, 'cli-data'),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
   }

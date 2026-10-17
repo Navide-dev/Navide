@@ -174,7 +174,11 @@ describe.skipIf(!REGISTRY_AVAILABLE)('real Registry → App install pipeline', (
     ].join('\n')
     execFileSync(REGISTRY_PYTHON, ['-c', code, JSON.stringify(commands)], {
       cwd: REGISTRY_DIR,
-      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', NAVIDE_PLUGIN_CONFIG_DIR: join(work, 'cli-config') },
+      // The CLI opens a Registry data dir too; its own, not .registry-data in the checkout.
+      env: {
+        ...process.env, PYTHONDONTWRITEBYTECODE: '1',
+        NAVIDE_PLUGIN_CONFIG_DIR: join(work, 'cli-config'), REGISTRY_DATA_DIR: join(work, 'cli-data'),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
   }
