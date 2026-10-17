@@ -137,8 +137,16 @@ def _accepted_by_host_parser(request: dict[str, Any]) -> bool:
     if set(caller) - {"verifiedTo"} != {"kind", "paneId", "workspace"}:
         return False
     if caller["kind"] == "pane":
-        return bool(caller["paneId"]) and caller.get("verifiedTo", "pane") == "pane"
-    return caller["paneId"] is None and caller["workspace"] is None and caller.get("verifiedTo", "caller-kind") == "caller-kind"
+        workspace = caller["workspace"]
+        return (
+            bool(caller["paneId"]) and caller.get("verifiedTo", "pane") == "pane"
+            and (workspace is None or (isinstance(workspace, str) and workspace.startswith("/")))
+        )
+    return (
+        caller["kind"] in ("external", "host")
+        and caller["paneId"] is None and caller["workspace"] is None
+        and caller.get("verifiedTo", "caller-kind") == "caller-kind"
+    )
 
 
 def _body(result: Any) -> dict[str, Any]:
