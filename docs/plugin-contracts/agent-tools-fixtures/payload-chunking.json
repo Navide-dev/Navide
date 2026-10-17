@@ -1,0 +1,400 @@
+{
+  "$comment": "Chunked transfer of agent tool results and arguments (contract section 4.4). Results and arguments have no size cap; their sizes are disclosed as resultBytes and args_bytes. splitAgentToolPayloadText cuts the compact JSON text of a value into pieces of at most maxBytes UTF-8 bytes without splitting a code point; reassembleAgentToolPayloadText joins the pieces received for one request and checks them against the {chunks, bytes} summary. Every hop in both directions uses the same pieces and the same summary. 'arguments' pins the compact spelling both languages cut arguments from; 'argumentsDigest' pins args_sha256/args_bytes (canonical: true means TypeScript canonicalContractJson spells it too).",
+  "constants": {
+    "chunkBytes": 131072,
+    "wireResultChunkMethod": "notifications/navide/resultChunk",
+    "wireResultChunksKey": "io.navide/resultChunks",
+    "wireArgumentChunkMethod": "notifications/navide/argumentChunk",
+    "wireArgumentChunksKey": "io.navide/argumentChunks",
+    "wsResultChunkMessage": "agent.capability.result_chunk",
+    "wsRequestChunkEvent": "agent.capability.request_chunk",
+    "invalidCode": "PLUGIN_TOOL_CHUNKS_INVALID"
+  },
+  "splits": [
+    {
+      "name": "fits in one piece",
+      "text": "{\"a\":1}",
+      "maxBytes": 16,
+      "expected": [
+        "{\"a\":1}"
+      ]
+    },
+    {
+      "name": "exact multiple",
+      "text": "abcdefgh",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh"
+      ]
+    },
+    {
+      "name": "remainder piece",
+      "text": "abcdefghij",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh",
+        "ij"
+      ]
+    },
+    {
+      "name": "empty text is one empty piece",
+      "text": "",
+      "maxBytes": 4,
+      "expected": [
+        ""
+      ]
+    },
+    {
+      "name": "never splits a 3-byte code point",
+      "text": "ab中文",
+      "maxBytes": 4,
+      "expected": [
+        "ab",
+        "中",
+        "文"
+      ]
+    },
+    {
+      "name": "never splits a 4-byte code point",
+      "text": "a😀b",
+      "maxBytes": 4,
+      "expected": [
+        "a",
+        "😀",
+        "b"
+      ]
+    },
+    {
+      "name": "mixed widths fill each piece",
+      "text": "x中😀yz",
+      "maxBytes": 5,
+      "expected": [
+        "x中",
+        "😀y",
+        "z"
+      ]
+    }
+  ],
+  "reassembly": [
+    {
+      "name": "in order",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "{\"a\":"
+        },
+        {
+          "seq": 1,
+          "data": "\"中\"}"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 11
+      },
+      "expected": {
+        "ok": true,
+        "text": "{\"a\":\"中\"}"
+      }
+    },
+    {
+      "name": "arrival order does not matter, seq does",
+      "chunks": [
+        {
+          "seq": 1,
+          "data": "cd"
+        },
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": true,
+        "text": "abcd"
+      }
+    },
+    {
+      "name": "single empty piece",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": ""
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 0
+      },
+      "expected": {
+        "ok": true,
+        "text": ""
+      }
+    },
+    {
+      "name": "missing piece",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 2,
+          "data": "ef"
+        }
+      ],
+      "summary": {
+        "chunks": 3,
+        "bytes": 6
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "count"
+      }
+    },
+    {
+      "name": "duplicate seq",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    },
+    {
+      "name": "seq outside the announced count",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 5,
+          "data": "cd"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    },
+    {
+      "name": "more pieces than announced",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "cd"
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "count"
+      }
+    },
+    {
+      "name": "byte total disagrees",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        },
+        {
+          "seq": 1,
+          "data": "中"
+        }
+      ],
+      "summary": {
+        "chunks": 2,
+        "bytes": 4
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "bytes"
+      }
+    },
+    {
+      "name": "malformed summary",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 0,
+        "bytes": 2
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "summary"
+      }
+    },
+    {
+      "name": "malformed piece",
+      "chunks": [
+        {
+          "seq": "0",
+          "data": "ab"
+        }
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 2
+      },
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    }
+  ],
+  "arguments": [
+    {
+      "name": "object with text and numbers",
+      "arguments": {
+        "block_id": "b1",
+        "status": "done",
+        "n": 3
+      },
+      "text": "{\"block_id\":\"b1\",\"status\":\"done\",\"n\":3}",
+      "maxBytes": 8,
+      "expected": [
+        "{\"block_",
+        "id\":\"b1\"",
+        ",\"status",
+        "\":\"done\"",
+        ",\"n\":3}"
+      ]
+    },
+    {
+      "name": "non-ASCII stays unescaped",
+      "arguments": {
+        "note": "中文 😀",
+        "k": [
+          1,
+          2
+        ]
+      },
+      "text": "{\"note\":\"中文 😀\",\"k\":[1,2]}",
+      "maxBytes": 6,
+      "expected": [
+        "{\"note",
+        "\":\"中",
+        "文 ",
+        "😀\",",
+        "\"k\":[1",
+        ",2]}"
+      ]
+    },
+    {
+      "name": "control characters are escaped",
+      "arguments": {
+        "s": "a\u0001b\nc"
+      },
+      "text": "{\"s\":\"a\\u0001b\\nc\"}",
+      "maxBytes": 5,
+      "expected": [
+        "{\"s\":",
+        "\"a\\u0",
+        "001b\\",
+        "nc\"}"
+      ]
+    },
+    {
+      "name": "fractional number",
+      "arguments": {
+        "ratio": 1.5,
+        "list": [
+          0.25,
+          -2
+        ]
+      },
+      "text": "{\"ratio\":1.5,\"list\":[0.25,-2]}",
+      "maxBytes": 7,
+      "expected": [
+        "{\"ratio",
+        "\":1.5,\"",
+        "list\":[",
+        "0.25,-2",
+        "]}"
+      ]
+    }
+  ],
+  "argumentsDigest": [
+    {
+      "name": "integers and text",
+      "arguments": {
+        "status": "done",
+        "block_id": "b1",
+        "n": 3
+      },
+      "canonical": true,
+      "bytes": 39,
+      "sha256": "60fad2036b1e8fc7fa056ab3460b7b3d9e1a0016df3738b0917b3495de6d350a"
+    },
+    {
+      "name": "non-ASCII is escaped in the canonical spelling",
+      "arguments": {
+        "note": "中文 😀"
+      },
+      "canonical": true,
+      "bytes": 36,
+      "sha256": "5d4f445760a46a7d0b8518e2dedc5ca39d780169d15ec23bb68b407f858b1147"
+    },
+    {
+      "name": "empty object",
+      "arguments": {},
+      "canonical": true,
+      "bytes": 2,
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "fractional number falls back to Python json",
+      "arguments": {
+        "ratio": 1.5,
+        "b": [
+          0.25
+        ]
+      },
+      "canonical": false,
+      "bytes": 24,
+      "sha256": "53a2c0da9090ae631e638bbf7eb5c3182ffdf7dee96b5307a7df79c2ccce7760"
+    }
+  ]
+}

@@ -44,7 +44,8 @@ export const AGENT_TOOL_DEFAULT_TIMEOUT_MS = 30_000
 export const AGENT_TOOL_MAX_TIMEOUT_MS = 120_000
 /**
  * DB9: the technical cap on one description and one canonical input schema, in UTF-8 bytes.
- * Results have no cap (DB9 decision a): they travel in chunks (section 4.4) and their size is disclosed as `resultBytes`.
+ * Results and arguments have no cap (DB9 decision a): they travel in pieces (section 4.4) and their sizes are
+ * disclosed as `resultBytes` and `args_bytes`.
  */
 export const AGENT_TOOL_STABILITY_CAP_BYTES = 1_048_576
 
@@ -303,6 +304,7 @@ export type AgentToolCallErrorCode =
   | 'PLUGIN_TOOL_FAILED'
   /** No longer produced: results have no size cap (DB9 decision a). Kept so older readers still type-check. */
   | 'PLUGIN_TOOL_RESULT_TOO_LARGE'
+  | 'PLUGIN_TOOL_CHUNKS_INVALID'
 
 /** `reason` of PLUGIN_TOOL_UNAVAILABLE, in Host check order. */
 export type AgentToolUnavailableReason =
@@ -331,47 +333,57 @@ export type AgentToolCallResponse =
       ok: false
       error: string
       error_code: AgentToolCallErrorCode
-      reason?: AgentToolUnavailableReason
+      /** For PLUGIN_TOOL_UNAVAILABLE an unavailable reason; for PLUGIN_TOOL_CHUNKS_INVALID a join reason. */
+      reason?: AgentToolUnavailableReason | AgentToolChunksInvalidReason
       /** The plugin's own error code, for PLUGIN_TOOL_FAILED. */
       plugin_error?: string
       meta?: AgentToolCallMeta
     }
 
-// ── chunked result transfer (section 4.4) ───────────────────────────────────
+// ── chunked transfer of results and arguments (section 4.4) ────────────────
 
 /**
- * UTF-8 bytes of the `data` of one result piece. A transport unit, not a cap: a
- * result of any size is sent as as many pieces as it needs. Even if every byte
- * of a piece were escaped as `\u00XX` (6 bytes) the frame stays under the
- * 1 MiB Backend Wire frame (pluginBackendSupervisor maxFrameBytes).
+ * UTF-8 bytes of the `data` of one piece, in both directions. A transport
+ * unit, not a cap: a value of any size is sent as as many pieces as it needs.
+ * Even if every byte of a piece were escaped as `\u00XX` (6 bytes) the frame
+ * stays under the 1 MiB Backend Wire frame (pluginBackendSupervisor maxFrameBytes).
  */
-export const AGENT_TOOL_RESULT_CHUNK_BYTES = 131_072
-/** Backend Wire notification, child → Host, one per piece. */
+export const AGENT_TOOL_CHUNK_BYTES = 131_072
+/** Backend Wire notification, child → Host, one per result piece. */
 export const BACKEND_WIRE_RESULT_CHUNK_METHOD = 'notifications/navide/resultChunk'
 /**
  * Key of the client capability the Host advertises in `navide/call` `_meta`
  * clientCapabilities, and of the summary in the final success response `_meta`.
  */
 export const BACKEND_WIRE_RESULT_CHUNKS_KEY = 'io.navide/resultChunks'
-/** WebSocket message, Host → backend, one per piece; answered like any request. */
+/** Backend Wire notification, Host → child, one per argument piece. */
+export const BACKEND_WIRE_ARGUMENT_CHUNK_METHOD = 'notifications/navide/argumentChunk'
+/**
+ * Key of the capability a child advertises in its `navide/health` success
+ * `_meta`, and of the summary in a `navide/call` `_meta` sent without `arguments`.
+ */
+export const BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = 'io.navide/argumentChunks'
+/** WebSocket request, Host → backend, one per result piece; answered like any request. */
 export const AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = 'agent.capability.result_chunk'
+/** WebSocket event, backend → Host, one per argument piece, sent before `agent.capability.request`. */
+export const AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = 'agent.capability.request_chunk'
 
-/** Backend Wire `params` of {@link BACKEND_WIRE_RESULT_CHUNK_METHOD}; `requestId` is the `navide/call` id. */
-export interface BackendWireResultChunkParams {
+/** Backend Wire `params` of both chunk notifications; `requestId` is the `navide/call` id. */
+export interface BackendWireChunkParams {
   requestId: string | number
   seq: number
   data: string
 }
 
-/** Payload of {@link AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE}; `request_id` is the agent.capability request id. */
-export interface AgentToolResultChunkMessage {
+/** Payload of {@link AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE} and {@link AGENT_CAPABILITY_REQUEST_CHUNK_EVENT}. */
+export interface AgentToolChunkMessage {
   request_id: string
   seq: number
   data: string
 }
 
-/** Announced in the final message: how many pieces were sent and the UTF-8 bytes of the joined text. */
-export interface AgentToolResultChunksSummary {
+/** Sent with the message that completes a transfer: how many pieces and the UTF-8 bytes of the joined text. */
+export interface AgentToolChunksSummary {
   chunks: number
   bytes: number
 }
@@ -379,16 +391,16 @@ export interface AgentToolResultChunksSummary {
 /** The final Host → backend response of a chunked result: `result` is replaced by `resultChunks`. */
 export interface AgentToolCallChunkedResponse {
   ok: true
-  resultChunks: AgentToolResultChunksSummary
+  resultChunks: AgentToolChunksSummary
   meta: AgentToolCallMeta
 }
 
 /** `json` is set by the caller when the joined text does not parse. */
-export type AgentToolResultChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes' | 'json'
+export type AgentToolChunksInvalidReason = 'summary' | 'seq' | 'count' | 'bytes' | 'json'
 
-export type AgentToolResultReassembly =
+export type AgentToolPayloadReassembly =
   | { ok: true; text: string }
-  | { ok: false; code: 'RESULT_CHUNKS_INVALID'; reason: AgentToolResultChunksInvalidReason }
+  | { ok: false; code: 'PLUGIN_TOOL_CHUNKS_INVALID'; reason: AgentToolChunksInvalidReason }
 
 /** The value of `meta.resultBytes`: UTF-8 bytes of the compact JSON text of a result (`null` when absent). */
 export function agentToolResultBytes(result: unknown): number {
@@ -396,7 +408,7 @@ export function agentToolResultBytes(result: unknown): number {
 }
 
 /** Cuts `text` into pieces of at most `maxBytes` UTF-8 bytes, never inside a code point. Always at least one piece. */
-export function splitAgentToolResultText(text: string, maxBytes: number = AGENT_TOOL_RESULT_CHUNK_BYTES): string[] {
+export function splitAgentToolPayloadText(text: string, maxBytes: number = AGENT_TOOL_CHUNK_BYTES): string[] {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 4) throw new RangeError('maxBytes must be an integer >= 4')
   const pieces: string[] = []
   let start = 0
@@ -423,15 +435,15 @@ function isCount(value: unknown, min: number): value is number {
 
 /**
  * Joins the pieces received for one request (in any arrival order) and checks
- * them against the final message's summary. No size limit beyond memory.
+ * them against the summary. No size limit beyond memory.
  */
-export function reassembleAgentToolResultText(
+export function reassembleAgentToolPayloadText(
   chunks: ReadonlyArray<{ seq: unknown; data: unknown }>,
   summary: unknown,
-): AgentToolResultReassembly {
-  const invalid = (reason: AgentToolResultChunksInvalidReason): AgentToolResultReassembly =>
-    ({ ok: false, code: 'RESULT_CHUNKS_INVALID', reason })
-  const s = summary as Partial<AgentToolResultChunksSummary> | null
+): AgentToolPayloadReassembly {
+  const invalid = (reason: AgentToolChunksInvalidReason): AgentToolPayloadReassembly =>
+    ({ ok: false, code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason })
+  const s = summary as Partial<AgentToolChunksSummary> | null
   if (!s || typeof s !== 'object' || !isCount(s.chunks, 1) || !isCount(s.bytes, 0)) return invalid('summary')
   if (chunks.some((c) => !isCount(c.seq, 0) || typeof c.data !== 'string')) return invalid('seq')
   if (chunks.length !== s.chunks) return invalid('count')

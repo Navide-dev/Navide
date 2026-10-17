@@ -201,19 +201,23 @@ def test_approval_kinds_and_decide_action() -> None:
     assert tools.PLUGIN_APPROVAL_DECIDE_ACTION == "plugins.agent_request.decide"
 
 
-# ── chunked result transfer (DB9 decision a: no result cap) ─────────────────
+# ── chunked transfer of results and arguments (no size cap, section 4.4) ────
 
-_CHUNKING = _load("result-chunking.json")
+_CHUNKING = _load("payload-chunking.json")
 
 
 def test_chunking_constants_match_the_shared_fixture() -> None:
     assert {
-        "chunkBytes": tools.AGENT_TOOL_RESULT_CHUNK_BYTES,
-        "wireChunkMethod": tools.BACKEND_WIRE_RESULT_CHUNK_METHOD,
-        "wireChunksKey": tools.BACKEND_WIRE_RESULT_CHUNKS_KEY,
-        "wsChunkMessage": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
-        "invalidCode": tools.RESULT_CHUNKS_INVALID,
+        "chunkBytes": tools.AGENT_TOOL_CHUNK_BYTES,
+        "wireResultChunkMethod": tools.BACKEND_WIRE_RESULT_CHUNK_METHOD,
+        "wireResultChunksKey": tools.BACKEND_WIRE_RESULT_CHUNKS_KEY,
+        "wireArgumentChunkMethod": tools.BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+        "wireArgumentChunksKey": tools.BACKEND_WIRE_ARGUMENT_CHUNKS_KEY,
+        "wsResultChunkMessage": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+        "wsRequestChunkEvent": tools.AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+        "invalidCode": tools.AGENT_TOOL_CHUNKS_INVALID,
     } == _CHUNKING["constants"]
+    assert tools.AGENT_TOOL_CHUNKS_INVALID in tools.AGENT_TOOL_CALL_ERROR_CODES
 
 
 def test_a_fully_escaped_piece_fits_the_backend_ws_message_limit() -> None:
@@ -222,37 +226,58 @@ def test_a_fully_escaped_piece_fits_the_backend_ws_message_limit() -> None:
 
     worst = json.dumps(
         {"type": tools.AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE, "id": "x" * 64,
-         "payload": {"request_id": "x" * 64, "seq": tools.MAX_SAFE_INTEGER, "data": "\u0001" * tools.AGENT_TOOL_RESULT_CHUNK_BYTES}},
+         "payload": {"request_id": "x" * 64, "seq": tools.MAX_SAFE_INTEGER, "data": "\u0001" * tools.AGENT_TOOL_CHUNK_BYTES}},
         separators=(",", ":"),
     )
     assert len(worst.encode("utf-8")) < Config(app=None).ws_max_size
 
 
 @pytest.mark.parametrize("case", _CHUNKING["splits"], ids=lambda c: c["name"])
-def test_split_result_text(case: dict[str, Any]) -> None:
-    pieces = tools.split_agent_tool_result_text(case["text"], case["maxBytes"])
+def test_split_payload_text(case: dict[str, Any]) -> None:
+    pieces = tools.split_agent_tool_payload_text(case["text"], case["maxBytes"])
     assert pieces == case["expected"]
     assert all(tools.utf8_byte_length(p) <= case["maxBytes"] for p in pieces)
 
 
 def test_split_refuses_a_piece_size_that_cannot_hold_every_code_point() -> None:
     with pytest.raises(ValueError):
-        tools.split_agent_tool_result_text("abc", 3)
+        tools.split_agent_tool_payload_text("abc", 3)
 
 
 @pytest.mark.parametrize("case", _CHUNKING["reassembly"], ids=lambda c: c["name"])
-def test_reassemble_result_text(case: dict[str, Any]) -> None:
-    assert tools.reassemble_agent_tool_result_text(case["chunks"], case["summary"]) == case["expected"]
+def test_reassemble_payload_text(case: dict[str, Any]) -> None:
+    assert tools.reassemble_agent_tool_payload_text(case["chunks"], case["summary"]) == case["expected"]
 
 
-def test_a_10_mib_result_round_trips_with_no_cap() -> None:
-    result = {"rows": [f"row {i} 中文 😀 " + "x" * 230 for i in range(42_000)]}
-    text = json.dumps(result, separators=(",", ":"), ensure_ascii=False)
+@pytest.mark.parametrize("case", _CHUNKING["arguments"], ids=lambda c: c["name"])
+def test_arguments_are_cut_from_the_shared_compact_spelling(case: dict[str, Any]) -> None:
+    text = tools.agent_tool_payload_text(case["arguments"])
+    assert text == case["text"]
+    pieces = tools.split_agent_tool_payload_text(text, case["maxBytes"])
+    assert pieces == case["expected"]
+    joined = tools.reassemble_agent_tool_payload_text(
+        [{"seq": seq, "data": data} for seq, data in enumerate(pieces)],
+        {"chunks": len(pieces), "bytes": tools.utf8_byte_length(text)},
+    )
+    assert json.loads(joined["text"]) == case["arguments"]
+
+
+@pytest.mark.parametrize("case", _CHUNKING["argumentsDigest"], ids=lambda c: c["name"])
+def test_arguments_digest_is_the_audit_args_fields(case: dict[str, Any]) -> None:
+    assert tools.agent_tool_arguments_digest(case["arguments"]) == (case["sha256"], case["bytes"])
+
+
+@pytest.mark.parametrize("direction", ["result", "arguments"])
+def test_a_10_mib_value_round_trips_with_no_cap(direction: str) -> None:
+    value = {"rows": [f"row {i} 中文 😀 " + "x" * 230 for i in range(42_000)]}
+    text = tools.agent_tool_payload_text(value)
     size = tools.utf8_byte_length(text)
     assert size > 10 * 1_048_576
-    pieces = tools.split_agent_tool_result_text(text)
-    assert all(tools.utf8_byte_length(p) <= tools.AGENT_TOOL_RESULT_CHUNK_BYTES for p in pieces)
+    pieces = tools.split_agent_tool_payload_text(text)
+    assert all(tools.utf8_byte_length(p) <= tools.AGENT_TOOL_CHUNK_BYTES for p in pieces)
     received = [{"seq": seq, "data": data} for seq, data in enumerate(pieces)][::-1]
-    joined = tools.reassemble_agent_tool_result_text(received, {"chunks": len(pieces), "bytes": size})
+    joined = tools.reassemble_agent_tool_payload_text(received, {"chunks": len(pieces), "bytes": size})
     assert joined == {"ok": True, "text": text}
     assert hashlib.sha256(joined["text"].encode()).digest() == hashlib.sha256(text.encode()).digest()
+    if direction == "arguments":
+        assert tools.agent_tool_arguments_digest(json.loads(joined["text"]))[1] >= size

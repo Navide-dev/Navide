@@ -33,8 +33,9 @@ The governing rule of plan B is **disclose, don't restrict**: everything a
 package can do is declared, shown and consented to. The only hard rules are the
 ones that stop impersonation or deception (tool-name prefixes, reserved names,
 text that could fake another tool or a system message) and the DB9 stability
-cap on declarations. Tool results have no size cap: their size is disclosed
-([section 4.4](#44-chunked-result-transfer)).
+cap on declarations. Tool arguments and results have no size cap: their size
+is disclosed and they travel in pieces
+([section 4.4](#44-chunked-transfer-of-results-and-arguments)).
 
 ## 1. Vocabulary
 
@@ -193,14 +194,19 @@ integers, DB9) stay in `validateAgentTools`.
 `inputSchema` in its canonical spelling (`AGENT_TOOL_STABILITY_CAP_BYTES`,
 checked by `validateAgentTools`).
 
-**Tool results have no size cap** (user decision 2026-10-17, DB9 option a:
-"拿掉 1 MiB 回傳上限，只揭露資料大小；穩定性改用分段傳送處理"). Stability comes
-from the chunked transfer in [section 4.4](#44-chunked-result-transfer), never
-from refusing a result. The size of every result is disclosed instead: the Host
-measures it as `meta.resultBytes`, the audit row stores it as
-`plugin_tool_calls.result_bytes` ([section 5](#5-storage-in-navidedb)), and the
-activity page shows it per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in the
-error-code list for older readers but is no longer produced.
+**Tool results and tool arguments have no size cap** (user decisions
+2026-10-17: DB9 option a, "拿掉 1 MiB 回傳上限，只揭露資料大小；穩定性改用分段傳送處理",
+and "傳給外掛的參數上限也拿掉"). Stability comes from the chunked transfer in
+[section 4.4](#44-chunked-transfer-of-results-and-arguments), never from
+refusing a call. The sizes are disclosed instead, one field each:
+
+| Size | Measured by | Wire | Audit column |
+|---|---|---|---|
+| result | the Host, once (`agentToolResultBytes`, 4.2) | `meta.resultBytes` | `plugin_tool_calls.result_bytes` |
+| arguments | the backend, once (`agent_tool_arguments_digest`, 5) | none: the backend is the first hop that sees them and writes the audit row | `plugin_tool_calls.args_bytes` (with `args_sha256`) |
+
+The activity page shows both per call. `PLUGIN_TOOL_RESULT_TOO_LARGE` stays in
+the error-code list for older readers but is no longer produced.
 
 ### 2.8 Consent binding (for B1-a)
 
@@ -758,6 +764,7 @@ headless binding → `callBound`.
 | `PLUGIN_TOOL_TIMEOUT` | the backend did not answer within `timeoutMs` |
 | `PLUGIN_TOOL_FAILED` | the backend answered with an error; its own code is in `plugin_error` |
 | `PLUGIN_TOOL_RESULT_TOO_LARGE` | no longer produced: results have no cap (2.7) |
+| `PLUGIN_TOOL_CHUNKS_INVALID` | the pieces of the arguments or of the result could not be joined (4.4); `reason` is `summary`, `seq`, `count`, `bytes` or `json` |
 
 The transport failures that exist today stay as they are (`host_unavailable`,
 `host_timeout`, lower-case, produced by the backend itself).
@@ -792,35 +799,117 @@ error, error_code}` with `BAD_REQUEST` | `NOT_FOUND` | `REGISTRY_UNAVAILABLE` |
 `HOST_UNAVAILABLE`. Every piece of third-party text (names, descriptions) is
 wrapped as external content by the backend before an agent sees it.
 
-### 4.4 Chunked result transfer
+### 4.4 Chunked transfer of results and arguments
 
-A result of any size reaches the agent intact. Every hop has a single-message
-limit of its own (the plugin child's 1 MiB Backend Wire frame, uvicorn's
-16 MiB WebSocket message), so a result larger than one piece travels as
-ordered pieces and is joined at the receiving end. The pieces are a transport
-unit, not a cap: nothing refuses a result because of its size, and the
-receiver holds as much as memory allows.
+A result or an argument object of any size reaches the other end intact. Every
+hop has a single-message limit of its own (the plugin child's 1 MiB Backend
+Wire frame, uvicorn's 16 MiB WebSocket message), so a payload larger than one
+piece travels as ordered pieces and is joined at the receiving end. The pieces
+are a transport unit, not a cap: nothing refuses a call because of the size of
+its arguments or its result, and the receiver holds as much as memory allows.
+Both directions use the same piece format, the same piece size and the same
+two functions.
 
-**Pieces.** The sender spells the result value as compact JSON text
-(`JSON.stringify`, no whitespace) and cuts it with
-`splitAgentToolResultText(text)` into pieces of at most
-`AGENT_TOOL_RESULT_CHUNK_BYTES` = 131,072 UTF-8 bytes, never inside a code
-point. Even with every byte escaped as `\u00XX` a piece's frame stays below
-the 1 MiB Backend Wire frame. The receiver joins them with
-`reassembleAgentToolResultText(pieces, summary)`, which orders by `seq` (so
-arrival order does not matter), and checks that `seq` runs `0..chunks-1`
-exactly once each and that the joined text has `summary.bytes` UTF-8 bytes. A
-mismatch is `RESULT_CHUNKS_INVALID` with `reason` `summary` | `seq` | `count`
-| `bytes`; it fails that one call and nothing else. The joined text is then
-parsed as JSON; text that does not parse fails the call the same way with
-`reason` `json`. A result whose text fits in one piece is sent exactly as
-before, with no pieces.
+**Pieces.** The sender spells the value as compact JSON text
+(`JSON.stringify`; Python `json.dumps(separators=(",", ":"),
+ensure_ascii=False, allow_nan=False)`) and cuts it with
+`splitAgentToolPayloadText(text)` into pieces of at most
+`AGENT_TOOL_CHUNK_BYTES` = 131,072 UTF-8 bytes, never inside a code point.
+Even with every byte escaped as `\u00XX` a piece's frame stays below the 1 MiB
+Backend Wire frame. Each piece is `{seq, data}` with `seq` counting from 0.
+The receiver joins them with `reassembleAgentToolPayloadText(pieces,
+summary)`, which orders by `seq` (so arrival order does not matter) and checks
+that `seq` runs `0..chunks-1` exactly once each and that the joined text has
+`summary.bytes` UTF-8 bytes. The summary `{chunks, bytes}` travels in the
+message that completes the transfer. A mismatch is
+`PLUGIN_TOOL_CHUNKS_INVALID` with `reason` `summary` | `seq` | `count` |
+`bytes`; joined text that does not parse as JSON is the same code with
+`reason` `json`. It fails that one call and nothing else. A value whose text
+fits in one piece is sent exactly as before, with no pieces.
 
-**Scope.** Pieces carry results only (DB9). Tool arguments travel as today;
-their per-hop limits are listed in the DB9 contract PR, and sending arguments
-in pieces is a separate decision.
+Six hops carry an agent tool call; the agent's own hops (MCP HTTP) cannot be
+cut into pieces because the agent CLI is the client, so they carry no limit
+instead:
 
-**Hop 1: plugin child → Host (Backend Wire).** The Host advertises support in
+| Direction | Hop | How a large value travels |
+|---|---|---|
+| arguments | agent → backend (MCP HTTP request) | one request body; no body limit (A1) |
+| arguments | backend → Host (WebSocket event) | pieces (A2) |
+| arguments | Host → plugin child (Backend Wire) | pieces when the child supports them, else one frame (A3) |
+| result | plugin child → Host (Backend Wire) | pieces (R1) |
+| result | Host → backend (WebSocket request) | pieces (R2) |
+| result | backend → agent (MCP HTTP response) | one response; no limit (R3) |
+
+#### Arguments
+
+**A1: agent → backend (MCP HTTP).** The MCP endpoint accepts a `tools/call`
+request body of any size: Navide builds its `StreamableHTTPSessionManager`
+with `max_request_body_size=sys.maxsize` (the SDK needs a positive integer;
+its default is 4 MiB). This applies to the whole `/mcp` endpoint.
+
+**A2: backend → Host (WebSocket session).** When the compact spelling of
+`payload.arguments` is longer than one piece, the backend first sends the
+event `agent.capability.request_chunk` once per piece,
+
+```json
+{"request_id": "mcp:3f2a...", "seq": 0, "data": "{\"rows\":[..."}
+```
+
+and then the `agent.capability.request` event of 4.2 with
+`payload.arguments` replaced by `payload.argumentChunks`:
+
+```json
+{"request_id": "mcp:3f2a...", "operation": "agentTool", "target": {"...": "..."}, "tool": {"...": "..."}, "caller": {"...": "..."}, "payload": {"argumentChunks": {"chunks": 81, "bytes": 10612345}}}
+```
+
+Each piece is its own WebSocket message and each send is awaited before the
+next, so other sessions' and other panes' messages interleave with the pieces.
+The backend sends the pieces and the request as one sequence that the MCP
+call's cancellation does not interrupt. The Host keeps the pieces by
+`request_id` and accepts them only on the authenticated Host session; it joins
+them when the request arrives, then runs the checks of 4.2 on the joined
+arguments exactly as on inline ones. It drops the pieces it holds when the
+request arrives or the session closes. A join failure answers the request with
+`{ok: false, error_code: "PLUGIN_TOOL_CHUNKS_INVALID", reason}`. The Host's
+client for this session sets the `ws` option `maxPayload: 0` (no message limit;
+the library default is 100 MiB).
+
+**A3: Host → plugin child (Backend Wire).** A child that can receive pieces
+says so in the `_meta` of its `navide/health` success response:
+`"io.navide/argumentChunks": {}`. For such a child, when the compact spelling of
+the arguments is longer than one piece, the Host allocates the `navide/call`
+id, writes the notification
+
+```json
+{"jsonrpc":"2.0","method":"notifications/navide/argumentChunk","params":{"requestId":"<navide/call id>","seq":0,"data":"{\"rows\":[..."}}
+```
+
+once per piece, and then the `navide/call` request with `arguments` left out
+and the summary in its `_meta`:
+
+```json
+{"jsonrpc":"2.0","id":"<navide/call id>","method":"navide/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"io.navide/resultChunks":{}},"io.navide/argumentChunks":{"chunks":81,"bytes":10612345}},"name":"devmap.block.import","runtime":{"...":"..."}}}
+```
+
+The Host writes each piece as its own frame once its output queue is empty, so
+frames of other calls interleave and the queue's existing backlog bound is
+never exceeded. The call's `timeoutMs` starts before the first piece and covers
+the whole call. On timeout or cancellation the Host stops writing pieces and
+sends the existing `notifications/cancelled` for that id; the child drops the
+pieces it holds for that id (a cancellation of an id it never saw a request for
+is ignored, as today). A child that cannot join its pieces answers the call
+with the error `{"code": 1000, "message": "...", "data": {"code":
+"PLUGIN_TOOL_CHUNKS_INVALID", "details": {"reason": "bytes"}}}`.
+
+For a child that does not advertise the capability the Host sends the
+`navide/call` with the arguments inline in one frame, whatever its size: a
+single frame larger than the output queue's backlog bound is written alone
+once the queue is empty, never refused (today it is refused with
+`RESOURCE_LIMIT`). Whether such a child can read it is the child's own matter.
+
+#### Results
+
+**R1: plugin child → Host (Backend Wire).** The Host advertises support in
 every `navide/call` it sends:
 `params._meta["io.modelcontextprotocol/clientCapabilities"]["io.navide/resultChunks"] = {}`.
 A child may send pieces only when it sees that capability; a Host without it
@@ -850,11 +939,7 @@ stop sending pieces for that id. The child is not restarted for any of this;
 the existing rule that a single frame over the frame limit is a protocol error
 stays, and pieces are what keep a correct child under it.
 
-`backend-wire-v1.schema.json` gains the notification and the summary-only
-success response together with the Host's parser change (the contract gate
-test pins every valid wire fixture to the parser), in the implementation PR.
-
-**Hop 2: Host → backend (WebSocket session).** When the Host's response
+**R2: Host → backend (WebSocket session).** When the Host's response
 `result` spells longer than one piece, the Host sends the request message
 `agent.capability.result_chunk` once per piece,
 
@@ -882,10 +967,17 @@ transfer; when it ends (timeout, MCP client gone) the pieces are dropped and
 later ones answer `accepted: false`. Results that fit one piece keep the
 current single message.
 
-**Hop 3: backend → agent (MCP HTTP).** The MCP server returns the joined
+**R3: backend → agent (MCP HTTP).** The MCP server returns the joined
 result in one `tools/call` response. FastMCP's streamable HTTP transport has no
 response-size limit, so nothing is cut here; how much of a large result an
 agent CLI shows is that CLI's own behaviour and outside Navide.
+
+#### Wire schema
+
+`backend-wire-v1.schema.json` gains the two notifications, the summary-only
+success response, the `navide/call` without `arguments` and the health
+capability together with the Host's parser change (the contract gate test pins
+every valid wire fixture to the parser), in the implementation PR.
 
 ## 5. Storage in `navide.db`
 
@@ -905,7 +997,7 @@ involved; every statement is `IF NOT EXISTS`). Times are Unix milliseconds;
 | `caller_workspace`, `target_workspace` | TEXT | |
 | `cross_workspace` | INTEGER | 0/1 |
 | `plugin_id`, `plugin_version`, `tool`, `risk` | TEXT | |
-| `args_sha256`, `args_bytes` | TEXT, INTEGER | of the canonical arguments; the arguments are **not** stored |
+| `args_sha256`, `args_bytes` | TEXT, INTEGER | `agent_tool_arguments_digest(arguments)`: SHA-256 and UTF-8 byte length of the canonical spelling (`canonicalContractJson`; for arguments holding a fractional number, the same sorted, compact, ASCII spelling with the numbers as Python's `json` writes them). The arguments are **not** stored. This is the only arguments-size field (2.7) |
 | `outcome` | TEXT | `ok` / `error` |
 | `error_code` | TEXT | `''` on success |
 | `duration_ms`, `result_bytes` | INTEGER | `result_bytes` = the Host's `meta.resultBytes` (4.2); 0 when the call has no result |
@@ -927,8 +1019,8 @@ outcome)` primary key and `count`; filled before detail rows expire and kept
 of the 10× anomaly.
 
 The agent-tool row of `plugin_activity` carries no size of its own: the activity
-page shows the size of each call from `plugin_tool_calls.result_bytes` through
-`tool_call_id`.
+page shows the sizes of each call from `plugin_tool_calls.args_bytes` and
+`result_bytes` through `tool_call_id`.
 
 Activity is write-only: it decides nothing, and a failed write never fails the
 call it records.
@@ -1011,6 +1103,8 @@ by editing the fixture.
 | DS8 Envelope | the 9-field disclosure envelope ships first, `scanDigest` may be `null` | D-a, D-b and D-c can merge before the scanner without another envelope change |
 | DS9 Unknown subcommand | `unknownSubcommand`, worded "may reach a remote", level high | an unknown subcommand cannot be shown to be local |
 | DB9 result cap | none; size disclosed as `resultBytes`, stability from chunked transfer (4.4) | user decision 2026-10-17 (DB9 option a) |
-| Result piece size | 131,072 UTF-8 bytes on both hops | worst-case escaping keeps a piece frame under the 1 MiB Backend Wire frame; small enough that other calls interleave |
+| Argument cap | none on any hop; size disclosed as `args_bytes`, arguments travel in pieces (4.4) | user decision 2026-10-17 ("傳給外掛的參數上限也拿掉") |
+| Piece size | 131,072 UTF-8 bytes on every hop, both directions | worst-case escaping keeps a piece frame under the 1 MiB Backend Wire frame; small enough that other calls interleave |
+| Arguments-size field | `args_bytes` only, measured by the backend over the same spelling as `args_sha256`; no `meta.argsBytes` | one number for one fact; the backend sees the arguments first and writes the audit row |
 | Who measures the size | the Host, once, compact JSON (`agentToolResultBytes`) | one number from the hop that sees the plugin's value; the backend's spelling differs |
 | Example backend method names | lowercase dotted (`devmap.block.status`) | the Host supervisor refuses upper-case method names (2.1) |

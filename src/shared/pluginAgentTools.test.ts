@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
   AGENT_TOOL_DEFAULT_TIMEOUT_MS,
   AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+  AGENT_TOOL_CHUNK_BYTES,
   AGENT_TOOL_MAX_TIMEOUT_MS,
-  AGENT_TOOL_RESULT_CHUNK_BYTES,
   AGENT_TOOL_STABILITY_CAP_BYTES,
+  BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+  BACKEND_WIRE_ARGUMENT_CHUNKS_KEY,
   BACKEND_WIRE_RESULT_CHUNK_METHOD,
   BACKEND_WIRE_RESULT_CHUNKS_KEY,
   CORE_TOOL_NAMES,
@@ -15,13 +18,14 @@ import {
   agentToolResultBytes,
   deriveAgentToolPrefix,
   isValidAgentToolText,
-  reassembleAgentToolResultText,
+  reassembleAgentToolPayloadText,
   sanitizeAgentToolResultText,
-  splitAgentToolResultText,
+  splitAgentToolPayloadText,
   utf8ByteLength,
   validateAgentToolName,
   validateAgentTools,
 } from './pluginAgentTools'
+import { canonicalContractJson } from './pluginDisclosure'
 
 // The Python implementation (backend/agent_team_backend/plugins/agent_tools_contract.py)
 // is held to the same fixtures by backend/tests/test_plugin_agent_tools_contract.py.
@@ -122,63 +126,83 @@ describe('contract fragments that are not wired yet', () => {
   })
 })
 
-describe('chunked result transfer (DB9 decision a: no result cap)', () => {
-  const chunking = load('result-chunking.json') as {
+describe('chunked transfer of results and arguments (no size cap, section 4.4)', () => {
+  const chunking = load('payload-chunking.json') as {
     constants: Record<string, string | number>
     splits: Case<{ name: string; text: string; maxBytes: number; expected: string[] }>
     reassembly: Case<{ name: string; chunks: Array<{ seq: unknown; data: unknown }>; summary: unknown; expected: unknown }>
+    arguments: Case<{ name: string; arguments: unknown; text: string; maxBytes: number; expected: string[] }>
+    argumentsDigest: Case<{ name: string; arguments: unknown; canonical: boolean; bytes: number; sha256: string }>
   }
 
   it('pins the transport constants to the shared fixture', () => {
     expect({
-      chunkBytes: AGENT_TOOL_RESULT_CHUNK_BYTES,
-      wireChunkMethod: BACKEND_WIRE_RESULT_CHUNK_METHOD,
-      wireChunksKey: BACKEND_WIRE_RESULT_CHUNKS_KEY,
-      wsChunkMessage: AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
-      invalidCode: 'RESULT_CHUNKS_INVALID',
+      chunkBytes: AGENT_TOOL_CHUNK_BYTES,
+      wireResultChunkMethod: BACKEND_WIRE_RESULT_CHUNK_METHOD,
+      wireResultChunksKey: BACKEND_WIRE_RESULT_CHUNKS_KEY,
+      wireArgumentChunkMethod: BACKEND_WIRE_ARGUMENT_CHUNK_METHOD,
+      wireArgumentChunksKey: BACKEND_WIRE_ARGUMENT_CHUNKS_KEY,
+      wsResultChunkMessage: AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE,
+      wsRequestChunkEvent: AGENT_CAPABILITY_REQUEST_CHUNK_EVENT,
+      invalidCode: 'PLUGIN_TOOL_CHUNKS_INVALID',
     }).toEqual(chunking.constants)
   })
 
-  it('keeps a fully escaped piece inside one Backend Wire frame', () => {
+  it('keeps a fully escaped piece inside one Backend Wire frame in both directions', () => {
     // Read as text: src/shared is also compiled by the web project, which cannot import src/main.
     const supervisor = readFileSync(join(process.cwd(), 'src/main/plugins/pluginBackendSupervisor.ts'), 'utf8')
     const frame = Number(/maxFrameBytes \?\? ([\d_]+)/.exec(supervisor)?.[1]?.replace(/_/g, ''))
     expect(frame).toBeGreaterThan(0)
-    const worst = JSON.stringify({
-      jsonrpc: '2.0', method: BACKEND_WIRE_RESULT_CHUNK_METHOD,
-      params: { requestId: 'x'.repeat(64), seq: Number.MAX_SAFE_INTEGER, data: '\u0001'.repeat(AGENT_TOOL_RESULT_CHUNK_BYTES) },
-    })
-    expect(utf8ByteLength(worst) + 1).toBeLessThan(frame)
+    for (const method of [BACKEND_WIRE_RESULT_CHUNK_METHOD, BACKEND_WIRE_ARGUMENT_CHUNK_METHOD]) {
+      const worst = JSON.stringify({
+        jsonrpc: '2.0', method,
+        params: { requestId: 'x'.repeat(64), seq: Number.MAX_SAFE_INTEGER, data: '\u0001'.repeat(AGENT_TOOL_CHUNK_BYTES) },
+      })
+      expect(utf8ByteLength(worst) + 1).toBeLessThan(frame)
+    }
   })
 
   it.each(chunking.splits)('splits: $name', ({ text, maxBytes, expected }) => {
-    const pieces = splitAgentToolResultText(text, maxBytes)
+    const pieces = splitAgentToolPayloadText(text, maxBytes)
     expect(pieces).toEqual(expected)
     expect(pieces.every((p) => utf8ByteLength(p) <= maxBytes)).toBe(true)
   })
 
   it('refuses a piece size that cannot hold every code point', () => {
-    expect(() => splitAgentToolResultText('abc', 3)).toThrow(RangeError)
+    expect(() => splitAgentToolPayloadText('abc', 3)).toThrow(RangeError)
   })
 
   it.each(chunking.reassembly)('reassembles: $name', ({ chunks, summary, expected }) => {
-    expect(reassembleAgentToolResultText(chunks, summary)).toEqual(expected)
+    expect(reassembleAgentToolPayloadText(chunks, summary)).toEqual(expected)
   })
 
-  it('carries a 10 MiB result intact with no cap and discloses its size', () => {
-    const result = { rows: Array.from({ length: 42_000 }, (_, i) => `row ${i} 中文 😀 ${'x'.repeat(230)}`) }
-    const text = JSON.stringify(result)
-    const bytes = agentToolResultBytes(result)
+  it.each(chunking.arguments)('cuts arguments from the shared compact spelling: $name', ({ arguments: args, text, maxBytes, expected }) => {
+    expect(JSON.stringify(args)).toBe(text)
+    const pieces = splitAgentToolPayloadText(text, maxBytes)
+    expect(pieces).toEqual(expected)
+    const joined = reassembleAgentToolPayloadText(pieces.map((data, seq) => ({ seq, data })), { chunks: pieces.length, bytes: utf8ByteLength(text) })
+    expect(JSON.parse((joined as { text: string }).text)).toEqual(args)
+  })
+
+  it.each(chunking.argumentsDigest.filter((c) => c.canonical))('spells args_bytes canonically: $name', ({ arguments: args, bytes }) => {
+    expect(utf8ByteLength(canonicalContractJson(args))).toBe(bytes)
+  })
+
+  // Both directions cut and join with the same two functions, so one run covers results and arguments.
+  it('carries a 10 MiB result or argument object intact with no cap and discloses its size', () => {
+    const value = { rows: Array.from({ length: 42_000 }, (_, i) => `row ${i} 中文 😀 ${'x'.repeat(230)}`) }
+    const text = JSON.stringify(value)
+    const bytes = agentToolResultBytes(value)
     expect(bytes).toBe(utf8ByteLength(text))
     expect(bytes).toBeGreaterThan(10 * 1_048_576)
-    const pieces = splitAgentToolResultText(text)
-    expect(pieces.length).toBeGreaterThanOrEqual(Math.ceil(bytes / AGENT_TOOL_RESULT_CHUNK_BYTES))
-    expect(pieces.every((p) => utf8ByteLength(p) <= AGENT_TOOL_RESULT_CHUNK_BYTES)).toBe(true)
+    const pieces = splitAgentToolPayloadText(text)
+    expect(pieces.length).toBeGreaterThanOrEqual(Math.ceil(bytes / AGENT_TOOL_CHUNK_BYTES))
+    expect(pieces.every((p) => utf8ByteLength(p) <= AGENT_TOOL_CHUNK_BYTES)).toBe(true)
     const shuffled = pieces.map((data, seq) => ({ seq, data })).reverse()
-    const joined = reassembleAgentToolResultText(shuffled, { chunks: pieces.length, bytes })
+    const joined = reassembleAgentToolPayloadText(shuffled, { chunks: pieces.length, bytes })
     expect(joined).toEqual({ ok: true, text })
-    expect(JSON.parse((joined as { text: string }).text)).toEqual(result)
-  })
+    expect(JSON.parse((joined as { text: string }).text)).toEqual(value)
+  }, 60_000)
 
   it('measures an absent result as JSON null', () => {
     expect(agentToolResultBytes(undefined)).toBe(4)
