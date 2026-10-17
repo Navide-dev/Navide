@@ -709,3 +709,31 @@ class PluginAuditLog:
             anomalies.append({"kind": "undeclared-denied", "count7d": count7d, "lastAt": last_at})
         summary["anomalies"] = anomalies
         return summary
+
+    def historical_peak_concurrent_calls(self, plugin_id: str, *, since_ms: int, until_ms: int) -> dict[str, Any]:
+        """The most agent tool calls of ``plugin_id`` that ran at once in the window.
+
+        Each written call ran over ``[at - duration_ms, at]`` (``at`` is when
+        it was recorded, at its end); a call that ends as another starts does
+        not overlap it. Historical only: calls still running are not in the
+        table yet, so the current count is the Host's
+        (``plugins:backendCallConcurrency``), never derived from here.
+        Returns ``{historicalPeak, at}`` (``at`` is when the peak began, None
+        without calls). Reads only; run it off the event loop.
+        """
+        if not self.enabled:
+            return {"historicalPeak": 0, "at": None}
+        self.flush()
+        with self.db.transaction() as cur:
+            spans = cur.execute(
+                "SELECT at - duration_ms, at FROM plugin_tool_calls WHERE plugin_id = ? AND at >= ? AND at - duration_ms <= ?",
+                (plugin_id, int(since_ms), int(until_ms)),
+            ).fetchall()
+        # Ends sort before starts at the same instant, so touching spans do not overlap.
+        edges = sorted([(start, 1) for start, _ in spans] + [(end, -1) for _, end in spans], key=lambda e: (e[0], e[1]))
+        peak, peak_at, running = 0, None, 0
+        for at, step in edges:
+            running += step
+            if running > peak:
+                peak, peak_at = running, at
+        return {"historicalPeak": peak, "at": peak_at}

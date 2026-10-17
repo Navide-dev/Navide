@@ -914,3 +914,39 @@ def test_the_summary_counts_undeclared_refusals_over_30_days(audit: PluginAuditL
     _activity(audit, address="net.fetch", outcome="denied", denied_reason="undeclared", at_ms=NOW - DAY_MS)
     audit.prune(NOW)
     assert audit.activity_summary(_PLUGIN)["deniedUndeclared"]["count30d"] == 2
+
+
+# ── D-e: historical peak of concurrent agent tool calls ─────────────────────
+
+
+def _timed_call(audit: PluginAuditLog, clock: Clock, end_ms: int, duration_ms: int, **overrides: Any) -> None:
+    clock.now_ms = end_ms
+    assert _call(audit, at_ms=end_ms, duration_ms=duration_ms, **overrides) is not None
+
+
+def test_the_historical_peak_counts_overlapping_calls(audit: PluginAuditLog, clock: Clock) -> None:
+    base = NOW - DAY_MS
+    _timed_call(audit, clock, base + 1000, 1000)   # [0, 1000]
+    _timed_call(audit, clock, base + 1500, 1000)   # [500, 1500]  -> 2 at 500..1000
+    _timed_call(audit, clock, base + 1800, 1000)   # [800, 1800]  -> 3 at 800..1000
+    _timed_call(audit, clock, base + 5000, 100)    # alone
+    _timed_call(audit, clock, base + 1700, 900, plugin_id="other.plugin")  # another plugin
+    clock.now_ms = NOW
+    peak = audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=NOW - 2 * DAY_MS, until_ms=NOW)
+    assert peak == {"historicalPeak": 3, "at": base + 800}
+
+
+def test_calls_that_only_touch_end_to_start_do_not_overlap(audit: PluginAuditLog, clock: Clock) -> None:
+    base = NOW - DAY_MS
+    _timed_call(audit, clock, base + 1000, 1000)   # [0, 1000]
+    _timed_call(audit, clock, base + 2000, 1000)   # [1000, 2000]
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=0, until_ms=NOW)["historicalPeak"] == 1
+
+
+def test_the_peak_is_zero_without_calls_in_the_window(audit: PluginAuditLog, clock: Clock) -> None:
+    _timed_call(audit, clock, NOW - 10 * DAY_MS, 100)
+    clock.now_ms = NOW
+    assert audit.historical_peak_concurrent_calls(_PLUGIN, since_ms=NOW - DAY_MS, until_ms=NOW) == {
+        "historicalPeak": 0, "at": None,
+    }
