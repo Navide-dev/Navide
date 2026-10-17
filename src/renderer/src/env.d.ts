@@ -394,6 +394,7 @@ declare global {
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
+          backend?: { resultHelper: { state: 'idle' | 'ready' | 'unavailable'; lastError: string; since: number } }
           children: { current: number; peak: number; retained: number }
           views: Array<{
             pluginId: string
@@ -404,6 +405,8 @@ declare global {
               bridgeRequests: { current: number; peak: number }
               outputQueue: Record<'requests' | 'notifications', { frames: number; bytes: number; peakFrames: number; peakBytes: number }>
               droppedNotifications: number
+              droppedResultPieces: number
+              stdoutPending: { bytes: number; peakBytes: number }
             } | null
           }>
           plugins: Array<{ pluginId: string; current: number; peak: number; droppedNotifications: number }>
@@ -460,6 +463,9 @@ declare global {
         pendingUpdates: () => Promise<PluginUpdateInfo[]>
         onUpdatesChanged: (handler: (updates: PluginUpdateInfo[]) => void) => () => void
         onRescanNotices?: (handler: (notices: PluginRescanNotice[]) => void) => () => void
+        onResultHelperState?: (
+          handler: (state: { state: 'idle' | 'ready' | 'unavailable'; lastError: string; since: number }) => void,
+        ) => () => void
         prepareInstall: (args: {
           namespace: string
           name: string

@@ -49,6 +49,7 @@ import itertools
 import json
 import logging
 import re
+import time
 import unicodedata
 import weakref
 from dataclasses import dataclass, field
@@ -60,6 +61,9 @@ from mcp.types import CallToolResult, TextContent
 
 from agent_team_backend.plugins.agent_tools_contract import (
     AGENT_TOOL_CALL_ERROR_CODES,
+    AGENT_TOOL_CHUNK_BYTES,
+    AGENT_TOOL_TIMEOUT_REASONS,
+    AGENT_TOOLS_RESULT_HELPER_EVENT,
     AGENT_TOOL_UNAVAILABLE_REASONS,
     AGENT_TOOLS_SYNC_EVENT,
     CORE_TOOL_NAMES,
@@ -67,6 +71,14 @@ from agent_team_backend.plugins.agent_tools_contract import (
     utf8_byte_length,
     validate_agent_tool_name,
     is_valid_agent_tool_text,
+)
+from agent_team_backend.agent_tool_result_worker import (
+    IDLE_S,
+    InvalidResult,
+    ResultWorker,
+    ResultWorkerError,
+    ResultWorkerUnavailable,
+    strict_loads,
 )
 from agent_team_backend.plugins.external_content import neutralize_external_text
 
@@ -201,6 +213,89 @@ def _fence(entry: dict[str, Any], what: str, text: str) -> str:
 def wrap_result(entry: dict[str, Any], result: Any) -> str:
     """The agent-facing text of one result, wrapped as external content."""
     return _fence(entry, "result", _result_text(result))
+
+
+_result_worker = ResultWorker()
+
+
+def _publish_helper_state(state: dict[str, Any]) -> None:
+    """Tell the Host the helper's state (resource usage shows it, the first
+    `unavailable` raises a notice), on the Host session events already use."""
+    from agent_team_backend import app
+    from agent_team_backend.ipc import make_event
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(app.unicast_host(make_event(AGENT_TOOLS_RESULT_HELPER_EVENT, state)))
+
+
+_result_worker.on_state = _publish_helper_state
+
+#: The largest result the backend handled before DB9 (one frame, 1 MiB). When
+#: the helper process cannot start, a result up to this size is handled in the
+#: backend as it was then; a larger one is refused with the reason. Where the
+#: work runs, not a limit: with the helper, results have no size limit.
+IN_PROCESS_RESULT_BYTES = 1_048_576
+
+
+class _HelperFailed(Exception):
+    def __init__(self, reason: str, size: int) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.size = size
+
+
+def _disclose_helper_unavailable(name: str, detail: str) -> None:
+    message = (
+        f"the agent tool result helper process cannot be used ({detail}); results over 1 MiB are refused "
+        "until it can, and Navide retries in about a minute"
+    )
+    _log.error("plugin tool result %s: %s", name, message)
+    try:
+        from agent_team_backend import error_ledger
+
+        error_ledger.record("backend", "error", "AGENT_TOOL_RESULT_HELPER_UNAVAILABLE", message)
+    except Exception as err:  # noqa: BLE001 - disclosure must not fail the call
+        _log.warning("plugin tool result %s: could not record the helper state: %s", name, err)
+
+
+async def _large_result_text(name: str, entry: dict[str, Any], pieces: list[str], size: int) -> str:
+    """``wrap_result`` of a result received in pieces, from the helper process.
+
+    A helper that crashes or stops answering fails this call with the
+    reason (the work is not redone here, where it would hold the event loop:
+    a result that hung the helper would hang the backend). One that cannot
+    start leaves results up to IN_PROCESS_RESULT_BYTES to be handled here,
+    as before DB9, and refuses larger ones."""
+    try:
+        return await _result_worker.wrap(entry, pieces)
+    except ResultWorkerUnavailable as error:
+        # Disclosed when a start was tried and failed, not for every result
+        # while waiting for the next try.
+        if error.attempted:
+            _disclose_helper_unavailable(name, error.detail)
+        if size > IN_PROCESS_RESULT_BYTES:
+            raise _HelperFailed("unavailable", size) from None
+    except ResultWorkerError as error:
+        _log.warning("plugin tool result %s (%d bytes): the result helper failed: %s", name, size, error)
+        raise _HelperFailed(error.reason, size) from None
+    try:
+        value = strict_loads("".join(pieces))
+    except (ValueError, RecursionError):
+        raise InvalidResult from None
+    return wrap_result(entry, value)
+
+
+def _helper_failed_message(failed: _HelperFailed) -> str:
+    what = {
+        "crashed": "stopped while handling it",
+        "timeout": f"did not answer within {IDLE_S:g} s",
+        "unavailable": "cannot be used right now (results up to 1 MiB are still delivered)",
+    }.get(failed.reason, "failed")
+    again = "Navide retries starting it in about a minute." if failed.reason == "unavailable" else "The next call starts it again."
+    return f"The Navide plugin result ({failed.size} bytes) was not delivered: Navide's result helper process {what}. {again}"
 
 
 # ── snapshot validation and registration ────────────────────────────────────
@@ -712,35 +807,104 @@ def _open_workspace(requested: Any) -> str | None:
     return wanted if wanted in agent_messaging.workspaces() else None
 
 
+# Reasons a transfer or a timeout carries back to the agent (contract 4.4),
+# besides the unavailable reasons.
+_TRANSFER_REASONS = frozenset((*AGENT_TOOL_TIMEOUT_REASONS, "summary", "seq", "count", "short", "bytes", "json"))
+
+
 async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult | list[TextContent]:
-    """Answer one call to a third-party tool name."""
+    """Answer one call to a third-party tool name, and record it in the audit.
+
+    Every call of a catalogued tool gets one ``plugin_tool_calls`` row whatever
+    its end (success, refusal, failure, timeout, cancellation), written after
+    the call and only queued here: the audit never changes or delays the call.
+    """
     core = _server()
     try:
         caller = core._resolve_caller(ctx)  # noqa: SLF001
     except core.CallerUnknown as err:
         return _refusal(str(err), "BAD_REQUEST")
+    audit: dict[str, Any] = {
+        "outcome": "error",
+        "error_code": "cancelled",
+        "result_bytes": 0,
+        "arguments": arguments,
+        "workspace": "",
+    }
+    started = time.monotonic()
+    try:
+        return await _answer(name, arguments, caller, audit)
+    finally:
+        _record_call(name, caller, audit, started)
+
+
+def _record_call(name: str, caller: Any, audit: dict[str, Any], started: float) -> None:
+    """Queue the audit row of one call (contract 5). A failed write is logged, never raised."""
+    entry = _catalog.entries.get(name)
+    if entry is None:
+        return
+    try:
+        from agent_team_backend import agent_messaging, app
+
+        core = _server()
+        pane = agent_messaging.get(caller.pane_id) if caller.kind == "pane" else None
+        arguments = audit["arguments"]
+        app.plugin_audit_log.record_tool_call(
+            caller_kind=caller.kind,
+            target_workspace=audit["workspace"],
+            plugin_id=entry["pluginId"],
+            plugin_version=entry["pluginVersion"],
+            tool=name,
+            risk=entry["risk"],
+            arguments=arguments if isinstance(arguments, dict) else {},
+            outcome=audit["outcome"],
+            duration_ms=int((time.monotonic() - started) * 1000),
+            result_bytes=audit["result_bytes"],
+            pane_id=caller.pane_id or "",
+            pane_name=getattr(pane, "name", "") or "",
+            caller_workspace=core._caller_workspace(caller),  # noqa: SLF001
+            error_code=audit["error_code"],
+        )
+    except Exception as err:  # noqa: BLE001 - the audit never fails the call it records
+        _log.warning("plugin tool call %s: audit row not recorded: %s", name, err)
+
+
+async def _answer(
+    name: str, arguments: dict[str, Any], caller: Any, audit: dict[str, Any]
+) -> CallToolResult | list[TextContent]:
+    """The call itself; ``audit`` collects what its row records."""
+    core = _server()
+
+    def refuse(error: str, error_code: str, reason: str | None = None) -> CallToolResult:
+        audit["outcome"] = "error"
+        audit["error_code"] = error_code
+        return _refusal(error, error_code, reason)
+
     reason = _unavailable_reason(name)
     if reason is not None:
-        return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+        return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
     entry = _catalog.entries[name]
     caller_object = _caller_object(caller)
     workspace = caller_object["workspace"] or ""
     if caller.kind != "pane":
         if not _catalog.external_callers:
             reason = "external-callers-off"
-            return _refusal(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
+            return refuse(f"{name} is not available: {reason}", "PLUGIN_TOOL_UNAVAILABLE", reason)
         # Taken out before the plugin's schema check and never forwarded.
         arguments = dict(arguments)
         workspace = _open_workspace(arguments.pop("workspace_path", None)) or ""
+        audit["arguments"] = arguments
         if not workspace:
-            return _refusal(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")
+            return refuse(_WORKSPACE_PATH_REQUIRED, "BAD_REQUEST")
     elif not workspace:
-        return _refusal("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
+        return refuse("the calling pane has no workspace to run a Navide plugin tool in", "BAD_REQUEST")
+    audit["workspace"] = workspace
     # The whole consented inputSchema (regexes excepted), off the event loop;
     # the Host checks again.
     arguments, invalid = await asyncio.to_thread(_prepared_arguments, name, entry["inputSchema"], arguments)
     if invalid is not None:
-        return _refusal(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
+        return refuse(invalid, "PLUGIN_TOOL_INVALID_ARGUMENTS")
+    audit["arguments"] = arguments
     # A pane targets its own workspace; a caller without a pane has none to compare.
     cross_workspace: bool | None = workspace != caller_object["workspace"] if caller.kind == "pane" else None
     _log.info(
@@ -760,7 +924,7 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         },
     )
     if not isinstance(response, dict):
-        return _refusal("Navide Host answered with a malformed response", "BAD_REQUEST")
+        return refuse("Navide Host answered with a malformed response", "BAD_REQUEST")
     if response.get("ok") is True:
         _taint(caller, entry)
         result = response.get("result")
@@ -774,22 +938,44 @@ async def call(name: str, arguments: dict[str, Any], ctx: Any) -> CallToolResult
         else:
             size = None
             _log.warning("plugin tool result %s: the Host sent no valid resultBytes; size unknown", name)
-        # Size is disclosed, not limited (DB9 ruling a).
+        # Size is disclosed, not limited (DB9 ruling a). A result that came in
+        # pieces is parsed (strictly, as the Host would: no NaN or Infinity)
+        # and wrapped by a helper process, never on the event loop; one that
+        # came whole fits one piece and is wrapped here as before.
+        pieces = response.get("result_pieces")
+        if isinstance(pieces, list):
+            pieces_bytes = response.get("result_pieces_bytes")
+            if not isinstance(pieces_bytes, int) or isinstance(pieces_bytes, bool):
+                # The core always counts the bytes as the pieces arrive; were
+                # it missing, characters are a cheap stand-in for a message.
+                pieces_bytes = sum(len(piece) for piece in pieces)
+            try:
+                text = await _large_result_text(name, entry, pieces, pieces_bytes)
+            except InvalidResult:
+                return refuse("The Navide plugin result did not arrive whole.", "PLUGIN_TOOL_CHUNKS_INVALID", "json")
+            except _HelperFailed as failed:
+                return refuse(_helper_failed_message(failed), "result_helper_failed", failed.reason)
+        else:
+            text = wrap_result(entry, result)
+        audit["outcome"] = "ok"
+        audit["error_code"] = ""
+        # -1 = the Host sent no valid size (contract 2.7, 5).
+        audit["result_bytes"] = -1 if size is None else size
         return CallToolResult(
-            content=[TextContent(type="text", text=wrap_result(entry, result))],
+            content=[TextContent(type="text", text=text)],
             isError=False,
             _meta=None if size is None else {"resultBytes": size},
         )
     raw_code = response.get("error_code")
     error_code = raw_code if isinstance(raw_code, str) and raw_code in _HOST_ERROR_CODES else "PLUGIN_TOOL_FAILED"
     raw_reason = response.get("reason")
-    reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS else None
+    reason_value = raw_reason if raw_reason in AGENT_TOOL_UNAVAILABLE_REASONS or raw_reason in _TRANSFER_REASONS else None
     error = str(response.get("error") or "the call failed")
     if error_code == "PLUGIN_TOOL_FAILED":
         # The message is the plugin's own text: fenced like a result.
         _taint(caller, entry)
-        return _refusal(_fence(entry, "error", error), error_code, reason_value)
-    return _refusal(_neutralize(_clean(error)), error_code, reason_value)
+        return refuse(_fence(entry, "error", error), error_code, reason_value)
+    return refuse(_neutralize(_clean(error)), error_code, reason_value)
 
 
 def _taint(caller: Any, entry: dict[str, Any]) -> None:

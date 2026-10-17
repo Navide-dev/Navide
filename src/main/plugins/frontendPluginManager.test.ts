@@ -359,6 +359,7 @@ import {
   type PluginViewLaunchDescriptor,
 } from './frontendPluginManager'
 import { BACKEND_RESTART_BUDGET_SPENT_MESSAGE, PluginBackendHost } from './pluginBackendHost'
+import { splitAgentToolPayloadText, utf8ByteLength } from '../../shared/pluginAgentTools'
 import { setMainLedgerDataDir } from '../error-ledger'
 import { BackendPluginError, PluginBackendSupervisor } from './pluginBackendSupervisor'
 import { EditorSelectionGrants } from './editorSelectionGrants'
@@ -543,6 +544,20 @@ function asHost(win: FakeBrowserWindow): BrowserWindow {
 function descriptor(id: string): PluginLaunchDescriptor {
   return { id, requires: [], devUrl: '', entryFile: `/plugins/${id}/index.html` }
 }
+
+// The agent-tool path takes a result as text (contract 4.4). Here that text is
+// spelled from whatever `call` returns (often a spy), as the supervisor spells
+// a value; the supervisor's own tests cover how it keeps text.
+beforeEach(() => {
+  vi.spyOn(PluginBackendHost.prototype, 'callForResultText').mockImplementation(
+    async function (this: PluginBackendHost, instanceId, name, args, options) {
+      const value = await this.call(instanceId, name, args, options)
+      const text = JSON.stringify(value === undefined ? null : value)
+      const pieces = splitAgentToolPayloadText(text)
+      return { bytes: utf8ByteLength(text), chunks: pieces.length, piece: (index: number) => pieces[index] }
+    },
+  )
+})
 
 describe('backend Host session registration', () => {
   it('re-registers on the new socket when the previous registration is pending', () => {
@@ -16205,6 +16220,137 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     throw new Error('no agent.capability.result')
   }
 
+  describe('chunked transfer with the core (contract 4.4, A2 and R2)', () => {
+    const big = (bytes: number): { rows: string } => ({ rows: 'abc中文😀'.repeat(Math.ceil(bytes / 13)) })
+    const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex')
+    const pieces = (text: string): string[] => {
+      const out: string[] = []
+      let current = ''
+      let bytes = 0
+      for (const char of text) {
+        const size = Buffer.byteLength(char, 'utf8')
+        if (bytes + size > 131_072) { out.push(current); current = ''; bytes = 0 }
+        current += char
+        bytes += size
+      }
+      out.push(current)
+      return out
+    }
+    /** Answers every request message of `type` the Host sends, as the core would. */
+    async function answer(f: Fixture, type: string, accepted: (seq: number) => boolean, until: () => boolean): Promise<number> {
+      let answered = 0
+      for (let i = 0; i < 2_000 && !until(); i++) {
+        await settle()
+        for (const message of sentOf(f.socket).filter((m) => m.type === type).slice(answered)) {
+          f.socket.receive({ id: message.id, type, ok: true, payload: { ok: true, accepted: accepted(answered) }, error: null, timestamp: '' })
+          answered += 1
+        }
+      }
+      return answered
+    }
+
+    it("discloses the backend's result helper state in resource usage and tells the windows of each change", async () => {
+      const f = await fixture()
+      try {
+        const heard: unknown[] = []
+        f.mgr.onResultHelperState = (state) => heard.push(state)
+        expect(f.mgr.backendResourceUsage().backend).toMatchObject({ resultHelper: { state: 'idle', lastError: '' } })
+        const unavailable = { state: 'unavailable', lastError: 'it exited before it was ready', since: 1_700_000_000_000 }
+        f.socket.receive({ type: 'agent.tools.result_helper', payload: unavailable })
+        await settle()
+        expect(f.mgr.backendResourceUsage().backend).toEqual({ resultHelper: unavailable })
+        expect(heard).toEqual([unavailable])
+        // A malformed report changes nothing.
+        f.socket.receive({ type: 'agent.tools.result_helper', payload: { state: 'broken', lastError: 1, since: 'x' } })
+        await settle()
+        expect(heard).toHaveLength(1)
+        expect(f.mgr.backendResourceUsage().backend?.resultHelper.state).toBe('unavailable')
+        // A new backend session (the backend restarted) starts from idle, not the old state.
+        const before = wsMock.FakeNodeWebSocket.instances.length
+        f.socket.close()
+        await vi.waitFor(() => expect(wsMock.FakeNodeWebSocket.instances.length).toBeGreaterThan(before), { timeout: 10_000 })
+        wsMock.FakeNodeWebSocket.instances.at(-1)!.open()
+        await vi.waitFor(() => expect(f.mgr.backendResourceUsage().backend?.resultHelper.state).toBe('idle'))
+        expect(heard.at(-1)).toMatchObject({ state: 'idle' })
+      } finally {
+        await f.cleanup()
+      }
+    })
+
+    it('joins argument pieces sent before the request and calls the plugin with the whole arguments', async () => {
+      const f = await fixture()
+      try {
+        const args = { block_id: 'b1', status: 'done', ...big(1_048_576) }
+        const text = JSON.stringify(args)
+        const parts = pieces(text)
+        parts.forEach((data, seq) => f.socket.receive({ type: 'agent.capability.request_chunk', payload: { request_id: 'mcp:big', seq, data } }))
+        const response = await ask(f, toolRequest(f, {
+          request_id: 'mcp:big',
+          payload: { argumentChunks: { chunks: parts.length, bytes: Buffer.byteLength(text, 'utf8') } },
+        }))
+        expect(response).toMatchObject({ ok: true })
+        expect(f.call).toHaveBeenCalledTimes(1)
+        expect(sha(JSON.stringify(f.call.mock.calls[0][2]))).toBe(sha(text))
+      } finally {
+        await f.cleanup()
+      }
+    })
+
+    it('refuses a request whose argument pieces came out of order, without calling the plugin', async () => {
+      const f = await fixture()
+      try {
+        f.socket.receive({ type: 'agent.capability.request_chunk', payload: { request_id: 'mcp:bad', seq: 0, data: 'x'.repeat(131_072) } })
+        f.socket.receive({ type: 'agent.capability.request_chunk', payload: { request_id: 'mcp:bad', seq: 2, data: '"' } })
+        await expect(ask(f, toolRequest(f, { request_id: 'mcp:bad', payload: { argumentChunks: { chunks: 2, bytes: 131_073 } } })))
+          .resolves.toMatchObject({ ok: false, error_code: 'PLUGIN_TOOL_CHUNKS_INVALID', reason: 'seq' })
+        expect(f.call).not.toHaveBeenCalled()
+      } finally {
+        await f.cleanup()
+      }
+    })
+
+    it('sends a large result as pieces, each awaited, then the summary in place of the result', async () => {
+      const f = await fixture()
+      try {
+        const result = big(2 * 1_048_576)
+        f.call.mockImplementation(async (_instance, _method, _args, options) => {
+          options?.onTransferProgress?.('execution')
+          return result as never
+        })
+        f.socket.receive({ type: 'agent.capability.request', payload: toolRequest(f, { request_id: 'mcp:r2' }) })
+        const sentPieces = await answer(f, 'agent.capability.result_chunk', () => true,
+          () => sentOf(f.socket).some((m) => m.type === 'agent.capability.result'))
+        const final = sentOf(f.socket).filter((m) => m.type === 'agent.capability.result').at(-1)!
+        const text = JSON.stringify(result)
+        const sent = sentOf(f.socket).filter((m) => m.type === 'agent.capability.result_chunk')
+        expect(sentPieces).toBe(pieces(text).length)
+        expect(sha(sent.map((m) => m.payload.data as string).join(''))).toBe(sha(text))
+        expect(sent.map((m) => m.payload.seq)).toEqual(sent.map((_, i) => i))
+        const response = final.payload.response as Record<string, unknown>
+        expect(response.result).toBeUndefined()
+        expect(response.resultChunks).toEqual({ chunks: sent.length, bytes: Buffer.byteLength(text, 'utf8') })
+        expect((response.meta as { resultBytes: number }).resultBytes).toBe(Buffer.byteLength(text, 'utf8'))
+        // The Host told the core the call was alive when it started it.
+        expect(sentOf(f.socket).some((m) => m.type === 'agent.capability.progress' && m.payload.phase === 'execution')).toBe(true)
+      } finally {
+        await f.cleanup()
+      }
+    })
+
+    it('stops sending pieces once the core no longer waits for the request', async () => {
+      const f = await fixture()
+      try {
+        f.call.mockResolvedValue(big(2 * 1_048_576) as never)
+        f.socket.receive({ type: 'agent.capability.request', payload: toolRequest(f, { request_id: 'mcp:gone' }) })
+        await answer(f, 'agent.capability.result_chunk', (seq) => seq < 2, () => false)
+        expect(sentOf(f.socket).filter((m) => m.type === 'agent.capability.result_chunk')).toHaveLength(3)
+        expect(sentOf(f.socket).some((m) => m.type === 'agent.capability.result')).toBe(false)
+      } finally {
+        await f.cleanup()
+      }
+    }, 30_000)
+  })
+
   it('golden: with the master switch off nothing is pushed, agentMethods stay empty, and calls are refused', async () => {
     const f = await fixture({ enabled: false })
     try {
@@ -16457,9 +16603,24 @@ describe('third-party agent tool calls (contract 4.2)', () => {
     try {
       const big = 'x'.repeat(1_048_577)
       f.call.mockResolvedValueOnce(big as never)
-      const answer = await ask(f, toolRequest(f, { request_id: 'mcp:big' })) as { ok: boolean; result: unknown; meta: { resultBytes: number } }
+      // Contract 4.4, R2: a result longer than one piece reaches the core in
+      // pieces (each answered here as the core would), then its summary.
+      f.socket.receive({ type: 'agent.capability.request', payload: toolRequest(f, { request_id: 'mcp:big' }) })
+      let answered = 0
+      for (let i = 0; i < 500 && !sentOf(f.socket).some((m) => m.type === 'agent.capability.result'); i++) {
+        await settle()
+        for (const piece of sentOf(f.socket).filter((m) => m.type === 'agent.capability.result_chunk').slice(answered)) {
+          f.socket.receive({ id: piece.id, type: piece.type, ok: true, payload: { ok: true, accepted: true }, error: null, timestamp: '' })
+          answered += 1
+        }
+      }
+      const pieces = sentOf(f.socket).filter((m) => m.type === 'agent.capability.result_chunk')
+      const answer = sentOf(f.socket).find((m) => m.type === 'agent.capability.result')!.payload.response as {
+        ok: boolean; resultChunks: { chunks: number; bytes: number }; meta: { resultBytes: number }
+      }
       expect(answer.ok).toBe(true)
-      expect(answer.result).toBe(big)
+      expect(JSON.parse(pieces.map((m) => m.payload.data as string).join(''))).toBe(big)
+      expect(answer.resultChunks).toEqual({ chunks: pieces.length, bytes: 1_048_579 })
       expect(answer.meta.resultBytes).toBe(1_048_579)
     } finally {
       await f.cleanup()

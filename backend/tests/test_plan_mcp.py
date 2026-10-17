@@ -1238,3 +1238,91 @@ async def test_plan_add_todo_explains_a_host_refusal_with_the_valid_ids(
     assert result.isError
     text = result.content[0].text
     assert "unknown todo id" in text and "t1" in text and "t2" in text
+
+
+# ── no request body limit on /mcp (agent-tools contract 4.4, A1) ────────────
+
+
+async def test_a_10_mib_plan_add_note_crosses_the_mcp_endpoint_while_other_calls_stay_fast(
+    workspace: Path,
+) -> None:
+    import asyncio
+    import time
+
+    import httpx
+
+    from agent_team_backend.mcp_server import auth as plan_mcp_auth
+
+    # The plan tools are installed onto the core server by the Plans plugin at
+    # App start; install the missing ones for this test and take them off after.
+    tools = plan_mcp.server._tool_manager._tools  # noqa: SLF001
+    added = [tool for tool in plan_tools.PLAN_TOOLS if tool.__name__ not in tools]
+    for tool in added:
+        plan_mcp.server.tool()(tool)
+    await plan_mcp.startup()
+    try:
+        url = f"/?client=host&t={plan_mcp_auth.internal_token()}"
+        headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        text = "note 中文 😀 " * (10 * 1_048_576 // 16)
+
+        def call(request_id: int, name: str, arguments: dict) -> dict:
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=120) as client:
+            big = asyncio.create_task(client.post(url, headers=headers, json=call(
+                1, "plan_add_note", {"workspace_path": str(workspace), "rel_path": "beta.html", "text": text},
+            )))
+            latencies: list[float] = []
+            while not big.done():
+                started = time.perf_counter()
+                small = await client.post(url, headers=headers, json=call(
+                    2, "plan_list", {"workspace_path": str(workspace)},
+                ))
+                latencies.append(time.perf_counter() - started)
+                assert small.status_code == 200
+            response = await big
+        # The SDK refused bodies over 4 MiB with 413 before.
+        assert response.status_code == 200, response.text[:300]
+        body = response.json()
+        assert "error" not in body, str(body)[:300]
+        assert body["result"]["isError"] is False, str(body)[:300]
+        notes = parse_plan_meta((_plans_dir(workspace) / "beta.html").read_text(encoding="utf-8"))["reviewNotes"]
+        assert notes[-1]["text"] == text.strip()  # the tool trims the note
+        assert latencies, "no small call ran during the large one"
+    finally:
+        await plan_mcp.shutdown()
+        for tool in added:
+            tools.pop(tool.__name__, None)
+
+
+async def test_a_tool_call_over_the_mcp_endpoint_sees_its_request_body_size(workspace: Path) -> None:
+    """The agent tool proxy skips its size walk for a small request (contract
+    4.4, A2): the body size must reach the tool call made by that request."""
+    from agent_team_backend.mcp_server import auth as plan_mcp_auth
+
+    async def zz_body_size() -> int:
+        seen = plan_mcp._request_body_bytes.get()  # noqa: SLF001
+        return -1 if seen is None else seen[0]
+
+    plan_mcp.server.tool()(zz_body_size)
+    await plan_mcp.startup()
+    try:
+        url = f"/?client=host&t={plan_mcp_auth.internal_token()}"
+        headers = {"accept": "application/json, text/event-stream", "content-type": "application/json"}
+        body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "zz_body_size", "arguments": {}}})
+        transport = httpx.ASGITransport(app=plan_mcp.asgi_app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test", timeout=30) as client:
+            response = await client.post(url, headers=headers, content=body)
+        assert response.status_code == 200, response.text[:300]
+        result = response.json()["result"]
+        assert result["isError"] is False
+        assert json.loads(result["content"][0]["text"]) == len(body.encode())
+    finally:
+        await plan_mcp.shutdown()
+        plan_mcp.server._tool_manager._tools.pop("zz_body_size", None)  # noqa: SLF001

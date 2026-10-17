@@ -270,6 +270,41 @@ def test_split_payload_text(case: dict[str, Any]) -> None:
     assert all(tools.utf8_byte_length(p) <= case["maxBytes"] for p in pieces)
 
 
+def _split_by_code_point(text: str, max_bytes: int) -> list[str]:
+    """The original code-point loop, kept as the reference the byte cut must match."""
+    pieces: list[str] = []
+    start = 0
+    size = 0
+    for index, char in enumerate(text):
+        point = ord(char)
+        width = 1 if point < 0x80 else 2 if point < 0x800 else 4 if point > 0xFFFF else 3
+        if size + width > max_bytes:
+            pieces.append(text[start:index])
+            start = index
+            size = 0
+        size += width
+    pieces.append(text[start:])
+    return pieces
+
+
+def test_the_byte_cut_matches_the_code_point_loop_piece_for_piece() -> None:
+    import random
+
+    alphabet = ["a", "{", "é", "\u07ff", "\u0800", "中", "\uffff", "😀", "\U00010000", "\ud800", "\udfff"]
+    rng = random.Random(7)
+    for _ in range(2000):
+        text = "".join(rng.choice(alphabet) for _ in range(rng.randrange(0, 60)))
+        for max_bytes in (4, 5, 6, 7, 8, 13, 64):
+            assert tools.split_agent_tool_payload_text(text, max_bytes) == _split_by_code_point(text, max_bytes), (text, max_bytes)
+    for unit in ("x", "中", "x中😀é"):
+        text = unit * (300_000 // len(unit))
+        assert tools.split_agent_tool_payload_text(text) == _split_by_code_point(text, tools.AGENT_TOOL_CHUNK_BYTES)
+
+
+def test_a_lone_surrogate_is_escaped_as_json_stringify_escapes_it() -> None:
+    assert tools.agent_tool_payload_text({"s": "a\ud800"}) == '{"s":"a\\ud800"}'
+
+
 def test_split_refuses_a_piece_size_that_cannot_hold_every_code_point() -> None:
     with pytest.raises(ValueError):
         tools.split_agent_tool_payload_text("abc", 3)
@@ -284,8 +319,12 @@ def test_reassemble_payload_text(case: dict[str, Any]) -> None:
 def test_each_piece_is_checked_on_arrival(case: dict[str, Any]) -> None:
     seen: list[dict[str, Any]] = []
     short_seen = False
-    for data in case["pieces"]:
-        result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+    seqs = case.get("seqs")
+    for index, data in enumerate(case["pieces"]):
+        if seqs is None:
+            result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"])
+        else:
+            result = tools.agent_tool_chunk_arrival(short_seen, data, case["chunkBytes"], seqs[index], index)
         seen.append(result)
         if not result["ok"]:
             break

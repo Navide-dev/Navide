@@ -392,6 +392,10 @@ BACKEND_WIRE_ARGUMENT_CHUNKS_KEY = "io.navide/argumentChunks"
 AGENT_CAPABILITY_RESULT_CHUNK_MESSAGE = "agent.capability.result_chunk"
 #: WebSocket event, backend -> Host, one per argument piece, sent before ``agent.capability.request``.
 AGENT_CAPABILITY_REQUEST_CHUNK_EVENT = "agent.capability.request_chunk"
+#: backend → Host event: the state of the helper process that handles results
+#: in pieces, ``{state: "idle" | "ready" | "unavailable", lastError, since}``
+#: (4.4, R2), sent on every change.
+AGENT_TOOLS_RESULT_HELPER_EVENT = "agent.tools.result_helper"
 #: WebSocket request, Host -> backend: the call is alive (keeps the backend's wait running).
 AGENT_CAPABILITY_PROGRESS_MESSAGE = "agent.capability.progress"
 #: Idle timer of a transfer of pieces, restarted by every piece. It detects a
@@ -417,31 +421,59 @@ class AgentToolChunksSummary(TypedDict):
     bytes: int
 
 
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+_ENCODE_SLICE = 1 << 18
+
+
 def agent_tool_payload_text(value: Any) -> str:
-    """The compact JSON spelling a value is cut from (``JSON.stringify`` in TypeScript)."""
-    return json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    """The compact JSON spelling a value is cut from, as ``JSON.stringify`` spells it in TypeScript.
+
+    Non-ASCII text stays as it is; a lone surrogate (which UTF-8 cannot carry)
+    is escaped as ``\\uXXXX`` the way ``JSON.stringify`` escapes it. Numbers
+    are spelled by Python's ``json`` (``1.0`` where JavaScript writes ``1``),
+    so only the backend measures argument sizes (section 5).
+    """
+    text = json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        return _LONE_SURROGATE.sub(lambda match: f"\\u{ord(match.group()):04x}", text)
+    return text
 
 
 def split_agent_tool_payload_text(text: str, max_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> list[str]:
-    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point."""
+    """Cut ``text`` into pieces of at most ``max_bytes`` UTF-8 bytes, never inside a code point.
+
+    Cut on the encoded bytes: each cut steps back off continuation bytes to
+    the start of its code point. A lone surrogate counts its 3 bytes
+    (``surrogatepass``) and comes back unchanged.
+    """
     if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 4:
         raise ValueError("max_bytes must be an integer >= 4")
+    # Encoded a slice at a time (a slice never splits a code point), so no
+    # single call holds the interpreter for the whole text.
+    data = b"".join(
+        text[at : at + _ENCODE_SLICE].encode("utf-8", "surrogatepass") for at in range(0, len(text), _ENCODE_SLICE)
+    )
     pieces: list[str] = []
     start = 0
-    size = 0
-    for index, char in enumerate(text):
-        point = ord(char)
-        width = 1 if point < 0x80 else 2 if point < 0x800 else 4 if point > 0xFFFF else 3
-        if size + width > max_bytes:
-            pieces.append(text[start:index])
-            start = index
-            size = 0
-        size += width
-    pieces.append(text[start:])
+    while len(data) - start > max_bytes:
+        end = start + max_bytes
+        while data[end] & 0xC0 == 0x80:
+            end -= 1
+        pieces.append(data[start:end].decode("utf-8", "surrogatepass"))
+        start = end
+    pieces.append(data[start:].decode("utf-8", "surrogatepass"))
     return pieces
 
 
-def agent_tool_chunk_arrival(short_seen: bool, data: Any, chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES) -> dict[str, Any]:
+def agent_tool_chunk_arrival(
+    short_seen: bool,
+    data: Any,
+    chunk_bytes: int = AGENT_TOOL_CHUNK_BYTES,
+    seq: Any = None,
+    expected_seq: int | None = None,
+) -> dict[str, Any]:
     """Check one piece on arrival (section 4.4).
 
     Senders send pieces in ``seq`` order and only the last may be short (under
@@ -449,9 +481,12 @@ def agent_tool_chunk_arrival(short_seen: bool, data: Any, chunk_bytes: int = AGE
     ``short``. A short piece does not restart the idle timer (``short: True``);
     a full one does. A format rule, not a limit. Returns ``{"ok": True,
     "short": bool}`` or ``{"ok": False, "code": "PLUGIN_TOOL_CHUNKS_INVALID",
-    "reason": "seq" | "short"}``.
+    "reason": "seq" | "short"}``. With ``expected_seq`` (0, 1, 2, ...) a piece
+    whose ``seq`` repeats or steps back is ``seq``.
     """
     if not isinstance(data, str):
+        return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "seq"}
+    if expected_seq is not None and (not _is_count(seq, 0) or int(seq) != expected_seq):
         return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "seq"}
     if short_seen:
         return {"ok": False, "code": AGENT_TOOL_CHUNKS_INVALID, "reason": "short"}
@@ -459,6 +494,10 @@ def agent_tool_chunk_arrival(short_seen: bool, data: Any, chunk_bytes: int = AGE
 
 
 def _is_count(value: Any, minimum: int) -> bool:
+    # An integral float (1.0) counts: JSON.parse gives TypeScript the integer 1
+    # for it, so both languages must accept it alike.
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
     return isinstance(value, int) and not isinstance(value, bool) and minimum <= value <= MAX_SAFE_INTEGER
 
 
@@ -481,21 +520,22 @@ def reassemble_agent_tool_payload_text(
 
     if not isinstance(summary, dict) or not _is_count(summary.get("chunks"), 1) or not _is_count(summary.get("bytes"), 0):
         return invalid("summary")
-    if any(not _is_count(c.get("seq"), 0) or not isinstance(c.get("data"), str) for c in chunks):
+    # A piece that is not an object (None included) is a malformed piece, not a crash.
+    if any(not isinstance(c, dict) or not _is_count(c.get("seq"), 0) or not isinstance(c.get("data"), str) for c in chunks):
         return invalid("seq")
-    count = summary["chunks"]
+    count = int(summary["chunks"])
     if len(chunks) != count:
         return invalid("count")
     ordered: list[str | None] = [None] * count
     for chunk in chunks:
-        seq = chunk["seq"]
+        seq = int(chunk["seq"])
         if seq >= count or ordered[seq] is not None:
             return invalid("seq")
         ordered[seq] = chunk["data"]
     if any(utf8_byte_length(piece or "") < chunk_bytes - 3 for piece in ordered[:-1]):
         return invalid("short")
     text = "".join(piece for piece in ordered if piece is not None)
-    if utf8_byte_length(text) != summary["bytes"]:
+    if utf8_byte_length(text) != int(summary["bytes"]):
         return invalid("bytes")
     return {"ok": True, "text": text}
 

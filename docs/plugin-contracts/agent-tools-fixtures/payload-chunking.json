@@ -86,6 +86,44 @@
         "😀y",
         "z"
       ]
+    },
+    {
+      "name": "a 2-byte code point that would cross the cut starts the next piece",
+      "text": "abcé",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "é"
+      ]
+    },
+    {
+      "name": "a 4-byte code point that would cross the cut starts the next piece",
+      "text": "abc😀d",
+      "maxBytes": 4,
+      "expected": [
+        "abc",
+        "😀",
+        "d"
+      ]
+    },
+    {
+      "name": "an ASCII run longer than a piece, then wide text",
+      "text": "abcdefgh中x",
+      "maxBytes": 4,
+      "expected": [
+        "abcd",
+        "efgh",
+        "中x"
+      ]
+    },
+    {
+      "name": "a lone surrogate counts 3 bytes and is kept as it is",
+      "text": "a\ud800bc",
+      "maxBytes": 4,
+      "expected": [
+        "a\ud800",
+        "bc"
+      ]
     }
   ],
   "reassembly": [
@@ -370,6 +408,60 @@
         "ok": true,
         "text": "abcdefghi"
       }
+    },
+    {
+      "name": "an integral float seq and summary are counts",
+      "chunks": [
+        {
+          "seq": 0,
+          "data": "abcd"
+        },
+        {
+          "seq": 1.0,
+          "data": "ef"
+        }
+      ],
+      "summary": {
+        "chunks": 2.0,
+        "bytes": 6
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": true,
+        "text": "abcdef"
+      }
+    },
+    {
+      "name": "a null piece is malformed, not a crash",
+      "chunks": [
+        null
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 0
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
+    },
+    {
+      "name": "a piece that is not an object",
+      "chunks": [
+        "abcd"
+      ],
+      "summary": {
+        "chunks": 1,
+        "bytes": 4
+      },
+      "chunkBytes": 4,
+      "expected": {
+        "ok": false,
+        "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+        "reason": "seq"
+      }
     }
   ],
   "arguments": [
@@ -441,6 +533,21 @@
         "list\":[",
         "0.25,-2",
         "]}"
+      ]
+    },
+    {
+      "name": "a lone surrogate is escaped like JSON.stringify",
+      "arguments": {
+        "s": "a\ud800b",
+        "t": "中"
+      },
+      "text": "{\"s\":\"a\\ud800b\",\"t\":\"中\"}",
+      "maxBytes": 8,
+      "expected": [
+        "{\"s\":\"a\\",
+        "ud800b\",",
+        "\"t\":\"中",
+        "\"}"
       ]
     }
   ],
@@ -600,6 +707,109 @@
           "ok": false,
           "code": "PLUGIN_TOOL_CHUNKS_INVALID",
           "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a repeated seq fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        0
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a seq that steps back fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "a seq that skips ahead fails at once",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh"
+      ],
+      "seqs": [
+        0,
+        2
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": false,
+          "code": "PLUGIN_TOOL_CHUNKS_INVALID",
+          "reason": "seq"
+        }
+      ]
+    },
+    {
+      "name": "seqs in order pass",
+      "chunkBytes": 8,
+      "pieces": [
+        "abcdefgh",
+        "abcdefgh",
+        "x"
+      ],
+      "seqs": [
+        0,
+        1,
+        2
+      ],
+      "expected": [
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": false
+        },
+        {
+          "ok": true,
+          "short": true
         }
       ]
     }

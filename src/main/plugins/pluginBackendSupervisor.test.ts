@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { generateKeyPairSync, sign as edSign } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign as edSign } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { fileURLToPath } from 'node:url'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -17,9 +17,13 @@ import {
   type AuthenticatedBackendRuntime,
   type BackendPluginEvent,
   type BackendPluginLaunchSpec,
+  type BackendResultText,
   type PluginBackendSupervisorOptions,
   type BackendRuntimeContext,
 } from './pluginBackendSupervisor'
+import { AGENT_TOOL_CHUNK_BYTES, utf8ByteLength } from '../../shared/pluginAgentTools'
+import { DEFAULT_BACKEND_RESOURCE_LIMITS, watchBackendResources } from './pluginBackendResourceWatchdog'
+import { stdoutPendingOf } from './pluginThirdPartyBackends'
 import {
   PLANS_BRIDGE_PORTS,
   createInMemoryPlansBridgeDispatcher,
@@ -76,6 +80,11 @@ const activation: BackendPluginLaunchSpec = {
     'fixture.duplicateevent',
     'fixture.duplicatekeys',
     'fixture.echo',
+    'fixture.hash',
+    'fixture.pid',
+    'fixture.bigresult',
+    'fixture.bigexit',
+    'fixture.nonewline',
     'fixture.bridge',
     'fixture.bridgeburst',
     'fixture.emit',
@@ -438,6 +447,312 @@ describe('PluginBackendSupervisor', () => {
 
   afterEach(async () => {
     await Promise.all(supervisors.splice(0).map((supervisor) => supervisor.close()))
+  })
+
+  it('gives every child spawn its own event-loop turn and still starts them all', async () => {
+    let turn = 0
+    let ticking = true
+    const tick = (): void => {
+      if (!ticking) return
+      turn += 1
+      setImmediate(tick)
+    }
+    setImmediate(tick)
+    const spawnedAt: number[] = []
+    const started = Array.from({ length: 5 }, (_, index) => {
+      const supervisor = makeSupervisor({
+        spawnProcess: () => {
+          spawnedAt.push(turn)
+          return makeControlledChild(index + 1)
+        },
+      })
+      supervisors.push(supervisor)
+      return supervisor.start()
+    })
+    await Promise.all(started)
+    ticking = false
+    expect(spawnedAt).toHaveLength(5)
+    expect(new Set(spawnedAt).size).toBe(5)
+  })
+
+  describe('chunked transfer (agent-tools contract 4.4)', () => {
+    const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex')
+    const big = (bytes: number): { data: string } => {
+      const unit = 'abc中文😀'
+      return { data: unit.repeat(Math.ceil(bytes / Buffer.byteLength(unit, 'utf8'))) }
+    }
+
+    it('joins a 10 MiB result sent in pieces over real stdio; the child is never restarted', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null)
+      const phases: string[] = []
+
+      const result = await client.call('fixture.bigresult', { bytes: 10 * 1_048_576 }, {
+        timeoutMs: 60_000,
+        onTransferProgress: (phase) => phases.push(phase),
+      })
+      expect(sha(JSON.stringify(result))).toBe(sha(JSON.stringify(big(10 * 1_048_576))))
+      expect(phases.filter((phase) => phase === 'result').length).toBeGreaterThanOrEqual(80)
+      expect(phases[0]).toBe('execution')
+      await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+      expect(onFailure).not.toHaveBeenCalled()
+    }, 120_000)
+
+    it('reads one result frame over 1 MiB without failing or restarting the child', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null)
+      const result = await client.call('fixture.bigresult', { bytes: 3 * 1_048_576, mode: 'single' }, { timeoutMs: 60_000 })
+      expect(sha(JSON.stringify(result))).toBe(sha(JSON.stringify(big(3 * 1_048_576))))
+      await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+      expect(onFailure).not.toHaveBeenCalled()
+    }, 120_000)
+
+    it('discloses a frame the child never ends as it grows, without cutting the child off', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      expect(supervisor.resourceUsage().stdoutPending).toEqual({ bytes: 0, peakBytes: 0 })
+      const call = client.call('fixture.nonewline', { bytes: 8 * 1_048_576 }, { timeoutMs: 60_000 }).catch((error) => error)
+      // The number is visible while the bytes still arrive, long before memory runs out.
+      await vi.waitFor(() => expect(supervisor.resourceUsage().stdoutPending.bytes).toBeGreaterThan(1_048_576), { timeout: 30_000 })
+      await vi.waitFor(() => expect(supervisor.resourceUsage().stdoutPending.bytes).toBeGreaterThanOrEqual(8 * 1_048_576), { timeout: 30_000 })
+      const usage = supervisor.resourceUsage().stdoutPending
+      expect(usage.peakBytes).toBeGreaterThanOrEqual(usage.bytes)
+      // Past the old 1 MiB frame bound the child is neither failed nor restarted.
+      expect(onFailure).not.toHaveBeenCalled()
+      await supervisor.close()
+      await call
+    }, 120_000)
+
+    // #386 reads this disclosure through stdoutPendingOf from the Host's
+    // backendResourceUsage().views[]: it notices, and never stops the child.
+    it('feeds the resource watchdog a frame the child never ends, so the user is told and the child keeps running', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null) as number
+      // The same entry shape PluginBackendHost.backendResourceUsage() lists.
+      const usage = () => ({ views: [{ pluginId: 'acme.indexer', instanceId: 'view-1', subscriptions: { current: 0, peak: 0 }, child: supervisor.resourceUsage() }] })
+      const killed: number[] = []
+      const onExceeded = vi.fn()
+      const watch = watchBackendResources(pid, '/data', vi.fn(), { ...DEFAULT_BACKEND_RESOURCE_LIMITS, dataSampleEvery: 1 }, {
+        listProcesses: async () => [{ pid, ppid: 1, rssBytes: 1_048_576, cpuMs: 0 }],
+        dataDirBytes: async () => 0,
+        kill: (victim) => killed.push(victim),
+        now: () => 0,
+        setInterval: () => 'handle',
+        clearInterval: () => undefined,
+      }, undefined, {
+        onExceeded,
+        stdoutPending: { bytes: () => stdoutPendingOf(usage(), 'acme.indexer', 'view-1'), threshold: 2 * 1_048_576 },
+      })
+      try {
+        await watch.sample()
+        expect(onExceeded).not.toHaveBeenCalled()
+        const call = client.call('fixture.nonewline', { bytes: 8 * 1_048_576 }, { timeoutMs: 60_000 }).catch((error) => error)
+        await vi.waitFor(async () => {
+          await watch.sample()
+          expect(onExceeded).toHaveBeenCalledWith(expect.objectContaining({ item: 'stdoutPending', threshold: 2 * 1_048_576 }))
+        }, { timeout: 30_000 })
+        expect(onExceeded.mock.calls[0]?.[0].usage).toBeGreaterThan(2 * 1_048_576)
+        // Another view's child reads nothing.
+        expect(stdoutPendingOf(usage(), 'acme.indexer', 'view-2')).toBe(0)
+        expect(killed).toEqual([])
+        expect(onFailure).not.toHaveBeenCalled()
+        expect(() => process.kill(pid, 0)).not.toThrow()
+        await supervisor.close()
+        await call
+      } finally {
+        watch.dispose()
+      }
+    }, 120_000)
+
+    const loopLag =(): { stop: () => number } => {
+      let worst = 0
+      let last = performance.now()
+      const timer = setInterval(() => {
+        const now = performance.now()
+        worst = Math.max(worst, now - last - 1)
+        last = now
+      }, 1)
+      return { stop: () => { clearInterval(timer); return worst } }
+    }
+
+    for (const mode of ['pieces', 'single'] as const) {
+      it(`takes a 40 MiB result as text (${mode}); this thread never decodes or parses more than one piece at a time`, async () => {
+        const onFailure = vi.fn()
+        const supervisor = makeSupervisor({ onFailure })
+        supervisors.push(supervisor)
+        await supervisor.start()
+        const client = supervisor.clientFor(authenticatedRuntime)
+        const pid = await client.call('fixture.pid', null)
+        // What this (the Host's main) thread decodes and parses during the call.
+        let largestParse = 0
+        let largestDecode = 0
+        const parse = JSON.parse
+        const parseSpy = vi.spyOn(JSON, 'parse').mockImplementation((text: string, reviver?: Parameters<typeof JSON.parse>[1]) => {
+          largestParse = Math.max(largestParse, Buffer.byteLength(text))
+          return parse(text, reviver)
+        })
+        type Decoder = InstanceType<typeof TextDecoder>
+        const decode = TextDecoder.prototype.decode
+        const decodeSpy = vi.spyOn(TextDecoder.prototype, 'decode').mockImplementation(function (this: Decoder, input?: Parameters<Decoder['decode']>[0], options?: Parameters<Decoder['decode']>[1]) {
+          largestDecode = Math.max(largestDecode, input?.byteLength ?? 0)
+          return decode.call(this, input, options)
+        })
+        const lag = loopLag()
+        let text: BackendResultText
+        try {
+          text = await client.call('fixture.bigresult', { bytes: 40 * 1_048_576, mode }, {
+            timeoutMs: 120_000,
+            resultText: true,
+          }) as unknown as BackendResultText
+        } finally {
+          parseSpy.mockRestore()
+          decodeSpy.mockRestore()
+        }
+        const worst = lag.stop()
+        expect(largestParse).toBeLessThanOrEqual(AGENT_TOOL_CHUNK_BYTES)
+        expect(largestDecode).toBeLessThanOrEqual(AGENT_TOOL_CHUNK_BYTES)
+        const joined = Array.from({ length: text.chunks }, (_, index) => text.piece(index))
+        expect(joined.every((piece) => utf8ByteLength(piece) <= AGENT_TOOL_CHUNK_BYTES)).toBe(true)
+        expect(sha(joined.join(''))).toBe(sha(JSON.stringify(big(40 * 1_048_576))))
+        expect(text.bytes).toBe(utf8ByteLength(joined.join('')))
+        // A loose smoke check only; the bounds above are what this test guards.
+        expect(worst).toBeLessThan(250)
+        await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+        expect(onFailure).not.toHaveBeenCalled()
+      }, 240_000)
+    }
+
+    it('delivers a large answer from a child that exits right after writing it', async () => {
+      let delivered = 0
+      for (let round = 0; round < 10; round++) {
+        const supervisor = makeSupervisor()
+        supervisors.push(supervisor)
+        await supervisor.start()
+        const client = supervisor.clientFor(authenticatedRuntime)
+        const value = await client.call('fixture.bigexit', { bytes: 2 * 1_048_576 }, { timeoutMs: 60_000 })
+        if (sha(JSON.stringify(value)) === sha(JSON.stringify(big(2 * 1_048_576)))) delivered += 1
+      }
+      expect(delivered).toBe(10)
+    }, 240_000)
+
+    it('checks a frame parsed off the main thread as strictly as the main thread does', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      // A repeated key is a protocol error at any size, on either thread.
+      await expect(client.call('fixture.bigresult', { bytes: 2 * 1_048_576, mode: 'duplicate-key' }, { timeoutMs: 60_000 }))
+        .rejects.toMatchObject({ code: 'PROTOCOL_ERROR' })
+    }, 120_000)
+
+    it('handles the frames that follow a large one after it, in order', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const order: string[] = []
+      const large = client.call('fixture.bigresult', { bytes: 8 * 1_048_576, mode: 'single' }, { timeoutMs: 60_000 })
+        .then((value) => { order.push('large'); return value })
+      const small = client.call('fixture.pid', null).then((value) => { order.push('small'); return value })
+      await Promise.all([large, small])
+      expect(order).toEqual(['large', 'small'])
+      expect(sha(JSON.stringify(await large))).toBe(sha(JSON.stringify(big(8 * 1_048_576))))
+    }, 120_000)
+
+    it('fails a dripping child at its second piece as short, and the child keeps serving', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null)
+      await expect(client.call('fixture.bigresult', { bytes: 1, mode: 'drip' }))
+        .rejects.toMatchObject({ code: 'CHUNKS_INVALID', reason: 'short' })
+      await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+    })
+
+    it('fails a repeated seq at once as seq', async () => {
+      const supervisor = makeSupervisor()
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      await expect(client.call('fixture.bigresult', { bytes: 1_048_576, mode: 'repeat' }))
+        .rejects.toMatchObject({ code: 'CHUNKS_INVALID', reason: 'seq' })
+      await expect(client.call('fixture.echo', { ok: true })).resolves.toBeDefined()
+    })
+
+    it('drops pieces that arrive after the call was cancelled, without a protocol error', async () => {
+      const onFailure = vi.fn()
+      const supervisor = makeSupervisor({ onFailure })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const pid = await client.call('fixture.pid', null)
+      const controller = new AbortController()
+      const call = client.call('fixture.bigresult', { bytes: 4 * 1_048_576 }, {
+        signal: controller.signal,
+        timeoutMs: 60_000,
+        onTransferProgress: (phase) => { if (phase === 'result') controller.abort() },
+      })
+      await expect(call).rejects.toMatchObject({ code: 'USER_CANCELLED' })
+      await expect(client.call('fixture.pid', null)).resolves.toBe(pid)
+      expect(onFailure).not.toHaveBeenCalled()
+      await vi.waitFor(() => expect(supervisor.resourceUsage().droppedResultPieces).toBeGreaterThan(0))
+    }, 120_000)
+
+    it('sends 10 MiB of arguments in pieces to a child that reads them', async () => {
+      const supervisor = makeSupervisor({ environment: { NAVIDE_FIXTURE: 'backend-wire', NAVIDE_FIXTURE_ARGUMENT_CHUNKS: '1' } })
+      supervisors.push(supervisor)
+      await supervisor.start()
+      const client = supervisor.clientFor(authenticatedRuntime)
+      const args = big(10 * 1_048_576)
+      const phases: string[] = []
+      const result = await client.call('fixture.hash', args, { timeoutMs: 60_000, onTransferProgress: (phase) => phases.push(phase) }) as {
+        sha256: string; bytes: number; pieces: number
+      }
+      expect(result.sha256).toBe(sha(JSON.stringify(args)))
+      expect(result.bytes).toBe(Buffer.byteLength(JSON.stringify(args), 'utf8'))
+      expect(result.pieces).toBeGreaterThanOrEqual(80)
+      expect(phases.filter((phase) => phase === 'arguments')).toHaveLength(result.pieces)
+      expect(phases.at(-1)).toBe('execution')
+    }, 120_000)
+
+    it('keeps other children answering promptly while a 10 MiB result streams in', async () => {
+      const busy = makeSupervisor()
+      const other = makeSupervisor()
+      supervisors.push(busy, other)
+      await Promise.all([busy.start(), other.start()])
+      const otherClient = other.clientFor(authenticatedRuntime)
+      await otherClient.call('fixture.echo', { warm: true })
+      let done = false
+      const transfer = busy.clientFor(authenticatedRuntime)
+        .call('fixture.bigresult', { bytes: 10 * 1_048_576 }, { timeoutMs: 60_000 })
+        .finally(() => { done = true })
+      const latencies: number[] = []
+      while (!done) {
+        const started = performance.now()
+        await otherClient.call('fixture.echo', { small: true })
+        latencies.push(performance.now() - started)
+      }
+      await transfer
+      expect(latencies.length).toBeGreaterThan(0)
+      // Calls to another child are served throughout the transfer, not held behind it.
+      expect(Math.max(...latencies)).toBeLessThan(1_000)
+    }, 120_000)
   })
 
   it('starts a child process and completes health plus one unary call', async () => {
@@ -2646,7 +2961,7 @@ describe('PluginBackendSupervisor', () => {
       expect(supervisor.resourceUsage().bridgeRequests).toEqual({ current: 0, peak: count })
     })
 
-    it('refuses a single request frame larger than the whole queue without failing the child', async () => {
+    it('writes a request frame larger than the old queue bound as one frame to a child without argument pieces', async () => {
       const onFailure = vi.fn()
       const harness = makeStallableChild()
       const supervisor = makeSupervisor({ onFailure, spawnProcess: () => harness.child })
@@ -2654,14 +2969,16 @@ describe('PluginBackendSupervisor', () => {
       await supervisor.start()
 
       const client = supervisor.clientFor(authenticatedRuntime)
-      // One frame that can never fit (256 KiB queue): refused up front, not
-      // written, so the overflow that would kill the child never happens.
+      // Contract 4.4, A3: no Host-side refusal (was RESOURCE_LIMIT); this child
+      // did not advertise argument pieces, so the arguments go in one frame.
       await expect(client.call('fixture.echo', { payload: 'z'.repeat(300 * 1024) }))
-        .rejects.toMatchObject({ code: 'RESOURCE_LIMIT' })
-      expect(harness.hostFrames.some((frame) => frame.includes('fixture.echo'))).toBe(false)
+        .resolves.toEqual({ echoed: true })
+      const written = harness.hostFrames.filter((frame) => frame.includes('fixture.echo'))
+      expect(written).toHaveLength(1)
+      expect(written[0].length).toBeGreaterThan(300 * 1024)
+      expect(harness.hostFrames.some((frame) => frame.includes('navide/argumentChunk'))).toBe(false)
       expect(onFailure).not.toHaveBeenCalled()
       expect(harness.kill).not.toHaveBeenCalled()
-      // The child is still serving requests.
       await expect(client.call('fixture.echo', { payload: 'ok' })).resolves.toBeDefined()
     })
 
