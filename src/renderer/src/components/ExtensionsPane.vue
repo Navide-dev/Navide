@@ -535,10 +535,6 @@ watch(installed, () => void refreshPacks())
               <span v-else-if="updatesById.get(p.id)" class="ext-badge ext-update-badge">
                 {{ $t('settings.extensions.marketplace.updateAvailableVersion', { version: updatesById.get(p.id)?.latestVersion ?? '' }) }}
               </span>
-              <!-- Card K3: placeholder until the shared source badge (K2) lands. -->
-              <span v-if="p.source === 'local-unsigned'" class="ext-badge ext-local-badge" :title="$t('settings.extensions.localInstall.badgeTitle')">
-                {{ $t('settings.extensions.localInstall.badge') }}
-              </span>
               <span v-if="p.disabled" class="ext-badge ext-disabled-badge" :title="$t('settings.extensions.disabledNote')">
                 {{ $t('settings.extensions.disabledBadge') }}
               </span>
@@ -973,8 +969,7 @@ watch(installed, () => void refreshPacks())
   white-space: nowrap;
 }
 .ext-badge.ext-sensitive,
-.ext-badge.ext-dev-warning,
-.ext-badge.ext-local-badge {
+.ext-badge.ext-dev-warning {
   color: var(--risk-fg);
   background: var(--risk-subtle);
 }

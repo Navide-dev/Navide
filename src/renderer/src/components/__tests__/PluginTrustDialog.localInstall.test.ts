@@ -1,0 +1,121 @@
+// @vitest-environment happy-dom
+// Card K3: the consent dialog for a Navide plugin installed from a file.
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
+import { i18n } from '@navide/plugin-ui/foundation'
+import PluginTrustDialog from '../PluginTrustDialog.vue'
+import { computeDisclosure, type DisclosureManifestInput } from '../../../../shared/pluginDisclosure'
+
+const LOCALES = ['zh-TW', 'en-US', 'ja-JP'] as const
+
+function pending(extra: Record<string, unknown> = {}) {
+  return {
+    label: 'acme.todo',
+    prepared: {
+      id: 'acme.todo',
+      version: '1.0.0',
+      trustTier: 'unsigned',
+      sensitive: [],
+      containsBackendExecutable: true,
+      requiresConfirmation: true,
+      publisherId: 'acme',
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosure: null,
+      scan: null,
+      registry: null,
+      source: 'local-unsigned',
+      digest: 'a'.repeat(64),
+      ...extra,
+    },
+  }
+}
+
+function render(step: 'replace' | 'risk', extra: Record<string, unknown> = {}) {
+  return mount(PluginTrustDialog, {
+    props: { pending: pending(extra), step } as never,
+    global: { plugins: [i18n] },
+    attachTo: document.body,
+  })
+}
+
+let saved: typeof i18n.global.locale.value
+beforeEach(() => {
+  saved = i18n.global.locale.value
+  i18n.global.locale.value = 'en-US'
+})
+afterEach(() => {
+  i18n.global.locale.value = saved
+  document.body.innerHTML = ''
+})
+
+describe('PluginTrustDialog for a file install (K3)', () => {
+  it('shows the fixed warning, the local source row, the claimed publisher and no scan, in every locale', () => {
+    for (const locale of LOCALES) {
+      i18n.global.locale.value = locale
+      const dialog = render('risk')
+      const warning = dialog.get('.ext-local-warning')
+      expect(warning.attributes('role')).toBe('note')
+      expect(warning.text()).toBe(i18n.global.t('settings.extensions.localInstall.warning'))
+      const row = dialog.get('.nv-source-row')
+      expect(row.attributes('data-source')).toBe('local-unsigned')
+      expect(row.text()).toContain(i18n.global.t('pluginDisclosure.source.selfDeclared', { publisher: 'acme' }))
+      expect(dialog.text()).toContain(i18n.global.t('settings.extensions.localInstall.signature'))
+      expect(dialog.text()).toContain('a'.repeat(64))
+      // A local install is never called reviewed or verified.
+      expect(dialog.find('.ext-trust-badge.ext-verified').exists()).toBe(false)
+      expect(dialog.text()).not.toContain(i18n.global.t('pluginDisclosure.source.marketplace'))
+      dialog.unmount()
+    }
+  })
+
+  it('starts on Cancel and keeps consent disabled until the user acknowledges the risk', async () => {
+    const dialog = render('risk')
+    await flushPromises()
+    await nextTick()
+    expect(document.activeElement?.classList.contains('ext-cancel')).toBe(true)
+    const confirm = dialog.get('.ext-confirm-risk')
+    expect(confirm.attributes('disabled')).toBeDefined()
+    await confirm.trigger('click')
+    expect(dialog.emitted('confirmRisk')).toBeUndefined()
+    await dialog.get('.ext-local-ack-input').setValue(true)
+    expect(confirm.attributes('disabled')).toBeUndefined()
+    await confirm.trigger('click')
+    expect(dialog.emitted('confirmRisk')).toHaveLength(1)
+  })
+
+  it('reads the disclosure as the Host reading the manifest, never as Registry-verified', () => {
+    const disclosure = computeDisclosure({
+      schemaVersion: 2, apiVersion: '^1.0.0', id: 'acme.todo', name: 'Todo', version: '1.0.0', publisher: 'acme',
+      permissions: {}, marketplace: { description: 'Todo', license: 'MIT' },
+      contributes: { views: [{ id: 'left', kind: 'custom', location: 'left', title: 'Todo', entry: 'frontend/left/index.html' }] },
+    } as unknown as DisclosureManifestInput)
+    const dialog = render('risk', { disclosure })
+    const provenance = dialog.get('.nv-disclosure-provenance')
+    expect(provenance.text()).toBe(i18n.global.t('pluginDisclosure.provenance.local'))
+    expect(provenance.classes()).toContain('nv-disclosure-provenance--unverified')
+    expect(dialog.text()).not.toContain(i18n.global.t('pluginDisclosure.provenance.verifiedNoScan'))
+  })
+
+  it('asks before replacing a Marketplace install, and says nothing is kept', async () => {
+    const dialog = render('replace', { replaces: { version: '0.9.0', source: 'marketplace' } })
+    expect(dialog.text()).toContain(i18n.global.t('settings.extensions.localInstall.replaceMarketplace', { id: 'acme.todo', version: '0.9.0' }))
+    expect(dialog.text()).toContain(i18n.global.t('settings.extensions.localInstall.replaceResets'))
+    expect(dialog.find('.ext-confirm-risk').exists()).toBe(false)
+    await dialog.get('.ext-confirm-replace').trigger('click')
+    expect(dialog.emitted('confirmReplace')).toHaveLength(1)
+  })
+
+  it('asks before a Marketplace install replaces a local one', () => {
+    const dialog = render('replace', { source: undefined, trustTier: 'signed-verified', replacesLocal: { version: '1.1.0-local' } })
+    expect(dialog.text()).toContain(i18n.global.t('settings.extensions.localInstall.replaceWithMarketplace', { id: 'acme.todo', version: '1.0.0' }))
+  })
+
+  it('leaves a Marketplace install without the local warning or acknowledgement', () => {
+    const dialog = render('risk', { source: undefined, trustTier: 'signed-verified', digest: undefined })
+    expect(dialog.find('.ext-local-warning').exists()).toBe(false)
+    expect(dialog.find('.ext-local-ack').exists()).toBe(false)
+    expect(dialog.get('.ext-confirm-risk').attributes('disabled')).toBeUndefined()
+  })
+})

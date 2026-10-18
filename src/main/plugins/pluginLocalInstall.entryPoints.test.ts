@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { agentApprovalSourceNote } from './pluginLocalInstall'
 
 const read = (path: string): string => readFileSync(resolve(process.cwd(), path), 'utf8')
 const LOCAL_INSTALL = /installFromFile|commitLocalInstall/
@@ -44,5 +45,14 @@ describe('install-from-file entry points', () => {
     expect(handler).not.toContain('process.env')
     expect(handler).toContain('const path = await pickFile(event)')
     expect(handler.match(/readFileSync\(/g)).toHaveLength(1)
+  })
+
+  it('names an unreviewed local source on the agent tool approval', () => {
+    expect(agentApprovalSourceNote('local-unsigned')).toBe('Source: a local file, not reviewed by Navide.')
+    expect(agentApprovalSourceNote('marketplace')).toBe('')
+    expect(agentApprovalSourceNote(undefined)).toBe('')
+    const main = read('src/main/index.ts')
+    const prompt = main.slice(main.indexOf('async function promptAgentToolWorkspaceWrite'))
+    expect(prompt.slice(0, prompt.indexOf('\n}\n'))).toContain('agentApprovalSourceNote(')
   })
 })

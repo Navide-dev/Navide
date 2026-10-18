@@ -245,11 +245,10 @@ describe('plugins:installFromFile', () => {
     // Nothing is written before consent.
     expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toBeNull()
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo' })).rejects.toThrow(/consent is required/)
-
-    // The refusal does not keep the package: choosing the file again is required.
-    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).rejects.toThrow(/no prepared local install/)
-    await call('plugins:installFromFile')
+    expect(new PluginActivationSelector(pluginsRoot).read('acme.todo')).toBeNull()
     await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).resolves.toMatchObject({ restartRequired: true })
+    // A committed prepare is spent: committing again needs the file again.
+    await expect(call('plugins:commitLocalInstall', { id: 'acme.todo', riskConfirmed: true })).rejects.toThrow(/no prepared local install/)
     await call('plugins:restart', { id: 'acme.todo' })
 
     expect(new PluginCapabilityGrantStore(pluginsRoot).get('acme.todo', '1.0.0')).toMatchObject({ packageVersion: '1.0.0', storage: true })

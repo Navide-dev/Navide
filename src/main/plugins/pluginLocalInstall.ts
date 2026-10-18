@@ -14,6 +14,7 @@ import { basename, dirname, join } from 'node:path'
 import { REGISTRY_RECEIPT_NAME, type InstalledTrustDecision } from './pluginInstalledTrust'
 import { readLocalTrustRecord, verifyLocalPackage, type PluginLocalTrustContext } from './pluginLocalTrust'
 import { parseManifestJson } from './pluginManifest'
+import type { PluginSource } from '../../shared/pluginSource'
 
 /** Consent records live beside, never inside, the plugins root: every child
  * of the root is scanned as a package, and a file inside a package would
@@ -89,4 +90,10 @@ export function promoteLocalCandidateRecord(pluginsRoot: string, pluginId: strin
  * replacing a local one). */
 export function forgetLocalTrustRecords(pluginsRoot: string, pluginId: string, roles: readonly LocalRecordRole[] = ['active', 'candidate']): void {
   for (const role of roles) rmSync(localTrustRecordPath(pluginsRoot, pluginId, role), { force: true })
+}
+
+/** The source line an agent approval names for a package installed from a
+ * file, so an unreviewed package's tools never read like a Marketplace one's. */
+export function agentApprovalSourceNote(source: PluginSource | undefined): string {
+  return source === 'local-unsigned' ? 'Source: a local file, not reviewed by Navide.' : ''
 }

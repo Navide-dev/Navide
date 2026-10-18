@@ -58,6 +58,7 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
+import { agentApprovalSourceNote } from './plugins/pluginLocalInstall'
 import {
   BackendPluginError,
   PluginBackendSupervisor,
@@ -1296,7 +1297,14 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
     type: 'warning',
     title: 'Agent wants to change files',
     message: `An agent asked to use "${prompt.tool.title}" (${prompt.tool.name}) of ${prompt.name} ${prompt.packageVersion}, which changes files. Allow agents to do this in this workspace?`,
-    detail: `${prompt.workspacePath}\n\nThe agent, not you, started this. You are asked again after an update or a new permission.`,
+    detail: [
+      // Card K3: an unreviewed package's tool says where it came from.
+      agentApprovalSourceNote(
+        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+      ),
+      prompt.workspacePath,
+      'The agent, not you, started this. You are asked again after an update or a new permission.',
+    ].filter(Boolean).join('\n\n'),
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,

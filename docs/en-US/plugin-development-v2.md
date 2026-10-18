@@ -2013,10 +2013,34 @@ runs only inside the OS sandbox described in
   view only when a grant for that exact package id and version exists, so a
   Developer Mode v2 view is refused ("package-version capability grant is
   missing") unless a Registry install of the same id and version already left
-  one behind. To run a v2 package in the app, install it from a Registry; a
-  local Registry works (see
+  one behind. To run a v2 package in the app, install it from a file (next
+  item) or from a Registry; a local Registry works (see
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
+- **Install from a file** (Settings → Navide Plugins → **Install from .vsix
+  file…**) works in packaged builds too, without Developer Mode. The main
+  process opens its own file dialog over the main window and reads the picked
+  file once; every later step uses those bytes, never the path again. Plugin
+  frames, agents (MCP) and environment variables cannot start or name a file
+  install. The package passes the same ZIP checks as a Registry package (50 MB
+  per entry, 200 MB per archive, no symlinks or special files, no unsafe
+  paths), the Manifest v2 schema, the backend executable rules and the engine
+  check; Manifest v1, extension packs and the `navide.` namespace are refused,
+  and so is a publisher or package id on the root-signed takedown list (even an
+  expired one). It has no Registry signature and no Navide review or scan, so
+  the user always consents in a dialog that shows a fixed warning, the
+  self-declared publisher and "not scanned", starts on Cancel and enables its
+  consent button only after an explicit acknowledgement. The package is staged
+  like a Registry candidate and its grant takes effect on **Restart Plugin**;
+  a native backend still asks for its own consent and runs in the same
+  sandbox. A file install never updates automatically. Installing a file over
+  an installed package of the same id (or a Marketplace version over a file
+  install) asks first, and the replacement keeps none of the replaced
+  package's grant, rollback grant, native backend consent or agent tool
+  approvals. The takedown check covers id and publisher only: a package
+  renamed to a new id is not caught, because the trust metadata carries no
+  blocked-digest list. Files extracted from a `.vsix` carry no quarantine
+  attribute, the same as a Registry install.
 - A package installed from a local file or folder is trusted through a local
   trust record, not the Registry root: the record holds the package id and
   version, the SHA-256 of every file in the installed copy, an overall content

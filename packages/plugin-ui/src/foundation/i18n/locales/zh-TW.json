@@ -1904,6 +1904,21 @@
         },
         "prereleaseAvailable": "有預覽版 {version}"
       },
+      "localInstall": {
+        "button": "從檔案安裝 .vsix…",
+        "backToMarketplace": "換回 Navide 市集版本",
+        "warning": "這個 Navide 外掛來自你選的本機檔案，沒有經過 Navide 審核，也沒有簽章：無法確認作者，檔案也可能被改過。只安裝你信任的人給你的檔案。",
+        "signatureLabel": "簽章",
+        "signature": "無：無法確認作者，檔案可能被改過",
+        "digestLabel": "檔案 SHA-256",
+        "acknowledge": "我了解這個 Navide 外掛沒有經過 Navide 審核，並確定要執行它的程式碼。",
+        "replaceTitle": "取代已安裝的 Navide 外掛",
+        "replaceMarketplace": "要把 {id}（Navide 市集版本 {version}）換成本機檔案版本嗎？換了之後不會自動更新。",
+        "replaceLocal": "要把 {id} 的本機檔案版本 {version} 換成這個檔案嗎？",
+        "replaceWithMarketplace": "要把 {id} 的本機檔案版本換成 Navide 市集版本 {version} 嗎？",
+        "replaceResets": "取代之後，原本給的權限、原生後端同意和 agent 工具授權都會清掉，需要重新同意。",
+        "confirmReplace": "取代"
+      },
       "trust": {
         "publisherRiskUnsigned": "{publisher} 的套件 {id} 沒有 Registry 簽章。信任這個發佈者後，Navide 會執行它的程式碼。",
         "sensitiveHeading": "敏感權限",
@@ -11272,6 +11287,7 @@
     "declaredHeading": "這個 Navide 外掛宣告的權限",
     "registryHeading": "Navide Registry 的紀錄（未簽章）",
     "provenance": {
+      "local": "以下由 Navide 從套件自己的 manifest 讀出；沒有 Navide Registry 簽章，也沒有經過 Navide 掃描。",
       "unverified": "以下由 Navide Registry 提供，尚未驗證；安裝前 Navide 會驗證簽章，並和套件內容比對。",
       "verified": "已驗證：揭露內容和下載的套件一致，掃描報告的 Navide Registry 簽章正確。",
       "verifiedNoScan": "已驗證：揭露內容和下載的套件一致。這個版本沒有系統掃描。"

@@ -1904,6 +1904,21 @@
         },
         "prereleaseAvailable": "プレリリース {version} あり"
       },
+      "localInstall": {
+        "button": ".vsix ファイルからインストール…",
+        "backToMarketplace": "Navide マーケットプレイス版に戻す",
+        "warning": "この Navide プラグインは、このコンピューター上のファイルから読み込まれます。Navide の審査を受けておらず署名もないため、作成者を確認できず、ファイルが改変されている可能性もあります。信頼できる相手から受け取ったファイルだけをインストールしてください。",
+        "signatureLabel": "署名",
+        "signature": "なし：作成者を確認できず、ファイルが改変されている可能性があります",
+        "digestLabel": "ファイルの SHA-256",
+        "acknowledge": "この Navide プラグインが Navide の審査を受けていないことを理解したうえで、そのコードを実行します。",
+        "replaceTitle": "インストール済みの Navide プラグインを置き換え",
+        "replaceMarketplace": "{id}（Navide マーケットプレイス版 {version}）をこのファイルの版に置き換えますか？置き換えると自動更新されなくなります。",
+        "replaceLocal": "{id} のファイル版 {version} をこのファイルに置き換えますか？",
+        "replaceWithMarketplace": "{id} のファイル版を Navide マーケットプレイス版 {version} に置き換えますか？",
+        "replaceResets": "置き換えると、これまでに許可した権限、ネイティブバックエンドの同意、agent ツールの許可はすべて消去され、改めて確認されます。",
+        "confirmReplace": "置き換える"
+      },
       "trust": {
         "publisherRiskUnsigned": "{publisher} のパッケージ {id} には Registry の署名がありません。この発行元を信頼すると、Navide はそのコードを実行します。",
         "sensitiveHeading": "機密性の高い権限",
@@ -11272,6 +11287,7 @@
     "declaredHeading": "この Navide プラグインが宣言している権限",
     "registryHeading": "Navide Registry の記録（署名なし）",
     "provenance": {
+      "local": "パッケージ自身の manifest から Navide が読み取った内容です。Navide Registry の署名はなく、Navide のスキャンも受けていません。",
       "unverified": "Navide Registry が提供した内容で、まだ検証されていません。インストール前に Navide が署名を検証し、パッケージと照合します。",
       "verified": "検証済み：開示内容はダウンロードしたパッケージと一致し、スキャン結果の Navide Registry の署名は有効です。",
       "verifiedNoScan": "検証済み：開示内容はダウンロードしたパッケージと一致しています。この版にはシステムスキャンがありません。"
