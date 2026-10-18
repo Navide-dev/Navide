@@ -12358,10 +12358,9 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
     : []
   const interruptedKids = interrupted.length > 0 ? interruptedChildren(session.workspacePath) : []
   const ids = [...new Set([...scopeIds, ...interrupted])]
-  // Queued until each one is done: a wake checks these as well as the panes restoring now.
+  // Queued until the batch is done: a wake checks these as well as the panes restoring now
+  // (one that has finished is realized, which the wake checks anyway).
   for (const id of ids) scheduledRestoreIds.add(id)
-  const realizeScheduled = (paneId: string) =>
-    realizeRestoredPane(paneId, true).finally(() => scheduledRestoreIds.delete(paneId))
   const reconnectStart = reconnectedCount.value
   // Starting a workspace fresh is the one batch nothing caps. Fresh spawns are
   // deliberately exempt from the resume semaphore — throttling them would stall
@@ -12376,17 +12375,21 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
-  if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
-  } else if (decision === 'resume' && session.scope === 'auto') {
-    // Auto brings back every pane live at the last close: same ceiling as 'all'.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
-  } else if (interrupted.length > 0) {
-    // The interrupted panes ride on top of the scope's pick: same ceiling as
-    // an 'all' restore, so a relaunch never starts more than two at once.
-    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, realizeScheduled)
-  } else {
-    await Promise.all(ids.map(realizeScheduled))
+  try {
+    if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (decision === 'resume' && session.scope === 'auto') {
+      // Auto brings back every pane live at the last close: same ceiling as 'all'.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else if (interrupted.length > 0) {
+      // The interrupted panes ride on top of the scope's pick: same ceiling as
+      // an 'all' restore, so a relaunch never starts more than two at once.
+      await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+    } else {
+      await Promise.all(ids.map((paneId) => realizeRestoredPane(paneId, true)))
+    }
+  } finally {
+    for (const id of ids) scheduledRestoreIds.delete(id)
   }
   const reconnected = reconnectedCount.value - reconnectStart
   if (reconnected > 0) {
