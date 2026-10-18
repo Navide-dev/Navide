@@ -12,6 +12,7 @@ import {
   settleWorkspaceRestoreSession,
   stripPinnedSessionId,
   stripDeadOpencodeAutoFlag,
+  wasLiveAtLastLaunch,
 } from '../resumeBehavior'
 
 describe('normalizeResumeBehavior', () => {
@@ -50,6 +51,7 @@ describe('normalizeRestoreScope', () => {
     expect(normalizeRestoreScope('page')).toBe('page')
     expect(normalizeRestoreScope('tab')).toBe('tab')
     expect(normalizeRestoreScope('all')).toBe('all')
+    expect(normalizeRestoreScope('auto')).toBe('auto')
   })
 
   it('defaults missing or invalid values to one CLI', () => {
@@ -84,6 +86,40 @@ describe('restoreScopeTargetIds', () => {
 
   it('uses every eligible pending pane for all, active tab first', () => {
     expect(restoreScopeTargetIds({ ...base, scope: 'all' })).toEqual(['a', 'b', 'd'])
+  })
+
+  it('uses only the panes live at the last launch for auto, active tab first', () => {
+    const liveAtLastLaunchIds = new Set(['b', 'c', 'd'])
+    expect(restoreScopeTargetIds({ ...base, scope: 'auto', liveAtLastLaunchIds })).toEqual(['b', 'd'])
+  })
+
+  it('restores nothing for auto when no pane was live at the last launch', () => {
+    expect(restoreScopeTargetIds({ ...base, scope: 'auto' })).toEqual([])
+    expect(restoreScopeTargetIds({ ...base, scope: 'auto', liveAtLastLaunchIds: new Set() })).toEqual([])
+  })
+
+  it('leaves the other four scopes unchanged by the live set', () => {
+    const liveAtLastLaunchIds = new Set(['d'])
+    for (const scope of ['single', 'page', 'tab', 'all'] as const) {
+      for (const trigger of ['cold', 'grid-page'] as const) {
+        const opts = { ...base, scope, focusedPaneId: 'b', trigger }
+        expect(restoreScopeTargetIds({ ...opts, liveAtLastLaunchIds })).toEqual(restoreScopeTargetIds(opts))
+      }
+    }
+  })
+})
+
+describe('wasLiveAtLastLaunch', () => {
+  it('matches the stamp against the previous launch id', () => {
+    expect(wasLiveAtLastLaunch({ last_live_launch: 'L1' }, 'L1')).toBe(true)
+    expect(wasLiveAtLastLaunch({ last_live_launch: 'L0' }, 'L1')).toBe(false)
+  })
+
+  it('treats a missing stamp or an unknown previous launch as not live', () => {
+    expect(wasLiveAtLastLaunch({}, 'L1')).toBe(false)
+    expect(wasLiveAtLastLaunch({ last_live_launch: '' }, '')).toBe(false)
+    expect(wasLiveAtLastLaunch({ last_live_launch: 'L1' }, '')).toBe(false)
+    expect(wasLiveAtLastLaunch({ last_live_launch: 'L1' }, 42)).toBe(false)
   })
 })
 

@@ -2206,11 +2206,12 @@
       "resume-behavior-never": "一律開新對話",
       "resume-behavior-ask": "每次詢問",
       "restore-scope": "恢復範圍",
-      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁，或全部 CLI（一次兩個依序啟動）。",
+      "restore-scope-hint": "選擇「總是恢復」時，可自動開啟單一 CLI、目前的 Grid 頁面、目前分頁、全部 CLI，或「自動」：只恢復上次關閉 Navide 時仍在執行的 CLI（全部 CLI 與自動都一次兩個依序啟動）。",
       "restore-scope-single": "單一 CLI",
       "restore-scope-page": "目前 Grid 頁面",
       "restore-scope-tab": "目前分頁",
       "restore-scope-all": "全部 CLI",
+      "restore-scope-auto": "自動",
       "resume-concurrency": "同時恢復上限",
       "resume-concurrency-hint": "開啟工作區或還原版面時，最多可同時恢復幾個 CLI pane，其餘依序排隊。若一次恢復太多 pane 導致「terminal.create timeout」錯誤，就把這個值調小（1–10）。",
       "resume-concurrency-label": "同時恢復數上限"
@@ -2499,7 +2500,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI。",
+              "desc": "接續範圍：單一 CLI／目前 Grid 頁面／目前分頁／全部 CLI／自動（只接續上次關閉 Navide 時仍在執行的 CLI）。",
               "fallback": "單一 CLI"
             },
             "resumeAfterRestart": {

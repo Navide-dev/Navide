@@ -5,11 +5,14 @@
 // confirm-dialog `ask`.
 
 export type ResumeBehavior = 'always' | 'never' | 'ask'
-export type RestoreScope = 'single' | 'page' | 'tab' | 'all'
+export type RestoreScope = 'single' | 'page' | 'tab' | 'all' | 'auto'
 
 /** Settings-store key (ui_settings.json via lib/settings.ts). */
 export const RESUME_BEHAVIOR_SETTING_KEY = 'agentTeam.resumeBehavior'
 export const RESTORE_SCOPE_SETTING_KEY = 'agentTeam.restoreScope'
+/** The launch before this one, as the backend rotated it at startup
+ *  (backend/agent_team_backend/launch_id.py). "" = not known. */
+export const PREVIOUS_LAUNCH_ID_SETTING_KEY = 'agentTeam.previousLaunchId'
 /** Whether a pane whose PTY died with the backend is resumed automatically
  *  once the backend comes back. */
 export const AUTO_RESUME_ON_RECONNECT_SETTING_KEY = 'agentTeam.autoResumeOnReconnect'
@@ -102,7 +105,16 @@ export function normalizeResumeBehavior(v: unknown): ResumeBehavior {
 
 /** Scope for an automatic resume. Old installs safely restore one CLI only. */
 export function normalizeRestoreScope(v: unknown): RestoreScope {
-  return v === 'page' || v === 'tab' || v === 'all' ? v : 'single'
+  return v === 'page' || v === 'tab' || v === 'all' || v === 'auto' ? v : 'single'
+}
+
+/** Whether a saved pane had a live CLI when the app last closed: its spawn
+ *  stamp names the previous launch. A record written before the stamp existed,
+ *  a reclaimed pane (stamp cleared) and an unknown previous launch all read as
+ *  not live. */
+export function wasLiveAtLastLaunch(saved: { last_live_launch?: string }, previousLaunchId: unknown): boolean {
+  return typeof previousLaunchId === 'string' && previousLaunchId !== '' &&
+    saved.last_live_launch === previousLaunchId
 }
 
 export type RestoreDecision = 'resume' | 'fresh'
@@ -171,6 +183,8 @@ export function restoreScopeTargetIds(opts: {
   minimizedPaneIds: ReadonlySet<string>
   focusedPaneId?: string | null
   trigger?: RestoreSessionTrigger
+  /** Panes whose CLI was live when the app last closed; read by 'auto' only. */
+  liveAtLastLaunchIds?: ReadonlySet<string>
 }): string[] {
   const pending = new Set(opts.pendingPaneIds)
   const eligible = (ids: readonly string[]): string[] => ids.filter(
@@ -188,10 +202,16 @@ export function restoreScopeTargetIds(opts: {
     const rest = eligible(opts.pendingPaneIds).filter((id) => !activeTab.includes(id))
     return [...activeTab, ...rest]
   }
+  if (opts.scope === 'auto') {
+    // Same order as 'all', narrowed to the panes that were live.
+    const live = opts.liveAtLastLaunchIds ?? new Set<string>()
+    const rest = eligible(opts.pendingPaneIds).filter((id) => !activeTab.includes(id))
+    return [...activeTab, ...rest].filter((id) => live.has(id))
+  }
   return activeTab
 }
 
-/** An 'all' restore starts at most this many panes at once; each next pane
+/** An 'all' (or 'auto') restore starts at most this many panes at once; each next pane
  *  waits for a prior spawn to complete (backend spawn ack). */
 export const ALL_SCOPE_RESTORE_CONCURRENCY = 2
 
