@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, quick_menu, redact, relay, report, share_cmds
+from . import media, pdf, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -83,6 +83,11 @@ RUN_TICK_S = 0.5
 EMPTY_TURN_GRACE_S = 120.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
+# Right after a restart a platform hands over what queued while Navide was down, before the
+# windows have registered their panes again: a pane that does not resolve yet is waited for
+# this long after start instead of being answered offline.
+STARTUP_GRACE_S = 60.0
+STARTUP_POLL_S = 1.0
 HELD_NOTICE_AFTER_S = 600.0
 HOLD_FAILURE_KEYS = {"gone", "not-ready"}
 HOLD_FAILURE_AFTER_S = 60.0
@@ -130,7 +135,7 @@ MSG_USAGE_LIMIT_KEPT = "這則請求先保留，重置後的回覆會照樣送�
 # that detector would also hold deliveries to the pane, so the channel reads the menu itself.
 _LIMIT_MENU_RE = re.compile(r"Stop and wait for limit to reset.{0,300}?Enter to confirm · Esc to cancel")
 _LIMIT_RESETS_RE = re.compile(r"hit your .{0,40}?limit\W{0,5}resets\s+(.{3,60}?\([^)]+\))")
-MSG_OFFLINE = "⚠️ pane 目前不在線上（可能在其他 workspace 或已關閉）"
+MSG_OFFLINE = wake.text(wake.DEFAULT_LANGUAGE, "offline")
 MSG_RELAY_EXPIRED = "⚠️ 這個確認已失效"
 MSG_RELAY_PROMPT_CHANGED = "⚠️ 畫面上的確認已經換了，這個回覆沒有送出；請在新的確認訊息重新選擇"
 # Appended to a relay prompt whose request lapsed, when the platform can edit it.
@@ -359,6 +364,7 @@ class ChannelManager:
         self._seams = seams
         self._factory_for = factory_for
         self._clock = clock
+        self._started_at = clock()
         self._adapters: dict[BotKey, ChannelAdapter] = {}
         self._lease: dict[str, BotKey] = {}  # token fingerprint -> bot
         self._errors: dict[BotKey, str] = {}  # bot -> config error shown in status
@@ -402,6 +408,7 @@ class ChannelManager:
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
+        self._started_at = self._clock()
         # No conversion outlives a backend: whatever is there was left by a crash.
         await asyncio.to_thread(pdf.clear, self._seams.pdf_root())
         if self._status_task is None:
@@ -1549,9 +1556,9 @@ class ChannelManager:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
-        pane_id = self._seams.resolve_pane(binding.pane_id)
+        pane_id = await self._resolve_after_startup(binding.pane_id)
         if not pane_id:
-            await self._reply(msg, MSG_OFFLINE)  # binding kept: it may come back
+            await self._reply(msg, await self._offline_text())  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
@@ -1569,6 +1576,17 @@ class ChannelManager:
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
         await self._debounced_deliver(msg, binding, pane_id)
+
+    async def _resolve_after_startup(self, pane_id: str) -> str:
+        """The pane's current id; during the startup grace an unknown pane is waited for."""
+        current = self._seams.resolve_pane(pane_id)
+        while not current and self._clock() - self._started_at < STARTUP_GRACE_S:
+            await asyncio.sleep(STARTUP_POLL_S)
+            current = self._seams.resolve_pane(pane_id)
+        return current
+
+    async def _offline_text(self) -> str:
+        return wake.text(prompt_skills.language(await self._ui_settings()), "offline")
 
     async def _debounced_deliver(self, msg: InboundMessage, binding: Binding, pane_id: str) -> None:
         if DEBOUNCE_S <= 0:
@@ -2123,9 +2141,9 @@ class ChannelManager:
             buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
             await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
             return
-        pane_id = self._seams.resolve_pane(binding.pane_id)
+        pane_id = await self._resolve_after_startup(binding.pane_id)
         if not pane_id:
-            await self._reply(msg, MSG_OFFLINE)
+            await self._reply(msg, wake.text(lang, "offline"))
             return
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
