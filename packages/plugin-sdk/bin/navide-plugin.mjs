@@ -482,6 +482,21 @@ function parseArgs(argv) {
   return { command, positional, options }
 }
 
+/** The version the Registry recorded, from its publish response body. */
+function publishedVersion(body) {
+  try {
+    const version = JSON.parse(body)?.version
+    return typeof version === 'string' ? version : ''
+  } catch {
+    return ''
+  }
+}
+
+/** SemVer pre-release suffix (build metadata is not one). */
+function isPrereleaseVersion(version) {
+  return version.split('+', 1)[0].includes('-')
+}
+
 async function main(argv) {
   const { command, positional, options } = parseArgs(argv)
   const [argument] = positional
@@ -572,6 +587,11 @@ async function main(argv) {
   })
   console.log(`${result.status} ${result.body}`)
   if (result.status < 200 || result.status >= 300) process.exitCode = 1
+  else if (isPrereleaseVersion(publishedVersion(result.body))) {
+    console.log(
+      'This version is a pre-release: it will be public to everyone who turns on Get pre-releases for this Navide plugin, and it goes through review. To test with specific people only, wait for Testplace (Navide 0.2.27).',
+    )
+  }
 }
 
 main(process.argv.slice(2)).catch((error) => {
