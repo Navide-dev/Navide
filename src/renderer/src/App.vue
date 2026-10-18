@@ -196,6 +196,7 @@ import {
   TERMINAL_KICKOFF_REASON, createKickoffReporter, paneStillStarting, promptReadyNow, runKickoffAttempts,
   submitHeldCopy, terminalKickoffOutcome,
 } from './lib/spawnKickoff'
+import { blockingDialogShown, confirmWeakSubmit, shouldWatchTurn } from './lib/submitTurnConfirm'
 import { terminalMultilineRefusal } from './lib/terminalInput'
 import { recordDiagnostic, readDiagnostics, diagnosticsNextSeq, setDiagnosticSink } from './lib/uiDiagnostics'
 import { paneExitFault, type PaneExitFault } from './lib/paneExitFault'
@@ -2615,6 +2616,12 @@ async function deliverAgentMessage(
   // that it is reported unconfirmed, not failed: the text and its Enter did go
   // out, and a sender told "failed" resends work that may already be running.
   // Its user record arriving later still confirms it (messaging.confirmDelivery).
+  // Enter went out on a collapsed paste nothing on screen could judge: not a
+  // delivery. Its user record arriving later still confirms it.
+  if (outcome.submit === 'unconfirmed') {
+    paneRefs[paneId]?.clearDeliveredPending?.()
+    return { unconfirmed: true }
+  }
   if (unconfirmed && !injectionVerified(outcome.echo ?? null, outcome.submit ?? null)) {
     if (!(await cliSignalSince(paneId, typedAt, RESUME_CONSUME_WAIT_MS))) {
       paneRefs[paneId]?.clearDeliveredPending?.()
@@ -4427,6 +4434,12 @@ async function injectText(
     ? (paneRefs[paneId]?.readScreenTail as ((n: number) => string) | undefined)
     : undefined
   const screenTail = (): string => (readScreen ? readScreen(SUBMIT_SCREEN_LINES) : '')
+  // The collapsed-paste check alone reads the whole screen, frame rows kept —
+  // see submitEvidence. The other two verdicts keep the narrow tail read.
+  const readVisible = paneId !== undefined
+    ? (paneRefs[paneId]?.readVisibleScreen as (() => string) | undefined)
+    : undefined
+  const visibleScreen = (): string | undefined => readVisible?.()
   // Whether the composer is holding our tail RIGHT NOW decides which signal we
   // can trust below, so sample it before pressing Enter.
   const tailWasOnScreen = !!tail && normalizeForMatch(screenTail()).includes(tail)
@@ -4466,8 +4479,30 @@ async function injectText(
     return true
   }
   const MAX_SUBMITS = 3
+  // A turn started or ended after this Enter — the CLI took a message.
+  const turnSince = (t: number): boolean => paneId !== undefined
+    && Math.max(paneTurnStartedAt.get(paneId) ?? 0, paneTurnCompleteAt.get(paneId) ?? 0) > t
+  const agentKey = panes.value.find((p) => p.id === paneId)?.agentKey
+  // Sampled before the first Enter: a pane already working queues our message
+  // and starts no turn for it, so there is no turn to watch for.
+  const midTurnAtEnter = paneId !== undefined
+    && (paneLastActiveAt.get(paneId) ?? 0) > (paneTurnCompleteAt.get(paneId) ?? 0)
+  // A permission / confirm dialog, where Enter would pick the default option.
+  // Not a turn that merely ended on a question — see blockingDialogShown.
+  const dialogShown = (): boolean => paneId !== undefined && blockingDialogShown({
+    awaitingKind: paneRefs[paneId]?.awaitingKind as string | null | undefined,
+    agentKey,
+    screen: visibleScreen() ?? screenTail(),
+  })
   for (let attempt = 1; attempt <= MAX_SUBMITS; attempt++) {
     if (shouldAbort?.()) return false
+    // Never press a resent Enter into a dialog. Our earlier Enter most likely
+    // started the work that raised it, but nothing confirms that.
+    if (attempt > 1 && dialogShown()) {
+      if (evidence) evidence.submit = 'unconfirmed'
+      return true
+    }
+    const enterAt = Date.now()
     try {
       await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
     } catch (err) {
@@ -4478,21 +4513,48 @@ async function injectText(
     // Poll instead of one flat sleep: a fast agent clears the composer in a few
     // hundred ms, and waiting the full gap on every attempt costs seconds.
     const deadline = Date.now() + SUBMIT_CONFIRM_MS
-    let landed = false
-    while (Date.now() < deadline && !landed) {
+    let how: SubmitEvidence | null = null
+    while (Date.now() < deadline) {
       await sleep(200)
       if (shouldAbort?.()) return false
-      const how = submitEvidence({
+      how = submitEvidence({
         tailWasOnScreen,
         tail,
         screen: screenTail(),
         grownBy: cleanBytes() - before,
-        baseline
+        baseline,
+        visibleScreen: visibleScreen(),
       })
-      landed = how !== null
-      if (landed && evidence) evidence.submit = how
+      // 'unconfirmed' keeps watching: the box may still come into view.
+      if (how !== null && how !== 'unconfirmed') break
     }
-    if (landed) return true
+    // A collapsed paste with no box in sight comes back 'unconfirmed' and is
+    // reported as such: no extra Enter on a screen we cannot read the box on.
+    if (how !== null) {
+      // Growth alone gets a second look: the CLI starting a new turn
+      // (lib/submitTurnConfirm.ts). Every other verdict returns at once.
+      const settled = await confirmWeakSubmit({
+        how,
+        watchTurn: shouldWatchTurn({ agentKey, midTurn: midTurnAtEnter }),
+        dialogShown,
+        turnStarted: () => turnSince(enterAt),
+        collapsedHeld: () => framedComposerHolds(visibleScreen() ?? screenTail(), ''),
+        pressEnter: async () => {
+          try {
+            await backend.send('terminal.input', { terminal_session_id: sessionId, data: '\r' })
+            return true
+          } catch {
+            return false
+          }
+        },
+        aborted,
+        sleep,
+        now: Date.now,
+      })
+      if (settled === null) return false
+      if (evidence) evidence.submit = settled
+      return true
+    }
     if (attempt < MAX_SUBMITS) {
       console.warn(
         `[injectText] input box still holds the text ${SUBMIT_CONFIRM_MS}ms after Enter ` +

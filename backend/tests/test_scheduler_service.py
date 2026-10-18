@@ -465,6 +465,16 @@ def test_outcome_mapping() -> None:
     assert outcome_of_send({"ok": True, "msg_key": "k", "status": "failed", "reason": "r"})["status"] == "error"
 
 
+def test_an_unconfirmed_send_is_an_error_with_a_warning(caplog) -> None:
+    # The text and its Enter went out but nothing confirmed the CLI took it;
+    # recording that as "ok" told the owner a run happened that may not have.
+    with caplog.at_level("WARNING", logger=sched_mod.log.name):
+        out = outcome_of_send({"ok": True, "msg_key": "k", "status": "unconfirmed"})
+    assert (out["status"], out["reason"], out["msg_key"]) == ("error", "unconfirmed", "k")
+    assert "unconfirmed" in out["detail"]
+    assert any("unconfirmed" in r.getMessage() for r in caplog.records)
+
+
 async def test_live_bridge_delivers_by_pane_id_through_cli_send_path(monkeypatch) -> None:
     from agent_team_backend.mcp_server import server as mcp
 
@@ -734,6 +744,15 @@ async def test_a_queued_message_that_was_delivered_stays_ok_and_says_so(env) -> 
     env["bridge"].final["kq"] = {"status": "delivered", "reason": None}
     listed = (await service.runs(job["id"]))["runs"]
     assert (listed[0]["status"], listed[0]["detail"]) == ("ok", "queued (mid-turn), then delivered")
+
+
+async def test_a_queued_message_that_was_then_unconfirmed_turns_its_run_into_an_error(env) -> None:
+    service, job = await _queued_run(env)
+    env["bridge"].queued.discard("kq")
+    env["bridge"].final["kq"] = {"status": "unconfirmed", "reason": None}
+    listed = (await service.runs(job["id"]))["runs"]
+    assert (listed[0]["status"], listed[0]["reason"]) == ("error", "unconfirmed")
+    assert listed[0]["detail"].startswith("queued (mid-turn), then unconfirmed")
 
 
 async def test_a_queued_message_no_longer_tracked_is_disclosed(env) -> None:
