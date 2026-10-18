@@ -6,8 +6,11 @@ import { CLI_AGENT_SPECS } from '@navide/plugin-shell'
 import CliAccountsPane from '../CliAccountsPane.vue'
 import { i18n } from '@navide/plugin-ui/foundation'
 import {
+  cliAccountDirActionsKey,
   cliAccountSwitchKey,
   createCliAccountSwitchHandler,
+  type CliAccountDirActions,
+  type CliProfileAccountDirs,
   type useCliProfiles,
   type CliAccountSwitchHandler,
   type CliProfile,
@@ -29,6 +32,7 @@ const usage = vi.hoisted(() => ({
     (agentKey: string | undefined | null, profileId: string | null) => UsageSnapshot | undefined
   >(),
   refreshUsage: vi.fn<(agentKey?: string, slotId?: string | null) => boolean>(() => true),
+  usageBackendConnected: vi.fn<() => boolean>(() => true),
 }))
 vi.mock('../../composables/useUsage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../composables/useUsage')>()
@@ -37,6 +41,7 @@ vi.mock('../../composables/useUsage', async (importOriginal) => {
     usageFor: usage.usageFor,
     accountUsageFor: usage.accountUsageFor,
     refreshUsage: usage.refreshUsage,
+    usageBackendConnected: usage.usageBackendConnected,
   }
 })
 
@@ -73,6 +78,8 @@ interface ApiOptions {
   scopes?: Record<string, string[]>
   /** Agents whose capability says loginIsolation === 'global'. */
   globalLogin?: string[]
+  /** Claude accounts signed in inside their own config dir. */
+  accountDirs?: CliProfileAccountDirs
 }
 
 // Fake `api` prop mirroring the useCliProfiles return shape (refs + fns),
@@ -126,6 +133,8 @@ function makeApi(opts: ApiOptions = {}) {
       }
       return defaultNames.value[agentKey] || undefined
     },
+    accountDirFor: (agentKey: string, profileId: string | null | undefined) =>
+      profileId && profileId !== '__default__' ? (opts.accountDirs?.[agentKey]?.[profileId] ?? null) : null,
     duplicateFor: (agentKey: string, profileId: string | null) =>
       duplicates.value[agentKey]?.[profileId ?? '__default__'] ?? null,
     portable,
@@ -205,20 +214,27 @@ describe('CliAccountsPane', () => {
     usage.usageFor.mockReset()
     usage.accountUsageFor.mockReset()
     usage.refreshUsage.mockReturnValue(true) // default: a connected backend
+    usage.usageBackendConnected.mockReturnValue(true)
+    localStorage.clear()
   })
 
   function mountPane(
     api: ReturnType<typeof useCliProfiles>,
-    opts: { workspaceOpen?: boolean; switchHandler?: CliAccountSwitchHandler } = {},
+    opts: {
+      workspaceOpen?: boolean
+      switchHandler?: CliAccountSwitchHandler
+      dirActions?: CliAccountDirActions
+    } = {},
   ) {
     wrapper = mount(CliAccountsPane, {
       props: { api, workspaceOpen: opts.workspaceOpen ?? true },
       global: {
         plugins: [i18n],
         // Mimic the main window providing the quiescence-aware switch handler.
-        provide: opts.switchHandler
-          ? { [cliAccountSwitchKey as symbol]: opts.switchHandler }
-          : {},
+        provide: {
+          ...(opts.switchHandler ? { [cliAccountSwitchKey as symbol]: opts.switchHandler } : {}),
+          ...(opts.dirActions ? { [cliAccountDirActionsKey as symbol]: opts.dirActions } : {}),
+        },
       },
     })
     return wrapper
@@ -849,12 +865,12 @@ describe('CliAccountsPane', () => {
     const w = mountPane(api)
 
     const cards = section(w, 0).findAll('.cli-card')
-    expect(cards[0].get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('90% Session')
+    expect(cards[0].get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('90% Session left')
     expect(cards[1].classes()).toContain('active')
-    expect(cards[1].get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('70% Session')
+    expect(cards[1].get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('70% Session left')
     expect(cards[1].findAll('.cli-mini-bar')).toHaveLength(2)
     // Footer carries the non-headline window (Weekly at 15% left).
-    expect(cards[1].get('.cli-card-foot').text()).toBe('Weekly 15%')
+    expect(cards[1].get('.cli-card-foot').text()).toBe('Weekly 15% left')
   })
 
   it('names the failure on the card, not just that the refresh failed', () => {
@@ -1227,13 +1243,172 @@ describe('CliAccountsPane', () => {
       await button.trigger('click')
       expect(button.text()).toBe('Refreshing…')
 
-      vi.advanceTimersByTime(60_000)
+      // One Claude read alone may take 180s, so the net must outlast it.
+      vi.advanceTimersByTime(180_000)
+      await flushPromises()
+      expect(button.text()).toBe('Refreshing…')
+      vi.advanceTimersByTime(20_000)
       await flushPromises()
       expect(button.text()).toBe('Refresh all')
       expect(button.attributes('disabled')).toBeUndefined()
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  // ── what the figures mean (left, not used) ────────────────────────────────
+
+  it('spells out that every figure is what is left, with the used share on hover', () => {
+    // The CLI's own panel prints "N% used"; a bare "100%" on the card was read
+    // as an exhausted bucket when it meant an untouched one.
+    usage.accountUsageFor.mockReturnValue(
+      usageSnapshot({
+        windows: [
+          { kind: 'session', label: 'Session (5h)', usedPercent: 28, resetsAt: null },
+          { kind: 'weekly', label: 'Weekly (all models)', usedPercent: 93, resetsAt: null },
+          { kind: 'weekly-model', label: 'Weekly (Fable)', usedPercent: 0, resetsAt: null },
+        ],
+      }),
+    )
+    const w = mountPane(
+      makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
+    )
+
+    const card = section(w, 0).findAll('.cli-card')[0]
+    expect(card.get('.cli-card-big').text().replace(/\s+/g, ' ')).toBe('72% Session (5h) left')
+    expect(card.get('.cli-card-foot').text()).toBe(
+      'Weekly (all models) 7% left · Weekly (Fable) 100% left',
+    )
+    const titles = card.findAll('.cli-mini-bar').map((b) => b.attributes('title'))
+    expect(titles[2]).toBe('Weekly (Fable): 100% left (0% used)')
+  })
+
+  it('names the Claude windows in the UI language', async () => {
+    usage.accountUsageFor.mockReturnValue(
+      usageSnapshot({
+        windows: [
+          { kind: 'session', label: 'Session (5h)', usedPercent: 28, resetsAt: null },
+          { kind: 'weekly-model', label: 'Weekly (Fable)', usedPercent: 0, resetsAt: null },
+        ],
+      }),
+    )
+    const previous = i18n.global.locale.value
+    i18n.global.locale.value = 'zh-TW'
+    try {
+      const w = mountPane(
+        makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
+      )
+      const card = section(w, 0).findAll('.cli-card')[0]
+      expect(card.get('.cli-card-big').text()).toContain('工作階段（5 小時） 剩餘')
+      expect(card.get('.cli-card-foot').text()).toBe('每週（Fable） 剩 100%')
+    } finally {
+      i18n.global.locale.value = previous
+    }
+  })
+
+  it('stamps a current reading with when it was taken', () => {
+    usage.accountUsageFor.mockReturnValue(usageSnapshot({ fetchedAt: '2026-07-26T04:00:00Z' }))
+    const w = mountPane(
+      makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
+    )
+    const updated = section(w, 0).findAll('.cli-card')[0].get('.cli-card-updated').text()
+    expect(updated).toMatch(/^updated 7\/26 \d\d:\d\d$/)
+  })
+
+  it('stops promising a read once the backend is gone', () => {
+    usage.usageBackendConnected.mockReturnValue(false)
+    usage.accountUsageFor.mockReturnValue(
+      usageSnapshot({ stale: true, refreshPending: true, refreshStatus: 'not-measured' }),
+    )
+    const w = mountPane(
+      makeApi({ identities: { claude: { __default__: { email: 'me@x.com', signedIn: true } } } }),
+    )
+    expect(section(w, 0).text()).not.toContain('Reading this account')
+  })
+
+  // ── signing a parked Claude account in to its own folder ───────────────────
+
+  function parkedApi(accountDirs: CliProfileAccountDirs = {}) {
+    return makeApi({
+      profiles: [profile('p1', 'claude', 'Account 2')],
+      identities: {
+        claude: {
+          __default__: { email: 'live@x.com', signedIn: true },
+          p1: { email: 'parked@x.com', signedIn: true },
+        },
+      },
+      accountDirs,
+    })
+  }
+
+  function dirActions(): CliAccountDirActions {
+    return { continueWith: vi.fn(async () => {}), signIn: vi.fn() }
+  }
+
+  it('offers a parked Claude account the sign-in to its own folder and says why', async () => {
+    usage.accountUsageFor.mockImplementation((key, profileId) =>
+      key === 'claude' && profileId === 'p1'
+        ? usageSnapshot({ stale: true, refreshStatus: 'not-measured' })
+        : undefined,
+    )
+    const actions = dirActions()
+    const w = mountPane(parkedApi(), { dirActions: actions })
+
+    const cards = section(w, 0).findAll('.cli-card')
+    // Never on the built-in Default: it is the real ~/.claude, with no folder.
+    expect(cards[0].find('.cli-card-dir-btn').exists()).toBe(false)
+    expect(cards[1].get('.cli-card-dir-hint').text()).toContain('own folder')
+
+    await cards[1].get('.cli-card-dir-btn').trigger('click')
+    expect(actions.signIn).toHaveBeenCalledWith('claude', 'p1')
+    expect(JSON.parse(localStorage.getItem('navide.cliAccountDirExpectedEmail')!)).toEqual({
+      p1: 'parked@x.com',
+    })
+  })
+
+  it('offers no folder sign-in without the main window flow or a workspace', async () => {
+    const w = mountPane(parkedApi())
+    expect(section(w, 0).find('.cli-card-dir-btn').exists()).toBe(false)
+    w.unmount()
+
+    const actions = dirActions()
+    const w2 = mountPane(parkedApi(), { dirActions: actions, workspaceOpen: false })
+    await section(w2, 0).findAll('.cli-card')[1].get('.cli-card-dir-btn').trigger('click')
+    expect(actions.signIn).not.toHaveBeenCalled()
+    expect(notify.toast).toHaveBeenCalled()
+  })
+
+  it('reads a parked account signed in to its own folder like the live one', async () => {
+    usage.usageFor.mockReturnValue(undefined)
+    usage.accountUsageFor.mockImplementation((key, profileId) =>
+      key === 'claude' && profileId === 'p1' ? usageSnapshot() : undefined,
+    )
+    const w = mountPane(parkedApi({ claude: { p1: { signedIn: true, email: 'parked@x.com' } } }), {
+      dirActions: dirActions(),
+    })
+    usage.refreshUsage.mockClear()
+
+    const card = section(w, 0).findAll('.cli-card')[1]
+    expect(card.find('.cli-card-dir-btn').exists()).toBe(false)
+    expect(card.find('.cli-card-dir-hint').exists()).toBe(false)
+    await card.get('.cli-card-refresh-btn').trigger('click')
+    expect(usage.refreshUsage).toHaveBeenCalledWith('claude', 'p1')
+  })
+
+  it('warns, without blocking, when the folder signed in as another account', () => {
+    localStorage.setItem('navide.cliAccountDirExpectedEmail', JSON.stringify({ p1: 'parked@x.com' }))
+    const other = mountPane(parkedApi({ claude: { p1: { signedIn: true, email: 'other@x.com' } } }), {
+      dirActions: dirActions(),
+    })
+    const warning = section(other, 0).findAll('.cli-card')[1].get('.cli-card-dir-mismatch').text()
+    expect(warning).toContain('other@x.com')
+    expect(warning).toContain('parked@x.com')
+    other.unmount()
+
+    const same = mountPane(parkedApi({ claude: { p1: { signedIn: true, email: 'Parked@x.com' } } }), {
+      dirActions: dirActions(),
+    })
+    expect(section(same, 0).find('.cli-card-dir-mismatch').exists()).toBe(false)
   })
 
   // ── portable credentials ───────────────────────────────────────────────────

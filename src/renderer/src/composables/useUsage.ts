@@ -183,6 +183,14 @@ export function refreshUsage(agentKey?: string, slotId?: string | null): boolean
   return true
 }
 
+/** True while the window's backend is connected. The store keeps the last
+ *  payload across a disconnect, so a "reading now" flag in it would otherwise
+ *  promise a read whose answer can no longer arrive. Display only: the
+ *  snapshots themselves are left untouched. */
+export function usageBackendConnected(): boolean {
+  return backend?.status.value === 'connected'
+}
+
 /** Snapshot for a pane's agent key, or undefined when the agent has no
  *  usage provider (aider/terminal) or nothing was fetched yet. The backend
  *  is the single source of who has a provider: agents without one are simply
