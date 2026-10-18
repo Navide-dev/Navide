@@ -71,7 +71,13 @@ from .signing import (
 )
 from .storage import LocalStorageBackend, StorageBackend, StorageError
 from .trust import compute_trust_tier, sensitive_capabilities
-from .versions import latest_prerelease_version, latest_stable_version, version_channel
+from .versions import (
+    TESTPLACE_CHANNEL,
+    VERSION_CHANNELS,
+    latest_prerelease_version,
+    latest_stable_version,
+    version_channel,
+)
 from .web import CHANGELOG_NAMES, SAFE_ASSET_TYPES, changelog_text, readme_text
 
 _log = logging.getLogger(__name__)
@@ -507,11 +513,21 @@ def _register_routes(app: FastAPI) -> None:
             max_length=64,
             pattern=r"^[a-z0-9][a-z0-9-]*$",
         ),
+        channel: str | None = None,
         identity: PublisherIdentity = Depends(get_publisher_identity),
         repo: RegistryRepository = Depends(_repo),
     ) -> PublishResponse:
         state: RegistryState = request.app.state.registry
         settings = state.settings
+        # Testplace opens in 0.2.27 (invites, Cloud-identity downloads). Until
+        # then no testplace row can exist, so no released App can be served one.
+        if channel == TESTPLACE_CHANNEL:
+            raise HTTPException(
+                status_code=409,
+                detail="TESTPLACE_NOT_OPEN: testplace publishing is not open yet",
+            )
+        if channel is not None and channel not in VERSION_CHANNELS:
+            raise HTTPException(status_code=400, detail=f"unknown channel '{channel}'")
         data = await package.read()
         try:
             loaded = read_package(data, target=target)
@@ -521,6 +537,14 @@ def _register_routes(app: FastAPI) -> None:
         manifest = loaded.manifest
         namespace = manifest.namespace
         name = manifest.extension_name
+        if channel is not None and channel != version_channel(manifest.version):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"version {manifest.version} is {version_channel(manifest.version)}, "
+                    f"not {channel}"
+                ),
+            )
 
         # Namespace entitlement: an authenticated publisher may only publish
         # under its own namespace (p3-publish).
