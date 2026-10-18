@@ -313,6 +313,17 @@ export function readRegistryReceiptChannel(pluginDir: string): string | undefine
   }
 }
 
+/** The testplace expiry in an installed package's retained Registry
+ * envelope, for display only, read the same way as the channel. */
+export function readRegistryReceiptExpiresAt(pluginDir: string): string | undefined {
+  try {
+    const expiresAt = (parseReceipt(pluginDir).envelope as { expiresAt?: unknown }).expiresAt
+    return typeof expiresAt === 'string' ? expiresAt : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function hasCoherentRegistryEvidence(pluginDir: string, expectedPackageId: string): boolean {
   try {
     if (existsSync(join(pluginDir, PLUGIN_QUARANTINE_MARKER))) return false

@@ -166,6 +166,8 @@ export interface InstalledPluginSummary {
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
   /** Source and review state; see `shared/pluginSource.ts`. */
   source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -1181,6 +1183,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       version: string
       disclosure: PluginManifestDisclosure | null
       scan: PluginScanReport | null
+      /** Source and review state; see `shared/pluginSource.ts`. */
+      source?: PluginSource
+      /** Registry-signed expiry; present only when `source` is `testplace`. */
+      expiresAt?: string
     }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),
