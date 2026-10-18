@@ -215,6 +215,14 @@ export function keptNativeBackendDataSource(dataRoot: string, pluginId: string):
   return 'marketplace'
 }
 
+/** The source a removal recorded for kept data, or null when there is no
+ * record (or no data folder). Unlike keptNativeBackendDataSource, no default. */
+export function recordedNativeBackendDataSource(dataRoot: string, pluginId: string): SetAsideSource | null {
+  const stat = lstatOrNull(dataDirFor(dataRoot, pluginId))
+  if (!stat?.isDirectory() || !existsSync(keptSourcePath(dataRoot, pluginId))) return null
+  return keptNativeBackendDataSource(dataRoot, pluginId)
+}
+
 /** The data now belongs to an installed package again: drop the record. */
 export function forgetKeptNativeBackendDataSource(dataRoot: string, pluginId: string): void {
   rmSync(keptSourcePath(dataRoot, pluginId), { force: true })

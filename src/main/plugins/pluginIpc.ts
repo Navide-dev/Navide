@@ -74,6 +74,7 @@ import {
   inspectNativeBackendData,
   keptNativeBackendDataSource,
   latestSetAsideNativeBackendData,
+  recordedNativeBackendDataSource,
   recordKeptNativeBackendDataSource,
   reattachNativeBackendData,
   removeNativeBackendData,
@@ -657,10 +658,12 @@ export function registerPluginIpc(
       // HIGH-3: data a removal kept from another source is set aside, too.
       const root = options.nativeBackendDataRoot
       const kept = root ? keptNativeBackendDataSource(root, id) : null
-      return kept !== null && kept !== incoming ? { backendDataSetAside: true } : {}
+      // MED-4: data a local file kept is never handed on, even to another
+      // local file: its id is only what each file claims.
+      return kept !== null && (kept === 'local-unsigned' || kept !== incoming) ? { backendDataSetAside: true } : {}
     }
     const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
-    if (current === incoming) return {}
+    if (current === incoming && current !== 'local-unsigned') return {}
     const places = dataPlaces(id)
     // Only data of a Marketplace package can be taken back: its id is the
     // Registry's, while a local file's id is only what the file claims.
@@ -2524,6 +2527,9 @@ export function registerPluginIpc(
     const replacedSource = installedSummary?.source === 'local-unsigned' ? 'local-unsigned' as const : 'marketplace' as const
     const sourceChanged = installedSummary !== undefined && !isFactory &&
       (replacedSource === 'local-unsigned') !== localCandidate
+    // MED-4: one local file replacing another hands over no data either.
+    const dataMoves = sourceChanged ||
+      (installedSummary !== undefined && localCandidate && replacedSource === 'local-unsigned')
     const incomingSource = localCandidate ? 'local-unsigned' as const : 'marketplace' as const
     const moved: Array<{ root: string; name: string; setAside: string | null; reattached: string | null }> = []
     /** Put every data location back as it was before this restart. Never
@@ -2645,14 +2651,17 @@ export function registerPluginIpc(
       // A failed move stops the restart here; nothing has been promoted yet.
       // HIGH-3: a fresh install never takes data a removal kept from another
       // source; data kept from its own source is reused exactly as on main.
+      // A recorded source applies whatever is installed now: an install path
+      // that does not restart (a Manifest v1 package) leaves the record in place.
       const keptRoot = options.nativeBackendDataRoot
-      const keptSource = !installedSummary && keptRoot ? keptNativeBackendDataSource(keptRoot, id) : null
-      if (keptRoot && keptSource !== null && keptSource !== incomingSource) {
+      const recordedSource = keptRoot ? recordedNativeBackendDataSource(keptRoot, id) : null
+      const keptSource = recordedSource ?? (!installedSummary && keptRoot ? keptNativeBackendDataSource(keptRoot, id) : null)
+      if (keptRoot && keptSource !== null && (keptSource === 'local-unsigned' || keptSource !== incomingSource)) {
         const entry: (typeof moved)[number] = { root: keptRoot, name: id, setAside: null, reattached: null }
         moved.push(entry)
         entry.setAside = setAsideNativeBackendData(keptRoot, id, keptSource)
       }
-      if (sourceChanged) {
+      if (dataMoves) {
         const reattach = pendingReattach.delete(id)
         for (const place of dataPlaces(id)) {
           const entry: (typeof moved)[number] = { ...place, setAside: null, reattached: null }
@@ -2721,7 +2730,7 @@ export function registerPluginIpc(
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
         finishSourceReplacement()
-        if (!installedSummary && options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
+        if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
@@ -2733,7 +2742,7 @@ export function registerPluginIpc(
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
       finishSourceReplacement()
-      if (!installedSummary && options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
+      if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
@@ -2743,7 +2752,8 @@ export function registerPluginIpc(
       // The data move back and the package rollback below never depend on
       // each other: both run, and every failure is reported (LOW-7).
       const moveErrors = undoDataMove()
-      if (moveErrors.length > 0 && sourceChanged) {
+      // Only a move this restart made can fail to come back.
+      if (moveErrors.length > 0) {
         // Fail closed until the user sorts the data out: no backend of this
         // id runs again on an earlier consent.
         try {
