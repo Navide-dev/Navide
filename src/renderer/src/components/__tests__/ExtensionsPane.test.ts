@@ -1240,3 +1240,29 @@ describe('ExtensionsPane invisible characters', () => {
     expect(wrapper.text()).not.toMatch(/[\u200b\u202e]/)
   })
 })
+
+describe('ExtensionsPane source badge (K2)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('badges each installed row by its source, falling back to the legacy provenance', async () => {
+    mockPlugins({
+      listInstalled: vi.fn().mockResolvedValue([
+        { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
+        { id: 'acme.folder', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
+        { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+        { id: 'acme.unknown', requires: [], sensitive: [] },
+      ]),
+    })
+    wrapper = mountExtensions()
+    await flushPromises()
+    const source = (id: string) => wrapper!.find(`[data-id="${id}"] .nv-source-badge`)
+    expect(source('acme.registry').attributes('data-source')).toBe('marketplace')
+    expect(source('acme.folder').attributes('data-source')).toBe('developer-unpacked')
+    expect(source('acme.file').attributes('data-source')).toBe('local-unsigned')
+    expect(source('acme.unknown').exists()).toBe(false)
+  })
+})

@@ -2219,3 +2219,49 @@ describe('MarketplacePane invisible characters', () => {
     expect(wrapper.get('.pack-dialog').text()).not.toMatch(/[\u200b\u202e]/)
   })
 })
+
+// Card K2: the source badge on signed search results and the detail page, and
+// the fixed source row on the detail page's disclosure card.
+describe('MarketplacePane source badge (K2)', () => {
+  let wrapper: VueWrapper | undefined
+  afterEach(() => {
+    wrapper?.unmount()
+    delete (window as unknown as Record<string, unknown>).agentTeam
+  })
+
+  it('marks only Registry-signed results as reviewed', async () => {
+    const row = (name: string, extra: Record<string, unknown>) => ({
+      namespace: 'acme', name, identity: `acme.${name}`, display_name: name, description: null, categories: [],
+      latest_version: '1.0.0', download_count: 0, rating_average: 0, featured: false, ...extra,
+    })
+    mockPlugins({
+      marketplaceSearch: vi.fn().mockResolvedValue({
+        items: [row('signed', { trust_tier: 'signed-verified' }), row('unsigned', { trust_tier: 'unsigned' })],
+        total: 2, offset: 0, limit: 20,
+      }),
+    })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    expect(wrapper.get('[data-id="acme.signed"] .nv-source-badge').attributes('data-source')).toBe('marketplace')
+    expect(wrapper.find('[data-id="acme.unsigned"] .nv-source-badge').exists()).toBe(false)
+  })
+
+  it('shows the source badge and the source row on the detail page, pre-release included', async () => {
+    mockPlugins()
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title .nv-source-badge').attributes('data-source')).toBe('marketplace')
+    expect(wrapper.get('.mkt-disclosure .nv-source-row').attributes('data-source')).toBe('marketplace')
+    wrapper.unmount()
+
+    const versions = demoDetail().versions.map((v) => ({ ...v, channel: 'pre-release' }))
+    mockPlugins({ marketplaceDetail: vi.fn().mockResolvedValue(demoDetail({ versions })) })
+    wrapper = mountMarketplace()
+    await flushPromises()
+    await wrapper.get('[data-id="acme.demo"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.mkt-detail-title .nv-source-badge').attributes('data-source')).toBe('prerelease')
+  })
+})

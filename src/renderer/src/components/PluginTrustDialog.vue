@@ -10,6 +10,7 @@ import { revealInvisibleValue as reveal } from '../../../shared/pluginAgentTools
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureDiff from './PluginDisclosureDiff.vue'
 import PluginAgentToolsList from './PluginAgentToolsList.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
 
 const props = defineProps<{ pending: PendingInstall; step: InstallStep | null }>()
 const emit = defineEmits<{ confirmReplace: []; confirmPublisher: []; confirmRisk: []; cancel: [] }>()
@@ -93,14 +94,8 @@ function capabilityHint(cap: string): string {
         <template v-if="step === 'risk' && local">
           <p class="ext-local-warning ext-risk-callout" role="note">{{ $t('settings.extensions.localInstall.warning') }}</p>
           <dl class="ext-local-facts">
-            <dt>{{ $t('settings.extensions.localInstall.sourceLabel') }}</dt>
-            <dd>{{ $t('settings.extensions.localInstall.source') }}</dd>
-            <dt>{{ $t('settings.extensions.localInstall.publisherLabel') }}</dt>
-            <dd>{{ $t('settings.extensions.localInstall.publisherClaimed', { publisher: reveal(pending.prepared.publisherId) }) }}</dd>
             <dt>{{ $t('settings.extensions.localInstall.signatureLabel') }}</dt>
             <dd>{{ $t('settings.extensions.localInstall.signature') }}</dd>
-            <dt>{{ $t('settings.extensions.localInstall.scanLabel') }}</dt>
-            <dd>{{ $t('settings.extensions.localInstall.scan') }}</dd>
             <template v-if="pending.prepared.digest">
               <dt>{{ $t('settings.extensions.localInstall.digestLabel') }}</dt>
               <dd><code class="ext-local-digest">{{ pending.prepared.digest }}</code></dd>
@@ -162,6 +157,17 @@ function capabilityHint(cap: string): string {
         <PluginAgentToolsList
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"
+        />
+        <!-- K2: only a Registry-signed package reads as reviewed; an unsigned
+             one keeps the unsigned badge below and no source row. A file
+             install (K3) shows its own source, the claimed publisher and
+             "not scanned". -->
+        <PluginSourceBadge
+          v-if="step !== 'replace' && (pending.prepared.trustTier === 'signed-verified' || pending.prepared.source)"
+          row
+          class="ext-trust-source"
+          :source="pending.prepared.source ?? 'marketplace'"
+          :publisher="pending.prepared.publisherId"
         />
         <label v-if="step === 'risk' && local" class="ext-local-ack">
           <input v-model="acknowledged" type="checkbox" class="ext-local-ack-input" />

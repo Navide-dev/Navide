@@ -78,3 +78,21 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
     expect(names[1]).toBe('acme.plain 2.0.0')
   })
 })
+
+describe('PluginDisclosureOverview source row (K2)', () => {
+  it('gives every card the fixed source row; a Host before K1 reads as marketplace', async () => {
+    ;(window as unknown as Record<string, unknown>).agentTeam = {
+      plugins: {
+        installedDisclosures: vi.fn().mockResolvedValue([
+          { id: 'nerdtechnic.devmap', version: '0.2.0', disclosure, scan: null },
+          { id: 'acme.pre', version: '2.0.0-beta.1', disclosure: null, scan: null, source: 'prerelease' },
+        ]),
+        activityReport: vi.fn(async () => ({ ok: false, error: 'not ready' })),
+      },
+    }
+    wrapper = mount(PluginDisclosureOverview, { global: { plugins: [i18n] } })
+    await flushPromises()
+    expect(wrapper.get('[data-id="nerdtechnic.devmap"] .nv-source-row').text()).toBe('Source and review Reviewed')
+    expect(wrapper.get('[data-id="acme.pre"] .nv-source-row').attributes('data-source')).toBe('prerelease')
+  })
+})

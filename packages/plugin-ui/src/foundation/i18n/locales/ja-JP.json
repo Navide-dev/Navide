@@ -11203,6 +11203,19 @@
     }
   },
   "pluginDisclosure": {
+    "source": {
+      "heading": "提供元と審査",
+      "marketplace": "審査済み",
+      "prerelease": "プレリリース版（審査済み）",
+      "testplace": "テスト版。人による審査なし。{date} に期限切れ",
+      "local-signed": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
+      "local-unsigned": "ローカルファイル。Navide の審査なし、署名なし",
+      "developer-unpacked": "開発者フォルダー。内容はいつでも変わる可能性があります",
+      "factory-bundled": "Navide に組み込み",
+      "notScanned": "未スキャン（Navide マーケットプレイスからインストールした Navide プラグインだけが Navide のスキャンを受けます）",
+      "publisher": "発行者：{publisher}",
+      "selfDeclared": "自称：{publisher}"
+    },
     "diff": {
       "heading": "この更新での権限の変化",
       "versions": "インストール済み {from} → {to} に更新。違いだけを表示します。",

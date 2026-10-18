@@ -20,6 +20,8 @@ import { ipcErrorMessage, usePluginInstallFlow } from '../composables/usePluginI
 import PluginTrustDialog from './PluginTrustDialog.vue'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginDisclosureSummary from './PluginDisclosureSummary.vue'
+import PluginSourceBadge from './PluginSourceBadge.vue'
+import type { PluginSource } from '../../../shared/pluginSource'
 import MarketplaceIcon from './MarketplaceIcon.vue'
 import PackInstallDialog from './PackInstallDialog.vue'
 import { usePackInstallFlow } from '../composables/usePackInstallFlow'
@@ -271,6 +273,13 @@ const latestVersionInfo = computed(() => {
     null
   )
 })
+
+/** K2: only a Registry-signed version reads as reviewed; anything else gets no source badge. */
+const detailSource = computed<PluginSource | undefined>(() => {
+  const info = latestVersionInfo.value
+  if ((info?.trust_tier ?? detail.value?.trust_tier) !== 'signed-verified') return undefined
+  return info?.channel === 'pre-release' ? 'prerelease' : 'marketplace'
+})
 // The Registry's latest version has no artifact for this Host. A different
 // install candidate alone does not mean that: with "Get pre-releases" on, the
 // candidate is a newer pre-release while the latest stable is still installable.
@@ -517,6 +526,7 @@ watch(
             <div class="mkt-hero-text">
               <div class="mkt-detail-title">
                 <h3>{{ reveal(detail.display_name || detail.name) }}</h3>
+                <PluginSourceBadge v-if="detailSource" :source="detailSource" />
                 <span v-if="isPack(detail)" class="mkt-badge mkt-badge--accent mkt-pack-badge">
                   {{ $t('settings.extensions.pack.badge') }}
                 </span>
@@ -909,6 +919,7 @@ watch(
                 :scan="latestVersionInfo.scan"
                 :registry="latestVersionInfo.registry"
                 :verified="false"
+                :source="detailSource"
               />
             </section>
 
@@ -1117,6 +1128,7 @@ watch(
               <div class="mkt-card-title">
                 <span class="ext-id">{{ reveal(ext.display_name || ext.name) }}</span>
                 <span v-if="ext.latest_version" class="mkt-muted mkt-card-version">{{ ext.latest_version }}</span>
+                <PluginSourceBadge v-if="ext.trust_tier === 'signed-verified'" source="marketplace" />
                 <span
                   v-if="updatesById.get(ext.identity)"
                   class="mkt-badge mkt-badge--accent ext-update-badge"

@@ -11203,6 +11203,19 @@
     }
   },
   "pluginDisclosure": {
+    "source": {
+      "heading": "Source and review",
+      "marketplace": "Reviewed",
+      "prerelease": "Pre-release (reviewed)",
+      "testplace": "Test build, no human review, expires {date}",
+      "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
+      "local-unsigned": "Local file, not reviewed by Navide, unsigned",
+      "developer-unpacked": "Developer folder; its contents can change at any time",
+      "factory-bundled": "Built into Navide",
+      "notScanned": "Not scanned (only Navide plugins installed from the Navide Marketplace are scanned by Navide)",
+      "publisher": "Publisher: {publisher}",
+      "selfDeclared": "Self-declared: {publisher}"
+    },
     "diff": {
       "heading": "What this update changes",
       "versions": "Installed {from} → update to {to}; only the differences are listed.",
