@@ -255,23 +255,36 @@ async function loginThroughBrowser(
   beforeCallback?: (port: string | null, query: URLSearchParams) => Promise<void>,
 ) {
   const child = spawn(process.execPath, [cli, 'login', '--registry', registry.url, '--no-browser'], { cwd, env })
+  // Listen before the callback: on a refused callback the CLI exits as soon as it
+  // has answered, and a 'close' emitted before the fetch settles would be lost.
+  const closed = new Promise<number | null>((resolve) => child.on('close', resolve))
   let stdout = ''
   let stderr = ''
   child.stderr.on('data', (chunk: Buffer) => {
     stderr += chunk.toString('utf8')
   })
-  const authorize = await new Promise<URL>((resolve) => {
+  // A CLI that exits before printing the URL fails the test now, not at its timeout.
+  const authorize = await new Promise<URL>((resolve, reject) => {
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
       const match = /Opening (\S+)/.exec(stdout)
       if (match) resolve(new URL(match[1]))
     })
+    void closed.then((code) => reject(new Error(`login exited (${code}) before printing the authorize URL: ${stderr}`)))
   })
   registry.setChallenge(authorize.searchParams.get('code_challenge') ?? '')
   const port = authorize.searchParams.get('port')
   if (beforeCallback) await beforeCallback(port, new URLSearchParams(callback(authorize)))
-  await fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`)
-  const status = await new Promise<number | null>((resolve) => child.on('close', resolve))
+  // The CLI may exit as soon as it has answered, so its exit also ends this wait;
+  // a failed request while it is still running fails the test with its stderr.
+  await new Promise<void>((resolve, reject) => {
+    fetch(`http://127.0.0.1:${port}/callback?${new URLSearchParams(callback(authorize))}`).then(
+      () => resolve(),
+      (error: unknown) => reject(new Error(`login callback request failed (${String(error)}): ${stderr}`)),
+    )
+    void closed.then(() => resolve())
+  })
+  const status = await closed
   return { status, stdout, stderr }
 }
 
