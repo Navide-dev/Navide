@@ -20,6 +20,7 @@ ENV_VERIFIER = "REGISTRY_VERIFIER"
 ENV_REQUIRE_SIGNATURE = "REGISTRY_REQUIRE_SIGNATURE"
 ENV_REQUIRE_AUTH = "REGISTRY_REQUIRE_AUTH"
 ENV_ADMIN_TOKEN = "REGISTRY_ADMIN_TOKEN"
+ENV_ALLOW_OPEN_ADMIN = "REGISTRY_ALLOW_OPEN_ADMIN"
 ENV_TRUST_PROFILE = "REGISTRY_TRUST_PROFILE"
 ENV_TRUST_CONFIG_FILE = "REGISTRY_TRUST_CONFIG_FILE"
 ENV_ROOT_PATH = "REGISTRY_ROOT_PATH"
@@ -63,7 +64,9 @@ class Settings:
     require_auth: bool = True
     """Reject anonymous publishes/yanks unless False (dev)."""
     admin_token: str | None = None
-    """Bearer token gating publisher registration; None leaves it open (dev)."""
+    """Token gating the X-Admin-Token endpoints; unset or blank refuses them."""
+    allow_open_admin: bool = False
+    """Dev-only opt-in: with no admin token, leave the X-Admin-Token endpoints open."""
     registry_signer_private_key: str | None = None
     """Injected Ed25519 signer key; persisted under data_dir when omitted."""
     registry_signer_key_id: str = "registry-local-1"
@@ -145,6 +148,8 @@ class Settings:
             raise ValueError("official registry requires publisher authentication")
         if self.admin_token is None or not self.admin_token.strip():
             raise ValueError("official registry requires an admin token")
+        if self.allow_open_admin:
+            raise ValueError("official registry cannot allow open admin endpoints")
         if not self.cookie_secure:
             raise ValueError("official registry requires Secure cookies")
 
@@ -371,6 +376,7 @@ def load_settings() -> Settings:
         require_signature=_env_bool(ENV_REQUIRE_SIGNATURE, True),
         require_auth=_env_bool(ENV_REQUIRE_AUTH, True),
         admin_token=os.environ.get(ENV_ADMIN_TOKEN),
+        allow_open_admin=_env_bool(ENV_ALLOW_OPEN_ADMIN, False),
         root_path=os.environ.get(ENV_ROOT_PATH, "").strip().rstrip("/"),
         auth_url=(os.environ.get(ENV_AUTH_URL) or "").strip().rstrip("/") or None,
         auth_secret=os.environ.get(ENV_AUTH_SECRET) or None,

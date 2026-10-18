@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 
+import pytest
 from fastapi.testclient import TestClient
 
 from tests.conftest import SignedEnv
@@ -149,3 +151,116 @@ def test_official_profile_keeps_publisher_registration_admin_gated(
         headers={"X-Admin-Token": "wrong-admin-token"},
     )
     assert wrong.status_code == 401
+
+
+# -- admin gate fails closed when no token is configured -----------------
+def _dev_client(tmp_path, **overrides) -> TestClient:
+    from registry.app import create_app
+    from registry.config import VERIFIER_ACCEPTING, Settings
+
+    settings = Settings(
+        data_dir=tmp_path,
+        verifier_kind=VERIFIER_ACCEPTING,
+        require_signature=False,
+        require_auth=False,
+        **overrides,
+    )
+    return TestClient(create_app(settings))
+
+
+def _seed_extension(client: TestClient) -> None:
+    resp = client.post(
+        "/api/publish",
+        files={"package": ("pkg.vsix", build_package(), "application/zip")},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def _admin_calls(client: TestClient, headers: dict[str, str]):
+    return (
+        client.post(
+            "/api/publishers", json={"name": "acme", "token": "t"}, headers=headers
+        ),
+        client.post(
+            "/api/extensions/acme/hello/featured",
+            json={"featured": True},
+            headers=headers,
+        ),
+    )
+
+
+@pytest.mark.parametrize("configured", [None, "", "   "])
+@pytest.mark.parametrize("presented", [None, "", "   ", "anything"])
+def test_admin_endpoints_refuse_when_no_admin_token_is_configured(
+    tmp_path, caplog, configured, presented
+) -> None:
+    client = _dev_client(tmp_path, admin_token=configured)
+    _seed_extension(client)
+    headers = {} if presented is None else {"X-Admin-Token": presented}
+
+    with caplog.at_level(logging.WARNING, logger="registry.app"):
+        responses = _admin_calls(client, headers)
+
+    for resp in responses:
+        assert resp.status_code == 401, resp.text
+        assert "REGISTRY_ADMIN_TOKEN is not set" in resp.json()["detail"]
+    assert client.get("/api/extensions/acme/hello").json()["featured"] is False
+    assert "REGISTRY_ADMIN_TOKEN is not set" in caplog.text
+
+
+def test_admin_endpoints_require_the_configured_token(tmp_path) -> None:
+    client = _dev_client(tmp_path, admin_token="admin-secret")
+    _seed_extension(client)
+
+    for headers in ({}, {"X-Admin-Token": ""}, {"X-Admin-Token": "wrong"}):
+        for resp in _admin_calls(client, headers):
+            assert resp.status_code == 401, resp.text
+            assert resp.json()["detail"] == "invalid admin token"
+
+    registered, featured = _admin_calls(client, {"X-Admin-Token": "admin-secret"})
+    assert registered.status_code == 201
+    assert featured.status_code == 200
+    assert featured.json()["featured"] is True
+
+
+def test_open_admin_opt_in_allows_tokenless_admin_calls(tmp_path, caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="registry.app"):
+        client = _dev_client(tmp_path, allow_open_admin=True)
+    assert "REGISTRY_ALLOW_OPEN_ADMIN" in caplog.text
+    _seed_extension(client)
+
+    registered, featured = _admin_calls(client, {})
+    assert registered.status_code == 201
+    assert featured.status_code == 200
+
+
+def test_open_admin_opt_in_does_not_bypass_a_configured_token(tmp_path) -> None:
+    client = _dev_client(tmp_path, admin_token="admin-secret", allow_open_admin=True)
+    _seed_extension(client)
+
+    for resp in _admin_calls(client, {}):
+        assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("configured", [None, "", " ", "\t"])
+@pytest.mark.parametrize("open_admin", [False, True])
+def test_admin_json_api_refuses_when_no_admin_token_is_configured(
+    tmp_path, caplog, configured, open_admin
+) -> None:
+    # The review/blocklist API never had a tokenless mode, so the dev opt-in
+    # does not open it either; a blank token is "not set", not a password.
+    client = _dev_client(tmp_path, admin_token=configured, allow_open_admin=open_admin)
+    headers = {} if configured is None else {"X-Admin-Token": configured}
+
+    with caplog.at_level(logging.WARNING, logger="registry.app"):
+        review = client.get("/api/admin/review", headers=headers)
+        block = client.post(
+            "/api/admin/blocklist",
+            json={"kind": "publisher", "value": "acme", "reason": "test"},
+            headers=headers,
+        )
+
+    for resp in (review, block):
+        assert resp.status_code == 401, resp.text
+        assert "REGISTRY_ADMIN_TOKEN is not set" in resp.json()["detail"]
+    assert "REGISTRY_ADMIN_TOKEN is not set" in caplog.text

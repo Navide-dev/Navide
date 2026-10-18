@@ -707,6 +707,15 @@ def outcome_of_send(answer: dict[str, Any]) -> dict[str, Any]:
     if status == "queued":
         hold = (answer.get("hold") or {}).get("key") or "pending"
         return {"status": "ok", "detail": f"queued ({hold})", "msg_key": msg_key}
+    if status == "unconfirmed":
+        # The text and its Enter went out, but nothing confirmed the CLI took
+        # it. Not a run that happened: an error the owner sees, and a warning.
+        log.warning("scheduler: delivery %s unconfirmed — the target may not have taken it", msg_key)
+        return {
+            "status": "error", "reason": "unconfirmed", "msg_key": msg_key,
+            "detail": "delivery unconfirmed: sent, but the target was not seen taking it — "
+            "check the pane before resending",
+        }
     return {"status": "ok", "detail": str(status or "sent"), "msg_key": msg_key}
 
 
@@ -923,6 +932,11 @@ class SchedulerService:
         if status in ("failed", "rejected"):
             await self.store.resolve_queued_run(
                 job["id"], "error", status, f"then {status}: {(outcome or {}).get('reason') or status}"
+            )
+        elif status == "unconfirmed":
+            log.warning("scheduler: queued delivery %s ended unconfirmed", key)
+            await self.store.resolve_queued_run(
+                job["id"], "error", status, "then unconfirmed: the target was not seen taking it"
             )
         elif outcome is None:
             await self.store.resolve_queued_run(job["id"], "ok", None, "outcome no longer tracked")
