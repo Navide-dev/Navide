@@ -355,6 +355,26 @@ async function setPrerelease(enabled: boolean, input?: HTMLInputElement): Promis
   }
 }
 
+// K5: a Navide plugin that is not installed can be installed as a pre-release
+// from its detail page. The offer is the Registry's newest pre-release when
+// this Host can install it and Install would not already take it.
+const prereleaseOffer = computed(() => {
+  const d = detail.value
+  const version = d?.latest_prerelease_version
+  if (!d || !version || installableVersionInfo.value?.version === version) return null
+  return d.versions.find((v) => v.version === version && v.installable && !v.yanked && v.compatible !== false) ?? null
+})
+// Turns on this Navide plugin's switch only (never another one's), then
+// installs the offered version through the normal flow.
+async function installPrereleaseOffer(): Promise<void> {
+  const d = detail.value
+  const offer = prereleaseOffer.value
+  if (!d || !offer) return
+  await setPrerelease(true)
+  if (detail.value?.gets_prereleases !== true || idOf(detail.value) !== idOf(d)) return
+  await installFrom(d.namespace, d.name, offer.version)
+}
+
 // Extension Pack detail: each member's name, version and permissions, shown
 // before anything is installed (display only; each member is verified on its
 // own when the pack is installed).
@@ -527,6 +547,10 @@ watch(
               <div class="mkt-detail-title">
                 <h3>{{ reveal(detail.display_name || detail.name) }}</h3>
                 <PluginSourceBadge v-if="detailSource" :source="detailSource" />
+                <PluginSourceBadge
+                  v-if="detailSource === 'marketplace' && detail.latest_prerelease_version"
+                  source="prerelease"
+                />
                 <span v-if="isPack(detail)" class="mkt-badge mkt-badge--accent mkt-pack-badge">
                   {{ $t('settings.extensions.pack.badge') }}
                 </span>
@@ -626,6 +650,14 @@ watch(
                     ? $t('settings.extensions.install')
                     : $t('settings.extensions.marketplace.installVersion', { version: installableVersionInfo.version })
               }}</template>
+            </button>
+            <button
+              v-if="!isPack(detail) && !installedById.get(idOf(detail)) && prereleaseOffer"
+              class="mkt-install-prerelease nv-btn nv-btn--ghost"
+              :disabled="flow.busy.value || prereleaseBusy"
+              @click="installPrereleaseOffer"
+            >
+              {{ $t('settings.extensions.marketplace.installPrerelease', { version: prereleaseOffer.version }) }}
             </button>
             <label v-if="hasPrereleases" class="mkt-prerelease-toggle">
               <input
@@ -1128,7 +1160,10 @@ watch(
               <div class="mkt-card-title">
                 <span class="ext-id">{{ reveal(ext.display_name || ext.name) }}</span>
                 <span v-if="ext.latest_version" class="mkt-muted mkt-card-version">{{ ext.latest_version }}</span>
-                <PluginSourceBadge v-if="ext.trust_tier === 'signed-verified'" source="marketplace" />
+                <template v-if="ext.trust_tier === 'signed-verified'">
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version !== ext.latest_version" source="marketplace" />
+                  <PluginSourceBadge v-if="ext.latest_prerelease_version" source="prerelease" />
+                </template>
                 <span
                   v-if="updatesById.get(ext.identity)"
                   class="mkt-badge mkt-badge--accent ext-update-badge"

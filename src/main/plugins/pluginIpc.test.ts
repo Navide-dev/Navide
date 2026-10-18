@@ -244,7 +244,8 @@ function signedDetail(
   digest: string,
   packageId = 'acme.demo',
   publisherId = 'acme',
-  version = '1.0.0'
+  version = '1.0.0',
+  envelopeExtra: Pick<RegistryPackageEnvelope, 'channel' | 'expiresAt'> = {}
 ): WireDetail {
   const registryEnvelope: RegistryPackageEnvelope = {
     schemaVersion: 1,
@@ -255,6 +256,7 @@ function signedDetail(
     publisherId,
     keyId: 'registry-test-1',
     signedAt: '2026-08-16T11:00:00.000Z',
+    ...envelopeExtra,
   }
   const trustMetadata: RegistryTrustMetadata = {
     schemaVersion: 1,
@@ -1034,6 +1036,35 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
   const disclosedManifest = {
     schemaVersion: 2, id: 'acme.demo', version: '1.0.0', publisher: 'acme', permissions: DISCLOSED_PERMISSIONS,
   }
+
+  it('carries the source from the verified envelope channel through prepareInstall', async () => {
+    const pkg = buildPkg('acme.demo', 'acme', {}, '1.0.0')
+    const root = mkdtempSync(join(tmpdir(), 'navide-plugin-ipc-prepare-source-'))
+    try {
+      registerPluginIpc(new FrontendPluginManager(), root, () => true, TRUST_CONFIG, undefined, TEST_PREFLIGHT_OPTIONS)
+      const prepare = handlers.get('plugins:prepareInstall')!
+      installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0'), pkg.bytes, pkg.digest)
+      const baseline = (await prepare(null, { namespace: 'acme', name: 'demo' })) as Record<string, unknown>
+      // An envelope without a channel keeps the version-number reading.
+      expect(baseline.source).toBe('marketplace')
+      const { source: _baselineSource, ...mainFields } = baseline
+      const cases: Array<[Pick<RegistryPackageEnvelope, 'channel' | 'expiresAt'>, string]> = [
+        [{ channel: 'stable' }, 'marketplace'],
+        [{ channel: 'pre-release' }, 'prerelease'],
+        [{ channel: 'testplace', expiresAt: '2099-01-01T00:00:00.000Z' }, 'testplace'],
+      ]
+      for (const [extra, expected] of cases) {
+        installFetch(signedDetail(pkg.digest, 'acme.demo', 'acme', '1.0.0', extra), pkg.bytes, pkg.digest)
+        const result = (await prepare(null, { namespace: 'acme', name: 'demo' })) as Record<string, unknown>
+        expect(result.source).toBe(expected)
+        // Every other field is what main returns for the same package.
+        const { source: _source, ...rest } = result
+        expect(rest).toEqual(mainFields)
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
 
   it('carries the signed disclosure, scan and registry facts through prepareInstall', async () => {
     const { bytes, digest } = buildPkg('acme.demo', 'acme', DISCLOSED_PERMISSIONS)
@@ -1930,6 +1961,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           source: 'marketplace',
         }))
       )
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', source: 'marketplace' }),
+      ])
+      expect(
+        (handlers.get('plugins:installedDisclosures')!(null) as Array<Record<string, unknown>>)[0]
+      ).not.toHaveProperty('expiresAt')
       // The Registry-signed envelope's channel decides the source, so a
       // testplace version is never shown as a reviewed Marketplace release.
       const selection = new PluginActivationSelector(root).read('acme.demo')?.active
@@ -1942,7 +1979,19 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       receipt.envelope.expiresAt = '2027-01-01T00:00:00.000Z'
       writeFileSync(receiptPath, JSON.stringify(receipt))
       expect(handlers.get('plugins:listInstalled')!(null)).toMatchObject([
-        { id: 'acme.demo', provenance: 'official-registry', source: 'testplace' },
+        {
+          id: 'acme.demo',
+          provenance: 'official-registry',
+          source: 'testplace',
+          expiresAt: '2027-01-01T00:00:00.000Z',
+        },
+      ])
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({
+          id: 'acme.demo',
+          source: 'testplace',
+          expiresAt: '2027-01-01T00:00:00.000Z',
+        }),
       ])
       expect(await handlers.get('plugins:listContributions')!(null)).toEqual(
         expect.arrayContaining([expect.objectContaining({ pluginId: 'acme.demo', source: 'testplace' })])
@@ -5046,6 +5095,26 @@ describe('Pre-release channel (Phase 4)', () => {
       minNavideVersion: '0.3.0',
       engineCompatible: false,
     })
+  })
+
+  // K5 RULE ZERO: the renderer's "Install pre-release" only calls the existing
+  // switch and installs an explicit version, so with the switch off the main
+  // process answers exactly as on main.
+  it('keeps the switch-off candidates and the per-extension scope unchanged (K5)', async () => {
+    serve([{ version: '0.1.0-alpha.1', target: 'universal', yanked: false }])
+    registerWith('1.2.0')
+    const detail = async (name: string) =>
+      (await handlers.get('plugins:marketplaceDetail')!(null, { namespace: 'acme', name })) as Record<string, unknown>
+    // A Navide plugin with only a pre-release has no switch-off candidate.
+    expect(await detail('other')).toMatchObject({ latest_installable_version: null, gets_prereleases: false })
+    // Build metadata does not make a version a pre-release.
+    serve([{ version: '1.3.0+build.7', target: 'universal', yanked: false }])
+    expect(await detail('other')).toMatchObject({ latest_installable_version: '1.3.0+build.7' })
+    // Turning one switch on leaves every other Navide plugin off.
+    serve(VERSIONS)
+    expect(await setPrerelease('acme.demo', true)).toEqual({ id: 'acme.demo', enabled: true })
+    expect(await detail('other')).toMatchObject({ latest_installable_version: '1.3.0', gets_prereleases: false })
+    expect(await detail('demo')).toMatchObject({ latest_installable_version: '1.3.1-beta.2', gets_prereleases: true })
   })
 
   it('validates the switch arguments', async () => {

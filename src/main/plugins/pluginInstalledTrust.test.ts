@@ -18,6 +18,7 @@ import {
   assertRegistryTrustSnapshotDoesNotRollback,
   discoverInstalledRegistryPackageIds,
   readRegistryReceiptChannel,
+  readRegistryReceiptExpiresAt,
   readRegistryTrustSnapshot,
   registryReceiptFromEvidence,
   verifyInstalledPackage,
@@ -457,8 +458,13 @@ describe('verifyInstalledRegistryPackage', () => {
     receipt.envelope.channel = 'testplace'
     writeFileSync(receiptPath, JSON.stringify(receipt))
     expect(readRegistryReceiptChannel(pluginDir)).toBe('testplace')
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBeUndefined()
+    receipt.envelope.expiresAt = '2027-01-01T00:00:00.000Z'
+    writeFileSync(receiptPath, JSON.stringify(receipt))
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBe('2027-01-01T00:00:00.000Z')
     rmSync(receiptPath)
     expect(readRegistryReceiptChannel(pluginDir)).toBeUndefined()
+    expect(readRegistryReceiptExpiresAt(pluginDir)).toBeUndefined()
   })
 
   it('keeps the legacy provenance value in every Registry receipt, which older Apps require', () => {

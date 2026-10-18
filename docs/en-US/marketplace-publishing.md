@@ -366,6 +366,50 @@ an App released before Testplace refuses it, and a current App refuses it
 after it expires (`TESTPLACE_EXPIRED`) or when the channel is one it does not
 know (`CHANNEL_UNSUPPORTED`).
 
+A user who has not installed your Navide plugin yet can pick **Install *version*
+(pre-release)** on its Marketplace page. That installs the newest pre-release and
+turns on **Get pre-releases** for your Navide plugin only; Install keeps taking
+the stable version. A Navide plugin with only pre-releases is installed this
+way. Navide labels a pre-release **Pre-release (reviewed)**, never unreviewed.
+`navide-plugin publish` says so when the Registry records a pre-release.
+
+### Pre-release, Testplace or a local install
+
+Pick by who should get the build and whether it must be reviewed first.
+Testplace is planned for Navide 0.2.27; until then, use a pre-release or send
+the package file.
+
+| | Pre-release | Testplace | Local install |
+|---|---|---|---|
+| Who can install it | Everyone who turns on **Get pre-releases** for your Navide plugin, or picks **Install *version* (pre-release)** | Only the testers you invite (up to 100 per Navide plugin) | Anyone you send the `.vsix` file to |
+| Review | Same review as a stable version | Automated scan only for invited testers; a public test code adds a light human review | None; Navide does not scan it |
+| Signed by the Navide Marketplace | Yes | Yes | No (your publisher signature at most) |
+| Label in Navide | **Pre-release (reviewed)** | **Test build, no human review, expires *date*** | **Local file**, with "not reviewed by Navide" |
+| Expires | No | After 90 days; the Navide plugin is turned off and its data kept | No |
+| How users get it | The Navide Marketplace, as an update or with **Install *version* (pre-release)** | The Navide Marketplace, after accepting the invitation | **Install from file**, after a separate consent |
+
+繁體中文：
+
+| | 預覽版 | Testplace | 本機安裝 |
+|---|---|---|---|
+| 誰能安裝 | 對你的 Navide 外掛打開「接收預覽版」，或選「安裝 *版本*（預覽版）」的所有人 | 只有你邀請的測試者（每個 Navide 外掛最多 100 位） | 你把 `.vsix` 檔案寄給的任何人 |
+| 審核 | 和正式版相同的審核 | 受邀測試者只跑自動掃描；公開測試碼另有輕量人工審核 | 沒有；Navide 不會掃描 |
+| Navide 市集簽章 | 有 | 有 | 沒有（最多只有發佈者自己的簽章） |
+| Navide 裡的標記 | 「預覽版（已審核）」 | 「測試版，沒有人工審核，*日期* 到期」 | 「本機檔案」，並註明未經 Navide 審核 |
+| 到期 | 不會 | 90 天後到期；Navide 外掛會停用、資料保留 | 不會 |
+| 使用者怎麼取得 | 從 Navide 市集更新，或選「安裝 *版本*（預覽版）」 | 接受邀請後從 Navide 市集安裝 | 另外同意後「從檔案安裝」 |
+
+日本語：
+
+| | プレリリース版 | Testplace | ローカルインストール |
+|---|---|---|---|
+| インストールできる人 | その Navide プラグインで「プレリリースを受け取る」をオンにした人、または「*バージョン* をインストール（プレリリース）」を選んだ人全員 | 招待したテスターのみ（Navide プラグインごとに最大 100 人） | `.vsix` ファイルを受け取った人なら誰でも |
+| 審査 | 正式版と同じ審査 | 招待テスターは自動スキャンのみ。公開テストコードには簡易な人による審査が加わります | なし。Navide はスキャンしません |
+| Navide マーケットプレイスの署名 | あり | あり | なし（あっても発行者自身の署名のみ） |
+| Navide での表示 | 「プレリリース版（審査済み）」 | 「テスト版。人による審査なし。*日付* に期限切れ」 | 「ローカルファイル」、Navide の審査を受けていない旨を表示 |
+| 有効期限 | なし | 90 日後。Navide プラグインは無効になり、データは残ります | なし |
+| 入手方法 | Navide マーケットプレイスからの更新、または「*バージョン* をインストール（プレリリース）」 | 招待を受け入れたあと Navide マーケットプレイスから | 別途同意したうえで「ファイルからインストール」 |
+
 ## 7. Extension packs
 
 An Extension Pack installs a set of plugins together. It is a manifest with

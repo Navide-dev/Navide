@@ -11,12 +11,13 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PluginSource } from '../../../shared/pluginSource'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
+import { pluginSourceLabel } from '../lib/pluginSourceMark'
 
 const props = defineProps<{
   source: PluginSource
   /** Publisher id; the row shows it only for local sources. */
   publisher?: string
-  /** Test build expiry (ISO-8601); printed as YYYY-MM-DD. */
+  /** Test build expiry (ISO-8601); printed as YYYY-MM-DD, or "unknown" when absent. */
   expiresAt?: string | null
   /** Render the disclosure card row instead of the badge. */
   row?: boolean
@@ -26,7 +27,7 @@ const { t } = useI18n()
 const LOCAL: readonly PluginSource[] = ['local-signed', 'local-unsigned', 'developer-unpacked']
 const UNSIGNED: readonly PluginSource[] = ['local-unsigned', 'developer-unpacked']
 
-const label = computed(() => t(`pluginDisclosure.source.${props.source}`, { date: (props.expiresAt ?? '').slice(0, 10) }))
+const label = computed(() => pluginSourceLabel(t, props.source, props.expiresAt))
 const local = computed(() => LOCAL.includes(props.source))
 const publisherText = computed(() => {
   if (!local.value || !props.publisher) return ''

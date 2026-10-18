@@ -2107,9 +2107,15 @@ runs only inside the OS sandbox described in
   `navide.` namespace is refused, and the root-signed takedown list
   (`blockedPublishers`, `blockedPackages`) disables a matching local package
   by its manifest id and publisher; without root-signed metadata the takedown
-  check is reported as not done. The record lives in the user's data folder,
-  so anyone who can write there can forge it, the same exposure as the
-  Registry receipt. It is evidence of consent, not a verification by Navide.
+  check is reported as not done. The local trust record is weaker than a
+  Registry receipt. A receipt cannot be forged without a Registry signing key,
+  but the local record is an unsigned file in the user's data folder: any
+  unsandboxed process running as the same user, an agent CLI included, can
+  write a record that matches altered content. What the record protects
+  against is the installed copy being changed after the user consented; it
+  does not protect against other processes of the same user. A plugin's own
+  backend (inside its sandbox) and plugin frames cannot write it. It is
+  evidence of consent, not a verification by Navide.
   The installed-package `source` field (`marketplace`, `prerelease`,
   `testplace`, `local-signed`, `local-unsigned`, `developer-unpacked`,
   `factory-bundled`) is reported beside the legacy `provenance` field, which

@@ -188,15 +188,15 @@ function capabilityHint(cap: string): string {
           v-if="step === 'risk' && pending.prepared.agentTools?.length"
           :tools="pending.prepared.agentTools"
         />
-        <!-- K2: only a Registry-signed package reads as reviewed; an unsigned
-             one keeps the unsigned badge below and no source row. A file
-             install (K3) shows its own source, the claimed publisher and
+        <!-- K2: only the source the Host names, from the signed channel; none
+             shows no row and is never guessed from the version. A file
+             install (K3) names its own source, the claimed publisher and
              "not scanned". -->
         <PluginSourceBadge
-          v-if="step !== 'replace' && (pending.prepared.trustTier === 'signed-verified' || pending.prepared.source)"
+          v-if="step !== 'replace' && pending.prepared.source"
           row
           class="ext-trust-source"
-          :source="pending.prepared.source ?? 'marketplace'"
+          :source="pending.prepared.source"
           :publisher="pending.prepared.publisherId"
         />
         <label v-if="step === 'risk' && local" class="ext-local-ack">

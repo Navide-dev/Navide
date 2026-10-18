@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 from urllib.parse import quote
 
-from . import media, pdf, quick_menu, redact, relay, report, share_cmds
+from . import media, pdf, quick_menu, redact, relay, report, share_cmds, wake
 from .. import error_ledger, prompt_skills
 from .mirror import (
     CHILD_SUMMARY_CHARS, MSG_SUMMARY_TAIL, Mirror, normalize_verbosity, result_text, source_chat, summarize,
@@ -60,8 +60,11 @@ RESUME_CALLBACK = "nv4:resume"
 PROMPTS_CALLBACK = "nv4:prompts"
 SKILLS_CALLBACK = "nv4:skills"
 MCP_CALLBACK = "nv4:mcp"
+WAKE_CALLBACK = "nv4:wake"
+WAKE_WORDS = {"/wake"}
 _CALLBACK_COMMANDS = {CANCEL_CALLBACK: "/cancel", STOP_CALLBACK: "stop", RESUME_CALLBACK: "/resume",
-                      PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp"}
+                      PROMPTS_CALLBACK: "/prompts", SKILLS_CALLBACK: "/skills", MCP_CALLBACK: "/mcp",
+                      WAKE_CALLBACK: "/wake"}
 DEDUP_MAX = 5000
 MAX_QUEUED_PER_PANE = 20
 # A person's own cap on lines into one pane. Chat deliveries skip the window's agent-to-agent
@@ -83,6 +86,11 @@ RUN_TICK_S = 0.5
 EMPTY_TURN_GRACE_S = 120.0
 RUN_WATCH_MAX_S = 1800.0  # stop typing/editing after this; a late turn_complete still replies
 VERDICT_POLL_S = 5.0
+# Right after a restart a platform hands over what queued while Navide was down, before the
+# windows have registered their panes again: a pane that does not resolve yet is waited for
+# this long after start instead of being answered offline.
+STARTUP_GRACE_S = 60.0
+STARTUP_POLL_S = 1.0
 HELD_NOTICE_AFTER_S = 600.0
 HOLD_FAILURE_KEYS = {"gone", "not-ready"}
 HOLD_FAILURE_AFTER_S = 60.0
@@ -108,6 +116,8 @@ MSG_CANCEL_UNSURE = "；{n} 則視窗沒有回應，可能仍會送進 pane"
 MSG_RESUMED = "▶️ 已恢復，排隊中的訊息會繼續送進 pane"
 MSG_NOT_STOPPED = "pane 沒有停住，不需要恢復"
 RESUME_BUTTONS = [("▶️ 繼續", RESUME_CALLBACK)]
+# A pane that is not online but can be woken onto its own conversation.
+WAKE_BUTTONS = [("▶️ 喚醒", WAKE_CALLBACK)]
 # /menu and a bare /start point to the three commands that replaced the quick menu.
 MENU_MOVED_BUTTONS = [("💬 Prompts", PROMPTS_CALLBACK), ("🧩 Skills", SKILLS_CALLBACK), ("🔌 MCP", MCP_CALLBACK)]
 # Where a platform has no buttons, the reply names the commands they stand for.
@@ -130,7 +140,7 @@ MSG_USAGE_LIMIT_KEPT = "這則請求先保留，重置後的回覆會照樣送�
 # that detector would also hold deliveries to the pane, so the channel reads the menu itself.
 _LIMIT_MENU_RE = re.compile(r"Stop and wait for limit to reset.{0,300}?Enter to confirm · Esc to cancel")
 _LIMIT_RESETS_RE = re.compile(r"hit your .{0,40}?limit\W{0,5}resets\s+(.{3,60}?\([^)]+\))")
-MSG_OFFLINE = "⚠️ pane 目前不在線上（可能在其他 workspace 或已關閉）"
+MSG_OFFLINE = wake.text(wake.DEFAULT_LANGUAGE, "offline")
 MSG_RELAY_EXPIRED = "⚠️ 這個確認已失效"
 MSG_RELAY_PROMPT_CHANGED = "⚠️ 畫面上的確認已經換了，這個回覆沒有送出；請在新的確認訊息重新選擇"
 # Appended to a relay prompt whose request lapsed, when the platform can edit it.
@@ -230,6 +240,15 @@ class Seams:
     navide_mcp: Callable[[], Awaitable[list[dict[str, Any]]]] = lambda: _no_rows()
     # server name -> its tool names; [] when not running, None when tools/list timed out
     navide_mcp_tools: Callable[[str], Awaitable[list[str] | None]] = lambda _name: _no_tools()
+    # pane_id -> {workspace_path, session_id} of an online pane, what a later wake resumes;
+    # {} when unknown. Blocking (reads the workspace's pane records)
+    wake_target: Callable[[str], dict[str, str]] = lambda _pane_id: {}
+    # () -> whether any Navide window is connected
+    windows_open: Callable[[], bool] = lambda: True
+    # (pane_id, workspace_path, session_id) -> {ok, pane_id} with the pane back on that same
+    # conversation, or {ok: False, code, started, detail?, agent?}; never a fresh conversation.
+    # `started` is False when it was refused before anything was opened
+    wake: Callable[[str, str, str], Awaitable[dict[str, Any]]] = lambda *_a: _no_wake()
 
 
 async def _no_limit() -> dict[str, Any]:
@@ -246,6 +265,10 @@ async def _no_rows() -> list[dict[str, Any]]:
 
 async def _no_tools() -> list[str] | None:
     return []
+
+
+async def _no_wake() -> dict[str, Any]:
+    return {"ok": False, "code": "no-window", "started": False}
 
 
 async def _no_resume() -> dict[str, Any]:
@@ -359,6 +382,7 @@ class ChannelManager:
         self._seams = seams
         self._factory_for = factory_for
         self._clock = clock
+        self._started_at = clock()
         self._adapters: dict[BotKey, ChannelAdapter] = {}
         self._lease: dict[str, BotKey] = {}  # token fingerprint -> bot
         self._errors: dict[BotKey, str] = {}  # bot -> config error shown in status
@@ -396,16 +420,21 @@ class ChannelManager:
         self._awaiting_shown: dict[str, _Shown] = {}
         self._awaiting_busy: set[str] = set()  # panes whose prompt is being read or relayed
         self._turn_source: dict[str, str] = {}
+        self._wake_limits = wake.WakeLimits(clock=clock)
+        # location -> (kept at, message): what reached a pane that was not online, for its wake
+        self._wake_kept: dict[str, list[tuple[float, InboundMessage]]] = {}
         self.mirror = Mirror(self)
 
     # --- lifecycle --------------------------------------------------------------
 
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
+        self._started_at = self._clock()
         # No conversion outlives a backend: whatever is there was left by a crash.
         await asyncio.to_thread(pdf.clear, self._seams.pdf_root())
         if self._status_task is None:
             self._status_task = asyncio.create_task(self._status_watch(), name="channels-status")
+        self._adopt_lost_kept()
         if self.store.global_enabled():
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
@@ -563,6 +592,7 @@ class ChannelManager:
             # Telegram describes its "/" menu in the language the rest of Navide speaks.
             adapter.command_language = lambda: prompt_skills.language(self._seams.ui_settings())
         await adapter.start(emit)
+        await self._report_lost_kept(bot)
         return None
 
     async def _stop_bot(self, platform: str, account: str) -> None:
@@ -1009,6 +1039,7 @@ class ChannelManager:
                 self.store.remove_platform(platform)
             else:
                 self.store.remove_account(platform, account)
+            self._forget_lost(f"{platform}:" if account is None else f"{platform}:{account}:", prefix=True)
             for pane_id, p in list(self._pending.items()):
                 if p.loc.platform == platform and (account is None or p.loc.account == account):
                     self._drop_pending(pane_id)
@@ -1130,6 +1161,7 @@ class ChannelManager:
         previous = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
         level = level or (previous.verbosity if previous else DEFAULT_VERBOSITY)
         binding = self.store.bind(pane_id, loc, verbosity=level)
+        await self._remember_wake_target(binding, pane_id)
         if previous is not None and previous.location().key() != loc.key():
             # Moved to another chat: child topics left in the old one would keep
             # posting there and let its members drive the children.
@@ -1146,6 +1178,9 @@ class ChannelManager:
         removed = self.store.unbind(pane_id)
         self._drop_pending(pane_id)
         if removed:
+            # What was kept for the chat's wake goes with the binding it was kept for.
+            self._set_kept(removed.location().key(), [])
+            self._forget_lost(removed.location().key())
             await self.mirror.release_children(pane_id)
             await self._changed()
             # Tell the chat it is no longer connected; off the request path so the
@@ -1232,6 +1267,11 @@ class ChannelManager:
             self._sync_bindings()
         pending = self._pending.get(pane_id)
         is_turn_end = entry.get("event_type") == "turn_complete"
+        if is_turn_end:
+            # A conversation started in the window, not from the chat, is what a later wake resumes.
+            bound = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
+            if bound is not None:
+                self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
@@ -1510,6 +1550,7 @@ class ChannelManager:
             return
         if msg.callback_data.startswith(share_cmds.CALLBACK_PREFIX) and await self._share_press(msg):
             return
+        wake_pressed = msg.callback_data == WAKE_CALLBACK
         if msg.callback_data in _CALLBACK_COMMANDS:
             # Then on through the binding checks below, as if the command had been typed.
             msg = dataclasses.replace(msg, text=_CALLBACK_COMMANDS[msg.callback_data], callback_data="")
@@ -1549,12 +1590,24 @@ class ChannelManager:
                 log.info("channels: %s is not bound through %s; staying silent",
                          msg.location_key(), _bot_label((msg.platform, msg.account)))
             return
-        pane_id = self._seams.resolve_pane(binding.pane_id)
+        pane_id = await self._resolve_after_startup(binding.pane_id)
         if not pane_id:
-            await self._reply(msg, MSG_OFFLINE)  # binding kept: it may come back
+            await self._offline(msg, binding)  # binding kept: it may come back
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
+        self._spawn(self._remember_wake_target(binding, pane_id))
+        key = binding.location().key()
+        if wake_pressed or key in self._wake_kept:
+            # The pane is back (on its own, or a wake button from before it came back): what
+            # was kept for it goes in first, in order.
+            lang = prompt_skills.language(await self._ui_settings())
+            if wake_pressed:
+                await self._reply(msg, wake.text(lang, "already_online"))
+            # A new message follows unless this was the button: it keeps its place in the queue.
+            await self._deliver_kept(msg, binding, pane_id, lang, reserve=0 if wake_pressed else 1)
+            if wake_pressed:
+                return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
         if _is_stop_word(command):
@@ -1569,6 +1622,181 @@ class ChannelManager:
         if await self.mirror.handle_inbound(msg, binding, pane_id):
             return
         await self._debounced_deliver(msg, binding, pane_id)
+
+    async def _remember_wake_target(self, binding: Binding, pane_id: str) -> None:
+        """Keep the online pane's workspace and conversation on its binding, for a later wake."""
+        try:
+            target = await asyncio.to_thread(self._seams.wake_target, pane_id)
+        except Exception as exc:  # noqa: BLE001 — the message still goes in without it
+            log.warning("channels: reading the wake target of %s failed: %s", pane_id, exc)
+            return
+        workspace_path = str(target.get("workspace_path") or "")
+        session_id = str(target.get("session_id") or "")
+        if not workspace_path or not session_id:
+            return  # nothing known yet (a pane before its first turn): keep what is stored
+        if (workspace_path, session_id) != (binding.workspace_path, binding.session_id):
+            self.store.set_wake_target(pane_id, workspace_path, session_id)
+
+    async def _offline(self, msg: InboundMessage, binding: Binding) -> None:
+        """A message for a bound pane that is not online.
+
+        A binding without a stored workspace and conversation (one made before waking
+        existed, not seen online since) is only told, as before. Otherwise the chat can wake
+        the pane onto its own conversation, and what it sent is kept for that wake."""
+        lang = prompt_skills.language(await self._ui_settings())
+        if not binding.workspace_path or not binding.session_id:
+            await self._reply(msg, wake.text(lang, "offline"))
+            return
+        if not self._seams.windows_open():
+            await self._reply(msg, wake.text(lang, "no_window"))
+            return
+        command = quick_menu.strip_mention(msg.text, self._identity(msg))
+        if _command_word(command) in WAKE_WORDS:
+            await self._wake(msg, binding, lang)
+            return
+        word = _command_word(command)
+        if _is_stop_word(command) or word in CANCEL_WORDS or word in RESUME_WORDS:
+            await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=WAKE_BUTTONS)
+            return
+        key = binding.location().key()
+        kept = await self._live_kept(msg, key, lang)
+        kept.append((self._clock(), msg))
+        if len(kept) > wake.STASH_MAX:
+            dropped, kept = kept[:-wake.STASH_MAX], kept[-wake.STASH_MAX:]
+            await self._reply(msg, wake.text(lang, "not_sent_overflow", max=wake.STASH_MAX, count=len(dropped),
+                                             items=_previews(dropped)))
+        self._set_kept(key, kept)
+        await self._reply(msg, wake.text(lang, "offline_wake", max=wake.STASH_MAX,
+                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=WAKE_BUTTONS)
+
+    async def _wake(self, msg: InboundMessage, binding: Binding, lang: str) -> None:
+        key = binding.location().key()
+        refusal = self._wake_limits.refusal(key, lang)
+        if refusal:
+            await self._reply(msg, refusal)
+            return
+        self._wake_limits.begin(key)
+        result: dict[str, Any] = {}
+        try:
+            await self._reply(msg, wake.text(lang, "waking"))
+            try:
+                result = await self._seams.wake(binding.pane_id, binding.workspace_path, binding.session_id)
+            except Exception as exc:  # noqa: BLE001 — answered as a failed wake
+                log.warning("channels: waking %s failed: %s", binding.pane_id, exc)
+                result = {"ok": False, "code": "error", "started": True}
+        finally:
+            self._wake_limits.end(key, counted=bool(result.get("ok") or result.get("started", True)))
+        if not result.get("ok"):
+            await self._reply(msg, wake.outcome_text(lang, result))
+            return
+        pane_id = str(result.get("pane_id") or binding.pane_id)
+        if pane_id != binding.pane_id:
+            self.store.rename_pane(binding.pane_id, pane_id)
+            await self._changed()
+        current = self._binding_for(msg) or binding
+        kept = await self._live_kept(msg, key, lang)
+        await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
+        await self._deliver_kept(msg, current, pane_id, lang, reserve=0)
+
+    def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:
+        """Keep ``kept`` for ``key`` (none: forget it), with previews saved so a restart can say
+        which were lost."""
+        if kept:
+            self._wake_kept[key] = kept
+        else:
+            self._wake_kept.pop(key, None)
+        try:
+            saved = self.store.kept_previews()
+            if kept:
+                saved[key] = [_preview(m) for _, m in kept]
+            else:
+                saved.pop(key, None)
+            self.store.set_kept_previews(saved)
+        except Exception as exc:  # noqa: BLE001 — the messages are still kept in memory
+            log.warning("channels: saving the kept messages of %s failed: %s", key, exc)
+
+    async def _live_kept(self, msg: InboundMessage, key: str, lang: str) -> list[tuple[float, InboundMessage]]:
+        """What is kept for ``key`` and still within its TTL; the chat is told which expired."""
+        kept = list(self._wake_kept.get(key, []))
+        expired = [k for k in kept if self._clock() - k[0] >= wake.STASH_TTL_S]
+        if expired:
+            kept = [k for k in kept if k not in expired]
+            self._set_kept(key, kept)
+            await self._reply(msg, wake.text(lang, "not_sent_expired", minutes=int(wake.STASH_TTL_S // 60),
+                                             count=len(expired), items=_previews(expired)))
+        return kept
+
+    async def _deliver_kept(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str, *,
+                            reserve: int) -> None:
+        """Send in, in order, what was kept for the binding while its pane was not online, as
+        far as the pane's queue takes (``reserve`` slots stay for what follows); the chat is
+        told which did not fit."""
+        key = binding.location().key()
+        kept = await self._live_kept(msg, key, lang)
+        self._set_kept(key, [])
+        room = max(MAX_QUEUED_PER_PANE - len(self._queued.get(pane_id, ())) - reserve, 0)
+        fits, over = kept[:room], kept[room:]
+        for _kept_at, kept_msg in fits:
+            await self._deliver(kept_msg, binding, pane_id)
+        if over:
+            await self._reply(msg, wake.text(lang, "not_sent_queue_full", count=len(over), items=_previews(over)))
+
+    def _adopt_lost_kept(self) -> None:
+        """At start: what was kept for a wake when the backend last stopped is gone. Hold its
+        previews until each chat's bot is running to be told; chats no longer bound are dropped."""
+        try:
+            lost = self.store.lost_previews()
+            for key, previews in self.store.kept_previews().items():
+                lost[key] = lost.get(key, []) + previews
+            bound = {b.location().key() for b in self.store.bindings()}
+            self.store.set_lost_previews({k: v for k, v in lost.items() if k in bound})
+            self.store.set_kept_previews({})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the kept messages from before the restart failed: %s", exc)
+
+    async def _report_lost_kept(self, bot: BotKey) -> None:
+        """Tell ``bot``'s chats which kept messages a restart lost, then forget the previews."""
+        try:
+            lost = self.store.lost_previews()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the lost kept messages failed: %s", exc)
+            return
+        adapter = self._adapters.get(bot)
+        if not lost or adapter is None:
+            return
+        lang = prompt_skills.language(await self._ui_settings())
+        for b in self.store.bindings():
+            loc = b.location()
+            previews = lost.get(loc.key())
+            if not previews or (b.platform, b.account) != bot:
+                continue
+            text = wake.text(lang, "not_sent_restart", count=len(previews), items=wake.quoted(previews))
+
+            async def tell(adapter: Any = adapter, loc: Location = loc, text: str = text) -> None:
+                # Kept when the notice did not go: the bot's next start tries again.
+                if await self._notice(adapter, loc, text):
+                    self._forget_lost(loc.key())
+
+            self._enqueue(loc.key(), tell)
+
+    def _forget_lost(self, key: str, *, prefix: bool = False) -> None:
+        """Delete the lost previews of location ``key`` (with ``prefix``, of every location
+        whose key starts with it: a whole bot or platform)."""
+        try:
+            lost = self.store.lost_previews()
+            kept = {k: v for k, v in lost.items() if not (k.startswith(key) if prefix else k == key)}
+            if kept != lost:
+                self.store.set_lost_previews(kept)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: forgetting the lost kept messages of %s failed: %s", key, exc)
+
+    async def _resolve_after_startup(self, pane_id: str) -> str:
+        """The pane's current id; during the startup grace an unknown pane is waited for."""
+        current = self._seams.resolve_pane(pane_id)
+        while not current and self._clock() - self._started_at < STARTUP_GRACE_S:
+            await asyncio.sleep(STARTUP_POLL_S)
+            current = self._seams.resolve_pane(pane_id)
+        return current
 
     async def _debounced_deliver(self, msg: InboundMessage, binding: Binding, pane_id: str) -> None:
         if DEBOUNCE_S <= 0:
@@ -2123,9 +2351,9 @@ class ChannelManager:
             buttons = MENU_MOVED_BUTTONS if adapter is not None and adapter.capabilities.buttons else None
             await self._reply(msg, quick_menu.text(lang, "menu_moved"), buttons=buttons)
             return
-        pane_id = self._seams.resolve_pane(binding.pane_id)
+        pane_id = await self._resolve_after_startup(binding.pane_id)
         if not pane_id:
-            await self._reply(msg, MSG_OFFLINE)
+            await self._reply(msg, wake.text(lang, "offline"))
             return
         adapter = self._adapters.get((msg.platform, msg.account))
         if adapter is None:
@@ -2535,11 +2763,14 @@ class ChannelManager:
         if current.task is None or current.task.done():
             current.task = self._spawn(self._while_running(pane_id, current))
 
-    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> None:
+    async def _notice(self, adapter: ChannelAdapter, loc: Location, text: str) -> bool:
+        """Post ``text`` to ``loc``; False (logged) when it did not go."""
         try:
             await self.mirror.send(loc, text)
         except Exception as exc:  # noqa: BLE001
             log.warning("channels: notice to %s failed: %s", loc.key(), exc)
+            return False
+        return True
 
     async def _while_running(self, pane_id: str, pending: _Pending) -> None:
         """Typing every 4s, one status message edited in place, awaiting notices."""
@@ -2986,6 +3217,14 @@ def _strip_controls(text: str, keep: str = "\t") -> str:
     return "".join(
         ch if ch in keep or unicodedata.category(ch) != "Cc" else (" " if ch in "\t\n\r" else "")
         for ch in text)
+
+
+def _preview(msg: InboundMessage) -> str:
+    return wake.preview(msg.text) or "📎"
+
+
+def _previews(kept: list[tuple[float, InboundMessage]]) -> str:
+    return wake.quoted([_preview(m) for _, m in kept])
 
 
 def _typed_hint(buttons: list[tuple[str, str]]) -> str:

@@ -252,6 +252,139 @@ def _credential_kind(path: str, ctx: _Ctx) -> str | None:
     return None
 
 
+#: Home-relative stand-ins for the stores _credential_kind names, as
+#: (path, directory). A directory reaches every name below it; a file only itself.
+_STORE_PATHS = tuple((_fold(p), d) for p, d in (
+    (".ssh", True), (".aws", True), (".gnupg", True), (".netrc", False), (".kube/config", False),
+    (".docker/config.json", False), (".azure", True), (".gcloud", True), ("Library/Keychains", True),
+    (".config/gcloud", True), (".config/gh/hosts.yml", False), (".claude/.credentials.json", False),
+    (".claude/secrets", True), (".codex/auth.json", False),
+))
+
+
+def _expand_braces(text: str) -> list[str]:
+    """``a{b,c}d`` -> ['abd', 'acd'] (nested too). Past 64 variants the rest
+    of the pattern from the first brace becomes ``*/**``: a superset, so a
+    huge expansion is graded more strictly, never skipped."""
+    start = text.find("{")
+    while start >= 0:
+        depth, parts, last = 0, [], start + 1
+        for i in range(start, len(text)):
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif c == "," and depth == 1:
+                parts.append(text[last:i])
+                last = i + 1
+        else:
+            return [text]  # unclosed: a literal brace
+        if parts:
+            parts.append(text[last:i])
+            out: list[str] = []
+            for alt in parts:
+                out += _expand_braces(text[:start] + alt + text[i + 1:])
+                if len(out) > 64:
+                    return [text[:start] + "*/**"]
+            return out
+        start = text.find("{", start + 1)
+    return [text]
+
+
+#: File names that hold secrets inside a store directory (e.g. ~/.ssh/id_rsa).
+_SECRET_NAMES = tuple(_fold(n) for n in (
+    "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519", "credentials", "config", ".netrc", "auth.json",
+    "hosts.yml", ".credentials.json", "login.keychain-db",
+))
+
+
+_EXTENSION_FILTER = re.compile(r"\*\.[^*?\[\]]+")
+
+
+def _names(seg: str, name: str, *, file: bool) -> bool:
+    """A glob segment that matches ``name`` beyond a bare sweep: '.s?h',
+    '*ssh' and '*_rsa' name their store or file; '*' only sweeps, and so does
+    an extension filter ('*.json') on a file with a stem before it (auth.json)."""
+    if not fnmatch.fnmatchcase(name, seg) or not set(seg) - set("*?"):
+        return False
+    # '*.netrc' matches all of .netrc, so it names it rather than filtering.
+    return not (file and _EXTENSION_FILTER.fullmatch(seg) and len(name) > len(seg) - 1)
+
+
+def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> int:
+    """Whether glob segments can match ``store`` (a file) or a name below it
+    (a directory): 2 when a segment names the store or a secret file in it,
+    1 when it is only reached through ``**`` or a ``*`` sweep, 0 when not."""
+    memo: dict[tuple[int, int], int] = {}
+
+    def reach(i: int, j: int) -> int:
+        if (i, j) not in memo:
+            if j == len(store):
+                if not directory:
+                    memo[i, j] = int(all(g == "**" for g in globs[i:]))
+                elif i == len(globs):
+                    memo[i, j] = 0
+                else:
+                    memo[i, j] = 2 if any(_names(globs[-1], n, file=True) for n in _SECRET_NAMES) else 1
+            elif i == len(globs):
+                memo[i, j] = 0
+            elif globs[i] == "**":
+                memo[i, j] = max(reach(i + 1, j), reach(i, j + 1))
+            elif not fnmatch.fnmatchcase(store[j], globs[i]):
+                memo[i, j] = 0
+            else:
+                r = reach(i + 1, j + 1)
+                memo[i, j] = 2 if r and j == len(store) - 1 and _names(globs[i], store[j], file=not directory) else r
+        return memo[i, j]
+
+    return reach(0, 0)
+
+
+def _stores_reached(path: str, ctx: _Ctx) -> list[tuple[str, bool]]:
+    """Secret stores below a glob's literal base that its wildcards can expand
+    into, as (store, named): see _glob_reaches."""
+    base = _glob_base(path)
+    if base == path:
+        return []
+    globs = [g for g in path[len(base):].split("/") if g]
+    # Consecutive `**` match the same paths as one.
+    globs = [g for i, g in enumerate(globs) if not (g == "**" and i and globs[i - 1] == "**")]
+    out = []
+    for h in _homes(ctx):
+        for store, directory in _STORE_PATHS:
+            full = h + "/" + store
+            if full != base and _inside(base, full):
+                r = _glob_reaches(globs, [s for s in full[len(base):].split("/") if s], directory)
+                if r:
+                    out.append((full, r == 2))
+    return out
+
+
+def _glob_dialect(pattern: str) -> str:
+    """The ripgrep / picomatch glob as fnmatch reads it: ``[^x]`` negates like
+    ``[!x]`` and a backslash escapes the next character (POSIX only: on
+    Windows it is the path separator)."""
+    out = []
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\" and not _WINDOWS and i + 1 < len(pattern):
+            n = pattern[i + 1]
+            out.append(f"[{n}]" if n in "*?[{},!^" else n)
+            i += 2
+            continue
+        if c == "[" and pattern[i + 1:i + 2] == "^":
+            out.append("[!")
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _is_dotenv(path: str) -> bool:
     base = posixpath.basename(path)
     return base == ".env" or (base.startswith(".env.") and base not in {".env.example", ".env.sample", ".env.template"})
@@ -1210,10 +1343,10 @@ def _tool_command(tool_input: dict) -> str | None:
 
 def _tool_paths(tool_input: dict) -> list[str]:
     out = []
-    for key in ("file_path", "path", "notebook_path", "filename", "target_file", "absolute_path"):
+    # Every path field is read, and a field may hold a list of paths.
+    for key in ("file_path", "path", "paths", "notebook_path", "filename", "target_file", "absolute_path"):
         v = tool_input.get(key)
-        if isinstance(v, str) and v:
-            out.append(v)
+        out += [p for p in (v if isinstance(v, list) else [v]) if isinstance(p, str) and p]
     return out
 
 
@@ -1267,15 +1400,25 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
         roots += [r for r in (root if isinstance(root, list) else [root]) if isinstance(r, str) and r]
     # Glob's pattern and Grep's glob filter are paths under root (or absolute).
     sub = tool_input.get("pattern" if name in GLOB_TOOLS else "glob")
-    sub = sub if isinstance(sub, str) and sub else None
+    sub = _glob_dialect(sub) if isinstance(sub, str) and sub else None
     raws = list(roots)
     if sub:
         absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
+        if name in GREP_TOOLS and not absolute and "/" not in sub:
+            # ripgrep matches a glob without '/' against the file name at any depth.
+            sub = "**/" + sub
         raws += [sub] if absolute or not roots else [posixpath.join(r, sub) for r in roots]
-    for raw in raws:
+    # A {a,b} brace is checked as each path it expands to; wildcards that can
+    # expand into a store below the literal base count as naming that store.
+    for raw in [v for r in raws for v in _expand_braces(r)]:
         path = _resolve(raw, ctx)
         if path is not None:
             _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
+            for store, named in _stores_reached(path, ctx):
+                # A grep that only sweeps a store in (naming no store or secret
+                # file) counts as no more than grepping the bare root: normal.
+                if named or name in GLOB_TOOLS:
+                    _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")

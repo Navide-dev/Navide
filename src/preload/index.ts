@@ -166,6 +166,8 @@ export interface InstalledPluginSummary {
   provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
   /** Source and review state; see `shared/pluginSource.ts`. */
   source?: PluginSource
+  /** Registry-signed expiry; present only when `source` is `testplace`. */
+  expiresAt?: string
   warning?: string
   pendingCandidateVersion?: string
   rollbackKind?: 'factory' | 'previous'
@@ -259,6 +261,8 @@ export interface MarketplaceExtension {
   extension_pack?: string[] | null
   /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
   trust_tier?: string | null
+  /** Newest pre-release newer than `latest_version` (Registry's view). */
+  latest_prerelease_version?: string | null
   /** Plan B D1 list card: the latest version's manifest disclosure and scan
    *  report as the Registry listed them, kept by the main process only when
    *  well formed and naming this item; unverified display data. */
@@ -476,7 +480,8 @@ export interface PreparedInstallSummary {
   scan?: PluginScanReport | null
   /** Unsigned Registry facts, never verified. */
   registry?: PluginRegistryDisclosureFacts | null
-  /** Card K3: the package's source; `local-unsigned` for a file install. */
+  /** Source and review state from the verified Registry envelope; absent for
+   *  a channel this App does not know. */
   source?: PluginSource
   /** Card K3: sha256 of the picked file, shown in the consent dialog. */
   digest?: string
@@ -1203,6 +1208,10 @@ contextBridge.exposeInMainWorld('agentTeam', {
       version: string
       disclosure: PluginManifestDisclosure | null
       scan: PluginScanReport | null
+      /** Source and review state; see `shared/pluginSource.ts`. */
+      source?: PluginSource
+      /** Registry-signed expiry; present only when `source` is `testplace`. */
+      expiresAt?: string
     }>> => ipcRenderer.invoke('plugins:installedDisclosures'),
     backendResourceUsage: (): Promise<BackendResourceUsage> =>
       ipcRenderer.invoke('plugins:backendResourceUsage'),

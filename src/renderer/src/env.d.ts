@@ -394,6 +394,8 @@ declare global {
           scan: PluginScanReport | null
           /** Source and review state; see `shared/pluginSource.ts`. */
           source?: PluginSource
+          /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+          expiresAt?: string
         }>>
         /** Backend children, subscriptions, Bridge requests and queue backlog, now and at the most (never capped). */
         backendResourceUsage?: () => Promise<{
@@ -567,6 +569,8 @@ declare global {
     provenance?: 'official-registry' | 'developer-local-unpacked' | 'factory-bundled'
     /** Source and review state; see `shared/pluginSource.ts`. */
     source?: PluginSource
+    /** Test build expiry (ISO-8601), from the signed envelope; testplace only. */
+    expiresAt?: string
     warning?: string
     pendingCandidateVersion?: string
     rollbackKind?: 'factory' | 'previous'
@@ -624,6 +628,8 @@ declare global {
     extension_pack?: string[] | null
     /** Trust tier of the latest version ('signed-verified' or 'unsigned'). */
     trust_tier?: string | null
+    /** Newest pre-release newer than `latest_version` (Registry's view). */
+    latest_prerelease_version?: string | null
     /** Plan B D1 list card: the latest version's manifest disclosure and scan
      *  report as the Registry listed them, kept by the main process only when
      *  well formed and naming this item; unverified display data. */
@@ -793,6 +799,8 @@ declare global {
     }>
     requiresConfirmation: boolean
     publisherId: string
+    /** Source and review state, when the Host sends one; see `shared/pluginSource.ts`. */
+    source?: PluginSource
     requiresPublisherTrust: boolean
     requiresRiskConfirmation: boolean
     /** Plan B D2: what this update changes, computed by the Host from the

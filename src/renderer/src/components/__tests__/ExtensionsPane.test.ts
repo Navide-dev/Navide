@@ -1248,21 +1248,25 @@ describe('ExtensionsPane source badge (K2)', () => {
     delete (window as unknown as Record<string, unknown>).agentTeam
   })
 
-  it('badges each installed row by its source, falling back to the legacy provenance', async () => {
+  it('badges each installed row by the Host\'s source and never guesses one', async () => {
     mockPlugins({
       listInstalled: vi.fn().mockResolvedValue([
         { id: 'acme.registry', requires: [], sensitive: [], provenance: 'official-registry' },
         { id: 'acme.folder', requires: [], sensitive: [], provenance: 'developer-local-unpacked' },
         { id: 'acme.file', requires: [], sensitive: [], source: 'local-unsigned' },
+        { id: 'acme.test', requires: [], sensitive: [], provenance: 'official-registry', source: 'testplace', expiresAt: '2027-01-17T00:00:00Z' },
         { id: 'acme.unknown', requires: [], sensitive: [] },
       ]),
     })
     wrapper = mountExtensions()
     await flushPromises()
     const source = (id: string) => wrapper!.find(`[data-id="${id}"] .nv-source-badge`)
-    expect(source('acme.registry').attributes('data-source')).toBe('marketplace')
-    expect(source('acme.folder').attributes('data-source')).toBe('developer-unpacked')
+    // No source means the Host could not name one (an unknown channel): no badge.
+    expect(source('acme.registry').exists()).toBe(false)
+    expect(source('acme.folder').exists()).toBe(false)
     expect(source('acme.file').attributes('data-source')).toBe('local-unsigned')
+    expect(source('acme.test').attributes('data-source')).toBe('testplace')
+    expect(source('acme.test').text()).toContain('2027-01-17')
     expect(source('acme.unknown').exists()).toBe(false)
   })
 })
