@@ -136,6 +136,7 @@ class PaneRecord:
     last_turn_state: str = ""       # "working" (running a turn, or parked on a permission / question prompt) / "idle"; "" = never reported. Read on a cold restore to bring back the panes a manual restart interrupted.
     report_to: str = ""             # messaging handle of the parent this spawned pane owes a report to
     report_pending: bool = False    # that report is still outstanding — persisted so a pane resumed after a restart still reports when its turn ends
+    last_live_launch: str = ""      # launch id (launch_id.py) the pane's CLI last spawned in; cleared by an idle reclaim. "" = no live CLI known, which is every record written before this field existed. Read by the 'auto' resume scope.
 
 
 @dataclass
@@ -699,6 +700,7 @@ class ProjectStore:
         session_home_id: str = "",
         profile_id: str = "",
         run_group_id: str = "",
+        launch_id: str = "",
     ) -> Project:
         project = self.load_or_create(workspace_path)
         if stage_index < 0 or stage_index >= len(project.stages):
@@ -718,6 +720,7 @@ class ProjectStore:
         pane.pane_id = pane_id
         pane.spawn_status = "spawned"
         if not pane.spawned_at: pane.spawned_at = _now_iso()
+        if launch_id: pane.last_live_launch = launch_id
         if agent: pane.agent = agent
         if role: pane.role = role
         # Claude pins its session id at spawn; Codex/Gemini use record_slot_session() later.
@@ -879,6 +882,7 @@ class ProjectStore:
         spawned_by: str = "",
         surface: str = "",
         window_kind: str = "",
+        launch_id: str = "",
     ) -> Project:
         project = self.load_or_create(workspace_path)
         pane = self._find_manual_pane(project, pane_id, previous_pane_id, session_id)
@@ -915,6 +919,7 @@ class ProjectStore:
         # Set once: the rebuild path re-spawns an existing record, and the pane
         # the user is looking at started at the ORIGINAL time, not this hop.
         if not pane.spawned_at: pane.spawned_at = _now_iso()
+        if launch_id: pane.last_live_launch = launch_id
         if session_id: pane.session_id = session_id
         if session_home_id: pane.session_home_id = session_home_id
         if profile_id: pane.profile_id = profile_id
@@ -1390,6 +1395,7 @@ class ProjectStore:
         last_turn_state: str | None = None,
         report_to: str | None = None,
         report_pending: bool | None = None,
+        last_live_launch: str | None = None,
     ) -> Project:
         """Persist what a pane was doing and the report it owes its parent.
 
@@ -1411,6 +1417,10 @@ class ProjectStore:
             changed = True
         if report_pending is not None and pane.report_pending != report_pending:
             pane.report_pending = report_pending
+            changed = True
+        # An idle reclaim sends "" (its CLI is gone); spawns stamp it themselves.
+        if last_live_launch is not None and pane.last_live_launch != last_live_launch:
+            pane.last_live_launch = last_live_launch
             changed = True
         if changed:
             self.save(project)

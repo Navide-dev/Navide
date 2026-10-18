@@ -34,6 +34,7 @@ from . import (
     confirm_token,
     device_trust,
     executions_service,
+    launch_id,
     native_mcp,
     native_memory,
     osplat,
@@ -8336,6 +8337,7 @@ def _record_dock_spawn(payload: dict, metadata: dict, agent_key: str, term_id: s
             origin=origin,
             surface=surface,
             window_kind=window_kind,
+            launch_id=launch_id.current(),
         )
         # The store leaves a window pane's record alone when a panel's create
         # names its id; its Agent History entry must be left alone with it.
@@ -10147,6 +10149,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     turn_state = payload.get("last_turn_state")
     report_to = payload.get("report_to")
     report_pending = payload.get("report_pending")
+    live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
         project = app.project_store.set_pane_resume_state(
@@ -10155,6 +10158,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
             last_turn_state=turn_state if isinstance(turn_state, str) else None,
             report_to=report_to if isinstance(report_to, str) else None,
             report_pending=report_pending if isinstance(report_pending, bool) else None,
+            last_live_launch=live_launch if isinstance(live_launch, str) else None,
         )
         # Not an error, but say so: a write that matched no record is lost.
         applied = any(p.pane_id == pane_id for p in project.panes)
@@ -10969,6 +10973,7 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
         session_home_id=payload.get("session_home_id", ""),
         profile_id=slot_pin,
         run_group_id=payload.get("run_group_id", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
@@ -11238,6 +11243,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         output_log_file=payload.get("output_log_file", ""),
         origin=payload.get("origin", ""),
         spawned_by=payload.get("spawned_by", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(
