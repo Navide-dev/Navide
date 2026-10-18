@@ -137,13 +137,14 @@ def test_v6_gives_old_bindings_no_wake_target_and_keeps_one_across_a_rename(tmp_
 async def test_an_online_pane_records_its_workspace_and_conversation(env: Env) -> None:
     fw = FakeWake(env).install()
     await env.inbound("hello")
-    [b] = env.store.bindings()
-    assert (b.workspace_path, b.session_id) == ("/ws", "sess-1")
+    await _until(lambda: (env.store.bindings()[0].workspace_path, env.store.bindings()[0].session_id)
+                 == ("/ws", "sess-1"))
     fw.target = {"workspace_path": "/ws", "session_id": "sess-2"}  # a new conversation in the pane
     await env.inbound("again")
-    assert env.store.bindings()[0].session_id == "sess-2"
+    await _until(lambda: env.store.bindings()[0].session_id == "sess-2")
     fw.target = {"workspace_path": "/ws", "session_id": ""}  # not known yet: keep the last one
     await env.inbound("and again")
+    await asyncio.sleep(0.05)
     assert env.store.bindings()[0].session_id == "sess-2"
 
 
@@ -167,8 +168,9 @@ async def test_a_binding_without_a_wake_target_is_only_told_as_before(env: Env) 
 async def test_offline_pane_offers_a_wake_and_keeps_the_message(env: Env) -> None:
     fw = _wakeable(env)
     await env.inbound("please run the tests")
-    assert env.tg.texts()[-1] == _zh("offline_wake")
-    assert env.tg.buttons[_zh("offline_wake")] == WAKE_BUTTONS
+    notice = _zh("offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+    assert env.tg.texts()[-1] == notice
+    assert env.tg.buttons[notice] == WAKE_BUTTONS
     assert env.fake.delivered == [] and fw.calls == []
 
 
@@ -289,19 +291,35 @@ async def test_a_wake_press_after_the_pane_came_back_sends_what_was_kept(env: En
     assert env.fake.delivered[-1][:2] == ("pane-1", "kept while offline")
 
 
-async def test_a_message_while_online_drops_what_was_kept(env: Env) -> None:
-    fw = _wakeable(env)
-    await env.inbound("old")
-    env.fake.gone.discard("pane-1")
+async def test_a_pane_back_on_its_own_gets_the_kept_messages_first(env: Env) -> None:
+    _wakeable(env)
+    await env.inbound("old one")
+    await env.inbound("old two")
+    env.fake.gone.discard("pane-1")  # the user opened the window at the computer
     await env.inbound("new")
-    assert [d[1] for d in env.fake.delivered] == ["new"]
-    env.fake.gone.add("pane-1")
-    fw.result = {"ok": True, "pane_id": "pane-1"}
+    assert [d[1] for d in env.fake.delivered] == ["old one", "old two", "new"]
+
+
+async def test_the_offline_reply_states_the_keeping_limits(env: Env) -> None:
+    _wakeable(env)
+    await env.inbound("hello")
+    for lang in ("zh-TW", "en-US", "ja-JP"):
+        notice = wake.text(lang, "offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+        assert str(wake.STASH_MAX) in notice and str(int(wake.STASH_TTL_S // 60)) in notice
+    assert env.tg.texts()[-1] == _zh("offline_wake", max=wake.STASH_MAX, minutes=int(wake.STASH_TTL_S // 60))
+
+
+async def test_a_message_pushed_out_of_the_kept_list_is_reported(env: Env, monkeypatch) -> None:
+    monkeypatch.setattr(wake, "STASH_MAX", 2)
+    _wakeable(env)
+    for text in ("first", "second", "third"):
+        await env.inbound(text)
+    assert _zh("not_sent_overflow", max=2, count=1, items="「first」") in env.tg.texts()
     await _press_wake(env)
-    assert [d[1] for d in env.fake.delivered] == ["new"]
+    assert [d[1] for d in env.fake.delivered] == ["second", "third"]
 
 
-async def test_kept_messages_expire(tmp_path) -> None:
+async def test_expired_kept_messages_are_reported_not_dropped_silently(tmp_path) -> None:
     clock = FakeClock()
     env = await _make_env(tmp_path, clock)
     try:
@@ -311,9 +329,39 @@ async def test_kept_messages_expire(tmp_path) -> None:
         await env.inbound("fresh")
         await _press_wake(env)
         assert [d[1] for d in env.fake.delivered] == ["fresh"]
+        minutes = int(wake.STASH_TTL_S // 60)
+        assert _zh("not_sent_expired", minutes=minutes, count=1, items="「too old」") in env.tg.texts()
     finally:
         await env.m.stop()
         env.db.close()
+
+
+async def test_kept_messages_lost_to_a_restart_are_reported(env: Env) -> None:
+    _wakeable(env)
+    await env.inbound("kept before the restart")
+    factory = env.m._factory_for
+    await env.m.stop()
+    restarted = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = restarted
+    await restarted.start()
+    await restarted.wait_idle()
+    assert _zh("not_sent_restart", count=1, items="「kept before the restart」") in env.tg.texts()
+    # Told once: a second restart has nothing left to report.
+    await restarted.stop()
+    again = mgr_mod.ChannelManager(env.store, env.fake.seams(), factory_for=factory, clock=env.clock)
+    env.m = again
+    await again.start()
+    await again.wait_idle()
+    assert env.tg.texts().count(_zh("not_sent_restart", count=1, items="「kept before the restart」")) == 0
+
+
+async def test_a_turn_end_refreshes_the_wake_target(env: Env) -> None:
+    # A new conversation started in the window, not through the chat, is what a later wake resumes.
+    fw = FakeWake(env).install()
+    env.store.set_wake_target("pane-1", "/ws", "sess-1")
+    fw.target = {"workspace_path": "/ws", "session_id": "sess-9"}
+    env.turn_complete("pane-1", "done")
+    await _until(lambda: env.store.bindings()[0].session_id == "sess-9")
 
 
 def test_wake_texts_exist_in_every_language() -> None:
@@ -339,10 +387,13 @@ def seam(monkeypatch):
         windows={"w1"}, records=[_Record(pane_id="old-1", agent="claude", session_id="sess-1",
                                          spawn_status="spawned", custom_name="api", auto_name="")],
         registry={}, refusal=None, exhausted=False, probe=True, opened_ws=[], placeholder_calls=[],
-        placeholder={"ok": True, "reason": "opened"}, spawns=[])
+        placeholder={"ok": True, "reason": "opened", "launched_session_id": "sess-1"}, spawns=[],
+        settings={})
     monkeypatch.setattr(app, "live_main_window_ids", lambda: set(state.windows))
     monkeypatch.setattr(app, "project_store", SimpleNamespace(
         peek=lambda ws: SimpleNamespace(panes=state.records) if ws == "/ws" else None), raising=False)
+    monkeypatch.setattr(app, "ui_settings_store", SimpleNamespace(get=lambda: dict(state.settings)),
+                        raising=False)
     monkeypatch.setattr(agent_messaging, "current", lambda pid: state.registry.get(pid))
     monkeypatch.setattr(mcp, "_refuse_unresumable_session", lambda *a: state.refusal)
 
@@ -366,8 +417,8 @@ def seam(monkeypatch):
             return {**state.placeholder, "pane": entry}
         return {**state.placeholder, "pane": SimpleNamespace(pane_id="new-1", realized=True)}
 
-    async def open_agent(agent, name, task, ctx, workspace_path="", session_id="", **kw):
-        state.spawns.append((agent, name, task, workspace_path, session_id))
+    async def open_agent(*a, **kw):
+        state.spawns.append((a, kw))
         return {"ok": True, "pane_id": "spawned-1"}
 
     monkeypatch.setattr(mcp, "_probe_window", probe)
@@ -395,6 +446,15 @@ async def test_seam_refuses_up_front_without_opening_anything(seam) -> None:
     assert seam.opened_ws == [] and seam.placeholder_calls == [] and seam.spawns == []
 
 
+async def test_seam_refuses_resume_behavior_never_before_opening_the_window(seam) -> None:
+    # Opening the window would restore every pane of the workspace fresh, this one included.
+    seam.probe = False
+    seam.settings = {"agentTeam.resumeBehavior": "never"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "fresh-refused", "started": False}
+    assert seam.opened_ws == [] and seam.placeholder_calls == []
+
+
 async def test_seam_opens_the_workspace_and_the_placeholder_onto_its_own_conversation(seam) -> None:
     seam.probe = False
     seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
@@ -402,12 +462,33 @@ async def test_seam_opens_the_workspace_and_the_placeholder_onto_its_own_convers
     assert seam.opened_ws == ["/ws"] and seam.placeholder_calls == [("old-1", True)]
 
 
+async def test_seam_does_not_take_an_already_open_pane_on_trust(seam) -> None:
+    # The window's own restore may have opened it, fresh under "never" or the user's choice.
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=True)
+    seam.placeholder = {"ok": True, "reason": "already-open", "launched_session_id": ""}
+    result = await channels_pkg.wake_pane("old-1", "/ws", "sess-1")
+    assert result == {"ok": False, "code": "session-mismatch", "started": True}
+    assert seam.placeholder_calls == [("old-1", True)]
+    seam.placeholder = {"ok": True, "reason": "already-open", "launched_session_id": "sess-1"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
+
+
+async def test_seam_fails_a_fresh_open_even_when_the_window_says_ok(seam) -> None:
+    seam.registry["old-1"] = SimpleNamespace(pane_id="old-1", realized=False)
+    seam.placeholder = {"ok": True, "reason": "fresh", "launched_session_id": "sess-1"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "fresh-refused", "started": True}
+    seam.placeholder = {"ok": True, "reason": "opened", "launched_session_id": "sess-other"}
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "session-mismatch", "started": True}
+
+
 async def test_seam_finds_the_pane_by_its_conversation_after_a_rekey(seam) -> None:
     seam.records.append(_Record(pane_id="rekeyed-1", agent="claude", session_id="sess-1",
                                 spawn_status="spawned", custom_name="api", auto_name=""))
-    seam.registry["rekeyed-1"] = SimpleNamespace(pane_id="rekeyed-1", realized=True)
-    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "rekeyed-1"}
-    assert seam.placeholder_calls == [] and seam.spawns == []
+    seam.registry["rekeyed-1"] = SimpleNamespace(pane_id="rekeyed-1", realized=False)
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "new-1"}
+    assert seam.placeholder_calls == [("rekeyed-1", True)] and seam.spawns == []
 
 
 async def test_seam_passes_on_a_window_that_would_not_resume(seam) -> None:
@@ -417,9 +498,12 @@ async def test_seam_passes_on_a_window_that_would_not_resume(seam) -> None:
         "ok": False, "code": "fresh-refused", "started": True}
 
 
-async def test_seam_opens_a_pane_onto_the_session_when_the_window_holds_none(seam) -> None:
-    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {"ok": True, "pane_id": "spawned-1"}
-    assert seam.spawns == [("claude", "api", "", "/ws", "sess-1")]
+async def test_seam_never_opens_a_second_pane_onto_the_conversation(seam) -> None:
+    # The window has not brought the pane back (still loading, or a detached group's): opening
+    # another pane onto the same session would run two CLIs on one conversation.
+    assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
+        "ok": False, "code": "pane-not-restored", "started": True}
+    assert seam.spawns == []
 
 
 async def test_seam_refuses_a_conversation_whose_pane_was_closed(seam) -> None:
@@ -429,3 +513,24 @@ async def test_seam_refuses_a_conversation_whose_pane_was_closed(seam) -> None:
     assert await channels_pkg.wake_pane("old-1", "/ws", "sess-1") == {
         "ok": False, "code": "no-record", "started": False}
     assert seam.spawns == [] and seam.opened_ws == []
+
+
+async def test_open_placeholder_reports_the_session_the_window_launched(monkeypatch) -> None:
+    from agent_team_backend import agent_messaging
+    from agent_team_backend.mcp_server import server as mcp
+
+    sent: list[dict[str, Any]] = []
+
+    async def ui_request(workspace, op, *, caller, action, args, **kw):
+        sent.append(args)
+        return {"ok": True, "result": {"realized": True, "reason": "opened", "paneId": "p2",
+                                       "launchedSessionId": "sess-1"}}
+
+    monkeypatch.setattr(mcp, "_ui_request", ui_request)
+    monkeypatch.setattr(agent_messaging, "current", lambda pid: None)
+    entry = SimpleNamespace(pane_id="p1", workspace_path="/ws")
+    opened = await mcp._open_placeholder(entry, require_resume=True)
+    assert sent == [{"paneId": "p1", "requireResume": True}]
+    assert opened["ok"] and opened["launched_session_id"] == "sess-1"
+    await mcp._open_placeholder(entry)
+    assert sent[-1] == {"paneId": "p1"}  # every other caller asks exactly as before

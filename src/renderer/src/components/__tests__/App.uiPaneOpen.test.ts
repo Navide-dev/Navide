@@ -42,13 +42,17 @@ describe('ui.pane.open', () => {
 
   it('passes requireResume through only when the caller asked for it', () => {
     // A chat's wake must come back on the pane's own conversation; every other
-    // caller keeps the old behavior, a fresh session included.
-    expect(command('ui.pane.open')).toContain('requireResume: requireResume === true')
+    // caller keeps the old behavior, a fresh session included. The answer rule
+    // itself is unit-tested in lib/__tests__/paneOpenAnswer.test.ts.
+    const body = command('ui.pane.open')
+    expect(body).toContain('const required = requireResume === true')
+    expect(body).toContain('{ explicit: true, requireResume: required }')
+    expect(body).toContain('launchedSessionId: opened?.launchedSessionId')
   })
 
   it('answers an already-open pane without restarting it', () => {
     const body = command('ui.pane.open')
-    const answer = body.indexOf("if (pane.realized) return { realized: true, reason: 'already-open'")
+    const answer = body.indexOf("paneOpenAnswer({ paneId, reason: 'already-open', realized: true")
     expect(answer).toBeGreaterThan(-1)
     expect(answer).toBeLessThan(body.indexOf('realizeRestoredPane('))
   })
@@ -61,7 +65,23 @@ describe('ui.pane.open', () => {
   })
 })
 
+describe('realizeRestoredPane', () => {
+  it('applies requireResume to a realize that is already running', () => {
+    expect(fn('realizeRestoredPane')).toContain(
+      'if (pending) return pending.then((outcome) => joinedRealizeOutcome(outcome, opts?.requireResume === true))')
+  })
+})
+
 describe('performRealizeRestoredPane', () => {
+  it('records the session it launched the pane on', () => {
+    expect(fn('performRealizeRestoredPane')).toContain("launched.launchedSessionId = isResume ? effectiveResumeId : ''")
+  })
+
+  it('never repoints the saved conversation for a caller that requires it', () => {
+    expect(fn('performRealizeRestoredPane')).toContain(
+      'if (ghostConfirmed && supportsGhostReconnect(saved.agent) && !opts?.requireResume)')
+  })
+
   it('takes the explicit decision instead of asking the workspace-wide question', () => {
     const body = fn('performRealizeRestoredPane')
     expect(body).toContain('opts?.explicit\n      ? explicitRestoreDecision(session)\n      : await restoreSessionDecision(session, batch, true)')

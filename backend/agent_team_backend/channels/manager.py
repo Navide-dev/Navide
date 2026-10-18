@@ -438,6 +438,7 @@ class ChannelManager:
             for (platform, account), acct in self.store.accounts().items():
                 if acct["enabled"]:
                     await self._start_bot(platform, account)
+        await self._report_lost_kept()
         self.mirror.schedule_sync()
 
     async def stop(self) -> None:
@@ -1261,6 +1262,11 @@ class ChannelManager:
             self._sync_bindings()
         pending = self._pending.get(pane_id)
         is_turn_end = entry.get("event_type") == "turn_complete"
+        if is_turn_end:
+            # A conversation started in the window, not from the chat, is what a later wake resumes.
+            bound = next((b for b in self.store.bindings() if b.pane_id == pane_id), None)
+            if bound is not None:
+                self._spawn(self._remember_wake_target(bound, pane_id))
         text = str(entry.get("text") or "")
         if is_turn_end and text.strip() and pane_id in self._textless \
                 and (pending is None or pending.armed_at is None):
@@ -1585,15 +1591,17 @@ class ChannelManager:
             return
         if pane_id != binding.pane_id:
             self.store.rename_pane(binding.pane_id, pane_id)
-        await self._remember_wake_target(binding, pane_id)
-        kept = self._wake_kept.pop(binding.location().key(), [])
-        if wake_pressed:
-            # A wake button from before the pane came back: it is online, so the kept
-            # messages go in now.
+        self._spawn(self._remember_wake_target(binding, pane_id))
+        key = binding.location().key()
+        if wake_pressed or key in self._wake_kept:
+            # The pane is back (on its own, or a wake button from before it came back): what
+            # was kept for it goes in first, in order.
             lang = prompt_skills.language(await self._ui_settings())
-            await self._reply(msg, wake.text(lang, "already_online"))
-            await self._deliver_kept(kept, binding, pane_id)
-            return
+            if wake_pressed:
+                await self._reply(msg, wake.text(lang, "already_online"))
+            await self._deliver_kept(msg, binding, pane_id, lang)
+            if wake_pressed:
+                return
         # "<@bot> stop" or "@bot /cancel" is the command, addressed to the bot.
         command = quick_menu.strip_mention(msg.text, self._identity(msg))
         if _is_stop_word(command):
@@ -1645,10 +1653,15 @@ class ChannelManager:
             await self._reply(msg, wake.text(lang, "offline_wake_nothing_kept"), buttons=WAKE_BUTTONS)
             return
         key = binding.location().key()
-        kept = [k for k in self._wake_kept.get(key, []) if self._clock() - k[0] < wake.STASH_TTL_S]
+        kept = await self._live_kept(msg, key, lang)
         kept.append((self._clock(), msg))
-        self._wake_kept[key] = kept[-wake.STASH_MAX:]
-        await self._reply(msg, wake.text(lang, "offline_wake"), buttons=WAKE_BUTTONS)
+        if len(kept) > wake.STASH_MAX:
+            dropped, kept = kept[:-wake.STASH_MAX], kept[-wake.STASH_MAX:]
+            await self._reply(msg, wake.text(lang, "not_sent_overflow", max=wake.STASH_MAX, count=len(dropped),
+                                             items=_previews(dropped)))
+        self._set_kept(key, kept)
+        await self._reply(msg, wake.text(lang, "offline_wake", max=wake.STASH_MAX,
+                                         minutes=int(wake.STASH_TTL_S // 60)), buttons=WAKE_BUTTONS)
 
     async def _wake(self, msg: InboundMessage, binding: Binding, lang: str) -> None:
         key = binding.location().key()
@@ -1675,15 +1688,65 @@ class ChannelManager:
             self.store.rename_pane(binding.pane_id, pane_id)
             await self._changed()
         current = self._binding_for(msg) or binding
-        kept = [k for k in self._wake_kept.pop(key, []) if self._clock() - k[0] < wake.STASH_TTL_S]
+        kept = await self._live_kept(msg, key, lang)
         await self._reply(msg, wake.text(lang, "woke_sent", count=len(kept)) if kept else wake.text(lang, "woke"))
-        await self._deliver_kept(kept, current, pane_id)
+        await self._deliver_kept(msg, current, pane_id, lang)
 
-    async def _deliver_kept(self, kept: list[tuple[float, InboundMessage]], binding: Binding,
-                            pane_id: str) -> None:
-        for kept_at, kept_msg in kept:
-            if self._clock() - kept_at < wake.STASH_TTL_S:
-                await self._deliver(kept_msg, binding, pane_id)
+    def _set_kept(self, key: str, kept: list[tuple[float, InboundMessage]]) -> None:
+        """Keep ``kept`` for ``key`` (none: forget it), with previews saved so a restart can say
+        which were lost."""
+        if kept:
+            self._wake_kept[key] = kept
+        else:
+            self._wake_kept.pop(key, None)
+        try:
+            saved = self.store.kept_previews()
+            if kept:
+                saved[key] = [_preview(m) for _, m in kept]
+            else:
+                saved.pop(key, None)
+            self.store.set_kept_previews(saved)
+        except Exception as exc:  # noqa: BLE001 — the messages are still kept in memory
+            log.warning("channels: saving the kept messages of %s failed: %s", key, exc)
+
+    async def _live_kept(self, msg: InboundMessage, key: str, lang: str) -> list[tuple[float, InboundMessage]]:
+        """What is kept for ``key`` and still within its TTL; the chat is told which expired."""
+        kept = list(self._wake_kept.get(key, []))
+        expired = [k for k in kept if self._clock() - k[0] >= wake.STASH_TTL_S]
+        if expired:
+            kept = [k for k in kept if k not in expired]
+            self._set_kept(key, kept)
+            await self._reply(msg, wake.text(lang, "not_sent_expired", minutes=int(wake.STASH_TTL_S // 60),
+                                             count=len(expired), items=_previews(expired)))
+        return kept
+
+    async def _deliver_kept(self, msg: InboundMessage, binding: Binding, pane_id: str, lang: str) -> None:
+        """Send in, in order, what was kept for the binding while its pane was not online."""
+        key = binding.location().key()
+        kept = await self._live_kept(msg, key, lang)
+        self._set_kept(key, [])
+        for _kept_at, kept_msg in kept:
+            await self._deliver(kept_msg, binding, pane_id)
+
+    async def _report_lost_kept(self) -> None:
+        """Messages kept for a wake when the backend last stopped are gone: say which."""
+        try:
+            lost = self.store.kept_previews()
+            self.store.set_kept_previews({})
+        except Exception as exc:  # noqa: BLE001
+            log.warning("channels: reading the kept messages from before the restart failed: %s", exc)
+            return
+        if not lost:
+            return
+        lang = prompt_skills.language(await self._ui_settings())
+        for b in self.store.bindings():
+            previews = lost.get(b.location().key())
+            adapter = self._adapters.get((b.platform, b.account))
+            if not previews or adapter is None:
+                continue
+            text = wake.text(lang, "not_sent_restart", count=len(previews), items=wake.quoted(previews))
+            loc = b.location()
+            self._enqueue(loc.key(), lambda adapter=adapter, loc=loc, text=text: self._notice(adapter, loc, text))
 
     async def _resolve_after_startup(self, pane_id: str) -> str:
         """The pane's current id; during the startup grace an unknown pane is waited for."""
@@ -1692,9 +1755,6 @@ class ChannelManager:
             await asyncio.sleep(STARTUP_POLL_S)
             current = self._seams.resolve_pane(pane_id)
         return current
-
-    async def _offline_text(self) -> str:
-        return wake.text(prompt_skills.language(await self._ui_settings()), "offline")
 
     async def _debounced_deliver(self, msg: InboundMessage, binding: Binding, pane_id: str) -> None:
         if DEBOUNCE_S <= 0:
@@ -3106,6 +3166,14 @@ def _strip_controls(text: str, keep: str = "\t") -> str:
     return "".join(
         ch if ch in keep or unicodedata.category(ch) != "Cc" else (" " if ch in "\t\n\r" else "")
         for ch in text)
+
+
+def _preview(msg: InboundMessage) -> str:
+    return wake.preview(msg.text) or "📎"
+
+
+def _previews(kept: list[tuple[float, InboundMessage]]) -> str:
+    return wake.quoted([_preview(m) for _, m in kept])
 
 
 def _typed_hint(buttons: list[tuple[str, str]]) -> str:

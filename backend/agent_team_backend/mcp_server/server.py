@@ -1833,6 +1833,9 @@ async def _open_placeholder(entry: Any, *, require_resume: bool = False) -> dict
         "realized": True,
         "reason": outcome.get("reason"),
         "pane": agent_messaging.current(entry.pane_id) or entry,
+        # The session the window launched the pane on ("" = a fresh one; None = a window
+        # that does not say). A caller that must have the saved conversation checks this.
+        "launched_session_id": outcome.get("launchedSessionId"),
     }
 
 

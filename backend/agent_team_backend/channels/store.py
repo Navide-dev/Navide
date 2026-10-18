@@ -18,6 +18,8 @@ from .base import Location
 COMPONENT = "channels"
 KV_ENABLED = "channels.enabled"
 KV_SHARE_OPEN_NOTIFY = "channels.share_open_notify"
+# location key -> previews of the messages kept for a wake, so a restart can say which were lost
+KV_WAKE_KEPT = "channels.wake_kept"
 
 
 def _v1(cur: sqlite3.Cursor) -> None:
@@ -208,6 +210,14 @@ class ChannelStore:
 
     def set_share_open_notify(self, enabled: bool) -> None:
         self._db.kv_set(KV_SHARE_OPEN_NOTIFY, bool(enabled), now=int(time.time()))
+
+    def kept_previews(self) -> dict[str, list[str]]:
+        kept = self._db.kv_get(KV_WAKE_KEPT, {})
+        return {str(k): [str(p) for p in v] for k, v in kept.items() if isinstance(v, list)} \
+            if isinstance(kept, dict) else {}
+
+    def set_kept_previews(self, kept: dict[str, list[str]]) -> None:
+        self._db.kv_set(KV_WAKE_KEPT, kept, now=int(time.time()))
 
     # --- accounts -------------------------------------------------------------
 

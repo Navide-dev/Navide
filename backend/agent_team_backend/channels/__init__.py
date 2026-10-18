@@ -17,8 +17,9 @@ from .manager import ChannelManager, Seams
 
 log = logging.getLogger(__name__)
 
-# How long a woken workspace's window gets to register the pane after it answers.
-WAKE_PANE_WAIT_S = 10.0
+# How long a woken workspace's window gets to register the pane after it answers. Past it the
+# wake is refused: opening another pane onto the session could run two CLIs on one conversation.
+WAKE_PANE_WAIT_S = 30.0
 WAKE_PANE_POLL_S = 0.5
 
 _manager: ChannelManager | None = None
@@ -276,6 +277,10 @@ def _host_ctx() -> Any:
     return SimpleNamespace(request_context=SimpleNamespace(request=SimpleNamespace(query_params=params)))
 
 
+# The renderer's resume preference (RESUME_BEHAVIOR_SETTING_KEY in lib/resumeBehavior.ts).
+RESUME_BEHAVIOR_KEY = "agentTeam.resumeBehavior"
+
+
 def _wake_record(workspace_path: str, session_id: str) -> Any | None:
     """The newest pane record of the workspace that held this conversation, or None; None
     too when that pane was closed (a close is the user's word, even if its unbind was lost)."""
@@ -311,10 +316,12 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     """Bring a pane that is not online back onto its own conversation (the chat's wake).
 
     Refused before anything opens, with ``started`` False: no Navide window, no record of
-    the conversation, a conversation the CLI cannot resume, or a CLI out of quota (the
-    cached reading only). Then the workspace's window is opened if needed and the pane is
-    opened in place, or, when the window no longer holds it, a pane is opened onto the same
-    session. Never a fresh conversation: the window is asked to refuse one."""
+    the conversation, a conversation the CLI cannot resume, a CLI out of quota (the cached
+    reading only), or Navide set never to resume (opening the window would start every pane
+    of the workspace fresh). Then the workspace's window is opened if needed and the pane is
+    opened in place onto that same session. It succeeds only when the window reports the
+    pane was launched on exactly ``session_id``; a pane the window does not bring back is
+    refused, never opened a second time."""
     from .. import app, quota_failover
     from ..mcp_server import server as mcp
 
@@ -329,6 +336,9 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
         return {"ok": False, "code": str(refusal.get("error_code") or "no-record"), "started": False}
     if quota_failover.snapshot_exhausted(await mcp._cached_usage_snapshot(agent_key)):
         return {"ok": False, "code": "quota", "agent": agent_key, "started": False}
+    settings = await asyncio.to_thread(app.ui_settings_store.get)
+    if (settings or {}).get(RESUME_BEHAVIOR_KEY) == "never":
+        return {"ok": False, "code": "fresh-refused", "started": False}
     if not await mcp._probe_window(workspace_path, mcp._WINDOW_PROBE_TIMEOUT_S):
         opened = await mcp.workspace_open(workspace_path, _host_ctx())
         if not opened.get("ok") or not opened.get("ready"):
@@ -339,69 +349,15 @@ async def wake_pane(pane_id: str, workspace_path: str, session_id: str) -> dict[
     while entry is None and loop.time() < deadline:
         await asyncio.sleep(WAKE_PANE_POLL_S)
         entry = _registered_pane(pane_id, workspace_path, session_id)
-    if entry is not None:
-        if entry.realized:
-            return {"ok": True, "pane_id": entry.pane_id}
-        opened = await mcp._open_placeholder(entry, require_resume=True)
-        if not opened["ok"]:
-            return {"ok": False, "code": str(opened.get("reason") or ""), "started": True}
-        return {"ok": True, "pane_id": opened["pane"].pane_id}
-    name = (getattr(record, "custom_name", "") or getattr(record, "auto_name", "") or agent_key).strip()
-    spawned = await mcp.cli_open_agent(agent_key, name, "", _host_ctx(),
-                                       workspace_path=workspace_path, session_id=session_id)
-    if not spawned.get("ok") or not spawned.get("pane_id"):
-        return {"ok": False, "code": str(spawned.get("error_code") or "open-failed"), "started": True,
-                "detail": str(spawned.get("error") or "")}
-    return {"ok": True, "pane_id": str(spawned["pane_id"])}
-
-
-async def start() -> None:
-    """Load channel config and start enabled adapters. Never raises into the lifespan."""
-    global _manager, _start_task
-    from .. import agent_messaging, app
-    from .store import ChannelStore
-
-    if _manager is not None:
-        return
-    try:
-        manager = ChannelManager(ChannelStore(app.database), default_seams())
-        _manager = manager
-        app.pane_activity_listeners.append(manager.on_pane_activity)
-        app.pane_prompt_listeners.append(manager.mirror.on_local_prompt)
-        agent_messaging.pane_listeners.append(manager.mirror.on_registry)
-        agent_messaging.message_row_listeners.append(manager.mirror.on_message_rows)
-        # Keychain reads can take seconds; adapters come up without holding the lifespan.
-        _start_task = asyncio.create_task(manager.start(), name="channels-start")
-        _start_task.add_done_callback(_log_start_failure)
-    except Exception:  # noqa: BLE001 — chat channels must never block startup
-        log.exception("channels: start failed")
-
-
-def _log_start_failure(task: asyncio.Task[None]) -> None:
-    if not task.cancelled() and task.exception() is not None:
-        log.error("channels: start failed", exc_info=task.exception())
-
-
-async def stop() -> None:
-    global _manager
-    from .. import app
-
-    manager, _manager = _manager, None
-    if manager is None:
-        return
-    from .. import agent_messaging
-
-    for registry, hook in (
-        (app.pane_activity_listeners, manager.on_pane_activity),
-        (app.pane_prompt_listeners, manager.mirror.on_local_prompt),
-        (agent_messaging.pane_listeners, manager.mirror.on_registry),
-        (agent_messaging.message_row_listeners, manager.mirror.on_message_rows),
-    ):
-        try:
-            registry.remove(hook)
-        except ValueError:
-            pass
-    try:
-        await manager.stop()
-    except Exception:  # noqa: BLE001
-        log.exception("channels: stop failed")
+    if entry is None:
+        return {"ok": False, "code": "pane-not-restored", "started": True}
+    # Asked even when it is already open: the window's own restore may have opened it fresh,
+    # and only the window knows which session it launched.
+    opened = await mcp._open_placeholder(entry, require_resume=True)
+    if not opened["ok"]:
+        return {"ok": False, "code": str(opened.get("reason") or ""), "started": True}
+    if opened.get("reason") == "fresh":
+        return {"ok": False, "code": "fresh-refused", "started": True}
+    if opened.get("launched_session_id") != session_id:
+        return {"ok": False, "code": "session-mismatch", "started": True}
+    return {"ok": True, "pane_id": opened["pane"].pane_id}

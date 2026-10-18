@@ -280,6 +280,7 @@ import {
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
+import { joinedRealizeOutcome, paneOpenAnswer } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
@@ -1801,6 +1802,9 @@ interface ActivePane {
    *  path may inject on the user's behalf. Cleared by the first injection or by
    *  agent activity. Not persisted: a restart re-derives it from the restore. */
   resumeContinueAvailable?: boolean
+  /** Runtime-only: the session a restore launched this pane on ('' = a fresh one).
+   *  ui.pane.open reports it so a caller that needs the saved conversation can check. */
+  launchedSessionId?: string
   /** Cold-restore metadata retained until the placeholder is explicitly opened. */
   deferredRestore?: DeferredRestoreMetadata
 }
@@ -10160,10 +10164,15 @@ registerCommand('ui.pane.open', async (args) => {
   if (!paneId) throw new Error(`ui.pane.open requires ${PANE_ID_HINT}`)
   const pane = panes.value.find((p) => p.id === paneId)
   if (!pane) throw new Error(`unknown pane ${paneId}`)
-  if (pane.realized) return { realized: true, reason: 'already-open', paneId }
-  const reason = await realizeRestoredPane(paneId, false, { explicit: true, requireResume: requireResume === true })
+  const required = requireResume === true
+  if (pane.realized) {
+    return paneOpenAnswer({ paneId, reason: 'already-open', realized: true, requireResume: required,
+      launchedSessionId: pane.launchedSessionId })
+  }
+  const reason = await realizeRestoredPane(paneId, false, { explicit: true, requireResume: required })
   const opened = panes.value.find((p) => p.id === paneId || p.formerPaneIds?.includes(paneId))
-  return { realized: opened?.realized === true, reason, paneId: opened?.id ?? paneId }
+  return paneOpenAnswer({ paneId: opened?.id ?? paneId, reason, realized: opened?.realized === true,
+    requireResume: required, launchedSessionId: opened?.launchedSessionId })
 })
 // The rung between "ask it to stop" (a message, which waits for the turn to
 // end) and ui.pane.close (which takes the pane and its PTY away). Like close
@@ -12358,7 +12367,7 @@ async function realizeRestoredPane(
   opts?: { explicit?: boolean; requireResume?: boolean },
 ): Promise<RealizeOutcome> {
   const pending = restoringPanePromises.get(paneId)
-  if (pending) return pending
+  if (pending) return pending.then((outcome) => joinedRealizeOutcome(outcome, opts?.requireResume === true))
   const promise = performRealizeRestoredPane(paneId, aggregateReconnect, opts)
   restoringPanePromises.set(paneId, promise)
   void promise.then(
@@ -12450,7 +12459,8 @@ async function performRealizeRestoredPane(
       saved.agent, sessionId, canResume, looksLikeResumeCommand(saved.agent, saved.command || ''),
     )
     let reconnectId = ''
-    if (ghostConfirmed && supportsGhostReconnect(saved.agent)) {
+    // A chat's wake asks for the saved conversation itself: never repoint it to another one.
+    if (ghostConfirmed && supportsGhostReconnect(saved.agent) && !opts?.requireResume) {
       reconnectId = await resolveReconnectForPane(saved, batch.workspacePath, batch.savedClaims)
       if (!deferredPaneStillCurrent(paneId, deferred)) return 'superseded'
     }
@@ -12518,6 +12528,8 @@ async function performRealizeRestoredPane(
     // was dropped before it could be persisted). The placeholder stands.
     if (!restored) return 'error'
     const { paneId: newId } = restored
+    const launched = panes.value.find((p) => p.id === newId)
+    if (launched) launched.launchedSessionId = isResume ? effectiveResumeId : ''
     // A resumed CLI has its transcript back but is parked at the prompt, and the
     // restore path deliberately injects nothing. Offer the one-click continue.
     if (isResume) {

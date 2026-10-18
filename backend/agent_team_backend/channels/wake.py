@@ -11,11 +11,15 @@ COOLDOWN_S = 300.0  # between two wakes of one binding
 DAILY_MAX = 10  # wakes of one binding per local day
 STASH_MAX = 20  # messages kept for the wake to deliver, per binding
 STASH_TTL_S = 1800.0  # a kept message older than this is not delivered by a later wake
+PREVIEW_CHARS = 40  # of a message the chat is told was not sent
 
 STRINGS: dict[str, dict[str, str]] = {
     "zh-TW": {
         "offline": "⚠️ pane 目前不在線上：它所在的 Navide 視窗沒有開著，或 pane 已關閉",
-        "offline_wake": "⚠️ pane 目前不在線上。喚醒會接回原本的對話，這則訊息會在喚醒後自動送進去",
+        "offline_wake": "⚠️ pane 目前不在線上。喚醒會接回原本的對話，這則訊息會在喚醒後或 pane 回到線上時自動送進去（最多暫存 {max} 則、{minutes} 分鐘內有效；Navide 重啟會清掉，沒送出的會再告訴你）",
+        "not_sent_overflow": "⚠️ 暫存已滿 {max} 則，最舊的 {count} 則沒有送進去：{items}。請重送",
+        "not_sent_expired": "⚠️ 這 {count} 則暫存超過 {minutes} 分鐘已失效，沒有送進去：{items}。請重送",
+        "not_sent_restart": "⚠️ Navide 重啟了，暫存的這 {count} 則沒有送進去：{items}。請重送",
         "offline_wake_nothing_kept": "⚠️ pane 目前不在線上，沒有可以中斷的工作。喚醒會接回原本的對話",
         "no_window": "⚠️ pane 目前不在線上，而且電腦上沒有開著任何 Navide 視窗，無法喚醒。請先在電腦上打開 Navide",
         "waking": "⏳ 喚醒中…",
@@ -33,10 +37,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_unavailable": "對話紀錄已不在電腦上",
         "reason_fresh": "Navide 的接續設定是重新開始，不接回舊對話",
         "reason_window": "Navide 視窗沒有回應",
+        "reason_mismatch": "接回的不是原本那段對話",
+        "reason_not_restored": "Navide 視窗沒有把這個 pane 帶回來",
     },
     "en-US": {
         "offline": "⚠️ The pane is not online: the Navide window it belongs to is not open, or the pane was closed",
-        "offline_wake": "⚠️ The pane is not online. Waking it resumes its own conversation, and this message is sent in once it is awake",
+        "offline_wake": "⚠️ The pane is not online. Waking it resumes its own conversation; this message is sent in once it is awake or back online (up to {max} messages are kept, for {minutes} minutes; a Navide restart clears them, and you are told which were not sent)",
+        "not_sent_overflow": "⚠️ The keep list is full ({max}); the oldest {count} message(s) were not sent: {items}. Please resend",
+        "not_sent_expired": "⚠️ These {count} kept message(s) are older than {minutes} minutes and were not sent: {items}. Please resend",
+        "not_sent_restart": "⚠️ Navide restarted; these {count} kept message(s) were not sent: {items}. Please resend",
         "offline_wake_nothing_kept": "⚠️ The pane is not online, so there is nothing to interrupt. Waking it resumes its own conversation",
         "no_window": "⚠️ The pane is not online and no Navide window is open on the computer, so it cannot be woken. Open Navide on the computer first",
         "waking": "⏳ Waking…",
@@ -54,10 +63,15 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_unavailable": "the conversation is no longer on the computer",
         "reason_fresh": "Navide is set to start fresh instead of resuming",
         "reason_window": "the Navide window did not answer",
+        "reason_mismatch": "the pane came back on a different conversation",
+        "reason_not_restored": "the Navide window did not bring this pane back",
     },
     "ja-JP": {
         "offline": "⚠️ pane は現在オフラインです：所属する Navide ウィンドウが開いていないか、pane が閉じられています",
-        "offline_wake": "⚠️ pane は現在オフラインです。起動すると元の会話に戻り、このメッセージは起動後に自動で送られます",
+        "offline_wake": "⚠️ pane は現在オフラインです。起動すると元の会話に戻り、このメッセージは起動後またはオンライン復帰時に自動で送られます（保留は最大 {max} 件、{minutes} 分間有効。Navide を再起動すると消え、送れなかったものはお知らせします）",
+        "not_sent_overflow": "⚠️ 保留が上限の {max} 件に達したため、古い {count} 件は送られませんでした：{items}。もう一度送ってください",
+        "not_sent_expired": "⚠️ 保留していた {count} 件は {minutes} 分を過ぎたため送られませんでした：{items}。もう一度送ってください",
+        "not_sent_restart": "⚠️ Navide が再起動したため、保留していた {count} 件は送られませんでした：{items}。もう一度送ってください",
         "offline_wake_nothing_kept": "⚠️ pane は現在オフラインのため、中断するものはありません。起動すると元の会話に戻ります",
         "no_window": "⚠️ pane はオフラインで、パソコンで Navide のウィンドウが一つも開いていないため起動できません。先にパソコンで Navide を開いてください",
         "waking": "⏳ 起動中…",
@@ -75,6 +89,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "reason_unavailable": "会話の記録がもうパソコンにありません",
         "reason_fresh": "Navide の設定が再開せずに新しく始める設定になっています",
         "reason_window": "Navide のウィンドウが応答しませんでした",
+        "reason_mismatch": "別の会話で戻ってきました",
+        "reason_not_restored": "Navide のウィンドウがこの pane を戻しませんでした",
     },
 }
 DEFAULT_LANGUAGE = "zh-TW"
@@ -89,7 +105,10 @@ UNRESUMABLE_REASONS = {
     "resume-unavailable": "reason_unavailable",
     "no-session-support": "reason_no_resume",
     "fresh-refused": "reason_fresh",
+    "session-mismatch": "reason_mismatch",
 }
+# A wake that failed for another known reason -> the reason shown.
+FAILURE_REASONS = {"pane-not-restored": "reason_not_restored"}
 
 
 def text(lang: str, key: str, **kw: Any) -> str:
@@ -105,8 +124,18 @@ def outcome_text(lang: str, result: dict[str, Any]) -> str:
         return text(lang, "quota", agent=str(result.get("agent") or "CLI"))
     if code in UNRESUMABLE_REASONS:
         return text(lang, "unresumable", reason=text(lang, UNRESUMABLE_REASONS[code]))
-    reason = str(result.get("detail") or "") or text(lang, "reason_window")
+    reason = text(lang, FAILURE_REASONS.get(code, "reason_window"))
     return text(lang, "failed", reason=reason)
+
+
+def preview(body: str) -> str:
+    """A short single-line quote of a message, for telling the chat it was not sent."""
+    line = " ".join((body or "").split())
+    return line if len(line) <= PREVIEW_CHARS else line[:PREVIEW_CHARS - 1] + "…"
+
+
+def quoted(previews: list[str]) -> str:
+    return "、".join(f"「{p}」" for p in previews)
 
 
 @dataclass
