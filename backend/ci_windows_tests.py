@@ -41,7 +41,8 @@ DONE = "ci-windows-tests.done"
 # By 2026-09-25 the whole suite took 1109-1880 s on one runner depending on the
 # host (8400 tests), so CI splits it with `--shard K/N` rather than stretching
 # the cap again (three shards since 2026-10-12, when one half hit the cap;
-# four since later that day).
+# four since later that day; five since 2026-10-19, when a slow runner took a
+# shard to 1627 s of pytest, 1742 s on this clock).
 CAP_SECONDS = 30 * 60
 REPORT_EVERY = 60
 RESULT_RE = re.compile(r" (PASSED|FAILED|SKIPPED|ERROR|XFAIL|XPASS)")
@@ -266,6 +267,10 @@ def main() -> int:
         peers = _describe(_job_pids(job))
         vm = psutil.virtual_memory()
         print(f"--- {elapsed}s: {_progress()}\n    in job: {peers}\n    vm: {vm.percent}% of {vm.total >> 20} MiB used, cpu {psutil.cpu_percent()}%, {len(psutil.pids())} processes\n    runner: {_runner_procs()}", flush=True)
+    if rc is None:
+        # The loop leaves at the cap after a sleep, without polling: pytest
+        # may have ended during that last interval, and its exit decides.
+        rc = child.poll()
 
     survivors = [pid for pid in _job_pids(job) if pid != os.getpid()]
     print(f"--- pytest exit: {rc if rc is not None else 'still running at cap'}")

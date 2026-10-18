@@ -487,6 +487,7 @@ _ISLAND_RUNS = {
 }
 
 
+@pytest.mark.serial
 @pytest.mark.parametrize("name", sorted(_ISLAND_RUNS))
 def test_many_plan_meta_islands_scan_in_linear_time(name: str) -> None:
     """B8-1/B8-2: finding the plan-meta islands rescanned to the end of the
