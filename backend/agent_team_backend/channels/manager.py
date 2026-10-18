@@ -2482,7 +2482,9 @@ class ChannelManager:
             while True:
                 verdict = await self._seams.await_verdict(msg_key, VERDICT_POLL_S)
                 status = verdict.get("status")
-                if status == "delivered":
+                # "unconfirmed" was typed and submitted, only not seen taken:
+                # the reply, if any, is the pane's next turn — same as delivered.
+                if status in ("delivered", "unconfirmed"):
                     self._arm(pane_id, pending)
                     return
                 if status in ("failed", "cancelled"):
@@ -2500,6 +2502,10 @@ class ChannelManager:
                         await self._notice(adapter, pending.loc, f"⚠️ 訊息已排隊超過 {int(age // 60)} 分鐘（{hold or 'queued'}）")
                 if age >= VERDICT_WATCH_MAX_S or verdict.get("unknown"):
                     return
+                # await_verdict only parks while the status is "queued"; any
+                # other status comes straight back, and the loop must not spin.
+                if status != "queued":
+                    await asyncio.sleep(VERDICT_POLL_S)
         finally:
             q = self._queued.get(pane_id)
             if q is not None:
