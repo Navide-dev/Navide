@@ -32,6 +32,12 @@ import { isValidManifestV2PluginId } from './pluginManifestV2'
 import { PluginActivationSelector } from './pluginActivationSelector'
 import type { InstalledManifest } from './pluginManifest'
 import { PLUGIN_QUARANTINE_MARKER } from './pluginInstallPaths'
+import {
+  verifyLocalPackage,
+  type PluginLocalTrustContext,
+  type PluginLocalTrustDecision,
+} from './pluginLocalTrust'
+import type { LocalPluginSource } from '../../shared/pluginSource'
 
 export const REGISTRY_RECEIPT_NAME = '.navide-registry-receipt.json'
 export const REGISTRY_ARTIFACT_NAME = '.navide-package.zip'
@@ -270,6 +276,28 @@ export function verifyInstalledRegistryPackage(
       reason: error instanceof Error ? error.message : String(error),
     }
   }
+}
+
+export type InstalledPackageTrustSource =
+  | { provenance: 'official-registry'; trust: InstalledRegistryTrustContext }
+  | { source: LocalPluginSource; recordPath: string; trust: PluginLocalTrustContext }
+
+/**
+ * Route an installed package to the verifier for its source. A Registry
+ * package goes through {@link verifyInstalledRegistryPackage} unchanged,
+ * including its Registry authority rule. A local package is checked against
+ * the user's consent record instead, so it is never quarantined for the
+ * Registry authority and never quarantines a Marketplace install.
+ */
+export function verifyInstalledPackage(
+  pluginDir: string,
+  expectedPackageId: string,
+  source: InstalledPackageTrustSource
+): InstalledTrustDecision | PluginLocalTrustDecision {
+  if ('provenance' in source) {
+    return verifyInstalledRegistryPackage(pluginDir, expectedPackageId, source.trust)
+  }
+  return verifyLocalPackage(pluginDir, expectedPackageId, source.recordPath, source.trust, source.source)
 }
 
 function hasCoherentRegistryEvidence(pluginDir: string, expectedPackageId: string): boolean {

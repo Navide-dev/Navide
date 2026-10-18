@@ -10,6 +10,7 @@ type DeepLinkApi = import('../../shared/deepLink').DeepLinkApi
 type ManifestPermissionsSummary = import('../../shared/executionPolicy').ManifestPermissionsSummary
 type PackageVersionGrantSummary = import('../../shared/executionPolicy').PackageVersionGrantSummary
 type LegacyPlansPreferenceProjection = import('../../shared/plansPreferences').LegacyPlansPreferenceProjection
+type PluginSource = import('../../shared/pluginSource').PluginSource
 type PluginManifestDisclosure = import('../../shared/pluginDisclosure').ManifestDisclosure
 type PluginDisclosureDiff = import('../../shared/pluginDisclosure').DisclosureDiff
 type PluginRegistryDisclosureFacts = import('../../shared/pluginDisclosure').RegistryDisclosureFacts
@@ -427,6 +428,8 @@ declare global {
           kind: 'custom'
           location: 'top' | 'bottom' | 'right' | 'left' | 'main' | 'window'
           manifestOrder: number
+          /** Source and review state of the package that contributes this view. */
+          source?: PluginSource
         }>>
         hostThemeChanged: (theme: string) => void
         prepareContribution: (args: {
