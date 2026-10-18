@@ -74,9 +74,12 @@ describe('PluginSourceBadge (K2)', () => {
     }
   })
 
-  it('prints a test build expiry as YYYY-MM-DD', () => {
+  it('prints a test build expiry as YYYY-MM-DD, and says when it is unknown', () => {
     i18n.global.locale.value = 'zh-TW'
     expect(render({ source: 'testplace', expiresAt: '2026-12-31T08:00:00Z' }).text()).toBe('測試版，沒有人工審核，2026-12-31 到期')
+    for (const expiresAt of [undefined, null, '']) {
+      expect(render({ source: 'testplace', expiresAt }).text()).toBe('測試版，沒有人工審核，到期日不明')
+    }
   })
 })
 

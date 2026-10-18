@@ -11208,6 +11208,7 @@
       "marketplace": "審査済み",
       "prerelease": "プレリリース版（審査済み）",
       "testplace": "テスト版。人による審査なし。{date} に期限切れ",
+      "testplaceNoExpiry": "テスト版。人による審査なし。期限不明",
       "local-signed": "ローカルファイル。発行者の署名あり。このバージョンは Navide の審査を受けていません",
       "local-unsigned": "ローカルファイル。Navide の審査なし、署名なし",
       "developer-unpacked": "開発者フォルダー。内容はいつでも変わる可能性があります",
