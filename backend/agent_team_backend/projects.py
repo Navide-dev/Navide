@@ -1680,6 +1680,26 @@ class ProjectStore:
         )
         return project
 
+    def reset_pipeline(self, workspace_path: str) -> Project | None:
+        """Return the workspace's last run to idle (pipeline_reset).
+
+        Only the state moves: the run's stages, task, log file and run
+        directory stay as history. Without this an aborted run outlived reset
+        and restart and kept answering pipeline_status (#417). None when the
+        workspace has no project yet."""
+        if self.peek(workspace_path) is None:
+            return None
+        project = self.load_or_create(workspace_path)
+        previous = project.state
+        project.state = "idle"
+        self.save(project)
+        self.append_event(
+            workspace_path,
+            {"event": "pipeline_reset", "previous_state": previous, "project_id": project.id},
+            log_file_name=project.log_file_name,
+        )
+        return project
+
     def record_pane_event(
         self,
         workspace_path: str,
