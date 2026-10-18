@@ -104,17 +104,23 @@ def _admin_token_configured(settings: Settings) -> bool:
     return bool(settings.admin_token and settings.admin_token.strip())
 
 
-def _require_admin_token(settings: Settings, presented: str | None) -> None:
-    """Fail closed: no configured admin token refuses every X-Admin-Token call."""
+def _require_admin_token(
+    settings: Settings, presented: str | None, *, honor_open_admin: bool = True
+) -> None:
+    """Fail closed: no configured admin token refuses every X-Admin-Token call.
+
+    `honor_open_admin=False` keeps an endpoint closed even under the dev
+    `allow_open_admin` opt-in (the review/blocklist JSON API never had one).
+    """
     if not _admin_token_configured(settings):
-        if settings.allow_open_admin:
+        if honor_open_admin and settings.allow_open_admin:
             return
         _log.warning(
             "refused admin request: REGISTRY_ADMIN_TOKEN is not set "
             "(set it, or REGISTRY_ALLOW_OPEN_ADMIN=1 for a local dev registry)"
         )
         raise HTTPException(
-            status_code=403,
+            status_code=401,
             detail="admin endpoints are disabled: REGISTRY_ADMIN_TOKEN is not set",
         )
     if presented is None or not cloud_auth.constant_time_equal(
