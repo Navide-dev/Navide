@@ -88,6 +88,13 @@ describe('performRealizeRestoredPane', () => {
     expect(body.slice(guard, body.indexOf('placeholder.restoring = true'))).not.toContain('await ')
   })
 
+  it('settles a wake claim with the outcome, and logs a refusal', () => {
+    expect(fn('realizeRestoredPane')).toContain('if (opts?.requireResume) wakeClaims.settle(paneId, outcome)')
+    const body = fn('performRealizeRestoredPane')
+    expect(body).toContain("code: 'restore.sessionOpenElsewhere'")
+    expect(body).toContain('wakeClaims.claim(paneId, sessionKey)')
+  })
+
   it('marks the panes a cold restore has queued, until each one is done', () => {
     const body = fn('advanceRestoreSession')
     expect(body).toContain('for (const id of ids) scheduledRestoreIds.add(id)')

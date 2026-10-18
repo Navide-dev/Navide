@@ -56,3 +56,26 @@ export function sessionHeldElsewhere(
   return holders.some((h) => h.id !== paneId && h.agentKey === agentKey && h.sessionId === sessionId
     && (h.realized || h.restoring || scheduled.has(h.id)))
 }
+
+/** Conversations a chat's wake brought back, which a later restore must not open a second
+ *  time. A wake claims its session when it starts and keeps it only when it opened; any
+ *  other outcome lets restores of that session through again, as they are on main. */
+export class WakeClaims {
+  private readonly held = new Set<string>()
+  private readonly byPane = new Map<string, string>()
+
+  claim(paneId: string, sessionKey: string): void {
+    this.held.add(sessionKey)
+    this.byPane.set(paneId, sessionKey)
+  }
+
+  settle(paneId: string, outcome: string): void {
+    const sessionKey = this.byPane.get(paneId)
+    this.byPane.delete(paneId)
+    if (sessionKey !== undefined && !RESUMED_OUTCOMES.has(outcome)) this.held.delete(sessionKey)
+  }
+
+  holds(sessionKey: string): boolean {
+    return this.held.has(sessionKey)
+  }
+}

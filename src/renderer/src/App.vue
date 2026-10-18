@@ -283,7 +283,7 @@ import {
   type RestoreSessionTrigger,
   type WorkspaceRestoreSession,
 } from './lib/resumeBehavior'
-import { joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
+import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere, type SessionHolder } from './lib/paneOpenAnswer'
 import { flushSettingsOnExit, initSettingsBackend, onSettingsChanged, settingsGet, settingsRemove, settingsSet } from '@navide/plugin-ui/shared'
 import { cliPermissionKey, parseCliPermissionMode, skipPermissionFlagFor } from '@navide/plugin-shell'
 import { chooseLaunchCommand, cliCommandKey, cliEnvKey, spawnEnvOverride, type LaunchCommandSource } from '@navide/plugin-shell'
@@ -12268,7 +12268,7 @@ const restoringPanePromises = new Map<string, Promise<RealizeOutcome>>()
 /** Placeholders a cold restore has queued and not finished yet (advanceRestoreSession). */
 const scheduledRestoreIds = new Set<string>()
 /** `${agent}:${session}` of conversations a chat's wake (requireResume) has opened. */
-const wakeHeldSessions = new Set<string>()
+const wakeClaims = new WakeClaims()
 
 function sessionHolders(): SessionHolder[] {
   return panes.value.map((p) => {
@@ -12489,11 +12489,13 @@ async function realizeRestoredPane(
   const promise = performRealizeRestoredPane(paneId, aggregateReconnect, opts)
   restoringPanePromises.set(paneId, promise)
   void promise.then(
-    () => {
+    (outcome) => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, outcome)
     },
     () => {
       if (restoringPanePromises.get(paneId) === promise) restoringPanePromises.delete(paneId)
+      if (opts?.requireResume) wakeClaims.settle(paneId, 'error')
     },
   )
   return promise
@@ -12548,10 +12550,16 @@ async function performRealizeRestoredPane(
   const heldElsewhere = (scheduled: ReadonlySet<string>) =>
     sessionHeldElsewhere(sessionHolders(), paneId, saved.agent, sessionId, scheduled)
   if (opts?.requireResume ? heldElsewhere(scheduledRestoreIds)
-    : wakeHeldSessions.has(sessionKey) && heldElsewhere(new Set())) {
+    : wakeClaims.holds(sessionKey) && heldElsewhere(new Set())) {
+    recordDiagnostic({
+      level: 'warn',
+      code: 'restore.sessionOpenElsewhere',
+      message: `${saved.agent} session ${sessionId} is already open in another pane; not opening it twice`,
+      paneId,
+    })
     return 'session-open-elsewhere'
   }
-  if (opts?.requireResume && sessionId) wakeHeldSessions.add(sessionKey)
+  if (opts?.requireResume && sessionId) wakeClaims.claim(paneId, sessionKey)
   placeholder.restoring = true
   syncViews()
 

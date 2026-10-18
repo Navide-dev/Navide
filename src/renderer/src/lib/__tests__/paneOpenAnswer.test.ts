@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere } from '../paneOpenAnswer'
+import { WakeClaims, joinedRealizeOutcome, paneOpenAnswer, sessionHeldElsewhere } from '../paneOpenAnswer'
 
 describe('joinedRealizeOutcome', () => {
   it('turns a restore that opened fresh into a refusal for a caller that requires the saved conversation', () => {
@@ -61,5 +61,34 @@ describe('sessionHeldElsewhere', () => {
     expect(sessionHeldElsewhere([placeholder, other({})], 'bound', 'claude', 'sess-1', new Set())).toBe(false)
     expect(sessionHeldElsewhere([placeholder, other({ realized: true, agentKey: 'codex' })], 'bound', 'claude', 'sess-1', new Set())).toBe(false)
     expect(sessionHeldElsewhere([placeholder, other({ realized: true, sessionId: '' })], 'bound', 'claude', '', new Set())).toBe(false)
+  })
+})
+
+describe('WakeClaims', () => {
+  // Review LOW-12: only a wake that actually brought the conversation back may keep a later
+  // restore off it; a failed wake leaves restores exactly as on main.
+  it('lets an ordinary restore through again after a wake that did not open', () => {
+    for (const outcome of ['fresh-refused', 'resume-unavailable', 'session-unavailable', 'session-open-elsewhere',
+      'error', 'cancelled', 'superseded']) {
+      const claims = new WakeClaims()
+      claims.claim('bound', 'claude:sess-1')
+      claims.settle('bound', outcome)
+      expect(claims.holds('claude:sess-1')).toBe(false)
+    }
+  })
+
+  it('keeps the claim of a wake that opened the conversation', () => {
+    const claims = new WakeClaims()
+    claims.claim('bound', 'claude:sess-1')
+    claims.settle('bound', 'opened')
+    expect(claims.holds('claude:sess-1')).toBe(true)
+  })
+
+  it('does not drop a claim another wake made for the same conversation', () => {
+    const claims = new WakeClaims()
+    claims.claim('first', 'claude:sess-1')
+    claims.settle('first', 'opened')
+    claims.settle('second', 'session-open-elsewhere') // refused before it claimed anything
+    expect(claims.holds('claude:sess-1')).toBe(true)
   })
 })

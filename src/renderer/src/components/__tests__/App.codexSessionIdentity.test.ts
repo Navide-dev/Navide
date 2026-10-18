@@ -9,7 +9,7 @@ import {
 } from '../../platform/plugin-shell/lib/resume-command'
 import { pinFreshSessionAtLaunch, shouldAttemptResume } from '../../lib/sessionHeal'
 import { accountSpawnPin } from '../../lib/accountFollowPanes'
-import { sessionHeldElsewhere } from '../../lib/paneOpenAnswer'
+import { WakeClaims, sessionHeldElsewhere } from '../../lib/paneOpenAnswer'
 
 const source = readFileSync(resolve(process.cwd(), 'src/renderer/src/App.vue'), 'utf8')
 
@@ -100,7 +100,7 @@ function harness() {
     workspaceRestoreSession: () => ({}), explicitRestoreDecision: () => 'fresh',
     // The one-CLI-per-conversation guard (a chat's wake): no other pane holds a session here.
     sessionHeldElsewhere, sessionHolders: () => [],
-    scheduledRestoreIds: new Set<string>(), wakeHeldSessions: new Set<string>(),
+    scheduledRestoreIds: new Set<string>(), wakeClaims: new WakeClaims(),
     deferredPaneStillCurrent: () => true, skipFlagFor: () => '',
     canResumeSession: async () => false, savedHistoryFile: async () => '',
     stripPinnedSessionId: (command: string) => command,
