@@ -785,7 +785,8 @@ def _split(text: str) -> list[list[_Cmd]]:
                 pipelines.append(pipeline)
             pipeline = []
             continue
-        if tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok):
+        # `>|` (noclobber override) is one punctuation token that holds a `|`.
+        if tok == ">|" or (tok and set(tok) <= set("<>&") and ("<" in tok or ">" in tok)):
             if tok.endswith("&"):
                 continue  # >&2 style fd dup; the next token is an fd
             pending_redirect = tok
@@ -1253,6 +1254,9 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
             acc.hit("critical", "disk-write", "dd writes directly to a device")
         else:
             acc.hit("high", "dd", "dd copies raw data")
+        for a in args:
+            if a.startswith("of="):
+                _store_arg(acc, a[3:], ctx)
         return
     if word.startswith("mkfs") or word.startswith("newfs") or word in {"fdisk", "sfdisk", "gpt", "wipefs"}:
         acc.hit("critical", "disk-format", f"{word} formats or repartitions a disk")
@@ -1292,6 +1296,8 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
         acc.hit("critical", "cloud-destroy", f"{word} deletes cloud resources")
         return
     if word in DOWNLOADERS:
+        for a in _download_outputs(word, args):
+            _store_arg(acc, a, ctx)
         _classify_upload(word, args, ctx, acc)
         return
     # Generic: any path-like argument that names a credential store or a
@@ -1303,12 +1309,68 @@ def _classify_command(word: str, argv: list[str], ctx: _Ctx, acc: _Acc, from_std
             path = _resolve(cand, ctx)
             if path:
                 _check_path(acc, path, ctx, write=writes, list_only=list_only, store=False)
-    if writes:
+    if writes or word in _STORE_ONLY_WRITES:
         for a in _store_targets(word, args):
-            for cand in _arg_paths(a):
-                path = _resolve(cand, ctx)
-                if path:
-                    _store_write(acc, path, ctx)
+            _store_arg(acc, a, ctx)
+
+
+#: Commands that change files but grade normal elsewhere: only the plugin
+#: store check reads them, so their grading outside the stores stays as it was.
+_STORE_ONLY_WRITES = {"unlink", "rmdir", "mkdir", "chown", "chgrp", "xattr", "ditto"}
+
+
+def _store_arg(acc: _Acc, arg: str, ctx: _Ctx) -> None:
+    """Plugin store check for one argument. A bare word (``acme.json``) is a
+    path relative to the working directory here too, unlike _arg_paths:
+    after ``cd plugin-local-trust`` it names a trust record, and anywhere
+    outside the stores it changes nothing."""
+    for cand in _arg_paths(arg) or ([arg] if arg and not arg.startswith("-") else []):
+        path = _resolve(cand, ctx)
+        if path:
+            _store_write(acc, path, ctx)
+
+
+def _url_file_name(url: str) -> str:
+    path = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://[^/]*", "", url).split("?", 1)[0].split("#", 1)[0]
+    return posixpath.basename(path) or "index.html"
+
+
+def _download_outputs(word: str, args: list[str]) -> list[str]:
+    """Files a download writes: curl -o/--output, wget -O/--output-document,
+    and otherwise (curl -O, a plain wget) the URL's file name in --output-dir
+    / -P or the working directory. ``-`` is stdout."""
+    curl = word != "wget"
+    files: list[str] = []
+    dirs: list[str] = []
+    remote = not curl
+    i = 0
+    while i < len(args):
+        a, nxt = args[i], (args[i + 1] if i + 1 < len(args) else "")
+        i += 1
+        if a.startswith("--"):
+            key, eq, val = a.partition("=")
+            if key in ("--output", "--output-document", "--output-dir", "--directory-prefix"):
+                if not eq:
+                    val, i = nxt, i + 1
+                (dirs if key in ("--output-dir", "--directory-prefix") else files).append(val)
+            elif key in ("--remote-name", "--remote-name-all"):
+                remote = True
+            continue
+        if not a.startswith("-") or a == "-":
+            continue
+        for j, ch in enumerate(a[1:], 1):
+            if curl and ch == "O":
+                remote = True
+            elif ch == ("o" if curl else "O") or (not curl and ch == "P"):
+                val = a[j + 1:]
+                if not val:
+                    val, i = nxt, i + 1
+                (dirs if ch == "P" else files).append(val)
+                break
+    if files or not remote:
+        return [f for f in files if f and f != "-"]
+    names = [_url_file_name(a) for a in args if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", a)]
+    return [posixpath.join(d, n) for n in names for d in dirs] if dirs else names
 
 
 def _store_targets(word: str, args: list[str]) -> list[str]:
@@ -1317,7 +1379,9 @@ def _store_targets(word: str, args: list[str]) -> list[str]:
     only with -i."""
     if word == "sed":
         return args if _flags(args) & {"-i", "--in-place"} else []
-    if word in {"cp", "install", "rsync", "scp"}:
+    if word == "xattr":
+        return args if _flags(args) & {"-w", "-d", "-c"} else []
+    if word in {"cp", "install", "rsync", "scp", "ditto"}:
         for i, a in enumerate(args):
             if a == "-t" and i + 1 < len(args):
                 return [args[i + 1]]
@@ -1398,6 +1462,15 @@ def _classify_git(args: list[str], ctx: _Ctx, acc: _Acc) -> None:
         return
     sub, rest = args[i], args[i + 1:]
     fl = _flags(rest)
+    if sub == "clone":
+        # The clone's destination (the repository's name when none is given).
+        pos = _positionals(rest)
+        urls = [k for k, p in enumerate(pos) if "://" in p or ":" in p or p.endswith(".git")]
+        if urls:
+            k = urls[0]
+            dest = pos[k + 1] if k + 1 < len(pos) else posixpath.basename(pos[k].rstrip("/")).removesuffix(".git")
+            _store_arg(acc, dest, ctx)
+        return
     if sub == "push":
         pos = _positionals(rest)
         refspecs = pos[1:]
