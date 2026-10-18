@@ -94,3 +94,11 @@ exports[`PluginSourceBadge (K2) > words every source in every locale (badge and 
   },
 }
 `;
+
+exports[`Pre-release source row (K5) > words a pre-release install as reviewed in every locale 1`] = `
+{
+  "en-US": "Source and review Pre-release (reviewed)",
+  "ja-JP": "提供元と審査 プレリリース版（審査済み）",
+  "zh-TW": "來源與審核 預覽版（已審核）",
+}
+`;
