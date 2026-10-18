@@ -2013,10 +2013,61 @@ runs only inside the OS sandbox described in
   view only when a grant for that exact package id and version exists, so a
   Developer Mode v2 view is refused ("package-version capability grant is
   missing") unless a Registry install of the same id and version already left
-  one behind. To run a v2 package in the app, install it from a Registry; a
-  local Registry works (see
+  one behind. To run a v2 package in the app, install it from a file (next
+  item) or from a Registry; a local Registry works (see
   [Publishing to the Navide Marketplace](marketplace-publishing.md)).
   Manifest v1 packages need no grant.
+- **Install from a file** (Settings → Navide Plugins → **Install from .vsix
+  file…**) works in packaged builds too, without Developer Mode. The main
+  process opens its own file dialog over the main window and reads the picked
+  file once; every later step uses those bytes, never the path again. Plugin
+  frames, agents (MCP) and environment variables cannot start or name a file
+  install. The package passes the same ZIP checks as a Registry package (50 MB
+  per entry, 200 MB per archive, no symlinks or special files, no unsafe
+  paths), the Manifest v2 schema, the backend executable rules and the engine
+  check; Manifest v1, extension packs and the `navide.` namespace are refused,
+  and so is a publisher or package id on the root-signed takedown list (even an
+  expired one). The Host fetches the current list from the Registry first;
+  when that fails and no list is stored, the dialog says the takedown check
+  could not be done (the next load still applies a list once one arrives). It has no Registry signature and no Navide review or scan, so
+  the user always consents in a dialog that shows a fixed warning, the
+  self-declared publisher and "not scanned", starts on Cancel and enables its
+  consent button only after an explicit acknowledgement. The package is staged
+  like a Registry candidate and its grant takes effect on **Restart Plugin**;
+  a native backend still asks for its own consent and runs in the same
+  sandbox. A file install never updates automatically. Installing a file over
+  an installed package of the same id (or a Marketplace version over a file
+  install) asks first, and the replacement keeps none of the replaced
+  package's permissions: its capability grant and rollback grant, its native
+  backend consent, every workspace its backend may change files in, its agent
+  tool write approvals and agent tool name priority. The new package cannot
+  read the replaced one's view storage either. When the source changes, the
+  native backend's private data folder and the package's view storage (every
+  version, so a package of the same version on another target never shares
+  it) are moved aside (`<name>@set-aside-<source>-<time>` beside them; never
+  deleted, never overwritten) so the new package starts empty; the question
+  says so, and going back to the Marketplace offers to take that data back,
+  off by default (a local file's data is never offered back: its id is only
+  what the file claims). A failed move stops the replacement with nothing
+  changed; if moving it back fails too, whatever is left in place is set aside
+  and the native backend consent is cleared. Removing the package removes what
+  was set aside with its storage, and with its backend data when the user
+  chooses to delete that. An update within one source keeps both as before.
+  Backend data a removal keeps records its source beside the folder
+  (`<id>@kept-source.json`, owner-only, outside the backend's sandbox): a
+  later install of the same id and source takes it over as before, one of the
+  other source finds it set aside instead. Data a local file kept is never
+  handed on, not even to another local file claiming the same id, and one
+  local file replacing another hands over none either; only a Registry-verified
+  id takes kept data over. Deleting or forging the record takes write access to
+  the user's data folder, the same exposure as the local trust record. Data kept by a release without the
+  record counts as Marketplace data, the only kind that could run a
+  third-party backend before file installs existed.
+  The package's own name is shown in the native backend consent with every
+  line break and invisible character spelled out, below the source line. The takedown check covers id and publisher only: a package
+  renamed to a new id is not caught, because the trust metadata carries no
+  blocked-digest list. Files extracted from a `.vsix` carry no quarantine
+  attribute, the same as a Registry install.
 - A package installed from a local file or folder is trusted through a local
   trust record, not the Registry root: the record holds the package id and
   version, the SHA-256 of every file in the installed copy, an overall content

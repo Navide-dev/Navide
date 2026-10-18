@@ -58,6 +58,8 @@ import { BUILTIN_PLUGIN_NAMES, builtinPluginDisabledMessage } from './plugins/fr
 import { builtinPluginDisabledDialog } from './builtinPluginStrings'
 import { loadPluginDir, type PluginActivationCatalogEntry } from './plugins/installedPlugins'
 import { verifyInstalledBackendSpawnTrust } from './plugins/pluginBackendSpawnTrust'
+import { agentApprovalSourceNote, nativeBackendConsentDialog } from './plugins/pluginLocalInstall'
+import { revealUnsafeLineText } from '../shared/pluginAgentTools'
 import {
   BackendPluginError,
   PluginBackendSupervisor,
@@ -188,7 +190,6 @@ import { canonicalExistingDirectory } from './plugins/workspacePathPolicy'
 import { pluginDeveloperModeEnabled } from './plugins/pluginDeveloperMode'
 import {
   isThirdPartyLaunchSpec,
-  nativeBackendConsentText,
   thirdPartyBackendLaunchSpec,
   type ThirdPartyLaunchSpec,
   ThirdPartyBackendController,
@@ -1256,8 +1257,13 @@ function nativeBackendDialogParent(): BrowserWindow | null {
 }
 
 async function promptNativeBackendConsent(prompt: NativeBackendConsentPrompt): Promise<boolean> {
-  // Plan B D-g: in the user's language, with the methods it serves.
-  const { title, message, detail, buttons } = nativeBackendConsentText(prompt, currentUiLocale())
+  // Plan B D-g: in the user's language, with the methods it serves. Card K3:
+  // an unreviewed package's source leads the text (nativeBackendConsentDialog).
+  const { title, message, detail, buttons } = nativeBackendConsentDialog(
+    prompt,
+    currentUiLocale(),
+    frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+  )
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title,
@@ -1295,8 +1301,21 @@ async function promptAgentToolWorkspaceWrite(prompt: AgentToolWritePrompt): Prom
   const options: Electron.MessageBoxOptions = {
     type: 'warning',
     title: 'Agent wants to change files',
-    message: `An agent asked to use "${prompt.tool.title}" (${prompt.tool.name}) of ${prompt.name} ${prompt.packageVersion}, which changes files. Allow agents to do this in this workspace?`,
-    detail: `${prompt.workspacePath}\n\nThe agent, not you, started this. You are asked again after an update or a new permission.`,
+    message: [
+      // Card K3: the source first, then package text with nothing hidden in it.
+      agentApprovalSourceNote(
+        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+      ),
+      `An agent asked to use "${revealUnsafeLineText(prompt.tool.title)}" (${revealUnsafeLineText(prompt.tool.name)}) of ${revealUnsafeLineText(prompt.name)} ${revealUnsafeLineText(prompt.packageVersion)}, which changes files. Allow agents to do this in this workspace?`,
+    ].filter(Boolean).join('\n'),
+    detail: [
+      // Card K3: an unreviewed package's tool says where it came from.
+      agentApprovalSourceNote(
+        frontendPluginManager.listInstalledPackages().find((pkg) => pkg.id === prompt.pluginId)?.source,
+      ),
+      prompt.workspacePath,
+      'The agent, not you, started this. You are asked again after an update or a new permission.',
+    ].filter(Boolean).join('\n\n'),
     buttons: ['Don\'t allow', 'Allow'],
     defaultId: 0,
     cancelId: 0,
@@ -1781,7 +1800,20 @@ const pluginTrustRefresh = registerPluginIpc(
     onPluginAgentAction: (notice) => pluginAgentActionRelay.notify(notice),
     preflightCandidateFrontend,
     preflightCandidateBackend,
+    // Card K3: the only source of a local package path is this dialog, opened
+    // over the main window that asked (never a detached or plugin window).
+    pickLocalPackageFile: async (event) => {
+      const parent = BrowserWindow.fromWebContents(event.sender)
+      if (!parent || parent.isDestroyed() || !mainWindows.has(parent) || detachedWindowIds.has(parent.id)) return null
+      const picked = await dialog.showOpenDialog(parent, {
+        properties: ['openFile'],
+        filters: [{ name: 'Navide plugin package', extensions: ['vsix'] }],
+      })
+      return picked.canceled ? null : picked.filePaths[0] ?? null
+    },
+    forgetBackendConsent: (pluginId) => nativeBackendStore.forgetGrants(pluginId),
     nativeBackendDataRoot: join(nativeBackendRoot, 'data'),
+    pluginStorageRoot: join(app.getPath('userData'), 'plugin-storage-v2'),
     cleanupPluginStorage: async (pluginId) => {
       await pluginStorageStore.cleanupPlugin(pluginId)
       nativeBackendStore.forget(pluginId)

@@ -209,11 +209,14 @@ listed at once; a namespace claimed on the Marketplace is reviewed first
 Navide, point the app at it as described under **Registry endpoints** in the
 [Plugin development guide](plugin-development.md#packaging-and-publishing).
 
-This is the way to try a package inside Navide before publishing. There is no
-`navide-plugin dev` command, and Developer Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`)
-writes no capability grant, so it cannot open a Manifest v2 view and refuses a
-backend. A Registry install grants the declared permissions and storage for
-that exact version when you choose **Restart Plugin**.
+This is one way to try a package inside Navide before publishing; the other is
+Settings → Navide Plugins → **Install from .vsix file…**, which works in any
+build and installs the file you pick as an unreviewed local package (it never
+updates automatically). There is no `navide-plugin dev` command, and Developer
+Mode (`AGENT_TEAM_PLUGIN_DEV_PATH`) writes no capability grant, so it cannot
+open a Manifest v2 view and refuses a backend. A Registry or file install
+grants the declared permissions and storage for that exact version when you
+choose **Restart Plugin**.
 
 ## 4. Publish to the Marketplace
 

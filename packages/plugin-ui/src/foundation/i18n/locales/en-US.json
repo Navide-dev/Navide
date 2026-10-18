@@ -1904,6 +1904,24 @@
         },
         "prereleaseAvailable": "pre-release {version} available"
       },
+      "localInstall": {
+        "button": "Install from .vsix file…",
+        "backToMarketplace": "Switch back to the Navide Marketplace version",
+        "warning": "This Navide plugin comes from a file on this computer. Navide has not reviewed it and it is not signed: its author cannot be confirmed and the file may have been changed. Only install files from people you trust.",
+        "signatureLabel": "Signature",
+        "signature": "None: the author cannot be confirmed and the file may have been changed",
+        "digestLabel": "File SHA-256",
+        "acknowledge": "I understand Navide has not reviewed this Navide plugin, and I want to run its code.",
+        "replaceTitle": "Replace an installed Navide plugin",
+        "replaceMarketplace": "Replace {id} (Navide Marketplace version {version}) with the version from this file? It will no longer update automatically.",
+        "replaceLocal": "Replace the file version {version} of {id} with this file?",
+        "replaceWithMarketplace": "Replace the file version of {id} with Navide Marketplace version {version}?",
+        "replaceResets": "Replacing it clears the permissions, the native backend consent, the workspaces it may change files in and the agent tool approvals given to the installed version; you will be asked again, and Rollback cannot bring the replaced version back.",
+        "replaceDataSetAside": "The new version starts with an empty data folder. The existing data is kept aside, and the new version cannot read it.",
+        "reattachData": "Take back the data kept aside from this source earlier (off by default)",
+        "takedownUnknown": "Navide cannot tell right now whether this Navide plugin has been taken down: the Navide takedown list could not be fetched.",
+        "confirmReplace": "Replace"
+      },
       "trust": {
         "publisherRiskUnsigned": "{publisher}'s package {id} is not signed by the Registry. Trusting this publisher lets Navide run its code.",
         "sensitiveHeading": "Sensitive capabilities",
@@ -11271,6 +11289,7 @@
     "declaredHeading": "What this Navide plugin declares",
     "registryHeading": "Navide Registry records (unsigned)",
     "provenance": {
+      "local": "Read by Navide from the package's own manifest. It has no Navide Registry signature and was not scanned by Navide.",
       "unverified": "Provided by the Navide Registry, not yet verified; before installing, Navide verifies the signature and compares it with the package.",
       "verified": "Verified: the disclosure matches the downloaded package and the scan report's Navide Registry signature is valid.",
       "verifiedNoScan": "Verified: the disclosure matches the downloaded package. This version has no system scan."

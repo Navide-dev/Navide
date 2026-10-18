@@ -604,6 +604,21 @@ export class PluginActivationSelector {
     return next
   }
 
+  /** Stop retaining the previous package and its grant. A package that
+   * changed between a Marketplace and a local source must not offer a
+   * rollback that restores the other source's consent (card K3, D7). */
+  forgetPrevious(pluginId: string): PluginActivationSelectorRecord | null {
+    const current = this.read(pluginId)
+    if (!current) return null
+    if (current.activation) throw new Error(`plugin ${pluginId} activation is in progress`)
+    if (!current.previous && !current.previousGrant) return current
+    const next: PluginActivationSelectorRecord = { ...current }
+    delete next.previous
+    delete next.previousGrant
+    writeAtomic(selectorPath(this.root, pluginId), next)
+    return next
+  }
+
   /** Explicit user removal and a legacy v1 install replace the whole package
    *  tree, so those are the lifecycle paths that clear the selection record. */
   clear(pluginId: string): void {

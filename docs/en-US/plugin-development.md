@@ -497,6 +497,11 @@ host, and the `/registry` path; a trailing slash is ignored) carries Official
 Registry authority. Development builds default to a local self-hosted Registry
 at `http://localhost:8787`. `AGENT_TEAM_MARKETPLACE_URL` overrides either
 default, and plaintext HTTP is rejected outside loopback in production builds.
+To try a package without a Registry, use Settings → Navide Plugins → **Install
+from .vsix file…** (any build): it installs the file you pick as an unreviewed,
+unsigned local package after an explicit consent and never updates it
+automatically; the rules are in the
+[v2 guide](plugin-development-v2.md).
 Publishing requires a publisher account on the registry instance you are
 targeting; on the Official Registry that is a namespace claimed with your
 Navide account (see [Publishing to the Navide Marketplace](marketplace-publishing.md)).

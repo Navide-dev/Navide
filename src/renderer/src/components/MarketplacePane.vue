@@ -1270,6 +1270,7 @@ watch(
       v-if="flow.pendingConfirm.value"
       :pending="flow.pendingConfirm.value"
       :step="flow.pendingStep.value"
+      @confirm-replace="flow.confirmReplace"
       @confirm-publisher="flow.confirmPublisher"
       @confirm-risk="flow.confirmRisk"
       @cancel="flow.cancel"

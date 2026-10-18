@@ -13,10 +13,11 @@
 
 import { app, BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { backendCallAddress } from './pluginActivity'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   prepareInstall,
+  prepareLocalInstall,
   stageInstallCandidate,
   commitInstallTransaction,
   removePlugin,
@@ -52,6 +53,8 @@ import {
   verifyInstalledRegistryPackage,
   writeRegistryTrustSnapshot,
   REGISTRY_ARTIFACT_NAME,
+  REGISTRY_TRUST_SNAPSHOT_NAME,
+  assertRegistryTrustSnapshotDoesNotRollback,
   type InstalledTrustDecision,
 } from './pluginInstalledTrust'
 import {
@@ -63,7 +66,18 @@ import { assertEngineCompatible, isEngineCompatible, minNavideVersion } from './
 import { compareSemver } from './pluginManifestV2'
 import { MAX_EXTENSION_PACK_MEMBERS } from '../../../packages/plugin-contracts/src/index'
 import { PluginPrereleaseStore } from './pluginPrereleaseStore'
-import { inspectNativeBackendData, removeNativeBackendData } from './pluginNativeBackendData'
+import {
+  forgetKeptNativeBackendDataSource,
+  inspectNativeBackendData,
+  keptNativeBackendDataSource,
+  latestSetAsideNativeBackendData,
+  recordedNativeBackendDataSource,
+  recordKeptNativeBackendDataSource,
+  reattachNativeBackendData,
+  removeNativeBackendData,
+  returnReattachedNativeBackendData,
+  setAsideNativeBackendData,
+} from './pluginNativeBackendData'
 import { packOnlyMembers, PluginPackStore, type InstalledPackRecord } from './pluginPackStore'
 import type {
   FrontendPluginManager,
@@ -103,7 +117,17 @@ import {
 import { cardRiskLevel, type ScanItem, type ScanReport } from '../../shared/pluginDisclosureScan'
 import { pluginSourceFromLegacyProvenance, type PluginSource } from '../../shared/pluginSource'
 import { PluginInstallScanStore } from './pluginInstallScanStore'
+import { pluginStorageDirName } from './pluginStorage'
 import { rescanFinding } from './pluginRescanNotice'
+import { createLocalTrustRecord, writeLocalTrustRecord } from './pluginLocalTrust'
+import { canonicalArchivePath } from './pluginPathPolicy'
+import {
+  forgetLocalTrustRecords,
+  isLocalInstalledPackage,
+  localTrustRecordPath,
+  promoteLocalCandidateRecord,
+  verifyLocalInstalledPackage,
+} from './pluginLocalInstall'
 
 /** Development-only endpoint. It is intentionally not the official Registry
  * identity: a local Registry must establish trust through root approval. */
@@ -480,6 +504,17 @@ export interface PluginIpcOptions {
   preflightCandidateFrontend?: (descriptor: PluginLaunchDescriptor) => Promise<void>
   /** Host-only standalone backend health check with no production bridge route. */
   preflightCandidateBackend?: (activation: PluginActivationCatalogEntry) => Promise<void>
+  /** Card K3: the Host's own file dialog, parented to the window that asked.
+   * The path it returns is the only path a local install ever reads; nothing
+   * the renderer sends is used as a path. Absent, installing from a file is
+   * unavailable. */
+  pickLocalPackageFile?: (event: IpcMainInvokeEvent) => Promise<string | null>
+  /** Card K3 (D7): drop the native backend consent and the agent tool write
+   * answers of a package whose source changed, so nothing carries over. */
+  forgetBackendConsent?: (pluginId: string) => void
+  /** `<userData>/plugin-storage-v2`: view storage, set aside with the native
+   * backend data when a package's source changes (card K3, D7). */
+  pluginStorageRoot?: string
   /** The running Navide release that `engines.navide` is checked against. */
   appVersion?: () => string
   /** An agent disabled or enabled an installed Marketplace package (B2-c):
@@ -577,6 +612,52 @@ export function registerPluginIpc(
 ): PluginTrustRefreshController {
   // Packages verified by prepareInstall, awaiting a commit, keyed by plugin id.
   const prepared = new Map<string, { pkg: PreparedInstall }>()
+  // Local packages awaiting consent (card K3). Kept apart from Registry
+  // prepares so commitInstall can never commit one, nor the reverse.
+  const preparedLocal = new Map<string, PreparedInstall>()
+  // D7: a set-aside native backend data directory the user chose to take back
+  // when this id returns to that source; applied at its restart, never assumed.
+  const pendingReattach = new Set<string>()
+  /** D7: every per-plugin data location a change of source sets aside: the
+   * native backend's private folder and the view storage (all versions, so a
+   * package of the same version but another target never shares it). */
+  const dataPlaces = (id: string): Array<{ root: string; name: string }> => [
+    ...(options.nativeBackendDataRoot ? [{ root: options.nativeBackendDataRoot, name: id }] : []),
+    ...(options.pluginStorageRoot ? [{ root: options.pluginStorageRoot, name: pluginStorageDirName(id) }] : []),
+  ]
+  /** D7: what replacing `id` with `incoming` does to its data: whether some is
+   * set aside (only when the source changes) and whether data set aside from
+   * `incoming` earlier may be taken back. */
+  const backendDataOnReplace = (id: string, incoming: 'marketplace' | 'local-unsigned') => {
+    const installed = manager.listInstalledPackages().find((pkg) => pkg.id === id)
+    if (!installed) {
+      // HIGH-3: data a removal kept from another source is set aside, too.
+      const root = options.nativeBackendDataRoot
+      const kept = root ? keptNativeBackendDataSource(root, id) : null
+      // MED-4: data a local file kept is never handed on, even to another
+      // local file: its id is only what each file claims.
+      return kept !== null && (kept === 'local-unsigned' || kept !== incoming) ? { backendDataSetAside: true } : {}
+    }
+    const current = installed.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace'
+    if (current === incoming && current !== 'local-unsigned') return {}
+    const places = dataPlaces(id)
+    // Only data of a Marketplace package can be taken back: its id is the
+    // Registry's, while a local file's id is only what the file claims.
+    const reattachable = incoming === 'marketplace' &&
+      places.some((place) => latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') !== null)
+    return {
+      ...(places.some((place) => existsSync(join(place.root, place.name))) ? { backendDataSetAside: true } : {}),
+      ...(reattachable ? { reattachableBackendData: true } : {}),
+    }
+  }
+  const rememberReattach = (id: string, incoming: 'marketplace' | 'local-unsigned', wanted: unknown): void => {
+    pendingReattach.delete(id)
+    if (wanted !== true) return
+    if (backendDataOnReplace(id, incoming).reattachableBackendData !== true) {
+      throw new Error(`there is no set-aside data of ${id} to take back`)
+    }
+    pendingReattach.add(id)
+  }
   const activeTransactions = new Set<string>()
   const capabilityGrants = new PluginCapabilityGrantStore(pluginsRoot)
   const lifecycleSelector = new PluginActivationSelector(pluginsRoot)
@@ -699,6 +780,14 @@ export function registerPluginIpc(
     pluginId: string,
     trustConfig: InstallerTrustConfig
   ): InstalledTrustDecision =>
+    // A local install (no Registry receipt, a consent record for this exact
+    // id and version) is verified against that record; everything else takes
+    // the Registry path exactly as before.
+    verifyLocalInstalledPackage(pluginsRoot, pluginDir, pluginId, {
+      pinnedRootKey: trustConfig.pinnedRegistryRootKey,
+      snapshot: readRegistryTrustSnapshot(pluginsRoot),
+      now: trustConfig.now,
+    }) ??
     (
       options.verifyCommittedInstall ??
       ((dir: string, id: string, config: InstallerTrustConfig) =>
@@ -737,6 +826,26 @@ export function registerPluginIpc(
     // message is shown to the user rather than swallowed.
     if (!selected.previousGrant) return null
     return { kind: 'previous', version: selected.previous.packageVersion }
+  }
+
+  // The installed package when it came from a local file (card K3).
+  const installedLocalPackage = (id: unknown) =>
+    typeof id === 'string'
+      ? manager.listInstalledPackages().find((pkg) => pkg.id === id && pkg.source === 'local-unsigned')
+      : undefined
+  /** Review MED-2 on #428: a package registered again after a failed restart
+   * or by a rollback keeps the source its own evidence shows: a directory a
+   * local consent record covers is local, anything else is a Registry package
+   * as on main. */
+  const evidenceSource = (dir: string, id: string) =>
+    isLocalInstalledPackage(pluginsRoot, dir, id)
+      ? { fields: { source: 'local-unsigned' as const }, registration: {} }
+      : { fields: { provenance: 'official-registry' as const }, registration: { official: true } }
+
+  // A file install committed but not restarted yet (review LOW-6).
+  const stagedLocalCandidate = (id: string): boolean => {
+    const candidate = lifecycleSelector.read(id)?.candidate
+    return candidate !== undefined && isLocalInstalledPackage(pluginsRoot, lifecycleSelector.packageDir(id, candidate), id)
   }
 
   // The installed inventory, shared by the Extensions page and the agent's
@@ -1666,6 +1775,17 @@ export function registerPluginIpc(
         scan: result.scan ?? null,
         registry: result.registryFacts,
         ...(source ? { source } : {}),
+        // D7: a Marketplace install over a local one asks first.
+        ...(() => {
+          const local = installedLocalPackage(result.id)
+          return local
+            ? { replacesLocal: { version: local.packageVersion ?? null }, ...backendDataOnReplace(result.id, 'marketplace') }
+            : stagedLocalCandidate(result.id)
+              ? { replacesLocal: { version: lifecycleSelector.read(result.id)?.candidate?.packageVersion ?? null } }
+              : manager.listInstalledPackages().some((pkg) => pkg.id === result.id)
+                ? {}
+                : backendDataOnReplace(result.id, 'marketplace')
+        })(),
       }
     }
   )
@@ -1819,9 +1939,14 @@ export function registerPluginIpc(
     'plugins:commitInstall',
     async (
       event,
-      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean }
+      args: { id: string; publisherConfirmed?: boolean; riskConfirmed?: boolean; replaceConfirmed?: boolean; reattachBackendData?: boolean }
     ) => {
       assertAuthorized(event)
+      // D7: never replace a local install with the Marketplace version unasked.
+      if (installedLocalPackage(args.id) && args.replaceConfirmed !== true) {
+        throw new Error(`replacing the local file version of ${args.id} requires confirmation`)
+      }
+      if (installedLocalPackage(args.id)) rememberReattach(args.id, 'marketplace', args.reattachBackendData)
       if (activeTransactions.has(args.id)) {
         throw new Error(`plugin transaction already in progress for ${args.id}`)
       }
@@ -1928,6 +2053,207 @@ export function registerPluginIpc(
     }
   )
 
+  // DX report A1 (card K3): install a `.vsix` the user picked in this window.
+  // The file comes only from the Host's own dialog; the call takes no
+  // arguments, so neither a plugin, an agent nor the environment can name
+  // one. The file is read once, here; every later step uses those bytes.
+  // MED-1 on #425: fetch the root-signed takedown list before a file install,
+  // so a Host that never stored one still checks it. Any failure leaves the
+  // stored list as it was; the dialog then says the check could not be done.
+  const refreshTakedownList = async (): Promise<void> => {
+    try {
+      const marketplace = resolveConfiguredMarketplace(trust)
+      const base = marketplace.registryUrl.replace(/\/+$/, '')
+      const listing = await fetch(`${base}/api/extensions?limit=1`)
+      if (!listing.ok) return
+      const item = ((await listing.json()) as { items?: Array<Record<string, unknown>> }).items?.[0]
+      if (typeof item?.namespace !== 'string' || typeof item.name !== 'string') return
+      const res = await fetch(`${base}/api/extensions/${encodeURIComponent(item.namespace)}/${encodeURIComponent(item.name)}`)
+      if (!res.ok) return
+      const detail = (await res.json()) as { trust_metadata: RegistryTrustMetadata; trust_metadata_signature: string }
+      verifyRegistryTrustMetadata(
+        detail.trust_metadata,
+        detail.trust_metadata_signature,
+        marketplace.trust.pinnedRegistryRootKey,
+        marketplace.trust.now,
+      )
+      const snapshot = {
+        schemaVersion: 1 as const,
+        metadata: detail.trust_metadata,
+        metadataSignature: detail.trust_metadata_signature,
+      }
+      let stored: Uint8Array | null = null
+      try {
+        stored = new Uint8Array(readFileSync(join(pluginsRoot, REGISTRY_TRUST_SNAPSHOT_NAME)))
+      } catch {
+        stored = null
+      }
+      assertRegistryTrustSnapshotDoesNotRollback(stored, snapshot)
+      writeRegistryTrustSnapshot(pluginsRoot, snapshot)
+    } catch (error) {
+      console.warn(`[plugins] takedown list not refreshed before a file install: ${errorText(error)}`)
+    }
+  }
+
+  ipcMain.handle('plugins:installFromFile', async (event) => {
+    assertAuthorized(event)
+    const pickFile = options.pickLocalPackageFile
+    if (!pickFile) throw new Error('installing from a file is unavailable')
+    const path = await pickFile(event)
+    if (!path) return null
+    // Review LOW-1: only a regular file is read (never a FIFO or a device).
+    if (!statSync(path).isFile()) throw new Error('the chosen path is not a regular file')
+    const bytes = new Uint8Array(readFileSync(path))
+    await refreshTakedownList()
+    const marketplace = resolveConfiguredMarketplace(trust)
+    const pkg = prepareLocalInstall(bytes, {
+      pinnedRegistryRootKey: marketplace.trust.pinnedRegistryRootKey,
+      trustSnapshot: readRegistryTrustSnapshot(pluginsRoot),
+      expectedTarget: marketplace.trust.expectedTarget,
+    })
+    if (isManifestV2(pkg.manifest) && pkg.manifest.extensionPack) {
+      throw new Error(`${pkg.id} is an extension pack; packs install only from the Marketplace`)
+    }
+    assertEngineCompatible(pkg.id, pkg.version, pkg.manifest, hostAppVersion())
+    preparedLocal.set(pkg.id, pkg)
+    const replaced = manager.listInstalledPackages().find((item) => item.id === pkg.id)
+    const agentTools = isManifestV2(pkg.manifest) ? computeDisclosure(pkg.manifest).agentTools : []
+    return {
+      id: pkg.id,
+      version: pkg.version,
+      trustTier: pkg.trustTier,
+      sensitive: pkg.sensitive,
+      containsBackendExecutable: pkg.containsBackendExecutable,
+      ...(agentTools.length > 0 ? { agentTools } : {}),
+      requiresConfirmation: true,
+      publisherId: pkg.publisherId,
+      requiresPublisherTrust: false,
+      requiresRiskConfirmation: true,
+      disclosureDiff: updateDisclosureDiff(pkg),
+      disclosure: pkg.disclosure ?? null,
+      scan: null,
+      registry: null,
+      source: pkg.source,
+      digest: pkg.digest,
+      takedownChecked: pkg.takedownChecked === true,
+      ...(replaced
+        ? {
+            replaces: {
+              version: replaced.packageVersion ?? null,
+              source: replaced.source === 'local-unsigned' ? 'local-unsigned' : 'marketplace',
+            },
+            ...backendDataOnReplace(pkg.id, 'local-unsigned'),
+          }
+        : backendDataOnReplace(pkg.id, 'local-unsigned')),
+    }
+  })
+
+  ipcMain.handle(
+    'plugins:commitLocalInstall',
+    async (event, args: { id?: unknown; riskConfirmed?: unknown; replaceConfirmed?: unknown; reattachBackendData?: unknown } | null) => {
+      assertAuthorized(event)
+      const id = typeof args?.id === 'string' ? args.id : ''
+      const pkg = preparedLocal.get(id)
+      if (!pkg) throw new Error(`no prepared local install for ${id}; choose the file again`)
+      if (activeTransactions.has(id)) {
+        throw new Error(`plugin transaction already in progress for ${id}`)
+      }
+      // Unreviewed code: consent is always required, whatever it declares.
+      if (args?.riskConfirmed !== true) {
+        throw new Error(`consent is required to install ${id} from a file`)
+      }
+      // D7: replacing an installed package of the same id is asked first.
+      const installedNow = manager.listInstalledPackages().some((item) => item.id === id) ||
+        lifecycleSelector.read(id)?.active !== undefined
+      if (installedNow && args?.replaceConfirmed !== true) {
+        throw new Error(`replacing the installed ${id} with the file version requires confirmation`)
+      }
+      rememberReattach(id, 'local-unsigned', args?.reattachBackendData)
+      const commitTrust = resolveConfiguredMarketplace(trust).trust
+      activeTransactions.add(id)
+      preparedLocal.delete(id)
+      const candidateRecord = localTrustRecordPath(pluginsRoot, id, 'candidate')
+      try {
+        const staged = stageInstallCandidate(pkg, pluginsRoot)
+        const scanned = loadPluginDir(staged.candidateDir)
+        if (scanned.error) throw new Error(`staged candidate is invalid: ${scanned.error}`)
+        if (!scanned.activation || !scanned.packageSummary) {
+          throw new Error('immutable activation requires a Manifest v2 candidate')
+        }
+        // The consent covers exactly the copy just written under the plugins
+        // root, never the file the user picked (which may change later).
+        const record = createLocalTrustRecord(staged.candidateDir, { source: 'file', consentedAt: new Date().toISOString() })
+        // Review LOW-2: the record must cover exactly the bytes read from the
+        // chosen file, not whatever the staged directory holds by now.
+        const expected = new Map(pkg.entries
+          .filter((entry) => entry.type === 'regular')
+          .map((entry) => [canonicalArchivePath(entry.path, 'regular'), sha256Hex(entry.data)] as const))
+        const recorded = Object.entries(record.fileDigests)
+        if (recorded.length !== expected.size || recorded.some(([path, digest]) => expected.get(path) !== digest)) {
+          throw new Error(`the staged copy of ${id} does not match the chosen file`)
+        }
+        writeLocalTrustRecord(candidateRecord, record)
+        const decision = verifyCommittedInstall(staged.candidateDir, id, commitTrust)
+        if (decision.action === 'quarantine') {
+          throw new Error(`staged candidate refused: ${decision.reason}`)
+        }
+        const activation: PluginActivationCatalogEntry = {
+          ...scanned.activation,
+          source: 'local-unsigned',
+          artifactDigest: decision.artifactDigest,
+        }
+        if (scanned.descriptor) {
+          if (!options.preflightCandidateFrontend) {
+            throw new Error('candidate frontend preflight is unavailable')
+          }
+          await options.preflightCandidateFrontend(scanned.descriptor)
+        }
+        if (activation.backend) {
+          if (!options.preflightCandidateBackend) {
+            throw new Error('candidate backend preflight is unavailable')
+          }
+          await options.preflightCandidateBackend(activation)
+        }
+        const candidate: PluginPackageSelection = {
+          packageVersion: pkg.version,
+          target: staged.target,
+          artifactDigest: decision.artifactDigest,
+        }
+        // The same version-bound grant a Registry candidate gets; it only
+        // takes effect when the user restarts the package.
+        let candidateGrant: HostCapabilityGrant
+        if (scanned.descriptor) {
+          const policy = scanned.descriptor.capabilityPolicy
+          if (!policy || policy.kind !== 'manifest-v2') {
+            throw new Error('invalid Manifest v2 capability policy')
+          }
+          candidateGrant = {
+            packageVersion: candidate.packageVersion,
+            system: [...policy.system],
+            ...(policy.shell ? { shell: policy.shell } : {}),
+            ...(policy.shell === 'full' ? { highRiskShellConfirmed: true as const } : {}),
+            storage: true,
+          }
+        } else {
+          candidateGrant = { packageVersion: candidate.packageVersion, system: [], storage: true }
+        }
+        lifecycleSelector.stageCandidate(id, candidate, {
+          candidateGrant: { selection: candidate, grant: candidateGrant },
+        })
+        return { id, requires: scanned.packageSummary.requires, restartRequired: true }
+      } catch (error) {
+        try {
+          forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
+        } catch {
+          // The install failure stays the reported error.
+        }
+        throw error
+      } finally {
+        activeTransactions.delete(id)
+      }
+    }
+  )
+
   ipcMain.handle('plugins:restart', async (event, args: { id?: unknown } | null) => {
     assertAuthorized(event)
     const id = assertPluginRemovalTarget(pluginsRoot, args?.id)
@@ -1951,14 +2277,65 @@ export function registerPluginIpc(
     if (scanned.error || !scanned.activation || !scanned.packageSummary) {
       throw new Error(`staged candidate is invalid${scanned.error ? `: ${scanned.error}` : ''}`)
     }
+    // Card K3: a candidate installed from a file carries its local source,
+    // never the Registry provenance or the official registration.
+    const localCandidate = isLocalInstalledPackage(pluginsRoot, candidateDir, id)
+    const candidateSource = localCandidate
+      ? { source: 'local-unsigned' as const }
+      : { provenance: 'official-registry' as const }
     const activation: PluginActivationCatalogEntry = {
       ...scanned.activation,
-      provenance: 'official-registry',
+      ...candidateSource,
       artifactDigest: currentTrust.artifactDigest,
     }
     const previousDescriptor = manager.getDescriptor(id)
     const installedSummary = manager.listInstalledPackages().find((item) => item.id === id)
     const isFactory = installedSummary?.provenance === 'factory-bundled'
+    // D7: a change to or from a local source keeps nothing of the replaced
+    // package's consent: grant, rollback grant, backend and agent tool answers.
+    const sourceReplaced = localCandidate || installedSummary?.source === 'local-unsigned'
+    // D7: the native backend data moves aside only when the source changes
+    // (Marketplace ↔ local file); an update within one source keeps it as on main.
+    const replacedSource = installedSummary?.source === 'local-unsigned' ? 'local-unsigned' as const : 'marketplace' as const
+    const sourceChanged = installedSummary !== undefined && !isFactory &&
+      (replacedSource === 'local-unsigned') !== localCandidate
+    // MED-4: one local file replacing another hands over no data either.
+    const dataMoves = sourceChanged ||
+      (installedSummary !== undefined && localCandidate && replacedSource === 'local-unsigned')
+    const incomingSource = localCandidate ? 'local-unsigned' as const : 'marketplace' as const
+    const moved: Array<{ root: string; name: string; setAside: string | null; reattached: string | null }> = []
+    /** Put every data location back as it was before this restart. Never
+     * throws: each failure is returned, and whatever is then at a live path
+     * is set aside so the package rolled back to never gets the new source's
+     * data (review of cd04b987d). */
+    const undoDataMove = (): unknown[] => {
+      const errors: unknown[] = []
+      for (const place of moved.splice(0).reverse()) {
+        try {
+          if (place.reattached) returnReattachedNativeBackendData(place.root, place.name, place.reattached)
+          if (place.setAside) {
+            // A backend of the new source that already started may have made
+            // a folder of its own: that one is set aside too, never merged.
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+            reattachNativeBackendData(place.root, place.name, place.setAside)
+          }
+        } catch (error) {
+          errors.push(error)
+          try {
+            if (existsSync(join(place.root, place.name))) setAsideNativeBackendData(place.root, place.name, incomingSource)
+          } catch (isolationError) {
+            errors.push(isolationError)
+          }
+        }
+      }
+      return errors
+    }
+    const finishSourceReplacement = (): void => {
+      if (!sourceReplaced) return
+      lifecycleSelector.forgetPrevious(id)
+      options.forgetBackendConsent?.(id)
+      if (!localCandidate) forgetLocalTrustRecords(pluginsRoot, id)
+    }
     const legacyDir = join(pluginsRoot, id)
     // A v0.2.9 backend-only install has neither a descriptor nor a selector
     // record; its installed summary still names the version living at the
@@ -2042,6 +2419,33 @@ export function registerPluginIpc(
           drainedBackendOnly = true
         }
       }
+      // D7: with the old backend stopped, set its data aside before cutover.
+      // A failed move stops the restart here; nothing has been promoted yet.
+      // HIGH-3: a fresh install never takes data a removal kept from another
+      // source; data kept from its own source is reused exactly as on main.
+      // A recorded source applies whatever is installed now: an install path
+      // that does not restart (a Manifest v1 package) leaves the record in place.
+      const keptRoot = options.nativeBackendDataRoot
+      const recordedSource = keptRoot ? recordedNativeBackendDataSource(keptRoot, id) : null
+      const keptSource = recordedSource ?? (!installedSummary && keptRoot ? keptNativeBackendDataSource(keptRoot, id) : null)
+      if (keptRoot && keptSource !== null && (keptSource === 'local-unsigned' || keptSource !== incomingSource)) {
+        const entry: (typeof moved)[number] = { root: keptRoot, name: id, setAside: null, reattached: null }
+        moved.push(entry)
+        entry.setAside = setAsideNativeBackendData(keptRoot, id, keptSource)
+      }
+      if (dataMoves) {
+        const reattach = pendingReattach.delete(id)
+        for (const place of dataPlaces(id)) {
+          const entry: (typeof moved)[number] = { ...place, setAside: null, reattached: null }
+          moved.push(entry)
+          entry.setAside = setAsideNativeBackendData(place.root, place.name, replacedSource)
+          const back = reattach ? latestSetAsideNativeBackendData(place.root, place.name, 'marketplace') : null
+          if (back) {
+            reattachNativeBackendData(place.root, place.name, back)
+            entry.reattached = back
+          }
+        }
+      }
       // The old runtime may take time to drain. Re-check the exact candidate
       // bytes and current Registry authority at the cutover seam, not only
       // before the drain started.
@@ -2063,22 +2467,26 @@ export function registerPluginIpc(
       }
       const selected = lifecycleSelector.activateCandidate(id)
       promoted = true
-      const summary = { ...scanned.packageSummary, provenance: 'official-registry' as const }
+      if (localCandidate) promoteLocalCandidateRecord(pluginsRoot, id)
+      const summary = { ...scanned.packageSummary, ...candidateSource }
+      const registration = localCandidate ? {} : { official: true }
       if (scanned.descriptor) {
-        manager.registerInstalledPackage(summary, scanned.descriptor, { official: true })
+        manager.registerInstalledPackage(summary, scanned.descriptor, registration)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
-          ...(selected.previous ? { previousVersion: selected.previous.packageVersion } : {}),
+          // D7: the replacing source never reads the replaced one's storage.
+          ...(selected.previous && !sourceReplaced ? { previousVersion: selected.previous.packageVersion } : {}),
         })
       } else {
         // Backend-only packages have no frontend descriptor, but they still
         // need a version-bound grant for their next update or rollback.
-        manager.registerInstalledPackage(summary, undefined, { official: true }, candidateDir)
+        manager.registerInstalledPackage(summary, undefined, registration, candidateDir)
         capabilityGrants.set(id, promotedGrant)
         manager.setPluginStorageSnapshotSelection(id, {
           activeVersion: selected.active!.packageVersion,
-          ...(selected.previous ? { previousVersion: selected.previous.packageVersion } : {}),
+          // D7: the replacing source never reads the replaced one's storage.
+          ...(selected.previous && !sourceReplaced ? { previousVersion: selected.previous.packageVersion } : {}),
         })
       }
       options.onActivationChange?.({ pluginId: id, activation })
@@ -2093,6 +2501,8 @@ export function registerPluginIpc(
         )
         manager.completePackageRestart(restartTransaction)
         lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+        finishSourceReplacement()
+        if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
         if (!previousVersion) recordFreshInstall(id)
         options.onPackageInstalled?.(id)
         return {
@@ -2103,10 +2513,27 @@ export function registerPluginIpc(
         }
       }
       lifecycleSelector.completeActivation(id, { activeGrant: promotedGrant })
+      finishSourceReplacement()
+      if (options.nativeBackendDataRoot) forgetKeptNativeBackendDataSource(options.nativeBackendDataRoot, id)
       if (!previousVersion) recordFreshInstall(id)
       options.onPackageInstalled?.(id)
       return { id, packageVersion: selected.active!.packageVersion, restoredInstances: 0, skippedDestroyedHostWindows: 0 }
     } catch (error) {
+      // A failed data move back is reported with the restart's own error,
+      // after the package rollback below has run, never instead of it.
+      // The data move back and the package rollback below never depend on
+      // each other: both run, and every failure is reported (LOW-7).
+      const moveErrors = undoDataMove()
+      // Only a move this restart made can fail to come back.
+      if (moveErrors.length > 0) {
+        // Fail closed until the user sorts the data out: no backend of this
+        // id runs again on an earlier consent.
+        try {
+          options.forgetBackendConsent?.(id)
+        } catch (forgetError) {
+          moveErrors.push(forgetError)
+        }
+      }
       if (promoted) {
         try {
           const promotedSelection = lifecycleSelector.read(id)
@@ -2139,10 +2566,11 @@ export function registerPluginIpc(
             const retainedGrant = promotedSelection.previousGrant
             if (!retainedGrant) throw new Error('previous package grant is unavailable for rollback')
             capabilityGrants.set(id, retainedGrant)
+            const previousSource = evidenceSource(previousDir, id)
             manager.registerInstalledPackage(
-              { ...previousScanned.packageSummary, provenance: 'official-registry' },
+              { ...previousScanned.packageSummary, ...previousSource.fields },
               previousScanned.descriptor,
-              { official: true },
+              previousSource.registration,
               previousDir,
             )
             manager.setPluginStorageSnapshotSelection(id, { activeVersion: previous.packageVersion })
@@ -2150,7 +2578,7 @@ export function registerPluginIpc(
               pluginId: id,
               activation: {
                 ...previousScanned.activation,
-                provenance: 'official-registry',
+                ...previousSource.fields,
                 artifactDigest: previousTrust.artifactDigest,
               },
             })
@@ -2183,7 +2611,19 @@ export function registerPluginIpc(
           }
         } catch (rollbackError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, rollbackError], 'Plugin restart and rollback failed.')
+          // Fail closed: a source-changing candidate left promoted keeps none
+          // of the replaced package's native backend permissions.
+          if (sourceReplaced) {
+            try {
+              options.forgetBackendConsent?.(id)
+            } catch {
+              // The rollback failure stays the reported error.
+            }
+          }
+          throw new AggregateError(
+            [error, rollbackError, ...moveErrors],
+            'Plugin restart and rollback failed.',
+          )
         }
       }
       if (!promoted) {
@@ -2195,15 +2635,14 @@ export function registerPluginIpc(
             restartTransaction = undefined
           }
           if (drainedBackendOnly && selectedBeforeRestart.active) {
-            const priorScanned = loadPluginDir(
-              lifecycleSelector.packageDir(id, selectedBeforeRestart.active),
-            )
+            const priorDir = lifecycleSelector.packageDir(id, selectedBeforeRestart.active)
+            const priorScanned = loadPluginDir(priorDir)
             if (priorScanned.activation) {
               options.onActivationChange?.({
                 pluginId: id,
                 activation: {
                   ...priorScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(priorDir, id).fields,
                   artifactDigest: selectedBeforeRestart.active.artifactDigest,
                 },
               })
@@ -2211,10 +2650,13 @@ export function registerPluginIpc(
           }
         } catch (recoveryError) {
           if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
-          throw new AggregateError([error, recoveryError], 'Plugin restart recovery failed.')
+          throw new AggregateError([error, recoveryError, ...moveErrors], 'Plugin restart recovery failed.')
         }
       }
       if (restartTransaction) manager.cancelPackageRestart(restartTransaction)
+      if (moveErrors.length > 0) {
+        throw new AggregateError([error, ...moveErrors], 'Plugin restart failed and its data could not be put back.')
+      }
       throw error
     } finally {
       activeTransactions.delete(id)
@@ -2230,6 +2672,7 @@ export function registerPluginIpc(
       throw new Error(`plugin transaction already in progress for ${id}`)
     }
     lifecycleSelector.discardCandidate(id)
+    forgetLocalTrustRecords(pluginsRoot, id, ['candidate'])
     return { ok: true }
   })
 
@@ -2294,10 +2737,11 @@ export function registerPluginIpc(
           `displaced package is no longer readable${activeScanned.error ? `: ${activeScanned.error}` : ''}`,
         )
       }
+      const activeSource = evidenceSource(activeDir, id)
       manager.registerInstalledPackage(
-        { ...activeScanned.packageSummary, provenance: 'official-registry' },
+        { ...activeScanned.packageSummary, ...activeSource.fields },
         activeScanned.descriptor,
-        { official: true },
+        activeSource.registration,
         activeDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: active.packageVersion })
@@ -2306,7 +2750,7 @@ export function registerPluginIpc(
           pluginId: id,
           activation: {
             ...activeScanned.activation,
-            provenance: 'official-registry',
+            ...activeSource.fields,
             artifactDigest: active.artifactDigest,
           },
         })
@@ -2433,10 +2877,11 @@ export function registerPluginIpc(
       const selected = lifecycleSelector.activatePrevious(id)
       promoted = true
       capabilityGrants.set(id, selectedBeforeRollback.previousGrant!)
+      const previousSource = evidenceSource(previousDir, id)
       manager.registerInstalledPackage(
-        { ...previousScanned.packageSummary, provenance: 'official-registry' },
+        { ...previousScanned.packageSummary, ...previousSource.fields },
         previousScanned.descriptor,
-        { official: true },
+        previousSource.registration,
         previousDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: selected.active!.packageVersion })
@@ -2444,7 +2889,7 @@ export function registerPluginIpc(
         pluginId: id,
         activation: {
           ...previousScanned.activation,
-          provenance: 'official-registry',
+          ...previousSource.fields,
           artifactDigest: currentPreviousTrust.artifactDigest,
         },
       })
@@ -2483,7 +2928,7 @@ export function registerPluginIpc(
                 pluginId: id,
                 activation: {
                   ...currentScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(currentDir, id).fields,
                   artifactDigest: selectedBeforeRollback.active.artifactDigest,
                 },
               })
@@ -2531,6 +2976,9 @@ export function registerPluginIpc(
     // new renderer calls from being admitted while cleanup is in progress.
     const previousVersion = installedPackageVersion(manager, pluginsRoot, id)
     const previousBackend = previousVersion ? manager.getBackendActivation(id, previousVersion) : undefined
+    const removedSource = manager.listInstalledPackages().find((pkg) => pkg.id === id)?.source === 'local-unsigned'
+      ? 'local-unsigned' as const
+      : 'marketplace' as const
     const pending = prepared.get(id)
     activeTransactions.add(id)
     try {
@@ -2539,6 +2987,8 @@ export function registerPluginIpc(
       // the package and restore its approved backend tuple for this session.
       try {
         await cleanupPluginStorage(id)
+        // Storage a source change set aside goes with the plugin's storage.
+        if (options.pluginStorageRoot) removeNativeBackendData(options.pluginStorageRoot, pluginStorageDirName(id))
         // The backend child was stopped with the runtime above. Deleting its
         // data here keeps a refused deletion on the same fail-closed path:
         // the package stays installed and its backend registration returns.
@@ -2560,6 +3010,18 @@ export function registerPluginIpc(
       capabilityGrants.remove(id)
       removePlugin(pluginsRoot, id)
       lifecycleSelector.clear(id)
+      forgetLocalTrustRecords(pluginsRoot, id)
+      // HIGH-3: kept data remembers whose it is, so only an install of the
+      // same source takes it over. If that cannot be recorded, the data is
+      // set aside instead of being left for any later install of the id.
+      if (!deleteNativeBackendData && nativeBackendDataRoot) {
+        try {
+          recordKeptNativeBackendDataSource(nativeBackendDataRoot, id, removedSource)
+        } catch (error) {
+          console.warn(`[plugins] source of the kept data of ${id} not recorded: ${errorText(error)}; setting it aside`)
+          setAsideNativeBackendData(nativeBackendDataRoot, id, removedSource)
+        }
+      }
       disabledPlugins.remove(id)
       // A reinstalled package starts with no record of who disabled it.
       recordDisableSource(id, null)
@@ -2744,9 +3206,10 @@ export function registerPluginIpc(
           throw new Error(`plugin ${id} cannot be enabled${scanned.error ? `: ${scanned.error}` : ''}`)
         }
         disabledPlugins.remove(id)
+        const enabledSource = evidenceSource(packageDir, id)
         try {
           manager.registerInstalledPackage(
-            { ...scanned.packageSummary, provenance: 'official-registry' },
+            { ...scanned.packageSummary, ...enabledSource.fields },
             scanned.descriptor,
             {},
             packageDir,
@@ -2760,7 +3223,7 @@ export function registerPluginIpc(
             pluginId: id,
             activation: {
               ...scanned.activation,
-              provenance: 'official-registry',
+              ...enabledSource.fields,
               artifactDigest: decision.artifactDigest,
             },
           })

@@ -37,6 +37,9 @@ const props = defineProps<{
   registry?: RegistryDisclosureFacts | null
   /** True only for a prepareInstall result (signature and digests checked). */
   verified?: boolean
+  /** Card K3: a package picked from a file. Its disclosure is the Host's
+   *  reading of the package's own manifest; no Registry stands behind it. */
+  localSource?: boolean
   /** K2: adds the fixed "Source and review" row; absent renders as before. */
   source?: PluginSource
   publisher?: string
@@ -91,7 +94,9 @@ const clauses = computed(() => (props.disclosure ? disclosureClauses(t, locale.v
 /** F1 on #360: "verified" names only what prepareInstall checked; without a
  *  scan report there is no scan signature to speak of. */
 const provenance = computed(() =>
-  !props.verified
+  props.localSource
+    ? 'pluginDisclosure.provenance.local'
+    : !props.verified
     ? 'pluginDisclosure.provenance.unverified'
     : scan.value
       ? 'pluginDisclosure.provenance.verified'
