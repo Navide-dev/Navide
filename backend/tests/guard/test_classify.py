@@ -350,7 +350,7 @@ def test_search_with_path_and_paths_unchanged_off_credential_paths(tool, tool_in
     ("glob", {"pattern": "**/*.ts", "paths": ["src", "~"]}, "high", "credential-path-list"),
     # `*` directly under home names the file store ~/.netrc, as Glob ~/.netrc does.
     ("Glob", {"pattern": "*", "path": "~"}, "high", "credential-path-list"),
-    ("Grep", {"pattern": "x", "path": "~", "glob": "*"}, "high", "credential-path-list"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "config"}, "critical", "credential-access"),
     # Glob dialect: [^x] negates like [!x]; a backslash escapes the next character.
     ("Glob", {"pattern": "~/.[^a]sh/*"}, "high", "credential-path-list"),
     ("Glob", {"pattern": "~/\\.ssh/*"}, "high", "credential-path-list"),
@@ -404,9 +404,9 @@ def test_ordinary_search_globs_unchanged(tool, tool_input):
     assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
 
 
-# A grep glob that reaches a store only through a `**` or bare `*` sweep is
-# graded high (allowed locally, audited), not critical: main asked nothing for
-# these, and a critical would add a local prompt.
+# A grep glob that reaches a store only through a `**` or `*` sweep, naming
+# no store or secret file, stays normal like a grep of the bare root (which
+# searches more): a high would add a prompt on tainted panes that main lacks.
 @pytest.mark.parametrize("tool, tool_input", [
     ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "**/*.md"}),
     ("Grep", {"pattern": "TODO", "path": "~", "glob": "**/*.md"}),
@@ -417,9 +417,14 @@ def test_ordinary_search_globs_unchanged(tool, tool_input):
     ("grep", {"pattern": "TODO", "paths": ["src", "~/.claude"], "glob": "*.md"}),
     ("rg", {"pattern": "TODO", "path": ".", "paths": ["src", "~/.claude"], "glob": "*.md"}),
 ])
-def test_grep_sweeps_into_a_store_are_high_not_critical(tool, tool_input):
+def test_grep_sweeps_into_a_store_stay_normal(tool, tool_input):
+    from agent_team_backend.guard import policy
+
     v = classify(tool, tool_input, cwd=WS, workspace=WS)
-    assert (v.level, v.rule_ids) == ("high", ("credential-path-list",)), (tool_input, v)
+    assert v == _MAIN_SEARCH_VERDICT, (tool_input, v)
+    for tainted in (False, True):
+        assert policy.decide(policy.effective_level(v.level, parseable=v.parseable, tainted=tainted),
+                             "local", tainted=tainted) == "allow"
 
 
 def test_grep_root_without_a_glob_is_unchanged():

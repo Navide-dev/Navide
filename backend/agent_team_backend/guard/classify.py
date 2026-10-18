@@ -1408,8 +1408,10 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
         if path is not None:
             _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
             for store, named in _stores_reached(path, ctx):
-                # Reached only through a sweep: graded like listing it (high), not reading it.
-                _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS or not named)
+                # A grep that only sweeps a store in (naming no store or secret
+                # file) counts as no more than grepping the bare root: normal.
+                if named or name in GLOB_TOOLS:
+                    _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")
