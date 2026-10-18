@@ -256,12 +256,21 @@ def test_search_tools_unchanged_off_credential_paths(tool, path):
     tool_input = {"pattern": "**/*.py" if tool == "Glob" else "TODO"}
     if path is not None:
         tool_input["path"] = path
+    if tool == "Glob" and path in _GLOB_ROOTS_ABOVE_A_STORE:
+        # `**` under these roots reaches a secret store (see test_search_globs_expanding_into_a_store).
+        v = classify(tool, tool_input, cwd=WS, workspace=WS)
+        assert (v.level, v.rule_ids) == ("high", ("credential-path-list",)), (path, v)
+        return
     assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+#: `**/*.py` from these roots can list names inside ~/.ssh or ~/.claude/secrets.
+_GLOB_ROOTS_ABOVE_A_STORE = {"~", "/", "~/.claude"}
 
 
 @pytest.mark.parametrize("tool_input", [
     {"pattern": "src/**/*.ts"}, {"pattern": "**/.env"}, {"pattern": "*.md", "path": "~/Documents"},
-    {"pattern": "/tmp/**"}, {"pattern": "~/.claude/*.md"}, {"pattern": "**/*", "path": "~"},
+    {"pattern": "/tmp/**"}, {"pattern": "~/.claude/*.md"},
 ])
 def test_glob_patterns_unchanged_off_credential_paths(tool_input):
     assert classify("Glob", tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
@@ -302,7 +311,6 @@ def test_qwen_and_copilot_search_tools_check_credential_paths(tool, tool_input, 
     ("grep", {"pattern": "TODO", "paths": ["src", "~/.claude"], "glob": "*.md"}),
     ("rg", {"pattern": "TODO", "paths": [".", "/tmp/x"]}),
     ("rg", {"pattern": "~/.aws/credentials", "paths": "."}),
-    ("glob", {"pattern": "**/*.ts", "paths": ["src", "~"]}),
     ("glob", {"pattern": "**/.env", "paths": []}),
 ])
 def test_qwen_and_copilot_search_tools_unchanged_off_credential_paths(tool, tool_input):
@@ -329,6 +337,87 @@ def test_search_with_path_and_paths_checks_every_root(tool, tool_input, level, r
     ("glob", {"pattern": "**/*.ts", "path": "", "paths": []}),
 ])
 def test_search_with_path_and_paths_unchanged_off_credential_paths(tool, tool_input):
+    assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+# A glob whose wildcards (or `**`, or a {a,b} brace) can expand into a secret
+# store below its base is graded as if it named that store literally.
+@pytest.mark.parametrize("tool, tool_input, level, rule", [
+    ("Glob", {"pattern": ".s*/*", "path": "~"}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "~/.[s]sh/*"}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "**/*", "path": "~"}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "**/*.py", "path": "/"}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "*/hosts.yml", "path": "~/.config/gh/.."}, "high", "credential-path-list"),
+    ("Glob", {"pattern": "~/{src,.aws/credentials}"}, "high", "credential-path-list"),
+    ("glob", {"pattern": "**/*.ts", "paths": ["src", "~"]}, "high", "credential-path-list"),
+    # `*` directly under home names the file store ~/.netrc, as Glob ~/.netrc does.
+    ("Glob", {"pattern": "*", "path": "~"}, "high", "credential-path-list"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "{.ssh,.aws}/*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": ".s?h/*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "**/.ssh/**"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "**/id_*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": ".codex/auth*"}, "critical", "credential-access"),
+    ("Grep", {"pattern": "x", "path": "~", "glob": "Library/*/login.keychain-db"}, "critical", "credential-access"),
+    ("grep_search", {"pattern": "x", "path": "~", "glob": "{.git,{.gnupg,.azure}}/**"}, "critical", "credential-access"),
+    ("rg", {"pattern": "x", "paths": ["src", "~"], "glob": ".claude/.cred*"}, "critical", "credential-access"),
+])
+def test_search_globs_expanding_into_a_store(tool, tool_input, level, rule):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert v.level == level, (tool, tool_input, v)
+    assert rule in v.rule_ids
+
+
+#: Ordinary searches that stay exactly as on main (before == after: normal).
+@pytest.mark.parametrize("tool, tool_input", [
+    ("Glob", {"pattern": "src/**/*.ts"}),
+    ("Glob", {"pattern": "**/*.py", "path": WS}),
+    ("Glob", {"pattern": "**/*", "path": WS}),
+    ("Glob", {"pattern": "**/*.ts"}),
+    ("Glob", {"pattern": "{src,docs}/**/*.{ts,md}"}),
+    ("Glob", {"pattern": "**/.env*", "path": "."}),
+    ("Glob", {"pattern": "*.md", "path": "~"}),
+    # Matching a store directory's own name lists nothing inside it.
+    ("Glob", {"pattern": "~/.s*"}),
+    ("Glob", {"pattern": ".*/", "path": "~/.docker"}),
+    ("Glob", {"pattern": "~/Documents/**/*"}),
+    ("Glob", {"pattern": "~/.claude/*.md"}),
+    ("Glob", {"pattern": "~/.claude/skills/**/*.py"}),
+    ("Glob", {"pattern": "**/*.py", "path": "~/.kube"}),
+    ("Glob", {"pattern": "**/*.py", "path": "~/.docker"}),
+    ("Glob", {"pattern": "/tmp/**/*"}),
+    ("Grep", {"pattern": "TODO", "path": ".", "glob": "**/*.py"}),
+    ("Grep", {"pattern": "TODO", "path": WS, "glob": "{src,tests}/**"}),
+    ("Grep", {"pattern": "TODO", "path": "~", "glob": "*.md"}),
+    ("Grep", {"pattern": "TODO", "path": "~/.claude", "glob": "*.md"}),
+    ("rg", {"pattern": "TODO", "paths": ["src", "~/.config/nvim"], "glob": "**/*.lua"}),
+    ("Glob", {"pattern": "src/{a,b"}),
+])
+def test_ordinary_search_globs_unchanged(tool, tool_input):
+    assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
+
+
+# File tools: every path field is checked, including `paths` and list values.
+@pytest.mark.parametrize("tool, tool_input, level, rule", [
+    ("read", {"path": "src/a.py", "paths": ["~/.ssh/id_rsa"]}, "critical", "credential-access"),
+    ("read", {"file_path": "src/a.py", "paths": "~/.aws/credentials"}, "critical", "credential-access"),
+    ("read_file", {"file_path": ["src/a.py", "~/.codex/auth.json"]}, "critical", "credential-access"),
+    ("view", {"path": ["README.md", "~/elsewhere/.env"]}, "critical", "dotenv-outside-workspace"),
+    ("write", {"file_path": "src/a.py", "path": ["docs/x.md", ".git/hooks/pre-push"]}, "high", "git-hooks-write"),
+    ("edit", {"paths": ["src/a.py", "~/.claude/settings.json"]}, "high", "agent-config-write"),
+])
+def test_file_tools_check_every_path_field(tool, tool_input, level, rule):
+    v = classify(tool, tool_input, cwd=WS, workspace=WS)
+    assert v.level == level, (tool, tool_input, v)
+    assert rule in v.rule_ids
+
+
+@pytest.mark.parametrize("tool, tool_input", [
+    ("read", {"file_path": "src/a.py", "paths": ["README.md", "docs/x.md"]}),
+    ("read_file", {"file_path": ["src/a.py", ".env"]}),
+    ("write", {"path": ["src/a.py"], "paths": []}),
+])
+def test_file_tools_every_path_field_unchanged_off_credential_paths(tool, tool_input):
     assert classify(tool, tool_input, cwd=WS, workspace=WS) == _MAIN_SEARCH_VERDICT
 
 

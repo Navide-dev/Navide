@@ -252,6 +252,85 @@ def _credential_kind(path: str, ctx: _Ctx) -> str | None:
     return None
 
 
+#: Home-relative stand-ins for the stores _credential_kind names, as
+#: (path, directory). A directory reaches every name below it; a file only itself.
+_STORE_PATHS = tuple((_fold(p), d) for p, d in (
+    (".ssh", True), (".aws", True), (".gnupg", True), (".netrc", False), (".kube/config", False),
+    (".docker/config.json", False), (".azure", True), (".gcloud", True), ("Library/Keychains", True),
+    (".config/gcloud", True), (".config/gh/hosts.yml", False), (".claude/.credentials.json", False),
+    (".claude/secrets", True), (".codex/auth.json", False),
+))
+
+
+def _expand_braces(text: str) -> list[str]:
+    """``a{b,c}d`` -> ['abd', 'acd'] (nested too). Past 64 variants the rest
+    of the pattern from the first brace becomes ``*/**``: a superset, so a
+    huge expansion is graded more strictly, never skipped."""
+    start = text.find("{")
+    while start >= 0:
+        depth, parts, last = 0, [], start + 1
+        for i in range(start, len(text)):
+            c = text[i]
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif c == "," and depth == 1:
+                parts.append(text[last:i])
+                last = i + 1
+        else:
+            return [text]  # unclosed: a literal brace
+        if parts:
+            parts.append(text[last:i])
+            out: list[str] = []
+            for alt in parts:
+                out += _expand_braces(text[:start] + alt + text[i + 1:])
+                if len(out) > 64:
+                    return [text[:start] + "*/**"]
+            return out
+        start = text.find("{", start + 1)
+    return [text]
+
+
+def _glob_reaches(globs: list[str], store: list[str], directory: bool) -> bool:
+    """Whether glob segments can match ``store`` (a file) or a name below it (a directory)."""
+    memo: dict[tuple[int, int], bool] = {}
+
+    def reach(i: int, j: int) -> bool:
+        if (i, j) not in memo:
+            if j == len(store):
+                memo[i, j] = i < len(globs) if directory else all(g == "**" for g in globs[i:])
+            elif i == len(globs):
+                memo[i, j] = False
+            elif globs[i] == "**":
+                memo[i, j] = reach(i + 1, j) or reach(i, j + 1)
+            else:
+                memo[i, j] = fnmatch.fnmatchcase(store[j], globs[i]) and reach(i + 1, j + 1)
+        return memo[i, j]
+
+    return reach(0, 0)
+
+
+def _stores_reached(path: str, ctx: _Ctx) -> list[str]:
+    """Secret stores below a glob's literal base that its wildcards can expand into."""
+    base = _glob_base(path)
+    if base == path:
+        return []
+    globs = [g for g in path[len(base):].split("/") if g]
+    # Consecutive `**` match the same paths as one.
+    globs = [g for i, g in enumerate(globs) if not (g == "**" and i and globs[i - 1] == "**")]
+    out = []
+    for h in _homes(ctx):
+        for store, directory in _STORE_PATHS:
+            full = h + "/" + store
+            if full != base and _inside(base, full) and _glob_reaches(
+                    globs, [s for s in full[len(base):].split("/") if s], directory):
+                out.append(full)
+    return out
+
+
 def _is_dotenv(path: str) -> bool:
     base = posixpath.basename(path)
     return base == ".env" or (base.startswith(".env.") and base not in {".env.example", ".env.sample", ".env.template"})
@@ -1210,10 +1289,10 @@ def _tool_command(tool_input: dict) -> str | None:
 
 def _tool_paths(tool_input: dict) -> list[str]:
     out = []
-    for key in ("file_path", "path", "notebook_path", "filename", "target_file", "absolute_path"):
+    # Every path field is read, and a field may hold a list of paths.
+    for key in ("file_path", "path", "paths", "notebook_path", "filename", "target_file", "absolute_path"):
         v = tool_input.get(key)
-        if isinstance(v, str) and v:
-            out.append(v)
+        out += [p for p in (v if isinstance(v, list) else [v]) if isinstance(p, str) and p]
     return out
 
 
@@ -1272,10 +1351,14 @@ def _check_search(acc: _Acc, name: str, tool_input: dict, ctx: _Ctx) -> None:
     if sub:
         absolute = sub.startswith(("/", "~")) or _isabs(sub) or any(sub.startswith(t) for t in _HOME_TOKENS)
         raws += [sub] if absolute or not roots else [posixpath.join(r, sub) for r in roots]
-    for raw in raws:
+    # A {a,b} brace is checked as each path it expands to; wildcards that can
+    # expand into a store below the literal base count as naming that store.
+    for raw in [v for r in raws for v in _expand_braces(r)]:
         path = _resolve(raw, ctx)
         if path is not None:
             _check_path(acc, path, ctx, write=False, list_only=name in GLOB_TOOLS)
+            for store in _stores_reached(path, ctx):
+                _check_path(acc, store, ctx, write=False, list_only=name in GLOB_TOOLS)
 
 
 _TOOL_CALL_RE = re.compile(r"\b[A-Z][A-Za-z]*\((.+)\)\s*$")
