@@ -2206,11 +2206,12 @@
       "resume-behavior-never": "Always start fresh",
       "resume-behavior-ask": "Ask each time",
       "restore-scope": "Resume scope",
-      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, or all CLIs (started two at a time, in order).",
+      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, all CLIs, or Auto — only the CLIs that were running when Navide last closed (all CLIs and Auto start two at a time, in order).",
       "restore-scope-single": "One CLI",
       "restore-scope-page": "Current Grid page",
       "restore-scope-tab": "Active tab",
       "restore-scope-all": "All CLIs",
+      "restore-scope-auto": "Auto",
       "resume-concurrency": "Concurrent resume limit",
       "resume-concurrency-hint": "How many CLI panes may resume at the same time when opening a workspace or restoring a layout; the rest queue. Lower this if resuming many panes at once causes 'terminal.create timeout' errors (1–10).",
       "resume-concurrency-label": "Max concurrent resumes"
@@ -2499,7 +2500,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs.",
+              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs / Auto (only the CLIs running when Navide last closed).",
               "fallback": "One CLI"
             },
             "resumeAfterRestart": {

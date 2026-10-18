@@ -263,6 +263,7 @@ import {
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
   RESTORE_SCOPE_SETTING_KEY,
+  PREVIOUS_LAUNCH_ID_SETTING_KEY,
   createWorkspaceRestoreSession,
   explicitRestoreDecision,
   interruptedRestoreTargetIds,
@@ -276,6 +277,7 @@ import {
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
   wasInterruptedAtLaunch,
+  wasLiveAtLastLaunch,
   type RestoreScope,
   type RestoreSessionDecision,
   type RestoreSessionTrigger,
@@ -11127,6 +11129,9 @@ interface ProjectPane {
   last_turn_state?: string
   report_to?: string
   report_pending?: boolean
+  /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
+   *  Absent on records written before the field existed. */
+  last_live_launch?: string
 }
 
 const HISTORY_ORIGINS: readonly SpawnHistoryEntry['origin'][] = ['manual', 'pipeline', 'mcp']
@@ -12273,6 +12278,10 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
   // workspace's entire pending list on top of the foreground one, so the CLIs a
   // window could start at once became the sum of every workspace it held.
   const onScreen = normWs(session.workspacePath) === normWs(currentWorkspace.value)
+  const previousLaunchId = settingsGet<unknown>(PREVIOUS_LAUNCH_ID_SETTING_KEY, '')
+  const liveAtLastLaunchIds = new Set(panes.value
+    .filter((pane) => pane.deferredRestore && wasLiveAtLastLaunch(pane.deferredRestore.saved, previousLaunchId))
+    .map((pane) => pane.id))
   return restoreScopeTargetIds({
     scope: session.scope,
     pendingPaneIds: pendingRestorePaneIds(panes.value, session.workspacePath),
@@ -12281,6 +12290,7 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
     minimizedPaneIds: minimizedPanes.value,
     focusedPaneId: onScreen ? focusPaneId.value : null,
     trigger,
+    liveAtLastLaunchIds,
   })
 }
 
@@ -12328,6 +12338,9 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+  } else if (decision === 'resume' && session.scope === 'auto') {
+    // Auto brings back every pane live at the last close: same ceiling as 'all'.
     await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
   } else if (interrupted.length > 0) {
     // The interrupted panes ride on top of the scope's pick: same ceiling as
@@ -17154,6 +17167,15 @@ async function reclaimIdlePane(paneId: string): Promise<boolean> {
   // the cold-restore path builds.
   const stillThere = panes.value.find((p) => p.id === paneId)
   if (!stillThere) return false
+  // Its CLI is gone: the 'auto' resume scope must not count it as live at the
+  // next launch. A rebuild re-stamps through its own spawn record instead.
+  if (stillThere.workspacePath && isLocalWorkspace(stillThere.workspacePath)) {
+    backend
+      .send('project.set_pane_resume_state', {
+        workspace_path: stillThere.workspacePath, pane_id: paneId, last_live_launch: '',
+      })
+      .catch(() => {})
+  }
   stillThere.realized = false
   stillThere.restoring = false
   stillThere.preparationStatus = 'starting'
