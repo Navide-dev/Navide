@@ -778,6 +778,8 @@ declare global {
     }>
     requiresConfirmation: boolean
     publisherId: string
+    /** Source and review state, when the Host sends one; see `shared/pluginSource.ts`. */
+    source?: PluginSource
     requiresPublisherTrust: boolean
     requiresRiskConfirmation: boolean
     /** Plan B D2: what this update changes, computed by the Host from the

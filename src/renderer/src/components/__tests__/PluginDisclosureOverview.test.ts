@@ -80,12 +80,13 @@ describe('PluginDisclosureOverview (D5, D-f)', () => {
 })
 
 describe('PluginDisclosureOverview source row (K2)', () => {
-  it('gives every card the fixed source row; a Host before K1 reads as marketplace', async () => {
+  it('gives every card the fixed source row; a Host before K1 reads the version', async () => {
     ;(window as unknown as Record<string, unknown>).agentTeam = {
       plugins: {
         installedDisclosures: vi.fn().mockResolvedValue([
           { id: 'nerdtechnic.devmap', version: '0.2.0', disclosure, scan: null },
           { id: 'acme.pre', version: '2.0.0-beta.1', disclosure: null, scan: null, source: 'prerelease' },
+          { id: 'acme.beta', version: '3.0.0-rc.1', disclosure: null, scan: null },
         ]),
         activityReport: vi.fn(async () => ({ ok: false, error: 'not ready' })),
       },
@@ -94,5 +95,6 @@ describe('PluginDisclosureOverview source row (K2)', () => {
     await flushPromises()
     expect(wrapper.get('[data-id="nerdtechnic.devmap"] .nv-source-row').text()).toBe('Source and review Reviewed')
     expect(wrapper.get('[data-id="acme.pre"] .nv-source-row').attributes('data-source')).toBe('prerelease')
+    expect(wrapper.get('[data-id="acme.beta"] .nv-source-row').attributes('data-source')).toBe('prerelease')
   })
 })

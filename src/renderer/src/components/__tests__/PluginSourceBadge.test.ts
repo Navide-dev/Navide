@@ -100,4 +100,17 @@ describe('PluginTrustDialog source row (K2)', () => {
       unsigned.unmount()
     }
   })
+  it('names a pre-release by its version and prefers the Host\'s own source', () => {
+    i18n.global.locale.value = 'en-US'
+    const at = (prepared: Record<string, unknown>) => {
+      const base = pending('signed-verified')
+      return mount(PluginTrustDialog, { props: { pending: { ...base, prepared: { ...base.prepared, ...prepared } }, step: 'risk' } as never, global: { plugins: [i18n] } })
+    }
+    expect(at({ version: '2.0.0-beta.1' }).get('.nv-source-row').attributes('data-source')).toBe('prerelease')
+    expect(at({ version: '2.0.0+build.7' }).get('.nv-source-row').attributes('data-source')).toBe('marketplace')
+    expect(at({ source: 'prerelease', version: '2.0.0' }).get('.nv-source-row').attributes('data-source')).toBe('prerelease')
+    const local = at({ trustTier: 'unsigned', source: 'local-unsigned' }).get('.nv-source-row')
+    expect(local.attributes('data-source')).toBe('local-unsigned')
+    expect(local.text()).toContain('Self-declared: acme')
+  })
 })
