@@ -11206,6 +11206,7 @@
       "marketplace": "Reviewed",
       "prerelease": "Pre-release (reviewed)",
       "testplace": "Test build, no human review, expires {date}",
+      "testplaceNoExpiry": "Test build, no human review, expiry unknown",
       "local-signed": "Local file signed by its publisher; this version was not reviewed by Navide",
       "local-unsigned": "Local file, not reviewed by Navide, unsigned",
       "developer-unpacked": "Developer folder; its contents can change at any time",

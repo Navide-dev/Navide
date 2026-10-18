@@ -10,7 +10,6 @@ import type { PluginActivityReport } from '../../../shared/pluginActivity'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { ScanReport } from '../../../shared/pluginDisclosureScan'
 import type { PluginSource } from '../../../shared/pluginSource'
-import { registrySourceOfVersion } from '../lib/pluginSourceMark'
 import { revealInvisibleText as reveal } from '../../../shared/pluginAgentTools'
 import PluginDisclosureCard from './PluginDisclosureCard.vue'
 import PluginActivityPanel from './PluginActivityPanel.vue'
@@ -21,9 +20,9 @@ interface Entry {
   version: string
   disclosure: ManifestDisclosure | null
   scan: ScanReport | null
-  /** Absent from a Host that predates K1; every package listed here is a
-   *  Registry install, so it is read from the version. */
+  /** The Host's source; absent (unknown channel) shows no source row, never a guess. */
   source?: PluginSource
+  expiresAt?: string
   report: PluginActivityReport | null
   reportError: string
 }
@@ -112,7 +111,8 @@ onBeforeUnmount(stopPolling)
         :scan="entry.scan"
         :registry="null"
         :verified="true"
-        :source="entry.source ?? registrySourceOfVersion(entry.version)"
+        :source="entry.source"
+        :expires-at="entry.expiresAt"
         :publisher="entry.id.split('.')[0]"
       />
       <p v-if="!entry.scan" class="nv-overview-muted">{{ $t('pluginActivity.overview.noScanRecord') }}</p>

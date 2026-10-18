@@ -11206,6 +11206,7 @@
       "marketplace": "已審核",
       "prerelease": "預覽版（已審核）",
       "testplace": "測試版，沒有人工審核，{date} 到期",
+      "testplaceNoExpiry": "測試版，沒有人工審核，到期日不明",
       "local-signed": "本機檔案，發佈者已簽章，這個版本未經 Navide 審核",
       "local-unsigned": "本機檔案，未經 Navide 審核，未簽章",
       "developer-unpacked": "開發者資料夾，內容隨時可能變動",

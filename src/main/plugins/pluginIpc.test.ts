@@ -1930,6 +1930,12 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
           source: 'marketplace',
         }))
       )
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({ id: 'acme.demo', source: 'marketplace' }),
+      ])
+      expect(
+        (handlers.get('plugins:installedDisclosures')!(null) as Array<Record<string, unknown>>)[0]
+      ).not.toHaveProperty('expiresAt')
       // The Registry-signed envelope's channel decides the source, so a
       // testplace version is never shown as a reviewed Marketplace release.
       const selection = new PluginActivationSelector(root).read('acme.demo')?.active
@@ -1942,7 +1948,19 @@ describe('plugins:prepareInstall wire → verifier mapping', () => {
       receipt.envelope.expiresAt = '2027-01-01T00:00:00.000Z'
       writeFileSync(receiptPath, JSON.stringify(receipt))
       expect(handlers.get('plugins:listInstalled')!(null)).toMatchObject([
-        { id: 'acme.demo', provenance: 'official-registry', source: 'testplace' },
+        {
+          id: 'acme.demo',
+          provenance: 'official-registry',
+          source: 'testplace',
+          expiresAt: '2027-01-01T00:00:00.000Z',
+        },
+      ])
+      expect(handlers.get('plugins:installedDisclosures')!(null)).toEqual([
+        expect.objectContaining({
+          id: 'acme.demo',
+          source: 'testplace',
+          expiresAt: '2027-01-01T00:00:00.000Z',
+        }),
       ])
       expect(await handlers.get('plugins:listContributions')!(null)).toEqual(
         expect.arrayContaining([expect.objectContaining({ pluginId: 'acme.demo', source: 'testplace' })])
