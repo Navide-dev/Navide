@@ -242,6 +242,31 @@ describe('blockingDialogShown', () => {
     const screen = ['Do you want to proceed?', '❯ 1. Yes', '  3. No, and tell Claude what to do differently (esc)'].join('\n')
     expect(blockingDialogShown({ awaitingKind: null, agentKey: 'claude', screen })).toBe(true)
   })
+
+  // Frameless (codex): the composer is the prompt row and what wraps below
+  // it. An unsent message quoting a dialog's wording must not read as one —
+  // main resends the Enter there and the message is delivered.
+  it('ignores dialog wording in a frameless composer', () => {
+    for (const composer of [
+      '› review: "Would you like to run the following command?" wording',
+      '› note: Press enter to confirm or esc to go back',
+    ]) {
+      const screen = ['• Updated the tests.', '', composer, '  continued on a second row', '', '  ⏎ send   ctrl+j newline'].join('\n')
+      expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen }), composer).toBe(false)
+    }
+  })
+
+  // codex's approval menu: its cursor row is a numbered option, not a prompt.
+  it('still reads a frameless approval menu as a dialog', () => {
+    const screen = [
+      '• Would you like to run the following command?',
+      '  $ rm -rf build',
+      '› 1. Yes, proceed',
+      '  2. No, and tell Codex what to do differently',
+      'Press enter to confirm or esc to go back',
+    ].join('\n')
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen })).toBe(true)
+  })
 })
 
 describe('the extra Enter under each awaiting kind', () => {
@@ -270,5 +295,55 @@ describe('the extra Enter under each awaiting kind', () => {
 
   it('never presses Enter on a permission prompt', async () => {
     expect(await run('permission')).toBe(0)
+  })
+
+  // aider keeps the submitted "> message" row on screen and prints its Y/N
+  // question below it, with no prompt row of its own. Enter would answer the
+  // default Yes.
+  const AIDER_ASK = [
+    '> please fix the failing test',
+    '',
+    'tests/test_x.py',
+    'Allow edits to file that has not been added to the chat? (Y)es/(N)o [Yes]: ',
+  ].join('\n')
+
+  it('reads aider\'s question below its old prompt row as a dialog', () => {
+    expect(blockingDialogShown({ awaitingKind: null, agentKey: 'aider', screen: AIDER_ASK })).toBe(true)
+  })
+
+  it('never presses Enter on aider\'s Y/N question', async () => {
+    let t = 0
+    let enters = 0
+    await confirmWeakSubmit({
+      how: 'growth',
+      watchTurn: true,
+      dialogShown: () => blockingDialogShown({ awaitingKind: null, agentKey: 'aider', screen: AIDER_ASK }),
+      turnStarted: () => false,
+      collapsedHeld: () => true,
+      pressEnter: async () => { enters++; return true },
+      aborted: () => false,
+      sleep: async (ms) => { t += ms },
+      now: () => t,
+    })
+    expect(enters).toBe(0)
+  })
+
+  it('never presses Enter on a frameless approval menu', async () => {
+    const menu = ['• Would you like to run the following command?', '› 1. Yes, proceed',
+      '  2. No, and tell Codex what to do differently'].join('\n')
+    let t = 0
+    let enters = 0
+    await confirmWeakSubmit({
+      how: 'growth',
+      watchTurn: true,
+      dialogShown: () => blockingDialogShown({ awaitingKind: null, agentKey: 'codex', screen: menu }),
+      turnStarted: () => false,
+      collapsedHeld: () => true,
+      pressEnter: async () => { enters++; return true },
+      aborted: () => false,
+      sleep: async (ms) => { t += ms },
+      now: () => t,
+    })
+    expect(enters).toBe(0)
   })
 })

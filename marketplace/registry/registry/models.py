@@ -105,6 +105,13 @@ class ExtensionVersion(SQLModel, table=True):
     download_count: int = Field(default=0)
     """Number of times this specific version's package was downloaded."""
     yanked: bool = Field(default=False, index=True)
+    channel: str = Field(
+        default="stable", index=True, sa_column_kwargs={"server_default": "stable"}
+    )
+    """'stable' | 'pre-release' (derived from SemVer at publish) | 'testplace'
+    (versions.py). Public reads never return a testplace row."""
+    expires_at: datetime | None = None
+    """When a testplace version stops being installable; None otherwise."""
     published_at: datetime = Field(default_factory=_now)
     review_status: str = Field(default="approved", index=True)
     """'pending' | 'approved' | 'rejected' (review.py). Only approved rows are

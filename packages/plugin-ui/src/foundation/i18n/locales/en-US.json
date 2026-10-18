@@ -2224,11 +2224,12 @@
       "resume-behavior-never": "Always start fresh",
       "resume-behavior-ask": "Ask each time",
       "restore-scope": "Resume scope",
-      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, or all CLIs (started two at a time, in order).",
+      "restore-scope-hint": "When always resuming, choose one CLI, the current Grid page, the active tab, all CLIs, or Auto — only the CLIs that were running when Navide last closed (all CLIs and Auto start two at a time, in order).",
       "restore-scope-single": "One CLI",
       "restore-scope-page": "Current Grid page",
       "restore-scope-tab": "Active tab",
       "restore-scope-all": "All CLIs",
+      "restore-scope-auto": "Auto",
       "resume-concurrency": "Concurrent resume limit",
       "resume-concurrency-hint": "How many CLI panes may resume at the same time when opening a workspace or restoring a layout; the rest queue. Lower this if resuming many panes at once causes 'terminal.create timeout' errors (1–10).",
       "resume-concurrency-label": "Max concurrent resumes"
@@ -2457,16 +2458,12 @@
               "more": "section 3 of this page"
             },
             "extensions": {
-              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins",
+              "what": "The execution policy Navide plugins run under, plus the bundled and installed Navide plugins; at the bottom, the disclosure overview of every Navide plugin installed from the Navide Marketplace (records only, it changes nothing a Navide plugin may do)",
               "more": "section 4 of this page"
             },
             "marketplace": {
               "what": "Searching the Navide plugin registry and installing from it",
               "more": "section 4 of this page"
-            },
-            "disclosureOverview": {
-              "what": "Each Navide plugin installed from the Navide Marketplace: its disclosure card, risk level, recent activity and unusual items on one page.",
-              "more": "Records only: nothing here changes what a Navide plugin may do. Each Navide plugin's full activity is also under its row on the Navide Plugins page."
             },
             "shortcuts": {
               "what": "Rebinding shortcuts, import and export",
@@ -2517,7 +2514,7 @@
               "fallback": "Always"
             },
             "resumeScope": {
-              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs.",
+              "desc": "How far resume reaches: One CLI / Current Grid page / Active tab / All CLIs / Auto (only the CLIs running when Navide last closed).",
               "fallback": "One CLI"
             },
             "resumeAfterRestart": {
@@ -8558,6 +8555,7 @@
     "statusbar-note": "its popovers go with it"
   },
   "error": {
+    "pipeline-start-refused": "The pipeline did not start: {reason}",
     "workspace-create-exists": "An item named “{name}” is already there. Pick another name.",
     "workspace-create-denied": "No permission to create a folder at {path}.",
     "workspace-create-failed": "Could not create the workspace folder at {path}.",
