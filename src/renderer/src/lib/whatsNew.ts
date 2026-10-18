@@ -111,6 +111,82 @@ export const WHATS_NEW_CHROME = {
 
 export const WHATS_NEW: WhatsNewEntry[] = [
   {
+    version: '0.2.25',
+    major: true,
+    title: {
+      'zh-TW': 'Agent 可以使用 Navide 外掛的工具（每一步都由你同意）、Guard 更周全也更安靜、Telegram 選單改版、介面縮放重開後會保留',
+      'en-US': 'Agents Can Use Navide Plugin Tools (With Your Consent), a More Thorough and Quieter Guard, a New Telegram Menu, and Interface Scale That Survives a Restart',
+      'ja-JP': 'エージェントが Navide プラグインのツールを使えるように（すべてあなたの同意のうえで）、Guard がより確実に、より静かに、Telegram のメニューを刷新、表示倍率が再起動後も保たれるように',
+    },
+    features: [
+      {
+        icon: '🧩',
+        name: { 'zh-TW': 'Agent 使用外掛工具', 'en-US': 'Plugin tools for agents', 'ja-JP': 'エージェント向けプラグインツール' },
+        tagline: {
+          'zh-TW': '第三方 Navide 外掛可以提供工具給 agent 呼叫。預設關閉，打開後也只有你同意過的外掛和工具才會出現。',
+          'en-US': 'Third-party Navide plugins can offer tools for agents to call. Off by default, and once on, only plugins and tools you agreed to appear.',
+          'ja-JP': 'サードパーティ製 Navide プラグインがエージェント向けのツールを提供できます。初期設定はオフで、オンにしても同意したプラグインとツールだけが使われます。',
+        },
+        where: {
+          'zh-TW': '設定 → Navide 外掛 → 原生後端',
+          'en-US': 'Settings → Navide Plugins → Native backends',
+          'ja-JP': '設定 → Navide プラグイン → ネイティブバックエンド',
+        },
+      },
+      {
+        icon: '✅',
+        name: { 'zh-TW': '核准卡', 'en-US': 'Approval card', 'ja-JP': '承認カード' },
+        tagline: {
+          'zh-TW': 'Agent 申請安裝、更新、移除 Navide 外掛，或重新啟用你停用的外掛時，一定要你在核准卡上按下核准才會執行。',
+          'en-US': 'When an agent asks to install, update or remove a Navide plugin, or to re-enable one you disabled, nothing happens until you approve it on the card.',
+          'ja-JP': 'エージェントが Navide プラグインのインストール、更新、削除、またはあなたが無効にしたプラグインの再有効化を求めたときは、承認カードであなたが承認するまで何も実行されません。',
+        },
+        where: { 'zh-TW': '主視窗會跳出', 'en-US': 'Pops up in the main window', 'ja-JP': 'メインウィンドウに表示されます' },
+      },
+      {
+        icon: '🔍',
+        name: { 'zh-TW': '活動與揭露', 'en-US': 'Activity and disclosure', 'ja-JP': 'アクティビティと開示' },
+        tagline: {
+          'zh-TW': '安裝前先看外掛會做什麼、風險多高；安裝後看它實際做了什麼，包括沒宣告就使用的部分。',
+          'en-US': 'Before installing, see what a plugin does and how risky it is; afterwards, see what it actually did, including anything it did not declare.',
+          'ja-JP': 'インストール前にプラグインが何をするか、リスクがどれくらいかを確認でき、インストール後は宣言していない操作も含めて実際に何をしたかを確認できます。',
+        },
+        where: {
+          'zh-TW': '設定 → Navide 外掛 → 揭露總覽',
+          'en-US': 'Settings → Navide Plugins → Disclosure overview',
+          'ja-JP': '設定 → Navide プラグイン → 開示の一覧',
+        },
+      },
+    ],
+    highlights: [
+      {
+        'zh-TW': 'Navide 外掛平台：在「設定 → Navide 外掛 → 原生後端」打開開關後，agent 就能呼叫第三方 Navide 外掛提供的工具；只有你同意過的外掛和工具才會出現，外掛一更新、工具一改變，就會再問你一次。Agent 也可以申請安裝、更新、移除 Navide 外掛，或重新啟用你停用的外掛，但一定要你在主視窗的核准卡上按下核准才會執行，按拒絕就什麼都不變。每個外掛在 Navide 市集都有揭露卡，安裝前就看得到風險等級、宣告的權限，以及掃描發現但沒有宣告的項目。安裝後，「權限、授予與活動」會列出外掛實際讀了哪些檔案、跑了哪些指令、agent 對它做了什麼，沒宣告就使用的部分會用紅字標出。外掛的背景程式用太多資源時，Navide 會通知你，由你決定「停止」或「繼續執行」，不再自動關掉。',
+        'en-US': 'The Navide plugin platform: turn on the switch in Settings → Navide Plugins → Native backends and agents can call tools that third-party Navide plugins provide. Only plugins and tools you agreed to appear, and you are asked again whenever a plugin updates or a tool changes. Agents can also ask to install, update or remove a Navide plugin, or to re-enable one you disabled, but nothing happens until you press Approve on the card in the main window; Reject changes nothing. Every plugin in the Navide Marketplace has a disclosure card, so before installing you can see its risk level, its declared permissions and anything the scan found that it did not declare. After installing, “Permissions, grants and activity” lists which files the plugin read, which commands it ran and what agents did to it, with anything used without being declared marked in red. When a plugin’s background process uses too many resources, Navide tells you and you choose Stop or Keep running, instead of it being shut down on its own.',
+        'ja-JP': 'Navide プラグインのプラットフォーム：「設定 → Navide プラグイン → ネイティブバックエンド」でスイッチをオンにすると、エージェントがサードパーティ製 Navide プラグインのツールを呼び出せるようになります。同意したプラグインとツールだけが使われ、プラグインが更新されたりツールが変わったりすると、もう一度確認します。エージェントは Navide プラグインのインストール、更新、削除、またはあなたが無効にしたプラグインの再有効化を求めることもできますが、メインウィンドウの承認カードであなたが承認するまで何も実行されず、拒否すれば何も変わりません。Navide マーケットプレイスの各プラグインには開示カードがあり、インストール前にリスクの度合い、宣言された権限、スキャンで見つかったのに宣言されていない項目を確認できます。インストール後は「権限・付与・アクティビティ」に、プラグインが実際に読んだファイル、実行したコマンド、エージェントがそのプラグインに行った操作が表示され、宣言せずに使ったものは赤で示されます。プラグインのバックグラウンドプロセスがリソースを使いすぎたときは、自動で止めずに通知し、「停止」か「実行を続ける」かをあなたが選べます。',
+      },
+      {
+        'zh-TW': 'Navide Guard：搜尋碰到憑證位置（例如 ~/.ssh、~/.aws）也會被檢查，Claude 的 Grep、Glob，以及 Qwen Code、Copilot CLI 的搜尋都算在內，同時給了好幾個搜尋路徑時每一個都會檢查。在設定把 Guard 關掉後，就不會再跳出 Guard 的通知或要你確認，不再打擾你。',
+        'en-US': 'Navide Guard: searches that touch a credential location (such as ~/.ssh or ~/.aws) are checked too, including Claude’s Grep and Glob and the searches of Qwen Code and Copilot CLI, and every search path is checked when several are given. With Guard switched off in Settings, Guard no longer shows notices or asks you to confirm, so it stays out of your way.',
+        'ja-JP': 'Navide Guard：認証情報の場所（~/.ssh や ~/.aws など）に触れる検索もチェックするようになりました。Claude の Grep と Glob、Qwen Code と Copilot CLI の検索も対象で、検索パスが複数あるときはすべてをチェックします。設定で Guard をオフにすると、Guard の通知や確認は表示されなくなり、作業の邪魔をしません。',
+      },
+      {
+        'zh-TW': 'Telegram：原本的 /menu 改成三個指令，/prompts 開 Prompt 技能、/skills 開技能、/mcp 列出 MCP 伺服器。傳 /menu 會提示你改用這三個指令，並附上對應的按鈕。',
+        'en-US': 'Telegram: the old /menu becomes three commands: /prompts opens your Prompts, /skills your skills, and /mcp lists your MCP servers. Sending /menu points you to these three, with a button for each.',
+        'ja-JP': 'Telegram：これまでの /menu は 3 つのコマンドに分かれました。/prompts でプロンプト、/skills でスキルを開き、/mcp で MCP サーバーを一覧します。/menu を送ると、この 3 つを使うよう案内し、それぞれのボタンを表示します。',
+      },
+      {
+        'zh-TW': '介面縮放：在「設定 → 外觀」調好的介面縮放，重開 Navide 後會保留，不會再回到 100%。',
+        'en-US': 'Interface scale: the scale you set in Settings → Appearance is kept when you restart Navide, instead of going back to 100%.',
+        'ja-JP': '表示倍率：「設定 → 外観」で設定した表示倍率が、Navide を再起動しても 100% に戻らず保たれるようになりました。',
+      },
+      {
+        'zh-TW': '其他修正與注意：Loop：evolve 超過預算時會自動中斷，Loop 也會停下來。~/.claude/secrets 的保護不只用在搜尋，直接讀取時也會要求確認。在 Telegram 送出 stop 之後，按「繼續」不會重開 Loop，要回到桌面重開。另外，明確中斷 pane 時 Loop 也會一起停；存了好幾個 MCP 登入的 Claude 帳號現在可以正常切換；在 Windows 上，外掛工具可以用 C:\\ 這類磁碟代號的工作區路徑；外掛名稱和路徑裡看不見的字元會被顯示出來，避免被偽裝成別的外掛。',
+        'en-US': 'Other fixes and notes: Loop: when an evolve run goes over its budget it is interrupted automatically, and its Loop stops too. The protection for ~/.claude/secrets covers reading it directly, not just searching it, so a direct read also asks you to confirm. After sending stop from Telegram, pressing Continue does not restart the Loop; restart it on the desktop. Also, explicitly interrupting a pane stops its Loop as well; Claude accounts holding several MCP logins can now be switched; on Windows, Navide plugin tools accept a drive-letter workspace path such as C:\\…; and invisible characters in Navide plugin names and paths are spelled out, so one plugin cannot pass itself off as another.',
+        'ja-JP': 'そのほかの修正と注意：Loop：evolve が予算を超えると自動で中断され、Loop も止まります。~/.claude/secrets の保護は検索だけでなく直接の読み取りにも及び、直接読み取るときも確認を求めます。Telegram から stop を送ったあとに「続行」を押しても Loop は再開しないため、デスクトップで再開してください。また、ペインを明示的に中断すると Loop も止まります。複数の MCP ログインを保存した Claude アカウントも切り替えられるようになりました。Windows では、Navide プラグインのツールが C:\\… のようなドライブ文字のワークスペースパスを受け付けます。Navide プラグインの名前やパスに含まれる見えない文字は表示されるようになり、別のプラグインになりすませなくなりました。',
+      },
+    ],
+  },
+  {
     version: '0.2.24',
     title: {
       'zh-TW': 'Telegram 待確認提示更好回覆、聊天訊息不再被誤擋、Linux 語音朗讀會出聲',
