@@ -424,6 +424,64 @@ describe('HIGH-3: data a removal kept', () => {
   })
 })
 
+describe('MED-2 on #428: a failed restart rolls back to the source it had', () => {
+  /** register(), but activating `failing` throws once, after promotion. */
+  function registerFailingActivation(failing: string): void {
+    handlers.clear()
+    let failOnce = true
+    manager = new FrontendPluginManager()
+    registerPluginIpc(manager, pluginsRoot, () => true, TRUST, undefined, {
+      cleanupPluginStorage: async () => undefined,
+      preflightCandidateFrontend: async () => undefined,
+      preflightCandidateBackend: async () => undefined,
+      pickLocalPackageFile: async () => picked,
+      nativeBackendDataRoot: dataRoot,
+      pluginStorageRoot: storageRoot,
+      forgetBackendConsent: (pluginId) => store.forgetGrants(pluginId),
+      onActivationChange: (change) => {
+        if (failOnce && change.activation?.packageVersion === failing) {
+          failOnce = false
+          throw new Error('activation failed')
+        }
+      },
+    })
+  }
+
+  it('a local file rolled back to stays local, and its kept data never reaches the Marketplace', async () => {
+    await fileInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'L-secret')
+    registerFailingActivation('2.0.0')
+    serveRegistry('acme.todo', '2.0.0')
+    await call('plugins:prepareInstall', { namespace: 'acme', name: 'todo' })
+    await call('plugins:commitInstall', { id: 'acme.todo', publisherConfirmed: true, riskConfirmed: true, replaceConfirmed: true })
+    await expect(call('plugins:restart', { id: 'acme.todo' })).rejects.toThrow(/activation failed/)
+    const pkg = manager.listInstalledPackages().find((item) => item.id === 'acme.todo')
+    expect(pkg).toMatchObject({ packageVersion: '1.0.0', source: 'local-unsigned' })
+    expect(pkg?.provenance).toBeUndefined()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'local-unsigned' }])
+    expect(readFileSync(join(dataRoot, 'acme.todo', 'token.txt'), 'utf8')).toBe('L-secret')
+    await call('plugins:remove', { id: 'acme.todo' })
+    expect(JSON.parse(readFileSync(join(dataRoot, 'acme.todo@kept-source.json'), 'utf8'))).toEqual({ schemaVersion: 1, source: 'local-unsigned' })
+    await marketplaceInstall('acme.todo', '3.0.0')
+    expect(existsSync(join(dataRoot, 'acme.todo'))).toBe(false)
+  })
+
+  it('RULE ZERO: a failed Marketplace update rolls back to a Marketplace package exactly as on main', async () => {
+    await marketplaceInstall('acme.todo', '1.0.0')
+    writeData('acme.todo', 'M')
+    registerFailingActivation('2.0.0')
+    serveRegistry('acme.todo', '2.0.0')
+    await call('plugins:prepareInstall', { namespace: 'acme', name: 'todo' })
+    await call('plugins:commitInstall', { id: 'acme.todo', publisherConfirmed: true, riskConfirmed: true })
+    await expect(call('plugins:restart', { id: 'acme.todo' })).rejects.toThrow(/activation failed/)
+    const pkg = manager.listInstalledPackages().find((item) => item.id === 'acme.todo')
+    expect(pkg).toMatchObject({ packageVersion: '1.0.0', provenance: 'official-registry' })
+    expect(pkg?.source).toBeUndefined()
+    expect(call('plugins:listInstalled')).toMatchObject([{ id: 'acme.todo', source: 'marketplace' }])
+    expect(readdirSync(dataRoot)).toEqual(['acme.todo'])
+  })
+})
+
 describe('MED-1: the takedown list before a file install', () => {
   it('fetches it when none is stored, and refuses a taken-down publisher right away', async () => {
     serveRegistry('other.pkg', '1.0.0', metadata(['acme']))

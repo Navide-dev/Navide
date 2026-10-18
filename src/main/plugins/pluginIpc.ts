@@ -861,6 +861,15 @@ export function registerPluginIpc(
       throw new Error(`DEVELOPER_FOLDER_HOLDS_ID [${id}]: ${id} is loaded from a developer folder; remove that folder in Developer Mode first`)
     }
   }
+  /** Review MED-2 on #428: a package registered again after a failed restart
+   * or by a rollback keeps the source its own evidence shows: a directory a
+   * local consent record covers is local, anything else is a Registry package
+   * as on main. */
+  const evidenceSource = (dir: string, id: string) =>
+    isLocalInstalledPackage(pluginsRoot, dir, id)
+      ? { fields: { source: 'local-unsigned' as const }, registration: {} }
+      : { fields: { provenance: 'official-registry' as const }, registration: { official: true } }
+
   // A file install committed but not restarted yet (review LOW-6).
   const stagedLocalCandidate = (id: string): boolean => {
     const candidate = lifecycleSelector.read(id)?.candidate
@@ -2854,10 +2863,11 @@ export function registerPluginIpc(
             const retainedGrant = promotedSelection.previousGrant
             if (!retainedGrant) throw new Error('previous package grant is unavailable for rollback')
             capabilityGrants.set(id, retainedGrant)
+            const previousSource = evidenceSource(previousDir, id)
             manager.registerInstalledPackage(
-              { ...previousScanned.packageSummary, provenance: 'official-registry' },
+              { ...previousScanned.packageSummary, ...previousSource.fields },
               previousScanned.descriptor,
-              { official: true },
+              previousSource.registration,
               previousDir,
             )
             manager.setPluginStorageSnapshotSelection(id, { activeVersion: previous.packageVersion })
@@ -2865,7 +2875,7 @@ export function registerPluginIpc(
               pluginId: id,
               activation: {
                 ...previousScanned.activation,
-                provenance: 'official-registry',
+                ...previousSource.fields,
                 artifactDigest: previousTrust.artifactDigest,
               },
             })
@@ -2922,15 +2932,14 @@ export function registerPluginIpc(
             restartTransaction = undefined
           }
           if (drainedBackendOnly && selectedBeforeRestart.active) {
-            const priorScanned = loadPluginDir(
-              lifecycleSelector.packageDir(id, selectedBeforeRestart.active),
-            )
+            const priorDir = lifecycleSelector.packageDir(id, selectedBeforeRestart.active)
+            const priorScanned = loadPluginDir(priorDir)
             if (priorScanned.activation) {
               options.onActivationChange?.({
                 pluginId: id,
                 activation: {
                   ...priorScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(priorDir, id).fields,
                   artifactDigest: selectedBeforeRestart.active.artifactDigest,
                 },
               })
@@ -3025,10 +3034,11 @@ export function registerPluginIpc(
           `displaced package is no longer readable${activeScanned.error ? `: ${activeScanned.error}` : ''}`,
         )
       }
+      const activeSource = evidenceSource(activeDir, id)
       manager.registerInstalledPackage(
-        { ...activeScanned.packageSummary, provenance: 'official-registry' },
+        { ...activeScanned.packageSummary, ...activeSource.fields },
         activeScanned.descriptor,
-        { official: true },
+        activeSource.registration,
         activeDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: active.packageVersion })
@@ -3037,7 +3047,7 @@ export function registerPluginIpc(
           pluginId: id,
           activation: {
             ...activeScanned.activation,
-            provenance: 'official-registry',
+            ...activeSource.fields,
             artifactDigest: active.artifactDigest,
           },
         })
@@ -3164,10 +3174,11 @@ export function registerPluginIpc(
       const selected = lifecycleSelector.activatePrevious(id)
       promoted = true
       capabilityGrants.set(id, selectedBeforeRollback.previousGrant!)
+      const previousSource = evidenceSource(previousDir, id)
       manager.registerInstalledPackage(
-        { ...previousScanned.packageSummary, provenance: 'official-registry' },
+        { ...previousScanned.packageSummary, ...previousSource.fields },
         previousScanned.descriptor,
-        { official: true },
+        previousSource.registration,
         previousDir,
       )
       manager.setPluginStorageSnapshotSelection(id, { activeVersion: selected.active!.packageVersion })
@@ -3175,7 +3186,7 @@ export function registerPluginIpc(
         pluginId: id,
         activation: {
           ...previousScanned.activation,
-          provenance: 'official-registry',
+          ...previousSource.fields,
           artifactDigest: currentPreviousTrust.artifactDigest,
         },
       })
@@ -3214,7 +3225,7 @@ export function registerPluginIpc(
                 pluginId: id,
                 activation: {
                   ...currentScanned.activation,
-                  provenance: 'official-registry',
+                  ...evidenceSource(currentDir, id).fields,
                   artifactDigest: selectedBeforeRollback.active.artifactDigest,
                 },
               })
@@ -3494,9 +3505,10 @@ export function registerPluginIpc(
           throw new Error(`plugin ${id} cannot be enabled${scanned.error ? `: ${scanned.error}` : ''}`)
         }
         disabledPlugins.remove(id)
+        const enabledSource = evidenceSource(packageDir, id)
         try {
           manager.registerInstalledPackage(
-            { ...scanned.packageSummary, provenance: 'official-registry' },
+            { ...scanned.packageSummary, ...enabledSource.fields },
             scanned.descriptor,
             {},
             packageDir,
@@ -3510,7 +3522,7 @@ export function registerPluginIpc(
             pluginId: id,
             activation: {
               ...scanned.activation,
-              provenance: 'official-registry',
+              ...enabledSource.fields,
               artifactDigest: decision.artifactDigest,
             },
           })
