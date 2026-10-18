@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import ntpath
+import sys
 import types
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,14 @@ from agent_team_backend.plugins.agent_tools_contract import (
     split_agent_tool_payload_text,
     utf8_byte_length,
 )
+
+# Most CPU time one event-loop step may take. `time.thread_time` counts in
+# whole scheduler ticks on Windows (15.625 ms), so a step of a little over one
+# tick reads as two (31.25 ms): there the budget is three ticks. A step that
+# parses a whole result on the loop costs hundreds of milliseconds, so both
+# budgets still catch it.
+LOOP_SLICE_BUDGET_S = 0.047 if sys.platform == "win32" else 0.02
+
 
 pytestmark = pytest.mark.asyncio
 
@@ -1172,7 +1181,7 @@ async def test_a_10_mib_result_in_pieces_reads_as_before_and_never_holds_the_loo
     assert result.isError is False
     # Character for character what the in-process wrap gives (same function, in the helper).
     assert result.content[0].text == expected
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
 
 
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity", "1e400", "-1e400"])
@@ -1311,7 +1320,7 @@ os._exit(9)
     assert (body["error_code"], body["reason"]) == ("result_helper_failed", "crashed")
     assert str(utf8_byte_length(agent_tool_payload_text(_BIG_RESULT))) in body["error"]
     # Not redone in the backend: the loop never held the result.
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
 
 
 async def test_a_helper_that_hangs_fails_the_call_within_its_window_and_its_tree_is_ended(monkeypatch, tmp_path) -> None:
@@ -1342,7 +1351,7 @@ time.sleep(3600)
     assert time.monotonic() - started < 5
     body = _body(result)
     assert (body["error_code"], body["reason"]) == ("result_helper_failed", "timeout")
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     grandchild = int(pid_file.read_text())
     for _ in range(50):
         if not osplat.process_tree.is_alive(grandchild):
@@ -1387,7 +1396,7 @@ async def test_a_helper_that_never_works_is_unavailable_and_results_main_handled
     body = _body(result)
     assert (body["error_code"], body["reason"]) == ("result_helper_failed", "unavailable")
     assert "about a minute" in body["error"]
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     assert len(recorded) == 1
 
 
@@ -1433,7 +1442,7 @@ async def test_a_helper_that_cannot_start_leaves_results_main_handled_and_refuse
     result, longest = await _measured_call(monkeypatch)
     body = _body(result)
     assert (body["error_code"], body["reason"]) == ("result_helper_failed", "unavailable")
-    assert longest < 0.02, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
+    assert longest < LOOP_SLICE_BUDGET_S, f"the loop ran {longest * 1000:.1f} ms of CPU without handing back"
     # Disclosed in the diagnostics, once per failed start.
     assert [args[2] for args in recorded] == ["AGENT_TOOL_RESULT_HELPER_UNAVAILABLE"]
 
@@ -1485,6 +1494,8 @@ async def test_a_busy_helper_ends_its_tree_when_the_backend_is_gone(tmp_path) ->
 import os, subprocess, sys, time
 sys.path.insert(0, {backend_dir!r})
 from agent_team_backend import agent_tool_result_worker as worker
+
+
 worker.HEARTBEAT_S = 0.2
 worker._outlive_no_parent({stand_in.pid}, os.getpid())
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(3600)"])
