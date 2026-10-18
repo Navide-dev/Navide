@@ -1309,6 +1309,25 @@ const file = await context.capabilities.invoke('fs.readFile', { path: 'README.md
 | `createPluginViewRuntimeClient()` | `ready()`, `hide()`, `onOpenTarget`, `onBackendStatus`, `openContributionWindow`, and the composed-view receiver, detail and close methods |
 | `createPluginBackendClient()` | `call` and `subscribe` for the package's own backend (see [Navide Backend Wire v1](#navide-backend-wire-v1)) |
 
+`@navide/plugin-sdk` and `@navide/plugin-contracts` declare
+`"sideEffects": false`, so a bundler keeps only the exports a view uses. The
+view runtime client is one object, though: using any of its methods keeps all
+of them in the bundle, including addresses such as `ui.openPluginWindow` that
+the Registry scan then reports as used. A view that needs only some of the
+stateless methods can import them as standalone functions instead; each does
+exactly what the client method of the same row does, and the client itself is
+unchanged:
+
+| Standalone function | Same as |
+|---|---|
+| `viewReady()` | `createPluginViewRuntimeClient().ready()` |
+| `hideView()` | `createPluginViewRuntimeClient().hide()` |
+| `onOpenTarget(listener)` | `createPluginViewRuntimeClient().onOpenTarget(listener)` |
+| `onBackendStatus(listener)` | `createPluginViewRuntimeClient().onBackendStatus(listener)` |
+| `openContributionWindow(params)` | `createPluginViewRuntimeClient().openContributionWindow(params)` |
+
+The receiver, detail and close methods exist only on the client.
+
 Every view must call `ready()` once it has mounted. The Host waits 10 seconds
 after the entry document finishes loading. During install and update preflight
 a view that has not reported ready fails the package; in a running view the
