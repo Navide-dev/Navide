@@ -264,6 +264,7 @@ import {
   RESUME_BEHAVIOR_SETTING_KEY,
   RESUME_INTERRUPTED_ON_LAUNCH_SETTING_KEY,
   RESTORE_SCOPE_SETTING_KEY,
+  PREVIOUS_LAUNCH_ID_SETTING_KEY,
   createWorkspaceRestoreSession,
   explicitRestoreDecision,
   interruptedRestoreTargetIds,
@@ -277,6 +278,7 @@ import {
   stripDeadOpencodeAutoFlag,
   turnStateForStatus,
   wasInterruptedAtLaunch,
+  wasLiveAtLastLaunch,
   type RestoreScope,
   type RestoreSessionDecision,
   type RestoreSessionTrigger,
@@ -465,6 +467,16 @@ const rolesApi = useRoles(backend)
 const cliProfilesApi = useCliProfiles(backend)
 const pipelinesApi = usePipelines(backend)
 const stagesApi = useStages(backend, () => pipelinesApi.activePipelineId.value)
+// The run panel's stage count reads this cache, so it follows the active
+// pipeline: it first loads before pipelines.list has answered (under the
+// 'default' placeholder id), and a switch made elsewhere (MCP, another window)
+// arrives as pipelines.changed with no stages for it (#417).
+watch(
+  () => pipelinesApi.activePipelineId.value,
+  (id) => {
+    if (id) void stagesApi.refresh(id)
+  },
+)
 // DAG run engine (gates, reject loops, pins, restart-from-node). Its hooks are
 // no-ops for a linear pipeline. It reports node states over its own requests,
 // not sendQuiet, so a run's pipeline.* call sequence stays what it was.
@@ -10472,7 +10484,7 @@ registerCommand('ui.pipeline.start', async (args) => {
   if (!pipelineId) {
     throw new Error('ui.pipeline.start requires a pipelineId: this workspace has no active pipeline')
   }
-  await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId })
+  const refusal = await onPipelineStart({ task: a.task ?? '', workspacePath: currentWorkspace.value, pipelineId })
   // onPipelineStart bails SOFTLY on every one of its own refusals (unknown
   // pipeline, stages not loaded, every slot of stage 01 failing to spawn) —
   // it logs and returns. Reporting ok on that is exactly the "started but
@@ -10480,7 +10492,10 @@ registerCommand('ui.pipeline.start', async (args) => {
   // what gets reported, not the fact that the call returned.
   const started: PipelineRun['state'] = pipeline.state
   if (started !== 'running') {
-    throw new Error(`ui.pipeline.start: the run did not start (state "${started}") — see the pipeline log for why`)
+    throw new Error(
+      `ui.pipeline.start: the run did not start (state "${started}")` +
+        (refusal ? `: ${refusal}` : ' — see the pipeline log for why')
+    )
   }
   return {
     pipelineId: pipelinesApi.activePipelineId.value,
@@ -10577,6 +10592,9 @@ registerCommand('ui.pipeline.reset', async () => {
   const state: PipelineRun['state'] = pipeline.state
   if (state !== 'idle') {
     throw new Error(`ui.pipeline.reset: the run was not cleared (state "${state}") — see the pipeline log for why`)
+  }
+  if (!(await clearStoredPipelineRun(currentWorkspace.value))) {
+    throw new Error('ui.pipeline.reset: the panes were closed but the stored run was not cleared — see the backend log')
   }
   return { workspacePath: currentWorkspace.value, state, stageIndex: pipeline.stageIndex }
 })
@@ -11125,6 +11143,9 @@ interface ProjectPane {
   last_turn_state?: string
   report_to?: string
   report_pending?: boolean
+  /** The launch the pane's CLI last spawned in ('' after an idle reclaim).
+   *  Absent on records written before the field existed. */
+  last_live_launch?: string
 }
 
 const HISTORY_ORIGINS: readonly SpawnHistoryEntry['origin'][] = ['manual', 'pipeline', 'mcp']
@@ -12271,6 +12292,10 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
   // workspace's entire pending list on top of the foreground one, so the CLIs a
   // window could start at once became the sum of every workspace it held.
   const onScreen = normWs(session.workspacePath) === normWs(currentWorkspace.value)
+  const previousLaunchId = settingsGet<unknown>(PREVIOUS_LAUNCH_ID_SETTING_KEY, '')
+  const liveAtLastLaunchIds = new Set(panes.value
+    .filter((pane) => pane.deferredRestore && wasLiveAtLastLaunch(pane.deferredRestore.saved, previousLaunchId))
+    .map((pane) => pane.id))
   return restoreScopeTargetIds({
     scope: session.scope,
     pendingPaneIds: pendingRestorePaneIds(panes.value, session.workspacePath),
@@ -12279,6 +12304,7 @@ function restoreSessionScopeTargets(session: RestoreSession, trigger: RestoreSes
     minimizedPaneIds: minimizedPanes.value,
     focusedPaneId: onScreen ? focusPaneId.value : null,
     trigger,
+    liveAtLastLaunchIds,
   })
 }
 
@@ -12326,6 +12352,9 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
   if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+  } else if (decision === 'resume' && session.scope === 'auto') {
+    // Auto brings back every pane live at the last close: same ceiling as 'all'.
     await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
   } else if (interrupted.length > 0) {
     // The interrupted panes ride on top of the scope's pick: same ceiling as
@@ -13610,7 +13639,18 @@ async function spawnPipelineStage(index: number): Promise<void> {
   }
 }
 
-async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string }): Promise<void> {
+/** Returns why the run was refused, or '' when it was not (ui.pipeline.start
+ *  reports the reason). */
+async function onPipelineStart(payload: { task: string; workspacePath: string; pipelineId?: string; fromNodeId?: string }): Promise<string> {
+  const pid = payload.pipelineId || pipelinesApi.activePipelineId.value
+  // pipelineLog alone left a refusal nowhere durable: it persists only once
+  // pipeline.workspacePath is set, which happens below, so after a reset or a
+  // restart nothing about it reached any log (#417).
+  const refuse = (reason: string): string => {
+    pipelineLog(`Pipeline start refused: ${reason}`)
+    void sendQuiet('pipeline.start_refused', { workspace_path: payload.workspacePath, pipeline_id: pid, reason })
+    return reason
+  }
   // If a specific pipeline was requested and it's not currently active, switch first.
   if (payload.pipelineId && payload.pipelineId !== pipelinesApi.activePipelineId.value) {
     // Both calls fail SOFTLY — setActivePipeline returns false and refresh only
@@ -13619,23 +13659,23 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     // pipeline's name, so abort instead of starting the wrong run.
     const switched = await pipelinesApi.setActivePipeline(payload.pipelineId, payload.workspacePath)
     if (!switched) {
-      pipelineLog(
-        `Pipeline start aborted: could not switch to the requested pipeline` +
+      return refuse(
+        `could not switch to pipeline ${payload.pipelineId}` +
           (pipelinesApi.error.value ? ` — ${pipelinesApi.error.value}` : '')
       )
-      return
-    }
-    // Reload stages for the newly-active pipeline before running. Pass the id
-    // explicitly so this never races the active-id ref.
-    await stagesApi.refresh(payload.pipelineId)
-    if (stagesApi.error.value) {
-      pipelineLog(`Pipeline start aborted: could not load its stages — ${stagesApi.error.value}`)
-      return
     }
   }
+  // Reload the stages of the pipeline being started, by explicit id so this
+  // never races the active-id ref — even when it already is the active one.
+  // The window's cache cannot be trusted for a start: it can hold none (it
+  // first loads before the active id is known) or another template's, and a
+  // start from it was refused, or ran stages the pipeline no longer has (#417).
+  await stagesApi.refresh(pid)
+  if (stagesApi.error.value) {
+    return refuse(`could not load the stages of pipeline ${pid} — ${stagesApi.error.value}`)
+  }
   if (!stagesApi.isLoaded.value || stagesApi.stages.value.length === 0) {
-    pipelineLog('Pipeline start skipped: stages not loaded yet. Please wait and try again.')
-    return
+    return refuse(`pipeline ${pid} has no stages`)
   }
   const stateBefore = pipeline.state
   pipeline.task = payload.task
@@ -13650,9 +13690,8 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
     fromNodeId: payload.fromNodeId,
   })
   if (startIndex === null) {
-    pipelineLog('Pipeline start aborted: could not prepare the run graph — see the line above')
     pipeline.state = stateBefore
-    return
+    return refuse('could not prepare the run graph — see the DAG line above')
   }
   pipeline.stageIndex = startIndex
   // Pipeline-created panes are grouped under a RunGroup tab named after the
@@ -13694,7 +13733,7 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   if (pipelineDag.holdBeforeStage(startIndex)) {
     pipeline.stageIndex = startIndex - 1
     if (pipeline.globalManager) startGlobalManagerRouter()
-    return
+    return ''
   }
   // Pre-spawn stage 01 only (role prompt, no kickoff). Every later stage is
   // warmed one ahead from activateStage — see stagePrewarms for why the whole
@@ -13706,11 +13745,18 @@ async function onPipelineStart(payload: { task: string; workspacePath: string; p
   // this check activateStage(0) then re-registered the stage and spawned the
   // same missing agents a second time, and the global router was armed on a
   // run that had already stopped.
-  if (pipeline.state !== 'running') return
+  if (pipeline.state !== 'running') return ''
   // Activate the first stage: build context + inject kickoffs + arm watchers.
   await activateStage(startIndex)
   // Start the global Manager cross-stage router (if configured).
   if (pipeline.globalManager) startGlobalManagerRouter()
+  return ''
+}
+
+/** ControlPane's Run button: a refusal is toasted, not only logged (#417). */
+async function onPipelineStartFromPanel(payload: Parameters<typeof onPipelineStart>[0]): Promise<void> {
+  const refusal = await onPipelineStart(payload)
+  if (refusal) notifyRestore.toast(i18n.global.t('error.pipeline-start-refused', { reason: refusal }), { type: 'error' })
 }
 
 /** Before firing 🎉 on the final stage, wait until every pipeline pane has
@@ -13951,6 +13997,27 @@ async function onPipelineReset(paneIds?: readonly string[]): Promise<void> {
   pipeline.pipelineLogFile = ''
   pipeline.backendLogFile = ''
   pipeline.runDir = ''
+}
+
+/** The backend leg of the user's Reset: return the stored run to idle, so it
+ *  stops answering pipeline_status and offering Resume, through a restart too
+ *  (#417). Not part of onPipelineReset, which closing or leaving a workspace
+ *  also runs: those keep the stored run so reopening the folder can resume it. */
+async function clearStoredPipelineRun(workspacePath: string): Promise<boolean> {
+  if (!workspacePath) return true
+  const resp = await sendQuiet<ProjectPayload>('pipeline.reset', { workspace_path: workspacePath })
+  if (!resp) {
+    pipelineLog('Pipeline reset: the stored run could not be returned to idle')
+    return false
+  }
+  existingProject.value = buildExistingProjectInfo(resp)
+  return true
+}
+
+/** ControlPane's Reset button. */
+async function onPipelineUserReset(): Promise<void> {
+  await onPipelineReset()
+  await clearStoredPipelineRun(currentWorkspace.value)
 }
 
 // ─────────── Switch / close workspace (phase-7) ───────────
@@ -17143,6 +17210,15 @@ async function reclaimIdlePane(paneId: string): Promise<boolean> {
   // the cold-restore path builds.
   const stillThere = panes.value.find((p) => p.id === paneId)
   if (!stillThere) return false
+  // Its CLI is gone: the 'auto' resume scope must not count it as live at the
+  // next launch. A rebuild re-stamps through its own spawn record instead.
+  if (stillThere.workspacePath && isLocalWorkspace(stillThere.workspacePath)) {
+    backend
+      .send('project.set_pane_resume_state', {
+        workspace_path: stillThere.workspacePath, pane_id: paneId, last_live_launch: '',
+      })
+      .catch(() => {})
+  }
   stillThere.realized = false
   stillThere.restoring = false
   stillThere.preparationStatus = 'starting'
@@ -21275,10 +21351,10 @@ function paneIsCommander(p: ActivePane): boolean {
       @rebuild-all="rebuildPanesViaResume('all', $event)"
       @restore="restorePane"
       @context-menu="(id, ev) => openPaneCtxMenu(ev, id)"
-      @pipeline-start="onPipelineStart"
+      @pipeline-start="onPipelineStartFromPanel"
       @pipeline-next="onPipelineNext"
       @pipeline-abort="onPipelineAbort"
-      @pipeline-reset="onPipelineReset"
+      @pipeline-reset="onPipelineUserReset"
       @workspace-check="onWorkspaceCheck"
       @pipeline-resume="onPipelineResume"
       @pipeline-restart="onPipelineRestart"

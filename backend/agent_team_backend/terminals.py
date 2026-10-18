@@ -2089,6 +2089,7 @@ class TerminalService:
             {
                 "terminal_session_id": session.id,
                 "pane_id": session.pane_id,
+                "workspace_path": str(session.metadata.get("workspace_path") or ""),
                 "reason": reason,
                 "exit_code": exit_code,
                 "uptime_ms": uptime_ms,

@@ -15,6 +15,7 @@ from .signing import (
     public_key_from_private,
     sign_json,
 )
+from .versions import PRERELEASE_CHANNEL, STABLE_CHANNEL, TESTPLACE_CHANNEL
 
 
 def _timestamp(value: datetime) -> str:
@@ -257,12 +258,25 @@ class RegistryTrustSigner:
         target: str,
         publisher_id: str,
         now: datetime | None = None,
+        channel: str = STABLE_CHANNEL,
+        expires_at: datetime | None = None,
     ) -> tuple[dict, str]:
+        """Only a testplace envelope carries `channel` and `expiresAt`. Stable
+        and pre-release envelopes keep the exact 8 fields every released App
+        accepts, and released Apps reject the 10-field testplace one."""
         signed_at = now or datetime.now(timezone.utc)
         if self.status not in {"active", "rotating"}:
             raise ValueError(f"registry signer is {self.status}")
         if not self.not_before <= signed_at <= self.not_after:
             raise ValueError("registry signer is outside its validity period")
+        if channel == TESTPLACE_CHANNEL:
+            if expires_at is None:
+                raise ValueError("a testplace version needs an expiry")
+        elif channel in {STABLE_CHANNEL, PRERELEASE_CHANNEL}:
+            if expires_at is not None:
+                raise ValueError(f"a {channel} version cannot expire")
+        else:
+            raise ValueError(f"unknown release channel '{channel}'")
         envelope = {
             "schemaVersion": 1,
             "artifactDigest": artifact_digest,
@@ -273,6 +287,9 @@ class RegistryTrustSigner:
             "keyId": self.key_id,
             "signedAt": _timestamp(signed_at),
         }
+        if channel == TESTPLACE_CHANNEL:
+            envelope["channel"] = channel
+            envelope["expiresAt"] = _timestamp(expires_at)
         return envelope, sign_json(self.signer_private_key, envelope)
 
     def sign_disclosure_envelope(

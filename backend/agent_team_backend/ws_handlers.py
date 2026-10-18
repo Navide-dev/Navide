@@ -34,6 +34,7 @@ from . import (
     confirm_token,
     device_trust,
     executions_service,
+    launch_id,
     native_mcp,
     native_memory,
     osplat,
@@ -8267,6 +8268,9 @@ def note_terminal_exit(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         _retire_dock_record(*entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        _clear_live_stamp(*target)
 
 
 async def note_terminal_exit_async(payload: dict) -> None:
@@ -8275,6 +8279,41 @@ async def note_terminal_exit_async(payload: dict) -> None:
     entry = _dock_record_to_retire(payload)
     if entry is not None:
         await asyncio.to_thread(_retire_dock_record, *entry)
+    target = _live_stamp_to_clear(payload)
+    if target is not None:
+        await asyncio.to_thread(_clear_live_stamp, *target)
+
+
+def _live_stamp_to_clear(payload: dict) -> tuple[str, str] | None:
+    """The (workspace, pane) whose last_live_launch an exit clears, or None.
+
+    The 'auto' resume scope restores the panes whose CLI was still running when
+    the app ended. A CLI that stops while the app runs — on its own ("exit",
+    "error") or through a requested kill ("killed": Kill All, closing a
+    workspace, a pipeline restart, an idle reclaim) — is not one of them. The
+    app ending is "shutdown" (kill_all at backend shutdown) and keeps the stamp.
+    A rebuild's kill names the OLD pane id, which the replacement's spawn
+    re-keys away, so the rebuilt pane stays stamped."""
+    if payload.get("reason") not in ("exit", "error", "killed"):
+        return None
+    workspace_path = str(payload.get("workspace_path") or "")
+    pane_id = str(payload.get("pane_id") or "")
+    if not workspace_path or not pane_id:
+        return None
+    return workspace_path, pane_id
+
+
+def _clear_live_stamp(workspace_path: str, pane_id: str) -> None:
+    from . import app
+
+    try:
+        # peek, not load_or_create: an exit must never create a project.
+        project = app.project_store.peek(workspace_path)
+        if project is None or not any(p.pane_id == pane_id for p in project.panes):
+            return
+        app.project_store.set_pane_resume_state(workspace_path, pane_id=pane_id, last_live_launch="")
+    except Exception:  # noqa: BLE001 — the PTY is already gone; a lost stamp clear must not fail its caller
+        log.exception("clearing live stamp of %s in %s failed", pane_id, workspace_path)
 
 
 def _dock_record_to_retire(payload: dict) -> tuple[str, str, str, str] | None:
@@ -8336,6 +8375,7 @@ def _record_dock_spawn(payload: dict, metadata: dict, agent_key: str, term_id: s
             origin=origin,
             surface=surface,
             window_kind=window_kind,
+            launch_id=launch_id.current(),
         )
         # The store leaves a window pane's record alone when a panel's create
         # names its id; its Agent History entry must be left alone with it.
@@ -10147,6 +10187,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
     turn_state = payload.get("last_turn_state")
     report_to = payload.get("report_to")
     report_pending = payload.get("report_pending")
+    live_launch = payload.get("last_live_launch")
     applied = False
     if ws_raw and pane_id:
         project = app.project_store.set_pane_resume_state(
@@ -10155,6 +10196,7 @@ async def project_set_pane_resume_state(session: "Session", msg_id: str, msg_typ
             last_turn_state=turn_state if isinstance(turn_state, str) else None,
             report_to=report_to if isinstance(report_to, str) else None,
             report_pending=report_pending if isinstance(report_pending, bool) else None,
+            last_live_launch=live_launch if isinstance(live_launch, str) else None,
         )
         # Not an error, but say so: a write that matched no record is lost.
         applied = any(p.pane_id == pane_id for p in project.panes)
@@ -10969,6 +11011,7 @@ async def pipeline_slot_spawn(session: "Session", msg_id: str, msg_type: str, pa
         session_home_id=payload.get("session_home_id", ""),
         profile_id=slot_pin,
         run_group_id=payload.get("run_group_id", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(slot_pin))
     from .guard.taint import pipeline_pane_spawned
@@ -11115,6 +11158,40 @@ async def pipeline_abort(session: "Session", msg_id: str, msg_type: str, payload
     )
 
 
+@handler("pipeline.reset")
+async def pipeline_reset(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The backend leg of pipeline_reset: the renderer kills the panes, this
+    returns the stored run to idle so it stops answering pipeline_status and
+    survives no restart (#417). Run history (log, run directory) is kept."""
+    from . import app
+
+    project = app.project_store.reset_pipeline(payload["workspace_path"])
+    if project is not None:
+        log.info("pipeline reset: %s is idle again", project.workspace_path)
+        _mirror_pipeline_state(project)
+    await session.send_json(
+        make_response(msg_id, msg_type, app._project_payload(project) if project is not None else {"project": None})
+    )
+
+
+@handler("pipeline.start_refused")
+async def pipeline_start_refused(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
+    """The renderer refused a start before it reached pipeline.start. Recorded
+    in the backend log and the workspace's pipeline.log (outside any run, so
+    not the last run's file), since a refusal used to leave no trace (#417)."""
+    from . import app
+
+    ws_path = payload["workspace_path"]
+    reason = str(payload.get("reason", ""))
+    pipeline_id = str(payload.get("pipeline_id", ""))
+    log.warning("pipeline start refused in %s (pipeline %s): %s", ws_path, pipeline_id or "?", reason)
+    app.project_store.append_event(
+        ws_path,
+        {"event": "pipeline_start_refused", "pipeline_id": pipeline_id, "reason": reason},
+    )
+    await session.send_json(make_response(msg_id, msg_type, {"ok": True}))
+
+
 @handler("pipeline.node_states")
 async def pipeline_node_states(session: "Session", msg_id: str, msg_type: str, payload: dict) -> None:
     """The renderer engine reports per-graph-node run state; stored on the
@@ -11238,6 +11315,7 @@ async def manual_pane_spawn(session: "Session", msg_id: str, msg_type: str, payl
         output_log_file=payload.get("output_log_file", ""),
         origin=payload.get("origin", ""),
         spawned_by=payload.get("spawned_by", ""),
+        launch_id=launch_id.current(),
     )
     app.pane_account_history.pin(str(payload["pane_id"]), _account_pin_for_history(manual_pin))
     await session.send_json(

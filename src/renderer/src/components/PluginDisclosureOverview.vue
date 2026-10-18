@@ -3,8 +3,9 @@
 // installed Registry package on one page: its disclosure card (from the
 // installed manifest and the scan verified at install), recent activity,
 // undeclared uses and unusual items. Records only: nothing on this page
-// changes what a plugin may do. Mounted only when the page is first opened.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+// changes what a plugin may do. Mounted only when the section is first shown;
+// `paused` stops the queue sampling while it is out of view.
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { PluginActivityReport } from '../../../shared/pluginActivity'
 import type { ManifestDisclosure } from '../../../shared/pluginDisclosure'
 import type { ScanReport } from '../../../shared/pluginDisclosureScan'
@@ -27,13 +28,14 @@ interface Entry {
   reportError: string
 }
 
-const props = withDefaults(defineProps<{ pollMs?: number }>(), { pollMs: 5000 })
+const props = withDefaults(defineProps<{ pollMs?: number; paused?: boolean }>(), { pollMs: 5000, paused: false })
 const entries = ref<Entry[]>([])
 const loading = ref(true)
 const growing = ref(new Set<string>())
 const open = ref(new Set<string>())
 const trend = createQueueTrend()
 let timer: ReturnType<typeof setInterval> | null = null
+let loaded = false
 
 function api() {
   return window.agentTeam?.plugins
@@ -77,14 +79,24 @@ function onToggle(id: string, event: Event): void {
   open.value = next
 }
 
-onMounted(async () => {
-  await load()
+function startPolling(): void {
+  if (timer || props.paused || !loaded) return
   void sampleQueues()
   timer = setInterval(() => void sampleQueues(), props.pollMs)
-})
-onBeforeUnmount(() => {
+}
+
+function stopPolling(): void {
   if (timer) clearInterval(timer)
+  timer = null
+}
+
+watch(() => props.paused, (paused) => { if (paused) stopPolling(); else startPolling() })
+onMounted(async () => {
+  await load()
+  loaded = true
+  startPolling()
 })
+onBeforeUnmount(stopPolling)
 </script>
 
 <template>
@@ -115,7 +127,7 @@ onBeforeUnmount(() => {
       <p v-else-if="entry.reportError" class="nv-overview-muted">{{ $t('pluginActivity.unavailable', { error: entry.reportError }) }}</p>
       <details class="nv-overview-details" @toggle="onToggle(entry.id, $event)">
         <summary>{{ $t('pluginActivity.tab') }}</summary>
-        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" />
+        <PluginActivityPanel v-if="open.has(entry.id)" :plugin-id="entry.id" :poll-ms="props.pollMs" :paused="props.paused" />
       </details>
     </article>
   </div>
