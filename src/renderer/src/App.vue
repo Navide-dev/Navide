@@ -12266,7 +12266,10 @@ async function advanceRestoreSession(trigger: RestoreSessionTrigger, coldBatch?:
   // the semaphore at whatever the user set (default 3), so adding a second
   // ceiling of 2 would just make their own setting slower.
   const unthrottledBatch = decision === 'fresh' && trigger === 'cold'
-  if (unthrottledBatch || (decision === 'resume' && (session.scope === 'all' || session.scope === 'auto'))) {
+  if (unthrottledBatch || (decision === 'resume' && session.scope === 'all')) {
+    await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
+  } else if (decision === 'resume' && session.scope === 'auto') {
+    // Auto brings back every pane live at the last close: same ceiling as 'all'.
     await runWithConcurrency(ids, ALL_SCOPE_RESTORE_CONCURRENCY, (paneId) => realizeRestoredPane(paneId, true))
   } else if (interrupted.length > 0) {
     // The interrupted panes ride on top of the scope's pick: same ceiling as

@@ -28,7 +28,7 @@ describe('auto resume scope wiring', () => {
 
   it('starts an auto restore two at a time, like all', () => {
     expect(fn('advanceRestoreSession')).toMatch(
-      /session\.scope === 'all' \|\| session\.scope === 'auto'\)\)\)\s*\{\s*await runWithConcurrency\(ids, ALL_SCOPE_RESTORE_CONCURRENCY/,
+      /else if \(decision === 'resume' && session\.scope === 'auto'\) \{\s*\/\/[^\n]*\n\s*await runWithConcurrency\(ids, ALL_SCOPE_RESTORE_CONCURRENCY/,
     )
   })
 

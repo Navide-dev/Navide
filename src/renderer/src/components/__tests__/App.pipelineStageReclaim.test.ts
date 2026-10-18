@@ -167,6 +167,7 @@ async function load(opts: Options = {}) {
   }
   const killed: { paneId: string; opts: Record<string, unknown> }[] = []
   const activateStage = vi.fn(async (_index: number) => {})
+  const backendSends: { type: string; payload: Record<string, unknown> }[] = []
   const factory = new Function(
     'pipeline',
     'stagesApi',
@@ -205,6 +206,8 @@ async function load(opts: Options = {}) {
     'activateStage',
     'onKill',
     'pipelineDag',
+    'isLocalWorkspace',
+    'backend',
     code,
   )
   const api = factory(
@@ -257,11 +260,17 @@ async function load(opts: Options = {}) {
       }
     }),
     linearPipelineDag().dag,
+    () => true,
+    {
+      send: vi.fn(async (type: string, payload: Record<string, unknown>) => {
+        backendSends.push({ type, payload })
+      }),
+    },
   )
   const paneById = (id: string): TestPane | undefined => panes.value.find((p) => p.id === id)
   const histFor = (id: string): HistEntry | undefined =>
     spawnHistory.value.find((e) => e.paneId === id)
-  return { api, pipeline, panes, paneById, histFor, killed, activateStage, spawnHistory }
+  return { api, pipeline, panes, paneById, histFor, killed, activateStage, spawnHistory, backendSends }
 }
 
 describe('advancing a stage reclaims the stage it just finished', () => {
@@ -297,6 +306,16 @@ describe('advancing a stage reclaims the stage it just finished', () => {
     for (const k of killed) {
       expect(k.opts).toMatchObject({ markRemoved: false, keepInList: true, force: false })
     }
+  })
+
+  it('clears the live stamp of each reclaimed pane, so Auto resume skips it', async () => {
+    const { api, backendSends } = await load()
+    await api.onPipelineNext()
+    const cleared = backendSends
+      .filter((s) => s.type === 'project.set_pane_resume_state' && s.payload.last_live_launch === '')
+      .map((s) => s.payload.pane_id)
+      .sort()
+    expect(cleared).toEqual(['S1-mgr', 'S1-w1'])
   })
 
   it('leaves the stage it is advancing INTO alone, and every manual pane', async () => {
